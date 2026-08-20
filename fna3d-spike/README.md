@@ -1,4 +1,4 @@
-# fna3d-spike — FNA3D existence gate (plan_fna3d.md FNA3D-0)
+# fna3d-spike — FNA3D existence gate (plans/plan_fna3d.md FNA3D-0)
 
 Standalone probe written **before** any CNA renderer code, following the precedent set by
 `dx9-spike/`, `dx2-spike/`, … Its job is to prove that the third-party library actually works in

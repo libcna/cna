@@ -31,22 +31,22 @@ CNA::Platform::GlContextDescription RequestedContext(const int multiSampleCount)
 GLenum Prim(PrimitiveType p){switch(p){case PrimitiveType::TriangleList:return GL_TRIANGLES;case PrimitiveType::TriangleStrip:return GL_TRIANGLE_STRIP;case PrimitiveType::LineList:return GL_LINES;case PrimitiveType::LineStrip:return GL_LINE_STRIP;default:return GL_POINTS;}}
 int VertCount(PrimitiveType p,int n){switch(p){case PrimitiveType::TriangleList:return n*3;case PrimitiveType::TriangleStrip:return n+2;case PrimitiveType::LineList:return n*2;case PrimitiveType::LineStrip:return n+1;default:return n;}}
 GLenum Cmp(int v){static const GLenum a[]={GL_ALWAYS,GL_NEVER,GL_LESS,GL_LEQUAL,GL_EQUAL,GL_GEQUAL,GL_GREATER,GL_NOTEQUAL};return (v>=0&&v<8)?a[v]:GL_ALWAYS;}
-// plan_opengl1.md item 17 (EasyGL parity): indices 10/11 are Blend.BlendFactor/InverseBlendFactor
+// plans/plan_opengl1.md item 17 (EasyGL parity): indices 10/11 are Blend.BlendFactor/InverseBlendFactor
 // (constant blend color) -- GL_ONE/GL_ZERO here is a fallback for a driver without extendedBlend
 // (GL_CONSTANT_COLOR/GL_ONE_MINUS_CONSTANT_COLOR are themselves core-1.4-gated enum tokens, not
 // valid to pass to glBlendFunc on an older driver), NOT the correct answer when it's available.
 GLenum BlendF(int v,bool extendedBlend){static const GLenum a[]={GL_ONE,GL_ZERO,GL_SRC_COLOR,GL_ONE_MINUS_SRC_COLOR,GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_DST_COLOR,GL_ONE_MINUS_DST_COLOR,GL_DST_ALPHA,GL_ONE_MINUS_DST_ALPHA,GL_ONE,GL_ZERO,GL_SRC_ALPHA_SATURATE};
  if(extendedBlend){if(v==10)return GL_CONSTANT_COLOR;if(v==11)return GL_ONE_MINUS_CONSTANT_COLOR;}
  return(v>=0&&v<13)?a[v]:GL_ONE;}
-// plan_opengl1.md item 18 (EasyGL parity): Blend.BlendFunction ordinals: Add=0,Subtract=1,
+// plans/plan_opengl1.md item 18 (EasyGL parity): Blend.BlendFunction ordinals: Add=0,Subtract=1,
 // ReverseSubtract=2,Max=3,Min=4.
 GLenum BlendEq(int v){switch(v){case 1:return GL_FUNC_SUBTRACT;case 2:return GL_FUNC_REVERSE_SUBTRACT;case 3:return GL_MAX;case 4:return GL_MIN;default:return GL_FUNC_ADD;}}
 GLenum StencilOp(int v){static const GLenum a[]={GL_KEEP,GL_ZERO,GL_REPLACE,GL_INCR,GL_DECR,GL_INCR,GL_DECR,GL_INVERT};return(v>=0&&v<8)?a[v]:GL_KEEP;}
-// plan_opengl1.md item 16 (EasyGL parity): TextureAddressMode -> GL wrap mode. XNA ordinals:
+// plans/plan_opengl1.md item 16 (EasyGL parity): TextureAddressMode -> GL wrap mode. XNA ordinals:
 // Wrap=0, Clamp=1, Mirror=2. GL_MIRRORED_REPEAT is core GL 1.4 (2002), same era as GL_CLAMP_TO_EDGE
 // (core 1.2) already used unconditionally here -- no capability gate needed.
 GLenum WrapMode(int v){switch(v){case 0:return GL_REPEAT;case 2:return GL_MIRRORED_REPEAT;default:return GL_CLAMP_TO_EDGE;}}
-// plan_opengl1.md phase 6: TextureFilter -> GL min/mag filter, same mapping EasyGLRenderer
+// plans/plan_opengl1.md phase 6: TextureFilter -> GL min/mag filter, same mapping EasyGLRenderer
 // already uses (its own ApplySamplerState) -- XNA ordinals: Linear=0, Point=1, Anisotropic=2,
 // LinearMipPoint=3, PointMipLinear=4, MinLinearMagPointMipLinear=5, MinLinearMagPointMipPoint=6,
 // MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8. `mip` selects whether the MIN filter
@@ -68,7 +68,7 @@ void MinMagFilter(int filter,bool mip,GLenum&minF,GLenum&magF){
 }
 void Mat(const Matrix&m,float o[16]){o[0]=m.M11;o[1]=m.M12;o[2]=m.M13;o[3]=m.M14;o[4]=m.M21;o[5]=m.M22;o[6]=m.M23;o[7]=m.M24;o[8]=m.M31;o[9]=m.M32;o[10]=m.M33;o[11]=m.M34;o[12]=m.M41;o[13]=m.M42;o[14]=m.M43;o[15]=m.M44;}
 void Color4(const Color&c){glColor4ub((GLubyte)c.getRProperty(),(GLubyte)c.getGProperty(),(GLubyte)c.getBProperty(),(GLubyte)c.getAProperty());}
-// plan_opengl1.md phase 3: ARB_multitexture/core-1.3 entry points for DualTextureEffect's
+// plans/plan_opengl1.md phase 3: ARB_multitexture/core-1.3 entry points for DualTextureEffect's
 // second texture unit -- glActiveTexture/glMultiTexCoord2f are not part of the GL 1.1 core
 // export table (notably on Windows' frozen opengl32.dll), so they need portable loading via
 // the platform GL loader, same reasoning as OpenGL1RenderTargetRenderer's FBO functions. Locally
@@ -84,13 +84,13 @@ bool TryLoadMultitextureFunctions(){
  glMultiTexCoord2f_=reinterpret_cast<CnaPFNGLMULTITEXCOORD2FPROC>(LoadPlatformGlProcAddress("glMultiTexCoord2f"));
  return glActiveTexture_&&glMultiTexCoord2f_;
 }
-// plan_opengl1.md phase 6: glGenerateMipmap is part of the same ARB_framebuffer_object/core-3.0
+// plans/plan_opengl1.md phase 6: glGenerateMipmap is part of the same ARB_framebuffer_object/core-3.0
 // entry-point family the FBO RenderTarget2D support (phase 2) already loads -- a separate,
 // dedicated loader here rather than folding it into TryLoadOpenGL1FramebufferObjectFunctions()
 // (OpenGL1RenderTargetRenderer.cpp) so a driver missing full FBO support but still exposing
 // glGenerateMipmap (rare, but not impossible) isn't penalized, and so RenderTarget2D's own
 // capability gating stays independent of texture mipmap generation's.
-// plan_opengl1.md items 17/18/19 (EasyGL parity): glBlendColor/glBlendFuncSeparate/
+// plans/plan_opengl1.md items 17/18/19 (EasyGL parity): glBlendColor/glBlendFuncSeparate/
 // glBlendEquationSeparate are all core GL 1.4 (2002) -- the same core version bundles constant
 // blend color, separate color/alpha blend factors, and blend equations beyond additive together,
 // so a single capability flag (OpenGL1Capabilities::extendedBlend) and a single loader cover all
@@ -115,7 +115,7 @@ bool TryLoadGenerateMipmapFunction(){
 }
 // CPU box-filter fallback for drivers with neither glGenerateMipmap nor GL_GENERATE_MIPMAP/
 // SGIS_generate_mipmap (a strict GL 1.1-1.3 driver older than 1999's SGIS extension -- expected
-// to be effectively unreachable on any real hardware/driver from this decade, but plan_opengl1.md
+// to be effectively unreachable on any real hardware/driver from this decade, but plans/plan_opengl1.md
 // phase 6 explicitly asks for a CPU fallback, not just "assume the extension exists"). 2x2 box
 // average per level, clamped to source bounds so odd dimensions degrade gracefully instead of
 // reading out of bounds.
@@ -137,7 +137,7 @@ void GenerateMipsCPU(GLenum target,int w,int h,const uint8_t*level0){
   prev=std::move(next);w=nw;h=nh;++level;
  }
 }
-// plan_opengl1.md item 21 (EasyGL parity): a RenderTarget2D is never an OpenGL1TextureRenderer
+// plans/plan_opengl1.md item 21 (EasyGL parity): a RenderTarget2D is never an OpenGL1TextureRenderer
 // (separate class -- GPU-produced content, no CPU shadow), so the plain dynamic_cast<const
 // OpenGL1TextureRenderer*> every sampling call site already used to gate mip-aware filtering
 // always came back null for one, silently forcing mip=false even after
@@ -155,7 +155,7 @@ void OpenGL1VertexBufferRenderer::SetData(const void*d,int c,std::size_t s){if(c
 void OpenGL1IndexBufferRenderer::SetData16(const void*d,int c){i32_=false;count_=c;data_.resize((size_t)c*2);if(d&&c)std::memcpy(data_.data(),d,data_.size());}
 void OpenGL1IndexBufferRenderer::SetData32(const void*d,int c){i32_=true;count_=c;data_.resize((size_t)c*4);if(d&&c)std::memcpy(data_.data(),d,data_.size());}
 OpenGL1TextureRenderer::OpenGL1TextureRenderer(const ImageData&d,OpenGL1ResourceRegistry*registry,bool generateMipmapCap):width_(d.width),height_(d.height),registry_(registry),mipMap_(d.mipLevels>1),generateMipmapCap_(generateMipmapCap){glGenTextures(1,&id_);glBindTexture(GL_TEXTURE_2D,id_);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-// plan_opengl1.md phase 6: GL_GENERATE_MIPMAP must be set BEFORE the level-0 image is specified
+// plans/plan_opengl1.md phase 6: GL_GENERATE_MIPMAP must be set BEFORE the level-0 image is specified
 // -- the driver then regenerates every level as a side effect of glTexImage2D/glTexSubImage2D on
 // level 0. Only used when there is no glGenerateMipmap (an explicit call after upload, in
 // RegenerateMips below, is preferred when available -- works identically on core-profile drivers
@@ -164,12 +164,12 @@ if(mipMap_&&!glGenerateMipmap_&&generateMipmapCap_)glTexParameteri(GL_TEXTURE_2D
 glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,width_,height_,0,GL_RGBA,GL_UNSIGNED_BYTE,d.pixels.empty()?nullptr:d.pixels.data());
 RegenerateMips(d.pixels.empty()?nullptr:d.pixels.data());
 if(registry_)registry_->Add(this);}
-// plan_opengl1.md phase 8: re-runs the exact same upload the constructor does, from whatever
+// plans/plan_opengl1.md phase 8: re-runs the exact same upload the constructor does, from whatever
 // CPU pixel data Texture2D last shared via ShareCpuPixels() -- nullptr (a blank texture of the
 // right size) only if context recovery was disabled and no CPU shadow was ever kept.
 void OpenGL1TextureRenderer::RecreateGLResource(){glGenTextures(1,&id_);glBindTexture(GL_TEXTURE_2D,id_);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);if(mipMap_&&!glGenerateMipmap_&&generateMipmapCap_)glTexParameteri(GL_TEXTURE_2D,GL_GENERATE_MIPMAP,GL_TRUE);const void*px=(cpuPixels_&&!cpuPixels_->empty())?cpuPixels_->data():nullptr;glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,width_,height_,0,GL_RGBA,GL_UNSIGNED_BYTE,px);RegenerateMips(static_cast<const uint8_t*>(px));}
 OpenGL1TextureRenderer::~OpenGL1TextureRenderer(){if(registry_)registry_->Remove(this);if(id_)glDeleteTextures(1,&id_);}void OpenGL1TextureRenderer::BindGL(int /*unit*/)const{glBindTexture(GL_TEXTURE_2D,id_);}
-// plan_opengl1.md phase 6: mip regeneration off a level-0 update. Priority: an explicit
+// plans/plan_opengl1.md phase 6: mip regeneration off a level-0 update. Priority: an explicit
 // glGenerateMipmap call (works on core-profile drivers too) > the GL_GENERATE_MIPMAP texture
 // parameter already set before the level-0 upload above (driver did it automatically as a side
 // effect) > a CPU box-filter fallback from the just-uploaded level-0 pixels for a driver with
@@ -189,7 +189,7 @@ else{for(int y=0;y<height_;++y)glTexSubImage2D(GL_TEXTURE_2D,0,0,y,width_,1,GL_R
  else RegenerateMips(nullptr);
 }}
 void OpenGL1TextureRenderer::UpdatePixelsLevel(int level,const uint8_t*p,int w,int h){glBindTexture(GL_TEXTURE_2D,id_);glTexImage2D(GL_TEXTURE_2D,level,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,p);}
-// plan_opengl1.md phase 5: ARB_texture_cube_map/core-1.3 cube map renderer for EnvironmentMapEffect.
+// plans/plan_opengl1.md phase 5: ARB_texture_cube_map/core-1.3 cube map renderer for EnvironmentMapEffect.
 // GL_TEXTURE_CUBE_MAP_POSITIVE_X..NEGATIVE_Z are consecutive enum values in exactly
 // Microsoft::Xna::Framework::Graphics::CubeMapFace's own declaration order (PositiveX=0 ..
 // NegativeZ=5, same convention EasyGLTextureCubeRenderer's kCubeFaceTargets table already relies
@@ -236,7 +236,7 @@ bool OpenGL1TextureCubeRenderer::SetData(int face,int level,int x,int y,int w,in
 // face/level image -- no sub-rectangle readback exists at the GL API level -- so the requested
 // [x,y,w,h] box is copied out of a full-image temporary rather than read directly.
 bool OpenGL1TextureCubeRenderer::GetData(int face,int level,int x,int y,int w,int h,void*data,int /*dataLength*/)const{if(face<0||face>=6||level<0||!data||w<=0||h<=0)return false;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levelSize=size_;for(int i=0;i<level;i++)levelSize=std::max(1,levelSize/2);std::vector<uint8_t>full((size_t)levelSize*levelSize*4);glPixelStorei(GL_PACK_ALIGNMENT,1);glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,GL_RGBA,GL_UNSIGNED_BYTE,full.data());uint8_t*dest=static_cast<uint8_t*>(data);for(int row=0;row<h;++row)std::memcpy(dest+(size_t)row*w*4,full.data()+((size_t)(y+row)*levelSize+x)*4,(size_t)w*4);return true;}
-// plan_opengl1.md item 22: the granted multisample attributes report what the driver genuinely
+// plans/plan_opengl1.md item 22: the granted multisample attributes report what the driver genuinely
 // provided for the visual the current GL context is bound to -- GLX can silently clamp
 // or altogether refuse the request GraphicsDevice made before window creation, so this is
 // read back empirically rather than trusted from GraphicsRendererCreateArgs::multiSampleCount.
@@ -259,7 +259,7 @@ std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.ve
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);IGraphicsRenderer::RegisterForWindow(a.surface.windowId,this);}
 OpenGL1Renderer::~OpenGL1Renderer(){IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());}
 void OpenGL1Renderer::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1Renderer::Present(){platformContext_->SwapBuffers();}void OpenGL1Renderer::GetViewportSize(int&w,int&h){surface_.GetDrawableSize(w,h);}void OpenGL1Renderer::OnSurfaceChanged(const RendererSurfaceInfo&s){surface_.Update(s);}void OpenGL1Renderer::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1Renderer::SetPresentationMode(int mode){presentationMode_=mode;}
-// plan_opengl1.md item 13 (EasyGL parity): see EffectiveWidth()/EffectiveHeight()'s own doc
+// plans/plan_opengl1.md item 13 (EasyGL parity): see EffectiveWidth()/EffectiveHeight()'s own doc
 // comment in the header for the full rationale of which modes recompute and which don't.
 void OpenGL1Renderer::ComputeLogicalSize(int&outW,int&outH)const{
 if(presentationMode_!=4){outW=virtualWidth_;outH=virtualHeight_;return;} // Only FixedHeightDynamicWidth recomputes.
@@ -286,7 +286,7 @@ void OpenGL1Renderer::SetSwapInterval(int interval){platformContext_->SetSwapInt
 void OpenGL1Renderer::ReadBackbuffer(int x,int y,int w,int h,uint8_t*pixels){int W,H;GetViewportSize(W,H);glReadBuffer(GL_BACK);glPixelStorei(GL_PACK_ALIGNMENT,1);const int glY=H-y-h;glReadPixels(x,glY,w,h,GL_RGBA,GL_UNSIGNED_BYTE,pixels);const int rowBytes=w*4;std::vector<uint8_t>tmp(rowBytes);for(int i=0;i<h/2;++i){uint8_t*top=pixels+i*rowBytes;uint8_t*bot=pixels+(h-1-i)*rowBytes;std::copy(top,top+rowBytes,tmp.data());std::copy(bot,bot+rowBytes,top);std::copy(tmp.begin(),tmp.end(),bot);}}
 std::unique_ptr<ITextureRenderer>OpenGL1Renderer::CreateTexture(const ImageData&d){return std::make_unique<OpenGL1TextureRenderer>(d,RegistryIfEnabled(),caps_.generateMipmap);}std::unique_ptr<ISpriteBatchRenderer>OpenGL1Renderer::CreateSpriteBatch(){return std::make_unique<OpenGL1SpriteBatchRenderer>(*this);}std::unique_ptr<IVertexBufferRenderer>OpenGL1Renderer::CreateVertexBuffer(int c){return std::make_unique<OpenGL1VertexBufferRenderer>(c);}std::unique_ptr<IIndexBufferRenderer>OpenGL1Renderer::CreateIndexBuffer16(int){return std::make_unique<OpenGL1IndexBufferRenderer>(false);}std::unique_ptr<IIndexBufferRenderer>OpenGL1Renderer::CreateIndexBuffer32(int){return std::make_unique<OpenGL1IndexBufferRenderer>(true);}
 std::unique_ptr<IRenderTargetRenderer>OpenGL1Renderer::CreateRenderTarget2D(int w,int h,int depthFormat,bool,bool mipMap,int multiSampleCount){if(!caps_.framebufferObject)return nullptr;try{return std::make_unique<OpenGL1RenderTargetRenderer>(w,h,depthFormat,mipMap,multiSampleCount,RegistryIfEnabled());}catch(const std::exception&){return nullptr;}}
-// plan_opengl1.md phase 8: matches EasyGLRenderer's own desktop DebugSimulateContextLoss()/
+// plans/plan_opengl1.md phase 8: matches EasyGLRenderer's own desktop DebugSimulateContextLoss()/
 // DebugRestoreContext() pattern (destroy+recreate is one atomic operation on desktop -- there is
 // no genuine asynchronous lost/restored pair the way WebGL has), implemented independently with
 // no EasyGL/metagl dependency. registry_.NotifyContextLost() runs while the OLD context is still
@@ -309,7 +309,7 @@ registry_.NotifyContextRestored();
 // own dimensions (currentRt_ is still non-null) -- a viewport/scissor mismatch on top of the
 // wrong target.
 if(currentRt_)currentRt_->BindAsRenderTarget();
-// plan_opengl1.md item 24: same rebind reasoning as currentRt_ above, for a cube-face target.
+// plans/plan_opengl1.md item 24: same rebind reasoning as currentRt_ above, for a cube-face target.
 if(currentCubeRt_)currentCubeRt_->BindAsRenderTargetFace(currentCubeFace_);
 std::cout<<"CNA: OpenGL1 desktop GL context recreated and all tracked resources restored"<<std::endl;
 }
@@ -318,7 +318,7 @@ std::unique_ptr<ITextureCubeRenderer>OpenGL1Renderer::CreateTextureCube(int size
 std::unique_ptr<IRenderTargetCubeRenderer>OpenGL1Renderer::CreateRenderTargetCube(int size,int depthFormat,bool /*preserveContents*/,bool mipMap,int){if(!caps_.framebufferObject||!caps_.textureCubeMap)return nullptr;try{return std::make_unique<OpenGL1RenderTargetCubeRenderer>(size,depthFormat,mipMap,RegistryIfEnabled());}catch(const std::exception&){return nullptr;}}
 std::unique_ptr<IOcclusionQueryRenderer>OpenGL1Renderer::CreateOcclusionQuery(){if(!caps_.occlusionQuery)return nullptr;return std::make_unique<OpenGL1OcclusionQueryRenderer>();}
 void OpenGL1Renderer::SetRenderTarget2D(IRenderTargetRenderer*rt){if(currentCubeRt_){currentCubeRt_->UnbindAsRenderTarget();currentCubeRt_=nullptr;currentCubeFace_=-1;}if(currentRt_&&currentRt_!=rt)currentRt_->UnbindAsRenderTarget();currentRt_=rt;if(rt)rt->BindAsRenderTarget();}
-// plan_opengl1.md item 24: mirrors SetRenderTarget2D's own clear-the-other-kind's-stale-pointer
+// plans/plan_opengl1.md item 24: mirrors SetRenderTarget2D's own clear-the-other-kind's-stale-pointer
 // symmetry -- switching TO a cube face must also unbind/clear whatever 2D currentRt_ was active.
 void OpenGL1Renderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer*rt,int face){if(currentRt_){currentRt_->UnbindAsRenderTarget();currentRt_=nullptr;}if(currentCubeRt_&&currentCubeRt_!=rt)currentCubeRt_->UnbindAsRenderTarget();currentCubeRt_=rt;currentCubeFace_=rt?face:-1;if(rt)rt->BindAsRenderTargetFace(face);}
 // Post-audit descriptor route (see the header's own comment). SetRenderTarget2D(nullptr) already
@@ -335,7 +335,7 @@ void OpenGL1Renderer::SetRenderTargets(const RenderTargetBindingDescriptor*rende
  SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
 }
 void OpenGL1Renderer::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1Renderer::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1Renderer::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1Renderer::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1Renderer::ClearDepth(float d){glClearDepth(d);glClear(GL_DEPTH_BUFFER_BIT);}void OpenGL1Renderer::ClearStencil(int s){glClearStencil(s);glClear(GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);glClear(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
-// plan_opengl1.md items 18/19 (EasyGL parity): colorBlendFunc/alphaBlendFunc (blend equations
+// plans/plan_opengl1.md items 18/19 (EasyGL parity): colorBlendFunc/alphaBlendFunc (blend equations
 // beyond additive) and alphaSrcBlend/alphaDstBlend (separate alpha blend factors) used to be
 // dropped entirely -- glBlendFunc always implied GL_FUNC_ADD for both channels and reused the
 // color factors for alpha too. glBlendFuncSeparate/glBlendEquationSeparate (both core GL 1.4,
@@ -360,7 +360,7 @@ void OpenGL1Renderer::ApplySamplerState(int slot,int filter,int u,int v,int maxA
 // CURRENTLY ACTIVE texture unit -- callers must glActiveTexture() + BindGL() the right texture
 // first. `hasMips` gates whether the min filter is allowed to request a _MIPMAP_ variant (see
 // OpenGL1TextureRenderer::HasMips()'s own doc comment for why).
-void OpenGL1Renderer::ApplySamplerFilterAndWrap(int slot,bool hasMips){if(slot<0||slot>=2)return;const GL1SamplerParams&s=samplerSlot_[slot];GLenum minF,magF;MinMagFilter(s.filter,hasMips,minF,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,minF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,WrapMode(s.addrU));glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,WrapMode(s.addrV));if(caps_.anisotropicFiltering){float req=(s.filter==2)?(float)s.maxAniso:1.0f;if(req<1.0f)req=1.0f;if(req>caps_.maxAnisotropy)req=caps_.maxAnisotropy;glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,req);}}// plan_opengl1.md item 17 (EasyGL parity): was a no-op -- Blend.BlendFactor/InverseBlendFactor
+void OpenGL1Renderer::ApplySamplerFilterAndWrap(int slot,bool hasMips){if(slot<0||slot>=2)return;const GL1SamplerParams&s=samplerSlot_[slot];GLenum minF,magF;MinMagFilter(s.filter,hasMips,minF,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,minF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,magF);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,WrapMode(s.addrU));glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,WrapMode(s.addrV));if(caps_.anisotropicFiltering){float req=(s.filter==2)?(float)s.maxAniso:1.0f;if(req<1.0f)req=1.0f;if(req>caps_.maxAnisotropy)req=caps_.maxAnisotropy;glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,req);}}// plans/plan_opengl1.md item 17 (EasyGL parity): was a no-op -- Blend.BlendFactor/InverseBlendFactor
 // mapped to GL_ONE/GL_ZERO instead (BlendF above), meaning a game using GraphicsDevice.
 // BlendFactor got a silently WRONG constant color, not just a degraded/ignored one.
 void OpenGL1Renderer::SetBlendFactor(float r,float g,float b,float a){if(caps_.extendedBlend)glBlendColor_(r,g,b,a);}void OpenGL1Renderer::SetReferenceStencil(int v){stencilRef_=v;}void OpenGL1Renderer::SetScissorRect(int x,int y,int w,int h){int H;if(currentRt_)H=currentRt_->GetHeight();else if(currentCubeRt_)H=currentCubeRt_->GetSize();else{int W;GetViewportSize(W,H);}glScissor(x,H-y-h,w,h);}void OpenGL1Renderer::SetViewport(int x,int y,int w,int h,float mn,float mx){int H;if(currentRt_)H=currentRt_->GetHeight();else if(currentCubeRt_)H=currentCubeRt_->GetSize();else{int W;GetViewportSize(W,H);}glViewport(x,H-y-h,w,h);glDepthRange(mn,mx);}
@@ -397,7 +397,7 @@ static void ApplyFogFromVector(const GpuDrawParams*params){
  }
  float fc[4]={params->fogColor[0],params->fogColor[1],params->fogColor[2],1};glFogfv(GL_FOG_COLOR,fc);
 }
-// plan_gltf.md GLTF-477: DrawInternal's per-vertex `emit` has cases for strides 16, 20, 24 and 32
+// plans/plan_gltf.md GLTF-477: DrawInternal's per-vertex `emit` has cases for strides 16, 20, 24 and 32
 // and a final `else glColor4f(1,1,1,1)` for everything else -- so a stride-48/52/56/60/68/76/80
 // record (every PBR and skinned layout CNA's glTF importer emits) was drawn as untextured, unlit,
 // FLAT WHITE geometry and reported as a successful draw. That is the third state the renderer
@@ -422,12 +422,12 @@ static void OpenGL1RequireEmittableStrideEXT(const IVertexBufferRenderer& vb,
         "layouts; every wider canonical record carries a tangent, a second UV set, bone weights or "
         "a packed COLOR_0 that OpenGL 1.x fixed function cannot express. The draw is refused rather "
         "than emitted as flat white geometry, which is what it used to become "
-        "(plan_gltf.md GLTF-477). Use a renderer with a programmable pipeline for this content.");
+        "(plans/plan_gltf.md GLTF-477). Use a renderer with a programmable pipeline for this content.");
 }
 
 void OpenGL1Renderer::DrawInternal(const OpenGL1VertexBufferRenderer&vb,const OpenGL1IndexBufferRenderer*ib,PrimitiveType prim,int pc,const GpuDrawParams*params){const auto&s=vb.Data();const size_t st=vb.Stride();if(st<12||s.empty())return;bool tex=params&&params->texture0&&(st==20||st==24||st==32);bool normal=(st==32);
 bool dual=tex&&params->dualTexture&&params->texture1&&glActiveTexture_&&glMultiTexCoord2f_;
-// plan_opengl1.md phase 5: EnvironmentMapEffect's fixed-function reflection-mapping subset.
+// plans/plan_opengl1.md phase 5: EnvironmentMapEffect's fixed-function reflection-mapping subset.
 // Needs a normal (stride 32), a real ARB_texture_cube_map cube texture and a second texture
 // unit (the cube map rides unit 1, exactly like DualTextureEffect's unit 1 -- the two are
 // mutually exclusive per draw, XNA has no effect that is both dual-textured and env-mapped).
@@ -448,7 +448,7 @@ glMatrixMode(GL_TEXTURE);
 if(dynamic_cast<const IRenderTargetRenderer*>(params->texture0)){glLoadIdentity();glScalef(1.0f,-1.0f,1.0f);glTranslatef(0.0f,-1.0f,0.0f);}else glLoadIdentity();
 glMatrixMode(GL_MODELVIEW);
 }else glDisable(GL_TEXTURE_2D);
-// plan_opengl1.md phase 3: DualTextureEffect's fixed-function equivalent, matching this
+// plans/plan_opengl1.md phase 3: DualTextureEffect's fixed-function equivalent, matching this
 // project's own shader renderers' "base.rgb*=2.0; FragColor=base*texture(uTexture2,vUV)*
 // uDiffuseColor" formula exactly via GL_COMBINE texture environment chaining -- unit 0
 // modulates texture0 by the vertex/material color (GL_PRIMARY_COLOR) with an RGB_SCALE of 2
@@ -468,7 +468,7 @@ glActiveTexture_(GL_TEXTURE0);glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_CO
 // `mix(baseColor,envColor,Amount)` blend (docs/environmentmapeffect-support.md Task 394).
 // Deliberately NOT attempted: Fresnel edge-weighting and EnvironmentMapSpecular's alpha-scaled
 // specular term are both inherently per-pixel/view-angle-dependent and cannot be expressed with
-// fixed-function texture combiners -- an honest, documented limitation (plan_opengl1.md), not a
+// fixed-function texture combiners -- an honest, documented limitation (plans/plan_opengl1.md), not a
 // silent wrong answer. OPENGL1 always behaves as if FresnelEnabled=false/EnvironmentMapSpecular=0.
 glActiveTexture_(GL_TEXTURE1);glEnable(GL_TEXTURE_CUBE_MAP);glDisable(GL_TEXTURE_2D);params->envMap->BindGL();
 glTexGeni(GL_S,GL_TEXTURE_GEN_MODE,GL_REFLECTION_MAP);glTexGeni(GL_T,GL_TEXTURE_GEN_MODE,GL_REFLECTION_MAP);glTexGeni(GL_R,GL_TEXTURE_GEN_MODE,GL_REFLECTION_MAP);
@@ -485,14 +485,14 @@ glActiveTexture_(GL_TEXTURE0);glTexEnvi(GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_MO
 }else{glDisable(GL_TEXTURE_2D);resetUnit1EnvGen();if(glActiveTexture_){glActiveTexture_(GL_TEXTURE1);glDisable(GL_TEXTURE_2D);glActiveTexture_(GL_TEXTURE0);}}
 normal?glEnable(GL_NORMALIZE):glDisable(GL_NORMALIZE);
 if(params&&params->lightingEnabled&&normal){glEnable(GL_LIGHTING);glEnable(GL_LIGHT0);float amb[4]={params->ambientColor[0],params->ambientColor[1],params->ambientColor[2],1};float dif[4]={params->light0Diffuse[0],params->light0Diffuse[1],params->light0Diffuse[2],1};float pos[4]={-params->light0Dir[0],-params->light0Dir[1],-params->light0Dir[2],0};glLightModelfv(GL_LIGHT_MODEL_AMBIENT,amb);glLightfv(GL_LIGHT0,GL_DIFFUSE,dif);glLightfv(GL_LIGHT0,GL_POSITION,pos);
-// plan_opengl1.md item 14 (EasyGL parity): BasicEffect.DirectionalLight1/DirectionalLight2 via
+// plans/plan_opengl1.md item 14 (EasyGL parity): BasicEffect.DirectionalLight1/DirectionalLight2 via
 // GL_LIGHT1/GL_LIGHT2, the same mechanism GL_LIGHT0 already uses -- GpuDrawParams::light1Diffuse/
 // light2Diffuse are zeroed by FillGpuDrawParams when a light is Enabled=false (mirrors FNA's own
 // DirectionalLight.Enabled setter), so unconditionally enabling both here is safe: a disabled
 // light's zero diffuse contributes nothing, matching every other lit-path field's own convention.
 float dif1[4]={params->light1Diffuse[0],params->light1Diffuse[1],params->light1Diffuse[2],1};float pos1[4]={-params->light1Dir[0],-params->light1Dir[1],-params->light1Dir[2],0};glEnable(GL_LIGHT1);glLightfv(GL_LIGHT1,GL_DIFFUSE,dif1);glLightfv(GL_LIGHT1,GL_POSITION,pos1);
 float dif2[4]={params->light2Diffuse[0],params->light2Diffuse[1],params->light2Diffuse[2],1};float pos2[4]={-params->light2Dir[0],-params->light2Dir[1],-params->light2Dir[2],0};glEnable(GL_LIGHT2);glLightfv(GL_LIGHT2,GL_DIFFUSE,dif2);glLightfv(GL_LIGHT2,GL_POSITION,pos2);
-// plan_opengl1.md item 15 (EasyGL parity): BasicEffect specular highlights via GL_SPECULAR
+// plans/plan_opengl1.md item 15 (EasyGL parity): BasicEffect specular highlights via GL_SPECULAR
 // material/light state. GL_SEPARATE_SPECULAR_COLOR (core GL 1.2) adds the specular term AFTER
 // texture modulation instead of folding it into the modulated primary color -- matches BasicEffect
 // .fx's own "texture*(ambient+diffuse) + specular" formula rather than darkening/distorting the
@@ -509,7 +509,7 @@ float spec0[4]={params->light0Specular[0],params->light0Specular[1],params->ligh
 float spec1[4]={params->light1Specular[0],params->light1Specular[1],params->light1Specular[2],1};glLightfv(GL_LIGHT1,GL_SPECULAR,spec1);
 float spec2[4]={params->light2Specular[0],params->light2Specular[1],params->light2Specular[2],1};glLightfv(GL_LIGHT2,GL_SPECULAR,spec2);
 glEnable(GL_COLOR_MATERIAL);glColorMaterial(GL_FRONT_AND_BACK,GL_AMBIENT_AND_DIFFUSE);
-// plan_opengl1.md phase 5 finding: the lit (stride 32) path never set GL_EMISSION, so
+// plans/plan_opengl1.md phase 5 finding: the lit (stride 32) path never set GL_EMISSION, so
 // EnvironmentMapEffect's EmissiveColor/AmbientLightColor contribution (pre-combined into
 // GpuDrawParams::emissiveColor by FillGpuDrawParams -- EnvironmentMapEffect does not populate
 // ambientColor at all, unlike BasicEffect) was silently dropped entirely. Real XNA/GL fixed-
@@ -519,7 +519,7 @@ float emis[4]={params->emissiveColor[0],params->emissiveColor[1],params->emissiv
 glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,emis);
 }else glDisable(GL_LIGHTING);ApplyFogFromVector(params);if(params&&params->alphaTest[3]<0){glEnable(GL_ALPHA_TEST);glAlphaFunc(GL_GEQUAL,params->alphaTest[0]);}else glDisable(GL_ALPHA_TEST);
  auto emitTexCoord=[&](float u,float v){if(dual){glMultiTexCoord2f_(GL_TEXTURE0,u,v);glMultiTexCoord2f_(GL_TEXTURE1,u,v);}else if(envMap){glMultiTexCoord2f_(GL_TEXTURE0,u,v);}else glTexCoord2f(u,v);};
- // plan_opengl1.md phase 4: matches FNA's real BasicEffect.fx combine -- when VertexColorEnabled,
+ // plans/plan_opengl1.md phase 4: matches FNA's real BasicEffect.fx combine -- when VertexColorEnabled,
  // the vertex color is multiplied by the material DiffuseColor (Task/GpuDrawParams convention:
  // diffuseColor already carries DiffuseColor*Alpha), not used alone. Stride 20/32 already applied
  // diffuseColor (no vertex-color channel to combine with there); this closes the same gap for the
@@ -571,7 +571,7 @@ glEnable(GL_TEXTURE_2D);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS
 // relative to whatever's currently bound, and an RT's dimensions can differ from the window.
 glOrtho(0,owner_.EffectiveWidth(),owner_.EffectiveHeight(),0,-1,1);
 glMatrixMode(GL_MODELVIEW);glPushMatrix();float m[16];Mat(transform_,m);glLoadMatrixf(m);}void OpenGL1SpriteBatchRenderer::End(){if(!begun_)return;glMatrixMode(GL_MODELVIEW);glPopMatrix();glMatrixMode(GL_PROJECTION);glPopMatrix();glPopAttrib();begun_=false;}void OpenGL1SpriteBatchRenderer::Draw(const ITextureRenderer&t,float x,float y){Rectangle d((int)x,(int)y,t.GetWidth(),t.GetHeight()),s(0,0,t.GetWidth(),t.GetHeight());Draw(t,d,s,Color::White);}void OpenGL1SpriteBatchRenderer::Draw(const ITextureRenderer&t,const Rectangle&d,const Rectangle&s,const Color&c){Draw(t,d,s,c,0,Vector2::Zero,SpriteEffects::None,0);}void OpenGL1SpriteBatchRenderer::Draw(const ITextureRenderer&t,const Rectangle&d,const Rectangle&s,const Color&c,float rot,const Vector2&o,SpriteEffects e,float z){if(!begun_)Begin();t.BindGL();
-// plan_opengl1.md phase 6 finding: SetSamplerAddressMode()'s u_/v_ used to be stored and never
+// plans/plan_opengl1.md phase 6 finding: SetSamplerAddressMode()'s u_/v_ used to be stored and never
 // actually applied (GL_TEXTURE_WRAP_S/T stayed whatever the texture's own constructor set,
 // always GL_CLAMP_TO_EDGE) -- harmless for the common default (Clamp=1, same result), a real gap
 // for a game requesting Wrap/tiling. Also now uses the same mip-aware min/mag mapping the 3D
@@ -590,7 +590,7 @@ glPushMatrix();glTranslatef((float)d.X,(float)d.Y,z);glRotatef(rot*57.2957795f,0
 #ifdef CNA_RENDERER_OPENGL1
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace OpenGL1

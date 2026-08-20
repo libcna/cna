@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework
             return (static_cast<int>(value) & static_cast<int>(flag)) != 0;
         }
 
-        // plan_apple.md APPLE-15. On a desktop the supported-orientation set is the framework's
+        // plans/plan_apple.md APPLE-15. On a desktop the supported-orientation set is the framework's
         // own bookkeeping, but on iOS and Android the operating system decides whether the device
         // may rotate at all, and it only learns the answer if the platform layer is told. Without
         // forwarding it, XNA's SupportedOrientations would silently mean nothing on the one

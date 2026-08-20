@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-053: measures the compiled-effect operations a real game repeats every frame, so
+// plans/plan_fx.md FX-053: measures the compiled-effect operations a real game repeats every frame, so
 // the decision to add (or not add) an immutable native-artifact cache rests on numbers rather than
 // on intuition. Construction and clone are the candidates such a cache would target; dirty upload,
 // clean apply and draw are what a cache must not make slower.

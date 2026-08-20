@@ -21,7 +21,7 @@ namespace CNA::Graphics {
     /**
      * @brief The glTF material extensions beyond what `PbrEffect` implements.
      *
-     * **A separate type from `PbrMaterial`, deliberately** (plan_modern.md `MOD-2070`).
+     * **A separate type from `PbrMaterial`, deliberately** (plans/plan_modern.md `MOD-2070`).
      * `PbrMaterial`'s defining property is that it is *lossless*: every field on it corresponds to
      * exactly one piece of `PbrEffect` state, so `applyMaterial` followed by `extractMaterial`
      * returns an equal material. That invariant is what Phase 13 existed to establish, and putting

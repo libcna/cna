@@ -14,7 +14,7 @@ Implements the constructor, property getters, `GetAvailableMediaSources()`, `ToS
 ## Executive Verdict
 Correct. `GetAvailableMediaSources()`'s "no real device enumeration concept on desktop -- there is
 exactly one real source" design is a reasonable, disclosed simplification (citing
-`plan_media.md MEDIA-61`).
+`plans/plan_media.md MEDIA-61`).
 
 ## Checklist Results
 No issues found within this file (see the paired `.hpp` report for the one LOW doc-comment finding

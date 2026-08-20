@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2164: per-pass GPU timings through the pipeline.
+// plans/plan_modern.md MOD-2164: per-pass GPU timings through the pipeline.
 //
 // A frame that is too slow is not a useful fact; a *pass* that is too slow is. The chain already
 // knows what it ran and in what order, so it is the one place that can attribute the time without

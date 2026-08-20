@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::GraphicsExt (MODULARIZATION_PLAN.md §11): the CNA graphics
+// Minimal-link probe for CNA::GraphicsExt (plans/MODULARIZATION_PLAN.md §11): the CNA graphics
 // extensions (the former cna_cnaext implementation) must be usable without content, media,
 // audio, runtime, devices or networking -- graphics-ext depends on the graphics core only.
 // The extension surface itself is option-gated (CNA_CNAEXT, default OFF), so the probe uses

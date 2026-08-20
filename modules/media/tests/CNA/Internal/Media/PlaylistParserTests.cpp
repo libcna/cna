@@ -22,7 +22,7 @@ TEST(PlaylistParserTest, ParsesFavoritesM3UAndSkipsTheMissingEntry)
     }
 }
 
-// plan_media.md MEDIA-58: .m3u8 UTF-8 handling via the non-ASCII "Étoile" filename/title.
+// plans/plan_media.md MEDIA-58: .m3u8 UTF-8 handling via the non-ASCII "Étoile" filename/title.
 TEST(PlaylistParserTest, ParsesInternationalM3U8WithNonAsciiEntry)
 {
     ParsedPlaylist playlist = PlaylistParser::Parse("tests/assets/media/music/International.m3u8");

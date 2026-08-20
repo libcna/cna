@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-065: the Vulkan compiled-effect runtime.
+// plans/plan_fx.md FX-065: the Vulkan compiled-effect runtime.
 //
 // This backend is the first with no MojoShader-provided adapter -- the nine-function effect context
 // is CNA's own, written against the portable SPIR-V profile (see VulkanCompiledEffect.hpp). Every
@@ -73,7 +73,7 @@ TEST(VulkanCompiledEffectTest, TheCapabilityIsTrueAndThePublicBoundaryAcceptsByt
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the Vulkan renderer";
-    // plan_fx.md FX-065: true only because the draw route exists. The two report false/true
+    // plans/plan_fx.md FX-065: true only because the draw route exists. The two report false/true
     // together on purpose -- a capability that says true while a compiled draw falls through to a
     // stock shader is exactly the defect FX-080 removed from the other three backends.
     EXPECT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
@@ -165,7 +165,7 @@ TEST(VulkanCompiledEffectTest, AppliesAPassAndPublishesTheStatesItAssigns)
     EXPECT_EQ(sampling.samplers[0].sampler.getAddressVProperty(), TextureAddressMode::Clamp);
     EXPECT_EQ(sampling.samplers[0].sampler.getMaxAnisotropyProperty(), 8);
 
-    // Re-applying the SAME pass must publish the same state again (plan_fx.md FX-101): MojoShader
+    // Re-applying the SAME pass must publish the same state again (plans/plan_fx.md FX-101): MojoShader
     // takes a commit-only shortcut there, and a backend that clears its state-change struct first
     // silently publishes nothing on every application after the first.
     CompiledEffectPassStateChanges again;
@@ -237,7 +237,7 @@ TEST(VulkanCompiledEffectTest, MalformedBytecodeIsRejectedWithoutCrashing)
     // MojoShader's own effect parser (`mojoshader_effects.c` `readvalue`), and MojoShader's
     // `assert` resolves to SDL's, whose default handler BLOCKS for an interactive answer. This
     // case therefore used to hang a whole suite run rather than fail, which is why it was left out
-    // of this test until `tests/HarnessAssertionPolicy.cpp` (plan_fx.md FX-111) made the suite's
+    // of this test until `tests/HarnessAssertionPolicy.cpp` (plans/plan_fx.md FX-111) made the suite's
     // assertion policy non-interactive. It is here now because it is the one case that proves that
     // policy is in effect -- if it regresses, this hangs.
     const std::vector<std::uint8_t> whole = LoadEffect("CnaConformanceEffect.fxb");
@@ -295,7 +295,7 @@ TEST(VulkanCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
     }
 }
 
-// plan_fx.md FX-060/FX-065: the same cross-renderer contracts FNA3D, SDL_GPU and EasyGL run,
+// plans/plan_fx.md FX-060/FX-065: the same cross-renderer contracts FNA3D, SDL_GPU and EasyGL run,
 // through the public Effect/GraphicsDevice API. Each drawing contract renders the compiled
 // effect's own parameters into a render target and reads the pixels back, so a draw that silently
 // used a stock shader -- or bound an attribute, uniform slice or sampler from the wrong place --
@@ -419,7 +419,7 @@ TEST(VulkanCompiledEffectDrawTest, SharedManyDrawsContract)
     GraphicsDevice device;
     if (!CNA::TestSupport::SupportsCompiledEffects(device))
         GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
-    // plan_fx.md FX-112: this renderer's own per-frame uniform chunks are what this contract was
+    // plans/plan_fx.md FX-112: this renderer's own per-frame uniform chunks are what this contract was
     // written against -- 600 compiled draws cross two of them -- but the shape is not Vulkan's,
     // so it lives in the shared suite where a fifth backend's own ring gets the same check.
     CNA::TestSupport::RunCompiledEffectManyDrawsContract(device);
@@ -433,7 +433,7 @@ TEST(VulkanCompiledEffectDrawTest, SharedTruncationContract)
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
-// plan_fx.md FX-112. The compiled SpriteBatch route leaves the stock sprite pipeline entirely and
+// plans/plan_fx.md FX-112. The compiled SpriteBatch route leaves the stock sprite pipeline entirely and
 // takes an early return out of End(), so the sequence that can break is returning to a compiled
 // batch after a stock one has run between them: a pending-sprite list that survived, or batch state
 // the early return skipped, would show up here and nowhere else. The three batches draw into

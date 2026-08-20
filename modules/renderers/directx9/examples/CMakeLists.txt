@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_directx11_test/
+# plans/plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_directx11_test/
 # cna_directx12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
 # new scripts/run-wine-dxvk9.sh (D9-5), not the shared run-wine-dxvk.sh (cold-start Sec.4).
 
@@ -384,7 +384,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     # REMED-GFX-172 cross-renderer control: DualTextureEffect's two layers have INDEPENDENT public
     # sampler slots -- FNA's DualTextureEffect.fx declares DECLARE_TEXTURE(Texture, 0) and
     # DECLARE_TEXTURE(Texture2, 1). D3D9 declares stride 20 with vertexColor=false unsupported for
-    # DualTextureEffect (plan_dx9.md D9-82d), so the fixture reports its own honest skip there.
+    # DualTextureEffect (plans/plan_dx9.md D9-82d), so the fixture reports its own honest skip there.
     cna_directx9_test(cna_test_directx9_dualtexture_slot_sampler
                    ${CNA_GRAPHICS_EXAMPLES_DIR}/dualtexture_slot_sampler_contract_test.cpp)
     cna_directx9_ctest_command(_directx9_dualtexture_slot_sampler_cmd cna_test_directx9_dualtexture_slot_sampler)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-131: the end-to-end proof that a float render target keeps values above 1.0.
+// plans/plan_modern.md MOD-131: the end-to-end proof that a float render target keeps values above 1.0.
 //
 // Everything else in Phase 1 is a promise about this one property -- the capability query, the
 // per-format verdict, the GL storage, the readback. A test that only checked those parts

@@ -6,7 +6,7 @@
 namespace CNA::Internal::Renderers::SvgDom
 {
     /**
-     * @brief Off-screen render target backed by a real private `<canvas>` (plan_svg_dom.md design
+     * @brief Off-screen render target backed by a real private `<canvas>` (plans/plan_svg_dom.md design
      * decision 5).
      *
      * An `<svg>`/`<image>` element cannot be rendered into and read back synchronously (no browser

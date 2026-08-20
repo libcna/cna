@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md session 13: real GraphicsDevice.ReferenceStencil support
+// plans/plan_opengl2.md session 13: real GraphicsDevice.ReferenceStencil support
 // (IGraphicsRenderer::SetReferenceStencil) -- previously a silent no-op on this renderer (the
 // shared IGraphicsRenderer base class's own default), so changing ONLY ReferenceStencil between
 // stencil passes (a common real XNA stencil-shadow-volume pattern) had no effect until the next

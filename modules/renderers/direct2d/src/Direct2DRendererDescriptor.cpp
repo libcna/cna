@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D13: the Direct2D family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D13: the Direct2D family's pre-construction contract.
 //
 // Direct2D binds to the window's HWND; no graphics-API window intent applies.
 
@@ -14,7 +14,7 @@ namespace CNA::Internal::Renderers::Direct2D
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

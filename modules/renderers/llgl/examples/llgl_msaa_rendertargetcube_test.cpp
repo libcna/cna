@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-34: RenderTargetCube MSAA -- a real antialiased edge resolved into a
+// plans/plan_llgl.md LLGL-34: RenderTargetCube MSAA -- a real antialiased edge resolved into a
 // RenderTargetCube's own shared colour texture, not just a bookkeeping check. Mirrors
 // examples/llgl_msaa_rendertarget_test.cpp's own RenderTarget2D technique and checks verbatim,
 // applied to CreateRenderTargetCube's own multiSampleCount parameter against a single face

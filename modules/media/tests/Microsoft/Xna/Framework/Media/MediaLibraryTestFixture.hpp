@@ -11,7 +11,7 @@ namespace Microsoft::Xna::Framework::Media::Test
 {
     // Shared real-fixture MediaLibrary construction for Phase 4 tests -- redirects
     // MediaLibraryPaths at the checked-in tests/assets/media/{music,pictures} trees instead of
-    // the real user's OS folders (plan_media.md MEDIA-46's override hooks).
+    // the real user's OS folders (plans/plan_media.md MEDIA-46's override hooks).
     class MediaLibraryTestFixture : public ::testing::Test
     {
     protected:

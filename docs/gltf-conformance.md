@@ -1,6 +1,6 @@
 # glTF 2.0 conformance — specification pin and oracle harness
 
-Campaign document: [`plan_gltf.md`](../plan_gltf.md).
+Campaign document: [`plans/plan_gltf.md`](../plans/plan_gltf.md).
 This file is the campaign's **normative reference anchor** (`GLTF-002`) and the operating manual for
 the numerical oracle harness (`GLTF-003` … `GLTF-006`, `GLTF-041`).
 
@@ -155,13 +155,13 @@ declared in that file.
 | 9 | Appendix C — Animation Sampler Interpolation Modes | `appendix-c-interpolation` |
 | 9.5 | Cubic Spline Interpolation | `interpolation-cubic` |
 
-### 2.6 Corrections to `plan_gltf.md` §7.3
+### 2.6 Corrections to `plans/plan_gltf.md` §7.3
 
-`plan_gltf.md` §7.3 was written before the pin existed and cites four sections by a number that does
+`plans/plan_gltf.md` §7.3 was written before the pin existed and cites four sections by a number that does
 not resolve in the pinned snapshot. The anchors below are authoritative; the plan text is **not**
 rewritten (it is a planning record), so resolve its citations through this table.
 
-| `plan_gltf.md` §7.3 citation | Resolves in the pinned snapshot to |
+| `plans/plan_gltf.md` §7.3 citation | Resolves in the pinned snapshot to |
 |---|---|
 | node transforms and `matrix`/TRS mutual exclusivity — "§3.5 (Nodes and Hierarchy)" | §3.5.2 `nodes-and-hierarchy` **and** §3.5.3 `transformations` — the mutual-exclusivity and `T * R * S` rules are in *Transformations*, not *Nodes and Hierarchy* |
 | skins and the joint matrix — "§3.8" | §3.7.3 `skins` (§3.7.3.3 `skinned-mesh-attributes` for the joint-matrix equation). §3.8 in this revision is *Texture Data* |
@@ -375,7 +375,7 @@ common root, and the scale/strength material owns a schema-valid shared texture.
 
 ### 3.1 The seven layers
 
-`plan_gltf.md` §7.1 defines the ladder. A task may not be closed at layer *N* until layers 1…*N*−1
+`plans/plan_gltf.md` §7.1 defines the ladder. A task may not be closed at layer *N* until layers 1…*N*−1
 pass for its fixture. Implemented so far:
 
 | Layer | What it compares | Status | Owning task |
@@ -510,7 +510,7 @@ animated root joint substitutes only its own local transform exactly like any ot
 
 ### 3.4 Promoted audit fixtures (`GLTF-004`)
 
-The fourteen throwaway fixtures the forensic audit used (`f1`…`f14`, `plan_gltf.md` §1.1/§1.2) are
+The fourteen throwaway fixtures the forensic audit used (`f1`…`f14`, `plans/plan_gltf.md` §1.1/§1.2) are
 promoted to permanent generated fixtures under their canonical corpus names (§24.2):
 
 | Audit | Canonical id | Owning group | Proves |
@@ -732,7 +732,7 @@ renderer is involved.
 Unlike L1–L4, an L5 golden is **not** purely spec-derived, and the distinction matters:
 
 * the **values** come from the fixture's own spec-derived L3 expectation;
-* the **placement** comes from CNA's own vertex stride ABI (`plan_gltf.md` §2.3) — a CNA decision,
+* the **placement** comes from CNA's own vertex stride ABI (`plans/plan_gltf.md` §2.3) — a CNA decision,
   not a Khronos one — including the fill values `ExtractMesh` writes into a slot whose attribute the
   file omits: normal `(0,0,1)`, texture coordinate `(0,0)`, colour alpha `255`.
 
@@ -842,7 +842,7 @@ calls, on the same effect instance — no renderer, no device draw, no reimpleme
 
 What it deliberately does **not** capture is `GraphicsDevice`'s own additions to the block *after*
 that call: vertex stream bindings, `vertexStart`, `startIndex`. Those describe the buffers, not the
-material, and none of them is a `plan_gltf.md` §21.1 quantity. L5 already owns the buffers, byte for
+material, and none of them is a `plans/plan_gltf.md` §21.1 quantity. L5 already owns the buffers, byte for
 byte.
 
 ### 5.2 The §21.1 contract at L6
@@ -1205,7 +1205,7 @@ oracle. Neither is substituted for the other.
 
 ### 5.7 Final viewer retake matrix (`GLTF-429`)
 
-The release retake is the exact 14-row Gate C matrix from `plan_gltf.md` §30.3, executed by
+The release retake is the exact 14-row Gate C matrix from `plans/plan_gltf.md` §30.3, executed by
 `scripts/gltf-viewer-retake.py`. Row 12 has separate sparse-attribute and sparse-index cases, so a
 complete run is 14 rows and 15 captures. The runner fetches nothing: it requires the already-built
 pinned Khronos renderer, a production OPENGLES3 viewer and an explicit sparse checkout of the

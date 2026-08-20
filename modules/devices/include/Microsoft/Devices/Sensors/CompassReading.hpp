@@ -85,7 +85,7 @@ namespace Microsoft::Devices::Sensors
          * correction requires magnetic declination, which depends on
          * geographic location (`System.Device.Location`, a separate WP7
          * assembly `Microsoft::Devices::Sensors` does not implement — see
-         * `docs/location-future-plan.md`). This never fabricates an assumed
+         * `docs/location-future-plans/plan.md`). This never fabricates an assumed
          * declination: absent real location data, magnetic heading is the
          * most accurate honest answer available, not geographic heading
          * silently presented as if it were.

@@ -10,7 +10,7 @@ only. Every wider canonical CNA record — 48, 52, 56, 60, 68, 76 and 80, which 
 skinned layout the glTF importer produces — is **refused by name**, and so is any draw that came
 from `PbrEffect` or `SkinnedPbrEffect`.
 
-**Until 2026-08-18 it drew them instead** (`plan_gltf.md GLTF-477`). `DrawInternal`'s per-vertex
+**Until 2026-08-18 it drew them instead** (`plans/plan_gltf.md GLTF-477`). `DrawInternal`'s per-vertex
 `emit` ended in `else glColor4f(1,1,1,1)`, so a glTF model rendered as untextured, unlit, flat white
 geometry and the draw reported success. OpenGL 1.x fixed function has no shader stage of any kind,
 so there is nothing here to grow into a metallic-roughness path; refusing is the honest half of the
@@ -27,7 +27,7 @@ Verified on a live device: `RendererStrideConformance` 3/3 and 600 of 603 `*Gltf
 | Build option | `-DCNA_GRAPHICS_RENDERER=OPENGL1` / `CNA_RENDERER_OPENGL1` |
 | Renderer target | `cna_renderer_opengl1` |
 | Platforms | desktop Linux and Windows only (enforced at configure time) |
-| Plan | `plan_opengl1.md` · test scenarios: `tests/opengl1/README.md` |
+| Plan | `plans/plan_opengl1.md` · test scenarios: `tests/opengl1/README.md` |
 
 ## API contract vs. driver-reported version
 

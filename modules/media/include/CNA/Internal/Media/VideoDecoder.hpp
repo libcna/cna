@@ -45,7 +45,7 @@ namespace CNA::Internal::Media
         // Requires a working resampler too, not just an opened audio codec -- ProcessAudioPacket()
         // silently discards every decoded audio frame without a working swrCtx_ (it early-returns),
         // so a caller checking only audioCtx_ would believe a video has playable audio that in fact
-        // never produces a single sample (found by external code review, plan_media.md MEDIA-160).
+        // never produces a single sample (found by external code review, plans/plan_media.md MEDIA-160).
         // Open()/OpenAudioStreamByIndex() both build+verify the resampler transactionally before
         // ever committing to using a track at all (MEDIA-162), so audioCtx_ and swrCtx_ can no
         // longer diverge through either of those paths -- the one remaining way they can is a
@@ -53,7 +53,7 @@ namespace CNA::Internal::Media
         // resampler and rebuilds a fresh one on every seek; if that rebuild fails, audioCtx_ stays
         // valid (the codec itself is untouched) while swrCtx_ is left null, correctly reported here
         // as "no audio" from that point on rather than silently believed still available (found by
-        // external code review, plan_media.md MEDIA-169 -- this comment previously described an
+        // external code review, plans/plan_media.md MEDIA-169 -- this comment previously described an
         // already-superseded SetupResampler()-during-initial-setup scenario Phase 13's MEDIA-162 fix
         // had already closed off, instead of the real, current path).
         [[nodiscard]] bool HasAudio()        const { return audioCtx_ != nullptr && swrCtx_ != nullptr; }
@@ -68,7 +68,7 @@ namespace CNA::Internal::Media
         /// discarded), false if trackIndex was already active or out of range (a true no-op) --
         /// callers that recreate downstream resources (audio streams, textures) after a switch
         /// need to know whether anything actually changed, not just that the call didn't throw
-        /// (plan_media.md MEDIA-154, found by external code review).
+        /// (plans/plan_media.md MEDIA-154, found by external code review).
         bool SetAudioStream(int trackIndex);
 
         /// Switches the active video stream to the trackIndex-th video stream (0-based). Same
@@ -96,23 +96,23 @@ namespace CNA::Internal::Media
 
         // Allocates + configures a codec context from stream parameters; returns nullptr (freeing
         // any partial allocation) on either allocation or avcodec_parameters_to_context failure,
-        // instead of risking a null dereference downstream (plan_media.md MEDIA-38).
+        // instead of risking a null dereference downstream (plans/plan_media.md MEDIA-38).
         static AVCodecContext* AllocAndConfigureCodecContext(
             const AVCodec* codec, const AVCodecParameters* params);
 
         // Builds a new resampler for the given codec context, resampling to packed float32.
         // Returns nullptr (freeing any partial allocation) if either allocation or swr_init fails,
         // instead of leaving a half-configured context a later swr_convert call would crash on
-        // (plan_media.md MEDIA-38). Deliberately does NOT assign to swrCtx_ itself -- callers
+        // (plans/plan_media.md MEDIA-38). Deliberately does NOT assign to swrCtx_ itself -- callers
         // build the new resampler and confirm it works BEFORE committing it (and destroying
         // whatever it replaces), so a resampler-setup failure can be reported as a genuine open
         // failure rather than silently leaving audio half-broken after the old, working state has
-        // already been discarded (plan_media.md MEDIA-162, found by external code review).
+        // already been discarded (plans/plan_media.md MEDIA-162, found by external code review).
         static SwrContext* CreateResampler(AVCodecContext* ctx);
 
         // BT.601 8-bit planar YUV -> RGBA (no libswscale needed). hChromaShift/vChromaShift
         // encode the chroma subsampling: 0 = full resolution on that axis, 1 = halved (4:2:0 is
-        // shift 1/1, 4:2:2 is shift 1/0, 4:4:4 is shift 0/0) -- plan_media.md MEDIA-35.
+        // shift 1/1, 4:2:2 is shift 1/0, 4:4:4 is shift 0/0) -- plans/plan_media.md MEDIA-35.
         static void yuv_planar8_to_rgba(
             const uint8_t* y, int yStride,
             const uint8_t* u, int uStride,
@@ -122,7 +122,7 @@ namespace CNA::Internal::Media
 
         // BT.601 10-/12-bit (16-bit-packed, little-endian) planar YUV -> RGBA. Downshifts each
         // sample to its 8-bit equivalent (bitDepth-8 bits) before reusing the same integer YUV
-        // math as the 8-bit path -- plan_media.md MEDIA-36.
+        // math as the 8-bit path -- plans/plan_media.md MEDIA-36.
         static void yuv_planar16_to_rgba(
             const uint8_t* y, int yStride,
             const uint8_t* u, int uStride,
@@ -145,7 +145,7 @@ namespace CNA::Internal::Media
         // immediately yielding a buffered frame on the very next outer-loop iteration, which
         // returns to the caller before the pending packet is ever resent. A function-local flag
         // loses that state on the next call, silently dropping the retained frame (found by
-        // external code review, plan_media.md MEDIA-146).
+        // external code review, plans/plan_media.md MEDIA-146).
         bool havePendingVideoPacket_ = false;
 
         int    videoStream_ = -1;

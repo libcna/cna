@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: proof that BlendState.BlendFactor (Blend::BlendFactor /
+// plans/plan_opengl2.md: proof that BlendState.BlendFactor (Blend::BlendFactor /
 // Blend::InverseBlendFactor) actually reaches the GPU on OpenGL2 -- reuses
 // examples/easygl_blendstate_blendfactor_test.cpp's own scene and expected values verbatim.
 //

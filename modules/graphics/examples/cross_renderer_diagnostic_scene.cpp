@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_software.md SOFTWARE-61/84: cross-renderer diagnostic tool. Renders one simple, fully
+// plans/plan_software.md SOFTWARE-61/84: cross-renderer diagnostic tool. Renders one simple, fully
 // unlit (VertexColorEnabled, no lighting) scene and dumps the resulting 64x64 RGBA8 backbuffer
 // to a raw file -- deliberately renderer-agnostic (no #ifdef, no renderer-specific include), built
 // once per renderer (see CMakeLists.txt's SOFTWARE and EASYGL sections) so the SAME source

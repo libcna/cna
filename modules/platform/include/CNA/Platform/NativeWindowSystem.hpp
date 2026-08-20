@@ -14,7 +14,7 @@ namespace CNA::Platform {
      * detected error instead of a crash.
      *
      * The set is derived from the native window properties CNA actually consumes today (see
-     * docs/platform-renderer-sdl-audit.md and plan_platform.md), not from what a windowing
+     * docs/platform-renderer-sdl-audit.md and plans/plan_platform.md), not from what a windowing
      * abstraction might theoretically expose.
      */
     enum class NativeWindowSystem

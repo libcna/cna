@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md: real regression proof for the render-target-destroyed-before-flush
+// plans/plan_sdlgpu.md: real regression proof for the render-target-destroyed-before-flush
 // use-after-free documented in this renderer's own status banner -- this renderer batches all
 // draws/clears and only actually renders them once, at Present() time (EnsureFrameRendered()),
 // but a RenderTarget2D's destructor previously released its real SDL_GPUTexture* handles

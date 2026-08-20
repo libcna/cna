@@ -3,7 +3,7 @@ $output v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor, 
 
 #include <bgfx_shader.sh>
 
-// plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect's vertex stage. Mirrors
+// plans/plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect's vertex stage. Mirrors
 // EasyGLRenderer::EnsurePbrProgram()'s vertex shader exactly -- see that function's own
 // doc comment for the full glTF metallic-roughness BRDF rationale.
 
@@ -35,7 +35,7 @@ void main()
     v_tangent = vec4(mul(u_world, vec4(a_tangent.xyz, 0.0)).xyz,
                      a_tangent.w * cnaDirectionHandedness(worldDirectionMat));
     v_texcoord0 = a_texcoord0;
-    // plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+    // plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
     // colour. Carried in v_vertexColor0 rather than v_color0 for the same reason the stride-56
     // skinned path does: v_color0 already carries u_diffuseColor for other fragment shaders. Its
     // varying default is opaque white, the multiplier's identity, so a stride without a colour slot

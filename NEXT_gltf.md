@@ -1,6 +1,6 @@
 # glTF campaign continuity
 
-Read this before `plan_gltf.md`. The plan is 2 700 lines and its own header used to say "nothing in
+Read this before `plans/plan_gltf.md`. The plan is 2 700 lines and its own header used to say "nothing in
 it was implemented", which stopped being true a long time ago; this file is the short version a new
 session needs to start work without re-deriving the state.
 
@@ -8,7 +8,7 @@ session needs to start work without re-deriving the state.
 
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested.
-- **Working document:** `plan_gltf.md`, **478** numbered rows. **Three remain open: `GLTF-344` and
+- **Working document:** `plans/plan_gltf.md`, **478** numbered rows. **Three remain open: `GLTF-344` and
   `GLTF-465` (both `✅/⬜`), and `GLTF-459` (`⬜`).** The campaign retrospective
   (`GLTF-460`) is written: `docs/gltf-campaign-retrospective.md`. Read it before starting the next
   subsystem campaign — its central finding is that this campaign's own L0–L7 ladder reads data and
@@ -34,7 +34,7 @@ session needs to start work without re-deriving the state.
   first — and the rest is a per-cycle leak in IGL's GLX path that costs one test in a long `*Gltf*`
   run on that one configuration. **It is not masked**: no test was skipped, relaxed or filtered.
   IGL's Vulkan backend, `OPENGLES3` and `OPENGL1` all survive the same loop, which is how it was
-  narrowed. Owned by `plan_igl.md` from here.
+  narrowed. Owned by `plans/plan_igl.md` from here.
 - **`GLTF-477` widened the audit past the seventeen and found two more third-state renderers.**
   `FNA3D` shaded every `PbrEffect` draw with FNA's own BasicEffect (its `SelectStockEffect` has no
   PBR case and it reads 0 of the 20 PBR draw parameters); `OPENGL1` drew every record wider than 32
@@ -262,7 +262,7 @@ dependency is permitted in the generator.
 partition over registered suites is total in both directions. A suite that matches no rung would
 still run under a plain `ctest` while silently sitting outside the conformance label.
 
-**`plan_gltf.md` §19's extension table is generated.** Its source of truth is
+**`plans/plan_gltf.md` §19's extension table is generated.** Its source of truth is
 `GltfExtensionRegistryEXT()` in `modules/content/src/GltfImport/GltfImportCore.cpp`, which the
 `extensionsRequired` gate also reads. `GltfExtensionRegistry.Section19AgreesWithTheRegistryOnEveryRow`
 compares them row by row and **prints the corrected table on failure** — paste that, do not edit the
@@ -378,7 +378,7 @@ Rewritten 2026-08-17 after the re-audit. Ordered by cost, cheapest first.
      The rebuilt tool reproduces every committed blob, so the diff was only the 12 PBR ones.
    - **LLGL** — `compile_shaders.py --glslang /tmp/cna-glslang-tools/usr/bin/glslangValidator`
      (extracted from the `glslang-tools` package by an earlier session; not on PATH). It reproduces
-     every non-PBR blob byte-for-byte, so the committed header was a **mix**: `plan_llgl.md` records
+     every non-PBR blob byte-for-byte, so the committed header was a **mix**: `plans/plan_llgl.md` records
      that some shaders were compiled with a scratch libshaderc script when glslang was unavailable,
      and those are exactly the PBR ones. Only the shaders being changed moved to the documented tool.
 
@@ -513,7 +513,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 
 | Path | What it is |
 |---|---|
-| `plan_gltf.md` | The 460-row campaign record. Each closed row carries its own evidence. |
+| `plans/plan_gltf.md` | The 460-row campaign record. Each closed row carries its own evidence. |
 | `tools/gltf_fixtures/` | The corpus generator. Edit here, never the assets. |
 | `tests/assets/gltf/` | Generated corpus: **145 assets, 729 files**, including sidecars and `manifest.json`'s defect ledger. Never edited by hand. |
 | `modules/content/src/GltfImport/GltfImportCore.cpp` | The importer. Extraction, skeletons, clips, lights, cameras, the extension registry, the stride table. |

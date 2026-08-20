@@ -94,7 +94,7 @@ only the deltas described above.
 
 ## See also
 
-- `plan_dx5.md` — this renderer's own implementation plan.
-- `plan_dx3.md`, `docs/directx3-renderer.md` — the renderer this one ports.
+- `plans/plan_dx5.md` — this renderer's own implementation plan.
+- `plans/plan_dx3.md`, `docs/directx3-renderer.md` — the renderer this one ports.
 - `dx5-spike/README.md` — the full `DX5-0` spike record.
-- `plan_dxold.md` — the roadmap this renderer is row 5 of.
+- `plans/plan_dxold.md` — the roadmap this renderer is row 5 of.

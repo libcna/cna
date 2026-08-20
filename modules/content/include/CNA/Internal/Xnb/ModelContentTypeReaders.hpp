@@ -10,14 +10,14 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 
-// plan_xnb.md XNB-36/37/38/39/40: Model and shared-resource-heavy readers -- see
+// plans/plan_xnb.md XNB-36/37/38/39/40: Model and shared-resource-heavy readers -- see
 // PrimitiveContentTypeReaders.hpp's own note on why these live in CNA::Internal::Xnb (FNA's own
 // equivalents are all `internal`/default-visibility classes, never subclassed by game code).
 //
 // VertexBufferReader/IndexBufferReader target std::shared_ptr<T> rather than a bare T: both
 // VertexBuffer and IndexBuffer are move-only (matching CNA's established GPU-resource-ownership
 // design), and -- distinctly from that -- they are genuinely *shared* resources in a Model's own
-// object graph (plan_xnb.md XNB-40: multiple ModelMeshParts can reference the exact same buffer),
+// object graph (plans/plan_xnb.md XNB-40: multiple ModelMeshParts can reference the exact same buffer),
 // which is what ReadSharedResource<T>() exists for in the first place. VertexDeclarationReader
 // stays a bare ContentTypeReader<VertexDeclaration> (copy-constructible, never a shared resource --
 // read once per VertexBuffer via ReadRawObject, matching FNA exactly) and ModelReader stays a bare
@@ -72,7 +72,7 @@ namespace CNA::Internal::Xnb
      * @brief FNA's real `Microsoft.Xna.Framework.Content.ModelReader`
      *        (`src/Content/ContentReaders/ModelReader.cs`).
      *
-     * **Current coverage**: bone name/transform/hierarchy (multi-bone, plan_xnb.md XNB-37), the
+     * **Current coverage**: bone name/transform/hierarchy (multi-bone, plans/plan_xnb.md XNB-37), the
      * root bone, per-mesh name/`ParentBone`/`BoundingSphere` (XNB-38/39), and per-mesh-part
      * scalar fields plus `VertexBuffer`/`IndexBuffer`/`Effect` shared-resource dedup (XNB-40).
      * `Model`/mesh/mesh-part `Tag` fields are read (to keep the stream position correct) but a

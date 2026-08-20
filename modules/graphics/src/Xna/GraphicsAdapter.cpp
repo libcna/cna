@@ -12,9 +12,9 @@
 #include <string>
 #endif
 
-// plan_dx9.md Phase D9-10 (D9-101/D9-102): GraphicsProfile.Reach/HiDef is a real, D3DCAPS9-backed
+// plans/plan_dx9.md Phase D9-10 (D9-101/D9-102): GraphicsProfile.Reach/HiDef is a real, D3DCAPS9-backed
 // distinction ONLY on this renderer -- the other 9 CNA renderers have no D3DCAPS9 to consult and
-// keep their honest `return true;`/hardcoded-fallback behavior below (see plan_dx9.md's own
+// keep their honest `return true;`/hardcoded-fallback behavior below (see plans/plan_dx9.md's own
 // "Boundaries" section: an implementation would otherwise be a hardcoded table pretending to be a
 // capability query, which this project explicitly refuses to fake).
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -201,7 +201,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsAdapter::IsProfileSupported(GraphicsProfile graphicsProfile) const
     {
-        // plan_runtimerenderer.md design decision 9: an ADAPTER-level query, asked before any
+        // plans/plan_runtimerenderer.md design decision 9: an ADAPTER-level query, asked before any
         // GraphicsDevice exists, so it goes through the renderer's static descriptor hook rather
         // than an IGraphicsRenderer virtual.
         const auto& queries =
@@ -210,7 +210,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return queries.isProfileSupported(static_cast<int>(graphicsProfile));
 
         // D9-101: the other renderers have no capability structure to consult -- an implementation
-        // here would be a hardcoded table pretending to be a capability query (plan_dx9.md's own
+        // here would be a hardcoded table pretending to be a capability query (plans/plan_dx9.md's own
         // "Boundaries" section explicitly refuses that), so they keep this honest.
         (void)graphicsProfile;
         return true;
@@ -226,7 +226,7 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs& selectedMultiSampleCount
     ) const
     {
-        // plan_runtimerenderer.md design decision 9: an ADAPTER-level query, so it goes through the
+        // plans/plan_runtimerenderer.md design decision 9: an ADAPTER-level query, so it goes through the
         // renderer's static descriptor hooks rather than an IGraphicsRenderer virtual -- there is no
         // device yet. A renderer that supplies no hook keeps exactly the behaviour it had when this
         // was the #else branch of an #ifdef.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-337 / GLTF-338: `KHR_materials_unlit`.
+// plans/plan_gltf.md GLTF-337 / GLTF-338: `KHR_materials_unlit`.
 //
 // One of the few glTF extensions that MAPS onto XNA rather than being approximated. The extension
 // means "shade this surface with its base colour and nothing else", and `BasicEffect`'s
@@ -134,7 +134,7 @@ TEST(GltfUnlitMaterial, ALitMaterialStillGetsTheDefaultLightingRig)
     cm.setGraphicsDevice(gd);
     Model model = cm.Load<Model>("mat-vertex-color-pbr");
 
-    // plan_gltf.md GLTF-462: this primitive is vertex-coloured AND metallic-roughness, which used to
+    // plans/plan_gltf.md GLTF-462: this primitive is vertex-coloured AND metallic-roughness, which used to
     // put it on BasicEffect; it arrives as a PbrEffect now, with its colour multiplying base colour.
     // The control's point is unchanged and is the reason `unlitEXT` is its own flag rather than "not
     // usePbr": a LIT material must still get the lighting rig, whichever effect carries it.

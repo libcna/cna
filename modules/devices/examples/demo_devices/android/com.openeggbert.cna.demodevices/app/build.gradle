@@ -7,7 +7,7 @@ def buildWithCMake = project.hasProperty('BUILD_WITH_CMAKE');
 android {
     namespace = "com.openeggbert.cna.demodevices"
     compileSdkVersion 35
-    // plan_devices.md Task DEVICES-0124: matches the NDK/API level this
+    // plans/plan_devices.md Task DEVICES-0124: matches the NDK/API level this
     // project already builds+tests CNA against (docs/devices-build.md
     // Section 4), not this template's own default.
     ndkVersion = "30.0.14904198"

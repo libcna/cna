@@ -1,7 +1,7 @@
-# glTF import performance and lifetime (`plan_gltf.md` Phase 22)
+# glTF import performance and lifetime (`plans/plan_gltf.md` Phase 22)
 
 What the import path costs, measured rather than estimated, and the decision each measurement led
-to. Every row of `plan_gltf.md` Phase 22 accepts *"measured; fixed or documented with numbers"* —
+to. Every row of `plans/plan_gltf.md` Phase 22 accepts *"measured; fixed or documented with numbers"* —
 this file is the numbers, and `GltfPerformanceTests.cpp` is where they come from.
 
 ## How to reproduce

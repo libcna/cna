@@ -49,7 +49,7 @@ signature a reverted fix would reproduce.
 - `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`'s comment is exceptionally candid about
   its own limitation: under a normal (non-TSan) build it only catches crashes/hangs, not data
   races, and explicitly cross-references where the real TSan verification result is recorded
-  (plan_audio.md).
+  (plans/plan_audio.md).
 - `BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion`'s comment documents a genuine
   **prior audit claim later found to be under-verified**: CHECKLIST.md's CP-17 asserted a behavior
   ("max-frame truncates the pre-loop playthrough too") that had never actually been checked against

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_runtimerenderer.md design decision 7: fallback is opt-in, ordered, and ALWAYS reported.
+// plans/plan_runtimerenderer.md design decision 7: fallback is opt-in, ordered, and ALWAYS reported.
 // This is the reported part -- one record per renderer that was tried and rejected, so a game (or
 // a bug report) can see exactly which renderers were attempted and why each was passed over,
 // rather than discovering after the fact that it silently got a different renderer than it asked
@@ -30,7 +30,7 @@ namespace CNA
          *
          * Only ever produced when the SDL window was supplied by the caller through
          * PresentationParameters::DeviceWindowHandle -- CNA may not destroy a window it does not
-         * own (plan_runtimerenderer.md design decision 8).
+         * own (plans/plan_runtimerenderer.md design decision 8).
          */
         WindowKindConflict
     };
@@ -61,7 +61,7 @@ namespace CNA
      *
      * The history is empty when the preferred renderer was created on the first attempt, which is
      * the overwhelmingly common case and the only possible one while fallback stays disabled
-     * (the default -- see plan_runtimerenderer.md design decision 6).
+     * (the default -- see plans/plan_runtimerenderer.md design decision 6).
      */
     struct GraphicsRendererFallbackRecord
     {

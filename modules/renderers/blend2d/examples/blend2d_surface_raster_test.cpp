@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_blend2d.md: window-independent raster test for Blend2DSurface -- exercises the Blend2D
+// plans/plan_blend2d.md: window-independent raster test for Blend2DSurface -- exercises the Blend2D
 // BLImage/BLContext wrapper and the straight<->premultiplied pixel-conversion helpers directly,
 // with no SDL window/video subsystem involved at all (mirrors the SKIA renderer's window-
 // independent Skia_Surface_Raster test category, docs/skia-renderer.md).

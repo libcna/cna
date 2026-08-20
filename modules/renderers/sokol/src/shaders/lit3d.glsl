@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-21: the Sokol renderer's lit 3D program -- BasicEffect with
+// plans/plan_sokol.md SOKOL-21: the Sokol renderer's lit 3D program -- BasicEffect with
 // LightingEnabled=true (ambient + up to 3 directional lights, Blinn-Phong specular, emissive,
 // fog, alpha test). Always samples a texture: SokolRenderer binds a real one when
 // TextureEnabled is true and a 1x1 opaque-white fallback otherwise, so this one shader serves

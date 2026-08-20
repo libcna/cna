@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-26 follow-up: Multiple Render Targets (MRT) proof for the LLGL graphics
+// plans/plan_llgl.md LLGL-26 follow-up: Multiple Render Targets (MRT) proof for the LLGL graphics
 // renderer, scoped to this renderer's own first cut -- see LlglMRTBinding's doc comment in
 // LlglRenderer.hpp for the full boundary. RenderTarget2D slots only (no RenderTargetCube
 // faces), and 3D colour-only draws are refused while an MRT set is bound: real XNA MRT is

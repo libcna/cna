@@ -13,7 +13,7 @@
 namespace CNA::Internal::Xnb
 {
     /**
-     * @brief One entry of a `.xnb` file's type-reader table (plan_xnb.md XNB-12).
+     * @brief One entry of a `.xnb` file's type-reader table (plans/plan_xnb.md XNB-12).
      */
     struct XnbTypeReaderTableEntry
     {
@@ -23,25 +23,25 @@ namespace CNA::Internal::Xnb
         /** @brief @ref rawName normalized to the XNB-5 canonical registry key (see NormalizeXnbTypeReaderName()). */
         std::string normalizedName;
 
-        /** @brief The serialized reader version (plan_xnb.md XNB-16B consults this against a reader's supported versions). */
+        /** @brief The serialized reader version (plans/plan_xnb.md XNB-16B consults this against a reader's supported versions). */
         int32_t version = 0;
     };
 
     /**
      * @brief Parses a `.xnb` type-reader table: a 7-bit-encoded count, then per entry a
      *        7-bit-length-prefixed string (the reader's assembly-qualified name) and a 4-byte
-     *        reader version (plan_xnb.md XNB-12), matching FNA's
+     *        reader version (plans/plan_xnb.md XNB-12), matching FNA's
      *        `ContentTypeReaderManager.LoadAssetReaders`.
      *
      * @param reader Binary reader positioned immediately after the `.xnb` container header.
      * @param path   File path, used only to build exception messages.
-     * @param limits Bounds applied to the parsed count (plan_xnb.md XNB-10A).
+     * @param limits Bounds applied to the parsed count (plans/plan_xnb.md XNB-10A).
      * @return The parsed table, in file order (index 0 is table entry 1 in the 1-based dispatch
      *         protocol used by XNB-16's root/object dispatch).
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the encoded count is
      *         negative or exceeds @p limits.maxTypeReaderCount, an entry's raw name exceeds
      *         @p limits.maxStringBytes (REMED-CONTENT-006), or an entry's name is not a
-     *         well-formed (possibly generic) .NET type name (plan_xnb.md XNB-43) -- matching every
+     *         well-formed (possibly generic) .NET type name (plans/plan_xnb.md XNB-43) -- matching every
      *         other malformed-input case in this pipeline, a caller only ever needs to catch this
      *         one exception type for "this .xnb file is malformed", never
      *         `XnbTypeName`'s own lower-level `std::invalid_argument`.

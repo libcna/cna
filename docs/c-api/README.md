@@ -45,7 +45,7 @@ count/copy directory and file listings and synchronous equivalents of the canoni
 selector and container pairs. Exact support and omissions are recorded in
 [`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
 this directory is binding on implementation until the release gate in
-[`../../plan_binding.md`](../../plan_binding.md) is complete.
+[`../../plans/plan_binding.md`](../../plans/plan_binding.md) is complete.
 
 ## Purpose
 

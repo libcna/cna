@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fna3d.md FNA3D-15: GTest coverage for the FNA3D renderer's shader-variant selection.
+// plans/plan_fna3d.md FNA3D-15: GTest coverage for the FNA3D renderer's shader-variant selection.
 //
 // FNA3D executes XNA's actual compiled stock effects, each of which carries exactly one technique
 // with one pass; the shader variant is chosen by an `int ShaderIndex` parameter that the effect's
@@ -10,7 +10,7 @@
 // pixel test. The rendered consequences are covered by the Fna3d_3D CTest binary.
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_FNA3D is defined project-wide.

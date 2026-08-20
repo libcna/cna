@@ -6,7 +6,7 @@
 namespace CNA::Internal::Renderers::HtmlDom
 {
     /**
-     * @brief Off-screen render target backed by a real `<canvas>` (plan_html_dom.md design
+     * @brief Off-screen render target backed by a real `<canvas>` (plans/plan_html_dom.md design
      * decision 10).
      *
      * A `<div>` cannot be rendered into, so the DOM sprite path has no way to express a render
@@ -67,7 +67,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * and exactly; a native (non-Emscripten) build has no canvas at all and reports false rather
          * than letting the shared layer hand the caller its own zeroed scratch buffer.
          *
-         * plan_html_dom.md HTMLDOM-106: the returned bytes are always straight (non-premultiplied)
+         * plans/plan_html_dom.md HTMLDOM-106: the returned bytes are always straight (non-premultiplied)
          * alpha, regardless of which BlendState drew into this target -- `getImageData`'s own
          * contract, not a choice this renderer makes. This is a deliberate deviation from real XNA,
          * where a render target's raw storage reflects whatever representation was actually drawn

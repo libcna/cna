@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_direct2d.md D2D-128: the shared pixel-oracle helpers of the Direct2D example tests.
+// plans/plan_direct2d.md D2D-128: the shared pixel-oracle helpers of the Direct2D example tests.
 //
 // Every Direct2D test needs the same two things -- a tolerance comparison and a "read one pixel,
 // print PASS/FAIL with both colours, accumulate the verdict" step -- and each one had grown its

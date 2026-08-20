@@ -104,7 +104,7 @@ TEST_F(DualTextureEffectDefaultsTest, Texture2DefaultsToNull)
     EXPECT_EQ(fx.getTexture2Property(), nullptr);
 }
 
-// plan_xnb.md XNB-32: SetOwnedTexture()/SetOwnedTexture2() -- content-pipeline-loaded effects
+// plans/plan_xnb.md XNB-32: SetOwnedTexture()/SetOwnedTexture2() -- content-pipeline-loaded effects
 // need to keep their own texture references alive (matching real XNA's GC-tracked
 // Effect.Texture), unlike setTextureProperty(Texture2D*)'s non-owning pointer used by Model's
 // shared texture pool.

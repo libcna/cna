@@ -25,7 +25,7 @@ Implements every `HeadlessMode`-aware backend/resource class declared in the pai
 graphics backend that does real bookkeeping (resource-lifetime registry, cumulative/per-frame statistics, an
 optional structured call trace) instead of touching a GPU, explicitly for fast/deterministic test runs and
 behavior-drift detection between commits (`HeadlessTrace` mode + `CompareTraceLogs`/`FormatTraceLogDiff`).
-Placement and design match `plan_headless.md`'s stated intent well — this is a coherent, single-responsibility file
+Placement and design match `plans/plan_headless.md`'s stated intent well — this is a coherent, single-responsibility file
 despite its size (950 lines), because nearly every one of its ~14 resource-backend classes is only a screenful of
 constructor/destructor/validation boilerplate.
 
@@ -151,7 +151,7 @@ finding for cross-reference when that shard is audited.
   (correct — matches "100 draw calls' worth of GPU work") but `primitiveCount += 10` (wrong — should be `1000`,
   since 100 instances each draw 10 primitives).
 - Why it matters: `GetStatistics()`/`GetLastFrameStatistics()` are the backend's primary test-facing API
-  (`plan_headless.md Phase N4`) — a test asserting "did my instanced-rendering code draw the expected total
+  (`plans/plan_headless.md Phase N4`) — a test asserting "did my instanced-rendering code draw the expected total
   primitive count" would get a number `instanceCount`× too small, for every instanced draw in the codebase (used
   wherever `DrawInstancedPrimitivesEx` appears, e.g. instancing tests in the Bgfx/Vulkan/D3D backends that might
   reuse Headless for a fast pre-check, or any Headless-mode test of instancing itself).

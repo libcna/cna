@@ -188,7 +188,7 @@ namespace CNA::Internal::Renderers
      * returns 0 (no visible samples) or 1 (at least one visible sample), not an
      * exact pixel count. This matches FNA's behaviour on GLES3.
      */
-    /// plan_modern.md MOD-2163: a GPU-side elapsed-time query around a range of commands.
+    /// plans/plan_modern.md MOD-2163: a GPU-side elapsed-time query around a range of commands.
     ///
     /// Deliberately not an occlusion query with a different name. The two look alike and are not:
     /// an occlusion query counts samples and is answered by the rasteriser, while this measures
@@ -229,7 +229,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief A GPU buffer a compute shader reads and writes (an SSBO, in GL terms).
      *
-     * plan_modern.md `MOD-1501`. Deliberately byte-oriented and free of every XNA type: a storage
+     * plans/plan_modern.md `MOD-1501`. Deliberately byte-oriented and free of every XNA type: a storage
      * buffer holds whatever a shader says it holds, and the public `CNA::Graphics::StorageBuffer`
      * wrapper is where a typed view over it belongs.
      */
@@ -262,7 +262,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief One compiled compute program, and the bindings a dispatch of it reads.
      *
-     * plan_modern.md `MOD-1500`. Mirrors `IEffectRenderer`'s shape: the renderer owns the compiled
+     * plans/plan_modern.md `MOD-1500`. Mirrors `IEffectRenderer`'s shape: the renderer owns the compiled
      * object, the interface exposes only what a caller must be able to say about it, and no XNA
      * type appears in a signature -- an image binding arrives as an `ITextureRenderer`, and the
      * access mode as an ordinal (`CNA::GraphicsImageAccess`) rather than as an enumeration this
@@ -322,7 +322,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Binds a texture to a sampler unit the program can sample.
          *
-         * plan_modern.md `MOD-1552`. Distinct from @ref BindImageTexture in what it needs of the
+         * plans/plan_modern.md `MOD-1552`. Distinct from @ref BindImageTexture in what it needs of the
          * texture: sampling has no immutability requirement, so this works where an image binding
          * does not. The caller still sets the sampler uniform itself, with @ref SetUniformInt, for
          * the same reason `IEffectRenderer` does -- the unit is data, not a name this layer knows.
@@ -890,13 +890,13 @@ namespace CNA::Internal::Renderers
         /// (`values` holds `count * 2` floats).
         virtual void SetUniformVec2Array(const char* name, const float* values, int count) {}
 
-        /// plan_modern.md MOD-217 (reopened): uploads @p count vec3 values. A vec3 array cannot be
+        /// plans/plan_modern.md MOD-217 (reopened): uploads @p count vec3 values. A vec3 array cannot be
         /// filled through SetUniformFloatArray -- GL rejects the type mismatch and leaves the
         /// uniform at zero, silently, which is how an SSAO kernel of 64 vec3s turns into 64 samples
         /// at the origin and an image with no occlusion in it at all.
         virtual void SetUniformVec3Array(const char* name, const float* values, int count) {}
 
-        /// plan_modern.md MOD-810: uploads @p count column-major 4x4 matrices, for a shader that
+        /// plans/plan_modern.md MOD-810: uploads @p count column-major 4x4 matrices, for a shader that
         /// declares `mat4 name[N]` -- a skinning palette, most of the time. Separate from
         /// SetUniformMat4 for the same reason the array forms above are separate from their scalar
         /// ones: the single-matrix call uploads exactly one matrix whatever the uniform's declared
@@ -913,7 +913,7 @@ namespace CNA::Internal::Renderers
         /// simultaneously, since they occupy distinct binding targets; the shader's own sampler
         /// type (`sampler2D` vs `samplerCube`) determines which one is actually sampled.
         virtual void BindTextureCube(int unit, ITextureCubeRenderer* texture) {}
-        /// plan_graphics.md Task 863: binds a volume texture to the given sampler unit (0-based),
+        /// plans/plan_graphics.md Task 863: binds a volume texture to the given sampler unit (0-based),
         /// for a custom shader that declares a `sampler3D` uniform. Same reasoning as
         /// `BindTextureCube()` above -- `ITexture3DRenderer` is its own interface, not a subtype of
         /// `ITextureRenderer`, and GL allows a 2D/cube/3D texture bound to the same unit
@@ -1107,7 +1107,7 @@ namespace CNA::Internal::Renderers
         /// EnvironmentMapEffect: camera world-space position for reflection vector.
         /// BasicEffect (lit path only): camera world-space position for specular half-vector.
         float eyePositionWorld[3] = {0,0,0};
-        /// plan_modern.md MOD-821: shadow reception. `shadowMap` holds light-space distance (not a
+        /// plans/plan_modern.md MOD-821: shadow reception. `shadowMap` holds light-space distance (not a
         /// depth buffer -- CNA cannot sample a depth attachment; see CNA::Graphics::ShadowMap), and
         /// `lightViewProjColMajor` takes a world position into that map's space. Defaults mean "no
         /// shadows", and a renderer with no shadow-sampling variant accepts and ignores them, the
@@ -1117,11 +1117,11 @@ namespace CNA::Internal::Renderers
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
         bool  shadowsEnabled = false;
         float shadowDepthBias = 0.0015f;
-        /// plan_modern.md MOD-840: PCF kernel radius in shadow-map texels. 0 is a single tap, 1 a
+        /// plans/plan_modern.md MOD-840: PCF kernel radius in shadow-map texels. 0 is a single tap, 1 a
         /// 3x3 neighbourhood, 2 a 5x5 one. Expressed as a radius rather than a kernel size because
         /// that is what a shader loop bound needs, and clamped by the renderer rather than trusted.
         int   shadowPcfRadius = 1;
-        /// plan_modern.md MOD-908: cascaded shadows. Zero means "one map", and everything below is
+        /// plans/plan_modern.md MOD-908: cascaded shadows. Zero means "one map", and everything below is
         /// ignored -- which is what keeps every existing draw, and every renderer with no cascade
         /// shader, exactly as it was. When it is non-zero `shadowMap` is the cascade atlas rather
         /// than a single map, `cascadeMatricesColMajor` holds one world-to-atlas matrix per cascade
@@ -1139,7 +1139,7 @@ namespace CNA::Internal::Renderers
         float cascadeBlendBand = 0.0f;
         /// Tints each cascade a different colour. A debugging aid, off by default.
         bool  cascadeDebugTint = false;
-        /// plan_modern.md MOD-1005: one punctual light and its shadow. 0 means none -- and every
+        /// plans/plan_modern.md MOD-1005: one punctual light and its shadow. 0 means none -- and every
         /// draw that has never heard of punctual lights leaves it there, which is what keeps this
         /// free. 1 is a point light (shadowed by `punctualShadowCube`), 2 a spot light (shadowed
         /// by `punctualShadowMap` through `punctualViewProjColMajor`). Both maps store *distance
@@ -1176,7 +1176,7 @@ namespace CNA::Internal::Renderers
         bool fresnelEnabled = false;
         /// EnvironmentMapEffect: exponent for the Fresnel edge-weighting term above.
         float fresnelFactor = 1.0f;
-        /// BasicEffect/SkinnedEffect: real XNA `PreferPerPixelLighting` value (plan_dx9.md
+        /// BasicEffect/SkinnedEffect: real XNA `PreferPerPixelLighting` value (plans/plan_dx9.md
         /// Divergence 1 / D9-81 item 1). When true, XNA selects a per-pixel-lit shader
         /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
         /// it selects a per-vertex-lit shader instead. Renderers that generate both lighting
@@ -1186,7 +1186,7 @@ namespace CNA::Internal::Renderers
         /// divergence from XNA's default, not fixed by adding this field alone. Only meaningful
         /// when `lightingEnabled` is true.
         bool preferPerPixelLighting = false;
-        /// EnvironmentMapEffect: real XNA `specularEnabled` value (plan_dx9.md Divergence 1 /
+        /// EnvironmentMapEffect: real XNA `specularEnabled` value (plans/plan_dx9.md Divergence 1 /
         /// D9-81 item 4) -- true when `SpecularColor` is non-black, selecting a distinct
         /// compiled shader in real XNA rather than a uniform toggle. `envMapSpecular` above
         /// already carries the specular color itself; this field additionally carries whether
@@ -1228,7 +1228,7 @@ namespace CNA::Internal::Renderers
         /// When true the renderer selects the skinning shader variant.
         bool skinned             = false;
         /// When true the renderer selects the PbrEffect (metallic-roughness BRDF) shader variant
-        /// (plan_cnj.md CNB-58, Phase 13A).
+        /// (plans/plan_cnj.md CNB-58, Phase 13A).
         bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
@@ -1300,7 +1300,7 @@ namespace CNA::Internal::Renderers
         /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
         /// mistaking a null renderer for an ordinary fixed-function stock effect.
         bool customEffectRequested = false;
-        /// plan_cnj.md CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
+        /// plans/plan_cnj.md CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
         /// When null the surface normal from the vertex stream is used unperturbed.
         const ITextureRenderer* pbrNormalMap = nullptr;
         /// PbrEffect: metallic-roughness map, glTF's own packing convention (G=roughness,
@@ -1316,13 +1316,13 @@ namespace CNA::Internal::Renderers
         const ITextureRenderer* pbrSpecularMap = nullptr;
         /// KHR_materials_specular colour map; RGB is sRGB-encoded by default.
         const ITextureRenderer* pbrSpecularColorMap = nullptr;
-        /// plan_gltf.md GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
+        /// plans/plan_gltf.md GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
         /// texture slot i (base colour, normal, metallic-roughness, emissive, occlusion,
         /// specular strength, specular colour); a clear
         /// bit selects TextureCoordinate0. The importer maps arbitrary glTF source TEXCOORD_n
         /// indices onto these two collision-free renderer channels before filling the effect.
         std::uint32_t pbrTextureCoordinateSetMask = 0;
-        /// plan_gltf.md GLTF-184: two affine rows per core PBR map, in base-colour, normal,
+        /// plans/plan_gltf.md GLTF-184: two affine rows per core PBR map, in base-colour, normal,
         /// metallic-roughness, emissive, occlusion order. For row vectors `r0` and `r1`, the
         /// transformed coordinate is `{dot(float3(uv,1),r0.xyz),
         /// dot(float3(uv,1),r1.xyz)}`. The fourth component is deterministic padding for native
@@ -1342,12 +1342,12 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrRoughnessFactor = 1.0f;
-        /// plan_gltf.md GLTF-343/GLTF-344: dielectric normal-incidence reflectance after applying
+        /// plans/plan_gltf.md GLTF-343/GLTF-344: dielectric normal-incidence reflectance after applying
         /// KHR_materials_ior and the factor-only part of KHR_materials_specular. Core glTF's
         /// default is 0.04 in every channel. Kept separate from the metallic F0, which remains the
         /// material's base colour, and from F90 below because specularFactor can reduce grazing
         /// reflectance independently. Every PBR-capable renderer consumes both endpoints -- as of
-        /// plan_gltf.md GLTF-476, which found that claim had been written while `IGL` consumed
+        /// plans/plan_gltf.md GLTF-476, which found that claim had been written while `IGL` consumed
         /// neither and hard-coded 0.04 in its shader. It is now machine-checked by
         /// `GltfRendererPbrFallbackPolicy.EveryPbrRendererConsumesEveryUniversalPbrDrawParameter`
         /// rather than asserted here.
@@ -1359,35 +1359,35 @@ namespace CNA::Internal::Renderers
         float pbrDielectricF0Unclamped[3] = {0.04f, 0.04f, 0.04f};
         /// GLTF-344: authored scalar strength, retained separately for texture-driven evaluation.
         float pbrSpecularFactor = 1.0f;
-        /// plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
+        /// plans/plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
         /// normal's x and y before the tangent basis is applied -- 0 flattens the map to the
         /// geometric normal, 1 is the map as authored, and glTF puts no upper bound on it. Only
         /// meaningful when `pbrNormalMap` is bound.
         float pbrNormalScale = 1.0f;
-        /// plan_gltf.md GLTF-225: glTF `occlusionTexture.strength`, applied as the specification's
+        /// plans/plan_gltf.md GLTF-225: glTF `occlusionTexture.strength`, applied as the specification's
         /// own `1 + strength * (sampled - 1)`. At 0 the result is 1 -- no occlusion at all,
         /// whatever the map holds -- and at 1 it is the map unchanged. Only meaningful when
         /// `pbrOcclusionMap` is bound.
         float pbrOcclusionStrength = 1.0f;
-        /// plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
+        /// plans/plan_gltf.md GLTF-210: the base-colour texture's samples are sRGB-ENCODED and must be
         /// decoded to linear before lighting (glTF §3.9.2). The `DiffuseColor` FACTOR is already
         /// linear and must NOT be decoded -- the two multiply, and decoding both would apply the
         /// transfer twice to one of them. Renderers that do not implement colour management ignore
         /// this, the established accepted-and-ignored pattern for a field they do not yet honour.
         bool pbrBaseColorTextureIsSrgb = true;
-        /// plan_gltf.md GLTF-210: the emissive texture is sRGB-encoded, on the same terms as
+        /// plans/plan_gltf.md GLTF-210: the emissive texture is sRGB-encoded, on the same terms as
         /// `pbrBaseColorTextureIsSrgb`. `emissiveColor` (the factor, possibly scaled above 1 by
         /// KHR_materials_emissive_strength) is linear and is not decoded.
         bool pbrEmissiveTextureIsSrgb = true;
         /// KHR_materials_specular colour-map RGB follows glTF's sRGB encoding rule.
         bool pbrSpecularColorTextureIsSrgb = true;
-        /// plan_gltf.md GLTF-212: encode the fragment's RGB from linear back to sRGB before it
+        /// plans/plan_gltf.md GLTF-212: encode the fragment's RGB from linear back to sRGB before it
         /// reaches the framebuffer. Alpha is never encoded -- glTF §3.9.4 makes it coverage, not
         /// colour. Normal, occlusion and metallic-roughness maps carry no flag at all because
         /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not
         /// exist.
         bool pbrEncodeOutputToSrgb = true;
-        /// plan_modern.md MOD-1224: image-based lighting, the three split-sum products at once.
+        /// plans/plan_modern.md MOD-1224: image-based lighting, the three split-sum products at once.
         /// `iblEnabled` false -- which is every draw that has never heard of IBL -- leaves the
         /// flat `ambientColor` term exactly as it was, and that is deliberate: the two are the
         /// same term computed two ways, so a renderer applies one or the other, never their sum
@@ -1695,7 +1695,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief A renderer's answer about a surface format, or a deferral to the framework's own rule.
      *
-     * plan_runtimerenderer.md design decision 9. Renderer-specific format behaviour used to live as
+     * plans/plan_runtimerenderer.md design decision 9. Renderer-specific format behaviour used to live as
      * #ifdef blocks inside the XNA layer, where the #else branch carried the renderer-agnostic
      * rule. Moving those behind a virtual has to preserve that structure exactly: a renderer either
      * has a real, renderer-specific answer, or it defers -- it must never be forced to restate the
@@ -1764,7 +1764,7 @@ namespace CNA::Internal::Renderers
         /// count applied (0 = no MSAA). Default: unsupported -- renderers that cannot change this
         /// post-construction report back whatever GetMultiSampleCount() already is.
         virtual int ApplyMultiSampleCount(int /*requestedMultiSampleCount*/) { return GetMultiSampleCount(); }
-        /// CNAEXT (plan_dx9.md D9-30/D9-33, found empirically). Reconfigures the renderer's tracked
+        /// CNAEXT (plans/plan_dx9.md D9-30/D9-33, found empirically). Reconfigures the renderer's tracked
         /// back-buffer format/depth-stencil format/fullscreen state in place, called from
         /// GraphicsDevice::Reset() alongside SetVirtualResolution()/ApplyMultiSampleCount() above --
         /// same "actually reach the renderer instead of being silently ignored after construction"
@@ -1794,7 +1794,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Maps a requested MSAA sample count to the count this renderer actually applied.
          *
-         * plan_runtimerenderer.md design decision 9. The identity default is deliberate and is
+         * plans/plan_runtimerenderer.md design decision 9. The identity default is deliberate and is
          * exactly what every renderer except GDI did when this was an #ifdef CNA_RENDERER_GDI block
          * in the XNA layer: PresentationParameters keeps echoing back what the game asked for.
          * Only a renderer that clamps the request at construction time (GDI, which supports one
@@ -1818,7 +1818,7 @@ namespace CNA::Internal::Renderers
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
 
-        // --- GraphicsProfile ceilings (plan_runtimerenderer.md design decision 9) -------------
+        // --- GraphicsProfile ceilings (plans/plan_runtimerenderer.md design decision 9) -------------
         //
         // XNA's GraphicsProfile.Reach/HiDef carry real, enforced-at-creation-time ceilings. Only a
         // renderer with a genuine capability structure to consult (D3D9's D3DCAPS9) can answer them
@@ -1887,7 +1887,7 @@ namespace CNA::Internal::Renderers
             return (std::numeric_limits<int>::max)();
         }
 
-        // --- Surface-format boundaries (plan_runtimerenderer.md design decision 9) -------------
+        // --- Surface-format boundaries (plans/plan_runtimerenderer.md design decision 9) -------------
 
         /**
          * @brief Whether a Texture2D may be created with the given surface format.
@@ -2037,7 +2037,7 @@ namespace CNA::Internal::Renderers
             return CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
         }
 
-        /// plan_modern.md MOD-123: whether sampling a half-float colour texture with a linear
+        /// plans/plan_modern.md MOD-123: whether sampling a half-float colour texture with a linear
         /// (or mip) filter is supported by this context, as distinct from being able to render into
         /// one. Default false: a renderer that has not checked cannot promise it, and a pass that
         /// wrongly assumes hardware filtering gets undefined sampling rather than a slower path.
@@ -2065,7 +2065,7 @@ namespace CNA::Internal::Renderers
         /// PreserveContents cube face was wiped on every bind cycle.
         virtual std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
 
-        /// plan_modern.md MOD-107: CreateRenderTargetCube plus an explicit
+        /// plans/plan_modern.md MOD-107: CreateRenderTargetCube plus an explicit
         /// Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal, exactly as
         /// CreateRenderTarget2DEXT is to CreateRenderTarget2D. The default forwards and ignores the
         /// format, so every renderer keeps its Color-only cube behaviour until it implements more;
@@ -2099,7 +2099,7 @@ namespace CNA::Internal::Renderers
         /// CompiledEffects so an old catch-all cannot accidentally advertise a native runtime.
         [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
 
-        /// plan_modern.md MOD-1502: compute shaders and storage buffers. Every default is the
+        /// plans/plan_modern.md MOD-1502: compute shaders and storage buffers. Every default is the
         /// honest "this renderer cannot", so all renderer families compile unchanged and none of
         /// them accidentally claims a feature it has never heard of -- the same opt-in shape
         /// SupportsCompiledEffects uses, and for the same reason.
@@ -2124,7 +2124,7 @@ namespace CNA::Internal::Renderers
         /// bitmask, which each renderer translates into its own native bits.
         virtual void MemoryBarrierEXT(int /*barrierBits*/) {}
 
-        /// plan_modern.md MOD-1699: whether the source text handed to `CreateEffectRenderer`
+        /// plans/plan_modern.md MOD-1699: whether the source text handed to `CreateEffectRenderer`
         /// actually determines the pixels. Three renderers answer this differently from
         /// `GraphicsCapability::CustomEffects`, and each way is legitimate: SOFTWARE and HEADLESS
         /// *accept* any shader source and render with their own fixed path instead (a documented
@@ -2134,7 +2134,7 @@ namespace CNA::Internal::Renderers
         /// worse than refusing. False by default, for the same reason every other promise here is.
         [[nodiscard]] virtual bool ExecutesShaderEffectSourceEXT() const { return false; }
 
-        /// plan_modern.md MOD-1699: whether this renderer's lit shaders actually SAMPLE the
+        /// plans/plan_modern.md MOD-1699: whether this renderer's lit shaders actually SAMPLE the
         /// shadow state an effect carries (`IShadowReceiverEXT`: single map, cascades, punctual).
         /// The state itself is accepted and ignored everywhere -- that convention is what keeps a
         /// draw working on a renderer with no shadow shader -- but "accepted and ignored" and
@@ -2143,25 +2143,25 @@ namespace CNA::Internal::Renderers
         /// sampling must not claim it.
         [[nodiscard]] virtual bool SupportsShadowSamplingEXT() const { return false; }
 
-        /// plan_modern.md MOD-1699: whether this renderer's PBR shader honours the image-based
+        /// plans/plan_modern.md MOD-1699: whether this renderer's PBR shader honours the image-based
         /// lighting group of `GpuDrawParams` (`iblIrradiance`, `iblPrefilteredSpecular`,
         /// `iblBrdfLut`). Same reasoning as `SupportsShadowSamplingEXT`, and the same default.
         [[nodiscard]] virtual bool SupportsImageBasedLightingEXT() const { return false; }
 
-        /// plan_modern.md MOD-1500: whether this renderer really implements compute. False by
+        /// plans/plan_modern.md MOD-1500: whether this renderer really implements compute. False by
         /// default, and consulted by GraphicsDevice for GraphicsCapability::ComputeShaders rather
         /// than that capability being answered by a renderer's own switch -- many of those end in
         /// `default: return true`.
         [[nodiscard]] virtual bool SupportsComputeShadersEXT() const { return false; }
 
-        /// plan_modern.md MOD-2090: whether this renderer really issues indirect draws --
+        /// plans/plan_modern.md MOD-2090: whether this renderer really issues indirect draws --
         /// `DrawPrimitivesIndirectEXT` and `DrawIndexedPrimitivesIndirectEXT` below. False by
         /// default, and consulted by GraphicsDevice for GraphicsCapability::IndirectDraw rather
         /// than that capability being answered by a renderer's own switch, for the reason
         /// SupportsComputeShadersEXT states.
         [[nodiscard]] virtual bool SupportsIndirectDrawEXT() const { return false; }
 
-        /// plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
+        /// plans/plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
         /// image. Separate from `SupportsComputeShadersEXT` because the two genuinely differ: GL ES
         /// 3.1 requires an *immutable* texture (`glTexStorage2D`) for `glBindImageTexture`, and
         /// CNA's textures are allocated mutably (`glTexImage2D`), so an ES context that fully
@@ -2169,7 +2169,7 @@ namespace CNA::Internal::Renderers
         /// default, like every other promise here.
         [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
 
-        /// plan_modern.md MOD-2092: the colour space the swap chain is currently presenting in.
+        /// plans/plan_modern.md MOD-2092: the colour space the swap chain is currently presenting in.
         /// `Srgb` by default and for every CNA renderer today -- an HDR swap chain is a property of
         /// the *presentation* path (DXGI, Vulkan surface formats, a platform's own HDR opt-in), not
         /// of a drawing API, and no CNA platform back end offers one yet. A renderer must not claim
@@ -2180,7 +2180,7 @@ namespace CNA::Internal::Renderers
             return CNA::DisplayColorSpace::Srgb;
         }
 
-        /// plan_modern.md MOD-2092: asks the swap chain to present in @p space.
+        /// plans/plan_modern.md MOD-2092: asks the swap chain to present in @p space.
         /// @return True when the swap chain now presents in that space. The default accepts only
         ///         `Srgb`, which is the truth rather than a stub: a renderer that returned true
         ///         without reconfiguring anything would have every caller encode for a display that
@@ -2190,31 +2190,31 @@ namespace CNA::Internal::Renderers
             return space == CNA::DisplayColorSpace::Srgb;
         }
 
-        /// plan_modern.md MOD-2091: how many storage buffers a VERTEX shader on this context may
+        /// plans/plan_modern.md MOD-2091: how many storage buffers a VERTEX shader on this context may
         /// read. GL ES 3.1 permits this to be zero -- a context can support compute completely and
         /// still refuse an SSBO in a vertex stage -- so it is a separate number rather than
         /// something derivable from `SupportsComputeShadersEXT()`. Zero means "not there", which is
         /// what every renderer without compute returns.
         [[nodiscard]] virtual int GetMaxVertexShaderStorageBlocksEXT() const { return 0; }
 
-        /// plan_modern.md MOD-2091: binds a storage buffer to a binding point a following DRAW's
+        /// plans/plan_modern.md MOD-2091: binds a storage buffer to a binding point a following DRAW's
         /// shaders read, rather than a following dispatch's. The binding points are the same set
         /// `IComputeShaderRenderer::BindStorageBuffer` uses; what differs is only which stage reads
         /// them, which is why this is on the renderer rather than on a program.
         virtual void BindStorageBufferForDrawEXT(int /*binding*/,
                                                  const IStorageBufferRenderer& /*buffer*/) {}
 
-        /// plan_modern.md MOD-2163: whether this renderer can measure GPU time around a range of
+        /// plans/plan_modern.md MOD-2163: whether this renderer can measure GPU time around a range of
         /// commands. False by default, and false is the honest answer wherever the underlying API
         /// has no timer query -- see IGpuTimerRenderer for why a CPU fallback is not offered.
         [[nodiscard]] virtual bool SupportsGpuTimerEXT() const { return false; }
 
-        /// plan_modern.md MOD-2163: creates a GPU timer, or null where SupportsGpuTimerEXT() is
+        /// plans/plan_modern.md MOD-2163: creates a GPU timer, or null where SupportsGpuTimerEXT() is
         /// false. Null rather than a stub that returns zeroes, so a caller cannot mistake "no
         /// timer here" for "this pass took no time".
         virtual std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() { return nullptr; }
 
-        /// plan_modern.md MOD-1505: the dispatch limits this context guarantees, per axis
+        /// plans/plan_modern.md MOD-1505: the dispatch limits this context guarantees, per axis
         /// (0 = x, 1 = y, 2 = z). Zero means "unknown or unsupported", which is what every
         /// renderer without compute returns.
         [[nodiscard]] virtual int GetMaxComputeWorkGroupCountEXT(int /*axis*/) const { return 0; }
@@ -2536,7 +2536,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Draws with the count and offsets read out of a GPU buffer instead of passed in.
          *
-         * plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
+         * plans/plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
          * @p argumentByteOffset, and the renderer never looks at it: the numbers are fetched by
          * the GPU as the command is issued, which is the whole point -- a compute shader can
          * decide how much to draw without the answer travelling back through the CPU.
@@ -2654,7 +2654,7 @@ namespace CNA::Internal::Renderers
             // can opt in. The corresponding creation default above returns nullptr.
             if (capability == CNA::GraphicsCapability::CompiledEffects)
                 return SupportsCompiledEffects();
-            // plan_modern.md MOD-100/MOD-101: float colour render targets are opt-in for the same
+            // plans/plan_modern.md MOD-100/MOD-101: float colour render targets are opt-in for the same
             // reason. CreateRenderTarget2DEXT's own shared default drops the requested
             // SurfaceFormat and produces an 8-bit Color target, so a renderer that has not been
             // taught float formats would, under a true default, promise that values above 1.0
@@ -2815,7 +2815,7 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief CNAEXT (plan_dx9.md D9-34). Real, driver-triggered device lifecycle events a renderer
+     * @brief CNAEXT (plans/plan_dx9.md D9-34). Real, driver-triggered device lifecycle events a renderer
      * can report back to GraphicsDevice via GraphicsRendererCreateArgs::deviceEventCallback.
      *
      * Distinct from the pre-existing IGraphicsRenderer::SetContextRecoveryEnabled()/
@@ -2910,28 +2910,28 @@ namespace CNA::Internal::Renderers
         ///   2 = wait for 2 vertical retraces (half refresh rate)
         /// Corresponds to PresentInterval: Default/One→1, Two→2, Immediate→0.
         int swapInterval = 1;
-        /// CNAEXT (plan_dx9.md D9-30). Requested back-buffer pixel format -- raw ordinal of
+        /// CNAEXT (plans/plan_dx9.md D9-30). Requested back-buffer pixel format -- raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::SurfaceFormat, avoiding coupling this
         /// renderer-agnostic header to the XNA namespace (mirrors CreateTexture3D's own
         /// surfaceFormat int convention). Renderers that don't need real format fidelity (every
         /// existing renderer except D3D9, whose goal is XNA authenticity rather than parity) may
         /// ignore this and keep hardcoding their own default, exactly as before this field existed.
         int backBufferFormat = 0;  // SurfaceFormat::Color
-        /// CNAEXT (plan_dx9.md D9-30). Requested depth/stencil format -- raw ordinal of
+        /// CNAEXT (plans/plan_dx9.md D9-30). Requested depth/stencil format -- raw ordinal of
         /// Microsoft::Xna::Framework::Graphics::DepthFormat. See backBufferFormat's own doc for
         /// the int-ordinal convention and the same "existing renderers may ignore this" note.
         int depthStencilFormat = 0;  // DepthFormat::None
-        /// CNAEXT (plan_dx9.md D9-30). Whether the game requested exclusive fullscreen. Existing
+        /// CNAEXT (plans/plan_dx9.md D9-30). Whether the game requested exclusive fullscreen. Existing
         /// renderers that already have their own fullscreen handling via the SDL window itself may
         /// continue to ignore this field exactly as before it existed.
         bool isFullScreen = false;
-        /// CNAEXT (plan_dx9.md D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
+        /// CNAEXT (plans/plan_dx9.md D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
         /// GraphicsProfile ordinal (Reach=0, HiDef=1). Only D3D9 can honestly enforce this today
-        /// (a real D3DCAPS9 to consult) -- see plan_dx9.md's "CNA's divergences from XNA 4.0",
+        /// (a real D3DCAPS9 to consult) -- see plans/plan_dx9.md's "CNA's divergences from XNA 4.0",
         /// Divergence 3. Every other renderer's GraphicsAdapter::IsProfileSupported() keeps its
         /// existing, honest `return true;` and may ignore this field.
         int graphicsProfile = 0;  // GraphicsProfile::Reach
-        /// CNAEXT (plan_dx9.md D9-34). Callback a renderer may invoke to report a REAL,
+        /// CNAEXT (plans/plan_dx9.md D9-34). Callback a renderer may invoke to report a REAL,
         /// driver-triggered device lifecycle event back to GraphicsDevice (which raises the
         /// corresponding DeviceLost/DeviceResetting/DeviceReset XNA event). Null by default; nine
         /// of the ten renderers never call it -- only a renderer that can genuinely lose its device
@@ -2941,7 +2941,7 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
-    // plan_runtimerenderer.md design decision 4: the renderer factory is NOT declared here.
+    // plans/plan_runtimerenderer.md design decision 4: the renderer factory is NOT declared here.
     //
     // It used to be -- declared once in this header and defined once per renderer family with an
     // identical signature, which is exactly why two renderer archives could never link into the

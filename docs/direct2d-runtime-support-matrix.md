@@ -1,6 +1,6 @@
 # Direct2D runtime support matrix
 
-plan_direct2d.md D2D-130. Every Direct2D branch that can behave differently per runtime is listed
+plans/plan_direct2d.md D2D-130. Every Direct2D branch that can behave differently per runtime is listed
 here with one of four dispositions, and nothing is covered by a global "this runtime is
 unsupported" skip:
 

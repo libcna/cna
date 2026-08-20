@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX5 (DX-32).
+// plans/plan_dx.md Phase DIRECTX5 (DX-32).
 #include "CNA/Internal/Renderers/DirectX11/D3D11InputLayoutCache.hpp"
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"

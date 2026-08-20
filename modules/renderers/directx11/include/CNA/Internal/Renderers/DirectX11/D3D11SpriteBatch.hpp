@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX9 (DX-70/DX-71/DX-72): real D3D11 SpriteBatch renderer -- quad batching that
+// plans/plan_dx.md Phase DX9 (DX-70/DX-71/DX-72): real D3D11 SpriteBatch renderer -- quad batching that
 // feeds Phase DIRECTX8's stock sprite2d pipeline (DX-70), a custom-Effect draw path reusing
 // D3D11EffectRenderer (DX-58/DX-71), and real TextureAddressMode::Wrap/Mirror support via the
 // existing D3D11SamplerCache (DX-72).
@@ -37,7 +37,7 @@ namespace CNA::Internal::Renderers::DirectX11
     class DirectX11Renderer;
     class D3D11EffectRenderer;
 
-    /// Real D3D11 SpriteBatch renderer (plan_dx.md Phase DX9).
+    /// Real D3D11 SpriteBatch renderer (plans/plan_dx.md Phase DX9).
     class D3D11SpriteBatchRenderer final : public ISpriteBatchRenderer
     {
     public:

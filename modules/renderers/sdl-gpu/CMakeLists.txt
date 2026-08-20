@@ -1,18 +1,18 @@
-# plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
+# plans/plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
 # into the same SDL3 library every other renderer links against) -- no separate find_package
 # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX.
 cna_add_renderer()
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 
-# plan_fx.md FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
+# plans/plan_fx.md FX-061: compiled XNA effects go through MojoShader's own SDL_GPU adapter plus the
 # translation shared with every other compiled-effect backend. Opt-in, because MojoShader is a
 # fetched dependency this renderer does not otherwise need.
 if(CNA_SDL_GPU_COMPILED_EFFECTS)
     target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
 endif()
 
-# plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectRenderer needs a REAL runtime GLSL->SPIR-V compile
+# plans/plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectRenderer needs a REAL runtime GLSL->SPIR-V compile
 # for arbitrary user ShaderEffect source (SDL_gpu only accepts precompiled bytecode) -- unlike
 # D3D11/D3D12's d3dcompiler, this environment has no libshaderc-dev package (no unversioned
 # .so symlink, no headers), only the runtime libshaderc1 package's versioned .so.1. Prefer a

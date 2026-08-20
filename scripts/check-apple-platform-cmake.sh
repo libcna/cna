@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_apple.md APPLE-1/APPLE-4: host-portable smoke check for cmake/ApplePlatform.cmake.
+# plans/plan_apple.md APPLE-1/APPLE-4: host-portable smoke check for cmake/ApplePlatform.cmake.
 #
 # The Apple platform layer is the one part of the build that a Linux or Windows developer can
 # never reach by configuring the project — every line of it is behind if(APPLE). That makes it

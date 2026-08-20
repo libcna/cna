@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-515..MOD-529: screen-space ambient occlusion.
+// plans/plan_modern.md MOD-515..MOD-529: screen-space ambient occlusion.
 //
 // SSAO is tested against synthetic depth and normal images rather than a rendered scene. That is
 // not a shortcut: it is the only way to state what the pass must do without also depending on a
@@ -178,7 +178,7 @@ TEST(SsaoPassTest, AFlatSurfaceIsLeftUnoccluded)
 
 TEST(SsaoPassTest, TheClearedSkyIsNotDarkenedBesideASilhouette)
 {
-    // plan_modern.md MOD-2009. `DepthNormalPrepass` clears depth to white, so an empty pixel reads
+    // plans/plan_modern.md MOD-2009. `DepthNormalPrepass` clears depth to white, so an empty pixel reads
     // as 1.0 -- the far plane -- while this pass tests for "nothing here" by comparing against
     // *zero*. Its early-out therefore never fires for the sky, and each sky pixel is estimated as a
     // surface at the far plane with every near object in front of it counting as an occluder. What

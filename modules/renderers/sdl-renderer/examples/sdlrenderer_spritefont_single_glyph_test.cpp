@@ -2,7 +2,7 @@
 // Task 690: Pixel test — draw a single glyph at a known position on SDL_Renderer.
 //
 // Task 424 (this row's own "mirrors" reference, the EasyGL original) is itself not yet
-// implemented (still ⬜ in plan_graphics.md's Phase 48) -- there is no existing test to port
+// implemented (still ⬜ in plans/plan_graphics.md's Phase 48) -- there is no existing test to port
 // here. This is a NEW, first-of-its-kind SpriteFont pixel test, designed directly from FNA's
 // real SpriteBatch::DrawString contract (traced in the shared, renderer-agnostic
 // SpriteBatch.cpp: per-glyph destination rect = position + accumulated kerning/cropping

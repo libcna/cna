@@ -6,7 +6,7 @@
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header (header-only template implementation)
 - XNA/FNA relevance: N/A -- NOXNA shared implementation detail behind 6 public XNA read-only collection
-  types (plan_media.md MEDIA-55/D9)
+  types (plans/plan_media.md MEDIA-55/D9)
 - Main related tests: not independently located in this pass
 
 ## Purpose

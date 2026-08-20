@@ -116,7 +116,7 @@ namespace CNA::Graphics {
         /**
          * @brief The occlusion shader's complete fragment source, for a given depth encoding.
          *
-         * plan_modern.md `MOD-2035`. Emitted rather than duplicated, for the reason `MOD-2141`
+         * plans/plan_modern.md `MOD-2035`. Emitted rather than duplicated, for the reason `MOD-2141`
          * settled for the atmosphere: two copies of one shader agree until somebody edits one of
          * them. The investigation into why a half-float depth target defeated this pass needs to run
          * *this* estimator against a depth image the pass itself cannot be pointed at, and a
@@ -130,7 +130,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the hemisphere sample count a quality preset asks for.
          *
-         * plan_modern.md `MOD-522`. A function rather than a side effect, for the reason
+         * plans/plan_modern.md `MOD-522`. A function rather than a side effect, for the reason
          * `MOD-409` records: `setRenderQuality` rewrites nothing, and
          * `RenderPipelineSettings::applyRenderQualityPresetEXT()` is the explicit step.
          *
@@ -160,7 +160,7 @@ namespace CNA::Graphics {
         /**
          * @brief Computes occlusion at half resolution and upsamples it.
          *
-         * plan_modern.md `MOD-523`. **Off by default.** AO is a low-frequency signal — a blurred
+         * plans/plan_modern.md `MOD-523`. **Off by default.** AO is a low-frequency signal — a blurred
          * estimate of a neighbourhood — so halving the resolution costs much less quality than it
          * looks like it should, and the compose pass's bilinear read is the upsample. It is not
          * free, though: thin contact shadows lose definition, which is exactly where AO earns its

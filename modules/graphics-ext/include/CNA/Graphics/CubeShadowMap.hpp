@@ -27,7 +27,7 @@ namespace CNA::Graphics {
     /**
      * @brief A point light's shadow, as six faces of a cube map.
      *
-     * plan_modern.md Phase 10. A point light casts in every direction, so one map cannot hold its
+     * plans/plan_modern.md Phase 10. A point light casts in every direction, so one map cannot hold its
      * shadow; the scene is rendered six times, once down each axis.
      *
      * **Cube rather than dual-paraboloid** (`MOD-1001`). Dual-paraboloid halves the passes, but it

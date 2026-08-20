@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_direct2d.md D2D-129: the 2D half of the cross-renderer diagnostic. Issues one fixed corpus
+// plans/plan_direct2d.md D2D-129: the 2D half of the cross-renderer diagnostic. Issues one fixed corpus
 // of PUBLIC 2D commands and dumps the resulting 64x64 RGBA8 backbuffer, in exactly the format
 // cross_renderer_diagnostic_compare.cpp already reads -- so the existing comparator judges this
 // too and no second comparator exists to drift.

@@ -15,7 +15,7 @@ baseline (524 passed, updated 2026-07-17), a fresh-clone reproducibility note, a
 of a **known, disclosed, out-of-Input-scope full-suite crash**.
 
 ## Executive Verdict
-Accurate and unusually transparent about a real, separate defect. Its own account of `plan_input.md`
+Accurate and unusually transparent about a real, separate defect. Its own account of `plans/plan_input.md`
 P9-031 finding the **unfiltered full `CnaTests` binary crashes with `double free or corruption
 (fasttop)` (SIGABRT) inside `ENetBackendTest`** — explicitly confirmed unrelated to Input via
 isolation testing, not present in any Input-filtered run including under ASan+UBSan — is a real,
@@ -42,7 +42,7 @@ it or downplaying it because it isn't this document's own subsystem's fault.
 ## Detailed Findings
 None in this document's own content — the ENet crash it discloses is itself the finding, and this
 document handles the disclosure correctly (attributes it precisely, scopes it out of Input, points
-to `plan_input.md`'s P9-031 record and `NEXT.md` for the bisection).
+to `plans/plan_input.md`'s P9-031 record and `NEXT.md` for the bisection).
 
 ## Cross-File Observations
 - The ENet-subsystem full-suite crash this document discloses was not independently cross-checked

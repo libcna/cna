@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::Content (MODULARIZATION_PLAN.md §4): constructing a
+// Minimal-link probe for CNA::Content (plans/MODULARIZATION_PLAN.md §4): constructing a
 // ContentManager must not require the runtime (Game) layer, devices, CNAEXT or networking.
 // Content legitimately pulls graphics-core, audio and media (type readers construct
 // Texture/SoundEffect/Song/Video) -- the paired ModuleLinkClosure_Content ctest asserts the

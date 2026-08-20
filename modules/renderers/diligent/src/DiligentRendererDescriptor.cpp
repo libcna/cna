@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D36: the Diligent family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D36: the Diligent family's pre-construction contract.
 //
 // DiligentCore picks its concrete device type (D3D12/Vulkan/D3D11/OpenGL) at RUNTIME, after the
 // window already exists -- but unlike BGFX's identical problem, SDL3 rejects a window created with
@@ -15,7 +15,7 @@
 // the first candidate TryCreateDevice() itself will attempt. Because only one the platform flag can be
 // requested, an auto build whose first preference (Vulkan) fails at runtime cannot then fall
 // through to OpenGL against this already-created window -- a known, documented limitation
-// (plan_diligent.md DILIGENT-57), not a silently broken promise.
+// (plans/plan_diligent.md DILIGENT-57), not a silently broken promise.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -33,7 +33,7 @@ namespace CNA::Internal::Renderers::Diligent
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

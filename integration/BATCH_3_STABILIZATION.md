@@ -145,7 +145,7 @@ check remains enabled; the disabled check could not have applied to `-fno-rtti` 
 
 ## 7. New findings
 
-**One: `DILIGENT-69`**, recorded on `plan_diligent.md`. It is *not* a CNA defect and not a
+**One: `DILIGENT-69`**, recorded on `plans/plan_diligent.md`. It is *not* a CNA defect and not a
 supported-path defect — it records why the session's own new instancing test shows red under the
 OpenGL device type, so that red is attributable rather than unexplained. It joins `DILIGENT-66`'s
 existing, already-root-caused GL divisor class and closes when that does.

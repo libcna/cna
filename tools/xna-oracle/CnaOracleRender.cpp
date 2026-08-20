@@ -1,4 +1,4 @@
-// plan_dx9.md Phase D9-A (D9-A3): scene-driven CNA renderer -- the "CNA" half of the D9-A4 diff
+// plans/plan_dx9.md Phase D9-A (D9-A3): scene-driven CNA renderer -- the "CNA" half of the D9-A4 diff
 // harness. Reads the SAME ".scene" file format tools/xna-oracle/Oracle.cs reads (see that file's
 // own header comment) and renders it through CNA's real public Game/GraphicsDeviceManager/
 // GraphicsDevice/BasicEffect API on whichever renderer this binary was built against (originally
@@ -225,7 +225,7 @@ namespace
         SceneVertexFormat vertexFormat = SceneVertexFormat::PositionColor;
         bool vertexColorEnabled = false;
         bool lightingEnabled = false;
-        // plan_dx9.md D9-81 item 1, resolved 2026-07-16: BasicEffect/SkinnedEffect's real
+        // plans/plan_dx9.md D9-81 item 1, resolved 2026-07-16: BasicEffect/SkinnedEffect's real
         // PreferPerPixelLighting, now that GpuDrawParams carries it. Defaults false, matching
         // real XNA's own default (per-vertex/Gouraud lighting).
         bool preferPerPixelLighting = false;
@@ -240,7 +240,7 @@ namespace
         int environmentMapSize = 0;
         float environmentMapAmount = 1.0f;
         float fresnelFactor = 1.0f;
-        // plan_dx9.md D9-81 item 4, resolved 2026-07-16: EnvironmentMapEffect.EnvironmentMapSpecular,
+        // plans/plan_dx9.md D9-81 item 4, resolved 2026-07-16: EnvironmentMapEffect.EnvironmentMapSpecular,
         // whose non-zero-ness drives the real specularEnabled bool now that GpuDrawParams carries
         // it. Defaults to Vector3::Zero, matching real XNA's own default (specular disabled).
         Vector3 environmentMapSpecular{0, 0, 0};
@@ -576,7 +576,7 @@ protected:
     void Draw(const GameTime&) override
     {
         // Give the swap chain one frame to settle -- same reason every other D3D9 CTest in this
-        // project skips frame 0 (see plan_dx9.md D9-64's own UpdatePresentationFormatEXT() finding).
+        // project skips frame 0 (see plans/plan_dx9.md D9-64's own UpdatePresentationFormatEXT() finding).
         if (frame_++ < 1) return;
 
         auto& dev = getGraphicsDeviceProperty();

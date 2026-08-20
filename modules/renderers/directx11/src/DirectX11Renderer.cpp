@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
+// plans/plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
@@ -924,7 +924,7 @@ namespace CNA::Internal::Renderers::DirectX11
         {
             throw std::runtime_error(
                 "DirectX11Renderer::DrawColoredPrimitives: only stride-16 (VertexPositionColor) "
-                "is implemented so far (plan_dx.md DX-61); other strides land in DX-62 onward");
+                "is implemented so far (plans/plan_dx.md DX-61); other strides land in DX-62 onward");
         }
 
         constexpr auto variant = D3DCommon::D3DShaderVariant::Colored3d;
@@ -986,7 +986,7 @@ namespace CNA::Internal::Renderers::DirectX11
         {
             throw std::runtime_error(
                 "DirectX11Renderer::DrawIndexedColoredPrimitives: only stride-16 "
-                "(VertexPositionColor) is implemented so far (plan_dx.md DX-61)");
+                "(VertexPositionColor) is implemented so far (plans/plan_dx.md DX-61)");
         }
 
         constexpr auto variant = D3DCommon::D3DShaderVariant::Colored3d;
@@ -1209,7 +1209,7 @@ namespace CNA::Internal::Renderers::DirectX11
     {
         if (!defaultFlatNormalSrv_)
         {
-            // plan_cnj.md CNB-58 follow-up: a "flat" tangent-space normal (0,0,1) encoded as RGB
+            // plans/plan_cnj.md CNB-58 follow-up: a "flat" tangent-space normal (0,0,1) encoded as RGB
             // (128,128,255), matching EasyGLRenderer::EnsureDefaultFlatNormalTexture()
             // exactly -- so the sampled/decoded (rgb*2-1) normal is exactly the geometric normal
             // (no perturbation) when PbrEffect::NormalMap is unbound.
@@ -1293,7 +1293,7 @@ namespace CNA::Internal::Renderers::DirectX11
                                       (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex     = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap      = params.envMapping  && !needsAlphaTest && !needsDualTex;
-        // plan_cnj.md CNB-58 follow-up: PbrEffect/SkinnedPbrEffect -- `params.skinned` further
+        // plans/plan_cnj.md CNB-58 follow-up: PbrEffect/SkinnedPbrEffect -- `params.skinned` further
         // selects Pbr3d vs. PbrSkinned3d below, mirroring EasyGLRenderer::SelectProgram()'s
         // own `if (params.pbr && params.skinned) ... else if (params.pbr) ...` priority (PBR takes
         // precedence over the plain-skinned bucket so SkinnedPbrEffect draws don't fall through to
@@ -1314,14 +1314,14 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error(
                 "DirectX11Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
                 "supports stride 20 (VertexPositionTexture) or 24 "
-                "(VertexPositionColorTexture, plan_dx.md DX-136)");
+                "(VertexPositionColorTexture, plans/plan_dx.md DX-136)");
         // DX-65: dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes) -- the 24-byte
         // dual_texture_colored3d variant was deliberately not ported (DX-13-hlsl's own row notes).
         if (needsDualTex && stride != 20)
             throw std::runtime_error(
                 "DirectX11Renderer::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
                 "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
-                "(plan_dx.md DX-13-hlsl)");
+                "(plans/plan_dx.md DX-13-hlsl)");
         // DX-66: env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes).
         if (needsEnvMap && stride != 32)
             throw std::runtime_error(
@@ -1333,8 +1333,8 @@ namespace CNA::Internal::Renderers::DirectX11
             throw std::runtime_error(
                 "DirectX11Renderer::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
                 "52 (VertexPositionNormalTextureSkinned) or 56 (skinned + per-vertex Color, "
-                "plan_cnj.md CNB-67)");
-        // plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
+                "plans/plan_cnj.md CNB-67)");
+        // plans/plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
         // (VertexPositionNormalTangentTexture); pbr_skinned3d.vert.hlsl (SkinnedPbrEffect) is
         // stride 68 (VertexPositionNormalTangentTextureSkinned).
         if (needsPbr && !params.skinned && stride != 48 && stride != 60)
@@ -1356,7 +1356,7 @@ namespace CNA::Internal::Renderers::DirectX11
         else if (needsEnvMap)
             variant = D3DCommon::D3DShaderVariant::EnvMap3d;
         else if (needsPbr)
-            // plan_gltf.md GLTF-463: stride 80 is the skinned dual-UV record with a packed COLOR_0
+            // plans/plan_gltf.md GLTF-463: stride 80 is the skinned dual-UV record with a packed COLOR_0
             // appended, so it needs the variant that declares the colour input; stride 76 has no
             // colour slot to bind. The rigid dual-UV variant always declares one because every
             // stride-60 record carries the slot (GLTF-462).
@@ -1367,7 +1367,7 @@ namespace CNA::Internal::Renderers::DirectX11
                 : ((stride == 60) ? D3DCommon::D3DShaderVariant::Pbr3dDualUv
                                   : D3DCommon::D3DShaderVariant::Pbr3d);
         else if (needsSkinned)
-            // plan_graphics.md Phase 80 (Task 1106): real XNA renders SkinnedEffect's lit path
+            // plans/plan_graphics.md Phase 80 (Task 1106): real XNA renders SkinnedEffect's lit path
             // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. CNB-67:
             // stride 56 (per-vertex Color present) routes to the *Colored siblings instead,
             // mirroring AlphaTest3d/AlphaTestColored3d's own stride-selected-variant precedent.
@@ -1393,7 +1393,7 @@ namespace CNA::Internal::Renderers::DirectX11
             default:
                 throw std::runtime_error(
                     "DirectX11Renderer::DrawPrimitivesEx: unsupported vertex stride " +
-                    std::to_string(stride) + " for the colored/textured bundle (plan_dx.md DX-62)");
+                    std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-62)");
             }
         }
 
@@ -1428,7 +1428,7 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else if (needsPbr)
         {
-            // plan_cnj.md CNB-58 follow-up: when a given PBR map is unbound, fall back to a 1x1
+            // plans/plan_cnj.md CNB-58 follow-up: when a given PBR map is unbound, fall back to a 1x1
             // neutral-value texture instead of an unbound SRV -- matches
             // EasyGLRenderer::EnsurePbrProgram()'s own fallback-texture convention exactly
             // (flat tangent-space normal for the normal map; factor-only/no-emissive/fully-lit
@@ -1589,7 +1589,7 @@ namespace CNA::Internal::Renderers::DirectX11
         }
         else if (needsPbr)
         {
-            // plan_cnj.md CNB-58 follow-up: pbr3d/pbr_skinned3d's shared PerDraw (b0,
+            // plans/plan_cnj.md CNB-58 follow-up: pbr3d/pbr_skinned3d's shared PerDraw (b0,
             // D3DPbrPerDrawConstants) -- transform + material constants. PbrLights lives at (b1)
             // for the unskinned Pbr3d variant, or (b2) for PbrSkinned3d (BoneBlock claims b1
             // there instead), matching skinned3d's own "next free slot" precedent.
@@ -1633,7 +1633,7 @@ namespace CNA::Internal::Renderers::DirectX11
             std::memcpy(perDraw.SpecularTextureTransformRows,
                         params.pbrSpecularTextureTransformRows,
                         sizeof(perDraw.SpecularTextureTransformRows));
-            // plan_gltf.md GLTF-465: §3.9.2's COLOR_0 multiplier switch. Only the stride-60 and
+            // plans/plan_gltf.md GLTF-465: §3.9.2's COLOR_0 multiplier switch. Only the stride-60 and
             // stride-80 variants declare a colour input, so this is inert for the others.
             perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;
 
@@ -2055,7 +2055,7 @@ namespace CNA::Internal::Renderers::DirectX11
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX11 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-600..MOD-610: FXAA.
+// plans/plan_modern.md MOD-600..MOD-610: FXAA.
 //
 // Anti-aliasing is measured here rather than looked at. A hard black/white edge is rendered, the
 // pass runs, and the assertion is that pixels appear whose value lies strictly between the two --

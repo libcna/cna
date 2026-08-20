@@ -308,7 +308,7 @@ namespace CNA::Internal::Renderers::Igl
                                        int /*dataLength*/) const
     {
         // Refused, and unlike the TextureCube case above this one really is an upstream limit --
-        // established by trying it, not by assuming it (plan_igl.md IGL-17).
+        // established by trying it, not by assuming it (plans/plan_igl.md IGL-17).
         //
         // The cube path works because a framebuffer is a cheap descriptor over an existing image,
         // so GetData can build a throwaway one and read the face back. That does not carry over to

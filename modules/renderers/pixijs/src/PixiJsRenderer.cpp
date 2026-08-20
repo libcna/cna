@@ -412,7 +412,7 @@ namespace CNA::Internal::Renderers::PixiJs
         int w, int h, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
     {
         // depthFormat/mipMap/multiSampleCount are ignored in this v1 scope, same boundary
-        // CANVAS-23/CANVAS-21 drew for their own render targets (plan_pixijs.md PIXIJS-34).
+        // CANVAS-23/CANVAS-21 drew for their own render targets (plans/plan_pixijs.md PIXIJS-34).
         EnsureApp(surface_.drawableSize.width, surface_.drawableSize.height);
         return std::make_unique<PixiJsRenderTargetRenderer>(w, h);
     }
@@ -609,7 +609,7 @@ namespace CNA::Internal::Renderers::PixiJs
         state_->blendFactorA = a;
     }
 
-    // ---- 3D: PixiJS's v1 scope is intentionally 2D-only (see plan_pixijs.md's own scope note --
+    // ---- 3D: PixiJS's v1 scope is intentionally 2D-only (see plans/plan_pixijs.md's own scope note --
     // unlike CANVAS/HTML_DOM this is a deliberate boundary, not a structural one). ----
     void PixiJsRenderer::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall("PixiJS", "ClearColorAndDepth"); }
     void PixiJsRenderer::ClearDepth(float) { HandleUnsupported3DCall("PixiJS", "ClearDepth"); }
@@ -635,7 +635,7 @@ namespace CNA::Internal::Renderers::PixiJs
 
     std::unique_ptr<IOcclusionQueryRenderer> PixiJsRenderer::CreateOcclusionQuery()
     {
-        // plan_pixijs.md Design decision 11: PixiJS exposes no occlusion-query primitive; shared
+        // plans/plan_pixijs.md Design decision 11: PixiJS exposes no occlusion-query primitive; shared
         // IGraphicsRenderer nullptr default under Throw policy, matching CANVAS-66/HTML_DOM.
         if (!ShouldStubUnsupported3DResource())
             return nullptr;
@@ -677,7 +677,7 @@ namespace CNA::Internal::Renderers::PixiJs
                                                        const Matrix&, const Matrix&, const Matrix&,
                                                        PrimitiveType, int) { HandleUnsupported3DCall("PixiJS", "DrawIndexedColoredPrimitives"); }
 
-    // plan_runtimerenderer.md design decision 4: the factory is family-scoped, so several renderer
+    // plans/plan_runtimerenderer.md design decision 4: the factory is family-scoped, so several renderer
     // archives can link into one binary. PixiJsRendererDescriptor.cpp takes its address.
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {

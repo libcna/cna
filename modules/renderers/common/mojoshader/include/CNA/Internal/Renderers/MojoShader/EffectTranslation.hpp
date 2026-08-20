@@ -5,7 +5,7 @@
  * @file EffectTranslation.hpp
  * @brief Renderer-neutral translation between a parsed MojoShader effect and CNA's own types.
  *
- * plan_fx.md FX-061/FX-062/FX-063/FX-065: every backend that executes compiled XNA effects reads
+ * plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: every backend that executes compiled XNA effects reads
  * the same parsed `MOJOSHADER_effect` and has to turn it into the same CNA reflection, render
  * states and sampler states. Only the native calls differ -- creating the effect, selecting a
  * technique, applying a pass, and binding a texture and sampler to a slot.

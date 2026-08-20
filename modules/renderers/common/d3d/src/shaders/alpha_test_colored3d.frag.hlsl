@@ -1,5 +1,5 @@
 // Shader Model 5.0 (ps_5_0). Sibling of alpha_test3d.frag.hlsl for the stride-24
-// (VertexPositionColorTexture) alpha-test-colored variant (plan_dx.md DX-136). The alpha-test
+// (VertexPositionColorTexture) alpha-test-colored variant (plans/plan_dx.md DX-136). The alpha-test
 // logic itself is unchanged from alpha_test3d.frag.hlsl -- this shader only ever reads the
 // already-combined Tint the vertex shader computed (input.Color * DiffuseColor when
 // VertexColorEnabled), not the vertex color directly, so it needs no changes beyond the input

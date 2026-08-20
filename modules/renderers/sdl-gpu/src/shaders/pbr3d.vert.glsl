@@ -6,7 +6,7 @@ layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec3 inNormal;
 layout(location = 2) in vec4 inTangent;
 layout(location = 3) in vec2 inUV;
-// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
 // colour. Declared only in the variants whose pipeline supplies it (strides 60 and 80); the others
 // pass opaque white, the multiplier's identity, so the shared fragment stage has one interface.
 #ifdef CNA_PBR_VERTEX_COLOR

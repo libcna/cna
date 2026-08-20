@@ -2,12 +2,12 @@
 <!--
   SPDX-License-Identifier: MS-PL
 
-  plan_html_dom.md HTMLDOM-99 / HTMLDOM-111. Standalone (no Emscripten/CMake needed -- this is a
+  plans/plan_html_dom.md HTMLDOM-99 / HTMLDOM-111. Standalone (no Emscripten/CMake needed -- this is a
   pure DOM/CSS technique question, not a renderer-integration one) reproduction of the experiment
   HTMLDOM-99 ran to decide between the HTML_DOM renderer's current PNG-variant-cache sprite tinting
   technique and a real-time SVG `feColorMatrix` filter alternative. HTMLDOM-111 checked this in
   (it did not previously exist in the repository) so HTMLDOM-99's own conclusion is independently
-  reproducible rather than only asserted in plan_html_dom.md's prose.
+  reproducible rather than only asserted in plans/plan_html_dom.md's prose.
 
   Methodology (same shape as modules/renderers/html-dom/examples/htmldom_stress_test.cpp's own HTMLDOM-89 benchmark, and
   modules/graphics/examples/graphics_renderer_benchmark.cpp's HTMLDOM-111 rework): 500 pooled sprite elements,
@@ -30,7 +30,7 @@
   Open this file directly in a browser (file://, or serve it locally -- no server-side dependency
   of any kind) and click "Run all four". Results are printed to the page and to the console.
 
-  HONEST CAVEAT (found while checking this in for HTMLDOM-111): plan_html_dom.md's own HTMLDOM-99
+  HONEST CAVEAT (found while checking this in for HTMLDOM-111): plans/plan_html_dom.md's own HTMLDOM-99
   row cites specific numbers (measured 2026-08-03, headless Chromium) -- steady-state variant-cache
   18.6-21.1 ms/frame vs feColorMatrix 38.2-40.9 ms/frame (~2x SLOWER); heavy churn variant-cache
   73.0-75.9 ms/frame vs feColorMatrix 43.4-52.0 ms/frame (~35-40% FASTER) -- from a script that was
@@ -42,7 +42,7 @@
   ~60fps vsync floor rather than showing a clear technique-driven gap. The likely explanation is that
   the original script's exact details (e.g. whether feColorMatrix's own setAttribute call was
   diffed/skipped when a tint repeated, matching this reconstruction, or called unconditionally every
-  frame) could not be perfectly reconstructed from plan_html_dom.md's prose description alone -- and
+  frame) could not be perfectly reconstructed from plans/plan_html_dom.md's prose description alone -- and
   three-plus years of subsequent browser/compositor optimisation work is also a plausible factor.
   What this file DOES support, reliably and reproducibly, is HTMLDOM-99's actual DECISION: keep the
   variant-cache. At the sprite counts and workloads this renderer targets, neither technique's cost is
@@ -212,7 +212,7 @@ async function runOne(technique, workload) {
   drawFrame(0);
   await new Promise(requestAnimationFrame);
 
-  // plan_html_dom.md HTMLDOM-111: BOTH numbers, deliberately, not just one -- submissionMs
+  // plans/plan_html_dom.md HTMLDOM-111: BOTH numbers, deliberately, not just one -- submissionMs
   // (bracketing just drawFrame() itself) is pure JS/CPU cost, ungated by vsync; endToEndMs (the
   // wall-clock gap between successive rAF-paced frame starts) is what a user actually sees, and
   // gets floored at the browser's own vsync cadence regardless of which technique is cheaper.
@@ -271,7 +271,7 @@ document.getElementById("runBtn").addEventListener("click", async () => {
       "end-to-end can disagree about which technique is cheaper (submission is pure JS/CPU cost, " +
       "ungated by vsync; end-to-end is what a user actually sees, and gets floored at this " +
       "machine's own vsync cadence regardless of which technique produced it). See this file's " +
-      "own top-of-file HONEST CAVEAT for why this run's numbers may not match plan_html_dom.md's " +
+      "own top-of-file HONEST CAVEAT for why this run's numbers may not match plans/plan_html_dom.md's " +
       "originally-cited ones, and why that does not change HTMLDOM-99's actual decision: at this " +
       "sprite count, on real hardware, neither technique's absolute cost is large enough to " +
       "justify a real-time SVG filter's added complexity over the variant-cache this renderer " +

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Transform fixtures -- owning group ``transforms`` (plan_gltf.md §11.4, §24.2).
+"""Transform fixtures -- owning group ``transforms`` (plans/plan_gltf.md §11.4, §24.2).
 
 These are the L4 ladder's first rungs and the fixtures that prove D1, D2 and D3: CNA's import
 data model carries no ``cgltf_node`` and no matrix, so every mesh primitive is emitted in

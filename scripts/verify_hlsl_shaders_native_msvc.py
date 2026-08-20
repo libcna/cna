@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real-Windows/MSVC counterpart to compile_shaders_hlsl.py's own Wine+MinGW compile loop.
 
-plan_dx.md DX-90/DX-114: those rows explicitly call out "shader-generation check" as something a
+plans/plan_dx.md DX-90/DX-114: those rows explicitly call out "shader-generation check" as something a
 GitHub-hosted Windows CI runner can usefully verify, distinct from (and not a substitute for) the
 swap-chain/tearing/device-lost/driver-parity items that need a real display + GPU driver. This
 script is that check: it builds hlsl_compiler_tool.cpp with the real, native cl.exe (assumes an

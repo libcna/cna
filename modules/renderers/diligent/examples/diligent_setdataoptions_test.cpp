@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-44: real-device proof that the Diligent renderer's vertex/index buffers
+// plans/plan_diligent.md DILIGENT-44: real-device proof that the Diligent renderer's vertex/index buffers
 // genuinely re-upload data through SetDataOptions::Discard and SetDataOptions::NoOverwrite, rather
 // than silently ignoring the hint (the shared IGraphicsRenderer default) or, worse, uploading once
 // and leaving stale GPU content behind.

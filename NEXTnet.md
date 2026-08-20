@@ -10,10 +10,10 @@ fidelity to FNA (`/rv/data/library/github.com/FNA-XNA/FNA` for most namespaces,
 `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/` for GamerServices), backed by
 unit tests.
 
-**Current phase:** `plan_net.md` ("2026-07-07 Re-Audit and Hardening") is fully checked off
+**Current phase:** `plans/plan_net.md` ("2026-07-07 Re-Audit and Hardening") is fully checked off
 (104/104 tasks, all 11 phases `[x]`, including Task 11.7's own final summary). **Three
 independent post-completion audits (all 2026-07-18) each found that "done" claims in this file
-and `plan_net.md` overstated what was actually delivered.** The first audit's 4 findings (F1 font
+and `plans/plan_net.md` overstated what was actually delivered.** The first audit's 4 findings (F1 font
 readability, Guide.cpp's keyboard-input overlay, avatar visual artifacts, this file's own broken
 example command) were addressed same-day; a **second** independent audit then re-verified that
 pass against fresh runtime evidence and found the avatar claim ("seams completely gone") itself
@@ -52,11 +52,11 @@ was invisible to every screenshot-based check and only surfaced once weights wer
 numerically* — when a visual defect resists visual debugging, measure the underlying data
 directly.
 Treat
-`plan_net.md`'s checkmarks as "this task's described work was completed at the time," not as "the
+`plans/plan_net.md`'s checkmarks as "this task's described work was completed at the time," not as "the
 underlying feature was fully correct" on first landing. The prior first-implementation pass
-(132/132 tasks) is complete; its own archive file (`plan_net_20260707.md`) no longer exists in the
+(132/132 tasks) is complete; its own archive file (`plans/plan_net_20260707.md`) no longer exists in the
 working tree (deleted by a later, separate, deliberate repo-wide cleanup commit, `e86b7cba` —
-still fully recoverable via git history, see Task 11.3's write-up in `plan_net.md`).
+still fully recoverable via git history, see Task 11.3's write-up in `plans/plan_net.md`).
 
 **Key architectural decisions (see `CLAUDE.md` for the full rules):**
 - Strict separation: `Microsoft::Xna::Framework::*` types must match real XNA/FNA behavior exactly.
@@ -98,7 +98,7 @@ still fully recoverable via git history, see Task 11.3's write-up in `plan_net.m
     `ENetDiscoveryServiceTest`'s failing cases passes cleanly standalone or under `ctest -j1` (the
     `ENet*` cases line up with a real, already-documented design property — many parallel test
     *processes* sharing one well-known discovery port, 61190, is expected OS-arbitrary contention,
-    not a bug). See `plan_net.md`'s own Task 10.7 write-up for the full per-category detail.
+    not a bug). See `plans/plan_net.md`'s own Task 10.7 write-up for the full per-category detail.
 - **Tools/apps available:** 24+ demo executables under `cmake-build-debug/`, including 8
   avatar-related demos, all now with an in-app **F1 help overlay** (Phase 8) — press F1 in any of
   them for its exact current controls. `docs/avatar-demos.md` is the controls/troubleshooting
@@ -504,7 +504,7 @@ honestly open:**
    payload/target/order/`SendDataOptions`. Proven via a real end-to-end delivery test over the
    actual ENet wire (`AppDataQueuedBeforeSecondLocalGamerIsWiredIsDeliveredOnceResolved`), not
    just a drop counter. See `include/CNA/Internal/Net/ENetBackend.hpp`'s own updated doc comments.
-6. ~~**Contradictory documentation** (this file, `plan_net.md`)~~ — ✅ **DONE.** This very pass:
+6. ~~**Contradictory documentation** (this file, `plans/plan_net.md`)~~ — ✅ **DONE.** This very pass:
    removed the "all 4 findings are now fixed" and "seams completely gone" overclaims, corrected
    the stale "no shared `examples/common` helper" claim below (item 4), described the avatar's
    real, measured, partial status instead.
@@ -561,7 +561,7 @@ honestly open:**
     check in before starting, per section 7).
 14. **Optional follow-up:** real friend-list population for `SignedInGamer::GetFriends()` (section
     3) — needs its own design decision, not just a mechanical fix.
-15. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plan_net.md` Task
+15. **Optional follow-up:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap (`plans/plan_net.md` Task
     7.8/7.10).
 16. **The one remaining avatar defect class — still open; FOUR approaches now disproven by
     measurement.** New in round 7, and it reframes the problem: with `pose=Wave` measurement
@@ -632,7 +632,7 @@ honestly open:**
 - Do not build or test against any backend other than EASYGL, or any build directory other than
   `cmake-build-debug`, for this plan's own scope (explicit user decision).
 - Do not fix the 10-other-demos `MakeSimpleFont` bug (section 6, item 4) without checking in first
-  — it's real and worth doing, but it's outside `plan_net.md`'s own stated scope (avatar demos
+  — it's real and worth doing, but it's outside `plans/plan_net.md`'s own stated scope (avatar demos
   only) and touches files across multiple unrelated plans.
 - No mass rewrites, no speculative architecture changes, no unrelated cleanup.
 - Before claiming any of section 6's active remediation items (1-3) "done," re-verify with fresh
@@ -645,7 +645,7 @@ honestly open:**
 ```text
 Read NEXT.md first. All 4 user-prioritized remediation items (F1 font, Guide.cpp, avatar seams,
 this file's own broken command) are done as of 2026-07-18. Check with the user before starting any
-of section 6's "optional follow-up" items (items 4-8) - none are in plan_net.md's own original
+of section 6's "optional follow-up" items (items 4-8) - none are in plans/plan_net.md's own original
 scope, and this file has already been burned once by claiming something was fixed without fresh
 verification (see section 3's own writeup) - don't repeat that on whichever item comes next.
 ```

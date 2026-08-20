@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX12 (DX-106).
+// plans/plan_dx.md Phase DX12 (DX-106).
 #include "CNA/Internal/Renderers/DirectX12/D3D12ResourceStateTracker.hpp"
 
 #include <stdexcept>

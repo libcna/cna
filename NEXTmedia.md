@@ -3,14 +3,14 @@
 > Scoped to `Microsoft::Xna::Framework::Media` + `CNA::Internal::Media::*` only, per the same
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
-> **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
+> **do not edit it from this branch.** Full task-by-task detail lives in `plans/plan_media.md`
 > (`MEDIA-1`–`MEDIA-232`, Phases 0-16); this file is a short current-state index.
 
 ## 1. Status (2026-07-18) — Phases 0-16; **merged into `develop`**
 
 **Where the work lives:** `feature/media` @ `22df8325`, merged into `develop` as `cb053b71`
 (two merges: `a3f88c94`/`36ac9656` for Phases 8-16 Groups A-I, `cb053b71` for `MEDIA-228`..`232`).
-Full task detail: `plan_media.md` (`MEDIA-1`–`MEDIA-232`; **231 real tasks — `MEDIA-157`
+Full task detail: `plans/plan_media.md` (`MEDIA-1`–`MEDIA-232`; **231 real tasks — `MEDIA-157`
 was never assigned**, so the highest ID is not the count).
 
 **Current baseline, measured on the merged tree — quote this number, not the historical ones:**
@@ -71,7 +71,7 @@ several points, **plus one genuine new regression Phase 8 itself introduced** wh
 track-switching bug (`MEDIA-131`): a fresh `Play()` call left the SDL audio stream paused forever,
 so every video with audio played completely silently. Root cause went deeper than the review
 itself suspected — `VideoPlayer` never initialized SDL's audio subsystem at all, a separate,
-pre-existing gap the investigation surfaced. All Phase 9 findings fixed for real (`plan_media.md`
+pre-existing gap the investigation surfaced. All Phase 9 findings fixed for real (`plans/plan_media.md`
 `MEDIA-139`..`MEDIA-145`); see §1a below. **Two adversarial review passes in one day, two real
 rounds of findings — this is exactly the "even a careful, well-documented fix needs its own
 verification" lesson, twice in a row.**
@@ -79,7 +79,7 @@ verification" lesson, twice in a row.**
 **Phase 8 correction (2026-07-18):** an external adversarial code review of the Phase 7 "126/126
 complete" claim found it was **not fully accurate** — 11 real, confirmed defects, several from
 `MEDIA-N` tasks that had been checked off despite not genuinely meeting their own Accept criteria.
-All 11 are now fixed or honestly documented (`plan_media.md` Phase 8, `MEDIA-127`..`MEDIA-138`); see
+All 11 are now fixed or honestly documented (`plans/plan_media.md` Phase 8, `MEDIA-127`..`MEDIA-138`); see
 §1a below for the full list. This is exactly the kind of "complete" claim needing its own
 adversarial pass — treat any future "this plan is done" statement the same way, verify against the
 actual code, not the checkbox.
@@ -87,7 +87,7 @@ actual code, not the checkbox.
 **Phase 0 complete** (`MEDIA-1`..`MEDIA-8`, commits `eb3c48a3`, `3d6a7508` on `feature/media`). Test
 infra (`tests/Microsoft/Xna/Framework/Media/` + `Video/`) and a full, verified fixture corpus
 (`tests/assets/media/{music,pictures,video}/`, each with a `manifest.json`) are in place. See
-`plan_media.md` §5 Phase 0 for exact task detail.
+`plans/plan_media.md` §5 Phase 0 for exact task detail.
 
 **Phase 1 complete** (`MEDIA-9`..`MEDIA-31`, the compliance sweep), under an autonomous work session
 (project owner unavailable for an extended period, explicit authorization given after a consolidated
@@ -210,7 +210,7 @@ Media-scoped tests across 9 files (`MediaSourceTests.cpp`, `GenreTests.cpp`, `Ar
 `CNA::Internal::Xnb::VideoContentTypeReader` (`.hpp`/`.cpp`), registered under FNA's real canonical
 name `Microsoft.Xna.Framework.Content.VideoReader` from `XnbBuiltInReaders.cpp` — `ContentManager::
 Load<Video>()` is possible for the first time (confirmed: no such reader existed anywhere in the
-repo before this task, and `plan_xnb.md` never planned one). Field layout matches FNA's real binary
+repo before this task, and `plans/plan_xnb.md` never planned one). Field layout matches FNA's real binary
 format exactly (reference string with the fake `.wmv` suffix stripped and re-resolved against
 `.ogv`/`.oga`, mirroring `SongReader`'s `.wma`-strip/`Normalize` pattern, then `durationMS`/`width`/
 `height`(int32) + `framesPerSecond`(float32) + `soundTrackType`(int32)) but uses direct typed reads
@@ -315,7 +315,7 @@ Full-suite regression after Phase 6: **4846 tests, 4844 passed, 0 failed, 2 pre-
 skips** (Accelerometer/Gyroscope) — grepped in full for `FAILED`, not a truncated tail, per
 `MEDIA-120`'s own requirement.
 
-**Phase 7 complete** (`MEDIA-121`..`MEDIA-126`, documentation and closure — **`plan_media.md` is now
+**Phase 7 complete** (`MEDIA-121`..`MEDIA-126`, documentation and closure — **`plans/plan_media.md` is now
 fully complete, 126/126 tasks across all 7 phases**). Added 10 new Media-specific rows to
 `CHECKLIST.md`'s deviations table (the real from-scratch library implementation itself, D1/D2/D5/D6
 from §4, the FFmpeg-unified video decode backend, `VideoSoundtrackType` metadata-only fidelity, AV1
@@ -340,7 +340,7 @@ embedded-`APIC`-frame album art, the `TouchCollection` exception-type inconsiste
 
 An external adversarial review of the Phase 7 "126/126, consistently done" claim checked the actual
 code against every task's own literal Accept criterion (not the checkbox) and found 11 real,
-confirmed defects. All are now fixed or honestly documented (`plan_media.md` `MEDIA-127`..`MEDIA-138`):
+confirmed defects. All are now fixed or honestly documented (`plans/plan_media.md` `MEDIA-127`..`MEDIA-138`):
 
 1. **`Album`/`Playlist.Duration` were permanently zero** (`MEDIA-127`) — library-scanned `Song`s
    never had a real duration set, `Album.Duration` was hardcoded to `TimeSpan.Zero`, and even
@@ -594,7 +594,7 @@ work, one a genuinely older gap (`MEDIA-38`) surfaced by looking one call deeper
    doing so would require either breaking `Open()`'s established non-throwing `bool` contract (relied
    on, unwrapped, by dozens of existing call sites) or throwing and immediately catching it right
    back into the same graceful-degradation behavior that already existed, a no-op complication this
-   project's own conventions discourage. `MEDIA-38`'s task text is corrected in `plan_media.md` to
+   project's own conventions discourage. `MEDIA-38`'s task text is corrected in `plans/plan_media.md` to
    describe what's actually the right fix for this failure mode, rather than forced to match wording
    written before the failure mode's real behavior was understood.
 
@@ -748,7 +748,7 @@ covering that code.
 Phase 0's commit `eb3c48a3` states the full `CnaTests` run showed "506 pre-existing failures, all one
 root cause (no real GL context)" — **this was a methodology mistake in that verification pass, not a
 real environment limitation.** `SDL_VIDEODRIVER=dummy` was forced for the *entire* suite; `dummy`
-cannot create a GL context at all. The project's own established precedent (`plan_cnb.md` `CNB-38`)
+cannot create a GL context at all. The project's own established precedent (`plans/plan_cnb.md` `CNB-38`)
 only uses `SDL_VIDEODRIVER=dummy` for the specific graphics-free test subset and runs the rest against
 a real display. This sandbox actually has a real X display (`DISPLAY=:0`, Mesa softwareish/llvmpipe-or-
 real GL via `glxinfo`, confirmed "direct rendering: Yes") — re-running the two sampled "failed" tests
@@ -759,7 +759,7 @@ Not amending the commit for it (low value, already-established "new commits, not
 note is the correction of record. A proper full-suite re-verification (real display, no forced driver)
 is queued as part of Phase 1 closure instead of redone in isolation.
 
-`CNA_GRAPHICS_BACKEND=HEADLESS` (proven real per `plan_headless.md`, `SDL_INIT_VIDEO` never called) and
+`CNA_GRAPHICS_BACKEND=HEADLESS` (proven real per `plans/plan_headless.md`, `SDL_INIT_VIDEO` never called) and
 `SOFTWARE` remain available as a stronger-guarantee fallback if a future session's sandbox has no real
 display at all — not needed here since one exists.
 
@@ -814,11 +814,11 @@ a `[[nodiscard]]` `operator[]`.
 ## 4. Where to pick up
 
 **Do not read any "N/N complete" line in this repo as settled** — an earlier version of this very
-section claimed "plan_media.md is complete, all 126 tasks across all 7 phases" while nine further
+section claimed "plans/plan_media.md is complete, all 126 tasks across all 7 phases" while nine further
 review rounds and 100+ tasks were still ahead of it. That sentence is exactly the failure mode this
 plan documents.
 
-**Actual state:** `plan_media.md` has 231 tasks (IDs run to `MEDIA-232`; `MEDIA-157` was never
+**Actual state:** `plans/plan_media.md` has 231 tasks (IDs run to `MEDIA-232`; `MEDIA-157` was never
 assigned). **224 done, 7 open.** All Media work is merged into `develop` (`cb053b71`).
 
 **If you are picking this up cold, in priority order:**
@@ -852,7 +852,7 @@ Nothing is currently blocking. The following are real, deliberately-deferred fol
 not required for "not just stubs" — surfaced during this plan's own design/audit work:
 
 - **NOXNA `MediaLibrary::Refresh()`.** The library scan is a synchronous, point-in-time snapshot
-  taken once at construction (`plan_media.md` D6) — there is no live filesystem-watching, and no way
+  taken once at construction (`plans/plan_media.md` D6) — there is no live filesystem-watching, and no way
   to re-scan an already-constructed `MediaLibrary` short of constructing a new one. A `Refresh()`
   method would be a reasonable NOXNA addition if a game needs to observe library changes without a
   full reconstruction.
@@ -870,10 +870,10 @@ not required for "not just stubs" — surfaced during this plan's own design/aud
   `MEDIA-65`'s current filename-only lookup (`cover.jpg`/`folder.jpg` in the album's own folder).
   Real-world ID3v2 tags frequently embed cover art directly in the `APIC` frame instead of (or in
   addition to) a sibling image file — `AudioTagParser` does not currently extract it. Flagged as
-  `plan_media.md` R2, default recommendation "start with the 2 filename conventions," this is the
+  `plans/plan_media.md` R2, default recommendation "start with the 2 filename conventions," this is the
   natural next increment if that ever proves insufficient.
 - **`Input::Touch::TouchCollection`'s exception-type inconsistency**, found during this plan's own
-  audit (`plan_media.md` §2 item 7 / `CHECKLIST.md`'s new project-wide deviation row) but explicitly
+  audit (`plans/plan_media.md` §2 item 7 / `CHECKLIST.md`'s new project-wide deviation row) but explicitly
   out of scope here: `TouchCollection.cpp`'s indexer throws `std::out_of_range` instead of the
   project's majority `System::ArgumentOutOfRangeException` (used by `BoundingBox`/`VertexBuffer`/
   `NetworkSessionProperties`, and now `MediaQueue`/`SongCollection` too). A future `Input`-namespace
@@ -888,7 +888,7 @@ not required for "not just stubs" — surfaced during this plan's own design/aud
   `VideoPlayerTests.cpp`'s `NonLoopedVideoWithLongerAudioTailStaysPlayingPastVideoDuration` is
   exactly this dedicated `VideoPlayer::Play()`+loop-until-`Stopped()` test against
   `audio_tail.mkv`. This bullet was left stale after Phase 9 landed (flagged by a third external
-  code review of Phase 9's own fix commit, `plan_media.md` MEDIA-150) — corrected here rather than
+  code review of Phase 9's own fix commit, `plans/plan_media.md` MEDIA-150) — corrected here rather than
   removed outright, so a future reader can see the open item really was closed, not silently
   dropped.
 - **`MediaPlayer::Update()`'s no-`SOUND_ENABLED` fallback is untestable in this project's current

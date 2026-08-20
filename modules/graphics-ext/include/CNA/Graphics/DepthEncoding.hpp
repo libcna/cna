@@ -12,7 +12,7 @@ namespace CNA::Graphics {
     /**
      * @brief How `DepthNormalPrepass` stores linear depth.
      *
-     * plan_modern.md `MOD-2035`. The layer packs depth into an 8-bit target everywhere, and the
+     * plans/plan_modern.md `MOD-2035`. The layer packs depth into an 8-bit target everywhere, and the
      * reason is a measurement rather than a preference: with a half-float target, screen-space
      * effects driven from the prepass occluded *nothing* on the reference renderer. **Why** is still
      * open, and a policy that cannot be compared against its alternative can never be re-examined —

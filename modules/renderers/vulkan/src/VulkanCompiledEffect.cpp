@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-065. See VulkanCompiledEffect.hpp for why this backend is CNA's own rather than a
+// plans/plan_fx.md FX-065. See VulkanCompiledEffect.hpp for why this backend is CNA's own rather than a
 // MojoShader-provided adapter.
 
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
@@ -435,7 +435,7 @@ namespace CNA::Internal::Renderers::Vulkan
             throw std::invalid_argument(
                 "Vulkan compiled effect: texture was not created by the active Vulkan renderer.");
         }
-        // plan_fx.md FX-110: the assigned texture's dimension has to match the one the effect
+        // plans/plan_fx.md FX-110: the assigned texture's dimension has to match the one the effect
         // declared, for the same reason it does on every other backend -- a mismatched kind binds
         // an unrelated image view and samples something the game never asked for.
         if (texture != nullptr)
@@ -471,7 +471,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (passIndex >= technique.pass_count)
             throw std::out_of_range("Vulkan compiled effect: pass index is out of range.");
 
-        // plan_fx.md FX-101: `stateChanges_` is deliberately NOT cleared between applications.
+        // plans/plan_fx.md FX-101: `stateChanges_` is deliberately NOT cleared between applications.
         // MojoShader writes it only in effectBeginPass, so a repeated application of the same pass
         // must keep the pointers the previous one left -- clearing them makes a repeat apply
         // publish no render state, no sampler state and no texture binding at all. FNA relies on
@@ -602,7 +602,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // nothing there would sample undefined vertex data, which is the silent-corruption shape
         // every other backend refuses too.
         LinkedPassEXT linked;
-        // plan_fx.md FX-112: one binding per supplied stream, in the caller's order, so binding
+        // plans/plan_fx.md FX-112: one binding per supplied stream, in the caller's order, so binding
         // index and stream index are the same number everywhere below and at record time.
         linked.vertexBindings.reserve(streams.size());
         for (std::size_t streamIndex = 0; streamIndex < streams.size(); ++streamIndex)
@@ -702,7 +702,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         if (vertexData->sampler_count > 0)
         {
-            // plan_fx.md FX-109: renderer-wide, not compiled-Effect specific. No CNA renderer
+            // plans/plan_fx.md FX-109: renderer-wide, not compiled-Effect specific. No CNA renderer
             // implements vertex-stage texture sampling through any route.
             throw System::NotSupportedException(
                 "CNA Vulkan: this compiled effect's vertex shader samples a texture. Vertex-stage "
@@ -745,7 +745,7 @@ namespace CNA::Internal::Renderers::Vulkan
         return linked;
     }
 
-    // ---- VulkanRenderer hooks (plan_fx.md FX-065) -------------------------------------------
+    // ---- VulkanRenderer hooks (plans/plan_fx.md FX-065) -------------------------------------------
     //
     // Defined here rather than in VulkanRenderer.cpp so the whole compiled-effect surface lives in
     // one guarded translation unit; nothing else in the renderer changes when the option is off.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx.md DX-3: run a Windows cross-compiled .exe (D3D11 renderer) under Wine
+# plans/plan_dx.md DX-3: run a Windows cross-compiled .exe (D3D11 renderer) under Wine
 # with DXVK, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-dxvk.sh <path-to.exe> [args...]
@@ -11,7 +11,7 @@
 # default to a log level that's enough to confirm DXVK (not WineD3D) actually
 # handled the run.
 #
-# plan_dx.md DX-85: this wrapper also automatically ASSERTS that DXVK itself
+# plans/plan_dx.md DX-85: this wrapper also automatically ASSERTS that DXVK itself
 # (not a silent WineD3D fallback) handled the run, using DX-4's own established
 # distinguishing signal -- a "DXVK: <version>" log line that only DXVK's own
 # logger ever prints (vanilla WineD3D never does). Without this, a broken/

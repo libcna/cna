@@ -38,7 +38,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief One programmatically reachable outcome of importing a glTF asset.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-034`/`GLTF-035`).
+     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-034`/`GLTF-035`).
      * @ref Code is the stable machine-readable identity. @ref Message is deliberately for people
      * and may gain detail or wording fixes without becoming an API break. A diagnostic is normally
      * aggregated for one @ref Subject; @ref Count says how many occurrences it represents and

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-315, MOD-318, MOD-319: the five tonemapping operators on a real frame.
+// plans/plan_modern.md MOD-315, MOD-318, MOD-319: the five tonemapping operators on a real frame.
 //
 // Tonemapping is the one pass whose job is a *curve*, so what a screenshot would show is the curve
 // and nothing else. This program measures the curve instead, on a real HDR gradient rendered

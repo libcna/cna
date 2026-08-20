@@ -174,7 +174,7 @@ namespace CNA
      * (e.g. static_assert(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::OpenGLES3)).
      *
      * The 5 GL-family public renderers (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2) all share the
-     * internal CNA_RENDERER_EASYGL identity (see plan_glbackends.md) -- the CNA_GL_PROFILE_*
+     * internal CNA_RENDERER_EASYGL identity (see plans/plan_glbackends.md) -- the CNA_GL_PROFILE_*
      * compile definition set alongside it distinguishes which of the 5 public names was selected.
      *
      * @return The active GraphicsRendererType, determined at compile time by CNA_GRAPHICS_RENDERER.
@@ -295,7 +295,7 @@ namespace CNA
      * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string
      * literal), so it stays valid for the lifetime of the program.
      *
-     * plan_runtimerenderer.md RTR-P7-5: this is the single place the identity names exist. It takes the
+     * plans/plan_runtimerenderer.md RTR-P7-5: this is the single place the identity names exist. It takes the
      * identity as a parameter rather than reading the compile-time one, so it serves both the
      * compile-time selection (through getCurrentGraphicsRendererName() below) and any runtime
      * selection, without the table being written twice.

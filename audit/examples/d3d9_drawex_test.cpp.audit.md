@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_drawex_test.cpp` (719 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note below)
 - Subsystem: `examples-tests-d3d9` shard — real effect-aware `DrawPrimitivesEx`/
-  `DrawIndexedPrimitivesEx` dispatch for all 5 XNA Stock Effects (`plan_dx9.md` D9-8, D9-82b/c/d/e/f).
+  `DrawIndexedPrimitivesEx` dispatch for all 5 XNA Stock Effects (`plans/plan_dx9.md` D9-8, D9-82b/c/d/e/f).
 - File type: `Game`-subclass executable (`D3D9DrawExTest : public Game`), 16 checks (A-J, M-R, plus
   4 sub-checks under "Check F"), CTest-registered as `D3D9_DrawEx`
   (`cmake/Tests/D3D9Tests.cmake:60-63`, `TIMEOUT 60`).

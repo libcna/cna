@@ -20,7 +20,7 @@
 // no-lighting shaders already multiply by).
 //
 // Scope note: `LightingEnabled=true`'s own emissive/ambient/specular combination (a much larger,
-// separate finding — see plan_graphics.md Task 369 write-up for the full audit) is deliberately
+// separate finding — see plans/plan_graphics.md Task 369 write-up for the full audit) is deliberately
 // NOT covered by this test; it needs its own dedicated task (new Task 885) since it also requires
 // forwarding `SpecularColor`/`SpecularPower`/multi-light data that doesn't exist anywhere yet, and
 // on Vulkan specifically would require expanding a push-constant budget shared with SkinnedEffect

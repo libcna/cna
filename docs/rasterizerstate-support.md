@@ -1,6 +1,6 @@
 # RasterizerState Support Matrix
 
-Phase 38 (`plan_graphics.md` Tasks 321–330) audited and pixel-verified `RasterizerState`
+Phase 38 (`plans/plan_graphics.md` Tasks 321–330) audited and pixel-verified `RasterizerState`
 conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings.
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-/* plan_binding.md CBIND-048: one seam where the C API used to have four.
+/* plans/plan_binding.md CBIND-048: one seam where the C API used to have four.
  *
  * Before the platform separation, the message box, the file dialog, the tray and the camera each
  * had their own injectable backend in `CNA::Devices::Detail`, and the C API's

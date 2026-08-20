@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx3.md: real DirectX 3 renderer (originally landed under the temporary DX30 name; renamed
+# plans/plan_dx3.md: real DirectX 3 renderer (originally landed under the temporary DX30 name; renamed
 # to DIRECTX3 on 2026-08-04 once the free-direct renderer released the name as FREEDIRECT, and to
 # DIRECTX3 in the 2026-08 naming normalization) -- a
 # mechanical port of DIRECTX2's own 2D+3D layers upgraded to IDirectDraw2, same
@@ -33,7 +33,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
         endif()
     endmacro()
 
-    # plan_dx3.md design decision 8: when cross-compiled from Linux (DIRECTX3 is Windows-only, design
+    # plans/plan_dx3.md design decision 8: when cross-compiled from Linux (DIRECTX3 is Windows-only, design
     # decision 1), CTest itself still runs on the Linux host, so the test COMMAND wraps the real
     # .exe with scripts/run-wine-directx3.sh -- a real, native Windows/MSVC configure needs no Wine
     # wrapper at all and runs the .exe directly, mirroring DirectX1Tests.cmake's own
@@ -46,7 +46,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
         endif()
     endmacro()
 
-    # plan_dx3.md design decision 9: a real, automated proof this renderer never quietly reaches
+    # plans/plan_dx3.md design decision 9: a real, automated proof this renderer never quietly reaches
     # for the proven-broken execute-buffer Direct3D path instead of the working
     # IDirect3DDevice2::DrawPrimitive one -- pure text check via
     # scripts/check-directx3-execute-buffer-discipline.sh, no compiled binary, no Wine needed, runs
@@ -111,7 +111,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
     cna_register_renderer_test(NAME DirectX3_LogicalTransform COMMAND ${_dx30_logical_transform_cmd}
         TIMEOUT 60 LABELS "DIRECTX3")
 
-    # NOTE: DirectX1_No3D has no DIRECTX3 equivalent here either, same reasoning as DIRECTX2 (plan_dx2.md task instructions) -- DIRECTX3's
+    # NOTE: DirectX1_No3D has no DIRECTX3 equivalent here either, same reasoning as DIRECTX2 (plans/plan_dx2.md task instructions) -- DIRECTX3's
     # 3D layer is real (not a permanent throw like DIRECTX1's), so its own 3D CTest suite grows across
     # Phase O3/O4/O5 instead of a single "throws" test that would need replacing almost immediately.
 

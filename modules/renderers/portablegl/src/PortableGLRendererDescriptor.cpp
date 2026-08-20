@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D10: the PortableGL family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D10: the PortableGL family's pre-construction contract.
 //
 // PortableGL (rswinkle/PortableGL) is a CPU software OpenGL 3.x implementation writing into its own
 // buffer -- the same "no window, no GPU library, no platform video subsystem" shape as
@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::PortableGL
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

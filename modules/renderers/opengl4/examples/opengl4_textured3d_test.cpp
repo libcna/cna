@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-13: real proof for the OpenGL4 renderer's DrawPrimitivesEx/
+// plans/plan_opengl4.md GL4-13: real proof for the OpenGL4 renderer's DrawPrimitivesEx/
 // DrawIndexedPrimitivesEx stride dispatch -- textured3d (VertexPositionTexture, stride 20),
 // colored_textured3d (VertexPositionColorTexture, stride 24), and lit_textured3d
 // (VertexPositionNormalTexture, stride 32, BasicEffect.EnableDefaultLighting()) -- verified via
@@ -75,7 +75,7 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
 
-        // plan_opengl4.md GL4-16: RasterizerState.CullMode now really applies, and
+        // plans/plan_opengl4.md GL4-16: RasterizerState.CullMode now really applies, and
         // GraphicsDevice's own default RasterizerState (CullCounterClockwiseFace, XNA's real
         // default) would otherwise cull this file's own quad winding -- irrelevant to what this
         // test actually checks (texturing/lighting, not winding), so opt out explicitly. Same

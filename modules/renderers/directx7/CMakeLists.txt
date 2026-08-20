@@ -1,4 +1,4 @@
-# plan_dx7.md design decision 14: same confirmed minimal link set as DIRECTX1/DIRECTX2/DIRECTX3/DIRECTX5/DIRECTX6 --
+# plans/plan_dx7.md design decision 14: same confirmed minimal link set as DIRECTX1/DIRECTX2/DIRECTX3/DIRECTX5/DIRECTX6 --
 # ddraw + dxguid. RendererSurfaceInfo supplies the native window; the APIs resolve from the
 # same import libraries, spike-confirmed (DX7-0) with no new link dependency.
 cna_add_renderer()

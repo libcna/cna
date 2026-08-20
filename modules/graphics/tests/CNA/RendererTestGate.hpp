@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_runtimerenderer.md RTR-P9-1/P9-2: the conversion idiom for renderer-gated tests.
+// plans/plan_runtimerenderer.md RTR-P9-1/P9-2: the conversion idiom for renderer-gated tests.
 //
 // The corpus has ~892 `#ifdef CNA_RENDERER_<X>` sites. That was the only mechanism available while
 // a build could hold exactly one renderer, and it has two costs now that a build can hold several:

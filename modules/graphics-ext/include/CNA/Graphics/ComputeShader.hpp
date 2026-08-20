@@ -26,7 +26,7 @@ namespace CNA::Graphics {
     /**
      * @brief One compute program, and the dispatches of it.
      *
-     * plan_modern.md `MOD-1521`. The engine-layer face of `IComputeShaderRenderer`: it owns the
+     * plans/plan_modern.md `MOD-1521`. The engine-layer face of `IComputeShaderRenderer`: it owns the
      * compiled program, validates a dispatch against the device's real limits before submitting
      * it, and inserts the barrier a caller most often forgets.
      *
@@ -91,7 +91,7 @@ namespace CNA::Graphics {
         /**
          * @brief Binds a texture the shader will sample, and sets its sampler uniform.
          *
-         * plan_modern.md `MOD-1552`. Sampling, unlike an image binding, needs nothing special of
+         * plans/plan_modern.md `MOD-1552`. Sampling, unlike an image binding, needs nothing special of
          * the texture, so this is the route that works on every context with compute at all.
          *
          * @param unit        The texture unit to bind to; must not be negative.
@@ -105,7 +105,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns whether this device can bind a `Texture2D` as a compute image at all.
          *
-         * plan_modern.md `MOD-1514`. Distinct from having compute: GL ES 3.1 requires an immutable
+         * plans/plan_modern.md `MOD-1514`. Distinct from having compute: GL ES 3.1 requires an immutable
          * texture for an image binding and CNA allocates its textures mutably, so an ES context
          * with full compute support still answers false here. Where it does, route compute output
          * through a @ref StorageBuffer instead.
@@ -130,7 +130,7 @@ namespace CNA::Graphics {
         /**
          * @brief Runs the program over a grid of work groups.
          *
-         * plan_modern.md `MOD-1523`: the counts are checked against the device's real limits
+         * plans/plan_modern.md `MOD-1523`: the counts are checked against the device's real limits
          * *before* submission, so an over-large dispatch is an exception naming the axis and the
          * limit rather than a driver error, a lost context, or -- worst of all -- silence.
          *
@@ -144,7 +144,7 @@ namespace CNA::Graphics {
         /**
          * @brief Orders memory access after a dispatch.
          *
-         * plan_modern.md `MOD-1524`. @ref dispatch already issues the two barriers a compute pass
+         * plans/plan_modern.md `MOD-1524`. @ref dispatch already issues the two barriers a compute pass
          * almost always needs -- `ShaderStorage` and `ShaderImageAccess` -- so results are visible
          * to the *next dispatch* and to a `getBytes` read-back without the caller doing anything.
          * What it cannot know is how the data will be consumed by the rest of the pipeline: a

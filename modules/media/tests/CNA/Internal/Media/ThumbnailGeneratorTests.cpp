@@ -27,7 +27,7 @@ namespace
     }
 }
 
-// plan_media.md MEDIA-209/210: Album::GetThumbnail and Picture::GetThumbnail used to just call
+// plans/plan_media.md MEDIA-209/210: Album::GetThumbnail and Picture::GetThumbnail used to just call
 // GetAlbumArt()/GetImage(), returning the FULL-SIZE image -- GetThumbnail was a synonym, not a
 // thumbnail. These assert real downscaling, deterministically and without any fixture.
 

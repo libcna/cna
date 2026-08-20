@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_modern.md MOD-1309/MOD-1310: the importer's own MaterialOut through the engine layer's
+// plans/plan_modern.md MOD-1309/MOD-1310: the importer's own MaterialOut through the engine layer's
 // glTF material bridge.
 //
 // The bridge itself is tested in modules/graphics-ext against a stand-in source, which is what
@@ -139,7 +139,7 @@ TEST(GltfMaterialToPbrMaterialTest, TheMaterialDetourReproducesTheImporterDrawPa
     using CNA::Internal::Renderers::GpuDrawParams;
 
     GraphicsDevice gd;
-    // plan_modern.md MOD-1690: importing a model builds a vertex buffer, which a 2D-only renderer
+    // plans/plan_modern.md MOD-1690: importing a model builds a vertex buffer, which a 2D-only renderer
     // refuses outright ("does not support 3D: CreateVertexBuffer"). Without this the
     // test fails there instead of skipping, and reads as a defect rather than as the renderer's
     // documented boundary.

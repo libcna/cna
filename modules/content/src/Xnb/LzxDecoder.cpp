@@ -189,7 +189,7 @@ namespace CNA::Internal::Xnb
                         leaf = pos >> 16;
                         for (fill = 0; fill < static_cast<uint32_t>(bit_num) - nbits; fill++)
                         {
-                            // plan_xnb.md XNB-30A hardening: FNA's own C# port relies on the CLR's
+                            // plans/plan_xnb.md XNB-30A hardening: FNA's own C# port relies on the CLR's
                             // automatic bounds-checked array access here (an adversarial/corrupt
                             // Huffman code-length table can grow next_symbol/leaf past this
                             // table's allocated room); a direct std::vector::operator[] port has
@@ -471,7 +471,7 @@ namespace CNA::Internal::Xnb
                                     R2 = R0; R0 = static_cast<uint32_t>(match_offset);
                                 }
 
-                                // plan_xnb.md XNB-30 hardening: FNA's own C# port relies on the
+                                // plans/plan_xnb.md XNB-30 hardening: FNA's own C# port relies on the
                                 // CLR's automatic bounds-checked array access to turn a corrupt
                                 // match_offset into a catchable IndexOutOfRangeException; a
                                 // direct C++ port using std::vector::operator[] would instead be
@@ -587,7 +587,7 @@ namespace CNA::Internal::Xnb
                                     R2 = R0; R0 = static_cast<uint32_t>(match_offset);
                                 }
 
-                                // plan_xnb.md XNB-30 hardening: FNA's own C# port relies on the
+                                // plans/plan_xnb.md XNB-30 hardening: FNA's own C# port relies on the
                                 // CLR's automatic bounds-checked array access to turn a corrupt
                                 // match_offset into a catchable IndexOutOfRangeException; a
                                 // direct C++ port using std::vector::operator[] would instead be

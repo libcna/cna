@@ -1,4 +1,4 @@
-// plan_fx.md FX-005: emit FNA's own reflection of a compiled Effect Framework binary as
+// plans/plan_fx.md FX-005: emit FNA's own reflection of a compiled Effect Framework binary as
 // normalized JSON, so CNA's reflection can be compared against ground truth produced by *running*
 // FNA rather than by reading its source.
 //
@@ -148,7 +148,7 @@ namespace CNA.FnaReference
 			}
 
 			var document = new JsonWriter()
-				.Add("generator", "FnaReference --effects (plan_fx.md FX-005)")
+				.Add("generator", "FnaReference --effects (plans/plan_fx.md FX-005)")
 				.Add("fnaAssembly", typeof(Effect).Assembly.FullName)
 				.AddRaw("effects", "[" + string.Join(",", effects.ToArray()) + "]");
 

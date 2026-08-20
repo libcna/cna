@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2061: the BRDF terms an area light needs, generated at load.
+// plans/plan_modern.md MOD-2061: the BRDF terms an area light needs, generated at load.
 //
 // The fitted linearly-transformed-cosine matrix is deliberately absent -- see the header for the
 // arithmetic that makes generating it at load infeasible -- and what is here instead are the terms

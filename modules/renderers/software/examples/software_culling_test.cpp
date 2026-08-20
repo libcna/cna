@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_software.md Phase S9 (SOFTWARE-81): empirical verification of backface culling.
+// plans/plan_software.md Phase S9 (SOFTWARE-81): empirical verification of backface culling.
 //
 // Two triangles cover the exact same screen region but have opposite vertex winding:
 //   frontCW  = (TL, TR, BL) -- clockwise as displayed (this renderer's screen space is Y-down).

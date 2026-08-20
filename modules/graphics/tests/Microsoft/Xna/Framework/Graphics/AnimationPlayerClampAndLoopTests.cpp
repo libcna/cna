@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-307 / GLTF-308: how `AnimationPlayer` treats a time outside the clip, and
+// plans/plan_gltf.md GLTF-307 / GLTF-308: how `AnimationPlayer` treats a time outside the clip, and
 // what a looping clip does at its own boundary.
 //
 // Every frame of every animated model goes through this, and both branches have a failure mode that

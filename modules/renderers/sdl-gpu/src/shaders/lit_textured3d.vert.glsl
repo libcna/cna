@@ -22,7 +22,7 @@ layout(set = 1, binding = 0) uniform PC {
     float vertexColorEnabled;
 } pc;
 
-// plan_sdlgpu.md: DirectionalLight1/DirectionalLight2 + EmissiveColor + specular + the World
+// plans/plan_sdlgpu.md: DirectionalLight1/DirectionalLight2 + EmissiveColor + specular + the World
 // matrix (needed here to compute a world-space normal/position), forwarded via a second
 // vertex-stage UBO (set 1, binding 1) since the primary 128-byte UBO above is already fully
 // packed -- mirrors VulkanRenderer/WebGPURenderer's own lit_textured3d second-UBO

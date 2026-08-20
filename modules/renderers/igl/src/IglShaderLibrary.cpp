@@ -331,7 +331,7 @@ layout(location = 7) in vec4 vWorldTangent;
             source += R"(
 const float CNA_PI = 3.14159265358979;
 
-// plan_gltf.md GLTF-182/GLTF-183/GLTF-184. glTF gives every texture reference its own `texCoord`
+// plans/plan_gltf.md GLTF-182/GLTF-183/GLTF-184. glTF gives every texture reference its own `texCoord`
 // index and its own optional KHR_texture_transform, so one interpolated coordinate cannot serve
 // all seven PBR slots. Slot order is base colour, normal, metallic-roughness, emissive, occlusion,
 // then the two KHR_materials_specular maps, which live in their own row block.

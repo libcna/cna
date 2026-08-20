@@ -76,7 +76,7 @@ case CNA::Internal::Backends::BackendDeviceEvent::Reset:
     DeviceReset.Raise(this, System::EventArgs::Empty);
     break;
 ```
-(this is explicitly the D3D9-class device-lost/reset scenario the surrounding comment cites: "plan_dx9.md
+(this is explicitly the D3D9-class device-lost/reset scenario the surrounding comment cites: "plans/plan_dx9.md
 D9-34: forward a REAL, backend-detected device-lost/reset event to this GraphicsDevice's own public
 XNA events. Nine of the ten backends never call this.") When this callback fires,
 `GraphicsDevice::DeviceResetting`/`DeviceReset` raise correctly — but because
@@ -154,7 +154,7 @@ the null-game guard above, just the sibling exception type.
   together in the cross-cutting findings doc as one project-internal inconsistency, not two
   unrelated FNA deviations.
 - `Graphics::GraphicsDevice`'s `deviceEventCallback` (device-lost forwarding) is cited by its own
-  comment as implemented by only one of ten backends (plan_dx9.md D9-34) — worth flagging again when
+  comment as implemented by only one of ten backends (plans/plan_dx9.md D9-34) — worth flagging again when
   that specific backend and `GraphicsDevice.cpp` are formally audited under Task #4's
   `xna-graphics` shard, to confirm which backend and cross-reference this finding there.
 

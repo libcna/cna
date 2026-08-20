@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan_direct2d.md D2D-127: prove the Direct2D tests actually detect the mutations they claim to.
+"""plans/plan_direct2d.md D2D-127: prove the Direct2D tests actually detect the mutations they claim to.
 
 A green suite says nothing until you know it can go red. This harness introduces one deliberate
 defect at a time into the renderer, rebuilds, runs the CTest that is supposed to catch it, and

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-21/IGL-55: RenderTargetCube -- one shared cube image, six per-face
-// framebuffers (FNA's own shape, per design decision documented in plan_igl.md).
+// plans/plan_igl.md IGL-21/IGL-55: RenderTargetCube -- one shared cube image, six per-face
+// framebuffers (FNA's own shape, per design decision documented in plans/plan_igl.md).
 //
 // Scene: bind face PositiveX and clear it magenta with one draw; bind face PositiveY and clear it
 // cyan with another. A working per-face binding leaves each face's own readback showing only its

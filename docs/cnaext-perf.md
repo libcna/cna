@@ -1,6 +1,6 @@
 # CNAEXT engine layer — measured performance
 
-`plan_modern.md` `MOD-1712`. Every perf row in that plan records its numbers here, in one format, so
+`plans/plan_modern.md` `MOD-1712`. Every perf row in that plan records its numbers here, in one format, so
 they can be compared with each other and re-measured later. A number without its recipe is not a
 measurement, so the recipe comes first.
 
@@ -29,7 +29,7 @@ completely; where it is dominated by call count (instancing) the ratio survives.
 
 ## HDR render targets
 
-`plan_modern.md` `MOD-138`. What the HDR pipeline's *first* decision costs, before any pass runs:
+`plans/plan_modern.md` `MOD-138`. What the HDR pipeline's *first* decision costs, before any pass runs:
 a scene target in a float format rather than 8-bit `Color`.
 
 Reproduce: `./cmake-build-cnaext/cna_test_cnaext_hdr_target --benchmark`.
@@ -54,7 +54,7 @@ post-process chain holds several targets at once — not frame time. That is the
 
 ## The whole frame
 
-`plan_modern.md` `MOD-742`. Every other table here times one pass in isolation. This is what a game
+`plans/plan_modern.md` `MOD-742`. Every other table here times one pass in isolation. This is what a game
 actually pays: a frame drawn the way a game draws it — a `SpriteBatch` sprite and a `BasicEffect`
 triangle — with and without the pipeline around it. Both sides pay the same back-buffer read (which
 is what forces the frame to happen inside the timed region), so the *difference* is the pipeline.
@@ -91,7 +91,7 @@ measured on its own above — where it costs more than everything here put toget
 
 ## Post-process passes
 
-`plan_modern.md` `MOD-230`. What each pass costs over a full frame, and — more usefully — what each
+`plans/plan_modern.md` `MOD-230`. What each pass costs over a full frame, and — more usefully — what each
 costs *over a plain copy*, since a copy is the floor any pass has to clear.
 
 Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
@@ -105,7 +105,7 @@ Reproduce: `./cmake-build-cnaext/cna_test_cnaext_postprocess_chain --benchmark`.
 
 ### The same passes, measured on the GPU
 
-`plan_modern.md` `MOD-2165`. Reproduce:
+`plans/plan_modern.md` `MOD-2165`. Reproduce:
 `./cmake-build-cnaext/cna_test_cnaext_gpu_timing --benchmark`. **The CPU numbers everywhere else in
 this document stay, and stay labelled as what they are.** A table that silently changed method would
 make its own history meaningless — a number that moved would be indistinguishable from a change in
@@ -138,7 +138,7 @@ it measure anything at all is a stall a real frame never performs. `GpuTimer` an
 
 ### FXAA, and why its preset is not a performance dial
 
-`plan_modern.md` `MOD-608`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_fxaa --benchmark`.
+`plans/plan_modern.md` `MOD-608`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_fxaa --benchmark`.
 
 Measured on two deliberately opposite images: a flat field, where the shader's early exit is taken
 on every texel, and a one-pixel checkerboard, where it is taken nowhere.
@@ -169,7 +169,7 @@ answer is `setFXAAEnabled(false)`.
 
 ### SSAO, per quality preset
 
-`plan_modern.md` `MOD-528`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_ssao --benchmark`.
+`plans/plan_modern.md` `MOD-528`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_ssao --benchmark`.
 
 | Preset | Samples | SSAO at 1280×720 | SSAO at 1920×1080 |
 |---|---|---|---|
@@ -197,7 +197,7 @@ fewer draws rather than a cheaper prepass.
 
 ### Bloom, per quality preset
 
-`plan_modern.md` `MOD-416`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_bloom --benchmark`.
+`plans/plan_modern.md` `MOD-416`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_bloom --benchmark`.
 
 | Preset | Levels | 1280×720 | 1920×1080 |
 |---|---|---|---|
@@ -251,7 +251,7 @@ each pass touches, which no GPU changes.
 
 ### Grading and output
 
-`plan_modern.md` `MOD-2133`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_grading --benchmark`.
+`plans/plan_modern.md` `MOD-2133`. Reproduce: `./cmake-build-cnaext/cna_test_cnaext_grading --benchmark`.
 Two runs; square frames, one full-screen pass each.
 
 | What | 720×720 | 1080×1080 |
@@ -293,7 +293,7 @@ and one add, and the cost is that it is per-pixel like everything else in a full
 
 ### Contact shadows, per step count
 
-`plan_modern.md` `MOD-2123`. Reproduce:
+`plans/plan_modern.md` `MOD-2123`. Reproduce:
 `./cmake-build-cnaext/cna_test_cnaext_contact_shadow --benchmark`. Two runs; the spread between them
 is under 5%. Square frames rather than 16:9, because the two axes being separated here are step count
 and pixel count and a square makes the second one easy to read.
@@ -368,7 +368,7 @@ roughly 0.5 ms per megabyte, bringing a 720p downsample result back costs about 
 
 ## Clustered forward lighting
 
-`plan_modern.md` `MOD-2048`. Four light counts, 256×256, the default 16×8×24 grid, all 256 lights
+`plans/plan_modern.md` `MOD-2048`. Four light counts, 256×256, the default 16×8×24 grid, all 256 lights
 packed close to a wall that fills the frame — deliberately the *worst* arrangement for a cluster
 grid, because every light is inside the frustum and the busiest cluster holds 69 of them.
 
@@ -428,7 +428,7 @@ nothing in this measurement can see.
 
 ## Probe-based indirect light
 
-`plan_modern.md` `MOD-2087`.
+`plans/plan_modern.md` `MOD-2087`.
 
 | What | Measurement | Source |
 |---|---|---|
@@ -443,7 +443,7 @@ six scene draws per probe on top, which is the whole reason baking is an offline
 
 ## GPU-driven rendering and display output
 
-`plan_modern.md` `MOD-2090`–`MOD-2095`. Source: `cna_test_cnaext_gpu_driven --benchmark`, at
+`plans/plan_modern.md` `MOD-2090`–`MOD-2095`. Source: `cna_test_cnaext_gpu_driven --benchmark`, at
 256×256. Every row is a **pair** — the new path and the thing it claims to beat, measured the same
 way in the same frame — because a single figure here would say nothing.
 
@@ -486,7 +486,7 @@ those rows are the *differences* above that floor, not the totals.
 
 ## Transparency
 
-`plan_modern.md` `MOD-2108`. Source: `cna_test_cnaext_transparency --benchmark`, at 256×256, each
+`plans/plan_modern.md` `MOD-2108`. Source: `cna_test_cnaext_transparency --benchmark`, at 256×256, each
 surface covering a quarter of the frame. Two runs; the spread between them is under 0.5 ms.
 
 | What | Measurement |

@@ -1,7 +1,7 @@
 # TINYGL renderer
 
 Capability boundary for `CNA_GRAPHICS_RENDERER=TINYGL`, CNA's fixed-function CPU OpenGL renderer.
-Task breakdown and design decisions are in [`../plan_tinygl.md`](../plan_tinygl.md); the
+Task breakdown and design decisions are in [`../plans/plan_tinygl.md`](../plans/plan_tinygl.md); the
 pre-implementation probe that established the constraints below is in
 [`../tinygl-spike/README.md`](../tinygl-spike/README.md).
 
@@ -187,7 +187,7 @@ expectations against this renderer need a tolerance of about 2, and the shipped 
 - **Verified on native Linux x86_64 (GCC), macOS arm64 (AppleClang) and Windows x86_64 (MSVC).**
   All three build, link and pass 14/14 suites in
   [run 31893559239](https://github.com/openeggbert/cna/actions/runs/31893559239); the matrix is
-  `.github/workflows/tinygl-cross-platform-ci.yml` and the task record is `plan_tinygl.md`
+  `.github/workflows/tinygl-cross-platform-ci.yml` and the task record is `plans/plan_tinygl.md`
   `TINYGL-19`. Nothing in the renderer is platform-specific and no platform gate is declared. Not
   one of the portability fixes that closed that task was a TinyGL rendering-contract difference —
   every pixel expectation held identically on all three hosts. MSVC builds TinyGL single-threaded

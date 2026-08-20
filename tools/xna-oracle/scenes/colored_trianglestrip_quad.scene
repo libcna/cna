@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: colored_trianglestrip_quad
+# plans/plan_dx9.md D9-A5 scene corpus: colored_trianglestrip_quad
 # Every scene in this corpus so far uses primitive=TriangleList (grep-verified: it's the ONLY
 # PrimitiveType value any .scene file has ever set), even though the scene format has supported
 # TriangleStrip/LineList/LineStrip since D9-A3's own original design (Oracle.cs's PrimitiveVerts()

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2104, MOD-2105: the pipeline's transparent phase.
+// plans/plan_modern.md MOD-2104, MOD-2105: the pipeline's transparent phase.
 //
 // Two claims and one promise. The claims: transparent geometry is drawn into the scene target, so
 // it is tonemapped and graded with everything else rather than pasted on afterwards; and the phase

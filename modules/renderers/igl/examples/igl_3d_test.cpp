@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-20: the colour-only 3D path -- a real VertexBuffer, a real IndexBuffer, the
+// plans/plan_igl.md IGL-20: the colour-only 3D path -- a real VertexBuffer, a real IndexBuffer, the
 // generated uber-effect shader with lighting off, and a real depth test.
 //
 // Scene: a red-cleared 64x64 back buffer with two full-screen quads drawn back to front. The green

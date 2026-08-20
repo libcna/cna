@@ -151,4 +151,4 @@ TEST(ENetHostHandleTest, BroadcastWithZeroConnectedPeersDoesNotThrow) {
 // enet_packet_create() itself returns null, is intentionally left untested - real ENet only
 // returns null there on a malloc() failure (see third_party/enet/packet.c), which cannot be
 // triggered deterministically without replacing the global allocator. Documented here rather
-// than skipped silently; see plan_net.md Task 5.15 for the same note.
+// than skipped silently; see plans/plan_net.md Task 5.15 for the same note.

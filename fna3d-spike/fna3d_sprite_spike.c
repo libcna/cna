@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MS-PL */
 /*
- * FNA3D textured-quad spike (plan_fna3d.md FNA3D-0b).
+ * FNA3D textured-quad spike (plans/plan_fna3d.md FNA3D-0b).
  *
  * The device spike proved clear/present/readback/texture/effect-parsing. This one proves the
  * remaining half of the vertical slice with no CNA code in the picture at all: a real draw call

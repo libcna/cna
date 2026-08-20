@@ -15,7 +15,7 @@ needs a hand-authored shader beyond the stock effect set.
 
 ## Executive Verdict
 Correct, and a well-designed NOXNA extension with real, load-bearing design rationale disclosed
-throughout its own doc comments (Task 1079/1081, `plan_graphics.md` Task 863) rather than
+throughout its own doc comments (Task 1079/1081, `plans/plan_graphics.md` Task 863) rather than
 undocumented additions.
 
 ## Checklist Results
@@ -33,7 +33,7 @@ undocumented additions.
   `Projection` extracted via `GraphicsDevice::ExtractMatrices()` — confirmed consistent with this
   session's own reading of that mechanism while auditing `IEffectMatrices.hpp`).
 - `SetTexture()` overloads for `Texture2D`/`TextureCube`/`Texture3D` are each separately dated to a
-  specific task (1081, plan_graphics.md 863) — a genuinely incremental, well-tracked feature
+  specific task (1081, plans/plan_graphics.md 863) — a genuinely incremental, well-tracked feature
   history rather than everything landing at once undocumented.
 
 ## Detailed Findings

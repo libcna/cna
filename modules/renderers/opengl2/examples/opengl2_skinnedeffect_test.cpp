@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact SkinnedEffect proof for the native OpenGL 2.1 graphics renderer --
+// plans/plan_opengl2.md: pixel-exact SkinnedEffect proof for the native OpenGL 2.1 graphics renderer --
 // bone-palette vertex skinning, matching EasyGLRenderer::EnsureSkinnedProgram's formula.
 // All draws use World=View=Projection=Identity (this project's own established convention -- see
 // opengl2_effects_test.cpp) with the quad at local Z=-0.8.

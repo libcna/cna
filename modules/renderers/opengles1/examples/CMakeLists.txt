@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_opengles1.md: OPENGLES1 (fixed-function OpenGL ES 1.1) CTest registration. Needs a real
+# plans/plan_opengles1.md: OPENGLES1 (fixed-function OpenGL ES 1.1) CTest registration. Needs a real
 # EGL/GLESv1_CM driver capable of creating an actual ES1 context -- not every EGL implementation
 # does (see docs/opengles1-renderer.md's own empirical finding on this project's Mesa/llvmpipe
 # development host), same "run with a real DISPLAY and a real driver" caveat as the Vulkan/Bgfx/
@@ -34,7 +34,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         endif()
     endmacro()
 
-    # plan_opengles1.md OPENGLES1-baseline: Clear()/Present(), SpriteBatch, and
+    # plans/plan_opengles1.md OPENGLES1-baseline: Clear()/Present(), SpriteBatch, and
     # DrawUserPrimitives(VertexPositionColor) through the real fixed-function pipeline. Needs a
     # real EGL/GLESv1_CM driver capable of creating an actual ES1 context -- see
     # docs/opengles1-renderer.md.
@@ -42,37 +42,37 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGLES1_Clear_Readback COMMAND cna_test_opengles1_clear_readback
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengles1.md OPENGLES1-79: blend/depth/rasterizer-cull/sampler state through the real
+    # plans/plan_opengles1.md OPENGLES1-79: blend/depth/rasterizer-cull/sampler state through the real
     # fixed-function pipeline (OPENGLES1-25/26/27/28).
     cna_opengles1_test(cna_test_opengles1_render_state opengles1_render_state_test.cpp)
     cna_register_renderer_test(NAME OpenGLES1_RenderState_Readback COMMAND cna_test_opengles1_render_state
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengles1.md OPENGLES1-79: fixed-function shading -- directional lighting, linear fog
+    # plans/plan_opengles1.md OPENGLES1-79: fixed-function shading -- directional lighting, linear fog
     # and the alpha test (OPENGLES1-22/23/24).
     cna_opengles1_test(cna_test_opengles1_lighting_fog_alphatest opengles1_lighting_fog_alphatest_test.cpp)
     cna_register_renderer_test(NAME OpenGLES1_LightingFogAlphaTest_Readback COMMAND cna_test_opengles1_lighting_fog_alphatest
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengles1.md OPENGLES1-79: real GPU vertex/index buffers, RenderTarget2D and wireframe
+    # plans/plan_opengles1.md OPENGLES1-79: real GPU vertex/index buffers, RenderTarget2D and wireframe
     # emulation (OPENGLES1-15/16/72/73/76).
     cna_opengles1_test(cna_test_opengles1_buffers_rendertarget opengles1_buffers_rendertarget_test.cpp)
     cna_register_renderer_test(NAME OpenGLES1_BuffersRenderTarget_Readback COMMAND cna_test_opengles1_buffers_rendertarget
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengles1.md OPENGLES1-79: dual texture, environment map and context loss/restore
+    # plans/plan_opengles1.md OPENGLES1-79: dual texture, environment map and context loss/restore
     # (OPENGLES1-71/74/11).
     cna_opengles1_test(cna_test_opengles1_multitexture_contextloss opengles1_multitexture_contextloss_test.cpp)
     cna_register_renderer_test(NAME OpenGLES1_MultitextureContextLoss_Readback COMMAND cna_test_opengles1_multitexture_contextloss
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengles1.md OPENGLES1-79: virtual resolution, coordinate transforms, the direct
+    # plans/plan_opengles1.md OPENGLES1-79: virtual resolution, coordinate transforms, the direct
     # depth/blend toggles and the SpriteBatch transform (OPENGLES1-9/10/13/18/20).
     cna_opengles1_test(cna_test_opengles1_resolution_statetoggles opengles1_resolution_statetoggles_test.cpp)
     cna_register_renderer_test(NAME OpenGLES1_ResolutionStateToggles_Readback COMMAND cna_test_opengles1_resolution_statetoggles
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengles1.md OPENGLES1-78: the same ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp the D3D9 and
+    # plans/plan_opengles1.md OPENGLES1-78: the same ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp the D3D9 and
     # EasyGL branches already build, linked against this renderer, so the checked-in scene corpus can
     # be rendered through real ES 1.1 and diffed against the real XNA 4.0 reference images by
     # scripts/run-oracle-corpus-diff-opengles1.sh. Not registered as a CTest for the same reason
@@ -80,7 +80,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # own -- xna-diff.py is what judges its output.
     cna_opengles1_test(cna_oracle_render_opengles1 ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
 
-    # plan_opengles1.md OPENGLES1-79: viewport and scissor clipping (OPENGLES1-29).
+    # plans/plan_opengles1.md OPENGLES1-79: viewport and scissor clipping (OPENGLES1-29).
     cna_opengles1_test(cna_test_opengles1_viewport_scissor opengles1_viewport_scissor_test.cpp)
     cna_register_renderer_test(NAME OpenGLES1_ViewportScissor_Readback COMMAND cna_test_opengles1_viewport_scissor
         TIMEOUT 30 LABELS "GraphicsSmoke;OpenGLES1" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

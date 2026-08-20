@@ -65,7 +65,7 @@ skipped entirely when neither is needed (the stated common case), avoiding unnec
 `putImageData` round-trips.
 
 ### Maintainability
-379 lines, proportionate; comment quality (each design decision cites its own `plan_canvas.md` task ID and, in two
+379 lines, proportionate; comment quality (each design decision cites its own `plans/plan_canvas.md` task ID and, in two
 cases, a specific found-and-fixed bug with the verification method) matches this codebase's highest bar.
 
 ### Robustness / Testing

@@ -1,6 +1,6 @@
 # CNA reference-value dump tool
 
-Task 479 (`plan_graphics.md` Phase 53, "FNA comparison harness"). A standalone C++ console tool
+Task 479 (`plans/plan_graphics.md` Phase 53, "FNA comparison harness"). A standalone C++ console tool
 that mirrors `tools/fna-reference/`'s own reference-value categories (enums, state presets,
 PackedVector, Viewport) using CNA's real C++ implementation, and emits the same JSON shape so
 `scripts/compare-fna-reference.py` can diff the two outputs key-for-key. None of these 4
@@ -52,7 +52,7 @@ this new harness itself (`ostringstream`'s default 6-significant-digit precision
 truncating large packed-value integers and sub-millimeter float differences; several state-preset
 properties and 7 `SurfaceFormat` `*EXT` enum members missing from the first draft of the C++
 dump): `IndexElementSize`'s numeric values did not match real FNA at the time (`SixteenBits=0`/
-`ThirtyTwoBits=1` in FNA vs. `16`/`32` in CNA) — tracked as `plan_graphics.md` Task 921, not fixed
+`ThirtyTwoBits=1` in FNA vs. `16`/`32` in CNA) — tracked as `plans/plan_graphics.md` Task 921, not fixed
 in this task since it was a public-API enum-value change with its own existing (then-wrong) test
 coverage to update, out of this task's own "build the comparison tooling" scope. **Task 921 has
 since fixed this (2026-07-09)** — CNA's `IndexElementSize` now uses `SixteenBits=0`/

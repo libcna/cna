@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-6: proves ContentManager::ResolveAssetPath tries ".cnj" before any
+// plans/plan_cnj.md CNB-6: proves ContentManager::ResolveAssetPath tries ".cnj" before any
 // reader-declared native extension (CNB-4), using pixel color as the observable signal for which
 // candidate path actually got picked. Originally written before Phase 2 (CNB-7/CNB-8) existed, by
 // writing raw PNG bytes straight into a "*.cnj" path and relying on Texture2D's decoder sniffing

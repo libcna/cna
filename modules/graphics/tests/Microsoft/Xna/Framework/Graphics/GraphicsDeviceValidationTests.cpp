@@ -205,9 +205,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     if (CNA_RENDERER_IS(SdlRenderer, FreeDirect, DirectX1, DirectX2, DirectX3, DirectX5,
                         DirectX6, DirectX7, DirectX8, Gdi, Software))
     {
-    // Task 709 (the SDL_RENDERER family) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
-    // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
-    // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
+    // Task 709 (the SDL_RENDERER family) / DX3-27 (DirectDraw, plans/plan_freedirect.md) / DX1-27 (real DirectDraw v1,
+    // plans/plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plans/plan_dx2.md) / plans/plan_dx3.md (same 2D
+    // layer, now DirectDraw v2) / plans/plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
     // exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
     // binding more than one target here must throw clearly rather than silently rendering to only
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
@@ -217,16 +217,16 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // throws for count > 1 because the renderer has one active colour buffer. It was absent, so
     // this test demanded a clean bind from a renderer that cannot do one; its SupportsCapability()
     // now reports MultipleRenderTargets as false to match.
-    // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
+    // Sokol left this list at plans/plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.
-    // Diligent left this list at plan_diligent.md DILIGENT-24: it is now real-MRT-capable
+    // Diligent left this list at plans/plan_diligent.md DILIGENT-24: it is now real-MRT-capable
     // too (up to four attachments), so 4 real targets bind cleanly here as well.
     EXPECT_THROW(gd.SetRenderTargets(bindings), std::runtime_error);
     }
     else if (CNA_RENDERER_IS(Stub, OpenVg, NanoVg))
     {
-    // plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
+    // plans/plan_stub.md: Stub supports no render targets AT ALL -- it keeps IGraphicsRenderer's nullptr
     // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- so this is a different case from
     // the single-target renderers above, which support one. GraphicsDevice rejects the bind before
     // reaching the renderer, because RenderTarget2D::GetRenderTargetRenderer() is null. Rejecting is
@@ -238,7 +238,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // OpenVgRenderer also keeps the nullptr CreateRenderTarget2D() default.
     //
     // NANOVG shares it too: NanoVG's own off-screen-framebuffer helper (nanovg_gl_utils.h's
-    // NVGLUframebuffer) was deliberately left out of this renderer's scope (plan_nanovg.md), so
+    // NVGLUframebuffer) was deliberately left out of this renderer's scope (plans/plan_nanovg.md), so
     // NanoVgRenderer also keeps the nullptr CreateRenderTarget2D() default.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
@@ -261,7 +261,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     }
     else if (CNA_RENDERER_IS(OpenGLES1))
     {
-    // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
+    // plans/plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
     // adds one -- a third distinct case from the single-target renderers above (which support one)
     // and from Stub (which supports none). A single RenderTarget2D binds normally via
     // GL_OES_framebuffer_object; more than one is refused rather than binding the first and
@@ -271,7 +271,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     }
     else if (CNA_RENDERER_IS(OpenGL1))
     {
-    // plan_opengl1.md: the same single-colour-attachment refusal shape as OPENGLES1 above, for the
+    // plans/plan_opengl1.md: the same single-colour-attachment refusal shape as OPENGLES1 above, for the
     // desktop fixed-function pipeline -- a single RenderTarget2D binds normally via the
     // ARB_framebuffer_object/core FBO path; more than one is refused rather than binding the
     // first and silently dropping the rest, which is also why
@@ -305,7 +305,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
     // kind, so even a single binding is refused deterministically rather than silently accepted.
     // TinyGL joins them -- it renders into exactly one ZBuffer and creates no render target at all.
-    // NanoVG joins them for the same reason as the four-target case above (plan_nanovg.md).
+    // NanoVG joins them for the same reason as the four-target case above (plans/plan_nanovg.md).
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
     else

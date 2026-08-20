@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-19: end-to-end proof that block-compressed textures reach the GPU intact,
+// plans/plan_fna3d.md FNA3D-19: end-to-end proof that block-compressed textures reach the GPU intact,
 // and that the driver-capability gates around them refuse rather than mis-size.
 //
 // This test drives `IGraphicsRenderer` directly rather than `Texture2D`, and that is deliberate:

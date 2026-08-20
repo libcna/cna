@@ -5,7 +5,7 @@ PLAT-8 / PLAT-121 - ratchet gate on CNA's remaining SDL coupling.
 
 Purpose
 -------
-plan_platform.md migrates ~260 production files off SDL across nine phases. Two failure modes
+plans/plan_platform.md migrates ~260 production files off SDL across nine phases. Two failure modes
 matter over that span, and neither is caught by a check that only runs at the end:
 
   * silent backsliding -- a new SDL call site added to an already-migrated module;
@@ -119,7 +119,7 @@ def write_budget(repo_root: Path, current: dict[str, object], floor: tuple[int, 
             "PLAT-8 ratchet budget. Maximum SDL-referencing production files (and total "
             "references) allowed outside the PLAT-3 allowlist. This may go DOWN and never UP: "
             "each migration task lowers it. Regenerate with "
-            "'python3 tools/platform/sdl_ratchet.py --update'. See plan_platform.md."
+            "'python3 tools/platform/sdl_ratchet.py --update'. See plans/plan_platform.md."
         ),
         "max_files": current["files"],
         "max_references": current["references"],
@@ -170,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"  measured:   {current['files']} files, {current['references']} references\n"
                 "--allow-increase does NOT override this. Fix the new SDL coupling instead:\n"
                 "run 'python3 tools/platform/sdl_ratchet.py' to see which module it is in, and move\n"
-                "it behind CNA::Platform (see plan_platform.md and docs/platform-abstraction.md).",
+                "it behind CNA::Platform (see plans/plan_platform.md and docs/platform-abstraction.md).",
                 file=sys.stderr,
             )
             return 1
@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
             f"CNA platform ratchet (PLAT-8): SDL coupling INCREASED outside the allowlist.\n"
             f"  files:      {current['files']} (budget {budget['max_files']}, +{max(0, over_files)})\n"
             f"  references: {current['references']} (budget {budget['max_references']}, +{max(0, over_refs)})\n"
-            f"New SDL usage belongs behind the platform contract -- see plan_platform.md.\n"
+            f"New SDL usage belongs behind the platform contract -- see plans/plan_platform.md.\n"
             f"If this increase is genuinely intended, run:\n"
             f"  python3 tools/platform/sdl_ratchet.py --update --allow-increase"
         )

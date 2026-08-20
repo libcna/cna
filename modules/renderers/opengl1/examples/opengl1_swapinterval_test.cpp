@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: runtime SetSwapInterval() override (plan_opengl1.md item 20, EasyGL parity).
+// OPENGL1 renderer: runtime SetSwapInterval() override (plans/plan_opengl1.md item 20, EasyGL parity).
 //
 // Before this, OpenGL1Renderer never overrode IGraphicsRenderer::SetSwapInterval() at all
 // (inherited the interface's no-op default) -- only the construction-time swapInterval ever

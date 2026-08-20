@@ -23,7 +23,7 @@ per symbol rather than skipped.
 
 Areas
 -----
-Sixteen areas carry symbols. PLAT-2's row in plan_platform.md lists the contract areas;
+Sixteen areas carry symbols. PLAT-2's row in plans/plan_platform.md lists the contract areas;
 `lifecycle`, `error` and `logging` are split out from the plan's original wording because each
 maps to a distinct owner (PLAT-29, PLAT-21, PLAT-53) and folding them into a neighbour would have
 hidden that. A seventeenth, `dynamic-library`, ended up empty -- see PLAT-45.

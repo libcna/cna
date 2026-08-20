@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D04: the Vulkan family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D04: the Vulkan family's pre-construction contract.
 //
 // Vulkan builds its surface from the platform window, which must have been created with
 // the platform window intent.
@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::Vulkan
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

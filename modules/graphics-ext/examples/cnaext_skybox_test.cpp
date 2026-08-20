@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1112..MOD-1114: the skybox as an application uses it.
+// plans/plan_modern.md MOD-1112..MOD-1114: the skybox as an application uses it.
 //
 // An orbit camera around a foreground object, with the sky behind it. The camera is what makes
 // this worth running as a program rather than as another unit test: a sky that is correct for one

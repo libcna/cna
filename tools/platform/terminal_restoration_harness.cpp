@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_platform.md PLAT-131 -- terminal restoration, on the exit paths that kill the process.
+// plans/plan_platform.md PLAT-131 -- terminal restoration, on the exit paths that kill the process.
 //
 // TerminalSession promises the terminal comes back on normal exit, on SIGINT/SIGTERM/SIGHUP, on
 // an uncaught exception and on abort(). Four of those five destroy the process, so none of them

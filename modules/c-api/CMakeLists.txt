@@ -361,7 +361,7 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
 
-    # plan_binding.md CBIND-067: every CNA_Bool input refuses a byte outside {0, 1}.
+    # plans/plan_binding.md CBIND-067: every CNA_Bool input refuses a byte outside {0, 1}.
     #
     # Generated from the public headers by tools/c-api/generate_bool_contract_test.py, because
     # 94 hand-written assertions would leave the guarantee exactly as fragile as the one they

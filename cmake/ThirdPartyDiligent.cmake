@@ -1,4 +1,4 @@
-# DiligentCore integration for the CNA Diligent graphics renderer (plan_diligent.md DILIGENT-1/2).
+# DiligentCore integration for the CNA Diligent graphics renderer (plans/plan_diligent.md DILIGENT-1/2).
 #
 # DiligentCore is itself a graphics abstraction layer over D3D11/D3D12/Vulkan/OpenGL/Metal, so this
 # module's job is only to make its engine factories available; which of them the renderer actually

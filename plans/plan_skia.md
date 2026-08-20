@@ -21,12 +21,12 @@
 ## Baseline release snapshot and active expansion
 
 - **Baseline:** SKIA-1 through SKIA-114 are complete and remain protected by the signed checklist
-  in [`docs/skia-release-gate.md`](docs/skia-release-gate.md). SKIA-115 through SKIA-170 form the
+  in [`docs/skia-release-gate.md`](../docs/skia-release-gate.md). SKIA-115 through SKIA-170 form the
   active successor scope requested after that release.
 - **Execution mode:** the accepted release is deterministic CPU raster. The pinned artifact has no
   Ganesh/Graphite/GL/Vulkan/Dawn path, and the selected build registers zero `Accelerated` tests.
   Future Ganesh/OpenGL work requires a successor plan and must reopen
-  [`docs/skia-surface-mode-adr.md`](docs/skia-surface-mode-adr.md).
+  [`docs/skia-surface-mode-adr.md`](../docs/skia-surface-mode-adr.md).
 - **Capabilities:** all **eleven** enum values are audited against the implementation, through an
   exhaustive `switch` with no `default` arm so a future member is a compile-time diagnostic rather
   than an inherited answer. Only `GraphicsCapability::Texture3D` is true, strictly for bounded CPU

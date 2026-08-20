@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2035b: how far does the early-out defect reach?
+// plans/plan_modern.md MOD-2035b: how far does the early-out defect reach?
 //
 // `HalfFloatDepthMechanismTests` established that on this renderer a shader reading a
 // single-channel half-float texture and then writing `if (value <= 0.0) { …; return; }` takes that

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::Input (MODULARIZATION_PLAN.md §4/§11): the input value types
+// Minimal-link probe for CNA::Input (plans/MODULARIZATION_PLAN.md §4/§11): the input value types
 // must be usable without content, media, audio, runtime, devices, extensions or networking.
 // Input legitimately pulls graphics-core (the declared graphics<->input XNA cycle), math and
 // core -- the paired ModuleLinkClosure_Input ctest asserts the closure stays free of the

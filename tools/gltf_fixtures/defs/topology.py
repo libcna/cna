@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Primitive-mode fixtures -- owning group ``topology`` (plan_gltf.md §24.2).
+"""Primitive-mode fixtures -- owning group ``topology`` (plans/plan_gltf.md §24.2).
 
 All seven glTF modes, one fixture each. Two of them prove **D5**: CNA never read
 ``primitive.mode``. Every primitive, whatever its declared topology, was emitted as an index list

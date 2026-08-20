@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: adapts examples/easygl_sprite_effects_test.cpp's own scene verbatim --
+// plans/plan_opengl2.md: adapts examples/easygl_sprite_effects_test.cpp's own scene verbatim --
 // verifies SpriteEffects::FlipHorizontally and FlipVertically at the UV level.
 //
 // Viewport 400x100, divided into four 100x100 sections, SamplerState::PointClamp so every pixel

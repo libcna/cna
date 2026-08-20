@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_software.md Phase S4 (SOFTWARE-30..34): the actual proof this renderer's rasterizer core
+// plans/plan_software.md Phase S4 (SOFTWARE-30..34): the actual proof this renderer's rasterizer core
 // works -- real, pixel-verified triangle rendering with no GPU, no window, no display server.
 //
 // Draws go through the normal GraphicsDevice::DrawPrimitives()/DrawIndexedPrimitives() public API

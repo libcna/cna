@@ -56,7 +56,7 @@ namespace CNA::Graphics {
         /**
          * @brief The pass's complete fragment source.
          *
-         * plan_modern.md `MOD-2035b`. Emitted rather than duplicated, for the reason `MOD-2141`
+         * plans/plan_modern.md `MOD-2035b`. Emitted rather than duplicated, for the reason `MOD-2141`
          * settled: a transcribed copy of a shader answers questions about a different shader. The
          * audit that followed `MOD-2035` needs to run *this* filter with one block removed, and a
          * replica would prove nothing about what the layer ships.
@@ -90,7 +90,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the edge threshold a quality preset asks for.
          *
-         * plan_modern.md `MOD-604`. FXAA has no sample count and no resolution to trade, so the dial
+         * plans/plan_modern.md `MOD-604`. FXAA has no sample count and no resolution to trade, so the dial
          * it does have is **which edges it bothers with**: the shader takes an early exit where
          * local contrast is below the threshold.
          *

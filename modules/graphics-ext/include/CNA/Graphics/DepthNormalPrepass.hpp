@@ -27,7 +27,7 @@ namespace CNA::Graphics {
     /**
      * @brief Renders the scene's linear view depth and view-space normals for screen-space effects.
      *
-     * plan_modern.md `MOD-501`. SSAO — and any later effect that needs to know the shape of the
+     * plans/plan_modern.md `MOD-501`. SSAO — and any later effect that needs to know the shape of the
      * scene rather than its colour — reads two images: how far each pixel is, and which way it
      * faces. This produces them, and the app drives it the way it drives `ShadowMap`: bracket a
      * draw of the scene, using the effect this hands back.
@@ -71,7 +71,7 @@ namespace CNA::Graphics {
         /**
          * @brief Creates the prepass with a chosen depth encoding.
          *
-         * plan_modern.md `MOD-2035`. The encoding is normally not a caller's business — the layer
+         * plans/plan_modern.md `MOD-2035`. The encoding is normally not a caller's business — the layer
          * packs everywhere, because a half-float depth target defeated every screen-space effect on
          * the reference renderer and the reason for that is still open. This overload exists so the
          * failing shape can still be *built*: a policy whose alternative cannot be constructed can
@@ -174,7 +174,7 @@ namespace CNA::Graphics {
         /**
          * @brief Whether depth is packed into an 8-bit target rather than stored as a float.
          *
-         * plan_modern.md `MOD-507`. Where float render targets are missing, linear depth is packed
+         * plans/plan_modern.md `MOD-507`. Where float render targets are missing, linear depth is packed
          * across the four channels of a `Color` target. It round-trips to about 1 part in 2^24
          * rather than a half-float's 11 bits of mantissa — *more* precise, in fact, but banded
          * differently, and the packing costs arithmetic on both ends.
@@ -186,7 +186,7 @@ namespace CNA::Graphics {
         /**
          * @brief Whether a prepass on this device packs its depth, asked without constructing one.
          *
-         * plan_modern.md `MOD-2035`. Single-sourced deliberately: six passes decode this prepass's
+         * plans/plan_modern.md `MOD-2035`. Single-sourced deliberately: six passes decode this prepass's
          * depth and every one of them has to reach the *same* answer it did. Deriving it separately
          * in each was the shape of a bug waiting to happen -- and this function's answer has since
          * changed, which would have broken every copy that did not change with it.
@@ -228,7 +228,7 @@ namespace CNA::Graphics {
         /**
          * @brief Turns the per-object velocity target on or off.
          *
-         * plan_modern.md `MOD-2033`. Off by default, and the default is the point: this is **an
+         * plans/plan_modern.md `MOD-2033`. Off by default, and the default is the point: this is **an
          * obligation on the application**, not a switch that makes motion blur better on its own.
          * With it on, every draw inside a pass must be preceded by @ref setPreviousWorldEXT with
          * that object's world matrix *from the previous frame*, and @ref setPreviousCameraEXT must
@@ -287,7 +287,7 @@ namespace CNA::Graphics {
         /**
          * @brief The GLSL a consumer includes to read this prepass's depth.
          *
-         * plan_modern.md `MOD-504`. One shared function rather than a copy per effect: the depth
+         * plans/plan_modern.md `MOD-504`. One shared function rather than a copy per effect: the depth
          * encoding and its inverse must agree, and two copies that happen to agree are one edit
          * away from an SSAO that darkens the wrong pixels. Declares
          * `float cnaDecodeLinearDepth(vec4)` and `vec3 cnaViewPositionFromDepth(vec2, float, mat4)`.
@@ -300,7 +300,7 @@ namespace CNA::Graphics {
         /**
          * @brief The GLSL that both writes and reads this prepass's velocity image.
          *
-         * plan_modern.md `MOD-2033`/`MOD-2035`. One string rather than a copy at each end, for the
+         * plans/plan_modern.md `MOD-2033`/`MOD-2035`. One string rather than a copy at each end, for the
          * reason @ref getDepthDecodeGlsl gives and which `MOD-2035` then demonstrated the hard way:
          * a consumer that decodes an encoded image by hand is one edit away from decoding an
          * encoding nothing writes any more, and the frame it produces looks plausible. The velocity

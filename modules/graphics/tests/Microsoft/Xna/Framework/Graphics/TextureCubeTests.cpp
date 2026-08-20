@@ -77,10 +77,10 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // support and readback support are the same set (a renderer either owns cube pixels or it does
 // not), so one constant drives both.
 //
-// plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
+// plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
 // Software), even though nothing on this renderer samples a cube texture as a GPU resource yet.
-// plan_runtimerenderer.md RTR-P9-4: evaluated at runtime, so these describe the ACTIVE renderer
+// plans/plan_runtimerenderer.md RTR-P9-4: evaluated at runtime, so these describe the ACTIVE renderer
 // rather than the build default.
 //
 // FINDING while converting this, preserved rather than fixed here: PORTABLEGL was silently NOT in
@@ -106,7 +106,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 //
 // The runtime form has no line continuations, so the trap cannot recur.
 //
-// PIXIJS (plan_pixijs.md PIXIJS-71) is in this "no cube resource exists" set too: no cube override
+// PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in this "no cube resource exists" set too: no cube override
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
 // ODR: these helpers were `inline` at namespace scope, and
 // modules/content/tests/CNA/Internal/Xnb/Texture3DTextureCubeContentTypeReaderTests.cpp defines the
@@ -125,7 +125,7 @@ namespace
 /// Level-0 readback and storage are the same set again.
 ///
 /// This briefly was not an alias: IGL exposes readback through `IFramebuffer` rather than
-/// `ITexture`, and a plain `TextureCube` owns no framebuffer, so its `GetData` refused (plan_igl.md
+/// `ITexture`, and a plain `TextureCube` owns no framebuffer, so its `GetData` refused (plans/plan_igl.md
 /// IGL-17). That turned out to be a limit of the renderer rather than of IGL -- a framebuffer is a
 /// cheap descriptor over an existing image, and `IglTextureCubeRenderer::GetData` now builds a
 /// throwaway one to read the requested face, the same move its own render-target readback already
@@ -666,7 +666,7 @@ TEST_F(TextureCubeTest, DoubleDisposeDoesNotThrow)
 }
 
 // -----------------------------------------------------------------------
-// TextureCollection assignment / Texture base class (plan_graphics.md Task 863)
+// TextureCollection assignment / Texture base class (plans/plan_graphics.md Task 863)
 //
 // Before Task 863, TextureCube inherited GraphicsResource directly (not Texture), so it could
 // never be stored in a TextureCollection (std::vector<Texture*>) at all -- a TextureCube* could

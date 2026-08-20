@@ -449,7 +449,7 @@ def world_positions(
         # transform cancels out. Reporting the node-placed positions here would make the L4
         # expectation contradict the skin block computed alongside it, and would ask CNA to apply a
         # transform the specification says to ignore. The skinned result lives under l4.skin
-        # instead (plan_gltf.md GLTF-247).
+        # instead (plans/plan_gltf.md GLTF-247).
         skinned = "skin" in nodes[inst.node] if inst.node < len(nodes) else False
         placement = mat_identity() if skinned else inst.world_matrix
         primitive_count = len(meshes[inst.mesh].get("primitives", []))
@@ -533,7 +533,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
 
     ``importPolicy`` is the one part of this record that is **not** spec-derived: it states what
     CNA's own documented policies must turn the primitive into. A strip or fan is converted to a
-    triangle list (plan_gltf.md §10.1, ``GLTF-072``), and a non-topological skin remaps authored
+    triangle list (plans/plan_gltf.md §10.1, ``GLTF-072``), and a non-topological skin remaps authored
     ``JOINTS_0`` indices onto its parent-before-child GPU palette (``GLTF-252``). `joints` states
     the palette indices present in the imported L3 mesh; `authored_joints`, when supplied, records
     the source accessor under `importPolicy.authoredJoints` so the remap can be checked rather than
@@ -544,7 +544,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
 
     resolved = list(indices) if indices is not None else list(range(len(positions)))
     triangles = expand_to_triangles(resolved, mode)
-    # What CNA's documented per-mode policy (plan_gltf.md §10.1) turns the primitive into. Three
+    # What CNA's documented per-mode policy (plans/plan_gltf.md §10.1) turns the primitive into. Three
     # distinct outcomes, and the manifest states which applies rather than leaving a reader to
     # infer it: a triangle mode converts to a triangle list (GLTF-072); a LINE_LOOP becomes a
     # LINE_STRIP carrying the closing segment glTF leaves implicit in the mode (GLTF-076); every

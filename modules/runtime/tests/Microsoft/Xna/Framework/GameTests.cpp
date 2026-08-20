@@ -153,7 +153,7 @@ TEST(GameTest, MobileLifecycleEventsSuspendResumeAndTerminateTheLoop)
         GTEST_SKIP() << "The selected platform cannot create a window in this environment.";
     }
 
-    // plan_apple.md APPLE-7. The lifecycle transitions are scripted as CNA platform events rather
+    // plans/plan_apple.md APPLE-7. The lifecycle transitions are scripted as CNA platform events rather
     // than injected into a backend queue: what is under test is the loop's reaction, and stating
     // it this way keeps the case true for every platform implementation instead of only the one
     // whose native constants it happened to name.

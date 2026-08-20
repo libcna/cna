@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_stub.md STUB-4: end-to-end smoke test for the Stub (no-op) graphics renderer. Constructs a
+// plans/plan_stub.md STUB-4: end-to-end smoke test for the Stub (no-op) graphics renderer. Constructs a
 // real Game (VertexBuffer, IndexBuffer, Texture2D, SpriteBatch, a custom Effect), runs a few
 // frames entirely under CNA_GRAPHICS_RENDERER=STUB, and asserts:
 //

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Animation fixtures -- owning group ``animation`` (plan_gltf.md §17.2, §24.2).
+"""Animation fixtures -- owning group ``animation`` (plans/plan_gltf.md §17.2, §24.2).
 
 Proves **D6**: an animation channel targeting an ordinary mesh node -- rigid, unskinned motion, the
 most common kind of animation in an authored scene -- is silently dropped. ``ExtractClips``
@@ -161,7 +161,7 @@ def anim_rigid_node() -> Fixture:
                     "the animation is imported and reported but not yet serialised.",
             # The owning-task list said GLTF-284 until GLTF-293 landed. GLTF-284 is the morph
             # weight-vector validation task and has nothing to do with rigid animation; the real
-            # owner is GLTF-293 (plan_gltf.md §29 Phase 14), with GLTF-294 unifying playback.
+            # owner is GLTF-293 (plans/plan_gltf.md §29 Phase 14), with GLTF-294 unifying playback.
             owning_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-293", "GLTF-294"],
             closed_tasks=["GLTF-103", "GLTF-113", "GLTF-114", "GLTF-293", "GLTF-294"],
             remaining_tasks=[],

@@ -1608,7 +1608,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
             glActiveTexture(GL_TEXTURE0);
         }
 
-        /// plan_gltf.md GLTF-473. The twin of SetupClientArraysForStride below, and it deliberately
+        /// plans/plan_gltf.md GLTF-473. The twin of SetupClientArraysForStride below, and it deliberately
         /// takes the SAME arguments: this function states, and the shared guard checks, exactly the
         /// offsets that one is about to program, so the two cannot drift into disagreeing.
         ///
@@ -2058,7 +2058,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         // the buffer stride alone, so a declaration that stride cannot represent is refused
         // rather than rendered from the wrong bytes.
         RequireFaithfulDeclarationEXT(vb_in, "colored-nonindexed");
-        // plan_gltf.md GLTF-473: this route binds a colour at offset 12, which is where a
+        // plans/plan_gltf.md GLTF-473: this route binds a colour at offset 12, which is where a
         // colour lives in exactly two of CNA's records (stride 16 and stride 24). Every other
         // stride keeps something else there -- the NORMAL, in every PBR and skinned one -- so a
         // buffer bound here that is not one of those two is refused rather than read from the
@@ -2105,7 +2105,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         // the buffer stride alone, so a declaration that stride cannot represent is refused
         // rather than rendered from the wrong bytes.
         RequireFaithfulDeclarationEXT(vb_in, "colored-indexed");
-        // plan_gltf.md GLTF-473: this route binds a colour at offset 12, which is where a
+        // plans/plan_gltf.md GLTF-473: this route binds a colour at offset 12, which is where a
         // colour lives in exactly two of CNA's records (stride 16 and stride 24). Every other
         // stride keeps something else there -- the NORMAL, in every PBR and skinned one -- so a
         // buffer bound here that is not one of those two is refused rather than read from the
@@ -2180,7 +2180,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         if (params.skinned || params.pbr || params.customEffectRenderer || params.instanceCount > 1
             || (params.dualTexture && !wantDualTexture) || (params.envMapping && !wantEnvMap))
         {
-            // plan_gltf.md GLTF-473. Naming WHY a draw is about to leave the programmable-effect world
+            // plans/plan_gltf.md GLTF-473. Naming WHY a draw is about to leave the programmable-effect world
             // matters as much as refusing it: "unsupported vertex stride" sends a reader looking at the
             // buffer, when the actual missing piece is the effect. PBR is tested first for the same
             // reason EasyGL's own SelectStockProgram tests it first -- SkinnedPbrEffect sets both flags,
@@ -2208,7 +2208,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
             return;
         }
 
-        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
+        // plans/plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
         // table. These three are pure predicates and the guard touches nothing, so both sit ABOVE
         // the first glMatrixMode below rather than beside the pointer setup they describe: a
         // refusal must leave the context exactly as it found it, or a caller that catches it draws
@@ -2328,7 +2328,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         if (params.skinned || params.pbr || params.customEffectRenderer || params.instanceCount > 1
             || (params.dualTexture && !wantDualTexture) || (params.envMapping && !wantEnvMap))
         {
-            // plan_gltf.md GLTF-473. Naming WHY a draw is about to leave the programmable-effect world
+            // plans/plan_gltf.md GLTF-473. Naming WHY a draw is about to leave the programmable-effect world
             // matters as much as refusing it: "unsupported vertex stride" sends a reader looking at the
             // buffer, when the actual missing piece is the effect. PBR is tested first for the same
             // reason EasyGL's own SelectStockProgram tests it first -- SkinnedPbrEffect sets both flags,
@@ -2356,7 +2356,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
             return;
         }
 
-        // plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
+        // plans/plan_gltf.md GLTF-473: the ordinary path's own offsets, checked against the same canonical
         // table. These three are pure predicates and the guard touches nothing, so both sit ABOVE
         // the first glMatrixMode below rather than beside the pointer setup they describe: a
         // refusal must leave the context exactly as it found it, or a caller that catches it draws
@@ -2667,7 +2667,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_OPENGLES1
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace OpenGLES1 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-230 / GLTF-231: a committed BLEND + doubleSided fixture through
+// plans/plan_gltf.md GLTF-230 / GLTF-231: a committed BLEND + doubleSided fixture through
 // application-owned GPU state.
 //
 // PbrEffect deliberately outputs straight RGB plus coverage alpha. Consequently glTF BLEND needs

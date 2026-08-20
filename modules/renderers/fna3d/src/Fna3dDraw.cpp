@@ -76,7 +76,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                          PrimitiveType primitive, int primitiveCount,
                                          const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-477: before PrepareDrawEXT, which binds buffers and applies a stock
+        // plans/plan_gltf.md GLTF-477: before PrepareDrawEXT, which binds buffers and applies a stock
         // effect. SelectStockEffect has no PBR case, so a PbrEffect draw used to fall through to
         // FNA's own BasicEffect and a SkinnedPbrEffect draw to its SkinnedEffect -- an authored
         // glTF metallic-roughness material rendered as a different material, silently.
@@ -92,7 +92,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                                 const Matrix& projection, PrimitiveType primitive,
                                                 int primitiveCount, const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-477: see DrawPrimitivesEx, and before the buffer checks for the same
+        // plans/plan_gltf.md GLTF-477: see DrawPrimitivesEx, and before the buffer checks for the same
         // reason -- nothing about this draw is going to be submitted.
         RequirePbrShadingSupportEXT(params, "FNA3D");
         const auto* indexBuffer = dynamic_cast<const Fna3dIndexBufferRenderer*>(&ib);
@@ -115,7 +115,7 @@ namespace CNA::Internal::Renderers::Fna3d
                                                   PrimitiveType primitive, int primitiveCount,
                                                   int instanceCount, const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-477: an instanced PBR draw is refused for the shading model rather than
+        // plans/plan_gltf.md GLTF-477: an instanced PBR draw is refused for the shading model rather than
         // for the instancing, so the diagnostic names the real reason.
         RequirePbrShadingSupportEXT(params, "FNA3D");
         if (params.compiledEffectRuntime == nullptr)

@@ -50,7 +50,7 @@ namespace CNA::Internal::Renderers::Canvas
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        // plan_canvas.md CANVAS-23: no Canvas2D target -- main canvas or any off-screen one --
+        // plans/plan_canvas.md CANVAS-23: no Canvas2D target -- main canvas or any off-screen one --
         // ever has a real depth/stencil buffer, regardless of what DepthFormat was requested at
         // construction (same reasoning/precedent as the native 2D renderer's Task 708 override).
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return false; }

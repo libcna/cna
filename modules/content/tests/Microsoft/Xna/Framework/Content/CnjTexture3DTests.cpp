@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-43/CNB-46: first-ever .cnj coverage for Texture3D. Unlike TextureCube (.dds via
+// plans/plan_cnj.md CNB-43/CNB-46: first-ever .cnj coverage for Texture3D. Unlike TextureCube (.dds via
 // sourceFile), Texture3D has no native passthrough file format at all -- self-contained JSON
 // ("width"/"height"/"depth") + a raw RGBA8 binary sidecar ("data"), mirroring Model's own
 // vertex/index binary-sidecar convention.
@@ -98,7 +98,7 @@ protected:
 
 // REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plan_software.md Boundaries). On a renderer that doesn't support it, loading now throws a clean
+// (plans/plan_software.md Boundaries). On a renderer that doesn't support it, loading now throws a clean
 // System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
 // succeeding with all-zero pixel data.
 TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
@@ -124,7 +124,7 @@ TEST_F(CnjTexture3DTest, LoadsRealCnjFixture)
 
     std::vector<Color> pixels(8, Color(0, 0, 0, 0));
     // IGL owns real volume pixels but cannot fetch them back: IGL v1.1.1 has no way to attach a 3D
-    // texture to a framebuffer, its only readback route (plan_igl.md IGL-17). Everything this test
+    // texture to a framebuffer, its only readback route (plans/plan_igl.md IGL-17). Everything this test
     // asserts about the CNJ reader itself is checked above; only the round trip needs readback.
     if (CNA_RENDERER_IS(Igl))
     {

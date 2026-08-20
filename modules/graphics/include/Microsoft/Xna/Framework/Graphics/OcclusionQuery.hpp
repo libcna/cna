@@ -56,7 +56,7 @@ namespace Microsoft::Xna::Framework::Graphics
     protected:
         /**
          * @brief Releases the native query renderer before the base class marks this resource
-         * disposed (plan_sokol.md SOKOL-42).
+         * disposed (plans/plan_sokol.md SOKOL-42).
          *
          * `GraphicsDevice::Dispose()` disposes tracked resources before tearing down the renderer
          * device/GL context; without this override the renderer_ object below would only be

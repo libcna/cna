@@ -117,7 +117,7 @@ void main() {
     vec3 albedo = baseColor * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
 #ifdef CNA_PBR_VERTEX_COLOR
-    // plan_gltf.md GLTF-465: glTF 2.0 §3.9.2 -- COLOR_0 is an additional linear multiplier on the
+    // plans/plan_gltf.md GLTF-465: glTF 2.0 §3.9.2 -- COLOR_0 is an additional linear multiplier on the
     // base colour product, its alpha included. pc.vertexColorEnabled is the effect's own switch, so
     // a primitive that has the slot but no authored colour (or an effect that opted out) keeps the
     // opaque-white identity. Kept inside the ifdef so the variants without a colour slot compile to

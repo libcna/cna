@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_headless.md: Headless (no GPU/window) graphics renderer tests. Deliberately no
+# plans/plan_headless.md: Headless (no GPU/window) graphics renderer tests. Deliberately no
 # SDL_VIDEODRIVER/DISPLAY environment -- the entire point of this renderer is running with neither.
 
 # Example/test executables historically live at the build root (scripts, docs and

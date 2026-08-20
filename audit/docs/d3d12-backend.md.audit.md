@@ -9,7 +9,7 @@
 
 ## Purpose
 Documents the D3D12 backend's status, Wine+vkd3d-proton dev-loop, test-writing conventions, and known
-limitations, explicitly re-audited (per its own header) against `plan_dx.md`'s actual `DX-100`-`DX-148`
+limitations, explicitly re-audited (per its own header) against `plans/plan_dx.md`'s actual `DX-100`-`DX-148`
 row status since "most of this section's earlier revisions predated Phase DX13/DX14/DX15 landing and
 were significantly stale."
 
@@ -18,7 +18,7 @@ The strongest self-auditing discipline found in this entire docs batch: the "Kno
 header explicitly states its own prior revisions were stale and this version was "re-derived from
 source, not copy-edited." It then follows through — a dedicated bullet ("The following are all real
 and closed now, despite earlier revisions of this section claiming otherwise") lists 6 specific
-features, explicitly warning the reader to "re-verify against `plan_dx.md`'s own row status before
+features, explicitly warning the reader to "re-verify against `plans/plan_dx.md`'s own row status before
 trusting any *other* specific claim in this file."
 
 ## Checklist Results

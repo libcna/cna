@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-19: byte-exact round-trip through the LLGL renderer's own texture upload and
+// plans/plan_llgl.md LLGL-19: byte-exact round-trip through the LLGL renderer's own texture upload and
 // readback path.
 //
 // This deliberately drives ITextureRenderer directly rather than going through Texture2D. The

@@ -1749,7 +1749,7 @@ namespace CNA::Internal::Renderers::Bgfx
                                                              "vs_env_map3d",
                                                              "fs_env_map3d",
                                                              "env_map3d");
-                // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect --
+                // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect --
                 // both vertex shaders share the one fs_pbr3d fragment shader (identical BRDF,
                 // see compile_shaders.py's kPbr3dShaders comment).
                 pbr3DProgram_             = tryCreateProgram(kPbr3dShaders,
@@ -1794,7 +1794,7 @@ namespace CNA::Internal::Renderers::Bgfx
                 envMapSpecularUnif_  = bgfx::createUniform("u_envMapSpecular", bgfx::UniformType::Vec4);
                 envMapSampler_       = bgfx::createUniform("s_envMap",         bgfx::UniformType::Sampler);
 
-                // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect uniforms.
+                // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect uniforms.
                 metallicRoughnessFactorUnif_ = bgfx::createUniform("u_metallicRoughnessFactor", bgfx::UniformType::Vec4);
                 pbrSrgbUnif_                  = bgfx::createUniform("u_srgb",                    bgfx::UniformType::Vec4);
                 dielectricFresnelUnif_        = bgfx::createUniform("u_dielectricFresnel",      bgfx::UniformType::Vec4);
@@ -1819,7 +1819,7 @@ namespace CNA::Internal::Renderers::Bgfx
                     1, 1, false, 1, bgfx::TextureFormat::RGBA8,
                     BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, whiteMem);
 
-                // plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound
+                // plans/plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound
                 // -- a "flat" tangent-space normal (0,0,1) encoded as RGB (128,128,255), matching
                 // EasyGLRenderer::EnsureDefaultFlatNormalTexture()'s identical rationale.
                 const uint8_t flatNormalPixel[4] = {128, 128, 255, 255};
@@ -3269,7 +3269,7 @@ namespace CNA::Internal::Renderers::Bgfx
         }
         else if (stride == 48)
         {
-            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: VertexPositionNormalTangentTexture
+            // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: VertexPositionNormalTangentTexture
             // (PbrEffect): pos(3f=12) + normal(3f=12) + tangent(4f=16, xyz + bitangent
             // handedness in w) + uv(2f=8) -- see EasyGLRenderer.cpp's own "case 48"
             // comment for the full cross-renderer-duplication note.
@@ -3281,7 +3281,7 @@ namespace CNA::Internal::Renderers::Bgfx
         else if (stride == 60)
         {
             // GLTF-182/344: rigid PBR with the importer-appended TEXCOORD_1 at offset 48.
-            // plan_gltf.md GLTF-462/GLTF-465: the four trailing bytes this used to `skip` are a
+            // plans/plan_gltf.md GLTF-462/GLTF-465: the four trailing bytes this used to `skip` are a
             // packed COLOR_0 -- the authored colour, or opaque white, which is the multiplier's
             // identity -- and glTF 3.9.2 makes it a term in the base-colour product.
             layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
@@ -3329,7 +3329,7 @@ namespace CNA::Internal::Renderers::Bgfx
         }
         else if (stride == 80)
         {
-            // plan_gltf.md GLTF-463: stride 76's skinned PBR record with a packed COLOR_0 appended
+            // plans/plan_gltf.md GLTF-463: stride 76's skinned PBR record with a packed COLOR_0 appended
             // at offset 76 -- the skinned counterpart of stride 60's own colour slot.
             layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
@@ -3547,7 +3547,7 @@ namespace CNA::Internal::Renderers::Bgfx
         bgfx::setUniform(depthBiasUnif_, depthBias4);
     }
 
-    // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: binds the base color map (unit 0, shared
+    // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: binds the base color map (unit 0, shared
     // texColor3DSampler_) plus PbrEffect's 6 additional maps (units 1-6, bound before unit 0 to
     // leave it active last, matching EasyGLRenderer::BindDrawParams()'s established
     // envMap/texture2 unit-ordering precedent). Each fallback texture is the correct "map
@@ -4055,7 +4055,7 @@ namespace CNA::Internal::Renderers::Bgfx
         }
         else if (params.pbr && params.skinned && bgfx::isValid(pbrSkinned3DProgram_))
         {
-            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: SkinnedPbrEffect -- same BRDF as
+            // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: SkinnedPbrEffect -- same BRDF as
             // PbrEffect below, plus the bone-palette skin transform (see vs_pbr_skinned3d.sc).
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float amb[4] = { params.ambientColor[0], params.ambientColor[1],
@@ -4108,7 +4108,7 @@ namespace CNA::Internal::Renderers::Bgfx
             float normalMatrixSkin[9];
             ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
             bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
-            // plan_gltf.md GLTF-465: stride 80 carries a COLOR_0 the fragment stage multiplies in.
+            // plans/plan_gltf.md GLTF-465: stride 80 carries a COLOR_0 the fragment stage multiplies in.
             {
                 const float vcePbr[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
                 bgfx::setUniform(vertexColorEn3DUnif_, vcePbr);
@@ -4118,7 +4118,7 @@ namespace CNA::Internal::Renderers::Bgfx
         }
         else if (params.pbr && bgfx::isValid(pbr3DProgram_))
         {
-            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect -- real glTF 2.0
+            // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect -- real glTF 2.0
             // metallic-roughness BRDF (see fs_pbr3d.sc's own doc comment).
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float amb[4] = { params.ambientColor[0], params.ambientColor[1],
@@ -4162,7 +4162,7 @@ namespace CNA::Internal::Renderers::Bgfx
                                  params.eyePositionWorld[2], 0.0f };
             bgfx::setUniform(eyePos3DUnif_, eyePos);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
-            // plan_gltf.md GLTF-465: the same shared gate every other VertexColorEnabled-aware
+            // plans/plan_gltf.md GLTF-465: the same shared gate every other VertexColorEnabled-aware
             // branch uses. Strides 60 and 80 always carry a colour slot, so the shader has to be
             // told whether it means anything.
             {
@@ -4532,7 +4532,7 @@ namespace CNA::Internal::Renderers::Bgfx
         }
         else if (params.pbr && params.skinned && bgfx::isValid(pbrSkinned3DProgram_))
         {
-            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: SkinnedPbrEffect -- same BRDF as
+            // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: SkinnedPbrEffect -- same BRDF as
             // PbrEffect below, plus the bone-palette skin transform (see vs_pbr_skinned3d.sc).
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float amb[4] = { params.ambientColor[0], params.ambientColor[1],
@@ -4585,7 +4585,7 @@ namespace CNA::Internal::Renderers::Bgfx
             float normalMatrixSkin[9];
             ComputeNormalMatrix3x3(params.worldColMajor, normalMatrixSkin);
             bgfx::setUniform(normalMatrix3DUnif_, normalMatrixSkin);
-            // plan_gltf.md GLTF-465: stride 80 carries a COLOR_0 the fragment stage multiplies in.
+            // plans/plan_gltf.md GLTF-465: stride 80 carries a COLOR_0 the fragment stage multiplies in.
             {
                 const float vcePbr[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
                 bgfx::setUniform(vertexColorEn3DUnif_, vcePbr);
@@ -4595,7 +4595,7 @@ namespace CNA::Internal::Renderers::Bgfx
         }
         else if (params.pbr && bgfx::isValid(pbr3DProgram_))
         {
-            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect -- real glTF 2.0
+            // plans/plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect -- real glTF 2.0
             // metallic-roughness BRDF (see fs_pbr3d.sc's own doc comment).
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
             float amb[4] = { params.ambientColor[0], params.ambientColor[1],
@@ -4639,7 +4639,7 @@ namespace CNA::Internal::Renderers::Bgfx
                                  params.eyePositionWorld[2], 0.0f };
             bgfx::setUniform(eyePos3DUnif_, eyePos);
             bgfx::setUniform(alphaTestUnif_, params.alphaTest);
-            // plan_gltf.md GLTF-465: the same shared gate every other VertexColorEnabled-aware
+            // plans/plan_gltf.md GLTF-465: the same shared gate every other VertexColorEnabled-aware
             // branch uses. Strides 60 and 80 always carry a colour slot, so the shader has to be
             // told whether it means anything.
             {
@@ -5099,7 +5099,7 @@ namespace CNA::Internal::Renderers::Bgfx
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_BGFX
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Bgfx { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

@@ -5,8 +5,8 @@ Run under real Wine `ddraw.dll` (Wine 10.0~repack-6, `WINEPREFIX=$HOME/.wine-cna
 
 ## What this backend needs to prove
 
-Per `plan_dxold.md`'s roadmap, "real DX3" (originally landed as `DX30` in this repo, since renamed — see
-`plan_dx3.md`'s own status note for why) is DirectDraw **v2** (`IDirectDraw2`, adds a
+Per `plans/plan_dxold.md`'s roadmap, "real DX3" (originally landed as `DX30` in this repo, since renamed — see
+`plans/plan_dx3.md`'s own status note for why) is DirectDraw **v2** (`IDirectDraw2`, adds a
 refresh-rate parameter to `SetDisplayMode` and a new `GetAvailableVidMem` method) plus "execute-
 buffer Direct3D, matured." The execute-buffer half of that description is **already known
 non-functional** in this environment (`dx2-spike/README.md`'s 14-variant finding) — `DX2` already

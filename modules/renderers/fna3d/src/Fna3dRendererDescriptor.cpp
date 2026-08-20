@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D41: the Fna3d family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D41: the Fna3d family's pre-construction contract.
 //
 // FNA3D selects its driver (SDL_GPU / Direct3D 11 / OpenGL) inside FNA3D_PrepareWindowAttributes
 // and returns the window attributes that driver needs -- the platform window intent for the GL driver, none
@@ -23,7 +23,7 @@ namespace CNA::Internal::Renderers::Fna3d
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

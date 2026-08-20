@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-392: a shared-importer defect may not be fixed inside a renderer.
+// plans/plan_gltf.md GLTF-392: a shared-importer defect may not be fixed inside a renderer.
 //
 // §6's rule exists because the opposite is so easy and so cheap in the moment. A model renders
 // wrong on one renderer; the renderer is where the wrongness is visible; a two-line adjustment
@@ -61,7 +61,7 @@ TEST(GltfSharedDefectPolicy, NoRendererCanSeeTheGltfImporter)
         const std::string source = ReadFile(entry.path());
         EXPECT_EQ(std::string::npos, source.find("CNA/Internal/GltfImport/"))
             << entry.path().string()
-            << " includes the glTF importer. plan_gltf.md §6/GLTF-392: a renderer must not be able "
+            << " includes the glTF importer. plans/plan_gltf.md §6/GLTF-392: a renderer must not be able "
                "to make an import decision -- a fix applied there is invisible to L1-L6 (which "
                "never look at a renderer) and absent from every other renderer.";
     }

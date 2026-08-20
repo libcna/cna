@@ -1,6 +1,6 @@
 # Engine-layer coverage (`modules/graphics-ext/`)
 
-`plan_modern.md` **MOD-1741**. Measured, not estimated — every number here came out of a real
+`plans/plan_modern.md` **MOD-1741**. Measured, not estimated — every number here came out of a real
 `--coverage` build on 2026-08-18 and can be reproduced with the recipe at the bottom. This file is a
 dated snapshot; it is not regenerated automatically, so re-measure before quoting it.
 

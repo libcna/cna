@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-37/IGL-55: PbrEffect pixel conformance, hand-derived rather than
+// plans/plan_igl.md IGL-37/IGL-55: PbrEffect pixel conformance, hand-derived rather than
 // captured-and-pasted -- see vulkan_pbreffect_handderived_test.cpp for the full independent
 // GGX/Smith-Schlick-GGX/Schlick-Fresnel re-derivation this scene and expected value are taken
 // from (case (a) only, to keep this renderer's own test suite in its established single-scenario
@@ -83,7 +83,7 @@ protected:
         effect.setMetallicFactorProperty(0.0f);
         effect.setRoughnessFactorProperty(0.5f);
         effect.setAmbientLightColorProperty(Vector3::Zero);
-        // plan_gltf.md GLTF-476: the value derived above is LINEAR, and it is the value the
+        // plans/plan_gltf.md GLTF-476: the value derived above is LINEAR, and it is the value the
         // reference re-derivation (vulkan_pbreffect_handderived_test.cpp) measures -- with the
         // same three switches turned off, for the same reason. This test used to omit them and
         // still read 91 only because this renderer had no colour management at all; once it
@@ -140,7 +140,7 @@ protected:
                           static_cast<bytecs>(91), static_cast<bytecs>(255)),
                     /*tolerance=*/14);
 
-        // plan_gltf.md GLTF-476, the same scene with KHR_materials_specular's scalar strength at 0.
+        // plans/plan_gltf.md GLTF-476, the same scene with KHR_materials_specular's scalar strength at 0.
         // The extension weights BOTH Fresnel endpoints, so F0 = 0.04 * 0 = 0 and F90 = 0, and at
         // VdotH = 1 the Schlick term is exactly F0 -- the specular lobe vanishes and kd rises to 1:
         //   Lo = (1 * 1 / pi + 0) * 1 * 1 = 0.318310 -> round(0.318310 * 255) = 81

@@ -1,4 +1,4 @@
-# plan_svg_dom.md: SVG DOM renderer examples. The genuine, in-browser vertical-slice smoke test
+# plans/plan_svg_dom.md: SVG DOM renderer examples. The genuine, in-browser vertical-slice smoke test
 # only builds under Emscripten (SVG_DOM is Emscripten-only, same gate as CANVAS/HTML_DOM).
 #
 # Native host-contract targets for all browser renderers are registered centrally in

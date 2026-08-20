@@ -77,14 +77,14 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_DIRECTX1
     ++enabled;
 #endif
-    // plan_dx2.md DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
+    // plans/plan_dx2.md DX2-84: the same class of gap the D3D9 comment above documents -- no commit in
     // this file's history ever added a DIRECTX2 entry either, so the full CnaTests suite's first-ever
     // run under CNA_GRAPHICS_RENDERER=DIRECTX2 (this regression pass) would have silently failed
     // EXPECT_EQ(enabled, 1) the same way D3D9's did.
 #ifdef CNA_RENDERER_DIRECTX2
     ++enabled;
 #endif
-    // plan_dx3.md: same class of gap DX2-84's own comment above documents -- DIRECTX3 needs its own
+    // plans/plan_dx3.md: same class of gap DX2-84's own comment above documents -- DIRECTX3 needs its own
     // entry here too, added proactively this time rather than discovered by a from-scratch regression.
 #ifdef CNA_RENDERER_DIRECTX3
     ++enabled;
@@ -107,7 +107,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_SDL_GPU
     ++enabled;
 #endif
-    // plan_opengles1.md: same class of gap DX2-84's comment above documents -- a new renderer that
+    // plans/plan_opengles1.md: same class of gap DX2-84's comment above documents -- a new renderer that
     // never gets an entry here makes this test report 0 enabled renderers rather than 1.
 #ifdef CNA_RENDERER_OPENGLES1
     ++enabled;
@@ -115,7 +115,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_OPENGL4
     ++enabled;
 #endif
-    // plan_opengl1.md phase 12 finding: same gap class as the D3D9 comment above -- no commit in
+    // plans/plan_opengl1.md phase 12 finding: same gap class as the D3D9 comment above -- no commit in
     // this file's own history ever added an OPENGL1 entry either, and the full unfiltered
     // CnaTests suite had never actually been run under CNA_GRAPHICS_RENDERER=OPENGL1 until this
     // audit did so.
@@ -125,7 +125,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_OPENGL2
     ++enabled;
 #endif
-    // plan_wicked.md: same gap class the D3D9 comment above documents -- the registration union
+    // plans/plan_wicked.md: same gap class the D3D9 comment above documents -- the registration union
     // that added the WICKED identity everywhere else never conflicted on this file, so its silent
     // omission surfaced only when the full CnaTests suite first ran under
     // CNA_GRAPHICS_RENDERER=WICKED and this test reported 0 enabled renderers.
@@ -148,7 +148,7 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 
-    // plan_metal.md METAL-232: the identical class of gap the D3D9 comment above documents --
+    // plans/plan_metal.md METAL-232: the identical class of gap the D3D9 comment above documents --
     // no commit in this file's own history ever added a Metal entry here, and this file has never
     // actually been built/run under CNA_GRAPHICS_RENDERER=METAL (no Apple toolchain in any session
     // to date), so this would have silently failed EXPECT_EQ(enabled, 1) the first time
@@ -173,25 +173,25 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
     ++enabled;
 #endif
 
-    // The IGL identity (plan_igl.md), registered here at the same time it was registered
+    // The IGL identity (plans/plan_igl.md), registered here at the same time it was registered
     // everywhere else.
 #ifdef CNA_RENDERER_IGL
     ++enabled;
 #endif
 
-    // plan_pixijs.md: same registration discipline as every renderer above -- add the PIXIJS
+    // plans/plan_pixijs.md: same registration discipline as every renderer above -- add the PIXIJS
     // entry here in the same task that adds the identity everywhere else, not after the fact.
 #ifdef CNA_RENDERER_PIXIJS
     ++enabled;
 #endif
 
-    // plan_nanovg.md: same registration discipline -- add the NANOVG entry here in the same task
+    // plans/plan_nanovg.md: same registration discipline -- add the NANOVG entry here in the same task
     // that adds the identity everywhere else, not after the fact.
 #ifdef CNA_RENDERER_NANOVG
     ++enabled;
 #endif
 
-    // plan_runtimerenderer.md RTR-P7-8: exactly one, in BOTH modes.
+    // plans/plan_runtimerenderer.md RTR-P7-8: exactly one, in BOTH modes.
     //
     // In a multi-renderer build this is not an accident -- it is the property that keeps this whole
     // file, and the ~892 other renderer-gated sites in the test and example corpus, meaningful.

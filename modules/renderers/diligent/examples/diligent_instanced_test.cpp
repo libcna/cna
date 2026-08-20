@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-43: real-device proof that hardware instancing on the Diligent
+// plans/plan_diligent.md DILIGENT-43: real-device proof that hardware instancing on the Diligent
 // renderer renders every instance at its own per-instance world position from a single
 // DrawInstancedPrimitives call, through the public XNA API only.
 //

@@ -16,5 +16,5 @@
     "wBitsPerSample": 4
   },
   "supportMatrixStatus": "rejected",
-  "notes": "plan_xnb.md XNB-33 support-matrix entry: MS-ADPCM parses correctly (its own compressed nBlockAlign=1024 block layout, wBitsPerSample=4) but is rejected -- CNA has no MS-ADPCM decoder yet."
+  "notes": "plans/plan_xnb.md XNB-33 support-matrix entry: MS-ADPCM parses correctly (its own compressed nBlockAlign=1024 block layout, wBitsPerSample=4) but is rejected -- CNA has no MS-ADPCM decoder yet."
 }

@@ -11,7 +11,7 @@
 // Uses an identity bone palette (weight=1 on bone 0, which defaults to Identity), isolating
 // skinning from the specular formula under test.
 //
-// Task 1102b correction (plan_graphics.md Phase 80): this test never calls
+// Task 1102b correction (plans/plan_graphics.md Phase 80): this test never calls
 // SetPreferPerPixelLightingProperty(), so it always exercised whatever this renderer's
 // SkinnedEffect dispatch treated as its default. Before Task 1102b, that default was
 // unconditionally per-pixel (the opposite of real XNA's own default, per-vertex/Gouraud) --

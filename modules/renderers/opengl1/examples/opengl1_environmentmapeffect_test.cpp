@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // OPENGL1 renderer: EnvironmentMapEffect's fixed-function cube-map reflection subset
-// (plan_opengl1.md phase 5).
+// (plans/plan_opengl1.md phase 5).
 //
 // OpenGL1Renderer::DrawInternal blends a real ARB_texture_cube_map cube texture into a
 // VertexPositionNormalTexture draw via GL_REFLECTION_MAP texture-coordinate generation on
@@ -14,7 +14,7 @@
 // vector happens to hit is irrelevant to the expected result -- only the blend math is under
 // test. It also deliberately disables DirectionalLight0 (enabled by default) so the "base" color
 // going into the blend is exactly EnvironmentMapEffect's own EmissiveColor+AmbientLightColor*
-// DiffuseColor formula (GpuDrawParams::emissiveColor, plan_opengl1.md phase 5's own GL_EMISSION
+// DiffuseColor formula (GpuDrawParams::emissiveColor, plans/plan_opengl1.md phase 5's own GL_EMISSION
 // fix) with no NdotL lighting-direction math to additionally verify.
 //
 // Deliberately NOT tested here (OpenGL1's own documented, intentional limitation): Fresnel edge-

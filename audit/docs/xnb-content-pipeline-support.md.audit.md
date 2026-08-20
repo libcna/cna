@@ -4,7 +4,7 @@
 - Source file: `docs/xnb-content-pipeline-support.md` (224 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes `plan_xnb.md` Phase G, XNB-45)
+- File type: Markdown documentation (closes `plans/plan_xnb.md` Phase G, XNB-45)
 - Cross-references: `tests-xna-content`/`xna-content` shard audits (confirmed the test suite misses
   `ContentReader::ReadExternalReference<T>()`'s absolute-path-escape HIGH finding; confirmed
   `CnjCustomLoaderTests.cpp` surfaces raw `std::` exceptions in `RegisterCnjLoader<T>()`'s guards);

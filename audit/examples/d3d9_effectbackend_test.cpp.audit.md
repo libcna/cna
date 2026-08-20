@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_effectbackend_test.cpp` (261 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note below)
 - Subsystem: `examples-tests-d3d9` shard — `D3D9EffectBackend`, CNA's custom
-  runtime-`D3DCompile()` `ShaderEffect` backend (`plan_dx9.md` Phase D9-11 / D9-111).
+  runtime-`D3DCompile()` `ShaderEffect` backend (`plans/plan_dx9.md` Phase D9-11 / D9-111).
 - File type: `Game`-subclass executable (`D3D9EffectBackendTest : public Game`), 5 checks (A-E),
   CTest-registered as `D3D9_EffectBackend` (`cmake/Tests/D3D9Tests.cmake:181-186`, `TIMEOUT 60`,
   gated behind `TARGET cna_backend_graphics_d3d9_effect`, pinned to the real-compiler Wine prefix

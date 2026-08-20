@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_flipped_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_flipped_quad
 # The third SpriteBatch scene, proving D9-90's SpriteEffects.FlipHorizontally handling. Reuses
 # sprite_rotated_quad.scene's exact 2x2 four-color texture (top-left=RED, top-right=GREEN,
 # bottom-left=BLUE, bottom-right=YELLOW) but with NO rotation and spriteeffects=FlipHorizontally

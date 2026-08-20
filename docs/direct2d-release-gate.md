@@ -1,6 +1,6 @@
 # Direct2D release gate
 
-plan_direct2d.md D2D-133. "Is the Direct2D backend releasable?" has exactly one answer, and a
+plans/plan_direct2d.md D2D-133. "Is the Direct2D backend releasable?" has exactly one answer, and a
 program produces it:
 
 ```bash
@@ -12,7 +12,7 @@ blocked. It is deliberately not satisfiable by editing prose.
 
 ## Criteria
 
-1. **Every plan row is closed.** No `🟨` and no `⬜` remains in `plan_direct2d.md`. The checker's
+1. **Every plan row is closed.** No `🟨` and no `⬜` remains in `plans/plan_direct2d.md`. The checker's
    ordinary mode already refuses a `✅` that cites no evidence, so closing a row requires naming the
    test, gate, document, or delegated task that covers it.
 2. **The five CTest gates are registered.** `Direct2D_Smoke`, `Direct2D_2DParity`,
@@ -43,6 +43,6 @@ dishonesty the gate exists to prevent, and their required contents above are wha
 
 Performance, soak, mutation, differential, and refactor work does not block the release unless it
 uncovers a concrete defect on a supported path. That is the same rule as
-[`plan_direct2d.md`](../plan_direct2d.md)'s closing verification rules, and the release gate
+[`plans/plan_direct2d.md`](../plans/plan_direct2d.md)'s closing verification rules, and the release gate
 deliberately does not check benchmark thresholds: a timing gate on shared CI hardware would either
 be so loose it proves nothing or so tight it fails at random.

@@ -20,7 +20,7 @@ three previously-fixed reconfiguration bugs documented in the paired header.
 Correct, and confirms the metadata-validation fidelity check cited in the header. `OpenDecoder()`
 (lines 142-...) validates the `Video`'s declared width/height/framesPerSecond against what the
 decoder actually reports, with a `1.0f` fps tolerance, throwing `InvalidOperationException` on
-mismatch -- explicitly citing `plan_media.md MEDIA-42` and FNA's real `VideoPlayerAV1`/
+mismatch -- explicitly citing `plans/plan_media.md MEDIA-42` and FNA's real `VideoPlayerAV1`/
 `VideoPlayerTheora` validation this matches. The comment further explains this check is "trivially
 true" for the raw-file constructor (self-consistent by construction) and "the real, meaningful
 validation" for the XNB-sourced constructor -- a precise characterization of when this check

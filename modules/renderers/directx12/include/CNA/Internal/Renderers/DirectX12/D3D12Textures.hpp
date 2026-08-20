@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12 (DX-109): real D3D12 2D texture renderer, RGBA8 storage only (matches this
+// plans/plan_dx.md Phase DX12 (DX-109): real D3D12 2D texture renderer, RGBA8 storage only (matches this
 // project's own established simplification -- D3D11TextureRenderer.hpp's own header comment applies
 // identically here). Same explicit upload-heap-staging discipline as D3D12Buffers.hpp/.cpp:
 // CreateCommittedResource on a DEFAULT heap for the GPU-resident texture, a fresh UPLOAD-heap
@@ -18,7 +18,7 @@
 //
 // Cube/3D texture variants (D3D11's own DX-41/DX-42 equivalents) are deliberately NOT implemented
 // in this pass -- DX-109's own plan row explicitly allows triaging 2D textures + buffers first
-// since they're DX-111's actual prerequisite; see plan_dx.md's DX-109 row for the honest scope note.
+// since they're DX-111's actual prerequisite; see plans/plan_dx.md's DX-109 row for the honest scope note.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "D3D12DescriptorHeaps.hpp"

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-21/MOD-22: the settings bag gains the fields the post-process passes read, and
+// plans/plan_modern.md MOD-21/MOD-22: the settings bag gains the fields the post-process passes read, and
 // TonemappingMode gains Uncharted2. Both are additive by design -- the existing values are stored
 // in settings and compared by ordinal, so appending is the only safe direction, and these tests
 // pin that as much as they pin the new accessors.
@@ -40,7 +40,7 @@ TEST(RenderPipelineSettingsTest, DefaultsAreTheInertPipeline)
 
 TEST(RenderPipelineSettingsTest, TheSsrFieldsRoundTripAndAreValidated)
 {
-    // plan_modern.md MOD-2004. Every field the pass reads, and the two whose out-of-range case is a
+    // plans/plan_modern.md MOD-2004. Every field the pass reads, and the two whose out-of-range case is a
     // decision rather than an oversight: distances clamp at zero because a negative reflection
     // distance has no meaning, and the edge fade clamps at half the frame because a fade wider than
     // that would consume the whole image.
@@ -113,7 +113,7 @@ TEST(RenderPipelineSettingsTest, ExtremeButMeaningfulValuesAreStoredRatherThanRe
     // The settings bag stores; the passes clamp when they apply a value, and document their range.
     // Rejecting here would make a quality preset need to know every pass's limits.
     //
-    // plan_modern.md MOD-730 narrowed this rule and this test with it. It used to assert that a
+    // plans/plan_modern.md MOD-730 narrowed this rule and this test with it. It used to assert that a
     // bloom threshold of -1 was stored too, and that is now clamped: a *negative* threshold or
     // intensity is a sign error rather than a look, and the pass would have had to guard against
     // it anyway. What survives -- and is what MOD-22 was really about -- is that values which are

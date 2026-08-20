@@ -5,7 +5,7 @@ to load a compiled effect it shipped as content. It covers what the format bound
 load, inspect, apply and clone an effect, which renderer supports it, and how to read every error
 the path can produce.
 
-For the architectural background and the remaining backend rollout, see [`plan_fx.md`](../plan_fx.md).
+For the architectural background and the remaining backend rollout, see [`plans/plan_fx.md`](../plans/plan_fx.md).
 For the difference from the CNAEXT source-based shader API, see
 [`shader-effect-vs-fx-bytecode.md`](shader-effect-vs-fx-bytecode.md). For fuzzing, see
 [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md).
@@ -24,7 +24,7 @@ The binary is untrusted input. It is bounded at 64 MiB, its reflected object gra
 arithmetic-checked, and every rejection is a specific exception rather than a generic failure.
 
 **Trust boundary.** A coverage-guided fuzz campaign is clean on both FNA3D drivers past the bar
-`plan_fx.md` FX-051 set for it -- over three million executions on OpenGL/GLSL and over two and a
+`plans/plan_fx.md` FX-051 set for it -- over three million executions on OpenGL/GLSL and over two and a
 half million on SDL_GPU/SPIR-V, under AddressSanitizer with asserts fatal, no new crash. Getting
 there fixed forty-one distinct ways untrusted bytecode crashed the process.
 
@@ -202,7 +202,7 @@ pixel and compares it against the texel the requested sampler state selects. Add
 from coordinates outside `[0,1]` with two probes per axis, so `Wrap`, `Clamp` and `Mirror` have
 three distinct signatures; the filter check samples a quarter of the way between two texel centres,
 away from any boundary; `MaxMipLevel` and the LOD bias are checked against a mipmapped texture whose
-levels are different colours (`plan_fx.md` FX-093).
+levels are different colours (`plans/plan_fx.md` FX-093).
 
 `MipMapLevelOfDetailBias` has no OpenGL ES equivalent at all -- `GL_TEXTURE_LOD_BIAS` is a desktop
 GL parameter -- which is why FNA3D's own OpenGL driver skips it under ES too. CNA does not
@@ -212,7 +212,7 @@ backend can represent rather than guessing, so an ES build proves everything els
 that one section.
 
 `AddressW` is carried through the renderer-neutral contract by
-`IGraphicsRenderer::ApplySamplerAddressW` (`plan_fx.md` FX-026). FNA3D and EasyGL apply it; SDL_GPU
+`IGraphicsRenderer::ApplySamplerAddressW` (`plans/plan_fx.md` FX-026). FNA3D and EasyGL apply it; SDL_GPU
 records it and carries it in its sampler-cache identity, but its compiled route resolves 2D textures
 only, so the axis is not observable there yet (FX-092, FX-110). It only matters for volume textures.
 
@@ -273,7 +273,7 @@ vertex-stage texture sampling, for one, which no CNA renderer implements at all;
 is not expected to add it. A **compiled-Effect-specific** limitation is one the renderer does not
 have elsewhere -- a `Texture3D` bound to a compiled sampler, say, which both SDL_GPU and EasyGL
 sample perfectly well in their ordinary draw families. The second kind is a debt of this feature and
-carries a task ID. `plan_fx.md` section 10.5 is the full table.
+carries a task ID. `plans/plan_fx.md` section 10.5 is the full table.
 
 Vulkan joined the supported set on 2026-08-18 (`CNA_VULKAN_COMPILED_EFFECTS=ON`). It is the one
 backend with no MojoShader-provided adapter -- there is no `mojoshader_vulkan.c` -- so the
@@ -287,9 +287,9 @@ vertex input is refused renderer-wide, for stock draws equally.
 DirectX 11, DirectX 9 and Metal are the planned next waves; each becomes true only after it passes
 the same shared suite **on hardware that can execute it**. None of the three has been written, and
 that is deliberate rather than pending: writing a backend that cannot be run would put a capability
-behind unexecuted code, which is the one thing this page's own rule forbids. `plan_fx.md` carries a
+behind unexecuted code, which is the one thing this page's own rule forbids. `plans/plan_fx.md` carries a
 concrete requirements note for each. Fixed-function, 2D-only and CPU renderers stay intentionally
-unsupported. `plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every
+unsupported. `plans/plan_fx.md` Phase G tracks the rollout, and section 10.3 there classifies every
 renderer identity.
 
 ### What "passes the shared contract" means
@@ -343,10 +343,10 @@ a second copy of the list.
 | `Shader parameter not found in effect.` | `std::runtime_error` | A shader's constant table names a parameter the effect does not declare |
 | `unsupported render state <n>` / `unsupported sampler state <n>` | `std::runtime_error` | A token CNA does not translate; report it with the effect that produced it |
 | `Border and MirrorOnce sampler addressing are not representable...` | `std::runtime_error` | Addressing mode outside XNA 4.0 |
-| `...binds a Texture3D/TextureCube to pixel sampler slot N. This renderer samples that kind elsewhere...` | `NotSupportedException` | A compiled-Effect-specific limitation on SDL_GPU and EasyGL (`plan_fx.md` FX-110) |
+| `...binds a Texture3D/TextureCube to pixel sampler slot N. This renderer samples that kind elsewhere...` | `NotSupportedException` | A compiled-Effect-specific limitation on SDL_GPU and EasyGL (`plans/plan_fx.md` FX-110) |
 | `...samples slot N, but no texture is bound there.` | `NotSupportedException` | The effect's texture parameter was never assigned, and nothing was selected on `GraphicsDevice.Textures` |
-| `Vertex-stage texture sampling is not implemented in this renderer at all, by any draw route.` | `NotSupportedException` | Renderer-wide, not FX-specific (`plan_fx.md` FX-109) |
-| `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: MojoShader's context and its linked programs died with the old GL context; recreate the `Effect` from its bytecode (`plan_fx.md` FX-107) |
+| `Vertex-stage texture sampling is not implemented in this renderer at all, by any draw route.` | `NotSupportedException` | Renderer-wide, not FX-specific (`plans/plan_fx.md` FX-109) |
+| `...cannot run after the GL context was recreated...` | `NotSupportedException` | EasyGL only: MojoShader's context and its linked programs died with the old GL context; recreate the `Effect` from its bytecode (`plans/plan_fx.md` FX-107) |
 | `...cannot sample the RenderTarget2D it is drawing into.` | `NotSupportedException` | EasyGL only: reading and writing one target in a single draw, which is undefined in XNA too |
 | `...cannot sample a RenderTarget2D on the OpenGL ES 2.0 / WebGL 1 profiles...` | `NotSupportedException` | Correcting a render target's row order needs `glBlitFramebuffer`, which those profiles do not have |
 | Any of the above while loading an asset | `ContentLoadException` | Same cause, wrapped with the asset name |
@@ -426,5 +426,5 @@ What the numbers say:
 **Decision on the immutable artifact cache:** not justified. The expensive step is native shader
 translation during construction, and `Clone()` already reuses it without sharing any mutable value,
 texture, selected technique or pass state. A bytecode-keyed cache would add cross-instance sharing
-risk for a case the existing API already covers. `plan_fx.md` FX-053 records this as decided, to be
+risk for a case the existing API already covers. `plans/plan_fx.md` FX-053 records this as decided, to be
 revisited only if a real port shows repeated construction of identical bytecode in a hot path.

@@ -39,7 +39,7 @@ namespace
         return "?";
     }
 
-    // Post-plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
+    // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
     // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
     // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
     // (every character rendered as an identical rectangle) by an independent audit.
@@ -132,7 +132,7 @@ void BoundaryDemo::Initialize()
                 "skeleton for actual rendering/animation lives entirely in the separate "
                 "SkinnedModelEXT EXT path, not in AvatarRenderer's own faithful-XNA surface. ===\n");
 
-    // Task 8 (plan_net.md Phase 8): F1 help overlay plumbing - see this class's own
+    // Task 8 (plans/plan_net.md Phase 8): F1 help overlay plumbing - see this class's own
     // AvatarDemo-mirroring comment in BoundaryDemo.hpp.
     auto& device = getGraphicsDeviceProperty();
     spriteBatch_ = std::make_unique<SpriteBatch>(device);
@@ -195,7 +195,7 @@ void BoundaryDemo::Draw(const GameTime& /*gameTime*/)
         spriteBatch_->End();
     }
 
-    // Task 8.5 (plan_net.md Phase 8): same framesBeforeExit_==1 timing as demo_avatar's own
+    // Task 8.5 (plans/plan_net.md Phase 8): same framesBeforeExit_==1 timing as demo_avatar's own
     // smokeFramesLeft_==1 convention - Game::Exit() suppresses Draw() on the frame Update()
     // actually calls it.
     if (framesBeforeExit_ == 1 && !screenshotPathEXT_.empty())

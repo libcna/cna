@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX3 (DX-12-state): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/
+// plans/plan_dx.md Phase DIRECTX3 (DX-12-state): XNA Blend/BlendFunction/CompareFunction/CullMode/FillMode/
 // TextureAddressMode/TextureFilter -> D3D11_* equivalents, shared between D3D11 and D3D12 (design
 // decision 4).
 //

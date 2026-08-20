@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-8: pixel oracle for the FNA3D renderer's 3D path. Unlike every other CNA
+// plans/plan_fna3d.md FNA3D-8: pixel oracle for the FNA3D renderer's 3D path. Unlike every other CNA
 // renderer, this one does not translate BasicEffect into shaders of its own -- it executes XNA's
 // actual compiled BasicEffect through MojoShader, selecting the shader variant with the same
 // integer ShaderIndex arithmetic XNA's own BasicEffect.OnApply() computes. These checks therefore

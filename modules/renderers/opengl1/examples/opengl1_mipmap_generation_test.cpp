@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: automatic mipmap generation (plan_opengl1.md phase 6).
+// OPENGL1 renderer: automatic mipmap generation (plans/plan_opengl1.md phase 6).
 //
 // OpenGL1TextureRenderer regenerates every mip level whenever level 0 is (re)uploaded and the
 // texture was created with mipMap=true, via (in priority order) an explicit glGenerateMipmap()

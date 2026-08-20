@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-25: real-device proof that MSAA on the Diligent renderer performs a
+// plans/plan_diligent.md DILIGENT-25: real-device proof that MSAA on the Diligent renderer performs a
 // genuine multisample resolve, both for the back buffer and for RenderTarget2D, through the
 // public XNA API only.
 //

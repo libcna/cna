@@ -310,7 +310,7 @@ the network. The resulting constraints for CNA are:
   are conceptually usable. Beware of `D3DCompile`, though—`modules/renderers/directx11` currently
   compiles HLSL **at runtime**; console environments generally do not permit runtime shader
   compilation, so a precompiled blob path would be needed (related to
-  `docs/fx-bytecode-support-plan.md`). The Vulkan renderer already handles this correctly—it uses
+  `docs/fx-bytecode-support-plans/plan.md`). The Vulkan renderer already handles this correctly—it uses
   the pregenerated `spirv_shaders.hpp`, not runtime compilation.
 - The public `microsoft/GDK` repository on GitHub is the GDK **for Windows/PC**; its console
   extensions (GDKX) are not public.
@@ -461,12 +461,12 @@ This is the more interesting option for CNA:
    .NET runtime (Mono AOT, now NativeAOT) to consoles—platforms that prohibit JIT. CNA is native
    C++; no managed runtime needs to be ported. That entire category of work disappears.
 3. **CNA's graphics path already exists.** FNA uses SDL on consoles; CNA has the `SDL_GPU` renderer
-   (`plan_sdlgpu.md`: 2D and 3D, the `BasicEffect` family, `AlphaTest`/`DualTexture`/
+   (`plans/plan_sdlgpu.md`: 2D and 3D, the `BasicEffect` family, `AlphaTest`/`DualTexture`/
    `EnvironmentMap`/`SkinnedEffect`, pipeline cache)—in other words, the same architecture. The
    console backend for `SDL_GPU` is part of SDL's NDA port, not something CNA would write.
    The only caveat: `ShaderEffect` in this renderer currently compiles GLSL→SPIR-V **at runtime**
    (linked `libshaderc`), which consoles do not permit—the console profile would need a
-   precompiled path (again, `docs/fx-bytecode-support-plan.md`).
+   precompiled path (again, `docs/fx-bytecode-support-plans/plan.md`).
 4. **The remaining difference is dependency discipline.** FNA needs SDL + a runtime on consoles.
    CNA currently also needs `sharp-runtime` and, depending on the profile, FFmpeg, ENet,
    GoogleTest, Skia, Blend2D, and so on. The console profile from Section 3 is therefore a

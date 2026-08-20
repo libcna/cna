@@ -174,7 +174,7 @@ TEST_F(EnvironmentMapEffectDefaultsTest, EnvironmentMapDefaultsToNull)
     EXPECT_EQ(fx.getEnvironmentMapProperty(), nullptr);
 }
 
-// plan_xnb.md XNB-32: SetOwnedTexture()/SetOwnedEnvironmentMap() -- content-pipeline-loaded
+// plans/plan_xnb.md XNB-32: SetOwnedTexture()/SetOwnedEnvironmentMap() -- content-pipeline-loaded
 // effects need to keep their own texture references alive (matching real XNA's GC-tracked
 // Effect.Texture), unlike setTextureProperty(Texture2D*)/setEnvironmentMapProperty(TextureCube*)'s
 // non-owning pointers used by Model's shared texture pool.

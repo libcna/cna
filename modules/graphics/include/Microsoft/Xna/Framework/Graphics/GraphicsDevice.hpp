@@ -421,7 +421,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Draws with the counts and offsets read out of a GPU buffer rather than passed in.
          *
-         * plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
+         * plans/plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
          * @p argumentByteOffset, written by whatever produced it -- usually a compute shader, in
          * which case the numbers never reach the CPU at all. That is the point: reading them back
          * to pass them as arguments is a pipeline stall, not merely a copy.
@@ -1004,7 +1004,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Enables or disables depth writes. */
         CNAEXT void SetDepthWriteEnabled(bool enabled);
         /**
-         * @brief Task/plan_dx9.md D9-103 finding: real XNA fixes GraphicsProfile at device
+         * @brief Task/plans/plan_dx9.md D9-103 finding: real XNA fixes GraphicsProfile at device
          * construction (the public GraphicsDevice.GraphicsProfile property is read-only), but
          * CNA's own GraphicsDeviceManager architecture eagerly default-constructs Game's
          * GraphicsDevice_ member (hardcoded GraphicsProfile::Reach) BEFORE GraphicsDeviceManager
@@ -1057,7 +1057,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns which graphics renderer THIS DEVICE is using.
          *
-         * plan_runtimerenderer.md RTR-P7-3. This used to be `constexpr`, returning
+         * plans/plan_runtimerenderer.md RTR-P7-3. This used to be `constexpr`, returning
          * CNA::getCurrentGraphicsRendererType() and ignoring `this` entirely -- correct while a
          * build could contain only one renderer, and wrong the moment it can contain several: it
          * would report the build's default even on a device that resolved to something else.
@@ -1113,7 +1113,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the largest number of compute work groups a dispatch may request.
          *
-         * plan_modern.md `MOD-1505`. Zero on every renderer without compute, which is also what a
+         * plans/plan_modern.md `MOD-1505`. Zero on every renderer without compute, which is also what a
          * renderer that supports it but has not been asked yet reports -- so a caller checks
          * `GraphicsCapability::ComputeShaders` first and reads these to size its dispatch.
          *
@@ -1123,7 +1123,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns whether a `ShaderEffect`'s source text really determines the pixels.
          *
-         * plan_modern.md `MOD-1699`. `GraphicsCapability::CustomEffects` says a renderer accepts a
+         * plans/plan_modern.md `MOD-1699`. `GraphicsCapability::CustomEffects` says a renderer accepts a
          * custom effect; this says the shader you wrote is what runs. They differ on real
          * renderers: SOFTWARE and HEADLESS accept any source and render with their own fixed path,
          * and Vulkan takes SPIR-V bytecode rather than GLSL text. A pass that assumes the first
@@ -1136,7 +1136,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns whether this renderer's lit shaders really sample the shadow state.
          *
-         * plan_modern.md `MOD-1699`. An effect accepts `IShadowReceiverEXT`'s state on every
+         * plans/plan_modern.md `MOD-1699`. An effect accepts `IShadowReceiverEXT`'s state on every
          * renderer -- that is what keeps a shadow-configured draw working where there is no shadow
          * shader -- but only some renderers *use* it. This is the difference, asked of the
          * renderer rather than inferred from a frame that came out unshadowed.
@@ -1148,7 +1148,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns whether this renderer's PBR shader honours an `ImageBasedLightEXT`.
          *
-         * plan_modern.md `MOD-1699`. Same distinction as @ref SupportsShadowSamplingEXT: the
+         * plans/plan_modern.md `MOD-1699`. Same distinction as @ref SupportsShadowSamplingEXT: the
          * bundle is carried everywhere and shaded with in some places.
          *
          * @return True when a bound environment will actually light the surface.
@@ -1158,7 +1158,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the colour space the swap chain is presenting in.
          *
-         * plan_modern.md `MOD-2092`. `Srgb` on every CNA renderer today; see
+         * plans/plan_modern.md `MOD-2092`. `Srgb` on every CNA renderer today; see
          * @ref SetDisplayColorSpaceEXT for why that is an answer rather than a gap.
          *
          * @return The current display colour space.
@@ -1293,7 +1293,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // GraphicsDevice). The platform outlives both the window and this device.
         CNA::Platform::IPlatform* platform_;
         std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
-        /// MERGE (plan_runtimerenderer.md RTR-P5-12 x plan_platform.md PLAT-8): the platform wrapper
+        /// MERGE (plans/plan_runtimerenderer.md RTR-P5-12 x plans/plan_platform.md PLAT-8): the platform wrapper
         /// already records whether destroying it destroys the underlying window, so this is no longer
         /// a lifetime flag. It survives as a policy flag: a caller-supplied window must not be torn
         /// down and rebuilt for a fallback candidate needing a different window kind, so the device
@@ -1310,7 +1310,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // raster renderer's final destructor calls.
         std::unique_ptr<CNA::Platform::IPlatformSurfacePresenter> surfacePresenter_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
-        /// plan_runtimerenderer.md RTR-P5: the descriptor this device actually resolved to, which
+        /// plans/plan_runtimerenderer.md RTR-P5: the descriptor this device actually resolved to, which
         /// may differ from the selected one when a fallback chain substituted another renderer.
         /// Pinned at construction so a later reconstruction (Reset, multisample change) rebuilds
         /// the SAME renderer rather than re-running resolution against a changed environment.
@@ -1342,7 +1342,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsProfile graphicsProfile_;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
-        /// plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a renderer via
+        /// plans/plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a renderer via
         /// GraphicsRendererCreateArgs::deviceEventCallback (RendererDeviceEvent::Lost -> Lost,
         /// Resetting -> NotReset, Reset -> Normal). Every renderer except D3D9 never calls that
         /// callback, so this stays Normal there, matching the pre-existing hardcoded behavior.
@@ -1473,7 +1473,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Resolves which renderer this device uses, honouring any configured fallback chain.
          *
-         * plan_runtimerenderer.md design decisions 6 and 7. Creates the window and the renderer
+         * plans/plan_runtimerenderer.md design decisions 6 and 7. Creates the window and the renderer
          * together, because the window's flags depend on which renderer is being attempted: a
          * candidate that needs a different window kind cannot reuse the previous candidate's
          * window. Runs once, from the constructor. Reconstruction paths use createRenderer()

@@ -22,7 +22,7 @@ namespace
     }
 }
 
-// plan_media.md MEDIA-64: real implementation backed by MediaLibraryIndex artist grouping.
+// plans/plan_media.md MEDIA-64: real implementation backed by MediaLibraryIndex artist grouping.
 TEST_F(MediaLibraryTestFixture, ArtistsContainsEveryFixtureArtist)
 {
     EXPECT_GE(library->getArtistsProperty()->getCountProperty(), 4); // corpus grows; presence below is the real contract
@@ -30,7 +30,7 @@ TEST_F(MediaLibraryTestFixture, ArtistsContainsEveryFixtureArtist)
     EXPECT_NE(FindArtist(library->getArtistsProperty(), "Artist Two"), nullptr);
 }
 
-// plan_media.md MEDIA-119: the case-variant-artist-tag regression itself now lives in its own
+// plans/plan_media.md MEDIA-119: the case-variant-artist-tag regression itself now lives in its own
 // dedicated, isolated file -- see ArtistGenreNormalizationRegressionTests.cpp.
 
 TEST_F(MediaLibraryTestFixture, ArtistOneHasTwoAlbums)
@@ -76,11 +76,11 @@ TEST_F(MediaLibraryTestFixture, ArtistCollectionIndexerThrowsOutOfRange)
                  System::ArgumentOutOfRangeException);
 }
 
-// plan_media.md MEDIA-101: the in-bounds case, not just the out-of-range case above.
+// plans/plan_media.md MEDIA-101: the in-bounds case, not just the out-of-range case above.
 TEST_F(MediaLibraryTestFixture, ArtistCollectionIndexerReturnsArtistsInBounds)
 {
     // Derived from the live Count rather than hardcoded: the shared fixture corpus grows as
-    // new formats/features get coverage (plan_media.md MEDIA-199/206), and an unrelated
+    // new formats/features get coverage (plans/plan_media.md MEDIA-199/206), and an unrelated
     // indexer test should not break every time it does.
     auto* artists = library->getArtistsProperty();
     const auto count = artists->getCountProperty();
@@ -92,7 +92,7 @@ TEST_F(MediaLibraryTestFixture, ArtistCollectionIndexerReturnsArtistsInBounds)
     EXPECT_THROW((void)(*artists)[count], System::ArgumentOutOfRangeException);
 }
 
-// plan_media.md MEDIA-100: Artist::IsDisposed, not exercised anywhere else in this file.
+// plans/plan_media.md MEDIA-100: Artist::IsDisposed, not exercised anywhere else in this file.
 TEST_F(MediaLibraryTestFixture, ArtistDisposeFlipsIsDisposed)
 {
     Artist* artistOne = FindArtist(library->getArtistsProperty(), "Artist One");
@@ -104,7 +104,7 @@ TEST_F(MediaLibraryTestFixture, ArtistDisposeFlipsIsDisposed)
     EXPECT_TRUE(artistOne->getIsDisposedProperty());
 }
 
-// plan_media.md MEDIA-101: ArtistCollection's own Dispose()/IsDisposed.
+// plans/plan_media.md MEDIA-101: ArtistCollection's own Dispose()/IsDisposed.
 TEST_F(MediaLibraryTestFixture, ArtistCollectionDisposeFlipsIsDisposed)
 {
     auto* artists = library->getArtistsProperty();
@@ -115,7 +115,7 @@ TEST_F(MediaLibraryTestFixture, ArtistCollectionDisposeFlipsIsDisposed)
     EXPECT_TRUE(artists->getIsDisposedProperty());
 }
 
-// plan_media.md MEDIA-121 (found by external code review): ArtistCollection's own GetTypeName().
+// plans/plan_media.md MEDIA-121 (found by external code review): ArtistCollection's own GetTypeName().
 TEST_F(MediaLibraryTestFixture, ArtistCollectionGetTypeNameIsFullyQualified)
 {
     EXPECT_EQ(library->getArtistsProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.ArtistCollection");

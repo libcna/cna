@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-16: end-to-end lifecycle proof for the sokol_gfx graphics renderer -- a real
+// plans/plan_sokol.md SOKOL-16: end-to-end lifecycle proof for the sokol_gfx graphics renderer -- a real
 // SDL window, a real GPU context, a real sg_setup(), and a 60-frame Clear()+Present() loop, with
 // the cleared colour read back off the real back buffer rather than merely "did not throw".
 //

@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 
-// plan_metal.md METAL-19: same reasoning as MetalCompareFunction.hpp -- switches on the real
+// plans/plan_metal.md METAL-19: same reasoning as MetalCompareFunction.hpp -- switches on the real
 // `Blend` enumerator names instead of raw int literals. Mirrors EasyGL's ToEasyGLBlendFactor /
 // Vulkan's ToVkBlendFactor exactly, including their identical no-RGB/Alpha-channel-distinction
 // choice for BlendFactor/InverseBlendFactor -- SourceColor/DestinationColor/BlendFactor as an

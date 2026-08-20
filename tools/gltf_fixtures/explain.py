@@ -37,7 +37,7 @@ def _decode_field(data: bytes, offset: int, size: int) -> list[float] | list[int
     """Decodes one field of a vertex, given its byte size.
 
     Size 4 is CNA's packed byte quadruple (``Color``, ``BlendIndices``); anything else is a run of
-    32-bit floats. That is the whole vertex ABI (plan_gltf.md §2.3) -- no field uses any other form.
+    32-bit floats. That is the whole vertex ABI (plans/plan_gltf.md §2.3) -- no field uses any other form.
     """
     chunk = data[offset:offset + size]
     if len(chunk) < size:

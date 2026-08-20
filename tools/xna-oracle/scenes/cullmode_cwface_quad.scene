@@ -1,4 +1,4 @@
-# plan_dx9.md D9-21 scene corpus: cullmode_cwface_quad
+# plans/plan_dx9.md D9-21 scene corpus: cullmode_cwface_quad
 # Same triangle as cullmode_none_quad.scene/cullmode_ccwface_quad.scene (negative NDC signed area,
 # the "CW"-labeled winding per docs/xna_culling_compatibility_audit.md's real-XNA-4.0-hardware-
 # verified table). Explicitly requests CullMode.CullClockwiseFace -- the OPPOSITE of XNA's default,

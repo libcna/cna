@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
-// plan_metal.md: real bug found 2026-07-20 in the original metalMinFilter()/metalMagFilter()/
+// plans/plan_metal.md: real bug found 2026-07-20 in the original metalMinFilter()/metalMagFilter()/
 // metalMipFilter() case-set membership (three independently-maintained {..} sets, easy to
 // transcribe wrong) -- 3 of the 9 real XNA TextureFilter values (3/6/7) produced the wrong
 // min-or-mag filter. Reimplemented as a single per-filter switch that spells out each filter's
@@ -14,7 +14,7 @@
 // unit-tested on this Linux machine; only the final `MTLSamplerMinMagFilter`/`MTLSamplerMipFilter`
 // enum translation stays in MetalRenderer.mm.
 //
-// plan_metal.md METAL-19: the switch below dispatches on the real `TextureFilter` enumerator
+// plans/plan_metal.md METAL-19: the switch below dispatches on the real `TextureFilter` enumerator
 // names (cast once, at the top, from the plain int the .mm call sites still pass), not on magic
 // integer literals -- unlike the version this replaced, which switched on raw case 1/3/4/5/6/7/8
 // values with only a comment recording the assumed ordinals. A future reordering of

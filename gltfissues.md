@@ -2,7 +2,7 @@
 
 Analysis date: 2026-07-28
 
-> **HISTORICAL — superseded as a working document by `plan_gltf.md` (`GLTF-450`).**
+> **HISTORICAL — superseded as a working document by `plans/plan_gltf.md` (`GLTF-450`).**
 >
 > Every finding below was **reproduced, made executable, and fixed** by the glTF correctness
 > campaign, which began from this analysis. The document is kept unrewritten as the evidence of what
@@ -19,7 +19,7 @@ Analysis date: 2026-07-28
 > | §5's further losses — rigid animation, samplers, UV sets, variants, colour space, culling, camera | `GLTF-294`, `GLTF-202`/`GLTF-203`, `GLTF-181`/`GLTF-188`, `GLTF-341`, `GLTF-209`–`GLTF-213`, `GLTF-231`, `GLTF-317`–`GLTF-322` | Mixed by design, and each one is now either fixed or a **named** limitation with the report field that says so. `KHR_materials_variants` is fully imported with model-wide CNAEXT selection; culling is carried and not applied. |
 > | "Missing Regression Tests" | the whole campaign | The corpus is 140 generated assets and a ten-rung oracle ladder (`docs/gltf-conformance.md`). |
 >
-> The current state of any of the above is `plan_gltf.md` (the row), `docs/gltf-limitations.md`
+> The current state of any of the above is `plans/plan_gltf.md` (the row), `docs/gltf-limitations.md`
 > (what is still lost, and where it is reported) and `known_bugs.md` (the defect ledger). If this
 > document and one of those ever disagree, those are right and this one is 2026-07-28.
 

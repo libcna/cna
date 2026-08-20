@@ -4,7 +4,7 @@
 - Source file: `docs/rasterizerstate-support.md` (145 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 38, `plan_graphics.md` Tasks 321-330)
+- File type: Markdown documentation (closes Phase 38, `plans/plan_graphics.md` Tasks 321-330)
 - Cross-references: `docs/sampler-state-support.md`/`docs/depthstencilstate-support.md` (referenced,
   not independently re-audited by this pass); `xna-graphics` shard audit (no contradicting finding)
 
@@ -42,7 +42,7 @@ contradiction).
 
 ## Cross-File Observations
 Consistent with the sibling `docs/rendertarget-support.md` (audited earlier in this pass) in
-methodology and honesty style — both documents from the same `plan_graphics.md` phase sequence
+methodology and honesty style — both documents from the same `plans/plan_graphics.md` phase sequence
 (Phases 38/39) share the same "🔍 not verified this phase" convention and the same per-backend
 granularity, suggesting a consistent, disciplined documentation practice across this entire phase
 range rather than a one-off.

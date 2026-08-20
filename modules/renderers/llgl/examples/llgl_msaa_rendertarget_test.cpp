@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-26 follow-up: MSAA render targets -- a real antialiased edge resolved into a
+// plans/plan_llgl.md LLGL-26 follow-up: MSAA render targets -- a real antialiased edge resolved into a
 // RenderTarget2D's own colour texture, not just a bookkeeping check. Mirrors
 // examples/llgl_msaa_test.cpp's own back-buffer technique and checks, applied to
 // CreateRenderTarget2D's own multiSampleCount parameter instead of the swap chain's.

@@ -37,7 +37,7 @@ namespace CNA::Graphics {
      * into a *slice atlas*: a 2D render target holding the volume's depth slices side by side, the
      * same layout `ColorGradePass` reads a 3D lookup table from. CNA has a `Texture3D` a shader can
      * sample but no render target that writes into one, and filling a volume with compute needs
-     * image stores that GL ES refuses for CNA's textures (`plan_modern.md` `MOD-1514`). An atlas
+     * image stores that GL ES refuses for CNA's textures (`plans/plan_modern.md` `MOD-1514`). An atlas
      * needs neither: one fullscreen draw fills every slice, because each atlas pixel knows which
      * froxel it is and can march to it on its own.
      *

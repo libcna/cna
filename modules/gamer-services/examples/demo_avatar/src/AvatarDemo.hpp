@@ -51,20 +51,20 @@ public:
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
     /** @brief Fixes the orbiting camera at a specific yaw (radians) instead of live Left/Right
-     *  control - Task 7.1 (plan_net.md Phase 7): reproducible front/side/back baseline captures. */
+     *  control - Task 7.1 (plans/plan_net.md Phase 7): reproducible front/side/back baseline captures. */
     void SetFixedCameraYawEXT(float yawRadians) { cameraYaw_ = yawRadians; fixedCameraYawEXT_ = true; }
 
     /** @brief Saves a PNG of the backbuffer on the final smoke frame instead of just exiting -
-     *  Task 7.1 (plan_net.md Phase 7). No effect unless SetSmokeFrames was also called. */
+     *  Task 7.1 (plans/plan_net.md Phase 7). No effect unless SetSmokeFrames was also called. */
     void SetScreenshotPathEXT(std::string path) { screenshotPathEXT_ = std::move(path); }
 
     /** @brief Forces the F1 help overlay's initial visibility instead of the default hidden -
-     *  Task 8.5 (plan_net.md Phase 8): lets a non-interactive smoke/screenshot run verify the
+     *  Task 8.5 (plans/plan_net.md Phase 8): lets a non-interactive smoke/screenshot run verify the
      *  overlay actually renders without needing simulated keyboard input. */
     void SetShowHelpForTestingEXT(bool visible) { showHelpEXT_ = visible; }
 
     /** @brief Selects a starting clip by name instead of the default clipNames_[0] - Task 7.1
-     *  (plan_net.md Phase 7): lets baseline/after captures target a bent-limb pose (e.g. "Wave"),
+     *  (plans/plan_net.md Phase 7): lets baseline/after captures target a bent-limb pose (e.g. "Wave"),
      *  not just the default T-pose, to reveal joint deformation. No-op if name isn't found. */
     void SetInitialClipEXT(const std::string& name)
     {
@@ -106,7 +106,7 @@ private:
     int smokeFramesLeft_ = -1;
     std::string screenshotPathEXT_;
 
-    // Task 8.1-8.3 (plan_net.md Phase 8): F1 help overlay - the same SpriteBatch/1x1-white-
+    // Task 8.1-8.3 (plans/plan_net.md Phase 8): F1 help overlay - the same SpriteBatch/1x1-white-
     // Texture2D/runtime-built-SpriteFont pattern already duplicated across 11+ other demos (see
     // demo_gamer_roster_hud/src/RosterGame.cpp's own MakeSimpleFont for the reference copy this
     // was copied from); no shared examples/common/ header exists for this, and this plan

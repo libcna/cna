@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_common_test.cpp` (149 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note below)
 - Subsystem: `examples-tests-d3d9` shard — pure-function format/state/vertex-layout mapping-table
-  checks (`plan_dx9.md` D9-20/D9-21/D9-22).
+  checks (`plans/plan_dx9.md` D9-20/D9-21/D9-22).
 - File type: standalone `main()`-based executable, no `Game`/device/window — CTest-registered as
   `D3D9_Common` (`cna_d3d9_test(cna_test_d3d9_common examples/d3d9_common_test.cpp)`,
   `cmake/Tests/D3D9Tests.cmake:28-35`), gated behind `CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND

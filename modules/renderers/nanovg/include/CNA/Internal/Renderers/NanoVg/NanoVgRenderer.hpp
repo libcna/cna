@@ -57,7 +57,7 @@ namespace CNA::Internal::Renderers::NanoVg
      * @brief NanoVG (memononen/nanovg, GL2 backend) vector-graphics renderer, on top of a real
      * desktop OpenGL context this renderer creates and owns itself (no EasyGL involved).
      *
-     * See docs/nanovg-renderer.md for the full capability boundary and plan_nanovg.md for the
+     * See docs/nanovg-renderer.md for the full capability boundary and plans/plan_nanovg.md for the
      * design decisions. In short: 2D-only (NanoVG has no 3D pipeline at all -- every inherently-3D
      * pure virtual throws by default, matching OpenVG/Canvas/Skia's established pattern), real
      * Clear/Present/textures/SpriteBatch through genuine `nvg*` NanoVG entry points, no render

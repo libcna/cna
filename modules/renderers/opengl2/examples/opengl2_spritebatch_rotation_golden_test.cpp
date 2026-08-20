@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_spritebatch_rotation_golden_test.cpp's own SpriteBatch rotation-around-origin
 // scene verbatim: a 100x100 texture (top-left 20x20 = Red marker, rest = Blue) drawn at
 // destinationRectangle=(200,150,100,100) with origin=(100,100) (the source's own bottom-right

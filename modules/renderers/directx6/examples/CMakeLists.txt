@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx6.md: real DirectX 6 renderer -- same DirectDraw v4 + Direct3D v3 interfaces as DIRECTX5, with
+# plans/plan_dx6.md: real DirectX 6 renderer -- same DirectDraw v4 + Direct3D v3 interfaces as DIRECTX5, with
 # real stencil buffer operations added; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -30,7 +30,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
         endif()
     endmacro()
 
-    # plan_dx6.md design decision 11: when cross-compiled from Linux (DIRECTX6 is Windows-only, design
+    # plans/plan_dx6.md design decision 11: when cross-compiled from Linux (DIRECTX6 is Windows-only, design
     # decision 1), CTest itself still runs on the Linux host, so the test COMMAND wraps the real
     # .exe with scripts/run-wine-directx6.sh -- a real, native Windows/MSVC configure needs no Wine
     # wrapper at all and runs the .exe directly, mirroring DirectX1Tests.cmake's own
@@ -43,7 +43,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
         endif()
     endmacro()
 
-    # plan_dx6.md design decision 12: a real, automated proof this renderer never quietly reaches
+    # plans/plan_dx6.md design decision 12: a real, automated proof this renderer never quietly reaches
     # for the proven-broken execute-buffer Direct3D path (or the old D3DVT_*-enum vertex-type
     # submission) instead of the working IDirect3DDevice3::DrawPrimitive + D3DFVF_TLVERTEX one --
     # pure text check via scripts/check-directx6-execute-buffer-discipline.sh, no compiled binary, no
@@ -179,7 +179,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
     cna_register_renderer_test(NAME DirectX6_WireframeAniso COMMAND ${_directx6_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DIRECTX6")
 
-    # Phase R5/R6 (plan_dx6.md): real stencil buffer write-then-test through the full XNA public
+    # Phase R5/R6 (plans/plan_dx6.md): real stencil buffer write-then-test through the full XNA public
     # API (GraphicsDevice.DepthStencilState) -- DIRECTX6's primary new deliverable over DIRECTX5, mirroring
     # the DX6-0 spike's own Test B/C shape (write REPLACE on half the target, then test EQUAL
     # against the full target and confirm the untouched half is correctly rejected).

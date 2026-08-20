@@ -80,7 +80,7 @@ corresponding SDL_GPU blend factor; the `default` (ordinal 0, `One`) correctly m
   `COUNTER_CLOCKWISE`, lines 123-131, 251-252) against this file's own comment (lines 129-136)
   documenting the CW-wound quad convention this scene relies on (no camera-induced winding flip,
   unlike `sdlgpu_3d_test.cpp`'s LookAt+Orthographic camera). Cross-checked this mapping's rationale
-  against `plan_sdlgpu.md`'s SDLGPU-20 row, which confirms it deliberately **mirrors this project's
+  against `plans/plan_sdlgpu.md`'s SDLGPU-20 row, which confirms it deliberately **mirrors this project's
   own EasyGL backend's hardware-validated cull convention**, not Vulkan's own (documented,
   Task-870) front/back-swapped convention — an intentional, cited divergence between two SdlGpu
   sibling backends' internal tables, not an inconsistency, since SDL_GPU's 3D shaders (like
@@ -167,7 +167,7 @@ checklist's Testing section calls for.
 
 ## Cross-File Observations
 
-- `plan_sdlgpu.md`'s SDLGPU-19 row (secondary context per D-3) confirms Checks G/H's own claimed
+- `plans/plan_sdlgpu.md`'s SDLGPU-19 row (secondary context per D-3) confirms Checks G/H's own claimed
   regression-worthiness was empirically git-stash-verified: reverting `FillDepthStencilState`'s
   mask-application lines back to hardcoded `0xFF` reproduced the exact predicted G/H failures, and
   restoring the fix returned the full suite to 16/16 — the same row also documents a *second* real
@@ -189,7 +189,7 @@ checklist's Testing section calls for.
 - See F1 — Check A's scene cannot discriminate the specific `ColorSourceBlend=SourceAlpha` XNA
   behavior from a naive `One` implementation.
 - `RasterizerState.DepthBias`/`SlopeScaleDepthBias` are captured by this backend but never applied
-  (per `plan_sdlgpu.md`'s own documented, deliberate scope boundary) — no test in this shard
+  (per `plans/plan_sdlgpu.md`'s own documented, deliberate scope boundary) — no test in this shard
   exercises or documents that gap at the test level; not a defect in this file, but worth noting
   since this is the file that would most naturally host such a check.
 
@@ -205,7 +205,7 @@ checklist's Testing section calls for.
   both necessary and correctly satisfied — a genuinely subtle piece of test design that holds up
   under scrutiny.
 - `ToCullMode`'s divergence from the sibling Vulkan backend's own table is explicitly documented
-  in both the production code's own comment and `plan_sdlgpu.md`, and was independently confirmed
+  in both the production code's own comment and `plans/plan_sdlgpu.md`, and was independently confirmed
   to still produce matching observable behavior across the two backends for identical input
   geometry — not an unexplained inconsistency.
 

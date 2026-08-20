@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2160, MOD-2162: drawing wireframe shapes, and the two depth modes.
+// plans/plan_modern.md MOD-2160, MOD-2162: drawing wireframe shapes, and the two depth modes.
 //
 // Every frustum, probe grid, cluster slice and light bound built in Phase 20 was verified by
 // arithmetic, because nothing in this layer could draw one. These tests check the geometry the

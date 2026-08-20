@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-35/IGL-55: EnvironmentMapEffect pixel conformance -- the first TextureCube
+// plans/plan_igl.md IGL-35/IGL-55: EnvironmentMapEffect pixel conformance -- the first TextureCube
 // exercise for this renderer family.
 //
 // EnvironmentMapAmount=1 makes the shader's `mix(baseColor, envColor, amount)` collapse to plain

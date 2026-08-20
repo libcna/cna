@@ -7,7 +7,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_pixijs.md PIXIJS-30/Design decision 8: synchronous, buffer-backed PIXI.Texture upload --
+// plans/plan_pixijs.md PIXIJS-30/Design decision 8: synchronous, buffer-backed PIXI.Texture upload --
 // PIXI.BufferResource wraps a plain typed array directly as the GPU texture source, avoiding the
 // async Image/ImageBitmap decode path PixiJS's own Texture.from() otherwise uses. Registered by
 // integer id in Module['cnaPixi'].textures -- PixiJsSpriteBatchRenderer's flush resolves the
@@ -48,7 +48,7 @@ EM_JS(int, CNA_PixiJs_CreateTextureWithPixels, (int id, int width, int height, c
     }
 });
 
-// plan_pixijs.md PIXIJS-31: full level-0 re-upload -- mutate the same backing buffer in place and
+// plans/plan_pixijs.md PIXIJS-31: full level-0 re-upload -- mutate the same backing buffer in place and
 // call baseTexture.update(), PixiJS's own synchronous "re-upload this resource to the GPU" call.
 EM_JS(int, CNA_PixiJs_UpdatePixels, (int id, int width, int height, const uint8_t* rgba), {
     const state = Module['cnaPixi'];
@@ -134,7 +134,7 @@ namespace CNA::Internal::Renderers::PixiJs
         if (level != 0)
             throw std::runtime_error(
                 "PixiJS does not support custom mip-level texture uploads (level " +
-                std::to_string(level) + ") -- plan_pixijs.md PIXIJS-31: PIXI.BufferResource and "
+                std::to_string(level) + ") -- plans/plan_pixijs.md PIXIJS-31: PIXI.BufferResource and "
                 "PIXI.BaseTexture expose no per-level CPU upload API at all; mipmaps are "
                 "GPU-auto-generated from level 0 only. Use Texture2D::SetData(level=0, ...) only.");
         (void)levelW; (void)levelH;

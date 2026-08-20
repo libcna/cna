@@ -41,7 +41,7 @@ namespace CNA::Graphics {
     /**
      * @brief What `materialFromGltfEXT` needs of an imported glTF material.
      *
-     * plan_modern.md `MOD-1310`. The bridge is expressed against this concept rather than against
+     * plans/plan_modern.md `MOD-1310`. The bridge is expressed against this concept rather than against
      * `CNA::Internal::GltfImport::MaterialOut` by name, and that is the whole point: the engine
      * layer would otherwise have to link the content module and see `cgltf`'s headers, for a
      * function that only reads fourteen plain values. The importer keeps exposing plain data; this
@@ -71,7 +71,7 @@ namespace CNA::Graphics {
     /**
      * @brief Builds a `PbrMaterial` from one imported glTF material and its resolved textures.
      *
-     * plan_modern.md `MOD-1309`. Nothing in the runtime import path changes: the importer keeps
+     * plans/plan_modern.md `MOD-1309`. Nothing in the runtime import path changes: the importer keeps
      * producing the `PbrEffect` it always did, and this is a second, optional reading of the same
      * decoded record for an application that wants the material as a value it can store, compare
      * or serialize.
@@ -134,7 +134,7 @@ namespace CNA::Graphics {
     /**
      * @brief What `materialExtensionsFromGltfEXT` needs of an imported glTF material.
      *
-     * plan_modern.md `MOD-2076`. Separate from `GltfMaterialSourceEXT` rather than folded into
+     * plans/plan_modern.md `MOD-2076`. Separate from `GltfMaterialSourceEXT` rather than folded into
      * it, so that a caller with an older importer record still satisfies the first concept: the
      * extension fields arrived later, and a single widened concept would have turned that into a
      * compile error at every existing call site.
@@ -186,7 +186,7 @@ namespace CNA::Graphics {
     /**
      * @brief Builds a `PbrMaterialExtensions` from one imported glTF material.
      *
-     * plan_modern.md `MOD-2076`. A file declaring none of these extensions produces a **neutral**
+     * plans/plan_modern.md `MOD-2076`. A file declaring none of these extensions produces a **neutral**
      * set, because the importer carries each extension's own default -- so reading the extensions
      * of a material that has none changes nothing, and a loader can call this unconditionally.
      *

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_gltf.md GLTF-007: the L5 rung of the numerical oracle ladder (plan_gltf.md §7.1) -- a
+// plans/plan_gltf.md GLTF-007: the L5 rung of the numerical oracle ladder (plans/plan_gltf.md §7.1) -- a
 // byte-exact comparison of the vertex and index buffers CNA generates against spec-derived goldens.
 //
 // TEST SCOPE ONLY -- see GltfOracleEXT.hpp for the scope rules. Nothing here is CNA public API,
@@ -20,7 +20,7 @@
 // rather than "byte 40".
 //
 // Buffers are compared as bytes throughout. Nothing here casts a byte pointer to a wider type: a
-// golden read from disk carries no alignment guarantee at all (plan_gltf.md §8.4).
+// golden read from disk carries no alignment guarantee at all (plans/plan_gltf.md §8.4).
 
 #include <cstdint>
 #include <string>
@@ -54,7 +54,7 @@ namespace CnaTest::GltfOracle
     };
 
     /**
-     * @brief The vertex layout a stride implies (plan_gltf.md §2.3, the de-facto CNA/glTF ABI).
+     * @brief The vertex layout a stride implies (plans/plan_gltf.md §2.3, the de-facto CNA/glTF ABI).
      *
      * This is an independent statement of the same table the fixture generator carries, and a test
      * asserts the two agree — a layout table that only exists once cannot catch its own drift.

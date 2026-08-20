@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). PBR + skinning combo (SkinnedPbrEffect) -- HLSL port of
-// EasyGLRenderer::EnsurePbrSkinnedProgram()'s vertex stage (plan_cnj.md CNB-58 follow-up):
+// EasyGLRenderer::EnsurePbrSkinnedProgram()'s vertex stage (plans/plan_cnj.md CNB-58 follow-up):
 // pbr3d.vert.hlsl's own transform, with bone skinning (up to 72 bones, 1/2/4 weights per vertex)
 // applied to Position/Normal/Tangent before the World transform, mirroring skinned3d.vert.hlsl's
 // own skinning math exactly.

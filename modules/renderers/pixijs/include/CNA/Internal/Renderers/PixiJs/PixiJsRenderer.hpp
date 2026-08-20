@@ -92,10 +92,10 @@ namespace CNA::Internal::Renderers::PixiJs
     /**
      * @brief PixiJS (pixijs.com) graphics renderer (Emscripten-only, 2D-only in v1 scope).
      *
-     * See plan_pixijs.md for the full task breakdown and design rationale. As of this class's
+     * See plans/plan_pixijs.md for the full task breakdown and design rationale. As of this class's
      * initial authoring (Phase P1), the inherently-3D-only pure virtuals are wired to the shared
      * ThrowNo3D convention every 2D-only CNA renderer uses; the PixiJS-specific 2D draw path
-     * (Phases P2-P6) is written but --  per plan_pixijs.md's own status block -- has not been run
+     * (Phases P2-P6) is written but --  per plans/plan_pixijs.md's own status block -- has not been run
      * against a real Emscripten toolchain or browser at all yet.
      */
     class PixiJsRenderer final : public IGraphicsRenderer
@@ -159,7 +159,7 @@ namespace CNA::Internal::Renderers::PixiJs
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
-        /// plan_pixijs.md PIXIJS-35: a single PIXI.Application's default render pipeline targets one
+        /// plans/plan_pixijs.md PIXIJS-35: a single PIXI.Application's default render pipeline targets one
         /// RenderTexture at a time in this renderer's v1 scope -- throws for count > 1, same
         /// conclusion CANVAS-26/HTML_DOM reached for their own single-target render paths.
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
@@ -199,10 +199,10 @@ namespace CNA::Internal::Renderers::PixiJs
          */
         void SetBlendFactor(float r, float g, float b, float a) override;
 
-        /// plan_pixijs.md PIXIJS-34: no PixiJS RenderTexture in this renderer's v1 scope carries a
+        /// plans/plan_pixijs.md PIXIJS-34: no PixiJS RenderTexture in this renderer's v1 scope carries a
         /// real depth/stencil attachment.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        /// plan_pixijs.md Design decision 6/12: PixiJS's built-in PIXI.BLEND_MODES.ADD is the
+        /// plans/plan_pixijs.md Design decision 6/12: PixiJS's built-in PIXI.BLEND_MODES.ADD is the
         /// renderer's real, tested mapping for BlendState::Additive -- everything 3D-only remains
         /// false in this v1, 2D-only scope.
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
@@ -240,7 +240,7 @@ namespace CNA::Internal::Renderers::PixiJs
     private:
         // Derives the logical (virtual) viewport size from the canvas/window's client pixel size
         // and virtualWidth_/virtualHeight_/presentationMode_ -- the same FixedHeightDynamicWidth
-        // math CanvasRenderer::getLogicalSize uses (plan_pixijs.md Phase P2/PIXIJS-23): the math is
+        // math CanvasRenderer::getLogicalSize uses (plans/plan_pixijs.md Phase P2/PIXIJS-23): the math is
         // renderer-agnostic, and the platform snapshot supplies the drawable size and density.
         void getLogicalSize(int& width, int& height) const;
         void getWindowSize(int& width, int& height) const;

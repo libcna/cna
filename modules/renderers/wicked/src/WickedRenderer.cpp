@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_wicked.md: CNA's WICKED graphics renderer on Wicked Engine's wi::graphics::GraphicsDevice.
+// plans/plan_wicked.md: CNA's WICKED graphics renderer on Wicked Engine's wi::graphics::GraphicsDevice.
 
 #include "CNA/Internal/Renderers/Wicked/WickedRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/VertexColourPbrSupport.hpp"
@@ -364,7 +364,7 @@ namespace CNA::Internal::Renderers::Wicked
             // first face of a cube reads back with another upload's rows spliced in, while the
             // same sequence with a submit between the copies is byte-exact at every width. The
             // flush also keeps the staging texture's deferred destruction trivially ordered
-            // behind its copy (plan_wicked.md WICKED-31).
+            // behind its copy (plans/plan_wicked.md WICKED-31).
             owner.FlushAndWaitEXT();
             return true;
         }
@@ -938,7 +938,7 @@ namespace CNA::Internal::Renderers::Wicked
             return false;
         if (w <= 0 || h <= 0 || x < 0 || y < 0 || dataLength < w * h * 4)
             return false;
-        // Same refusal as WickedRenderTargetRenderer::GetData -- see plan_wicked.md WICKED-52.
+        // Same refusal as WickedRenderTargetRenderer::GetData -- see plans/plan_wicked.md WICKED-52.
         if (multiSampleCount_ > 1)
             return false;
 
@@ -1043,7 +1043,7 @@ namespace CNA::Internal::Renderers::Wicked
     void WickedVertexBufferRenderer::SetVertexDeclaration(const VertexDeclaration& vertexDeclaration)
     {
         // The declaration's stride is what selects this renderer's input layout and shader variant,
-        // exactly as it does on D3D11/D3D12/Vulkan (plan_wicked.md WICKED-45). VariantForStride()
+        // exactly as it does on D3D11/D3D12/Vulkan (plans/plan_wicked.md WICKED-45). VariantForStride()
         // refuses an unlisted WIDTH, but a custom layout that happens to be one of the eight known
         // widths would be read from the wrong bytes -- so the element list is remembered here and
         // checked at draw time by RequireFaithfulDeclarationEXT() (REMED-GFX-DECL-GUARD).
@@ -1515,7 +1515,7 @@ namespace CNA::Internal::Renderers::Wicked
         // Wicked Engine's Vulkan device is the one device renderer available on every platform CNA
         // targets with this renderer. Its D3D12 device is a Windows-only alternative that additionally
         // needs the engine's own root-signature macro in every shader, which this renderer's HLSL does
-        // not yet declare -- tracked as plan_wicked.md WICKED-60, not silently selected here.
+        // not yet declare -- tracked as plans/plan_wicked.md WICKED-60, not silently selected here.
         device_ = std::make_unique<wig::GraphicsDevice_Vulkan>(
             wickedWindow_, wig::ValidationMode::Disabled, wig::GPUPreference::Discrete);
         if (!device_)
@@ -1670,7 +1670,7 @@ namespace CNA::Internal::Renderers::Wicked
     {
         // wi::shadercompiler reads its input from a file, so the embedded source is materialised
         // into a private temporary directory for the lifetime of this renderer. This keeps CNA free
-        // of a shader-asset deployment step (plan_wicked.md design decision 4).
+        // of a shader-asset deployment step (plans/plan_wicked.md design decision 4).
         std::error_code ec;
         const std::filesystem::path base =
             std::filesystem::temp_directory_path(ec) /
@@ -2632,7 +2632,7 @@ namespace CNA::Internal::Renderers::Wicked
         const bool hasPixels = data.pixels.size() >= level0Bytes;
 
         // Every declared level is filled with a real 2x2 box-filtered reduction of the one below
-        // it, computed here on the CPU (plan_wicked.md WICKED-28).
+        // it, computed here on the CPU (plans/plan_wicked.md WICKED-28).
         //
         // A GPU blit chain would be faster, but it needs each mip level transitioned independently
         // between render-target and shader-resource while the SAME image is both sampled and
@@ -3495,7 +3495,7 @@ namespace CNA::Internal::Renderers::Wicked
                                                   PrimitiveType primitive, int primitiveCount,
                                                   const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-465: this renderer has no stride-60/80 layout and no COLOR_0 term in its
+        // plans/plan_gltf.md GLTF-465: this renderer has no stride-60/80 layout and no COLOR_0 term in its
         // PBR path, so such a draw is refused by name rather than reaching a shader that would drop
         // the authored colour.
         RequireVertexColourPbrSupportEXT(
@@ -3659,7 +3659,7 @@ namespace CNA::Internal::Renderers::Wicked
 #ifdef CNA_RENDERER_WICKED
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Wicked { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

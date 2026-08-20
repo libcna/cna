@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1713: the engine layer under abuse.
+// plans/plan_modern.md MOD-1713: the engine layer under abuse.
 //
 // Everything here is a shape a game will eventually produce by accident -- a window dragged to one
 // pixel, a settings menu whose every switch is flipped between two frames, a pipeline resized every

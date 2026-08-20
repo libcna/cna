@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Texture fixtures -- owning group ``textures`` (plan_gltf.md §24.2).
+"""Texture fixtures -- owning group ``textures`` (plans/plan_gltf.md §24.2).
 
 The corpus had **no textured asset at all** until `GLTF-190`, which is why every texture-shaped
 task -- the sampler wiring, the base-colour/occlusion selection, the UV-set choice, the

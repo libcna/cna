@@ -34,7 +34,7 @@ preserve FNA's real (including deliberately quirky) behavior.
   for `HiDef`; `Reach` always passes, correctly reasoned as having no real floor worth checking) and
   an honest, explicitly-commented `return true;` fallback on the other nine backends — the comment
   correctly explains why (no `D3DCAPS9` equivalent exists to consult; a hardcoded table would be
-  "pretending to be a capability query," which this project's own `plan_dx9.md` explicitly refuses).
+  "pretending to be a capability query," which this project's own `plans/plan_dx9.md` explicitly refuses).
 - `QueryRenderTargetFormat`: on D3D9, a real two-part check (profile-format whitelist AND real
   `IDirect3D9::CheckDeviceFormat`-backed hardware support), correctly falling back to `Color` if
   either fails — matching XNA's own documented fallback contract. The non-D3D9 fallback

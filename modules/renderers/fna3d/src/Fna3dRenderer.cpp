@@ -123,7 +123,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // *selects its driver*, and FNA3D_CreateDevice refuses to run before it has ("Call
         // FNA3D_PrepareWindowAttributes first!").
         //
-        // plan_runtimerenderer.md RTR-P1-D41 replaced the descriptor's `prepareWindowFlags` hook
+        // plans/plan_runtimerenderer.md RTR-P1-D41 replaced the descriptor's `prepareWindowFlags` hook
         // with static data (`windowKind = OpenGL`, `glFramebuffer = 24/8/double`), which is the
         // right call for the window's visual -- CNA now states those requirements through
         // WindowDescription and the platform applies them. What went with the hook, unnoticed, was
@@ -1037,7 +1037,7 @@ namespace CNA::Internal::Renderers::Fna3d
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Fna3d { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(

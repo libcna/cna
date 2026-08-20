@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-33: the Sokol renderer's DualTextureEffect program -- two textures sampled at
+// plans/plan_sokol.md SOKOL-33: the Sokol renderer's DualTextureEffect program -- two textures sampled at
 // the SAME texcoord0 (this codebase has no second UV-set concept anywhere; every CNA renderer's own
 // DualTextureEffect implementation already reuses one shared UV for both textures, matching
 // EasyGLRenderer::EnsureDualTextured3DProgram()'s identical shape). FNA's PSDualTexture:

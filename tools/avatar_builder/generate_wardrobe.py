@@ -14,7 +14,7 @@ needed there.
 
 No new C++ engine support is required or added by this script. AvatarRenderer/
 SkinnedModelEXT currently load and draw exactly one model at a time (see
-plan_net.md Task 11.14's notes) — actually attaching a separately-converted wardrobe
+plans/plan_net.md Task 11.14's notes) — actually attaching a separately-converted wardrobe
 piece onto a running avatar at draw time, alongside its body, is future, out-of-scope
 engine work, not part of this task.
 
@@ -38,7 +38,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_skeleton  # noqa: E402  (bpy path setup must happen first)
 import generate_materials  # noqa: E402
-import generate_clothes_meshcraft as generate_clothes  # noqa: E402  (Task 7.6, plan_net.md
+import generate_clothes_meshcraft as generate_clothes  # noqa: E402  (Task 7.6, plans/plan_net.md
 # Phase 7: matches generate_avatar.py's own aliasing - a standalone wardrobe clothing piece
 # needs the same CSG-union fix as a full avatar's clothes, same root cause.)
 import generate_hair  # noqa: E402

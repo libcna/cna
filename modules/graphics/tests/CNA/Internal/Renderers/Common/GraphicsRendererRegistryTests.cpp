@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_runtimerenderer.md RTR-P2-3 / RTR-P6-9: the generated registry agrees with itself and with
+// plans/plan_runtimerenderer.md RTR-P2-3 / RTR-P6-9: the generated registry agrees with itself and with
 // the descriptors it lists.
 //
 // The registry is the join between four things written in four different places: the identity in

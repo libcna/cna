@@ -159,7 +159,7 @@ namespace Microsoft::Xna::Framework::Media
         // PictureAlbumCollection registration under rootPictureAlbum_) the first time a picture
         // is actually saved, if it didn't already exist from a previous session's scan. Idempotent
         // -- a no-op if savedPicturesAlbum_ is already set. Returns the (possibly newly-created)
-        // album, or rootPictureAlbum_ if there is nowhere to attach a new node (plan_media.md
+        // album, or rootPictureAlbum_ if there is nowhere to attach a new node (plans/plan_media.md
         // MEDIA-59/D7, a real gap found by external code review: SavePicture() used to silently
         // fall back to rootPictureAlbum_ forever instead of ever creating this node).
         PictureAlbum* EnsureSavedPicturesAlbum();

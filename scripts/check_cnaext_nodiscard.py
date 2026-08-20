@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plan_modern.md MOD-1902 -- the const-correctness / [[nodiscard]] sweep, as a gate.
+"""plans/plan_modern.md MOD-1902 -- the const-correctness / [[nodiscard]] sweep, as a gate.
 
 A one-time read of 49 headers decays the moment the next header lands, so the sweep that closed
 MOD-1902 runs as a ctest instead of living in a commit message.

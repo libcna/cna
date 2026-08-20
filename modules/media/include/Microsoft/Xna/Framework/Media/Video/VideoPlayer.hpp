@@ -210,18 +210,18 @@ namespace Microsoft::Xna::Framework::Media
         // audio device accumulated its ENTIRE decoded audio track in memory for the rest of
         // playback (potentially hundreds of MB for a long video), and CloseDecoder() never cleared
         // it either -- stale audio from a failed-device Play() could then be fed to a genuinely
-        // opened stream on a later successful Play() (found by external code review, plan_media.md
+        // opened stream on a later successful Play() (found by external code review, plans/plan_media.md
         // MEDIA-153).
         void DrainAndFlushAudioBuffer();
 
         // (Re)creates the frame texture to match whatever video track is currently active on
         // `decoder_`. A track switch can change frame dimensions, and an already-created texture
-        // sized for the previous track would otherwise silently keep the stale size (plan_media.md
+        // sized for the previous track would otherwise silently keep the stale size (plans/plan_media.md
         // MEDIA-90, a real bug found by external code review).
         void ReconfigureVideoOutputForCurrentTrack();
 
         // (Re)creates the audio stream to match whatever audio track is currently active on
-        // `decoder_`. Split from the video-side reconfiguration (plan_media.md MEDIA-148, found by
+        // `decoder_`. Split from the video-side reconfiguration (plans/plan_media.md MEDIA-148, found by
         // external code review): the two used to be one function always called together, so
         // switching only the video track tore down and reopened the audio stream too,
         // discarding whatever audio was already queued for playback -- and vice versa for an

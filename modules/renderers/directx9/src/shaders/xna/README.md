@@ -1,6 +1,6 @@
 # Vendored Microsoft XNA 4.0 Stock Effects (HLSL)
 
-`plan_dx9.md` Phase D9-7 (D9-70). These 10 files are copied **verbatim, byte-for-byte** from the
+`plans/plan_dx9.md` Phase D9-7 (D9-70). These 10 files are copied **verbatim, byte-for-byte** from the
 FNA reference tree:
 
 ```text
@@ -11,7 +11,7 @@ which itself vendors them, essentially unchanged, from Microsoft's own **Stock E
 project** (`http://xbox.create.msdn.com/en-US/education/catalog/sample/stock_effects`, per FNA's
 own `StockEffects/README`).
 
-**Not one line has been edited** (`plan_dx9.md` design decision 3). `scripts/verify-d3d9-stock-effects-vendored.sh`
+**Not one line has been edited** (`plans/plan_dx9.md` design decision 3). `scripts/verify-d3d9-stock-effects-vendored.sh`
 enforces this mechanically — it diffs every file here against the FNA tree and fails on any delta.
 Run it after any refresh of the FNA reference tree, and before any change to this directory.
 

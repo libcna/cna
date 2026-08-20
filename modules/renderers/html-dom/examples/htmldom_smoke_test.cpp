@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md HTMLDOM-15/HTMLDOM-72: end-to-end smoke test for the HTML_DOM graphics renderer,
+// plans/plan_html_dom.md HTMLDOM-15/HTMLDOM-72: end-to-end smoke test for the HTML_DOM graphics renderer,
 // written to produce a real PASS/FAIL in a real browser.
 //
 // Unlike the CANVAS renderer's own smoke test -- which could only ever prove that it configures and
@@ -100,7 +100,7 @@ namespace
         return strip(root.children[i].style.transform).indexOf(strip(UTF8ToString(needle))) >= 0 ? 1 : 0;
     });
 
-    /// plan_html_dom.md HTMLDOM-107: 1 when the DEFAULT ('full') region's own pool element at
+    /// plans/plan_html_dom.md HTMLDOM-107: 1 when the DEFAULT ('full') region's own pool element at
     /// `poolIndex`'s inline `transform` contains `needle`. Reads the pool array directly (not
     /// `root.children[i]`) for the same reason JsFullRegionSpriteZIndexAt (HTMLDOM-103) does:
     /// `root.children[i]` for a small `i` is NOT reliably the i-th 'full' sprite once named scissor
@@ -142,7 +142,7 @@ namespace
         return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
     });
 
-    /// plan_html_dom.md HTMLDOM-113: 1 when THIS browser actually recognises
+    /// plans/plan_html_dom.md HTMLDOM-113: 1 when THIS browser actually recognises
     /// `mix-blend-mode: plus-lighter` (docs/html-dom-renderer.md's own documented "requires
     /// Chromium 108+/Safari 16.4+/Firefox 122+" boundary -- older engines silently ignore the
     /// value and Additive degrades to normal alpha blending instead of failing, the one place this
@@ -156,7 +156,7 @@ namespace
                 CSS.supports('mix-blend-mode', 'plus-lighter')) ? 1 : 0;
     });
 
-    /// plan_html_dom.md HTMLDOM-94: 1 when a region exists for the exact rectangle `(x,y,w,h)` (a
+    /// plans/plan_html_dom.md HTMLDOM-94: 1 when a region exists for the exact rectangle `(x,y,w,h)` (a
     /// rectangle that currently covers the whole surface never gets a real region -- it collapses
     /// to the default, unclipped one -- so this always returns 0 for one of those).
     EM_JS(int, JsRegionExists, (int x, int y, int w, int h), {
@@ -208,7 +208,7 @@ namespace
         return n;
     });
 
-    /// plan_html_dom.md HTMLDOM-101: the region container's own real, COMPUTED layout box size
+    /// plans/plan_html_dom.md HTMLDOM-101: the region container's own real, COMPUTED layout box size
     /// (offsetWidth/offsetHeight -- requires actual browser layout to have run), or -1 if the region
     /// does not exist. Unlike JsRegionClipPathInsetIs (which only reads back the inline style STRING
     /// CNA wrote), this proves the container genuinely has a non-zero box for that clip-path to clip
@@ -220,14 +220,14 @@ namespace
         return region ? region.container.offsetWidth : -1;
     });
 
-    /// plan_html_dom.md HTMLDOM-101: see JsRegionOffsetWidth -- the same, for offsetHeight.
+    /// plans/plan_html_dom.md HTMLDOM-101: see JsRegionOffsetWidth -- the same, for offsetHeight.
     EM_JS(int, JsRegionOffsetHeight, (int x, int y, int w, int h), {
         const regions = Module['cnaDomRegions'];
         const region = regions ? regions[x + ',' + y + ',' + w + ',' + h] : null;
         return region ? region.container.offsetHeight : -1;
     });
 
-    /// plan_html_dom.md HTMLDOM-103: the region for rectangle `(x,y,w,h)`'s own container's current
+    /// plans/plan_html_dom.md HTMLDOM-103: the region for rectangle `(x,y,w,h)`'s own container's current
     /// CSS `z-index` (the paint-order value its most recent flush stamped on it), or -1 if the
     /// region does not exist or carries no z-index yet.
     EM_JS(int, JsRegionZIndex, (int x, int y, int w, int h), {
@@ -238,7 +238,7 @@ namespace
         return z ? parseInt(z, 10) : -1;
     });
 
-    /// plan_html_dom.md HTMLDOM-103: the DEFAULT ('full') region's own pool element at
+    /// plans/plan_html_dom.md HTMLDOM-103: the DEFAULT ('full') region's own pool element at
     /// `poolIndex`'s current CSS `z-index`, or -1 if that pool slot does not exist. Reads the pool
     /// array directly (not `root.children[i]`) so the index is exactly the same one the renderer
     /// itself uses, with no dependency on where that element happens to sit in root's child list.
@@ -258,7 +258,7 @@ namespace
         return root.children[i].style.backgroundRepeat === 'repeat' ? 1 : 0;
     });
 
-    /// plan_html_dom.md HTMLDOM-97: 1 when sprite `i`'s `background-repeat` equals `expected`
+    /// plans/plan_html_dom.md HTMLDOM-97: 1 when sprite `i`'s `background-repeat` equals `expected`
     /// exactly (e.g. `"repeat no-repeat"` for a mixed-axis draw) -- the general form of
     /// JsSpriteBackgroundRepeat above, needed once the two axes can carry different values.
     EM_JS(int, JsSpriteBackgroundRepeatIs, (int i, const char* expected), {
@@ -267,31 +267,31 @@ namespace
         return root.children[i].style.backgroundRepeat === UTF8ToString(expected) ? 1 : 0;
     });
 
-    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `width`, in CSS px, or -1.
+    /// plans/plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `width`, in CSS px, or -1.
     EM_JS(int, JsRootWidth, (), {
         const root = document.getElementById('cna-dom-root');
         return root ? parseInt(root.style.width, 10) : -1;
     });
 
-    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `height`, in CSS px, or -1.
+    /// plans/plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `height`, in CSS px, or -1.
     EM_JS(int, JsRootHeight, (), {
         const root = document.getElementById('cna-dom-root');
         return root ? parseInt(root.style.height, 10) : -1;
     });
 
-    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `left`, in CSS px (fractional), or -1.
+    /// plans/plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `left`, in CSS px (fractional), or -1.
     EM_JS(double, JsRootLeft, (), {
         const root = document.getElementById('cna-dom-root');
         return root ? parseFloat(root.style.left) : -1;
     });
 
-    /// plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `top`, in CSS px (fractional), or -1.
+    /// plans/plan_html_dom.md HTMLDOM-98: #cna-dom-root's own inline `top`, in CSS px (fractional), or -1.
     EM_JS(double, JsRootTop, (), {
         const root = document.getElementById('cna-dom-root');
         return root ? parseFloat(root.style.top) : -1;
     });
 
-    /// plan_html_dom.md HTMLDOM-108: the per-CnaPresentationMode scale factor
+    /// plans/plan_html_dom.md HTMLDOM-108: the per-CnaPresentationMode scale factor
     /// HtmlDomRenderer::ComputeLogicalViewport last computed and CNA_HtmlDom_UpdateSurface
     /// applied to #cna-dom-root, read directly from the Module state it is stored in (not parsed
     /// back out of the CSS transform string, which is empty whenever the scale is exactly 1).
@@ -304,7 +304,7 @@ namespace
         return v === undefined ? -1 : v;
     });
 
-    /// plan_html_dom.md HTMLDOM-108: #cna-dom-viewport's own inline geometry, in CSS px -- the
+    /// plans/plan_html_dom.md HTMLDOM-108: #cna-dom-viewport's own inline geometry, in CSS px -- the
     /// physical-canvas-sized wrapper that clips the scaled/offset #cna-dom-root (needed for
     /// Overscan, whose root deliberately extends past the canvas's own bounds).
     EM_JS(int, JsViewportWrapperWidth, (), {
@@ -362,7 +362,7 @@ class HtmlDomSmokeTest : public Game
     std::unique_ptr<Texture2D> texture_;
     std::unique_ptr<RenderTarget2D> renderTarget_;
     std::unique_ptr<SpriteFont> font_;
-    // plan_html_dom.md HTMLDOM-102: SpriteBatch::Begin() always applies EITHER the RasterizerState
+    // plans/plan_html_dom.md HTMLDOM-102: SpriteBatch::Begin() always applies EITHER the RasterizerState
     // passed to it OR RasterizerState::CullCounterClockwise as its own default (SpriteBatch.cpp,
     // matching FNA's PrepRenderState) -- so GraphicsDevice.RasterizerState set directly, separately
     // from Begin(), is overwritten by the very next Begin() call regardless. Every scissor-rect
@@ -391,7 +391,7 @@ protected:
             }));
         renderTarget_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 4, 4);
 
-        // plan_html_dom.md HTMLDOM-38: a one-glyph SpriteFont ('A', a 4x4 fully-opaque atlas cell,
+        // plans/plan_html_dom.md HTMLDOM-38: a one-glyph SpriteFont ('A', a 4x4 fully-opaque atlas cell,
         // no cropping offset, no bearing) -- enough to exercise DrawString() through the shared
         // SpriteFont/SpriteBatch layer and confirm it reaches the DOM path with zero renderer-
         // specific code, per this renderer's own claim.
@@ -434,7 +434,7 @@ protected:
                   "htmldom_pixel_verification_test.cpp's own) is therefore exercising the real "
                   "CSS blend, not this renderer's documented old-browser silent-degradation "
                   "fallback, which an automated CI browser cannot itself be downgraded to exercise");
-            // plan_html_dom.md HTMLDOM-117: the PUBLIC, game-facing query -- not just the raw CSS
+            // plans/plan_html_dom.md HTMLDOM-117: the PUBLIC, game-facing query -- not just the raw CSS
             // check the line above uses directly -- agrees with it. A real game can now check
             // GraphicsDevice::SupportsCapability(GraphicsCapability::AdditiveBlending) BEFORE
             // relying on genuine additive compositing, instead of only being able to infer the
@@ -491,7 +491,7 @@ protected:
 
         if (frame_ == 3)
         {
-            // plan_html_dom.md design decision 10: a render target is a real off-screen canvas, so
+            // plans/plan_html_dom.md design decision 10: a render target is a real off-screen canvas, so
             // unlike the DOM backbuffer it can be both drawn into and read back exactly. Clear to a
             // colour no other surface in this test uses, then verify every texel came back.
             dev.SetRenderTarget(renderTarget_.get());
@@ -536,13 +536,13 @@ protected:
 
         if (frame_ == 5)
         {
-            // plan_html_dom.md HTMLDOM-38: DrawString needs no renderer-specific code -- every
+            // plans/plan_html_dom.md HTMLDOM-38: DrawString needs no renderer-specific code -- every
             // glyph funnels through the same Draw() overload as an ordinary sprite.
             spriteBatch_->Begin();
             spriteBatch_->DrawString(*font_, "A", Vector2(2, 2), Color::White);
             spriteBatch_->End();
 
-            // plan_html_dom.md HTMLDOM-45: TextureAddressMode::Wrap, only distinguishable from
+            // plans/plan_html_dom.md HTMLDOM-45: TextureAddressMode::Wrap, only distinguishable from
             // Clamp once the requested sourceRectangle exceeds the texture's own bounds -- draw the
             // 2x2 texture with a 4x4 source rectangle (double its size) under PointWrap.
             spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend,
@@ -564,7 +564,7 @@ protected:
 
         if (frame_ == 6)
         {
-            // plan_html_dom.md HTMLDOM-45's other half: while a render target is bound, Wrap is
+            // plans/plan_html_dom.md HTMLDOM-45's other half: while a render target is bound, Wrap is
             // implemented by a completely SEPARATE code path -- a Canvas2D repeating pattern
             // (CNA_HtmlDom_FlushSprites' `targetCtx` branch), not the CSS background-repeat frame 5
             // just checked. That path has never been exercised at all until now, structurally or
@@ -622,7 +622,7 @@ protected:
                   "the render-target Wrap path tiles the source texture exactly, pixel-for-pixel");
         }
 
-        // plan_html_dom.md HTMLDOM-80/94: SetScissorRect, implemented as a real clip-path on a
+        // plans/plan_html_dom.md HTMLDOM-80/94: SetScissorRect, implemented as a real clip-path on a
         // dedicated DOM region per distinct scissor rect (design decision 13, revised by HTMLDOM-94)
         // -- verified the same way every other CSS-property mapping in this file is (checking the
         // computed value against a hand-derived expected string), consistent with how
@@ -636,7 +636,7 @@ protected:
         // between (the OLD, pre-HTMLDOM-94 test shape) would find nothing.
         if (frame_ == 7)
         {
-            // plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable, gating whether
+            // plans/plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable, gating whether
             // SetScissorRect's recorded rect clips anything at all -- an earlier version applied it
             // unconditionally, matching SDL_RENDERER's own omission but not real XNA fidelity (in
             // real XNA a game must explicitly enable scissor testing via RasterizerState; setting
@@ -726,7 +726,7 @@ protected:
             dev.setScissorRectangleProperty(Rectangle(0, 0, 64, 64));
         }
 
-        // plan_html_dom.md HTMLDOM-93: window resize + active scissor rect interaction, with no
+        // plans/plan_html_dom.md HTMLDOM-93: window resize + active scissor rect interaction, with no
         // GraphicsDevice.Reset() in between -- checks whether the clip-path's insets (computed once
         // against the surface size at SetScissorRect()-call time) go stale relative to the surface's
         // new size once it actually resizes, or get automatically re-derived.
@@ -802,7 +802,7 @@ protected:
             renderer.SetScissorRect(0, 0, 128, 128);
         }
 
-        // plan_html_dom.md HTMLDOM-97: the DOM-path (no render target bound) side of Mirror/mixed-
+        // plans/plan_html_dom.md HTMLDOM-97: the DOM-path (no render target bound) side of Mirror/mixed-
         // axis addressing -- htmldom_pixel_verification_test.cpp already checked the Canvas2D
         // render-target branch pixel-exact; this is the OTHER of the two separate code paths
         // CNA_HtmlDom_FlushSprites has (design decision 10's own split), checked structurally the
@@ -846,7 +846,7 @@ protected:
                   "axis's mode");
         }
 
-        // plan_html_dom.md HTMLDOM-98: GraphicsDevice.Viewport (SetViewport), confirmed non-gap
+        // plans/plan_html_dom.md HTMLDOM-98: GraphicsDevice.Viewport (SetViewport), confirmed non-gap
         // against every other 2D-only sibling but a real one against EASYGL. Verified structurally,
         // the same way scissor/regions are (JsRootWidth/Height/Left/Top rather than pixels): the
         // DOM backbuffer itself cannot be read back at all (design decision 11), so there is no
@@ -857,7 +857,7 @@ protected:
         // SetVirtualResolution(0,0)), so the logical->physical scale is exactly 1 -- the expected
         // "+4" offset below is a real, not-incidentally-1 multiplier check, not a coincidence of
         // skipping the scale math.
-        // plan_html_dom.md HTMLDOM-103: true per-flush paint order across regions (a region's own
+        // plans/plan_html_dom.md HTMLDOM-103: true per-flush paint order across regions (a region's own
         // DOM position previously reflected only its FIRST-creation order, not the actual sequence
         // its flushes happened in this frame) and non-destructive eviction (a region still active
         // this frame must never be LRU-evicted out from under the frame being built).
@@ -933,7 +933,7 @@ protected:
             dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));
         }
 
-        // plan_html_dom.md HTMLDOM-108: every CnaPresentationMode, implemented for real via
+        // plans/plan_html_dom.md HTMLDOM-108: every CnaPresentationMode, implemented for real via
         // HtmlDomRenderer::ComputeLogicalViewport (ported from SdlGpuRenderer's own
         // reference implementation) -- an earlier version only had correct geometry for
         // FixedHeightDynamicWidth; Letterbox/Overscan/Stretch/NativeBackBuffer all fell through to
@@ -1021,7 +1021,7 @@ protected:
                   "HTMLDOM-108e: FixedHeightDynamicWidth still fills the physical surface exactly "
                   "after switching through every other mode first, not left showing stale geometry");
 
-            // plan_html_dom.md HTMLDOM-108: SetPresentationMode must validate its ordinal -- an
+            // plans/plan_html_dom.md HTMLDOM-108: SetPresentationMode must validate its ordinal -- an
             // earlier version accepted anything and stored it unchecked. A rejected call must not
             // have changed the mode in effect, the same "rejected state leaves the prior one alone"
             // contract ApplyBlendStateAcceptsPresetsAndRejectsCustomOnes already established for
@@ -1037,7 +1037,7 @@ protected:
                   "HTMLDOM-108f: the rejected SetPresentationMode(99) call left the previously-set "
                   "FixedHeightDynamicWidth mode's own geometry completely unchanged");
 
-            // plan_html_dom.md HTMLDOM-108: TransformWindowToLogical must return the correct
+            // plans/plan_html_dom.md HTMLDOM-108: TransformWindowToLogical must return the correct
             // outside-letterbox result -- re-establish the exact Letterbox scenario from above
             // (bars top/bottom, content in physical y in [32,96)). A window point in the TOP BAR
             // (y=10 < 32) has no logical counterpart at all; a point inside the content band
@@ -1055,7 +1055,7 @@ protected:
                   "the hand-derived logical position ((64,64) physical -> (128,64) logical for "
                   "this exact 256x128-virtual/128x128-physical Letterbox scenario)");
 
-            // plan_html_dom.md HTMLDOM-108: TransformLogicalToWindow/TransformWindowToLogical round
+            // plans/plan_html_dom.md HTMLDOM-108: TransformLogicalToWindow/TransformWindowToLogical round
             // trip under Stretch (independent per-axis scale, the mode most likely to expose a
             // swapped X/Y factor). Logical (100,50) -> window (100*0.5, 50*1.0) = (50,50) -> back to
             // logical must reproduce (100,50) exactly (every factor here divides evenly, so this is
@@ -1079,7 +1079,7 @@ protected:
 
         if (frame_ == 12)
         {
-            // plan_html_dom.md HTMLDOM-107: Viewport no longer resizes/repositions #cna-dom-root at
+            // plans/plan_html_dom.md HTMLDOM-107: Viewport no longer resizes/repositions #cna-dom-root at
             // all (that was HTMLDOM-98's approach, and the actual defect this task fixes: a SECOND
             // viewport set later in the same frame retroactively moved/clipped every sprite an
             // EARLIER batch already flushed, since they all shared root's one single position). Root
@@ -1133,7 +1133,7 @@ protected:
             // Restore the full-backbuffer viewport for hygiene before the final publish below.
             dev.setViewportProperty(Viewport(0, 0, 128, 128));
 
-            // plan_html_dom.md HTMLDOM-118: SpriteSortMode::Immediate must genuinely apply
+            // plans/plan_html_dom.md HTMLDOM-118: SpriteSortMode::Immediate must genuinely apply
             // per-draw -- a scissor rect CHANGE between two Draw() calls inside ONE Begin(
             // Immediate)/End() block must send each sprite to whichever region was actually
             // active AT THE TIME that sprite's own Draw() was called, not both ending up wherever
@@ -1178,7 +1178,7 @@ protected:
 
             dev.setScissorRectangleProperty(Rectangle(0, 0, 128, 128));   // hygiene.
 
-            // plan_html_dom.md HTMLDOM-101: prove the scissor region has a real, non-zero layout
+            // plans/plan_html_dom.md HTMLDOM-101: prove the scissor region has a real, non-zero layout
             // box, AND that clip-path genuinely removes out-of-bounds content from the page's real
             // composited pixels -- not merely that a clip-path string with the right numbers exists
             // on a container that might still be 0x0 (the actual HTMLDOM-101 defect: the earlier

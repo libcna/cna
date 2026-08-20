@@ -130,7 +130,7 @@ namespace CNA::Internal
      * @param maxVersion Highest `"cnjVersion"` this document type understands. Defaults to 1, the
      *        original format and still the only version every type other than `Model` writes.
      *        `Model` passes 2, the version that adds the `"bones"` hierarchy and the per-mesh
-     *        `"parentBone"` index (plan_gltf.md GLTF-129, Phase 5). Scoping the ceiling per type
+     *        `"parentBone"` index (plans/plan_gltf.md GLTF-129, Phase 5). Scoping the ceiling per type
      *        rather than raising it globally keeps "a future version is rejected" true for every
      *        type that has not actually defined one.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the document was not

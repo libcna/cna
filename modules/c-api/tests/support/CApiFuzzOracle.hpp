@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-/* plan_binding.md CBIND-040B: the independent oracles the byte-facing tests judge against.
+/* plans/plan_binding.md CBIND-040B: the independent oracles the byte-facing tests judge against.
  *
  * Shared by the exhaustive sweep in `tests/cpp/Utf8OracleTest.cpp` and the libFuzzer target in
  * `tests/fuzz/StringViewFuzz.cpp`, so both judge the implementation by the same standard and a

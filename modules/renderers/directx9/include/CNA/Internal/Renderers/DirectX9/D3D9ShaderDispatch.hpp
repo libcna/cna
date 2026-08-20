@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-8 (D9-80): replicates XNA's real Stock Effects shader-permutation model
+// plans/plan_dx9.md Phase D9-8 (D9-80): replicates XNA's real Stock Effects shader-permutation model
 // exactly -- the `VSIndices[]`/`PSIndices[]` tables and the `ShaderIndex` computation, transcribed
 // directly from Microsoft's own sources (design decision 7: a transcription task, not a design
 // task -- every table and formula below is copied from a named, cited source, nothing invented).

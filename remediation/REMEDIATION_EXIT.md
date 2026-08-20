@@ -56,7 +56,7 @@ remains `74ebf356`.
 | E3 | No unresolved supported-path silent wrong result classified as a blocker | ✅ **`WEBGPU-115` closed and re-verified in source this session** (§3) |
 | E4 | Capability gaps either reject truthfully or are explicitly deferred | ✅ §4.1; verified live at 24/24 (declaration guard) and on the WireFrame matrix |
 | E5 | Principal backend baselines classified | ✅ 7 native + 2 Wine, §6 |
-| E6 | Deferred work safely bounded and traceable to `plan_postaudit.md` | ✅ Every deferred ticket has an ID, a reason and a target plan (§4) |
+| E6 | Deferred work safely bounded and traceable to `plans/plan_postaudit.md` | ✅ Every deferred ticket has an ID, a reason and a target plan (§4) |
 | E7 | Dynamic branch inventory available, derived after a fetch | ✅ `INTEGRATION_BRANCH_INVENTORY.md` — **21 logical lanes** |
 
 **Every criterion passes. The checkpoint-blocker set is EMPTY.**
@@ -92,7 +92,7 @@ substitutes nothing there — refusing them would delete a correct draw rather t
 one. Live this session: `[WEBGPU-115] PointListEXT solid: ACCEPTED … nativeDraws=1` and
 `[WEBGPU-115] PointListEXT wireframe: ACCEPTED … nativeDraws=1`.
 
-`plan_webgpu.md`'s `WEBGPU-115` row is **`✅`**. **No new ticket was created for it, and no other
+`plans/plan_webgpu.md`'s `WEBGPU-115` row is **`✅`**. **No new ticket was created for it, and no other
 ticket was bundled into it** — `REMED-GFX-219` in particular is untouched (§4.2).
 
 ---
@@ -105,12 +105,12 @@ Every row is traceable to an ID, a reason and a target plan. **None is silently 
 
 | Ticket | Class | Why it does not block | Target |
 |---|---|---|---|
-| `REMED-GFX-203` … `-208` | Backend capability completion (multi-stream vertex input: Vulkan, bgfx, WebGPU, SDL_GPU, D3D11+D3D12, D3D9) | **Safe declared boundary.** `MultiStreamVertexInput` defaults to `false`; an over-wide stream set is rejected deterministically **before native submission**. Verified live: the 21 multi-stream oracles **skip with a named reason** on Vulkan, bgfx and WebGPU rather than rendering something wrong | `plan_postaudit.md` §5, during modularization |
-| `REMED-GFX-210` | No queryable capability for hardware instancing | Throws `std::runtime_error` from the interface default. No false success — loud, not silent | `plan_postaudit.md` §6 |
-| `REMED-GFX-214` | WebGPU stride 20/24 with `TextureEnabled = false` | **Loud deterministic pre-native rejection.** `QueueColoredDraw` throws `std::invalid_argument` (`WebGPUGraphicsBackend.cpp:7213`) **before** `ColoredDrawCommand` is constructed — nothing queued, written or submitted. The exact opposite of `WEBGPU-115` | `plan_postaudit.md` §4.4.6 |
+| `REMED-GFX-203` … `-208` | Backend capability completion (multi-stream vertex input: Vulkan, bgfx, WebGPU, SDL_GPU, D3D11+D3D12, D3D9) | **Safe declared boundary.** `MultiStreamVertexInput` defaults to `false`; an over-wide stream set is rejected deterministically **before native submission**. Verified live: the 21 multi-stream oracles **skip with a named reason** on Vulkan, bgfx and WebGPU rather than rendering something wrong | `plans/plan_postaudit.md` §5, during modularization |
+| `REMED-GFX-210` | No queryable capability for hardware instancing | Throws `std::runtime_error` from the interface default. No false success — loud, not silent | `plans/plan_postaudit.md` §6 |
+| `REMED-GFX-214` | WebGPU stride 20/24 with `TextureEnabled = false` | **Loud deterministic pre-native rejection.** `QueueColoredDraw` throws `std::invalid_argument` (`WebGPUGraphicsBackend.cpp:7213`) **before** `ColoredDrawCommand` is constructed — nothing queued, written or submitted. The exact opposite of `WEBGPU-115` | `plans/plan_postaudit.md` §4.4.6 |
 | `REMED-GFX-217` | Seven rasterizing backends — native declaration translators | Blocker **RESOLVED** by `REMED-GFX-DECL-GUARD`: an unrepresentable declaration raises `System::NotSupportedException` before any native layout exists. `RequireFaithfulDeclarationEXT` present in **Vulkan, WebGPU, Software, SDL_GPU, D3D9, D3D11, D3D12**; **Headless correctly excluded** (no native layout to be unfaithful to). Verified **24/24** on Vulkan, bgfx, WebGPU and EasyGL | Translators during modularization |
 | `REMED-GFX-218` | EasyGL — attribute location from element index | Blocker **RESOLVED** by the same guard, on the **stock path only** (`EasyGLGraphicsBackend.cpp:5932`, `:6002`, `:6095` — before the VAO is touched and before a program is selected). The custom `ShaderEffect` element-index convention is a documented contract and is untouched | Per-family semantic placement, post-checkpoint |
-| `REMED-GFX-219` | EasyGL **under**-reports `WireFrame` | See §4.2 | `plan_postaudit.md` §9 |
+| `REMED-GFX-219` | EasyGL **under**-reports `WireFrame` | See §4.2 | `plans/plan_postaudit.md` §9 |
 
 ### 4.2 `REMED-GFX-219` — disposition confirmed
 
@@ -125,9 +125,9 @@ all"), while EasyGL's own `GL_LINES` emulation renders a **correct** wireframe
 | Severity / priority | **LOW / P3** |
 | Checkpoint blocker | **NO** |
 | Integration blocker | **NO** |
-| Disposition | **OPEN / DEFERRED** to `plan_postaudit.md` §9 |
+| Disposition | **OPEN / DEFERRED** to `plans/plan_postaudit.md` §9 |
 | Suggested trigger | EasyGL capability/query cleanup, or any EasyGL module work |
-| Also fix | `plan_graphics.md`'s `ℹ️ EasyGL N/A (GLES3)` coverage row records the same non-existent boundary |
+| Also fix | `plans/plan_graphics.md`'s `ℹ️ EasyGL N/A (GLES3)` coverage row records the same non-existent boundary |
 
 **Not bundled with `WEBGPU-115`, deliberately.** Their safety directions are **opposite**: GFX-219
 under-reports a capability it has (a caller that gates on the query loses a working feature —
@@ -174,7 +174,7 @@ point-topology ticket was subsequently fixed by `GLTF-393`/`394`; this cube conv
 
 The ticket also records **why the obvious fix is wrong**: flipping the upload would only move the
 divergence onto the cube **sampling** path, where the real convention difference lives. Correcting it
-belongs with cube sampling/camera conventions, post-checkpoint. MEDIUM, `plan_postaudit.md`.
+belongs with cube sampling/camera conventions, post-checkpoint. MEDIUM, `plans/plan_postaudit.md`.
 
 #### 4.3.2 `REMED-GFX-132` — recorded scope was too narrow
 
@@ -345,7 +345,7 @@ clearer module boundaries:
 - `REMED-GFX-137` — with cube sampling/camera conventions, not before.
 
 Doing any of these before the checkpoint would enlarge its blast radius without making the runtime
-any more truthful — the guards already do that. **Nothing in `plan_postaudit.md` is a prerequisite
+any more truthful — the guards already do that. **Nothing in `plans/plan_postaudit.md` is a prerequisite
 for NoXNA graphics-extension work.**
 
 **This document does not claim the long-term CNA backlog is complete.** It claims the audit-driven

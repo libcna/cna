@@ -125,7 +125,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 // The portable pixel oracle: rasterizes 3D triangles and implements RenderTarget2D::GetData.
-/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffset()
 {
@@ -134,7 +134,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 }
 
 // REMED-GFX-113's renderer set: the above, minus the renderers without backbuffer readback.
-/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetBackbuffer()
 {
@@ -143,7 +143,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 }
 
 // REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry.
-/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this describes
+/// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this describes
 /// the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedTransition()
 {
@@ -152,7 +152,7 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 }
 
 // The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset.
-/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool OrdinaryBindingOffsetInstancedOffset()
 {
@@ -559,7 +559,7 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetIndexedDrawRendersThePrefixDecoy)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -597,7 +597,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetIndexedDrawRendersThePrefixDecoy
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetIndexedDrawSkipsThePrefixDecoy)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -637,7 +637,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetIndexedDrawSkipsThePrefixDeco
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndex)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -676,7 +676,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndex)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithBaseVertex)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -714,7 +714,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithBaseVertex)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndexAndBaseVertex)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -753,7 +753,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndexAndBase
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetHonoredWithThirtyTwoBitIndices)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -791,7 +791,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetHonoredWithThirtyTwoBitIndice
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetNonIndexedDrawRendersThePrefixDecoy)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -819,7 +819,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetNonIndexedDrawRendersThePrefixDe
 
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetNonIndexedDrawCombinesWithVertexStart)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -856,7 +856,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetNonIndexedDrawCombinesWithVer
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -903,7 +903,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, MultipleStreamsUseOnlyTheGeometryStreamsOw
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, DynamicBufferRewrittenBetweenDrawsIsReadAtTheOffset)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -954,7 +954,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, DynamicBufferRewrittenBetweenDrawsIsReadAt
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, OffsetReuseAcrossDrawsIsExact)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -1002,7 +1002,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OffsetReuseAcrossDrawsIsExact)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, BindingOffsetSurvivesDisposalAndHandleReuse)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -1059,7 +1059,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BindingOffsetSurvivesDisposalAndHandleReus
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, OffsetIsIncludedInTheDrawRangeValidation)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -1112,7 +1112,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OffsetIsIncludedInTheDrawRangeValidation)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, SetVertexBufferOverloadsCarryAndClearTheOffset)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffset())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -1158,7 +1158,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, SetVertexBufferOverloadsCarryAndClearTheOf
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheBindingOffset)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffsetBackbuffer())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -1192,7 +1192,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheBindingOffse
 
 TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonIndexedDraws)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffsetBackbuffer())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
@@ -1233,7 +1233,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonI
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, OrdinaryInstancedOrdinaryTransitionsKeepEachRoutesOffset)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!OrdinaryBindingOffsetInstancedTransition())
         GTEST_SKIP() << "this renderer\'s instanced route does not render the geometry";
     RequireOrdinaryRendering();

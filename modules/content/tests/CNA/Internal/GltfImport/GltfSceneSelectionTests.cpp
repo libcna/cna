@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-123 / GLTF-133 / GLTF-135 / GLTF-143: which nodes a file's default scene
+// plans/plan_gltf.md GLTF-123 / GLTF-133 / GLTF-135 / GLTF-143: which nodes a file's default scene
 // actually contains.
 //
 // §3.5 makes `nodes` a flat pool and `scenes` the thing that selects from it, so "in the file" and

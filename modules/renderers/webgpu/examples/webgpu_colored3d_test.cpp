@@ -2,7 +2,7 @@
 // Phase 57/63 vertical slice: verify WebGPURenderer::DrawColoredPrimitives()/
 // DrawIndexedColoredPrimitives() -- the first real 3D draw path this renderer supports (a
 // VertexPositionColor, stride-16 quad/triangle with no texture/lighting), matching WEBGPU-93's
-// own "3D coloured-quad pixel test (stride 16)" target. See plan_webgpu.md's Phase 57 section for
+// own "3D coloured-quad pixel test (stride 16)" target. See plans/plan_webgpu.md's Phase 57 section for
 // the investigated entry point this implements: the 128-float uniform layout mirrors
 // VulkanRenderer::FillExtPushConst() byte-for-byte, and GraphicsDevice::DrawUserPrimitives()/
 // DrawUserIndexedPrimitives() already route here directly for any VertexPositionColor draw.

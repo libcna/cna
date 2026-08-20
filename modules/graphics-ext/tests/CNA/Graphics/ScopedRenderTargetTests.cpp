@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-203 and MOD-227: what happens to the bound render target when a pass goes
+// plans/plan_modern.md MOD-203 and MOD-227: what happens to the bound render target when a pass goes
 // wrong, and what a pass does on a renderer that cannot run it.
 //
 // Both are failure-path behaviour, which is to say the behaviour nothing exercises by accident. A

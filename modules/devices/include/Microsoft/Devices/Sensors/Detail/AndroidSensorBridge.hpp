@@ -145,7 +145,7 @@ namespace Microsoft::Devices::Sensors::Detail
      * note).
      *
      * This is CNA-internal plumbing shared by Compass/Motion's future
-     * native Android backends (`plan_devices.md` Phase 7/8) — not itself an
+     * native Android backends (`plans/plan_devices.md` Phase 7/8) — not itself an
      * XNA-facing sensor class, and not wired into Compass/Motion by this
      * class alone (see AndroidCompassBackend/AndroidMotionBackend).
      *

@@ -1,10 +1,10 @@
 #pragma once
 
-// plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics renderer. 2D-only --
+// plans/plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics renderer. 2D-only --
 // every 3D entry point throws (Phase O7). Unlike DIRECTX3 (which fronts the ../free-direct sibling
 // reimplementation), this renderer talks to a REAL Windows ddraw.h, using only v1 COM interfaces
 // (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC -- never IDirectDraw2+/Surface2+/DDSURFACEDESC2,
-// plan_dx1.md section 1), cross-compiled via MinGW-w64 and run under Wine/Proton, the same Route B
+// plans/plan_dx1.md section 1), cross-compiled via MinGW-w64 and run under Wine/Proton, the same Route B
 // delivery mechanism D3D9/D3D11/D3D12 already use.
 //
 // This header intentionally does NOT include <ddraw.h> (design decision 9's containment rule,
@@ -19,7 +19,7 @@
 namespace CNA::Internal::Renderers::DirectX1
 {
     /**
-     * DIRECTX1 graphics renderer (plan_dx1.md): a CPU 2D compositor that uses a REAL
+     * DIRECTX1 graphics renderer (plans/plan_dx1.md): a CPU 2D compositor that uses a REAL
      * IDirectDraw/IDirectDrawSurface (v1 only) as its pixel storage/present mechanism. Real device/
      * window bring-up (Phase O2): DirectDrawCreate -> SetCooperativeLevel(DDSCL_NORMAL, against a
      * real Win32 HWND supplied in RendererSurfaceInfo) -> primary CreateSurface. No SetDisplayMode
@@ -33,7 +33,7 @@ namespace CNA::Internal::Renderers::DirectX1
      * target; Present() letterbox-scales that shadow buffer onto the primary via a single Blt(),
      * with the destination rect recomputed every frame from the window's real client area
      * (GetClientRect + ClientToScreen) -- unlike DIRECTX3's own documented stale-scale limitation
-     * (plan_freedirect.md DX3-16), a virtual-resolution or window-resize change is correct on the very next
+     * (plans/plan_freedirect.md DX3-16), a virtual-resolution or window-resize change is correct on the very next
      * Present(), since nothing here is cached.
      *
      * Textures and render targets (Phase O3) are real: both are private offscreen

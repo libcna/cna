@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-062 existence gate: prove that the pinned MojoShader's OpenGL adapter
+// plans/plan_fx.md FX-062 existence gate: prove that the pinned MojoShader's OpenGL adapter
 // (mojoshader_opengl.c) links and renders a committed compiled effect's shader pair against a
 // real GLES3 context this machine can create -- before any EasyGL renderer code is written for
 // it.
 //
 // EasyGL is the shared implementation behind OPENGLES2/OPENGLES3/OPENGL33/OPENGL4/WEBGL1/WEBGL2
-// (plan_fx.md section 10.3). Its own stock shaders are authored once in GLSL ES 3.00 and string-
+// (plans/plan_fx.md section 10.3). Its own stock shaders are authored once in GLSL ES 3.00 and string-
 // rewritten to whichever dialect the active profile needs at runtime -- but that pipeline is
 // irrelevant here: MojoShader emits already-correct-dialect GLSL for whatever profile
 // MOJOSHADER_glCreateContext is asked for, entirely in parallel to EasyGL's own shaders. This
@@ -22,7 +22,7 @@
 //                                                          offscreen FBO, reads pixels back
 //
 // The --render golden values match the ones independently hand-verified for the SDL_GPU adapter
-// (tools/graphics/mojoshader_sdlgpu_probe.cpp, plan_fx.md FX-071's golden-pixel investigation):
+// (tools/graphics/mojoshader_sdlgpu_probe.cpp, plans/plan_fx.md FX-071's golden-pixel investigation):
 // technique 0 pass 0 (MainVertexShader/MainPixelShader, a 1x1 white FxTexture) lands on
 // (3,6,10,13); technique 0 pass 1 / technique 1 pass 0 (FlatPixelShader, no sampling) on
 // (20,41,61,82) -- both confirmed byte-identical to the SDL_GPU adapter's own golden pixels. Both
@@ -211,7 +211,7 @@ namespace
         return reinterpret_cast<void*>(SDL_GL_GetProcAddress(fnname));
     }
 
-    // plan_fx.md FX-062 finding: unlike the SDL_GPU/D3D11 adapters, every MOJOSHADER_gl* Effects-
+    // plans/plan_fx.md FX-062 finding: unlike the SDL_GPU/D3D11 adapters, every MOJOSHADER_gl* Effects-
     // relevant function omits the leading context-pointer argument the MOJOSHADER_effectShaderContext
     // typedefs declare -- MojoShader's OpenGL adapter keeps its context as implicit thread-local
     // state (set via MOJOSHADER_glMakeContextCurrent), not an explicit per-call parameter, and
@@ -346,7 +346,7 @@ namespace
         return 0;
     }
 
-    /// plan_fx.md FX-062 golden-pixel check: links the selected technique/pass's shaders
+    /// plans/plan_fx.md FX-062 golden-pixel check: links the selected technique/pass's shaders
     /// (PROBE_TECHNIQUE/PROBE_PASS env vars, default 0/0), draws a full-screen quad shaped for
     /// CnaConformanceEffect.fx's MainVertexShader (float3 POSITION0, float2 TEXCOORD0) into an
     /// offscreen RGBA8 FBO, and reports whether the centre pixel matches the value independently

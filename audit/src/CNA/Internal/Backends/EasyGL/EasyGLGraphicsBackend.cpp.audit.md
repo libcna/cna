@@ -244,7 +244,7 @@ passes connect.
 - Why it matters: a narrower-scope version of F2's problem (World is at least partially applied here, unlike the
   SkinnedEffect case), but still a real, confirmed divergence from this same file's own established correct
   pattern for every other lit shader.
-- FNA/XNA comparison: N/A directly (PbrEffect/SkinnedPbrEffect are NOXNA extensions per `plan_cnj.md` CNB-58), but
+- FNA/XNA comparison: N/A directly (PbrEffect/SkinnedPbrEffect are NOXNA extensions per `plans/plan_cnj.md` CNB-58), but
   the correctness bar is the same real-time-graphics standard (inverse-transpose for normals under non-uniform
   scale) this file already applies correctly to its own non-skinned PBR program.
 - Related files: same as F2.

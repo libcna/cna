@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-/* plan_binding.md CBIND-040B: the byte-facing surfaces, fuzzed against an independent oracle.
+/* plans/plan_binding.md CBIND-040B: the byte-facing surfaces, fuzzed against an independent oracle.
  *
  * Every `CNA_StringView` this ABI accepts passes through `ValidateStringView`, which is the one
  * place a C caller's arbitrary bytes meet a decision. A random fuzzer would sample that decision;

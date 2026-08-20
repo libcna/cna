@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-24: VertexBuffer/IndexBuffer SetData() used to unconditionally destroy and
+// plans/plan_sokol.md SOKOL-24: VertexBuffer/IndexBuffer SetData() used to unconditionally destroy and
 // recreate the underlying sokol_gfx buffer on every upload. Both SokolVertexBufferRenderer and
 // SokolIndexBufferRenderer now allocate a dynamic_update buffer once (sized to the owning
 // VertexBuffer/IndexBuffer's own declared capacity) and reuse it in place via sg_update_buffer()

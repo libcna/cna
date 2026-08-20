@@ -79,13 +79,13 @@ namespace Microsoft::Xna::Framework::Graphics
             return (static_cast<int>(options) & static_cast<int>(flag)) != 0;
         }
 
-        // MERGE (plan_platform.md PLAT-8): LogWindowDebugState() lived here on this branch and
+        // MERGE (plans/plan_platform.md PLAT-8): LogWindowDebugState() lived here on this branch and
         // printed a window's raw flag bitmask after creation. It was a debug aid for the
         // window-kind work, its one call site was inside the creation path that now goes through
         // the platform contract, and it cannot be expressed without reaching past that contract to
         // the windowing library. next does not have it. Dropped rather than smuggled through.
 
-        /// plan_runtimerenderer.md RTR-P8-5: a documented debug facility for verifying that a
+        /// plans/plan_runtimerenderer.md RTR-P8-5: a documented debug facility for verifying that a
         /// configured fallback chain actually works, without having to break a driver to find out.
         ///
         /// CNA_DEBUG_UNAVAILABLE_RENDERERS is a comma-separated list of renderer names to treat as
@@ -126,7 +126,7 @@ namespace Microsoft::Xna::Framework::Graphics
             return false;
         }
 
-        // MERGE (plan_runtimerenderer.md P1/P3 x plan_platform.md PLAT-*): `next` added
+        // MERGE (plans/plan_runtimerenderer.md P1/P3 x plans/plan_platform.md PLAT-*): `next` added
         // RendererWindowRequirements and filled it with one `#ifdef CNA_RENDERER_<X>` per family --
         // the pattern P1/P3 removed from this file and that
         // scripts/check_runtime_renderer_discipline.py pins as absent. Neither design is discarded:
@@ -157,14 +157,14 @@ namespace Microsoft::Xna::Framework::Graphics
         /// CNA_DEBUG_FAIL_RENDERER_INIT: treat these renderers as failing during INITIALIZATION,
         /// which is a materially different path from failing the probe -- by then the window
         /// already exists, so a candidate needing a different window kind forces CNA to destroy and
-        /// recreate it (plan_runtimerenderer.md design decision 8). That transition is otherwise
+        /// recreate it (plans/plan_runtimerenderer.md design decision 8). That transition is otherwise
         /// unreachable without a genuinely broken driver.
         [[nodiscard]] bool isDebugForcedInitFailure(std::string_view rendererName)
         {
             return isRendererListedIn("CNA_DEBUG_FAIL_RENDERER_INIT", rendererName);
         }
 
-        /// plan_runtimerenderer.md RTR-P4: the single point where the runtime selection meets the
+        /// plans/plan_runtimerenderer.md RTR-P4: the single point where the runtime selection meets the
         /// compiled-in set. The generated registry translation unit publishes that set into the
         /// selection layer before main() runs, so by the time anything here asks, the answer is real.
         [[nodiscard]] const CNA::Internal::Renderers::GraphicsRendererDescriptor& selectedDescriptor()
@@ -550,7 +550,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // own forwarding exactly.
             renderer_->SetSwapInterval(toSwapInterval(presentationParameters_.getPresentationIntervalProperty()));
 
-            // plan_dx9.md D9-30/D9-33: same "actually reach the renderer" rationale as
+            // plans/plan_dx9.md D9-30/D9-33: same "actually reach the renderer" rationale as
             // ApplyMultiSampleCount above, for back-buffer/depth-stencil format and fullscreen --
             // needed because Game commonly constructs this GraphicsDevice (and its renderer) with
             // default PresentationParameters before GraphicsDeviceManager.ApplyChanges() ever runs.
@@ -1384,7 +1384,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Upload to a temporary vertex buffer and draw.
         //
-        // plan_fx.md FX-081: the staged buffer carries the vertex type's own canonical
+        // plans/plan_fx.md FX-081: the staged buffer carries the vertex type's own canonical
         // VertexDeclaration, exactly as FNA's DrawUserPrimitives<T> uses VertexDeclarationCache<T>.
         // Without it a renderer has only the byte stride to work from, which is enough for the
         // stock shader families but not for a compiled Effect, whose vertex shader declares
@@ -2237,7 +2237,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     CNA::GraphicsRendererType GraphicsDevice::GetGraphicsRendererType() const
     {
-        // plan_runtimerenderer.md RTR-P7-3: this device's own renderer. activeDescriptor_ is null
+        // plans/plan_runtimerenderer.md RTR-P7-3: this device's own renderer. activeDescriptor_ is null
         // only if the accessor is somehow reached before resolution, in which case the build
         // default is the honest answer.
         return activeDescriptor_ != nullptr ? activeDescriptor_->type
@@ -2276,7 +2276,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // security/compatibility boundary requires a separate explicit renderer opt-in.
         if (capability == CNA::GraphicsCapability::CompiledEffects)
             return GetRenderer().SupportsCompiledEffects();
-        // plan_modern.md MOD-100/MOD-101: the float render-target entries are derived, for the same
+        // plans/plan_modern.md MOD-100/MOD-101: the float render-target entries are derived, for the same
         // reason CompiledEffects is -- a renderer whose capability switch ends in
         // `default: return true` would otherwise claim that values above 1.0 survive a
         // render-to-target purely because it has never heard of the enumerator. Each is answered by
@@ -2355,8 +2355,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     bool GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const
     {
-        // plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
-        // (plan_runtimerenderer.md design decision 9's tri-state verdict), so the two can never
+        // plans/plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
+        // (plans/plan_runtimerenderer.md design decision 9's tri-state verdict), so the two can never
         // disagree -- a format this returns true for is a format RenderTarget2D will accept, and one
         // it returns false for is one the constructor refuses.
         switch (GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))
@@ -2515,7 +2515,7 @@ namespace Microsoft::Xna::Framework::Graphics
         description.width = width;
         description.height = height;
 
-        // MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md P1/P2): next derived the render
+        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P1/P2): next derived the render
         // intent, the high-density backing and the framebuffer bits from #if defined(CNA_RENDERER_*)
         // chains. That is exactly the construct P1/P3 removed, and it cannot be right in a
         // multi-renderer binary: several families are compiled in at once, so the chains describe
@@ -2590,7 +2590,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::setVideoSubsystemAcquired(const bool acquired)
     {
-        // MERGE DEFECT (plan_platform.md PLAT-8 x plan_runtimerenderer.md RTR-P5-15), fixed here:
+        // MERGE DEFECT (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md RTR-P5-15), fixed here:
         // both campaigns independently added an AcquireSubsystem(Video) -- `next` in
         // createOrAttachWindow(), where a window is about to be created, and this plan in
         // resolveRenderer(), per fallback candidate -- and the merge kept both while keeping the
@@ -2653,7 +2653,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 Microsoft::Xna::Framework::Input::Mouse::INTERNAL_setWindow(0, 0);
             }
 
-            // MERGE (plan_platform.md PLAT-8): destroying the window is the platform wrapper's job.
+            // MERGE (plans/plan_platform.md PLAT-8): destroying the window is the platform wrapper's job.
             // The wrapper created by CreateWindow() owns its window; the one returned by
             // AdoptWindowHandle() does not, so resetting a borrowed wrapper cannot destroy a
             // caller's window even if ownsWindow_ were ever wrong.
@@ -2785,7 +2785,7 @@ namespace Microsoft::Xna::Framework::Graphics
                         candidateType, GraphicsRendererFallbackReason::InitializationFailed,
                         e.what()});
 
-                // plan_runtimerenderer.md RTR-P5-13: only a window this device OWNS may be dropped
+                // plans/plan_runtimerenderer.md RTR-P5-13: only a window this device OWNS may be dropped
                 // here. discardOwnedWindow() correctly refuses to destroy a caller-supplied window,
                 // but it also dropped the window and zeroed DeviceWindowHandle unconditionally -- so
                 // after any initialization failure CNA forgot the caller's window entirely and the
@@ -2804,7 +2804,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 continue;
             }
 
-            // plan_runtimerenderer.md design decision 5, refined by RTR-P5-18: the selection
+            // plans/plan_runtimerenderer.md design decision 5, refined by RTR-P5-18: the selection
             // latches on SUCCESSFUL resolution, not at the start of construction.
             //
             // Latching up front was the first cut, and it was wrong in a way the fallback tests
@@ -2846,7 +2846,7 @@ namespace Microsoft::Xna::Framework::Graphics
             args.surface.drawableSize = platformWindow_->GetPixelSize();
             args.surface.displayScale = platformWindow_->GetDisplayScale();
         }
-        // MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md design decision 2): next picked
+        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next picked
         // these services with `#if defined(CNA_RENDERER_<X>)` chains. The descriptor of the family
         // actually being constructed answers the same question correctly in a multi-renderer build,
         // where several of those macros can be defined at once.
@@ -2873,13 +2873,13 @@ namespace Microsoft::Xna::Framework::Graphics
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
         args.multiSampleCount = presentationParameters_.getMultiSampleCountProperty();
         args.swapInterval = toSwapInterval(presentationParameters_.getPresentationIntervalProperty());
-        // plan_dx9.md D9-30: real presentation-parameter fidelity for renderers that need it (D3D9);
+        // plans/plan_dx9.md D9-30: real presentation-parameter fidelity for renderers that need it (D3D9);
         // every other renderer continues to ignore these exactly as before the fields existed.
         args.backBufferFormat = static_cast<int>(presentationParameters_.getBackBufferFormatProperty());
         args.depthStencilFormat = static_cast<int>(presentationParameters_.getDepthStencilFormatProperty());
         args.isFullScreen = presentationParameters_.getIsFullScreenProperty();
         args.graphicsProfile = static_cast<int>(graphicsProfile_);
-        // plan_dx9.md D9-34: forward a REAL, renderer-detected device-lost/reset event to this
+        // plans/plan_dx9.md D9-34: forward a REAL, renderer-detected device-lost/reset event to this
         // GraphicsDevice's own public XNA events. Nine of the ten renderers never call this.
         args.deviceEventCallback = [this](CNA::Internal::Renderers::RendererDeviceEvent event)
         {
@@ -2900,7 +2900,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         };
 
-        // plan_runtimerenderer.md design decision 4: reached through the descriptor rather than a
+        // plans/plan_runtimerenderer.md design decision 4: reached through the descriptor rather than a
         // single shared factory symbol, which is what lets several renderer archives coexist.
         renderer_ = descriptor.create(args);
 
@@ -2917,7 +2917,7 @@ namespace Microsoft::Xna::Framework::Graphics
                     presentationParameters_.getMultiSampleCountProperty()));
             if (!rendererStartupNameLogged_)
             {
-                // plan_runtimerenderer.md RTR-P7-10: the ACTIVE renderer, not the compile-time
+                // plans/plan_runtimerenderer.md RTR-P7-10: the ACTIVE renderer, not the compile-time
                 // one. In a multi-renderer build those differ, and printing the compile-time name
                 // would misreport every runtime selection -- which is exactly the situation this
                 // line exists to make visible.
@@ -3143,7 +3143,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
     {
-        // plan_dx9.md D9-34: tracks the real renderer-reported status via deviceStatus_ (updated by
+        // plans/plan_dx9.md D9-34: tracks the real renderer-reported status via deviceStatus_ (updated by
         // the deviceEventCallback lambda in createRenderer()). Every renderer except D3D9 never calls
         // that callback, so this stays Normal for them -- identical behavior to before this field
         // existed.
@@ -3427,7 +3427,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
         // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
         // enforcement inside the renderer (NumSimultaneousRTs, which could be higher).
-        // plan_runtimerenderer.md design decision 9: asked of the active renderer; renderers with
+        // plans/plan_runtimerenderer.md design decision 9: asked of the active renderer; renderers with
         // no profile distinction report no ceiling.
         if (renderer_ != nullptr)
         {

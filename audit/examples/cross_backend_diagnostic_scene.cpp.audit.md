@@ -5,7 +5,7 @@
 - Source file: `examples/cross_backend_diagnostic_scene.cpp`
 - Audit status: AUDITED
 - Subsystem: `examples-tests-generic` shard — cross-backend diagnostic dump producer
-  (`plan_software.md` SOFTWARE-61/SOFTWARE-84).
+  (`plans/plan_software.md` SOFTWARE-61/SOFTWARE-84).
 - File type: `Game`-subclass executable, built per-backend, **not** CTest-registered anywhere.
   Confirmed registrations (both explicitly commented "not registered as a ctest"):
   `cmake/Tests/SoftwareTests.cmake:45` (`cna_diag_software`) and

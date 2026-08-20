@@ -16,5 +16,5 @@
     "wBitsPerSample": 8
   },
   "supportMatrixStatus": "rejected",
-  "notes": "plan_xnb.md XNB-33 support-matrix entry: 8-bit PCM parses correctly (same WAVEFORMATEX layout) but is rejected by SoundEffectReader -- CNA's SoundEffect PCM constructors always assume 16-bit signed samples (SDL_AUDIO_S16LE), with no 8-to-16-bit upconversion path yet."
+  "notes": "plans/plan_xnb.md XNB-33 support-matrix entry: 8-bit PCM parses correctly (same WAVEFORMATEX layout) but is rejected by SoundEffectReader -- CNA's SoundEffect PCM constructors always assume 16-bit signed samples (SDL_AUDIO_S16LE), with no 8-to-16-bit upconversion path yet."
 }

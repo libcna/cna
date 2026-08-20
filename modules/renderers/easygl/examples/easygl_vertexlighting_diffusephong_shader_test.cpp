@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 947 (Phase 78 rollout): HLSL->GLSL shader-conversion proof -- VertexLighting.fx's
 // PerVertexDiffuseAndPhong technique (5 of 5 effect/technique combinations `PerPixelLighting`
-// sample cycles through -- with this row, all 5 are ported; see plan_graphics.md Task 947's own
+// sample cycles through -- with this row, all 5 are ported; see plans/plan_graphics.md Task 947's own
 // PerPixelDiffuseAndPhong row for the running total). Diffuse + Phong specular + ambient all
 // computed entirely in the vertex shader and interpolated as a plain COLOR varying -- the
 // sample's own fully-per-vertex "faceted specular highlight" demonstration technique.

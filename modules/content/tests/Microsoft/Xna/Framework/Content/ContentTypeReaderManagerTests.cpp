@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-14/XNB-14A/XNB-14B: unit tests for ContentTypeReaderManager's registration
+// plans/plan_xnb.md XNB-14/XNB-14A/XNB-14B: unit tests for ContentTypeReaderManager's registration
 // surface. Does not call ReadUntyped()/Read() on any reader -- that needs a real ContentReader&
-// (plan_xnb.md XNB-15/16), out of scope for this task; these tests cover only registration,
+// (plans/plan_xnb.md XNB-15/16), out of scope for this task; these tests cover only registration,
 // per-call instance freshness, and concrete EffectReader registration.
 
 #include <gtest/gtest.h>

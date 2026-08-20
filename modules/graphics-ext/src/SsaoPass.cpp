@@ -175,7 +175,7 @@ void main() {
         occlusionEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, occlusionSource);
         composeEffect_   = std::make_unique<ShaderEffect>(device, kVertexSource, kComposeSource);
 
-        // plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
+        // plans/plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
         // correct and completely silent. This names the pass and prints the compiler's log once.
         bool logged = false;
         detail::reportShaderCompileFailure(device, "SsaoPass (occlusion)", occlusionEffect_.get(),

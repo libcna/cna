@@ -14,7 +14,7 @@ namespace
     constexpr const char* kFixture = "tests/assets/media/video/chroma_420.mkv";
 }
 
-// plan_media.md MEDIA-44: the raw-file constructor now throws FileNotFoundException for a
+// plans/plan_media.md MEDIA-44: the raw-file constructor now throws FileNotFoundException for a
 // missing file, matching FNA's own File.Exists check, instead of silently leaving
 // width_/height_/duration_ at 0 with no exception at all.
 TEST(VideoTest, RawFileConstructorThrowsFileNotFoundExceptionForMissingFile)
@@ -74,7 +74,7 @@ TEST(VideoTest, GetTypeNameIsFullyQualified)
     EXPECT_EQ(video.GetTypeName(), "Microsoft.Xna.Framework.Media.Video");
 }
 
-// plan_media.md MEDIA-86: Video's own SetAudioTrackEXT/SetVideoTrackEXT (distinct from
+// plans/plan_media.md MEDIA-86: Video's own SetAudioTrackEXT/SetVideoTrackEXT (distinct from
 // VideoPlayer's identically-named methods -- these only record the selected track index and
 // forward to an attached VideoPlayer, which is nullptr for a standalone Video like this one, so
 // "doesn't throw and other fields stay unaffected" is what's actually observable at this level).

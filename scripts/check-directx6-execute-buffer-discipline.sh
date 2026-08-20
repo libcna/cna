@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# plan_dx6.md design decision 12: a real, automated proof that the DIRECTX6 renderer never quietly
+# plans/plan_dx6.md design decision 12: a real, automated proof that the DIRECTX6 renderer never quietly
 # reaches for the proven-broken execute-buffer Direct3D path (IDirect3D/IDirect3DDevice::Execute/
 # D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DINSTRUCTION/D3DOP_*) or the old D3DVERTEXTYPE-enum
 # vertex-type submission (D3DVT_*) instead of the working IDirect3DDevice3::DrawPrimitive/
-# DrawIndexedPrimitive + D3DFVF_TLVERTEX one -- see plan_dx6.md's status note (the DX6-0 spike,
+# DrawIndexedPrimitive + D3DFVF_TLVERTEX one -- see plans/plan_dx6.md's status note (the DX6-0 spike,
 # itself building on DX2-0/DX30-0/DX5-0) for why both are permanently off-limits here. Registered
 # as the DirectX6_ExecuteBufferDiscipline CTest (cmake/Tests/DirectX6Tests.cmake) -- pure text check, no
 # compiled binary, no Wine needed, runs identically whether cross-compiling or not.
@@ -51,7 +51,7 @@ if [ "$violations" -ne 0 ]; then
     echo "IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DINSTRUCTION/" >&2
     echo "D3DOP_*/the un-versioned IDirect3D/IDirect3DDevice/the old D3DVT_* vertex-type enum" >&2
     echo "values), and ONLY v4 DirectDraw for its 2D layer (IDirectDrawSurface4/DDSURFACEDESC2 are" >&2
-    echo "fine; never IDirectDraw2/3/7+/IDirectDrawSurface[1235-7]+), per plan_dx6.md design" >&2
+    echo "fine; never IDirectDraw2/3/7+/IDirectDrawSurface[1235-7]+), per plans/plan_dx6.md design" >&2
     echo "decision 12." >&2
     exit 1
 fi

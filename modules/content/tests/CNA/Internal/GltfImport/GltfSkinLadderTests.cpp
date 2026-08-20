@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-399 / §15.4: the skinning ladder, evaluated rather than described.
+// plans/plan_gltf.md GLTF-399 / §15.4: the skinning ladder, evaluated rather than described.
 //
 // §15.4 lists a ladder of skin fixtures with an exactly computable answer for each. Six of them
 // owned a defect and got a hand-written test when that defect was closed; the rest stated their

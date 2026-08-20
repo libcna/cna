@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA hot-path lint (plan_platform.md Task PLAT-9)
+# CNA hot-path lint (plans/plan_platform.md Task PLAT-9)
 #
 # Enforces design decision 4 -- no platform call inside a per-pixel, per-vertex,
 # per-fragment, per-sample or per-event loop -- at configure time.
@@ -59,5 +59,5 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_hot_path_scri
 add_custom_target(cna_platform_hot_path_lint
     COMMAND "${Python3_EXECUTABLE}" "${_hot_path_script}" --repo "${CMAKE_CURRENT_SOURCE_DIR}"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Checking for platform calls inside hot loops (plan_platform.md PLAT-9)"
+    COMMENT "Checking for platform calls inside hot loops (plans/plan_platform.md PLAT-9)"
     VERBATIM)

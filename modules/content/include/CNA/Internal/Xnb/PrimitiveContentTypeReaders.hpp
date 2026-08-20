@@ -7,7 +7,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 
-// plan_xnb.md XNB-18A: primitive .xnb readers. FNA's own equivalents (src/Content/
+// plans/plan_xnb.md XNB-18A: primitive .xnb readers. FNA's own equivalents (src/Content/
 // ContentReaders/*.cs) are all `internal class` -- never subclassed or referenced directly by
 // game code, only dispatched through the type-reader table -- so these live in
 // CNA::Internal::Xnb rather than the public Microsoft::Xna::Framework::Content namespace,

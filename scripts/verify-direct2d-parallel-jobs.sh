@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_direct2d.md D2D-123: mechanically enforce "never more than 2 parallel build/test jobs" for
+# plans/plan_direct2d.md D2D-123: mechanically enforce "never more than 2 parallel build/test jobs" for
 # Direct2D-relevant build commands, rather than trusting review to catch an unbounded --parallel/-j
 # (or a cap above 2) every time it is added.
 #
@@ -17,7 +17,7 @@ FILES=(
     "cmake/UnitTests.cmake"
     "docs/direct2d-renderer.md"
     "docs/direct2d-mip-storage-spike.md"
-    "plan_direct2d.md"
+    "plans/plan_direct2d.md"
     "scripts/run-wine-direct2d.sh"
     "scripts/run-proton-direct2d.sh"
     "scripts/run-direct2d-virtual-display.sh"

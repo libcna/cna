@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState mapping for
+// plans/plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState mapping for
 // the OpenGL4 graphics renderer -- previously every 3D draw used whatever GL's own defaults were;
 // GraphicsDevice.BlendState/DepthStencilState/RasterizerState assignments had no effect at all.
 //

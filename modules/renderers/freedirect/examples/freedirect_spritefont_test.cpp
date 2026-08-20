@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString tests for the DIRECTX3 (DirectDraw,
+// plans/plan_freedirect.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString tests for the DIRECTX3 (DirectDraw,
 // via the ../free-direct sibling) graphics renderer.
 //
 // SpriteBatch::DrawString (shared, renderer-agnostic SpriteBatch.cpp) lays out each glyph as a

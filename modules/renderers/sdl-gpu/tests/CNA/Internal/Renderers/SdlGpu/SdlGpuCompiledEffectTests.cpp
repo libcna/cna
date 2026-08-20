@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-061/FX-071: the SDL_GPU compiled-effect runtime and its draw route.
+// plans/plan_fx.md FX-061/FX-071: the SDL_GPU compiled-effect runtime and its draw route.
 //
 // SupportsCompiledEffects() reports true (FX-071 is done: ordinary 3D draws and SpriteBatch both
 // draw with a compiled pass, verified by RendersTheAppliedPassesExpectedPixelsIntoARenderTarget
@@ -79,7 +79,7 @@ TEST(SdlGpuCompiledEffectTest, TheCapabilityIsTrueNowThatDrawsExecuteTheEffect)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
-    // plan_fx.md FX-071: ordinary 3D draws and SpriteBatch both draw with a compiled pass now
+    // plans/plan_fx.md FX-071: ordinary 3D draws and SpriteBatch both draw with a compiled pass now
     // (RendersTheAppliedPassesExpectedPixelsIntoARenderTarget, DrawsASpriteWithACompiledEffect),
     // verified by a real golden-pixel readback and the FX-060 shared conformance contract
     // (SharedBackendConformanceContract) -- so this capability no longer means "will silently
@@ -246,7 +246,7 @@ TEST(SdlGpuCompiledEffectTest, CloneCarriesItsOwnValuesAndSurvivesTheSource)
     EXPECT_NO_THROW(clone->ApplyPass(0, deviceState, changes));
 }
 
-// ---- plan_fx.md FX-071: vertex-attribute builder and uniform snapshot capture ------------------
+// ---- plans/plan_fx.md FX-071: vertex-attribute builder and uniform snapshot capture ------------------
 
 TEST(SdlGpuCompiledEffectVertexLayoutTest, EveryFormatAndUsageMapsToADistinctNativeValue)
 {
@@ -543,7 +543,7 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsIndexedAndNonIndexedPrimitivesWithTheApp
 
 TEST(SdlGpuCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARenderTarget)
 {
-    // plan_fx.md FX-071 golden-pixel test: the real per-pixel proof that was missing while the
+    // plans/plan_fx.md FX-071 golden-pixel test: the real per-pixel proof that was missing while the
     // FX-071 investigation was open. RenderTarget2D::GetData() is real on this renderer (unlike
     // backbuffer readback, see sdlgpu_rendertarget2d_test.cpp), so this draws through
     // SdlGpuRenderer::DrawPrimitivesEx the same way DrawsIndexedAndNonIndexedPrimitivesWithTheApplied
@@ -688,7 +688,7 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
     runtime->SetTechnique(0);
     runtime->ApplyPass(0, deviceState, changes);  // P0: MainVertexShader/MainPixelShader
 
-    // plan_fx.md FX-071: exercised at the level SdlGpuRenderer::QueueSprite is reachable from
+    // plans/plan_fx.md FX-071: exercised at the level SdlGpuRenderer::QueueSprite is reachable from
     // directly, the same way this file's other lower-level tests bypass Effect/GraphicsDevice, to
     // isolate the SpriteBatch draw route from the public Effect(device, bytecode)/SpriteBatch::Begin
     // construction path (both now work, since SupportsCompiledEffects() is true).
@@ -722,7 +722,7 @@ TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)
 
 TEST(SdlGpuCompiledEffectTest, SharedBackendConformanceContract)
 {
-    // plan_fx.md FX-060/FX-071: the same cross-renderer contract FNA3D's
+    // plans/plan_fx.md FX-060/FX-071: the same cross-renderer contract FNA3D's
     // Fna3dCompiledEffectTest.SharedBackendConformanceContract runs -- format, reflection,
     // techniques/passes, render state, state policy, samplers, texture binding, clone and
     // lifetime -- now through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
@@ -734,7 +734,7 @@ TEST(SdlGpuCompiledEffectTest, SharedBackendConformanceContract)
 }
 
 
-// plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
+// plans/plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
 // own Tint parameter into a render target and reads it back, so a draw that silently used a stock
 // shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.
 

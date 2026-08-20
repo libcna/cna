@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O4 (DX2-37): depth-test correctness through the real Direct3D v2 device and
+// plans/plan_dx2.md Phase O4 (DX2-37): depth-test correctness through the real Direct3D v2 device and
 // its attached Z-buffer (mirrors DX2-0's own dx2_spike7_full.cpp test A, now through the full XNA
 // public API instead of a standalone spike).
 //

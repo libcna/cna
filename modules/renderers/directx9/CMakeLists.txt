@@ -1,4 +1,4 @@
-# plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectRenderer.cpp calls
+# plans/plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectRenderer.cpp calls
 # D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
 # stock D3D9 pipeline must stay d3dcompiler-free (unlike D3D11/D3D12, which link it into their
 # whole renderer target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its
@@ -30,13 +30,13 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/D3D9EffectRenderer.cpp")
     target_link_libraries(cna_renderer_d3d9_effect PRIVATE cna_graphics_core cna_core cna_math)
 endif()
 
-# plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the global
+# plans/plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the global
 # scalar, which names the build DEFAULT.
 cna_renderer_target_name(_cna_d3d9_target)
 add_library(${_cna_d3d9_target} STATIC ${_cna_d3d9_sources})
 cna_renderer_common_setup(${_cna_d3d9_target})
 set(RENDERER_TARGET "${_cna_d3d9_target}")
-# plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
+# plans/plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
 # dxgi -- D3D9 predates DXGI) by D9-2's own spike. No cna_renderer_d3dcommon (design
 # decision 12 -- D3D9 does not share D3DCommon). d3dcompiler is deliberately NOT linked here --
 # design decision 9/16 keep the stock pipeline dependency-free; it lives on the isolated effect

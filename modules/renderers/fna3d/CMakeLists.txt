@@ -1,4 +1,4 @@
-# plan_fna3d.md: the FNA3D renderer draws through FNA3D (fetched and pinned by
+# plans/plan_fna3d.md: the FNA3D renderer draws through FNA3D (fetched and pinned by
 # cmake/ThirdPartyFNA3D.cmake), which itself dispatches onto SDL_GPU, Direct3D 11 or OpenGL at
 # runtime. SDL3 supplies the window FNA3D presents into -- the same window every other windowed
 # renderer uses; FNA3D's own only dependency is that same SDL3.
@@ -52,7 +52,7 @@ target_include_directories(${RENDERER_TARGET} PRIVATE "${CNA_FNA3D_GENERATED_DIR
 # module's window-flag hook, the renderer's tests and examples -- needs the same include roots and
 # MojoShader switches.
 target_link_libraries(${RENDERER_TARGET} PUBLIC cna_fna3d)
-# plan_fx.md FX-061: the MojoShader-to-CNA reflection and state translation is shared with every
+# plans/plan_fx.md FX-061: the MojoShader-to-CNA reflection and state translation is shared with every
 # other backend that executes compiled effects, so it lives in common/mojoshader rather than here.
 target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_mojoshader_effect)
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)

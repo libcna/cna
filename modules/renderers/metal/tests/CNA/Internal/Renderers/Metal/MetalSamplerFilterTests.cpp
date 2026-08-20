@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md: DescribeMetalSamplerFilter() only reads a plain XNA TextureFilter ordinal and
+// plans/plan_metal.md: DescribeMetalSamplerFilter() only reads a plain XNA TextureFilter ordinal and
 // returns a plain C++ struct -- zero Objective-C dependency, genuinely unit-tested on this Linux
 // machine. No #if defined(CNA_RENDERER_METAL) gate, deliberately.
 //

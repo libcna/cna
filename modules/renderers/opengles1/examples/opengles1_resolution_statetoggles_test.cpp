@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengles1.md OPENGLES1-79 follow-up: closes the last rows left uncovered after the first
+// plans/plan_opengles1.md OPENGLES1-79 follow-up: closes the last rows left uncovered after the first
 // wave of runtime tests -- OPENGLES1-9 (virtual resolution / logical size), OPENGLES1-10
 // (window<->logical coordinate transforms), OPENGLES1-13 (the direct SetDepthTestEnabled /
 // SetBlendEnabled / SetDepthWriteEnabled toggles, as distinct from the state objects already

@@ -15,7 +15,7 @@ count, per-level byte-count-prefixed pixel data (DXT1/3/5 software-decompressed 
 `DxtUtil`), uploaded via `Texture2D::SetData()`.
 
 ## Executive Verdict
-Healthy -- explicit, correctly-reasoned adversarial-input hardening (cited plan_xnb.md XNB-43) against the
+Healthy -- explicit, correctly-reasoned adversarial-input hardening (cited plans/plan_xnb.md XNB-43) against the
 classic "negative-times-negative dimension overflow" trick, plus a genuine post-decompress byte-count
 cross-check before ever indexing into decoded pixel data.
 

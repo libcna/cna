@@ -73,7 +73,7 @@ void main()
                          * cnaDirectionHandedness(skinDirectionMat));
 
     v_texcoord0 = a_texcoord0;
-    // plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+    // plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
     // colour. Carried in v_vertexColor0 rather than v_color0 for the same reason the stride-56
     // skinned path does: v_color0 already carries u_diffuseColor for other fragment shaders. Its
     // varying default is opaque white, the multiplier's identity, so a stride without a colour slot

@@ -1,4 +1,4 @@
-# --- Renderer descriptor compilation gate (plan_runtimerenderer.md) ---
+# --- Renderer descriptor compilation gate (plans/plan_runtimerenderer.md) ---
 #
 # A GraphicsRendererDescriptor translation unit is the one file per renderer family that a build
 # needs even when that family is not selected: it is what GraphicsRendererRegistry hands

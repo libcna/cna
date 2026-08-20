@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: alphatest_notequal_quad
+# plans/plan_dx9.md D9-A5 scene corpus: alphatest_notequal_quad
 # The first scene to exercise AlphaFunction=NotEqual, the negation of alphatest_equal_quad.scene
 # within the SAME PSAlphaTestEqNe shader bucket (confirmed against FNA's own AlphaTestEffect.cs:
 # NotEqual uses the identical `abs(a - x) < y` comparison as Equal, just with the pass/fail branch

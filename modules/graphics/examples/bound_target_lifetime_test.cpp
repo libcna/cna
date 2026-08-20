@@ -204,7 +204,7 @@ namespace
      * Declared false where a run MEASURED level 1 coming back all-zero rather than the flat colour
      * that was cleared into level 0: BGFX (`E1a the unbind regenerated level 1 (0/8) ... got
      * (0,0,0,0)`). WebGPU refuses `mipMap=true` outright with a NotSupportedException naming
-     * plan_webgpu.md WEBGPU-53/54, which the legs catch and declare at run time, so it does not need
+     * plans/plan_webgpu.md WEBGPU-53/54, which the legs catch and declare at run time, so it does not need
      * to appear here. Silence is not a declaration, which is why the measured-zero case needs one.
      */
     constexpr bool kRenderTargetMipReadable =
@@ -871,7 +871,7 @@ class BoundTargetLifetimeTest : public Game
         catch (const std::exception& e)
         {
             // WebGPU refuses mipMap=true on a render target outright, with a std::runtime_error
-            // naming plan_webgpu.md WEBGPU-53/54 -- deliberately, so the XNA layer's promised mip
+            // naming plans/plan_webgpu.md WEBGPU-53/54 -- deliberately, so the XNA layer's promised mip
             // chain cannot silently be missing. A renderer that SAYS so is declared here; one that
             // silently returns zeros is not, which is what kRenderTargetMipReadable exists for.
             if (!MipRefusal(e)) throw;

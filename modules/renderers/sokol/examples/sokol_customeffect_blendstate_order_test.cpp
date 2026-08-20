@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-41: SpriteBatch's raw-GL custom-effect draw path
+// plans/plan_sokol.md SOKOL-41: SpriteBatch's raw-GL custom-effect draw path
 // (SokolSpriteBatchRenderer::DrawSpriteRunEXT's custom branch) must apply the device's real
 // BlendState, not silently keep whatever GL_BLEND state a previous draw happened to leave behind.
 //
@@ -18,7 +18,7 @@
 // the tint/shader colours below are plain straight alpha, not premultiplied, and AlphaBlend
 // against straight-alpha input produces a fully-opaque-looking result instead of a genuine 50/50
 // mix (the same "first draft used the premultiplied factors against straight-alpha data" mistake
-// plan_sokol.md SOKOL-21's own history note records for a different test).
+// plans/plan_sokol.md SOKOL-21's own history note records for a different test).
 //
 // Check A -- sanity: a STOCK NonPremultiplied sprite over black genuinely blends (not a
 //   hardcoded assumption -- establishes the harness itself is exercising real blending).

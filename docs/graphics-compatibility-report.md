@@ -12,7 +12,7 @@
 > status, see `NEXT.md` §5 (the actively maintained bug list) and
 > `docs/graphics-renderer-feature-matrix.md`.
 
-**Written for Task 499 (`plan_graphics.md` Phase 55).** This project has historically described
+**Written for Task 499 (`plans/plan_graphics.md` Phase 55).** This project has historically described
 Graphics maturity with informal, hand-derived percentages (e.g. `docs/xna-4-api-coverage.md`'s
 older §8 table — "~98%", "~85%" — acknowledged in Task 490's own "Release checklist" section as
 color commentary, not a rigorous measurement). This report replaces that with numbers computed
@@ -21,7 +21,7 @@ arithmetic. It does not re-derive the qualitative detail in `docs/xna-4-api-cove
 482–485), `docs/graphics-renderer-feature-matrix.md` (Task 451), or `docs/migration-guide.md`
 (Tasks 486–489) — see those for the "why", this report is the "how many."
 
-All figures below are pulled from `plan_graphics.md`'s own Task 493–498 rows (re-read directly,
+All figures below are pulled from `plans/plan_graphics.md`'s own Task 493–498 rows (re-read directly,
 not from memory, before writing this report).
 
 ## 1. Per-renderer test pass rate
@@ -110,7 +110,7 @@ saying what it's a percentage of.
 
 ## 5. Assessment against Task 500's own gate criteria
 
-Task 500 (`plan_graphics.md`, next task) reads: *"Declare `Microsoft.Xna.Framework.Graphics` 1.0
+Task 500 (`plans/plan_graphics.md`, next task) reads: *"Declare `Microsoft.Xna.Framework.Graphics` 1.0
 compatibility milestone only if Tasks 491–499 pass or deviations are explicitly documented."*
 Based on the real numbers in this report:
 

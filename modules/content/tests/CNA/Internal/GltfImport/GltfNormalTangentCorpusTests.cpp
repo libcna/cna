@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-170/GLTF-175/GLTF-176/GLTF-399: the discriminating assertions behind the
+// plans/plan_gltf.md GLTF-170/GLTF-175/GLTF-176/GLTF-399: the discriminating assertions behind the
 // normals/tangents corpus group. L2/L3/L4/L5 already sweep the values and bytes generically; these
 // tests prove each newly added fixture still has the shape that makes those comparisons useful.
 

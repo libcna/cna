@@ -4,7 +4,7 @@
 
 - Source file: `examples/webgpu_skinnedpbr3d_test.cpp`
 - Audit status: AUDITED
-- Subsystem: `examples-tests-webgpu` shard — `SkinnedPbrEffect` test (PBR + skinning combo, plan_cnj.md
+- Subsystem: `examples-tests-webgpu` shard — `SkinnedPbrEffect` test (PBR + skinning combo, plans/plan_cnj.md
   Phase 14J WebGPU counterpart, closes the remaining half of this backend's "no skinning shader at all" gap
   alongside `webgpu_skinned3d_test.cpp`)
 - File type: standalone `Game`-subclass executable, CTest-registered

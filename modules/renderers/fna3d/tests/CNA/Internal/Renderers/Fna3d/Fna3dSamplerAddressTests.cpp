@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-026: SamplerState carries three addressing axes, but the renderer-neutral contract
+// plans/plan_fx.md FX-026: SamplerState carries three addressing axes, but the renderer-neutral contract
 // used to carry two. FNA3D filled the third by mirroring U, so a draw replaced whatever W an
 // effect or the game had asked for. These tests pin the axis down where the assembled native
 // sampler state is visible, which is the only place the substitution was observable.

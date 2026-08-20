@@ -20,7 +20,7 @@ namespace CNA::Graphics {
     /**
      * @brief Writes every field of a material onto a `PbrEffect`.
      *
-     * plan_modern.md `MOD-1303`. Free functions rather than methods on either type, for the
+     * plans/plan_modern.md `MOD-1303`. Free functions rather than methods on either type, for the
      * layering reason that runs through this whole module: `PbrMaterial` is engine-layer and
      * compiled out by default, `PbrEffect` is XNA-layer and always compiled, and neither may
      * depend on the other. A function that knows both is the only shape that leaves both alone.
@@ -38,7 +38,7 @@ namespace CNA::Graphics {
     /**
      * @brief Writes every field of a material onto a `SkinnedPbrEffect`.
      *
-     * plan_modern.md `MOD-1304`. The same coverage as the rigid overload; the skinning state
+     * plans/plan_modern.md `MOD-1304`. The same coverage as the rigid overload; the skinning state
      * (bone palette, weights per vertex) is scene data and is left alone.
      *
      * @param material The material to apply.
@@ -50,7 +50,7 @@ namespace CNA::Graphics {
     /**
      * @brief Reads a material back out of a `PbrEffect`.
      *
-     * plan_modern.md `MOD-1305`. `extractMaterial(effect)` after `applyMaterial(material, effect)`
+     * plans/plan_modern.md `MOD-1305`. `extractMaterial(effect)` after `applyMaterial(material, effect)`
      * returns a material equal to the original -- that round trip is what makes this type usable
      * as a serialization form, and it is asserted field by field in the tests.
      *
@@ -72,7 +72,7 @@ namespace CNA::Graphics {
     /**
      * @brief Applies the device state a material implies: blending and face culling.
      *
-     * plan_modern.md `MOD-1306`/`MOD-1307`. Separate from @ref applyMaterial, and deliberately
+     * plans/plan_modern.md `MOD-1306`/`MOD-1307`. Separate from @ref applyMaterial, and deliberately
      * something the application calls rather than something a draw does behind its back:
      * `PbrEffect::getDoubleSidedEXTProperty` is documented as carried state precisely because a
      * `Model::Draw` that mutated `BlendState` as a side effect would surprise every XNA caller.

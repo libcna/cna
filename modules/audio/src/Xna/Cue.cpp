@@ -929,7 +929,7 @@ namespace Microsoft::Xna::Framework::Audio
                 // structurally true, but that comparison never accounted for FAudio's `next` being
                 // continuous while this draw is discrete, which is exactly what `P11-XACT-002`
                 // caught while writing an equal-weight regression test for its own copy of this
-                // pattern (`plan_audio.md`, `P11-XACT-004`).
+                // pattern (`plans/plan_audio.md`, `P11-XACT-004`).
                 uint32_t totalWeight = 0;
                 for (const auto& e : var.entries)
                     totalWeight += static_cast<uint32_t>(e.weightMax) - e.weightMin;

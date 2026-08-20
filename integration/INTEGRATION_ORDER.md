@@ -176,7 +176,7 @@ GPG-verifies; `git log` over the batch contains zero attribution hits.
 > CLEAN classification re-verified exactly (40/40 maintainer PGP, zero trailers, zero
 > attribution) — and **nine** commit bodies still carried session narrative, two of them caught
 > only by a multiline-aware sweep across line wraps (a line-based grep misses `this\nsession`);
-> plan-section citations like "(plan_opengl2.md session 13)" were kept as factual references.
+> plan-section citations like "(plans/plan_opengl2.md session 13)" were kept as factual references.
 > **The probe found 17 errors, 14 distinct drifts** — the familiar stale-fork set plus two the
 > head never adopted because they are the lane's own interface additions
 > (`GetDefaultViewportRect` behind its real Letterbox/Overscan/Stretch modes, and
@@ -260,7 +260,7 @@ GPG-verifies; `git log` over the batch contains zero attribution hits.
 > by the campaign's known non-maintainer key (0 PGP, 0 genuinely unsigned — the inventory row
 > re-verified at the object level); the first 8 carry both prohibited trailers. Four per-session
 > `NEXT.md` status-summary commits were **OMITTED with justification** (session narrative;
-> `plan_opengl4.md` carries the technical continuity); the other 24 replayed, 32 of 41 files
+> `plans/plan_opengl4.md` carries the technical continuity); the other 24 replayed, 32 of 41 files
 > byte-identical at the replay boundary, 0 missing.
 >
 > **Content: the compile probe found 23 errors across 13 drifts** — the `opengles1` set (bool
@@ -486,7 +486,7 @@ recreation across two shared interfaces — and, before that, for the §1.1 capa
 > (Wicked 5780-corpus, Magnum 5843-corpus, EasyGL 6212-ctest + the 5913-case continuity
 > instrument), sanitizer gates clean, `REMED-GFX-222` discovered and resolved
 > in-stabilization — and the stabilization's own deeper-than-corpus probe found **`WICKED-80`**
-> (`Texture3D` staged transfers corrupt dimension-dependent tail rows, `plan_wicked.md`), an open
+> (`Texture3D` staged transfers corrupt dimension-dependent tail rows, `plans/plan_wicked.md`), an open
 > production defect that blocks the tag under the same literal criterion `REMED-GFX-220` blocked
 > Batch 1's first decision. Full record: **`integration/BATCH_2_STABILIZATION.md`**.
 
@@ -608,7 +608,7 @@ truthful per §1.1.
 
 Gated by **C1**. Execute the nine-step sequence in inventory §7.4 exactly, in order. The
 cross-repository **merges** — steps 4, 5 and 6 — and `GLB-38` (step 7) are **owner-only**;
-`plan_glbackends.md` records that decision independently and it has not been lifted.
+`plans/plan_glbackends.md` records that decision independently and it has not been lifted.
 
 **The lane adds four public backends, not five.** They are **OpenGL ES 3, OpenGL 3, WebGL 1 and
 WebGL 2**. **EasyGL is internal and hidden** — a support library, never a user-selectable CNA
@@ -973,7 +973,7 @@ with `git cat-file -p` rather than from the inventory's signature row.
 
 The renumbering **invalidates four cross-references** from files outside the lane —
 `include/CNA/Graphics/PbrMaterial.hpp:19` and `noxna_devices.md:93` (`N11`),
-`docs/surface-format-support.md:184,220` (`N20`), and `plan_postaudit.md:1572-74`
+`docs/surface-format-support.md:184,220` (`N20`), and `plans/plan_postaudit.md:1572-74`
 (`N50`/`N51`/`N52` plus an old section number). Two further citations live under `audit/`, which is
 frozen. `DitherMode.hpp:14`'s `N70` still resolves correctly.
 

@@ -402,7 +402,7 @@ does not, as of the state above:
 Everything **not** in this table (2D SpriteBatch, BasicEffect textured/lit 3D, depth/stencil,
 culling, depth bias, RenderTarget2D incl. MSAA+resolve, RenderTargetCube, TextureCube, Texture3D
 storage, occlusion queries) is already at parity with EasyGL — see the "What works" table in
-[`docs/sokol-backend.md`](docs/sokol-backend.md) for the verification evidence behind each one.
+[`docs/sokol-backend.md`](../docs/sokol-backend.md) for the verification evidence behind each one.
 
 ---
 

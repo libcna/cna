@@ -23,7 +23,7 @@ namespace CNA::Graphics {
     /**
      * @brief Measures how long the GPU spent on a range of commands.
      *
-     * plan_modern.md `MOD-2163`. Every number in `docs/cnaext-perf.md` was measured with a CPU wall
+     * plans/plan_modern.md `MOD-2163`. Every number in `docs/cnaext-perf.md` was measured with a CPU wall
      * clock wrapped around a one-texel read-back, which works but measures the wrong thing twice
      * over: the clock starts when the driver *accepts* the work rather than when the GPU starts it,
      * and the read-back that forces completion is itself a synchronisation the real frame would

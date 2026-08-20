@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-210, MOD-219, MOD-220: the shader-side infrastructure the passes share.
+// plans/plan_modern.md MOD-210, MOD-219, MOD-220: the shader-side infrastructure the passes share.
 //
 // All three exist because of failures that produce a picture rather than an error. A shader
 // compiled twice costs twice and looks identical. A shader that failed to compile makes its pass

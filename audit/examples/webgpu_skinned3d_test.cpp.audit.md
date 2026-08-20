@@ -5,7 +5,7 @@
 - Source file: `examples/webgpu_skinned3d_test.cpp`
 - Audit status: AUDITED
 - Subsystem: `examples-tests-webgpu` shard — `SkinnedEffect` test (closing this backend's "no skinning shader
-  at all" gap, plan_cnj.md Phase 14J WebGPU counterpart)
+  at all" gap, plans/plan_cnj.md Phase 14J WebGPU counterpart)
 - File type: standalone `Game`-subclass executable, CTest-registered
   (`cna_webgpu_test(cna_test_webgpu_skinned3d examples/webgpu_skinned3d_test.cpp)` /
   `cna_register_backend_test(NAME WebGPU_Skinned3D …)`, `cmake/Tests/WebGpuTests.cmake:108-109`).

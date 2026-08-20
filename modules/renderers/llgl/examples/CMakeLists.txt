@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_llgl.md: LLGL renderer CTest registration. Like the Vulkan/Bgfx/SDL_GPU entries above these
+# plans/plan_llgl.md: LLGL renderer CTest registration. Like the Vulkan/Bgfx/SDL_GPU entries above these
 # need a real (or virtual) display; unlike them, the native API underneath is decided at runtime by
 # LLGL itself, so the same binaries exercise whichever module was selected.
 
@@ -14,7 +14,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
-# plan_llgl.md LLGL-9/LLGL-16: CTest registration for the LLGL graphics renderer.
+# plans/plan_llgl.md LLGL-9/LLGL-16: CTest registration for the LLGL graphics renderer.
 #
 # Both tests need a real display and a real GPU (or a software rasterizer behind a virtual X
 # server), exactly like the Vulkan/Bgfx/SDL_GPU entries: LLGL creates its context or surface from
@@ -392,7 +392,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
     # on this module -- a genuine, pre-existing environment/driver gap discovered while adding
     # this test (cube textures were previously exercised only through CnaTests' default,
     # Vulkan-preferred TextureCubeTest, never through a CNA_LLGL_RENDERER=opengl-pinned CTest),
-    # not a regression in EnvironmentMapEffect or CreateTextureCube itself. See plan_llgl.md
+    # not a regression in EnvironmentMapEffect or CreateTextureCube itself. See plans/plan_llgl.md
     # LLGL-25/LLGL-26 and docs/llgl-renderer.md.
     cna_register_renderer_test(NAME Llgl_SkinnedEffect_IdentityBones_OpenGL COMMAND cna_test_llgl_skinnedeffect_identity_bones
         TIMEOUT 90 LABELS "Llgl"
@@ -433,7 +433,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
 
     # LLGL-39: plain-registration batch of shared, cross-renderer tests (no CNA_RENDERER_ conditional
     # Contract branches -- ordinary Game-subclass oracles, already registered on EasyGL and usually
-    # several other renderers, simply never wired up here). See plan_llgl.md's own Phase LLGL-7 for
+    # several other renderers, simply never wired up here). See plans/plan_llgl.md's own Phase LLGL-7 for
     # how this list was derived.
     cna_llgl_test(cna_test_llgl_rendertarget2d_depth ${CNA_GRAPHICS_EXAMPLES_DIR}/rendertarget2d_depth_test.cpp)
     cna_register_renderer_test(NAME Llgl_RenderTarget2D_DepthBuffer COMMAND cna_test_llgl_rendertarget2d_depth

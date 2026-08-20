@@ -23,5 +23,5 @@
     "durationMs": 500
   },
   "supportMatrixStatus": "supported",
-  "notes": "plan_xnb.md XNB-33 support-matrix entry: 16-bit PCM mono, the primary supported SoundEffect variant (maps directly onto SoundEffect's existing SDL_AUDIO_S16LE-only PCM constructors). Platform byte 'd' (DesktopGL) -- already among FNA's own accepted XNB platform bytes."
+  "notes": "plans/plan_xnb.md XNB-33 support-matrix entry: 16-bit PCM mono, the primary supported SoundEffect variant (maps directly onto SoundEffect's existing SDL_AUDIO_S16LE-only PCM constructors). Platform byte 'd' (DesktopGL) -- already among FNA's own accepted XNB platform bytes."
 }

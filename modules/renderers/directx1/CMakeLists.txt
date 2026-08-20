@@ -1,4 +1,4 @@
-# plan_dx1.md design decision 10: ddraw + dxguid (GUID storage for IID_IDirectDraw etc.) is the
+# plans/plan_dx1.md design decision 10: ddraw + dxguid (GUID storage for IID_IDirectDraw etc.) is the
 # confirmed minimal link set (DX1-0 spike) -- no free-direct, no DXVK, no d3dcompiler, no
 # d3d11/dxgi. Native window access comes from RendererSurfaceInfo.
 cna_add_renderer()

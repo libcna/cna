@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: alphatest_less_quad
+# plans/plan_dx9.md D9-A5 scene corpus: alphatest_less_quad
 # The first scene to exercise a SECOND AlphaTestEffect.AlphaFunction value (Less), not just the
 # single Greater value alphatest_quad.scene already covers -- proving the real AlphaFunction
 # dispatch itself is honored end to end against real XNA, not merely that clip()'s discard exists

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx7.md: real DirectX 7 graphics renderer -- genuinely new interfaces vs DIRECTX6:
+// plans/plan_dx7.md: real DirectX 7 graphics renderer -- genuinely new interfaces vs DIRECTX6:
 // IDirectDraw7/IDirectDrawSurface7 (created via DirectDrawCreateEx, not the old
 // DirectDrawCreate+QueryInterface chain) and IDirect3D7/IDirect3DDevice7. DIRECTX7 REMOVES the whole
 // viewport-object concept this renderer family has carried since DX2-0 -- there is no
@@ -24,7 +24,7 @@
 namespace CNA::Internal::Renderers::DirectX7
 {
     /**
-     * DIRECTX7 graphics renderer (plan_dx7.md): a port of DirectX6Renderer (plan_dx6.md, itself a
+     * DIRECTX7 graphics renderer (plans/plan_dx7.md): a port of DirectX6Renderer (plans/plan_dx6.md, itself a
      * port of DirectX5/DirectX3/DirectX2Renderer), upgraded to DirectDraw v7
      * (IDirectDraw7/IDirectDrawSurface7/DDSURFACEDESC2/DDSCAPS2) and Direct3D v7
      * (IDirect3D7/IDirect3DDevice7). Device/window bring-up: DirectDrawCreateEx(nullptr, &dd7,
@@ -59,7 +59,7 @@ namespace CNA::Internal::Renderers::DirectX7
      * real depth-test occlusion, real texture sampling, full per-draw state mapping, and CPU-side
      * BasicEffect lighting (ambient + directional Lambertian/Blinn-Phong specular via real
      * D3DRENDERSTATE_SPECULARENABLE) -- all ported from DIRECTX6's own already-proven 3D layer. NEW at
-     * this DirectX era (plan_dx7.md design decision 4): the whole IDirect3DViewport3 object is
+     * this DirectX era (plans/plan_dx7.md design decision 4): the whole IDirect3DViewport3 object is
      * GONE -- IDirect3DDevice7::SetViewport(D3DVIEWPORT7*) and IDirect3DDevice7::Clear(...) are
      * direct device methods instead, spike-confirmed real (DX7-0 Tests D/E/F). Texture binding
      * (design decision 6) is a direct IDirect3DDevice7::SetTexture(stage, surface) call, replacing
@@ -134,7 +134,7 @@ namespace CNA::Internal::Renderers::DirectX7
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
 
-        // plan_dx7.md design decision 7: ApplyDepthStencilState honors depth AND the front-face
+        // plans/plan_dx7.md design decision 7: ApplyDepthStencilState honors depth AND the front-face
         // stencil parameters (enable/func/fail/zfail/pass/mask/writemask/ref) -- ported verbatim
         // from DIRECTX6, spike-confirmed the real write+test behavior survives the DIRECTX7 API flattening
         // (DX7-0 Tests E/F). twoSidedStencilMode/ccwStencil* remain accepted-and-ignored:
@@ -159,13 +159,13 @@ namespace CNA::Internal::Renderers::DirectX7
                                int maxAnisotropy) override;
 
         // ---- 3D pipeline: real, built on IDirect3D7/IDirect3DDevice7::DrawPrimitive (not execute
-        // buffers -- gone entirely since DIRECTX5; see plan_dx5.md section 1). Device/Z-buffer bring-up
+        // buffers -- gone entirely since DIRECTX5; see plans/plan_dx5.md section 1). Device/Z-buffer bring-up
         // (no separate viewport object, decision 4), VertexBuffer/IndexBuffer storage, the CPU
         // transform/clip -> D3DTLVERTEX draw path, and per-draw state application are all real and
         // pixel-verified. Unlike DIRECTX1 (which throws PERMANENTLY -- DirectX 1 shipped no Direct3D at
         // all, so there is genuinely no COM interface reachable from a real DirectX-1-era header
         // pairing to even call), this is a working 3D pipeline, not a stub. What remains out of
-        // scope is documented per-method below and in plan_dx7.md's own Boundaries section
+        // scope is documented per-method below and in plans/plan_dx7.md's own Boundaries section
         // (lighting/fog/multitexture/envMap/skinning accepted-and-ignored; MRT/instancing/
         // occlusion-query/volume-and-cube textures/custom-effects either accepted-and-ignored or
         // genuinely unavailable at this DirectX era; stencil is real since DIRECTX6, ported verbatim). ----
@@ -177,10 +177,10 @@ namespace CNA::Internal::Renderers::DirectX7
             // -- all real as of this phase, so ThreeD now reports true. DepthStencilBuffer also
             // reports true (a real, if depth-only, buffer exists -- SupportsDepthStencil() already
             // says so). MultiSampleAntiAliasing/MultipleRenderTargets/OcclusionQuery/CustomEffects
-            // report false -- genuinely unavailable at this DirectX era (plan_dx2.md's Boundaries
+            // report false -- genuinely unavailable at this DirectX era (plans/plan_dx2.md's Boundaries
             // section).
             //
-            // WireFrame (Phase O9, plan_dx2.md design decision 13): reports true. A follow-up
+            // WireFrame (Phase O9, plans/plan_dx2.md design decision 13): reports true. A follow-up
             // spike (dx2_spike10_specular_wireframe_aniso.cpp, Test D) empirically confirmed
             // D3DRENDERSTATE_FILLMODE=D3DFILL_WIREFRAME genuinely renders edge-only output on this
             // environment's software RGB device (a point inside a filled triangle reads back the

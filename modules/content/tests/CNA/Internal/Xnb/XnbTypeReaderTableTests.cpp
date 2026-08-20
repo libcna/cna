@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-12: unit tests for ParseXnbTypeReaderTable().
+// plans/plan_xnb.md XNB-12: unit tests for ParseXnbTypeReaderTable().
 
 #include <gtest/gtest.h>
 
@@ -109,7 +109,7 @@ TEST(XnbTypeReaderTableTest, RealMonoGameFixturePreservesRawNameAlongsideNormali
     EXPECT_EQ(table[0].version, 0);
 }
 
-// plan_xnb.md XNB-43: a malformed generic-argument name (XnbTypeName's own std::invalid_argument)
+// plans/plan_xnb.md XNB-43: a malformed generic-argument name (XnbTypeName's own std::invalid_argument)
 // must surface as this pipeline's one consistent malformed-input error type, not leak the
 // lower-level exception a caller catching ContentLoadException around Load<T>() would miss.
 // REMED-CONTENT-006: maxStringBytes previously had zero consumers anywhere -- only

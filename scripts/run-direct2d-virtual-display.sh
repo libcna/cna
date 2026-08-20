@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_direct2d.md D2D-120: the one canonical virtual-display runner for Direct2D tests.
+# plans/plan_direct2d.md D2D-120: the one canonical virtual-display runner for Direct2D tests.
 #
 # Direct2D always presents to a real HWND, so its tests need a display even when they only read
 # pixels back. Ad-hoc `xvfb-run -a ...` invocations scattered across docs and CI differ in screen

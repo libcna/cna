@@ -51,7 +51,7 @@ namespace CNA::Internal::Renderers::Igl
          * handle. A `ShaderEffect` whose GLSL does not compile is the plain case -- IGL's
          * `verifyResult` records "failed to compile vertex shader" in the Result, hands back a null
          * module, and then takes the process down before `IglEffectRenderer` can raise the
-         * exception plan_igl.md IGL-42 promises ("real compile errors").
+         * exception plans/plan_igl.md IGL-42 promises ("real compile errors").
          *
          * Only the BREAK is disabled. IGL still logs every such failure at error level, and CNA
          * still checks every Result and throws by name -- nothing is swallowed here.
@@ -1442,7 +1442,7 @@ namespace CNA::Internal::Renderers::Igl
 
 namespace CNA::Internal::Renderers::Igl
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own namespace so
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own namespace so
     // several renderer archives can link into one binary (see IglRendererDescriptor.cpp, which
     // takes this function's address).
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-005 / GLTF-006 -- see GltfOracleEXT.hpp for the diagnostic/test scope rules.
+// plans/plan_gltf.md GLTF-005 / GLTF-006 -- see GltfOracleEXT.hpp for the diagnostic/test scope rules.
 
 #include "GltfOracleEXT.hpp"
 
@@ -57,7 +57,7 @@ namespace CnaTest::GltfOracle
             return out + "\"";
         }
 
-        /// glTF §3.6.2.2's component reader, restated on the oracle side (plan_gltf.md GLTF-062).
+        /// glTF §3.6.2.2's component reader, restated on the oracle side (plans/plan_gltf.md GLTF-062).
         /// A normalized integer maps onto its unit range with the divisors the specification names
         /// -- 255/127/65535/32767 -- and a signed value clamps at -1 rather than reaching -1.008.
         float ReadFloatComponent(const std::uint8_t* p, cgltf_component_type type, bool normalized)
@@ -148,7 +148,7 @@ namespace CnaTest::GltfOracle
         }
 
         /// Decodes a whole accessor to floats, as `cgltf_accessor_unpack_floats` does but with
-        /// §3.6.2.3's sparse addressing rather than cgltf's (plan_gltf.md GLTF-062).
+        /// §3.6.2.3's sparse addressing rather than cgltf's (plans/plan_gltf.md GLTF-062).
         ///
         /// The oracle normally delegates the decode to cgltf precisely so it is not CNA's importer
         /// judging itself -- but for one combination cgltf is the component under test. A sparse
@@ -177,7 +177,7 @@ namespace CnaTest::GltfOracle
                        std::to_string(values.size()) + " components";
             }
 
-            // plan_gltf.md GLTF-056. §3.6.2.2's signed normalized conversions are
+            // plans/plan_gltf.md GLTF-056. §3.6.2.2's signed normalized conversions are
             // `max(c / 127, -1)` and `max(c / 32767, -1)`; cgltf divides and returns with no clamp,
             // so -128 decodes to -1.0079. Restated on the oracle side for the same reason as
             // GLTF-062's sparse addressing: the oracle must apply the specification, not inherit
@@ -311,7 +311,7 @@ namespace CnaTest::GltfOracle
 
         /// Reads a float from a packed vertex at `offset`, via memcpy -- the packed bytes carry no
         /// alignment guarantee, so a reinterpret_cast here would be exactly the undefined
-        /// behaviour plan_gltf.md §8.4 flags in production code.
+        /// behaviour plans/plan_gltf.md §8.4 flags in production code.
         float ReadFloat(const std::vector<std::uint8_t>& bytes, std::size_t offset)
         {
             float value = 0.0f;
@@ -475,7 +475,7 @@ namespace CnaTest::GltfOracle
         return Multiply(Multiply(translation, rotation), scale);
     }
 
-    // plan_gltf.md GLTF-113: converts a CNA Matrix back into this oracle's glTF-shaped
+    // plans/plan_gltf.md GLTF-113: converts a CNA Matrix back into this oracle's glTF-shaped
     // column-major array. XNA is row-major with a row-vector convention and glTF is column-major
     // with a column-vector one, so the two are transposes of the same transform -- and the flat
     // byte order of a row-major M is therefore already the flat order of column-major M^T. This is
@@ -619,7 +619,7 @@ namespace CnaTest::GltfOracle
         const std::size_t stride = static_cast<std::size_t>(mesh.stride);
         dump.vertexCount = mesh.vertexBytes.size() / stride;
 
-        // Slot offsets per the stride ABI (plan_gltf.md §2.3). -1 means "this layout has no such
+        // Slot offsets per the stride ABI (plans/plan_gltf.md §2.3). -1 means "this layout has no such
         // slot", which is itself part of the L3 answer.
         long long normalOffset = -1, tangentOffset = -1, uvOffset = -1, uv1Offset = -1;
         long long weightOffset = -1, jointOffset = -1, colorOffset = -1;
@@ -835,7 +835,7 @@ namespace CnaTest::GltfOracle
         // REQUIRED to be rendered" -- which is not "nothing may be". CNA imports every root node
         // in that case, which is the reading every viewer takes, and the oracle mirrors the
         // decision deliberately: returning nothing here would make `scene-no-scenes` assert that
-        // CNA does the opposite of what it documents (plan_gltf.md GLTF-399).
+        // CNA does the opposite of what it documents (plans/plan_gltf.md GLTF-399).
         std::vector<const cgltf_node*> fallbackRoots;
         if (scene == nullptr)
         {
@@ -942,7 +942,7 @@ namespace CnaTest::GltfOracle
                 for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
                 {
                     WorldInstance instance;
-                    // plan_gltf.md GLTF-113/GLTF-114: MeshGroup now carries the instancing node and
+                    // plans/plan_gltf.md GLTF-113/GLTF-114: MeshGroup now carries the instancing node and
                     // its composed world transform, so this reports what CNA really places rather
                     // than a hardcoded identity. A skinned instance is deliberately reported at the
                     // identity root, matching what both loaders do with it -- glTF ignores a skinned

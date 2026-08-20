@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2093: spatial upscaling.
+// plans/plan_modern.md MOD-2093: spatial upscaling.
 //
 // The promise that matters most is the negative one -- at a 1:1 scale the pass changes nothing --
 // because it is what makes the resolution dial calibratable: a frame rendered at full size with the

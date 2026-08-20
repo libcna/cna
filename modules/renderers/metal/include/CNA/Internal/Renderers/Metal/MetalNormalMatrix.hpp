@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_metal.md METAL-34-style extraction: this formula is pure C++ (plain float arrays, basic
+// plans/plan_metal.md METAL-34-style extraction: this formula is pure C++ (plain float arrays, basic
 // arithmetic) with zero Objective-C/Metal-framework dependency, so -- like MetalPipelineKey.hpp --
 // it can be genuinely unit-tested on any platform without an Apple toolchain, unlike the rest of
 // the Metal renderer. MetalRenderer.mm includes this header instead of defining the function

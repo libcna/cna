@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-334 / GLTF-335 / GLTF-348: the extension registry, and the rules that keep it
+// plans/plan_gltf.md GLTF-334 / GLTF-335 / GLTF-348: the extension registry, and the rules that keep it
 // from becoming a third place the truth is written down.
 //
 // Before GLTF-334 there were two: `IsGltfExtensionSupportedEXT`'s hand-written list, which decides
-// whether a file naming an extension in `extensionsRequired` loads at all, and plan_gltf.md §19's
+// whether a file naming an extension in `extensionsRequired` loads at all, and plans/plan_gltf.md §19's
 // classification table, which is what a human reads. They already disagreed in spirit -- §19 called
 // KHR_texture_transform PARTIAL while the gate claimed it -- and nothing said why, because the
 // two axes ("how completely is it implemented" and "do we accept a file that demands it") had never
@@ -84,13 +84,13 @@ namespace
         return out;
     }
 
-    /// Parses §19's classification table out of plan_gltf.md.
+    /// Parses §19's classification table out of plans/plan_gltf.md.
     ///
     /// Reading the plan rather than restating it is the point: a duplicated table would drift, and
     /// a drifted table asserts nothing.
     std::vector<DocRow> ParseSection19(std::string& error)
     {
-        const std::filesystem::path plan = RepositoryRoot() / "plan_gltf.md";
+        const std::filesystem::path plan = RepositoryRoot() / "plans/plan_gltf.md";
         std::ifstream file(plan);
         if (!file) { error = "cannot open " + plan.string(); return {}; }
 

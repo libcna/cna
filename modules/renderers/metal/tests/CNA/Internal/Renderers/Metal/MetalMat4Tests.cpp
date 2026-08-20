@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-34-style extraction: MetalMat4Multiply/FromXna/Transpose are plain float
+// plans/plan_metal.md METAL-34-style extraction: MetalMat4Multiply/FromXna/Transpose are plain float
 // arithmetic plus Microsoft::Xna::Framework::Matrix (itself plain C++, zero Objective-C/Metal-
 // framework dependency), so they compile and run on any platform CnaTests already builds for -- no
 // #if defined(CNA_RENDERER_METAL) gate.

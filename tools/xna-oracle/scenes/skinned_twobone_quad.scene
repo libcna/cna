@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: skinned_twobone_quad
+# plans/plan_dx9.md D9-A5 scene corpus: skinned_twobone_quad
 # The first scene to exercise a REAL, non-degenerate skinning blend: SkinnedEffect with
 # WeightsPerVertex=2 and two DIFFERENT bones (both bound with nonzero weight), not the single
 # Identity-bone no-op skinned_quad.scene uses. Also the first scene needing a SECOND

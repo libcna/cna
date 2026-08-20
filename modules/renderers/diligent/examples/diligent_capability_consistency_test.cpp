@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-61: real-device proof that GraphicsDevice.SupportsCapability() agrees
+// plans/plan_diligent.md DILIGENT-61: real-device proof that GraphicsDevice.SupportsCapability() agrees
 // with what the corresponding Create/Apply operation actually does on THIS live device -- not just
 // that EvaluateCapability()'s pure decision logic is internally consistent (already covered by the
 // DiligentDeviceSelectionTest.EvaluateCapability* GTest cases with synthetic inputs, no GPU

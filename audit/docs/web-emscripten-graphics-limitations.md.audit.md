@@ -65,7 +65,7 @@ The dated, narrowly-scoped 2026-07-15 self-correction note is an excellent examp
 kind of "old bookmarks find stale claims, so update in place with a dated note rather than silently
 rewriting" discipline this audit has observed as a recurring, deliberate project convention across
 multiple documents in this shard (`docs/model-content-pipeline-support.md`,
-`docs/sampler-state-support.md`, `docs/location-future-plan.md`). The explicit "Recommendation for
+`docs/sampler-state-support.md`, `docs/location-future-plans/plan.md`). The explicit "Recommendation for
 whoever eventually does the first real Emscripten build" closing section is genuinely actionable
 guidance, not just a status dump.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2080: what the light looks like arriving at one point, as nine coefficients.
+// plans/plan_modern.md MOD-2080: what the light looks like arriving at one point, as nine coefficients.
 //
 // A spherical-harmonic probe is easy to get plausibly wrong: a sign flip on one basis function, a
 // missing solid-angle weight, or the wrong normalisation all produce a probe that lights a scene

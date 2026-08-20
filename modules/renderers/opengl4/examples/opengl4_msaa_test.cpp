@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-17: real backbuffer (window-level) MSAA for the OpenGL4 graphics renderer --
+// plans/plan_opengl4.md GL4-17: real backbuffer (window-level) MSAA for the OpenGL4 graphics renderer --
 // GraphicsRendererCreateArgs::multiSampleCount was previously accepted but ignored entirely
 // (GetMultiSampleCount() always reported 0, PreferMultiSampling had no effect).
 //

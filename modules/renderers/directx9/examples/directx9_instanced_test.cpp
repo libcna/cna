@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-8 (D9-83): real hardware instancing via SetStreamSourceFreq, using CNA's
+// plans/plan_dx9.md Phase D9-8 (D9-83): real hardware instancing via SetStreamSourceFreq, using CNA's
 // own CNAEXT Instanced3D shader (see D3D9InstancedDraw.cpp's own header comment for why this is
 // not a Microsoft Stock Effect port -- real XNA has no per-instance-aware Stock Effect vertex
 // shader at all).

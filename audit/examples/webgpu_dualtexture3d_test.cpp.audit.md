@@ -106,7 +106,7 @@ Good coverage of both stride variants (20/24) and both draw shapes (indexed/non-
 multiply formula and the vertex-colour tint gate. Not covered by this file (no claim made otherwise):
 `DualTextureEffect`'s fog support (this shader has none — `CreateDualTextureResources()`'s WGSL has no
 fog term at all, a documented, deliberate deferral consistent with every other WebGPU 3D shader in this
-backend per `plan_webgpu.md`), and any case where `Texture`/`Texture2` differ in size/aspect (both
+backend per `plans/plan_webgpu.md`), and any case where `Texture`/`Texture2` differ in size/aspect (both
 checks use 1×1 solid-colour textures, so UV-interpolation correctness across a larger texture is
 untested — an acceptable, narrow scope gap for a formula-correctness test, not a defect).
 

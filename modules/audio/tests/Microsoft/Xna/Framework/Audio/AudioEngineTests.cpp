@@ -575,7 +575,7 @@ TEST(AudioEngineTest, TwoArgConstructorLoadsFixtureWithRendererAndLookAhead)
 
 TEST(AudioEngineTest, ThreeArgConstructorWithArbitraryRendererAndLookAheadBehavesLikeSingleArg)
 {
-    // lookAheadTime/rendererId have no effect (plan_audio.md XA-4): even a nonzero look-ahead
+    // lookAheadTime/rendererId have no effect (plans/plan_audio.md XA-4): even a nonzero look-ahead
     // and a renderer ID that doesn't name any real backend must not throw, and the resulting
     // engine must behave identically to the single-argument constructor.
     AudioEngine engine(XgsFixturePath(),

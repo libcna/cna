@@ -135,7 +135,7 @@ against the actual current production code (not merely re-stated from the header
   deliberately hitting the former-crash scenario, the other avoids the scenario entirely as
   defense-in-depth. Confirmed both files' own stated rationale against the same underlying
   production mechanism (`usedRenderTargetsThisFrame_` + deferred `QueueTextureRelease`).
-- `plan_sdlgpu.md`'s SDLGPU-37 row (secondary context per D-3) independently confirms this was a
+- `plans/plan_sdlgpu.md`'s SDLGPU-37 row (secondary context per D-3) independently confirms this was a
   real, git-log-documented finding ("a real, non-test-specific finding from writing this test: a
   `RenderTarget2D`/`RenderTargetCube` that goes out of scope ... before this backend's deferred
   `Present()`-time render pass actually executes is a real use-after-free ... caught via a genuine
@@ -148,7 +148,7 @@ against the actual current production code (not merely re-stated from the header
 - Fog and skinned-normal-transform cross-cutting bugs are **not applicable**: this file has no
   lighting/effect code path at all — its only draws are `Clear()` calls and a plain
   `SpriteBatch::Draw` of an untextured-effect quad.
-- Also notes (per `plan_sdlgpu.md`'s own text) that `currentExtraMrtTargets_` (the MRT-sibling
+- Also notes (per `plans/plan_sdlgpu.md`'s own text) that `currentExtraMrtTargets_` (the MRT-sibling
   bookkeeping `sdlgpu_mrt_test.cpp` exercises) is explicitly **not** converted to the same
   `shared_ptr`-based fix and remains "its own narrower, separate version of this risk ... out of
   scope in that same item" — i.e. a render target used only as an MRT *secondary* attachment

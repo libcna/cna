@@ -21,7 +21,7 @@ namespace
     }
 }
 
-// plan_media.md MEDIA-63: real implementation backed by MediaLibraryIndex genre grouping.
+// plans/plan_media.md MEDIA-63: real implementation backed by MediaLibraryIndex genre grouping.
 TEST_F(MediaLibraryTestFixture, GenresContainsEveryFixtureGenre)
 {
     EXPECT_GE(library->getGenresProperty()->getCountProperty(), 4); // corpus grows; presence below is the real contract
@@ -72,7 +72,7 @@ TEST_F(MediaLibraryTestFixture, GenreGetTypeNameIsFullyQualified)
     EXPECT_EQ(rock->GetTypeName(), "Microsoft.Xna.Framework.Media.Genre");
 }
 
-// plan_media.md MEDIA-57 (GenreCollectionTests folded in): indexer/count/dispose/iteration.
+// plans/plan_media.md MEDIA-57 (GenreCollectionTests folded in): indexer/count/dispose/iteration.
 TEST_F(MediaLibraryTestFixture, GenreCollectionIndexerAndIterationWork)
 {
     auto* genres = library->getGenresProperty();
@@ -80,7 +80,7 @@ TEST_F(MediaLibraryTestFixture, GenreCollectionIndexerAndIterationWork)
     ASSERT_GT(genreCount, 0);
 
     // Derived from the live count rather than hardcoded, so growing the fixture corpus (e.g. the
-    // FLAC/Opus files added for plan_media.md MEDIA-199) exercises the same contract instead of
+    // FLAC/Opus files added for plans/plan_media.md MEDIA-199) exercises the same contract instead of
     // breaking an unrelated indexer test.
     for (SharpRuntime::intcs i = 0; i < genreCount; ++i)
     {
@@ -93,14 +93,14 @@ TEST_F(MediaLibraryTestFixture, GenreCollectionIndexerAndIterationWork)
     EXPECT_EQ(count, genreCount) << "iteration must visit exactly Count items";
 }
 
-// plan_media.md MEDIA-121 (found by external code review): GenreCollection's own GetTypeName(),
+// plans/plan_media.md MEDIA-121 (found by external code review): GenreCollection's own GetTypeName(),
 // not exercised anywhere else in this file (only Genre's own was tested).
 TEST_F(MediaLibraryTestFixture, GenreCollectionGetTypeNameIsFullyQualified)
 {
     EXPECT_EQ(library->getGenresProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.GenreCollection");
 }
 
-// plan_media.md MEDIA-98: Albums property, not exercised by any other test above.
+// plans/plan_media.md MEDIA-98: Albums property, not exercised by any other test above.
 TEST_F(MediaLibraryTestFixture, RockGenreAlbumsPropertyContainsRockAlbums)
 {
     Genre* rock = FindGenre(library->getGenresProperty(), "Rock");
@@ -109,7 +109,7 @@ TEST_F(MediaLibraryTestFixture, RockGenreAlbumsPropertyContainsRockAlbums)
     EXPECT_GT(rock->getAlbumsProperty()->getCountProperty(), 0);
 }
 
-// plan_media.md MEDIA-98: Genre::Dispose() flips IsDisposed; a non-owning view, so the
+// plans/plan_media.md MEDIA-98: Genre::Dispose() flips IsDisposed; a non-owning view, so the
 // underlying Albums/Songs collections (owned by MediaLibrary) remain independently valid.
 TEST_F(MediaLibraryTestFixture, GenreDisposeFlipsIsDisposed)
 {
@@ -122,7 +122,7 @@ TEST_F(MediaLibraryTestFixture, GenreDisposeFlipsIsDisposed)
     EXPECT_TRUE(rock->getIsDisposedProperty());
 }
 
-// plan_media.md MEDIA-99: GenreCollection's own Dispose()/IsDisposed, distinct from any one
+// plans/plan_media.md MEDIA-99: GenreCollection's own Dispose()/IsDisposed, distinct from any one
 // contained Genre's Dispose()/IsDisposed.
 TEST_F(MediaLibraryTestFixture, GenreCollectionDisposeFlipsIsDisposed)
 {

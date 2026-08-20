@@ -18,7 +18,7 @@
 // alpha factors ever leaked into the colour computation, one of these two checks would show the
 // wrong result.
 //
-// NOTE: Vulkan's ApplyBlendState (Task 868, see plan_graphics.md) hardcodes colorSrcBlend=
+// NOTE: Vulkan's ApplyBlendState (Task 868, see plans/plan_graphics.md) hardcodes colorSrcBlend=
 // SourceAlpha, colorDstBlend=InverseSourceAlpha regardless of what's requested. At alpha=255 that
 // collapses to "source only" (SourceAlpha=1, InverseSourceAlpha=0) — which happens to match Check
 // A's expectation by coincidence, but NOT Check B's (which expects "destination only"). Expect

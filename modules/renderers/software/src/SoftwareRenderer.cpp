@@ -1581,7 +1581,7 @@ namespace CNA::Internal::Renderers::Software
         // ---- Phase S5/S6: generalized (textured/blended/effect-driven) rasterization ----
 
 #ifndef CNA_SOFTWARE_2D_ONLY
-        /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
+        /// Transforms a vertex whose byte layout is inferred from `stride` (plans/plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
         /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
         /// EnvironmentMapEffect), 48/60=VertexPositionNormalTangentTexture with one/two UV sets,
@@ -1703,7 +1703,7 @@ namespace CNA::Internal::Renderers::Software
                     std::memcpy(&out.u, raw.At(48), sizeof(float));
                     std::memcpy(&out.v, raw.At(52), sizeof(float));
                 }
-                // plan_gltf.md GLTF-462: stride 60's last four bytes were reserved padding and are
+                // plans/plan_gltf.md GLTF-462: stride 60's last four bytes were reserved padding and are
                 // the packed COLOR_0 now. §3.7.2.1 makes it "an additional linear multiplier to base
                 // color", and this raster path already multiplies out.r/g/b/a into the sampled base
                 // colour -- so reading it here is the whole of vertex-coloured PBR for this
@@ -1729,7 +1729,7 @@ namespace CNA::Internal::Renderers::Software
                     std::memcpy(&out.u, raw.At(68), sizeof(float));
                     std::memcpy(&out.v, raw.At(72), sizeof(float));
                 }
-                // plan_gltf.md GLTF-463: stride 80 is the stride-76 skinned PBR record with a packed
+                // plans/plan_gltf.md GLTF-463: stride 80 is the stride-76 skinned PBR record with a packed
                 // COLOR_0 appended. This raster path already multiplies out.r/g/b/a into the sampled
                 // base colour, so reading it here is the whole of skinned vertex-coloured PBR for
                 // this renderer -- and `!params.vertexColorEnabled` further down replaces it with
@@ -3466,7 +3466,7 @@ namespace CNA::Internal::Renderers::Software
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_SOFTWARE
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Software { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

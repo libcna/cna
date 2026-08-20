@@ -48,7 +48,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns the compiler/linker log from a failed compile, empty when it succeeded.
          *
-         * plan_modern.md `MOD-219`. `IsEffectValid()` says *that* a shader did not compile; this
+         * plans/plan_modern.md `MOD-219`. `IsEffectValid()` says *that* a shader did not compile; this
          * says why. The two are separate on purpose: a failed compile is not an exception here,
          * because on several renderers `GraphicsCapability::CustomEffects` is true while GLSL source
          * is never compiled at all (Vulkan takes SPIR-V; SOFTWARE and HEADLESS accept and ignore),
@@ -148,7 +148,7 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void SetTexture(int unit, TextureCube& texture);
 
         /**
-         * @brief plan_graphics.md Task 863: binds a volume (3D) texture to an additional sampler
+         * @brief plans/plan_graphics.md Task 863: binds a volume (3D) texture to an additional sampler
          * unit, for a custom shader that declares a `sampler3D` uniform.
          *
          * @param unit    0-based sampler unit.
@@ -249,7 +249,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /**
          * @brief Releases the compiled renderer program before the base class marks this resource
-         * disposed (plan_sokol.md SOKOL-42).
+         * disposed (plans/plan_sokol.md SOKOL-42).
          *
          * `Effect::Dispose(bool)` only reaches `GraphicsResource::Dispose(bool)`, which never
          * touches `effectRenderer_`. `GraphicsDevice::Dispose()` disposes tracked resources before

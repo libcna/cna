@@ -79,7 +79,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
@@ -706,7 +706,7 @@ namespace
 // magenta primitive lives strictly after the requested range.
 TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsPrimitiveCountAtVertexStartZero)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -737,7 +737,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsPrimitiveCountAtVertexStartZ
 // contract; every magenta primitive lives strictly before the requested range.
 TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsNonzeroVertexStartToEndOfBuffer)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -769,7 +769,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsNonzeroVertexStartToEndOfBuf
 // frame, so no result can be produced by a later draw.
 TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsFirstMiddleAndFinalRanges)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -819,7 +819,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDrawHonorsFirstMiddleAndFinalRanges)
 // DynamicVertexBuffer takes the same public contract as the static buffer above.
 TEST_F(NonIndexedDrawRangeTest, PersistentDynamicDrawHonorsRangeAndCount)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -850,7 +850,7 @@ TEST_F(NonIndexedDrawRangeTest, PersistentDynamicDrawHonorsRangeAndCount)
 // time would render the last range three times.
 TEST_F(NonIndexedDrawRangeTest, DeferredNonIndexedRangesAtoBtoAKeepTheirOwnRange)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -906,7 +906,7 @@ TEST_F(NonIndexedDrawRangeTest, DeferredNonIndexedRangesAtoBtoAKeepTheirOwnRange
 // draw must still keep its own range across the buffer-version change (REMED-GFX-109).
 TEST_F(NonIndexedDrawRangeTest, DeferredRangesSurviveBufferVersionChangesBetweenDraws)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -959,7 +959,7 @@ TEST_F(NonIndexedDrawRangeTest, DeferredRangesSurviveBufferVersionChangesBetween
 // result depends on which target the range was requested against.
 TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -1028,7 +1028,7 @@ TEST_F(NonIndexedDrawRangeTest, NonIndexedRangeHoldsOnRenderTargetAndBackbuffer)
 // larger caller array. This must keep working unchanged.
 TEST_F(NonIndexedDrawRangeTest, DrawUserPrimitivesKeepsItsCopiedExactRange)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -1057,7 +1057,7 @@ TEST_F(NonIndexedDrawRangeTest, DrawUserPrimitivesKeepsItsCopiedExactRange)
 // buffer already is the exact range. This is why REMED-GFX-113 left that path untouched.
 TEST_F(NonIndexedDrawRangeTest, UntypedDrawUserPrimitivesUploadsOnlyTheRequestedRange)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -1088,7 +1088,7 @@ TEST_F(NonIndexedDrawRangeTest, UntypedDrawUserPrimitivesUploadsOnlyTheRequested
 // must leave the framebuffer exactly as the clear left it.
 TEST_F(NonIndexedDrawRangeTest, RejectedNonIndexedRangesRenderNothing)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, Software);
     RequireRangeRendering();
@@ -1231,7 +1231,7 @@ TEST_F(NonIndexedDrawRangeTest, PublicContractValidatesEveryNonIndexedRangeBefor
 // topology, fails here.
 TEST_F(NonIndexedDrawRangeTest, EverySupportedTopologyHonorsVertexStartAndExactCount)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU);
     RequireRangeRendering();
@@ -1289,7 +1289,7 @@ TEST_F(NonIndexedDrawRangeTest, EverySupportedTopologyHonorsVertexStartAndExactC
 // let one draw's topology or range leak into another would put geometry in a neighbour's region.
 TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU);
     RequireRangeRendering();
@@ -1355,7 +1355,7 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 // (0, UINT32_MAX) and let bgfx clamp to the buffer's own allocated size.
 TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedBindingIsTheExactElementRange)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
@@ -1422,7 +1422,7 @@ TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedBindingIsTheExactElementRange)
 // the requested triangles' edges.
 TEST_F(NonIndexedDrawRangeTest, BgfxWireframeNonIndexedRangeStillHonorsVertexStart)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
@@ -1469,7 +1469,7 @@ TEST_F(NonIndexedDrawRangeTest, BgfxWireframeNonIndexedRangeStillHonorsVertexSta
 // many different ranges and returns to the process baseline after disposal.
 TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedRangesAllocateNoPerDrawNativeResources)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
@@ -1527,7 +1527,7 @@ TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedRangesAllocateNoPerDrawNativeResou
 // The public buffer may be disposed while draws that referenced it are still queued for the frame.
 TEST_F(NonIndexedDrawRangeTest, BgfxDisposingAfterQueuedRangedDrawsIsSafe)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
@@ -1571,7 +1571,7 @@ TEST_F(NonIndexedDrawRangeTest, BgfxDisposingAfterQueuedRangedDrawsIsSafe)
 // region, so the message names the consumed vertex range rather than a single wrong pixel.
 TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedDrawConsumesExactlyTheRequestedVertexRange)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireRangeRendering();
@@ -1636,7 +1636,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedDrawConsumesExactlyTheRequeste
 // rule every one of them out as the cause of the consumed range.
 TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStateAndTarget)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireRangeRendering();
@@ -1742,7 +1742,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangeIsIndependentOfRenderStat
 // leave the frame exactly as the clear left it.
 TEST_F(NonIndexedDrawRangeTest, SoftwareRejectsUnsupportedNonIndexedTopologiesWithoutRendering)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireRangeRendering();
@@ -1788,7 +1788,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareRejectsUnsupportedNonIndexedTopologiesWi
 // side effect of the last draw overwriting the frame.
 TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeepsRendering)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireRangeRendering();
@@ -1867,7 +1867,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareValidInvalidValidNonIndexedSequenceKeeps
 // stride scaling determines.
 TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartScalesByTheDeclaredStride)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireRangeRendering();
@@ -1992,7 +1992,7 @@ TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedVertexStartScalesByTheDeclared
 // draw into the next and that the two buffers stay independent.
 TEST_F(NonIndexedDrawRangeTest, SoftwareNonIndexedRangesStayIndependentAcrossTwoBuffers)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequireRangeRendering();

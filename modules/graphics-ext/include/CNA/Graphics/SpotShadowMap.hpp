@@ -26,7 +26,7 @@ namespace CNA::Graphics {
     /**
      * @brief A spot light's shadow: one perspective map covering the cone.
      *
-     * plan_modern.md `MOD-1004`. A spot light only illuminates a cone, so unlike a point light it
+     * plans/plan_modern.md `MOD-1004`. A spot light only illuminates a cone, so unlike a point light it
      * needs one map rather than six, and unlike a directional light that map is perspective rather
      * than orthographic -- fitted to the cone's own field of view, which is what keeps its texels
      * where the light actually reaches.

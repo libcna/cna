@@ -16,5 +16,5 @@
     "wBitsPerSample": 32
   },
   "supportMatrixStatus": "rejected",
-  "notes": "plan_xnb.md XNB-33 support-matrix entry: 32-bit IEEE float parses correctly but is rejected -- CNA's SoundEffect has no float-to-PCM16 conversion path yet."
+  "notes": "plans/plan_xnb.md XNB-33 support-matrix entry: 32-bit IEEE float parses correctly but is rejected -- CNA's SoundEffect has no float-to-PCM16 conversion path yet."
 }

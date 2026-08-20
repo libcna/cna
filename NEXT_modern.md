@@ -1,6 +1,6 @@
 # NEXT_modern.md — running ledger for the CNAEXT engine layer
 
-Continuity file for [`plan_modern.md`](plan_modern.md) (the `MOD-*` backlog implementing
+Continuity file for [`plans/plan_modern.md`](plans/plan_modern.md) (the `MOD-*` backlog implementing
 [`CNAEXT.md`](CNAEXT.md)). Same role `NEXT_skia.md` has for the Skia renderer: read this first,
 do not reconstruct the layer's state from the general `NEXT.md`.
 
@@ -717,7 +717,7 @@ Three things are worth knowing before repeating it:
   the whole time.
 - **Disk.** The ASan tree needs room the three existing build directories did not leave. The
   14 GB `cmake-build-multi` was deleted to make space; its findings are recorded in
-  `plan_modern.md` `MOD-1692`/`MOD-1696`/`MOD-1697` and the tree itself is reproducible from the
+  `plans/plan_modern.md` `MOD-1692`/`MOD-1696`/`MOD-1697` and the tree itself is reproducible from the
   recipe in `CLAUDE.md`.
 - **The one expected leak.** `1032 bytes in libdbus via SDL_DBus_Init`. It is the *same single
   allocation* whether you run the whole suite once or 3000 pipeline frames, which is what makes it
@@ -800,7 +800,7 @@ gap in the run.
 D3D12 is the one entry whose "0 fail" needs its qualifier read: it **segfaults on the copy-through
 path** — a `FullscreenPass` draw into a `RenderTarget2D`, the fallback every unsupported pass takes
 — so 17 tests kill the process rather than failing. Measuring the other 409 needed a driver that
-resumes past each crash with the remaining tests as its filter. The defect is `plan_dx.md`'s;
+resumes past each crash with the remaining tests as its filter. The defect is `plans/plan_dx.md`'s;
 `MOD-1625` carries the detail.
 
 Also verified on the reference renderer: **`CNA_CNAEXT=OFF`** (7557 ran · 7495 pass · 62 skip ·
@@ -890,7 +890,7 @@ Two defects came out of it, and neither was visible on EasyGL:
   have taken the per-instance fallback. The fix is the `MOD-1699` shape again: the instanced path
   binds the transforms as a **second vertex stream**, so it needs multi-stream input as much as it
   needs instancing. That the renderer's `Instancing` answer is itself a promise it does not keep is
-  a separate, renderer-level finding, recorded for `plan_sdlgpu.md` rather than fixed here.
+  a separate, renderer-level finding, recorded for `plans/plan_sdlgpu.md` rather than fixed here.
 - **A process-exit segfault with nothing to do with graphics.** `CnaTests
   --gtest_filter=*Instanc*` crashed *after* every test reported, deterministically, on every
   renderer and with `CNA_CNAEXT` off. `__run_exit_handlers → ~VibrateController →
@@ -1089,6 +1089,6 @@ predate this phase.
 
 ## 4. Open questions
 
-The ten `OQ-*` entries at the end of `plan_modern.md` each carry a default that is being followed.
+The ten `OQ-*` entries at the end of `plans/plan_modern.md` each carry a default that is being followed.
 Four were answered by the owner on 2026-08-17 (`OQ-1`, `OQ-7`, `OQ-8`, `OQ-9` — see §1); the rest
 stay on their defaults until raised.

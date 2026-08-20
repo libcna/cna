@@ -1,6 +1,6 @@
 # FNA reference-app generator
 
-Task 471 (`plan_graphics.md` Phase 53, "FNA comparison harness"). A small C# console app that
+Task 471 (`plans/plan_graphics.md` Phase 53, "FNA comparison harness"). A small C# console app that
 references the real FNA.dll and emits selected reference values as JSON, so CNA's own C++ tests
 can eventually diff against ground truth produced by *running* FNA itself, not just reading its
 source. Not part of the CNA C++ build; never run by CNA at runtime.
@@ -58,7 +58,7 @@ render+present+readback cycle), which needs a native `FNA3D` shared library not 
 sandbox and with its own multi-layer dependency chain (a separately-uninitialized nested
 `MojoShader` submodule inside `lib/FNA3D`, plus unresolved SDL2/SDL3 linkage) — a substantially
 larger undertaking than every other task in this phase, deferred rather than attempted blind. See
-`plan_graphics.md` Tasks 474/475/477/478 for the full investigation.
+`plans/plan_graphics.md` Tasks 474/475/477/478 for the full investigation.
 
 Task 476 (`ViewportReference.cs`) is done: `Viewport.Project`/`Unproject`, genuinely tractable
 without a `GraphicsDevice` (a plain value struct, pure `Matrix`/`Vector3` math). Covers 3
@@ -82,7 +82,7 @@ how to run the comparison.
 Task 480 (the rest of this phase) documents how to regenerate this reference data — not yet
 started.
 
-## `--effects`: compiled Effect Framework reflection (plan_fx.md FX-005)
+## `--effects`: compiled Effect Framework reflection (plans/plan_fx.md FX-005)
 
 `FnaReference.exe --effects <directory-of-fxb> [output.json]` emits FNA's own reflection of every
 `.fxb` in a directory. This is the FX-005 oracle: every other reflection check in the compiled
@@ -124,7 +124,7 @@ MONO_PATH=/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug \
 `Fna3dCompiledEffectTest.StockFixtureReflectionMatchesTheFnaOracle` reads that checked-in JSON and
 compares CNA's reflection of the same six binaries against it, subtree by subtree.
 
-## `--effect-states`: what FNA installs when a pass is applied (plan_fx.md FX-005)
+## `--effect-states`: what FNA installs when a pass is applied (plans/plan_fx.md FX-005)
 
 `FnaReference.exe --effect-states <directory-of-fxb> [output.json]` is the state half of the same
 oracle. Where `--effects` compares the object graph CNA *reads*, this compares what CNA *does* with

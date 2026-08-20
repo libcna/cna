@@ -21,7 +21,7 @@ header changed.
 
 478 baseline files all PRESERVED (hashes identical). **5 additions** (no removals):
 `tests/modules/probe_{math,core,graphics,content,runtime}.cpp` — the minimal-link probe
-consumers (MODULARIZATION_PLAN.md §4).
+consumers (plans/MODULARIZATION_PLAN.md §4).
 
 ## Registered tests (compared by NAME)
 

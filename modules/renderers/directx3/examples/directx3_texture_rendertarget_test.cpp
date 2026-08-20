@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture and render-target renderer tests for the DIRECTX2
+// plans/plan_dx2.md Phase O2 (DX2-11, 2D layer ported from DX1-20..DX1-28): texture and render-target renderer tests for the DIRECTX2
 // (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics
 // renderer.
 //
@@ -172,7 +172,7 @@ protected:
         // Check H (DX2-28): real finding, spike-confirmed rather than assumed -- unlike DIRECTX3's
         // free-direct (which enforces its own hardcoded 4096x4096 dimension cap), real Wine
         // ddraw.dll's IDirectDraw::CreateSurface has no such artificial ceiling: a dedicated spike
-        // (plan_dx2.md DX2-28) succeeded up to 16384x16384 offscreen surfaces and only failed at
+        // (plans/plan_dx2.md DX2-28) succeeded up to 16384x16384 offscreen surfaces and only failed at
         // 65536x65536 (E_INVALIDARG). So a 4096x4096 Texture2D -- XNA's own real HiDef-profile
         // ceiling -- must succeed without throwing here, the opposite assertion from DIRECTX3's own
         // equivalent check. CNA does not enforce any GraphicsProfile-based size ceiling outside the

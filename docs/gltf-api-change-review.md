@@ -1,6 +1,6 @@
 # glTF API-change review (`GLTF-025`)
 
-`plan_gltf.md` §25's gate: **every proposed public or CNAEXT member is reviewed here, with its
+`plans/plan_gltf.md` §25's gate: **every proposed public or CNAEXT member is reviewed here, with its
 problem, shape, compatibility, migration and test recorded, before it is implemented.** A row that
 has not been through this file must not appear in a header.
 

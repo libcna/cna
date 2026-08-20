@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_runtimerenderer.md RTR-P9-24: the oracle scene corpus, run against SEVERAL renderers from ONE
+# plans/plan_runtimerenderer.md RTR-P9-24: the oracle scene corpus, run against SEVERAL renderers from ONE
 # binary.
 #
 # Every existing corpus script -- run-oracle-corpus-diff.sh (D3D9), -easygl, -fna3d, -opengles1 --

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::DevicesExt (MODULARIZATION_PLAN.md §11): the CNA-specific
+// Minimal-link probe for CNA::DevicesExt (plans/MODULARIZATION_PLAN.md §11): the CNA-specific
 // device extensions must be usable WITHOUT the XNA device base (dependency direction is
 // devices-ext -> runtime/graphics/core/math, never devices-ext <-> devices). The extension
 // surface itself is option-gated (CNA_DEVICES, default OFF), so the probe uses real symbols

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-45/IGL-55: SpriteBatch.Begin(effect) -- a custom ShaderEffect driving the 2D
+// plans/plan_igl.md IGL-45/IGL-55: SpriteBatch.Begin(effect) -- a custom ShaderEffect driving the 2D
 // sprite pipeline, not the general 3D draw path `igl_shadereffect_texture3d_test.cpp` already
 // covers. This exercises a genuinely different call site: `IglRenderer::DrawSpriteBatchEXT()`
 // (`IglDraw.cpp`), which builds its `PipelineKey`/`AcquirePipeline()` call and its
@@ -76,7 +76,7 @@ void main() {
 }
 )";
 
-    // The same effect for SPIR-V (plan_igl.md IGL-43). Three differences, each forced rather than
+    // The same effect for SPIR-V (plans/plan_igl.md IGL-43). Three differences, each forced rather than
     // stylistic: every user input and output carries an explicit location (SPIR-V requires it, and
     // desktop GLSL 4.10 does not); the parameters are members of a std140 block at the binding CNA
     // reserves for a custom effect, because loose uniforms do not exist here; and the sampler is

@@ -110,7 +110,7 @@ namespace CNA::Internal::Graphics
      * UV1 follows it, which brings the useful data to 56 bytes. Stride 56 already identifies the
      * skinned+colour layout, so `GLTF-182` padded this record to 60 to keep one meaning per stride.
      *
-     * plan_gltf.md `GLTF-462` gives those four bytes a job instead of leaving them reserved: they
+     * plans/plan_gltf.md `GLTF-462` gives those four bytes a job instead of leaving them reserved: they
      * are the packed `COLOR_0` a metallic-roughness primitive may carry (§3.7.2.1 makes vertex
      * colour "an additional linear multiplier to base color"). The change is byte-compatible with
      * every renderer that already binds this stride — offsets 0..55 are untouched and the four
@@ -176,7 +176,7 @@ namespace CNA::Internal::Graphics
     /**
      * @brief GPU stream for a skinned PBR vertex carrying two UV sets and a packed colour.
      *
-     * plan_gltf.md `GLTF-463`. §3.7.2.1 makes `COLOR_0` "an additional linear multiplier to base
+     * plans/plan_gltf.md `GLTF-463`. §3.7.2.1 makes `COLOR_0` "an additional linear multiplier to base
      * color", and `GLTF-462` carried that for rigid primitives in the four bytes stride 60 had
      * reserved as a discriminator. The skinned record has no such bytes -- stride 76 is exactly its
      * seven fields -- so the skinned combination needs its own stride, and this is it: the whole

@@ -1,6 +1,6 @@
-// plan_runtimerenderer.md RTR-P1-D16: the SvgDom family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D16: the SvgDom family's pre-construction contract.
 //
-// Emscripten-only. Renders into real SVG DOM elements over the platform's canvas (plan_svg_dom.md design
+// Emscripten-only. Renders into real SVG DOM elements over the platform's canvas (plans/plan_svg_dom.md design
 // decision 1); no GPU flag.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -15,7 +15,7 @@ namespace CNA::Internal::Renderers::SvgDom
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX13 (DX-122): real D3D12 3D texture renderer -- mirrors D3D11Texture3DRenderer's
+// plans/plan_dx.md Phase DX13 (DX-122): real D3D12 3D texture renderer -- mirrors D3D11Texture3DRenderer's
 // (D3D11's own DX-42) XNA-level behavior contract, RGBA8 storage only (matches this project's own
 // established simplification, D3D11TextureRenderer.hpp's own header comment applies identically
 // here). Same explicit upload-heap-staging discipline D3D12TextureRenderer (DX-109) already

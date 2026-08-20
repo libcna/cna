@@ -24,7 +24,7 @@ namespace CNA::Graphics {
     /**
      * @brief Projects a texture onto whatever the depth prepass says is already there.
      *
-     * plan_modern.md `MOD-2094`. Bullet holes, scorch marks, puddles, tyre tracks: a decal is an
+     * plans/plan_modern.md `MOD-2094`. Bullet holes, scorch marks, puddles, tyre tracks: a decal is an
      * image glued onto geometry it knows nothing about. This is the screen-space form of that --
      * for every pixel, the prepass depth gives a position, the decal's inverse transform puts that
      * position in the decal's own space, and the pixel is painted only if it lands **inside the

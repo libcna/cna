@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_magnum.md: Magnum (mosra/magnum) renderer integration tests.
+# plans/plan_magnum.md: Magnum (mosra/magnum) renderer integration tests.
 
 # Example/test executables historically live at the build root (scripts, docs and
 # the golden-image working-directory conventions rely on it); keep them there.
@@ -12,7 +12,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
-# plan_magnum.md MAGNUM-41: MAGNUM renderer integration tests. Needs a real windowing system and a
+# plans/plan_magnum.md MAGNUM-41: MAGNUM renderer integration tests. Needs a real windowing system and a
 # real OpenGL driver, so like the EASYGL/VULKAN blocks these run against CNA_TEST_DISPLAY (a live
 # X server, or an Xvfb one with Mesa's software rasterizer behind it).
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
@@ -41,7 +41,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
-    # plan_magnum.md MAGNUM-50: DualTextureEffect's overbright factor and second-layer
+    # plans/plan_magnum.md MAGNUM-50: DualTextureEffect's overbright factor and second-layer
     # participation, both of which a 0/1-saturated scene cannot detect.
     cna_magnum_test(cna_test_magnum_dualtextureeffect magnum_dualtextureeffect_test.cpp)
     cna_register_renderer_test(NAME Magnum_DualTextureEffect
@@ -49,7 +49,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
-    # plan_magnum.md MAGNUM-51: EnvironmentMapEffect's reflection blend is a lerp, not an addition,
+    # plans/plan_magnum.md MAGNUM-51: EnvironmentMapEffect's reflection blend is a lerp, not an addition,
     # and the two only separate against a mid-tone cube map over a non-zero base.
     cna_magnum_test(cna_test_magnum_environmentmapeffect
                     magnum_environmentmapeffect_test.cpp)
@@ -58,7 +58,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
-    # plan_magnum.md MAGNUM-52: SkinnedEffect measured by where the geometry lands, which is what a
+    # plans/plan_magnum.md MAGNUM-52: SkinnedEffect measured by where the geometry lands, which is what a
     # bone palette that never reaches the shader actually gets wrong.
     cna_magnum_test(cna_test_magnum_skinnedeffect magnum_skinnedeffect_test.cpp)
     cna_register_renderer_test(NAME Magnum_SkinnedEffect
@@ -66,7 +66,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
-    # plan_magnum.md MAGNUM-53: PbrEffect's glTF metallic-roughness BRDF, on a rig where every dot
+    # plans/plan_magnum.md MAGNUM-53: PbrEffect's glTF metallic-roughness BRDF, on a rig where every dot
     # product is exactly 1 so each expected byte is derived from the formula, not captured.
     cna_magnum_test(cna_test_magnum_pbreffect magnum_pbreffect_test.cpp)
     cna_register_renderer_test(NAME Magnum_PbrEffect
@@ -83,7 +83,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
-    # plan_magnum.md MAGNUM-57: a draw reusing a cached vertex array must still land where its own
+    # plans/plan_magnum.md MAGNUM-57: a draw reusing a cached vertex array must still land where its own
     # base vertex and index offset say, not where the draw that populated the cache did.
     cna_magnum_test(cna_test_magnum_meshcache magnum_meshcache_test.cpp)
     cna_register_renderer_test(NAME Magnum_MeshCache
@@ -91,7 +91,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
-    # plan_magnum.md MAGNUM-56: a multisampled target must keep its multisample storage while it is
+    # plans/plan_magnum.md MAGNUM-56: a multisampled target must keep its multisample storage while it is
     # part of a multi-target set, which only a one-sample-per-pixel write can tell apart from a
     # resolved image.
     cna_magnum_test(cna_test_magnum_mrt_msaa magnum_mrt_msaa_test.cpp)
@@ -100,7 +100,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
-    # plan_magnum.md MAGNUM-60: PreferPerPixelLighting picks between two shader families, which
+    # plans/plan_magnum.md MAGNUM-60: PreferPerPixelLighting picks between two shader families, which
     # only a specular highlight -- non-linear in a term that varies across the surface -- separates.
     cna_magnum_test(cna_test_magnum_pervertexlighting magnum_pervertexlighting_test.cpp)
     cna_register_renderer_test(NAME Magnum_PerVertexLighting

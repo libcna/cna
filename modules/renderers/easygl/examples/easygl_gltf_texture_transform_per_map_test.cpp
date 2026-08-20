@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-184/336: distinct base-colour and normal-map transforms at the real sampler.
+// plans/plan_gltf.md GLTF-184/336: distinct base-colour and normal-map transforms at the real sampler.
 //
 // At authored UV (.25,.75), the base transform maps to (-.25,.875), which PointClamp resolves to
 // the reference texture's blue bottom-left quadrant. The normal transform maps to

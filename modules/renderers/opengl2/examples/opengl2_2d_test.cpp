@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: end-to-end 2D vertical-slice proof for the native OpenGL 2.1 graphics renderer
+// plans/plan_opengl2.md: end-to-end 2D vertical-slice proof for the native OpenGL 2.1 graphics renderer
 // -- a real Texture2D upload and real SpriteBatch draws, verified with actual pixel readback
 // (OpenGL2Renderer::ReadBackbuffer), not just "didn't throw". Mirrors the shape of
 // sdlgpu_2d_test.cpp/sdlgpu_samplerstate_test.cpp (checks on frame 1, then kTotalFrames of the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-GFX-006 / plan_gltf.md GLTF-264: SkinnedEffect world- and joint-space normal transforms.
+// REMED-GFX-006 / plans/plan_gltf.md GLTF-264: SkinnedEffect world- and joint-space normal transforms.
 //
 // FNA's stock path (SkinnedEffect.fx + Lighting.fxh):
 //   Skin():                        vin.Normal = mul(vin.Normal, (float3x3)skinning);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_gltf.md GLTF-003/GLTF-004: loading side of the generated conformance corpus.
+// plans/plan_gltf.md GLTF-003/GLTF-004: loading side of the generated conformance corpus.
 //
 // TEST SCOPE ONLY -- see GltfOracleEXT.hpp for the scope rules.
 //

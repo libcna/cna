@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-465: the shared refusal that keeps a renderer out of the one state that is a
+// plans/plan_gltf.md GLTF-465: the shared refusal that keeps a renderer out of the one state that is a
 // defect rather than a limitation -- accepting a valid glTF asset and drawing it with different core
 // semantics. Every renderer that does not evaluate glTF's COLOR_0 base-colour product calls this, so
 // its predicate is worth pinning exactly: too wide and it refuses content that renders correctly

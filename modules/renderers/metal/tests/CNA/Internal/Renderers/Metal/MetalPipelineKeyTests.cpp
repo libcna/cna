@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-34: "the one piece of Phase 2 genuinely build-verifiable on this Linux
+// plans/plan_metal.md METAL-34: "the one piece of Phase 2 genuinely build-verifiable on this Linux
 // machine today". MetalPipelineKey.hpp has zero Objective-C/Apple-framework dependency, so unlike
 // the rest of the Metal renderer (Objective-C++, only ever compiled on a real Mac), this test
 // compiles and runs on every platform CnaTests already builds for -- no #if defined(CNA_RENDERER_*)
@@ -13,7 +13,7 @@ using namespace CNA::Internal::Renderers::Metal;
 
 TEST(MetalBlendKey, DefaultMatchesXnaOpaquePreset)
 {
-    // plan_metal.md METAL-24's own comment claims the default MetalBlendKey matches
+    // plans/plan_metal.md METAL-24's own comment claims the default MetalBlendKey matches
     // BlendState.Opaque's real values (Blend::One=0/Blend::Zero=1, BlendFunction::Add=0 for both
     // channels) -- verified against the real enum ordinals here rather than re-trusted.
     MetalBlendKey k;
@@ -74,7 +74,7 @@ TEST(MetalPipelineCacheKey, EqualOnlyWhenKindAndBlendBothMatch)
 
 TEST(MetalPipelineCacheKey, ColorAttachmentCountDefaultsToOne)
 {
-    // plan_metal.md METAL-113: every pre-MRT call site aggregate-initializes only {kind, blend},
+    // plans/plan_metal.md METAL-113: every pre-MRT call site aggregate-initializes only {kind, blend},
     // relying on this default so it's unaffected by the new field.
     MetalPipelineCacheKey k{MetalPipelineKind::Colored16, MetalBlendKey{}};
     EXPECT_EQ(k.colorAttachmentCount, 1);
@@ -128,7 +128,7 @@ TEST(MetalPipelineCacheKeyHash, DifferentSampleCountUsuallyProducesDifferentHash
 
 TEST(MetalPipelineCacheKeyHash, ColorAttachmentCountAndSampleCountBothVaryingProducesDifferentHash)
 {
-    // plan_metal.md METAL-104: a real regression guard for the hash_combine fix -- if sampleCount
+    // plans/plan_metal.md METAL-104: a real regression guard for the hash_combine fix -- if sampleCount
     // were still packed into the same 64-bit word as colorAttachmentCount, a (count=1,samples=8)
     // key could collide with a (count=?,samples=?) key via bit overflow into colorAttachmentCount's
     // own range. XOR-combining avoids this; this test locks in that distinctness for a
@@ -159,7 +159,7 @@ TEST(MetalPipelineCacheKeyHash, DifferentKeysUsuallyProduceDifferentHashes)
     }
 }
 
-// plan_metal.md METAL-22/23: the actual real-world usage pattern -- getOrCreatePipeline()'s own
+// plans/plan_metal.md METAL-22/23: the actual real-world usage pattern -- getOrCreatePipeline()'s own
 // std::unordered_map<PipelineCacheKey, id<MTLRenderPipelineState>, PipelineCacheKeyHash>. This is
 // the property that matters in practice: does the cache correctly distinguish every PipelineKind,
 // and does it correctly treat two draws with the SAME shader but a DIFFERENT BlendState as two

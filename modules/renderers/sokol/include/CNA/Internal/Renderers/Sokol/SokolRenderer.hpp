@@ -144,13 +144,13 @@ namespace CNA::Internal::Renderers::Sokol
     /**
      * @brief Renderer handle for a 2D off-screen render target.
      *
-     * plan_sokol.md SOKOL-25: a real colour attachment (plus an optional combined depth-stencil
+     * plans/plan_sokol.md SOKOL-25: a real colour attachment (plus an optional combined depth-stencil
      * attachment) that a pass can render into, and a separate texture view of the same colour
      * image so a later pass can sample it -- sokol_gfx requires a distinct sg_view per use even
      * when both reference the same sg_image (see the "offscreen rendering" section of
      * sokol_gfx.h's own doc comment).
      *
-     * plan_sokol.md SOKOL-26: when @p multiSampleCount is greater than 1 (after clamping to the
+     * plans/plan_sokol.md SOKOL-26: when @p multiSampleCount is greater than 1 (after clamping to the
      * driver's `GL_MAX_SAMPLES`), this class follows sokol_gfx.h's own documented MSAA offscreen
      * workflow -- a multisample-only colour image (`usage.color_attachment`, `sample_count > 1`)
      * that a pass renders into, plus a *separate* single-sample resolve image
@@ -162,7 +162,7 @@ namespace CNA::Internal::Renderers::Sokol
      * depth-stencil attachment are requested -- it is never resolved (nothing here reads a render
      * target's depth back), matching every other renderer's MSAA depth handling.
      *
-     * plan_sokol.md SOKOL-39: when @p mipMap is true, `colorImageId_` (the single-sample resolve/
+     * plans/plan_sokol.md SOKOL-39: when @p mipMap is true, `colorImageId_` (the single-sample resolve/
      * only colour image) is allocated with a full mip chain (`sg_image_desc.num_mipmaps` -- GL
      * storage for every level, via sokol_gfx's own `glTexStorage2D`-based allocation, exists
      * immediately even though only level 0 is ever rendered into: there is no public XNA API to
@@ -228,7 +228,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Reads back a rectangle of this target's colour content via a throwaway GL FBO.
          *
-         * plan_sokol.md SOKOL-38/39. GL-only. @p level may be any allocated mip level (0 when
+         * plans/plan_sokol.md SOKOL-38/39. GL-only. @p level may be any allocated mip level (0 when
          * `mipMap=false`, 0..LevelCount-1 otherwise).
          *
          * @param level      Requested mip level; out of range returns false.
@@ -254,7 +254,7 @@ namespace CNA::Internal::Renderers::Sokol
          * @brief Regenerates every mip level above 0 from the current level-0 content via a raw
          * `glGenerateMipmap`, GL-only. No-op when this target was not created with `mipMap=true`.
          * Called on unbind, mirroring `EasyGLRenderTargetRenderer`'s identical "auto-generate on
-         * unbind" contract (plan_sokol.md SOKOL-39). CNAEXT.
+         * unbind" contract (plans/plan_sokol.md SOKOL-39). CNAEXT.
          */
         CNAEXT void RegenerateMipmapsIfNeededEXT() const;
 
@@ -315,7 +315,7 @@ namespace CNA::Internal::Renderers::Sokol
      * @brief Renderer handle for a RenderTargetCube: a real sokol_gfx CUBE image plus one
      * colour-attachment view per face and a single shared depth-stencil attachment.
      *
-     * plan_sokol.md SOKOL-26. The depth-stencil buffer is genuinely ONE resource shared by all six
+     * plans/plan_sokol.md SOKOL-26. The depth-stencil buffer is genuinely ONE resource shared by all six
      * faces (matching FNA3D's own cube render-target convention -- see
      * rendertarget_depthstencil_usage_test.cpp's U2 check), not per-face: it is a plain 2D
      * depth-stencil image, reused as the pass's depth attachment regardless of which face is
@@ -370,7 +370,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Reads back a rectangle of one face's colour content via a throwaway GL FBO.
          *
-         * plan_sokol.md SOKOL-38/39. GL-only. @p level may be any allocated mip level.
+         * plans/plan_sokol.md SOKOL-38/39. GL-only. @p level may be any allocated mip level.
          *
          * @param face       Cube face index (0=+X, 1=-X, 2=+Y, 3=-Y, 4=+Z, 5=-Z).
          * @param level      Requested mip level; out of range returns false.
@@ -389,7 +389,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Regenerates every mip level above 0 (on all six faces) from the current level-0
          * content via a raw `glGenerateMipmap`, GL-only. No-op when this target was not created
-         * with `mipMap=true`. Called on unbind (plan_sokol.md SOKOL-39). CNAEXT.
+         * with `mipMap=true`. Called on unbind (plans/plan_sokol.md SOKOL-39). CNAEXT.
          */
         CNAEXT void RegenerateMipmapsIfNeededEXT() const;
 
@@ -439,7 +439,7 @@ namespace CNA::Internal::Renderers::Sokol
 
     /**
      * @brief Renderer handle for a cube texture: a real `sg_image`/`sg_view` pair, sampled by
-     * `EnvironmentMapEffect` (plan_sokol.md SOKOL-34).
+     * `EnvironmentMapEffect` (plans/plan_sokol.md SOKOL-34).
      *
      * A CPU-side RGBA8 shadow (`levels_[level][face]`) is still kept, mirroring
      * `SokolTextureRenderer`'s own shape: sokol_gfx has no sub-image upload, so every `SetData()`
@@ -545,7 +545,7 @@ namespace CNA::Internal::Renderers::Sokol
      * @brief Renderer handle for a volume (3D) texture: pure CPU-side RGBA8 storage, no sokol_gfx
      * image.
      *
-     * plan_sokol.md SOKOL-27. Same rationale as `SokolTextureCubeRenderer`: nothing on this renderer
+     * plans/plan_sokol.md SOKOL-27. Same rationale as `SokolTextureCubeRenderer`: nothing on this renderer
      * samples a volume texture (there is no 3D-sampler shader variant), so a real `sg_image` would
      * be a GPU resource with no consumer. Mirrors Software's own choice to leave `Texture3D`
      * unimplemented entirely -- this renderer goes one step further and at least stores real pixels.
@@ -620,7 +620,7 @@ namespace CNA::Internal::Renderers::Sokol
     /**
      * @brief Renderer handle for a vertex buffer.
      *
-     * plan_sokol.md SOKOL-24: the underlying sokol_gfx buffer is `dynamic_update`, sized once (to
+     * plans/plan_sokol.md SOKOL-24: the underlying sokol_gfx buffer is `dynamic_update`, sized once (to
      * the greater of the owning `VertexBuffer`'s own declared capacity and the first upload) and
      * reused across SetData() calls via `sg_update_buffer()` whenever the new data still fits and
      * this buffer has not already been updated once this frame. sokol_gfx permits at most one
@@ -636,7 +636,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Creates an empty vertex buffer handle with the given capacity hint.
          * @param vertexCapacity Number of vertices the owning VertexBuffer was created for.
-         * @param owner CNAEXT (plan_sokol.md SOKOL-24). Owning renderer, consulted for the current
+         * @param owner CNAEXT (plans/plan_sokol.md SOKOL-24). Owning renderer, consulted for the current
          *              frame index so repeated same-shape uploads can reuse the sokol_gfx buffer
          *              via `sg_update_buffer()` instead of recreating it every time. Null falls
          *              back to always recreating (still correct, just not the cheap path).
@@ -702,10 +702,10 @@ namespace CNA::Internal::Renderers::Sokol
         std::size_t stride_ = 0;
         std::uint32_t bufferId_ = 0;
         SokolRenderer* ownerEXT_ = nullptr;
-        /// plan_sokol.md SOKOL-24: byte size the current bufferId_ was actually created with --
+        /// plans/plan_sokol.md SOKOL-24: byte size the current bufferId_ was actually created with --
         /// an sg_update_buffer() is only legal while the new data still fits inside this.
         std::size_t allocatedBytesEXT_ = 0;
-        /// plan_sokol.md SOKOL-24: ownerEXT_->GetFrameIndexEXT() as of the last sg_update_buffer()
+        /// plans/plan_sokol.md SOKOL-24: ownerEXT_->GetFrameIndexEXT() as of the last sg_update_buffer()
         /// on the current bufferId_, or 0 (never a real frame index) when it has not been
         /// dynamically updated since it was (re)created.
         std::uint64_t lastUpdateFrameEXT_ = 0;
@@ -890,7 +890,7 @@ namespace CNA::Internal::Renderers::Sokol
     /**
      * @brief Renderer handle for a 16- or 32-bit index buffer.
      *
-     * plan_sokol.md SOKOL-24: same dynamic-buffer reuse strategy as SokolVertexBufferRenderer --
+     * plans/plan_sokol.md SOKOL-24: same dynamic-buffer reuse strategy as SokolVertexBufferRenderer --
      * see that class's own doc comment.
      */
     class SokolIndexBufferRenderer : public IIndexBufferRenderer
@@ -900,7 +900,7 @@ namespace CNA::Internal::Renderers::Sokol
          * @brief Creates an empty index buffer handle with the given capacity hint.
          * @param indexCapacity  Number of indices the owning IndexBuffer was created for.
          * @param thirtyTwoBit   True when the owning IndexBuffer uses 32-bit indices.
-         * @param owner CNAEXT (plan_sokol.md SOKOL-24). Same role as
+         * @param owner CNAEXT (plans/plan_sokol.md SOKOL-24). Same role as
          *              `SokolVertexBufferRenderer`'s own `owner` parameter.
          */
         SokolIndexBufferRenderer(int indexCapacity, bool thirtyTwoBit,
@@ -952,9 +952,9 @@ namespace CNA::Internal::Renderers::Sokol
         bool thirtyTwoBit_ = false;
         std::uint32_t bufferId_ = 0;
         SokolRenderer* ownerEXT_ = nullptr;
-        /// plan_sokol.md SOKOL-24: see SokolVertexBufferRenderer::allocatedBytesEXT_.
+        /// plans/plan_sokol.md SOKOL-24: see SokolVertexBufferRenderer::allocatedBytesEXT_.
         std::size_t allocatedBytesEXT_ = 0;
-        /// plan_sokol.md SOKOL-24: see SokolVertexBufferRenderer::lastUpdateFrameEXT_.
+        /// plans/plan_sokol.md SOKOL-24: see SokolVertexBufferRenderer::lastUpdateFrameEXT_.
         std::uint64_t lastUpdateFrameEXT_ = 0;
     };
 
@@ -1029,7 +1029,7 @@ namespace CNA::Internal::Renderers::Sokol
 
         /**
          * @brief Sets a custom `ShaderEffect` to use for sprite rendering instead of the built-in
-         * sprite shader (plan_sokol.md SOKOL-28), or null to restore it. Flushes any pending
+         * sprite shader (plans/plan_sokol.md SOKOL-28), or null to restore it. Flushes any pending
          * sprites first, matching `EasyGLSpriteBatchRenderer::SetCustomEffect`'s own contract: a
          * flush must happen while the OLD effect (or lack of one) is still in effect, not the new
          * one.
@@ -1096,7 +1096,7 @@ namespace CNA::Internal::Renderers::Sokol
     /**
      * @brief Renderer handle for an occlusion query, implemented with a raw GL query object.
      *
-     * plan_sokol.md SOKOL-29. sokol_gfx exposes no query API of its own, but on this renderer's
+     * plans/plan_sokol.md SOKOL-29. sokol_gfx exposes no query API of its own, but on this renderer's
      * target platform (SOKOL_GLCORE) sokol renders through an ordinary GL context this class can
      * issue raw `glBeginQuery`/`glEndQuery` calls against directly -- a query records whatever the
      * GL context rasterizes between them regardless of which layer (sokol_gfx or this class) issued
@@ -1109,7 +1109,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Allocates the underlying GL query object.
          * @param owner The renderer whose GL context this query's Begin/End calls target
-         *              (plan_sokol.md SOKOL-43); null is legal (matches the default constructor's
+         *              (plans/plan_sokol.md SOKOL-43); null is legal (matches the default constructor's
          *              prior behaviour) and simply disables cross-object coordination.
          */
         explicit SokolOcclusionQueryRenderer(SokolRenderer* owner = nullptr);
@@ -1124,7 +1124,7 @@ namespace CNA::Internal::Renderers::Sokol
          * @brief Starts recording samples that pass the depth/stencil test for subsequent draws.
          *
          * FNA's own OcclusionQuery.Begin()/End() are pure one-line forwards to FNA3D with no call-
-         * sequence validation at all (plan_sokol.md SOKOL-29's own audit), so a repeated Begin()
+         * sequence validation at all (plans/plan_sokol.md SOKOL-29's own audit), so a repeated Begin()
          * with no intervening End() must not throw here either -- but raw GL, unlike FNA3D's
          * drivers, raises GL_INVALID_OPERATION for exactly that (double Begin, or End with no
          * active Begin), and an unconsumed GL error left pending trips sokol_gfx's own internal
@@ -1133,7 +1133,7 @@ namespace CNA::Internal::Renderers::Sokol
          * glBeginQuery/glEndQuery pair GL itself considers legal, silently absorbing everything
          * else -- matching FNA's "no exception" contract without corrupting sokol's error state.
          *
-         * plan_sokol.md SOKOL-43: OpenGL permits only one active `GL_SAMPLES_PASSED` query per
+         * plans/plan_sokol.md SOKOL-43: OpenGL permits only one active `GL_SAMPLES_PASSED` query per
          * context at a time, not per query object -- `active_` alone cannot see a DIFFERENT
          * object's outstanding Begin(). When `owner` was supplied, this also coordinates through
          * `owner`'s single shared "which query owns the context's one active slot" tracking, so a
@@ -1160,7 +1160,7 @@ namespace CNA::Internal::Renderers::Sokol
         [[nodiscard]] int PixelCount() const override;
 
     private:
-        /// plan_sokol.md SOKOL-43: the renderer whose context-wide active-query slot this instance
+        /// plans/plan_sokol.md SOKOL-43: the renderer whose context-wide active-query slot this instance
         /// coordinates through; null disables coordination (see the constructor's own doc).
         SokolRenderer* owner_ = nullptr;
         std::uint32_t queryId_ = 0;
@@ -1177,7 +1177,7 @@ namespace CNA::Internal::Renderers::Sokol
 
     /**
      * @brief Renderer handle for a custom `ShaderEffect`: real runtime GLSL compilation via raw GL
-     * calls bracketed by `sg_reset_state_cache()` (plan_sokol.md SOKOL-28), GL-only (matching
+     * calls bracketed by `sg_reset_state_cache()` (plans/plan_sokol.md SOKOL-28), GL-only (matching
      * `ReadBackbuffer`/`SokolOcclusionQueryRenderer`'s own `CNA_SOKOL_HAS_GL_READBACK` boundary).
      *
      * A custom-effect draw bypasses `sg_shader`/`sg_pipeline` entirely: sokol_gfx's own uniform
@@ -1261,7 +1261,7 @@ namespace CNA::Internal::Renderers::Sokol
         /// realized by ApplyPendingTextureBindsEXT() -- see that method's own doc comment for why
         /// this is deferred rather than applied immediately.
         ///
-        /// plan_sokol.md SOKOL-44: holds the SOURCE renderer, not a resolved sg_image id. A texture's
+        /// plans/plan_sokol.md SOKOL-44: holds the SOURCE renderer, not a resolved sg_image id. A texture's
         /// id is not stable across `SetData()` -- `SokolTextureRenderer::RecreateImage()` (and the
         /// cube/render-target equivalents) destroy the old `sg_image` and allocate a new one on every
         /// upload -- so resolving eagerly here would let `effect.SetTexture(...); texture.SetData(...);
@@ -1294,7 +1294,7 @@ namespace CNA::Internal::Renderers::Sokol
      * `GetData()` readback), `TextureCube`/`Texture3D` storage and `OcclusionQuery` are all
      * implemented. Anything genuinely unsupported (PBR shading, `RasterizerState.FillMode`,
      * `RenderTargetCube` MSAA -- the last two are permanent sokol_gfx API boundaries, not
-     * "not implemented yet") fails loudly rather than silently no-opping. See plan_sokol.md and
+     * "not implemented yet") fails loudly rather than silently no-opping. See plans/plan_sokol.md and
      * docs/sokol-renderer.md for the current, test-verified capability boundary.
      */
     class SokolRenderer : public IGraphicsRenderer
@@ -1423,7 +1423,7 @@ namespace CNA::Internal::Renderers::Sokol
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
 
         /**
-         * @brief Creates a CPU-storage-only cube texture (plan_sokol.md SOKOL-27).
+         * @brief Creates a CPU-storage-only cube texture (plans/plan_sokol.md SOKOL-27).
          *
          * No real GPU resource is allocated: nothing on this renderer samples a cube texture yet
          * (dual-texture/environment-map/skinned/PBR 3D draws all throw), so `SokolTextureCubeRenderer`
@@ -1438,7 +1438,7 @@ namespace CNA::Internal::Renderers::Sokol
             int size, bool mipMap, int surfaceFormat) override;
 
         /**
-         * @brief Creates a CPU-storage-only volume texture (plan_sokol.md SOKOL-27).
+         * @brief Creates a CPU-storage-only volume texture (plans/plan_sokol.md SOKOL-27).
          *
          * No real GPU resource is allocated: nothing on this renderer samples a volume texture yet
          * (there is no 3D-sampler shader variant), so `SokolTexture3DRenderer` only stores the
@@ -1455,13 +1455,13 @@ namespace CNA::Internal::Renderers::Sokol
             int w, int h, int depth, bool mipMap, int surfaceFormat) override;
 
         /**
-         * @brief Creates a raw-GL occlusion query (plan_sokol.md SOKOL-29).
+         * @brief Creates a raw-GL occlusion query (plans/plan_sokol.md SOKOL-29).
          * @return The new occlusion query renderer, or null on a non-GL `CNA_SOKOL_API`.
          */
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
         /**
-         * @brief CNAEXT (plan_sokol.md SOKOL-43). Claims this context's one `GL_SAMPLES_PASSED`
+         * @brief CNAEXT (plans/plan_sokol.md SOKOL-43). Claims this context's one `GL_SAMPLES_PASSED`
          * active-query slot for @p query.
          *
          * OpenGL permits only one active occlusion query per context, not per query object, so
@@ -1477,7 +1477,7 @@ namespace CNA::Internal::Renderers::Sokol
         CNAEXT bool TryActivateOcclusionQueryEXT(SokolOcclusionQueryRenderer* query);
 
         /**
-         * @brief CNAEXT (plan_sokol.md SOKOL-43). Releases this context's active-query slot if
+         * @brief CNAEXT (plans/plan_sokol.md SOKOL-43). Releases this context's active-query slot if
          * @p query currently owns it (a no-op otherwise -- e.g. @p query never held the slot, or
          * this is a redundant release).
          *
@@ -1490,7 +1490,7 @@ namespace CNA::Internal::Renderers::Sokol
         CNAEXT void ReleaseOcclusionQueryEXT(SokolOcclusionQueryRenderer* query);
 
         /**
-         * @brief CNAEXT (plan_sokol.md SOKOL-24). Monotonic counter incremented once per
+         * @brief CNAEXT (plans/plan_sokol.md SOKOL-24). Monotonic counter incremented once per
          * `Present()`/`sg_commit()`.
          *
          * `SokolVertexBufferRenderer`/`SokolIndexBufferRenderer` compare this against the frame
@@ -1506,7 +1506,7 @@ namespace CNA::Internal::Renderers::Sokol
         CNAEXT [[nodiscard]] std::uint64_t GetFrameIndexEXT() const { return frameIndexEXT_; }
 
         /**
-         * @brief Compiles a custom `ShaderEffect` from raw GLSL source (plan_sokol.md SOKOL-28).
+         * @brief Compiles a custom `ShaderEffect` from raw GLSL source (plans/plan_sokol.md SOKOL-28).
          *
          * GL-only (see `SokolEffectRenderer`'s own doc comment for why); on a non-GL
          * `CNA_SOKOL_API`, `SokolEffectRenderer::CompileProgram` deterministically fails and
@@ -1572,11 +1572,11 @@ namespace CNA::Internal::Renderers::Sokol
          * @param mipMap           When true, only level 0 is ever rendered into directly (matching
          *                         real D3D9 XNA's `D3DUSAGE_AUTOGENMIPMAP`); the rest of the mip
          *                         chain is regenerated via `glGenerateMipmap` on unbind
-         *                         (plan_sokol.md SOKOL-39).
+         *                         (plans/plan_sokol.md SOKOL-39).
          * @param multiSampleCount Clamped to the driver's real `GL_MAX_SAMPLES`, following
          *                         sokol_gfx.h's own documented offscreen-MSAA workflow: a separate
          *                         multisample-only colour image plus a single-sample resolve image
-         *                         (plan_sokol.md SOKOL-26); observable via IRenderTargetRenderer::
+         *                         (plans/plan_sokol.md SOKOL-26); observable via IRenderTargetRenderer::
          *                         GetMultiSampleCount(), matching every other renderer's own
          *                         device-clamped-count convention.
          * @return The new render target renderer.
@@ -1592,14 +1592,14 @@ namespace CNA::Internal::Renderers::Sokol
          * @param size             Edge length of each face in pixels.
          * @param depthFormat      Raw DepthFormat ordinal; None (0) allocates no depth-stencil
          *                         attachment, any other value allocates a combined one, shared by
-         *                         all six faces (plan_sokol.md SOKOL-26 -- see
+         *                         all six faces (plans/plan_sokol.md SOKOL-26 -- see
          *                         SokolRenderTargetCubeRenderer's own doc comment).
          * @param preserveContents Unused, for the same reason CreateRenderTarget2D's identically
          *                         named parameter is: a real sokol_gfx image naturally preserves
          *                         its content across binds.
          * @param mipMap           When true, only level 0 of each face is ever rendered into
          *                         directly; the rest of the chain is regenerated via
-         *                         `glGenerateMipmap` on unbind (plan_sokol.md SOKOL-39), the same
+         *                         `glGenerateMipmap` on unbind (plans/plan_sokol.md SOKOL-39), the same
          *                         convention CreateRenderTarget2D uses.
          * @param multiSampleCount Silently clamped to 1 -- **permanent, not "not implemented
          *                         yet"**: sokol_gfx's own validation layer hard-rejects any
@@ -1607,7 +1607,7 @@ namespace CNA::Internal::Renderers::Sokol
          *                         (`VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE`), confirmed
          *                         empirically while prototyping the same per-face multisample +
          *                         resolve layout `RenderTarget2D` uses successfully
-         *                         (plan_sokol.md SOKOL-26).
+         *                         (plans/plan_sokol.md SOKOL-26).
          * @return The new cube render target renderer.
          */
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(
@@ -1623,7 +1623,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief Binds a render-target set. A single RenderTarget2D, a single RenderTargetCube
          * face, the back buffer (null / count 0), or 2-4 RenderTarget2D targets bound together
-         * (plan_sokol.md SOKOL-26 MRT) is supported. A RenderTargetCube face combined with any
+         * (plans/plan_sokol.md SOKOL-26 MRT) is supported. A RenderTargetCube face combined with any
          * other target in the same set is not implemented (matches EasyGLRenderer's own
          * choice to reject that combination outright).
          * @param renderTargets Ordered attachment descriptors, or null for the back buffer.
@@ -1831,7 +1831,7 @@ namespace CNA::Internal::Renderers::Sokol
         /**
          * @brief GraphicsDevice.DrawInstancedPrimitives -- one draw call rendering `instanceCount`
          * copies of the same mesh, each transformed by its own World matrix read from
-         * `params.instanceVb` (plan_sokol.md SOKOL-36).
+         * `params.instanceVb` (plans/plan_sokol.md SOKOL-36).
          *
          * A dedicated, deliberately simplified shader (instanced3d.glsl, ported from
          * VulkanRenderer's own instanced3d.{vert,frag}.glsl): flat `DiffuseColor` only, no
@@ -1904,7 +1904,7 @@ namespace CNA::Internal::Renderers::Sokol
          * @param addressU Raw TextureAddressMode value for U.
          * @param addressV Raw TextureAddressMode value for V.
          * @param customEffect Custom `ShaderEffect` bound via `SpriteBatch.Begin(..., effect)`
-         *                     (plan_sokol.md SOKOL-28), or null for the built-in sprite shader. A
+         *                     (plans/plan_sokol.md SOKOL-28), or null for the built-in sprite shader. A
          *                     non-null but invalid (failed-to-compile) effect falls back to the
          *                     built-in shader too, matching `EasyGLSpriteBatchRenderer::FlushBatch`'s
          *                     own `renderer && renderer->IsValid()` gate.
@@ -1949,11 +1949,11 @@ namespace CNA::Internal::Renderers::Sokol
             /// match the pass it draws into, and a RenderTarget2D's MSAA count is independent of
             /// both the swapchain's and every other render target's.
             int sampleCount;
-            /// See Pipeline3DKey's identical field (plan_sokol.md SOKOL-26 MRT): sokol_gfx requires
+            /// See Pipeline3DKey's identical field (plans/plan_sokol.md SOKOL-26 MRT): sokol_gfx requires
             /// a pipeline's color_count to exactly match the active pass's real attachment count.
             int colorAttachmentCount;
             /// GraphicsDevice.BlendFactor, packed 0xRRGGBBAA from the same 8-bit Color the public
-            /// API exposes (plan_sokol.md SOKOL-40). sokol_gfx bakes blend_color into the pipeline
+            /// API exposes (plans/plan_sokol.md SOKOL-40). sokol_gfx bakes blend_color into the pipeline
             /// object at creation time -- there is no dynamic blend-constant call, unlike most
             /// APIs -- so a pipeline built under one BlendFactor is wrong for a draw under another
             /// and must not be reused; only Blend::BlendFactor/InverseBlendFactor actually read it.
@@ -2059,9 +2059,9 @@ namespace CNA::Internal::Renderers::Sokol
             /// The active pass's real sample count (the bound RenderTarget2D's MSAA count if one is
             /// bound and multisampled, otherwise the swapchain's) -- sokol_gfx bakes sample_count
             /// into the pipeline object and rejects a mismatch against the pass it draws into
-            /// (plan_sokol.md SOKOL-26).
+            /// (plans/plan_sokol.md SOKOL-26).
             int sampleCount;
-            /// plan_sokol.md SOKOL-26 MRT: sokol_gfx requires a pipeline's color_count to exactly
+            /// plans/plan_sokol.md SOKOL-26 MRT: sokol_gfx requires a pipeline's color_count to exactly
             /// match the active pass's real attachment count (1 for a single target/the swapchain,
             /// 2-4 while a multi-render-target set is bound). Every stock 3D fragment shader has
             /// only ever declared output location 0 (see DrawColored3D's own comment), so slots
@@ -2096,7 +2096,7 @@ namespace CNA::Internal::Renderers::Sokol
             /// this).
             int blendIndicesOffset;
             int blendIndicesFormat;
-            /// See PipelineKey's identical field (plan_sokol.md SOKOL-40).
+            /// See PipelineKey's identical field (plans/plan_sokol.md SOKOL-40).
             std::uint32_t blendFactorPacked;
 
             bool operator==(const Pipeline3DKey& other) const;
@@ -2108,7 +2108,7 @@ namespace CNA::Internal::Renderers::Sokol
         };
 
         /**
-         * @brief Identity of an instanced-3D pipeline (plan_sokol.md SOKOL-36).
+         * @brief Identity of an instanced-3D pipeline (plans/plan_sokol.md SOKOL-36).
          *
          * A separate, smaller key than Pipeline3DKey: instanced3d.glsl only ever reads Position
          * from vertex-buffer slot 0 (any stride -- see instanced3d.glsl's own doc comment) and the
@@ -2146,7 +2146,7 @@ namespace CNA::Internal::Renderers::Sokol
             float depthBias;
             float slopeScaleDepthBias;
             int sampleCount;
-            /// See Pipeline3DKey's identical field (plan_sokol.md SOKOL-26 MRT).
+            /// See Pipeline3DKey's identical field (plans/plan_sokol.md SOKOL-26 MRT).
             int colorAttachmentCount;
             int cullMode;
             int primitiveType;
@@ -2161,7 +2161,7 @@ namespace CNA::Internal::Renderers::Sokol
             int instanceStepRate;
             int positionOffset;
             int positionFormat;
-            /// See PipelineKey's identical field (plan_sokol.md SOKOL-40).
+            /// See PipelineKey's identical field (plans/plan_sokol.md SOKOL-40).
             std::uint32_t blendFactorPacked;
 
             bool operator==(const PipelineInstanced3DKey& other) const;
@@ -2203,7 +2203,7 @@ namespace CNA::Internal::Renderers::Sokol
                            int primitiveCount,
                            const GpuDrawParams& params);
         /**
-         * @brief CNAEXT (plan_sokol.md SOKOL-23). Builds a doubled-edge index list (a-b, b-c, c-a
+         * @brief CNAEXT (plans/plan_sokol.md SOKOL-23). Builds a doubled-edge index list (a-b, b-c, c-a
          * per triangle) for `RasterizerState.FillMode == WireFrame` -- the same CPU-side
          * triangle-to-`GL_LINES` re-expansion `EasyGLRenderer::DrawWireframe()` uses.
          * sokol_gfx has no native polygon-fill-mode API, but this technique needs none: it only
@@ -2225,7 +2225,7 @@ namespace CNA::Internal::Renderers::Sokol
             const SokolIndexBufferRenderer* ib, PrimitiveType primitive, int primitiveCount,
             int startIndex, int vertexStart);
         /**
-         * @brief Custom-`ShaderEffect` 3D draw (plan_sokol.md SOKOL-28): bypasses `sg_pipeline`
+         * @brief Custom-`ShaderEffect` 3D draw (plans/plan_sokol.md SOKOL-28): bypasses `sg_pipeline`
          * entirely via raw GL calls bracketed by `sg_reset_state_cache()`. See
          * `SokolEffectRenderer`'s own doc comment for why. Attribute layout comes from
          * @p declaration when non-null with at least one element, else the same fixed set of
@@ -2242,7 +2242,7 @@ namespace CNA::Internal::Renderers::Sokol
                                 int primitiveCount,
                                 const GpuDrawParams& params);
         /**
-         * @brief CNAEXT (plan_sokol.md SOKOL-41). Applies the device's full current graphics state
+         * @brief CNAEXT (plans/plan_sokol.md SOKOL-41). Applies the device's full current graphics state
          * -- depth test/write, stencil, blend (including the constant colour), face culling and
          * winding, and depth bias -- as raw GL calls, for the two draw paths that bypass
          * `sg_pipeline` entirely (`DrawCustomEffect3D` and `DrawSpriteRunEXT`'s custom-effect
@@ -2257,7 +2257,7 @@ namespace CNA::Internal::Renderers::Sokol
          */
         void ApplyCustomEffectRasterStateEXT();
         /**
-         * @brief CNAEXT (plan_sokol.md SOKOL-41/SOKOL-26 MRT). Applies `ColorWriteChannels0..3` via
+         * @brief CNAEXT (plans/plan_sokol.md SOKOL-41/SOKOL-26 MRT). Applies `ColorWriteChannels0..3` via
          * `glColorMaski` per active colour-attachment slot, for the same two raw-GL draw paths
          * ApplyCustomEffectRasterStateEXT() serves.
          *
@@ -2288,7 +2288,7 @@ namespace CNA::Internal::Renderers::Sokol
         /// Cube-face counterpart of BindSingleRenderTarget2D -- mutually exclusive with it, so each
         /// clears the other's tracking field.
         void BindRenderTargetCubeFace(SokolRenderTargetCubeRenderer* rt, int face);
-        /// MRT counterpart of BindSingleRenderTarget2D (plan_sokol.md SOKOL-26): @p targets.size()
+        /// MRT counterpart of BindSingleRenderTarget2D (plans/plan_sokol.md SOKOL-26): @p targets.size()
         /// is always >= 2 (SetRenderTargets already special-cases count == 1). targets[0] becomes
         /// currentRenderTarget_ -- so every existing depth/sample-count/size/mip-regen path that
         /// already reads currentRenderTarget_ continues to answer about "the" target that owns
@@ -2319,7 +2319,7 @@ namespace CNA::Internal::Renderers::Sokol
         /// CurrentPassHasDepthStencilAttachmentEXT's rationale.
         [[nodiscard]] int CurrentPassSampleCountEXT() const;
         /// Returns the active pass's real colour-attachment count: 1 for a single target or the
-        /// swapchain, 2-4 while a multi-render-target set is bound (plan_sokol.md SOKOL-26 MRT).
+        /// swapchain, 2-4 while a multi-render-target set is bound (plans/plan_sokol.md SOKOL-26 MRT).
         /// sokol_gfx requires a pipeline's color_count to exactly match the pass it draws into, the
         /// same reasoning CurrentPassSampleCountEXT's own doc comment gives for sample_count.
         [[nodiscard]] int CurrentPassColorAttachmentCountEXT() const;
@@ -2347,7 +2347,7 @@ namespace CNA::Internal::Renderers::Sokol
         /// Which face of currentRenderTargetCube_ is the active colour attachment. Meaningless
         /// while currentRenderTargetCube_ is null.
         int currentRenderTargetCubeFace_ = 0;
-        /// plan_sokol.md SOKOL-26 MRT: slots 1..N-1 of a multi-render-target bind, empty when not
+        /// plans/plan_sokol.md SOKOL-26 MRT: slots 1..N-1 of a multi-render-target bind, empty when not
         /// MRT. Slot 0 stays currentRenderTarget_ (see BindRenderTargets2D's own comment) --
         /// mutually exclusive with currentRenderTargetCube_ being non-null, since a RenderTargetCube
         /// face combined with any other target in one set is not implemented.
@@ -2367,7 +2367,7 @@ namespace CNA::Internal::Renderers::Sokol
         int blendAlphaDst_ = 1;   // Blend::Zero
         int blendColorFunc_ = 0;  // BlendFunction::Add
         int blendAlphaFunc_ = 0;  // BlendFunction::Add
-        /// Per-attachment ColorWriteChannels0..3 (plan_sokol.md SOKOL-26 MRT); slot 0 is what every
+        /// Per-attachment ColorWriteChannels0..3 (plans/plan_sokol.md SOKOL-26 MRT); slot 0 is what every
         /// stock-effect Pipeline3DKey/PipelineKey/PipelineInstanced3DKey still reads (see
         /// DrawColored3D/GetSpritePipeline/DrawInstancedPrimitivesEx), slots 1-3 are only consulted
         /// by DrawCustomEffect3D's own raw-GL glColorMaski calls while more than one render target
@@ -2400,7 +2400,7 @@ namespace CNA::Internal::Renderers::Sokol
         int scissorRect_[4] = {0, 0, 0, 0};
         bool viewportSet_ = false;
         int viewportRect_[4] = {0, 0, 0, 0};
-        /// Viewport.MinDepth/MaxDepth (plan_sokol.md SOKOL-37). Applied via a raw glDepthRangef call
+        /// Viewport.MinDepth/MaxDepth (plans/plan_sokol.md SOKOL-37). Applied via a raw glDepthRangef call
         /// in ApplyPendingViewportAndScissor -- see SetViewport's own doc comment for why sokol_gfx
         /// itself has no equivalent call.
         float viewportMinDepth_ = 0.0f;
@@ -2438,7 +2438,7 @@ namespace CNA::Internal::Renderers::Sokol
         std::uint32_t skinned3dShaderId_ = 0;
         std::uint32_t instanced3dShaderId_ = 0;
         std::uint32_t envmap3dShaderId_ = 0;
-        /// Raw GL VAO used only by the custom-`ShaderEffect` draw path (plan_sokol.md SOKOL-28) --
+        /// Raw GL VAO used only by the custom-`ShaderEffect` draw path (plans/plan_sokol.md SOKOL-28) --
         /// sokol_gfx's own pipeline objects own their vertex layout state internally and are not
         /// reused here, since a custom-effect draw bypasses sg_pipeline entirely. Created lazily on
         /// first use, destroyed alongside the rest of this renderer's GL resources.
@@ -2453,17 +2453,17 @@ namespace CNA::Internal::Renderers::Sokol
         std::unordered_map<PipelineInstanced3DKey, std::uint32_t, PipelineInstanced3DKeyHash>
             pipelineInstanced3dCache_;
         std::unordered_map<SamplerKey, std::uint32_t, SamplerKeyHash> samplerCache_;
-        /// plan_sokol.md SOKOL-43: which SokolOcclusionQueryRenderer, if any, currently owns this
+        /// plans/plan_sokol.md SOKOL-43: which SokolOcclusionQueryRenderer, if any, currently owns this
         /// context's one GL_SAMPLES_PASSED active-query slot. See
         /// TryActivateOcclusionQueryEXT()/ReleaseOcclusionQueryEXT()'s own doc comments.
         SokolOcclusionQueryRenderer* activeOcclusionQueryEXT_ = nullptr;
-        /// plan_sokol.md SOKOL-23: scratch line-topology index buffer for
+        /// plans/plan_sokol.md SOKOL-23: scratch line-topology index buffer for
         /// RasterizerState.FillMode == WireFrame, recreated (immutable, with data) on every
         /// wireframe draw -- same "every upload recreates the resource" convention every other
         /// buffer in this renderer already uses, see BuildWireframeLineIndicesEXT()'s own doc
         /// comment.
         std::uint32_t wireframeIndexBufferId_ = 0;
-        /// plan_sokol.md SOKOL-24: see GetFrameIndexEXT()'s own doc comment.
+        /// plans/plan_sokol.md SOKOL-24: see GetFrameIndexEXT()'s own doc comment.
         std::uint64_t frameIndexEXT_ = 1;
     };
 }

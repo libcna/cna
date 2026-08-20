@@ -1,4 +1,4 @@
-# plan_blend2d.md: BLEND2D renderer example/test registration (module-local). The module is a
+# plans/plan_blend2d.md: BLEND2D renderer example/test registration (module-local). The module is a
 # no-op unless BLEND2D is selected.
 #
 # Tests are split by execution requirement, mirroring the SKIA renderer's own registration
@@ -59,7 +59,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND CNA_GRAPHICS_RENDERER ST
     cna_register_renderer_test(NAME Blend2D_Correctness COMMAND cna_test_blend2d_correctness
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "Blend2D;Correctness")
 
-    # plan_blend2d.md remediation (post-3da643712 review): RenderTarget2D public-property
+    # plans/plan_blend2d.md remediation (post-3da643712 review): RenderTarget2D public-property
     # truthfulness (DepthStencilFormat/MultiSampleCount/LevelCount) and custom-Effect rejection,
     # driven through the real Game/GraphicsDeviceManager/RenderTarget2D/SpriteBatch public API.
     # Uses SDL_VIDEODRIVER=dummy (verified against Game/GraphicsDeviceManager, same as

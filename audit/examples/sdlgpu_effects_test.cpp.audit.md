@@ -37,7 +37,7 @@ of both draws with no exception.
 `alpha_test3d.frag.glsl`/`dual_texture3d.frag.glsl`. As with `sdlgpu_3d_test.cpp` in this same
 batch, the frame-1 checked path duplicates `DrawScene()`'s logic rather than calling it (F1), and
 neither check's actual pixel content is asserted by the automated CTest — the discard-vs-blend and
-channel-multiply claims rest entirely on a one-time manual screenshot (`plan_sdlgpu.md`
+channel-multiply claims rest entirely on a one-time manual screenshot (`plans/plan_sdlgpu.md`
 `SDLGPU-31`/`SDLGPU-32`, 2026-07-15), same documented swapchain-readback limitation already
 established in this batch's other reports.
 
@@ -110,7 +110,7 @@ confirmed by eye (F1) — not in the underlying implementation.
   setter sequence, differing only in the interleaved `check(true, …)` calls and `stage` tracking.
   Per the header comment (lines 6-14), the actual proof that check A's discard is genuine (not
   alpha-blended) and check B's channel math is genuine (not "one texture shown") is a screenshot
-  taken once at `plan_sdlgpu.md SDLGPU-31`/`SDLGPU-32` (2026-07-15) — this audit's own
+  taken once at `plans/plan_sdlgpu.md SDLGPU-31`/`SDLGPU-32` (2026-07-15) — this audit's own
   independent formula re-derivation (above) confirms that screenshot's claims *should* have been
   true at that time, but nothing in this file or its CTest registration re-confirms it now.
 - Why it matters: identical to `sdlgpu_3d_test.cpp`'s F1 — a future edit to `DrawScene()` alone
@@ -143,7 +143,7 @@ confirmed by eye (F1) — not in the underlying implementation.
   Cross-File Observations.
 - This file's `AlphaTestEffect`/`DualTextureEffect` formulas were cross-checked directly against
   FNA's actual `HLSL/AlphaTestEffect.fx`/`HLSL/DualTextureEffect.fx` source in this pass (not
-  merely trusted from the header comment or `plan_sdlgpu.md`'s own claim) and confirmed correct —
+  merely trusted from the header comment or `plans/plan_sdlgpu.md`'s own claim) and confirmed correct —
   this strengthens confidence in the underlying `alpha_test3d.frag.glsl`/`dual_texture3d.frag.glsl`
   shaders beyond what a prior audit pass might have taken on faith.
 - Same duplication shape as `sdlgpu_3d_test.cpp`'s F1 — now confirmed as a repeated pattern across

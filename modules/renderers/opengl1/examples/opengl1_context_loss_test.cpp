@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: context-loss resource recreation registry (plan_opengl1.md phase 8).
+// OPENGL1 renderer: context-loss resource recreation registry (plans/plan_opengl1.md phase 8).
 //
 // OpenGL1Renderer::DebugSimulateContextLoss() destroys and immediately recreates the SDL
 // GL context (one atomic operation on desktop -- matching every other renderer's own

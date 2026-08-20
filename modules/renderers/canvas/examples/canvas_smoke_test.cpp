@@ -1,4 +1,4 @@
-// plan_canvas.md CANVAS-15: structural smoke test for the CANVAS (HTML Canvas 2D) graphics
+// plans/plan_canvas.md CANVAS-15: structural smoke test for the CANVAS (HTML Canvas 2D) graphics
 // renderer. Constructs a real Game (GraphicsDeviceManager, Clear(), a Texture2D + SpriteBatch
 // draws), verifies exact scaled-destination pixels, and checks the AlphaBlend cache/bulk replay
 // counters across a couple of frames.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2165: the post-process table, measured on the GPU.
+// plans/plan_modern.md MOD-2165: the post-process table, measured on the GPU.
 //
 // Every number in docs/cnaext-perf.md until now came from a CPU wall clock wrapped around a
 // one-texel read-back. That method works and it measures two things it should not: the clock starts

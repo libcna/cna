@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect proof for the SDL_GPU graphics renderer -- a
+// plans/plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect proof for the SDL_GPU graphics renderer -- a
 // REAL runtime GLSL->SPIR-V compile via libshaderc (SDL_gpu only accepts precompiled bytecode),
 // not just a "didn't throw" smoke test. Verified end-to-end through the public XNA API:
 // SpriteBatch.Begin(effect) -> Draw() -> End(), reading back the actual rendered pixel via

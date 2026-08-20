@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-18: real Texture2D mip level support for the OpenGL4 graphics renderer --
+// plans/plan_opengl4.md GL4-18: real Texture2D mip level support for the OpenGL4 graphics renderer --
 // Texture2D::SetData(level, ...) for level>0 previously reached
 // OpenGL4TextureRenderer::UpdatePixelsLevel(), which was unoverridden (inherited no-op default),
 // so any mip level beyond 0 was silently discarded. GL_TEXTURE_MAX_LEVEL also defaulted to GL's
@@ -10,7 +10,7 @@
 // easygl_texture_mip_filter_effect_test.cpp/vulkan/bgfx ports): a 128x128 mipMap texture has 8
 // levels (128,64,32,16,8,4,2,1). Levels 0-2 are solid RED; levels 3-7 are solid GREEN. Drawn via
 // SpriteBatch (which correctly threads TextureFilter through to ApplySamplerState, unlike the
-// direct-3D-draw path's still-hardcoded sampler -- see plan_opengl4.md's own GL4-13 "Remaining
+// direct-3D-draw path's still-hardcoded sampler -- see plans/plan_opengl4.md's own GL4-13 "Remaining
 // work" note) at a tiny on-screen size, forcing the GPU's automatic LOD calculation well into the
 // GREEN range.
 //

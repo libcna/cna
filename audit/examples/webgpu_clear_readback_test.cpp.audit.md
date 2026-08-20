@@ -15,7 +15,7 @@
   (`EnsureFrameRendered()` lines 5027+, `ReadBackbuffer()` line 5528, sprite pipeline blend state
   lines 2340-2358, `TextureAddressMode`→`WGPUAddressMode` mapping lines 217-221,
   `TextureFilter`→`WGPUFilterMode` mapping lines 360-373).
-- Referenced tasks: WEBGPU-91/92/132 (`plan_webgpu.md`).
+- Referenced tasks: WEBGPU-91/92/132 (`plans/plan_webgpu.md`).
 
 ## Purpose
 
@@ -72,7 +72,7 @@ present in current source: `WebGPUGraphicsBackend.cpp` lines 2348-2354 pairs
 straight-alpha "over" blend) with an adjacent comment explicitly describing the prior, buggy
 `One`/`OneMinusSrcAlpha` (premultiplied-equation) pairing that silently ignored partial alpha — this
 is not a stale claim, the fix is genuinely in the code the test exercises, cross-checked against
-`plan_webgpu.md`'s WEBGPU-132 entry which independently corroborates the same before/after description.
+`plans/plan_webgpu.md`'s WEBGPU-132 entry which independently corroborates the same before/after description.
 
 ### Robustness
 Check E (alpha=0 must be a true no-op) and check G (alpha=128 must land strictly between black and
@@ -103,7 +103,7 @@ None at HIGH or above.
 
 ## Cross-File Observations
 
-- Corroborates (rather than merely repeats) `plan_webgpu.md`'s WEBGPU-132 entry: both sources describe
+- Corroborates (rather than merely repeats) `plans/plan_webgpu.md`'s WEBGPU-132 entry: both sources describe
   the same bug, the same fix, and the same "value depends on blend colour-space" caveat, with this
   audit independently re-deriving the blend-factor pairing from the actual current source rather than
   taking the plan doc's claim at face value.

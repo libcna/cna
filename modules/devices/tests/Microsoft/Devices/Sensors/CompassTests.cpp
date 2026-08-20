@@ -636,7 +636,7 @@ TEST(CompassTests, RemovingAnotherNotYetInvokedCalibrateHandlerDuringDispatchSti
 // Compass instance, not just Dispose()s it) -- that scenario is Android-only
 // and requires real hardware or an Android ASan build this container cannot
 // run; left explicitly documented as unverified, not silently assumed safe,
-// in plan_devices.md's SENSORBASE-003 closing note.
+// in plans/plan_devices.md's SENSORBASE-003 closing note.
 TEST(CompassTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
 {
     Compass c;

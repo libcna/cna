@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT) proof for the SDL_GPU graphics renderer.
+// plans/plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT) proof for the SDL_GPU graphics renderer.
 //
 // Stock (single fragment output) effects keep the same scope boundary this project's D3D11/D3D12
 // MRT support established: rts[0] is the real draw target; rts[1..count-1] are bound and

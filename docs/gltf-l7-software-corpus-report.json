@@ -2665,7 +2665,7 @@
       "returnCode": 1,
       "owningTask": "GLTF-261",
       "errorContains": "has 73 joints, but the GPU bone palette holds 72",
-      "terminalError": "cna-gltf-viewer: Skin 'BigRig' has 73 joints, but the GPU bone palette holds 72. Truncating would leave every vertex bound to a joint past the limit collapsed toward the origin, so the skin is refused instead (plan_gltf.md GLTF-261).",
+      "terminalError": "cna-gltf-viewer: Skin 'BigRig' has 73 joints, but the GPU bone palette holds 72. Truncating would leave every vertex bound to a joint past the limit collapsed toward the origin, so the skin is refused instead (plans/plan_gltf.md GLTF-261).",
       "twoProcessDispositionIdentical": true
     },
     {
@@ -3940,7 +3940,7 @@
       "returnCode": 1,
       "owningTask": "GLTF-254",
       "errorContains": "weighted 0.400000 to joint 5",
-      "terminalError": "cna-gltf-viewer: Primitive 'StrayJointTri': vertex 1 is weighted 0.400000 to joint 5, but the skin declares only 2 joints. Binding it to the root instead would drag the vertex there, so the file is refused (plan_gltf.md GLTF-254).",
+      "terminalError": "cna-gltf-viewer: Primitive 'StrayJointTri': vertex 1 is weighted 0.400000 to joint 5, but the skin declares only 2 joints. Binding it to the root instead would drag the vertex there, so the file is refused (plans/plan_gltf.md GLTF-254).",
       "twoProcessDispositionIdentical": true
     },
     {

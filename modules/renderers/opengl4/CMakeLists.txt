@@ -1,4 +1,4 @@
-# plan_opengl4.md GL4-1: real desktop OpenGL 4.x core profile via the platform's own GL
+# plans/plan_opengl4.md GL4-1: real desktop OpenGL 4.x core profile via the platform's own GL
 # library (libGL/opengl32/OpenGL.framework, resolved by find_package(OpenGL) in
 # RendererSelection.cmake); window/context management comes from IPlatformGlContext -- no other new
 # third-party dependency (GL4Loader.hpp/.cpp is this renderer's own hand-rolled loader for

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-003 / GLTF-004: the generated conformance corpus and the L1-L4 ladder over it.
+// plans/plan_gltf.md GLTF-003 / GLTF-004: the generated conformance corpus and the L1-L4 ladder over it.
 //
 // This suite is unusual on purpose, and the shape is the point.
 //
@@ -250,7 +250,7 @@ TEST(GltfFixtureCorpus, TheGeneratorPackageIsCompleteInTheCheckout)
                 << source.filename().string() << " imports '" << module
                 << "', but neither " << asModule.string() << " nor " << asPackage.string()
                 << " exists. The generator cannot run, so the corpus cannot be regenerated -- "
-                   "check .gitignore is not swallowing the file (plan_gltf.md GLTF-003).";
+                   "check .gitignore is not swallowing the file (plans/plan_gltf.md GLTF-003).";
         }
     }
 }
@@ -687,7 +687,7 @@ TEST(GltfFixtureCorpus, DirectX11CorpusL7ReportIsCompleteExactAndReproducible)
     const JsonValue& translationEnvironment = Member(report, "translationLayerEnvironment");
     ASSERT_EQ(JsonType::Array, translationEnvironment.type);
     ASSERT_EQ(1u, translationEnvironment.arrayValue.size());
-    // plan_gltf.md GLTF-471: the pin is on the RELEASE, and the two strings below are the two
+    // plans/plan_gltf.md GLTF-471: the pin is on the RELEASE, and the two strings below are the two
     // spellings the same release logs. Upstream DXVK 2.6 prints "DXVK: v2.6"; Debian's `dxvk`
     // 2.6+ds-1 prints "DXVK: 2.6.0". The committed report was captured against the former and this
     // revision's re-capture against the latter, and both are DXVK 2.6 -- so accepting either keeps
@@ -913,7 +913,7 @@ TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
 
 TEST(GltfFixtureCorpus, EveryL7GoldenCarriesTheVertexColourAlphaProductRatherThanTheWhiteIdentity)
 {
-    // plan_gltf.md GLTF-465. §3.9.2/§3.7.2.1: COLOR_0 is "an additional linear multiplier to base
+    // plans/plan_gltf.md GLTF-465. §3.9.2/§3.7.2.1: COLOR_0 is "an additional linear multiplier to base
     // color" -- ITS ALPHA INCLUDED. Every other check in this suite proves the colour reaches the
     // renderer; this one proves the renderer USED it, from the committed pixels, with no display and
     // no shader-source string matching.
@@ -1121,7 +1121,7 @@ TEST(GltfFixtureCorpus, ValidatorErrorsAreExactNamedMalformedFixtureOracles)
 
 TEST(GltfFixtureCorpus, DistinctAssetCountEqualsTheSumOfOwningGroupCounts)
 {
-    // plan_gltf.md §24.1: one asset has exactly one owning group, so the distinct-asset total is
+    // plans/plan_gltf.md §24.1: one asset has exactly one owning group, so the distinct-asset total is
     // the sum of the owning-group counts. Referencing a fixture from another group never
     // re-counts it.
     const JsonValue& manifest = CorpusManifest();
@@ -1195,7 +1195,7 @@ TEST(GltfFixtureCorpus, FinalTargetAccountsForEveryGeneratedAndMissingAssetExact
 
     // The human plan names the generated target rather than carrying a fourth independent number.
     const std::filesystem::path plan =
-        CorpusDirectory().parent_path().parent_path().parent_path() / "plan_gltf.md";
+        CorpusDirectory().parent_path().parent_path().parent_path() / "plans/plan_gltf.md";
     std::ifstream file(plan);
     ASSERT_TRUE(file.is_open()) << plan.string();
     const std::string text((std::istreambuf_iterator<char>(file)),
@@ -1203,12 +1203,12 @@ TEST(GltfFixtureCorpus, FinalTargetAccountsForEveryGeneratedAndMissingAssetExact
     const std::string heading = "### 24.2 Target corpus — " + std::to_string(targetSum) +
                                 " distinct synthetic assets";
     EXPECT_NE(std::string::npos, text.find(heading))
-        << "plan_gltf.md must use the generator's target: " << heading;
+        << "plans/plan_gltf.md must use the generator's target: " << heading;
 }
 
 TEST(GltfFixtureCorpus, AllFourteenForensicAuditFixturesArePromoted)
 {
-    // plan_gltf.md §24.2: f1...f14 are promoted, not re-invented, and each maps to exactly one
+    // plans/plan_gltf.md §24.2: f1...f14 are promoted, not re-invented, and each maps to exactly one
     // canonical corpus id.
     const JsonValue& promoted = Member(CorpusManifest(), "promotedAuditFixtures");
     ASSERT_EQ(JsonType::Object, promoted.type);
@@ -1285,7 +1285,7 @@ TEST(GltfFixtureCorpus, EveryGlbTwinIsAValidContainerCarryingTheSameAsset)
     }
 }
 
-// plan_gltf.md GLTF-131: the transform ladder in `.glb` form too.
+// plans/plan_gltf.md GLTF-131: the transform ladder in `.glb` form too.
 //
 // The test above proves the two containers hold the same *counts*. This one asks the question the
 // row is actually about: does CNA place the geometry identically out of either container? A GLB
@@ -1528,7 +1528,7 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
             EXPECT_EQ(static_cast<int>(NumberOr(expected, "mode", -1)), dump.topologyMode);
             EXPECT_EQ(StringOr(expected, "modeName", ""), dump.topologyName);
 
-            // GLTF-072: what CNA's own documented per-mode policy (plan_gltf.md §10.1) must turn
+            // GLTF-072: what CNA's own documented per-mode policy (plans/plan_gltf.md §10.1) must turn
             // the primitive into. Kept separate from the spec-derived fields above because it is a
             // CNA decision -- converting strips and fans at import rather than plumbing new
             // topologies through every renderer.
@@ -1547,7 +1547,7 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
             // into a slot whose attribute the file omits is not something the specification
             // constrains, and asserting CNA's fill value here would silently promote an
             // implementation choice to a requirement.
-            // plan_gltf.md GLTF-178: tangents are compared here too, but only where the fixture
+            // plans/plan_gltf.md GLTF-178: tangents are compared here too, but only where the fixture
             // AUTHORS them. A generated tangent basis is CNA's own algorithm rather than anything
             // §3.7.2.1 prescribes, so the manifest states none and this comparison skips it --
             // asserting a generated basis would promote an implementation choice to a conformance
@@ -1647,7 +1647,7 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
                 {
                     ASSERT_EQ(triangles.arrayValue.size() * 3, dump.indices.size())
                         << "the emitted index list does not describe the expected triangle count";
-                    // plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split renumbers, so an emitted
+                    // plans/plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split renumbers, so an emitted
                     // index is compared through the manifest's own independently computed remap
                     // rather than against the authored number directly. `triangles` stays in
                     // AUTHORED numbering because it is the spec's own expansion of the file, which
@@ -1828,7 +1828,7 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
             ASSERT_NE(cnaByPlacement.end(), found)
                 << "CNA imported no instance for this node/primitive pair";
             EXPECT_EQ(expectedInstance->mesh, found->second->mesh);
-            // plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split duplicates a vertex shared
+            // plans/plan_gltf.md GLTF-461: §3.7.2.1's flat-normal split duplicates a vertex shared
             // between differently oriented faces, so CNA can emit more vertices than the file
             // declares. The invariant is that the split DUPLICATES and never MOVES: every emitted
             // vertex must sit exactly where its source vertex does. Mapping through the remap keeps
@@ -1857,7 +1857,7 @@ TEST(GltfConformanceL4, CnaWorldPositionsMatchTheExpectedGeometry)
     }
 }
 
-// --- plan_gltf.md GLTF-401: the manifest describes every asset, completely ------------------------
+// --- plans/plan_gltf.md GLTF-401: the manifest describes every asset, completely ------------------------
 
 TEST(GltfFixtureCorpus, EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEachOfThem)
 {
@@ -1932,7 +1932,7 @@ TEST(GltfFixtureCorpus, EveryAssetDeclaresItsGroupItsLayersAndAnExpectationForEa
         << "too few declared layers across the corpus for this to be a completeness check";
 }
 
-// --- plan_gltf.md GLTF-419: the corpus stays small enough to read --------------------------------
+// --- plans/plan_gltf.md GLTF-419: the corpus stays small enough to read --------------------------------
 
 TEST(GltfFixtureCorpus, EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot)
 {
@@ -1993,7 +1993,7 @@ TEST(GltfFixtureCorpus, EveryAssetFitsTheSizeBudgetOrStatesWhyItCannot)
     RecordProperty("largestAsset", largestName);
 }
 
-// --- plan_gltf.md GLTF-416: the corpus documentation is generated, not maintained ----------------
+// --- plans/plan_gltf.md GLTF-416: the corpus documentation is generated, not maintained ----------------
 
 TEST(GltfFixtureCorpus, TheConformanceDocListsEveryFixtureTheManifestDeclares)
 {
@@ -2063,7 +2063,7 @@ TEST(GltfFixtureCorpus, TheConformanceDocListsEveryFixtureTheManifestDeclares)
     EXPECT_EQ(CorpusFixtureIds().size(), compared);
 }
 
-// --- plan_gltf.md GLTF-414: inline documents stay a deliberate choice ----------------------------
+// --- plans/plan_gltf.md GLTF-414: inline documents stay a deliberate choice ----------------------------
 
 TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
 {
@@ -2116,7 +2116,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // Note for whoever edits this comment: the scan counts the opening delimiter anywhere in a
     // .cpp, comments included, so spelling it here would raise the very number it explains.
     //
-    // 275 -> 280 is plan_modern.md MOD-2076, and the decision this ratchet asks for is: these are
+    // 275 -> 280 is plans/plan_modern.md MOD-2076, and the decision this ratchet asks for is: these are
     // **loader-machinery probes**, not conformance statements about an asset. Each one asks which
     // values of KHR_materials_clearcoat / _sheen / _transmission / _volume / _iridescence reach
     // MaterialOut, including the two that are about the *absence* of a declaration and one about an
@@ -2171,7 +2171,7 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
            "the commit message.";
 }
 
-// --- plan_gltf.md GLTF-066: the L2 dump shows the sparse override APPLIED -------------------------
+// --- plans/plan_gltf.md GLTF-066: the L2 dump shows the sparse override APPLIED -------------------------
 
 TEST(GltfConformanceL2, ASparseOverrideIsVisibleInTheDumpAndNotJustPlausible)
 {

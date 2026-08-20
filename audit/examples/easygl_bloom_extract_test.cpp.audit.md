@@ -10,7 +10,7 @@
   (`ContentManager.cpp` lines 715-785, specifically `ReadCustomGlslEffect` lines 765-785),
   `Microsoft::Xna::Framework::Graphics::ShaderEffect` (`ShaderEffect.cpp`).
 - XNA/FNA relevance: exercises `ContentManager::Load<T>()` (real XNA 4.0 API) end-to-end against a genuine `.cnj`
-  content descriptor — the CNA-specific content-pipeline replacement for XNB (see `plan_cnj.md`, out of this
+  content descriptor — the CNA-specific content-pipeline replacement for XNB (see `plans/plan_cnj.md`, out of this
   batch's scope but referenced by this file's own header). The pixel-shader math itself (`BloomExtract.fx`) is from
   the Microsoft XNA Game Studio **BloomPostprocess** sample, not part of FNA.
 - FNA reference: N/A for the shader body — the `BloomSample_4_0` sample project does not exist anywhere under
@@ -24,7 +24,7 @@
 Task 946 shader-conversion proof for `BloomExtract.fx`'s threshold-remap pixel shader, plus — per the file's own
 header (lines 18-22) — the **first exercise anywhere in the repository** of the `.cnj`-based `Effect` content-type
 round trip through `ContentManager::Load<std::shared_ptr<Effect>>()` (migrated from `.shader.json` to `.cnj` per
-`plan_cnj.md` CNB-14/CNB-15). Correctly placed as an `easygl_`-prefixed integration test per `AUDIT_SCOPE.md`.
+`plans/plan_cnj.md` CNB-14/CNB-15). Correctly placed as an `easygl_`-prefixed integration test per `AUDIT_SCOPE.md`.
 
 ## Executive Verdict
 

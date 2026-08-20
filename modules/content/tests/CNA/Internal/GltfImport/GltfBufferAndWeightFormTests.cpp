@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-029 / GLTF-033 / GLTF-090 / GLTF-091 / GLTF-092 / GLTF-094 / GLTF-255: the two
+// plans/plan_gltf.md GLTF-029 / GLTF-033 / GLTF-090 / GLTF-091 / GLTF-092 / GLTF-094 / GLTF-255: the two
 // file-level forms every fixture in the corpus depends on, the two weight encodings none of them
 // uses, and the attributes CNA has nowhere to put.
 //

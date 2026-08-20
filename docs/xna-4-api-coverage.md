@@ -2,8 +2,8 @@
 
 **Date:** 2026-06-26 (updated 2026-06-26 — Tasks 197–199; updated 2026-07-03 — Input/Touch
 sections, `feature/input` Phases I1–I6; updated 2026-07-04 — final Input status, `feature/input`
-Phase I9, `plan_input.md` tasks 700–840, coverage split by category; updated 2026-07-09 — Task 481,
-Graphics sections rewritten after `plan_graphics.md` Phases 47–53: SDL_Renderer's own full 2D-only
+Phase I9, `plans/plan_input.md` tasks 700–840, coverage split by category; updated 2026-07-09 — Task 481,
+Graphics sections rewritten after `plans/plan_graphics.md` Phases 47–53: SDL_Renderer's own full 2D-only
 audit phase (Phase 70, 15 real bugs found and fixed), EasyGL/Vulkan/Bgfx gap-closure phases
 (Phases 71–73), the Model/OcclusionQuery correctness audits (Phases 49–50), a new golden-image
 pixel-testing infrastructure, and a new FNA-vs-CNA JSON comparison harness — §7/§8 and the Stock
@@ -15,7 +15,7 @@ independent questions); Task 483 added a dense per-class Graphics coverage table
 the complementary per-renderer Graphics support summary; Task 485 added a consolidated "Known
 deviations from XNA/FNA" list, closing the Tasks 481-485 documentation arc; Task 490 added a
 release checklist gating 90%/95%/100% compatibility milestone claims against concrete criteria,
-closing Phase 54 in full, Tasks 481-490; updated 2026-07-17 — `plan_net.md` Task 9.1: GamerServices
+closing Phase 54 in full, Tasks 481-490; updated 2026-07-17 — `plans/plan_net.md` Task 9.1: GamerServices
 and Net sections were stale since before decision 1a (Xbox-360-reference correctness bar) — both
 namespaces are real, tested implementations now (Phases 1-8), not "not planned"/"intentionally
 excluded"/"Guide-stub-only." Corrected §2/§3/§4/§5/§8/§10/§11 and added §9 (GamerServices/Net
@@ -170,12 +170,12 @@ FNA/XNA" table or the cited `AUDIT.md` section; not re-derived here.
 ### Release checklist for Graphics compatibility milestones (Task 490, 2026-07-09)
 
 This project has historically used informal per-subsystem percentage estimates (see the old
-Phase 9–14 coverage table earlier in `plan_graphics.md`) to describe Graphics maturity. Those
+Phase 9–14 coverage table earlier in `plans/plan_graphics.md`) to describe Graphics maturity. Those
 estimates are useful color commentary but are not a checklist — nothing gates a "~95%" claim
 against a concrete, falsifiable condition. This section replaces ad-hoc percentages with pass/fail
 criteria, built directly on the axes/tables Tasks 482–485 already established. **Don't estimate a
 new percentage from this checklist — use it to gate whether a round-number milestone claim
-(90%/95%/100%) is honest, using the counts already tracked in this file and `plan_graphics.md`.**
+(90%/95%/100%) is honest, using the counts already tracked in this file and `plans/plan_graphics.md`.**
 
 **Before claiming any milestone at all**, the counts below must be pulled fresh from the real
 current state of Task 483's per-class table, Task 484's per-renderer table, and Task 485's known-
@@ -218,7 +218,7 @@ was written and not yet folded into it) — do not reuse cached numbers from an 
 #### Before claiming "Graphics is 100% XNA/FNA-compatible"
 
 - [ ] Zero entries remain in the "Confirmed bugs, not yet fixed" list (Task 485 plus any newer
-      findings like 922) — all fixed, tested, and moved to "closed" in `plan_graphics.md`.
+      findings like 922) — all fixed, tested, and moved to "closed" in `plans/plan_graphics.md`.
 - [ ] Zero BLOCKED tasks remain (currently 5) — each has either shipped a real implementation or an
       explicit, project-owner-approved permanent exclusion moved into the "Intentional, permanent
       deviations" list instead of staying BLOCKED indefinitely.
@@ -289,13 +289,13 @@ none are trivial engineering either.
 
 ### `Microsoft::Xna::Framework::GamerServices`
 
-**Updated (`feature/net`, Phases 1-8 of `plan_net.md`, decision 1a):** stale as of this table's
+**Updated (`feature/net`, Phases 1-8 of `plans/plan_net.md`, decision 1a):** stale as of this table's
 original writing. FNA does not implement GamerServices (it targets PC XNA only, where
 GamerServices is Xbox-Live-only), but CNA deliberately went beyond FNA's scope here — decision 1a
 made the real Xbox 360 XNA 4.0 reference behavior (not Windows' no-op stubs) the correctness bar,
 since CNA already has its own real avatar/networking implementations to hold to that standard.
 Every class below now exists with a real `.cpp` implementation, not a stub — see §4 for the
-per-class implementation notes and `plan_net.md`/`AUDIT.md` for the line-by-line FNA-fidelity
+per-class implementation notes and `plans/plan_net.md`/`AUDIT.md` for the line-by-line FNA-fidelity
 audits behind them:
 
 | Class | Notes |
@@ -375,8 +375,8 @@ All 17 XNA 4.0 PackedVector types are fully implemented:
 
 > Updated 2026-07-04 (Fáze 9 `P9-DOCS-002`) — the entries below describing XACT/`Microphone`/
 > `DynamicSoundEffectInstance` as unimplemented stubs were stale by a full branch's worth of work
-> (`plan_audio.md` Fáze 0–9). See `AUDIT.md`'s Audio table for the per-class summary and
-> `plan_audio.md` for the complete file-by-file history.
+> (`plans/plan_audio.md` Fáze 0–9). See `AUDIT.md`'s Audio table for the per-class summary and
+> `plans/plan_audio.md` for the complete file-by-file history.
 
 - `AudioEngine`, `SoundBank`, `WaveBank`, `Cue`: **Implemented.** Real hand-written `.xgs`/`.xsb`/
   `.xwb` (XACT) parser (`CNA::Internal::Audio::XactParser`), mixed through SDL3_mixer. Cue playback,
@@ -421,7 +421,7 @@ this table exists to answer "is X implemented?" at a glance without reading ever
 
 #### `Apply3D` / 3D audio fidelity — consolidated summary (`P9-3D-001..010`)
 
-Fáze 9's `P9-3D` group (`plan_audio.md`) audited every piece of `Apply3D` against FNA/FAudio one
+Fáze 9's `P9-3D` group (`plans/plan_audio.md`) audited every piece of `Apply3D` against FNA/FAudio one
 at a time; this is the consolidated result now that all nine original items plus one user-directed
 follow-up (`P9-3D-010`) have landed. Per-property breakdown:
 
@@ -488,7 +488,7 @@ which one a given deviation is:
    they are permanent, reasoned trade-offs, not bugs to eventually fix. (The interactive-variation
    selection used to be a uniform-pick fallback here, but that was a real gap, not a renderer
    compromise — it's been variable-range-driven since `P9-XACT-002/003/004`, see Implemented above;
-   this stale claim was corrected during the `P10-AUDIT` pass, `plan_audio.md`.)
+   this stale claim was corrected during the `P10-AUDIT` pass, `plans/plan_audio.md`.)
 2. **Bugs that were fixed to *actually* match FNA**, not compromises — e.g. every `P9-LIFECYCLE`/
    `P9-CATEGORY`/`P9-VALIDATION` fix in Fáze 9 (natural cue-completion reconciliation, the
    category mutate-during-iteration bug, the `offset+count` integer-overflow segfault, `Resume()`
@@ -622,8 +622,8 @@ both but never throws either from its own Audio source either), not a gap.
 ### `Microsoft::Xna::Framework::Input::Touch`
 
 - `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`, `GestureSample`, `GestureType`: headers exist, full API surface.
-- SDL3 touch renderer is wired up (`feature/input` branch, `plan_input.md` Phase I2, INPUT-TOUCH-*/INPUT-GESTURE-* cluster): `SDL_EVENT_FINGER_*` feeds `TouchPanel::INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back-buffer size). Gestures (Tap, DoubleTap, Hold, Horizontal/Vertical/Free drag, Flick, Pinch, PinchComplete) are recognized end-to-end by `GestureDetector` and covered by a dedicated test suite.
-- **Input member-level parity (2026-07-06):** the full public Input surface is now mechanically parity-checked against FNA — member/signature parity via the generated `docs/input-member-parity-matrix.md` (INPUT-API-027) + the compile-time signature freeze (INPUT-API-031), and enum values byte-pinned (INPUT-API-034). Keyboard keycode/scancode maps are byte-identical to FNA (INPUT-KBD-009/010). See `plan_input.md` for the per-type task status.
+- SDL3 touch renderer is wired up (`feature/input` branch, `plans/plan_input.md` Phase I2, INPUT-TOUCH-*/INPUT-GESTURE-* cluster): `SDL_EVENT_FINGER_*` feeds `TouchPanel::INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back-buffer size). Gestures (Tap, DoubleTap, Hold, Horizontal/Vertical/Free drag, Flick, Pinch, PinchComplete) are recognized end-to-end by `GestureDetector` and covered by a dedicated test suite.
+- **Input member-level parity (2026-07-06):** the full public Input surface is now mechanically parity-checked against FNA — member/signature parity via the generated `docs/input-member-parity-matrix.md` (INPUT-API-027) + the compile-time signature freeze (INPUT-API-031), and enum values byte-pinned (INPUT-API-034). Keyboard keycode/scancode maps are byte-identical to FNA (INPUT-KBD-009/010). See `plans/plan_input.md` for the per-type task status.
 - Gesture recognition is a byte-faithful port of FNA's `GestureDetector.cs` (audited, task 829) with deterministic clock-injected tests (task 830); multi-touch edge cases + coordinate scaling covered (tasks 825–828).
 - Known deviation: `TouchPanel::GetState()` reads a panel-owned event map rather than FNA's per-frame poll population of `touches_` (documented in-source, task 714/PLAT-86) — CNA's input bridge is event-driven, not poll-driven. The map is internally unbounded, but the public snapshot is deterministically capped at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
 - `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and **4** when connected, matching FNA/XNA (DEC-09, 2026-07-05 — XNA always reports 4; a fixed XNA-compat value, not the `MAX_TOUCHES` tracking cap).
@@ -660,7 +660,7 @@ implemented and exercised by the `demo_*` avatar/net examples and their own test
 These classes were part of XNA 4.0 but FNA does not implement them, because FNA targets PC XNA
 only, where GamerServices/Avatar/Net are Xbox-Live/Xbox-360-exclusive and have no PC equivalent.
 
-**Superseded by decision 1a (`plan_net.md`):** the three subsections that originally lived here —
+**Superseded by decision 1a (`plans/plan_net.md`):** the three subsections that originally lived here —
 GamerServices, Avatar API, and Net — are **no longer excluded or "not planned."** CNA made the
 real Xbox 360 XNA 4.0 reference behavior (not Windows' PC no-op stubs) the correctness bar for
 these three areas specifically, since accurate multiplayer/avatar behavior has real value for CNA
@@ -677,7 +677,7 @@ implementations:
 - **Net** — `Microsoft.Xna.Framework.Net` (`NetworkSession`, `PacketReader`/`Writer`,
   `NetworkGamer`, etc.) is real, ENet-backed transport, not a stub. `NetworkSessionType::SystemLink`
   (LAN-style local play, including real host migration and simulated latency/packet-loss testing
-  hooks — `plan_net.md` Phases 5/6) is fully implemented; `PlayerMatch`/`Ranked`/session invites
+  hooks — `plans/plan_net.md` Phases 5/6) is fully implemented; `PlayerMatch`/`Ranked`/session invites
   remain documented stubs (no matchmaking renderer exists to implement them against — see §9 for
   the current per-feature breakdown).
 
@@ -735,7 +735,7 @@ no implementation exists or is scheduled.
 ## 7. Stock Effect Renderer Parity
 
 **Rewritten 2026-07-09 (Task 481) — the previous version of this section (dated 2026-06-26, Task
-196) was stale by an entire session's worth of work** (`plan_graphics.md` Phases 71–73: EasyGL
+196) was stale by an entire session's worth of work** (`plans/plan_graphics.md` Phases 71–73: EasyGL
 final gap closure, Bgfx full 2D+3D pixel-verified parity, Vulkan gap closure) and its central claim
 — "Bgfx `SetDepthTestEnabled`/`SetBlendEnabled` still throw, no 3D pixel tests possible" — is no
 longer true. Rather than re-duplicate detailed per-effect/per-renderer tables here (which drift
@@ -759,7 +759,7 @@ level, a permanent ceiling needing a project-owner decision on shader-level Z-of
 Every `GraphicsDevice` state-object category (`DepthStencilState`/`RasterizerState`/`BlendState`/
 `SamplerState`), `SpriteBatch`/`SpriteFont`/`Model`/`OcclusionQuery`/`Texture2D`/`Texture3D`/
 `TextureCube`/`RenderTarget2D`/`RenderTargetCube`/`Viewport` row group is now fully pixel-verified
-on Bgfx — see `plan_graphics.md`'s own Phase 72 intro blockquote for the complete session log.
+on Bgfx — see `plans/plan_graphics.md`'s own Phase 72 intro blockquote for the complete session log.
 
 **Update (2026-07-10, Task 860) — Phase 73 (Vulkan gap closure) is now closed in full too**: of
 the phase's 8 confirmed real gaps (`SpriteBatch` sort-mode/rotation/scale/crop/flip, `SpriteFont`,
@@ -772,7 +772,7 @@ already-tracked architecture decision — see the update immediately below for i
 the same day.
 
 **Update (2026-07-10, Task 854) — Task 447/854 (Vulkan OcclusionQuery) is now fully CLOSED, and
-Phase 73 has moved to `plan_graphics_20260709.md` in full** (every one of its 37 rows now ✅). The
+Phase 73 has moved to `plans/plan_graphics_20260709.md` in full** (every one of its 37 rows now ✅). The
 project owner picked a direction for Task 447's 3 open design questions (tagging mechanism,
 multi-draw-span policy, per-frame query-pool reset sequencing) and all 3 are now implemented: a
 new `Pending3DDraw::occlusionQuery` field tags every deferred draw with the currently-active
@@ -801,7 +801,7 @@ full detail.
   whole-feature gap in this section.
 - **SDL_Renderer** is a 2D-only renderer by design (stock 3D effects are N/A there) — but its own 2D
   path (`SpriteBatch`/`SpriteFont`/`BlendState`/etc.) went through a full, dedicated audit phase
-  this session (`plan_graphics.md` Phase 70, 15 real bugs found and fixed) and is now comprehensively
+  this session (`plans/plan_graphics.md` Phase 70, 15 real bugs found and fixed) and is now comprehensively
   pixel-verified; see `docs/sdl-renderer-2d-completeness.md`.
 - `GraphicsDevice` state objects (`BlendState`/`DepthStencilState`/`RasterizerState`/`SamplerState`)
   have their own per-renderer correctness table in the feature matrix, separate from the stock-effect
@@ -905,12 +905,12 @@ behavior or a genuinely unimplemented feature).
 
 2. **Input** — ✅ Done: GamePad, Keyboard, Mouse, Touch, TextInputEXT, MouseCursor. All have real,
    FNA-faithful runtime behavior wired to SDL3 (`feature/input` branch Phases I1–I9,
-   `plan_input.md` tasks 700–840), not stubs. Coverage is assessed **by category, not blended**
+   `plans/plan_input.md` tasks 700–840), not stubs. Coverage is assessed **by category, not blended**
    (per the input review): **XNA 4.0 core** ~99% behavior / ~99% tested (complete & faithful);
    **FNA `*EXT`** ~95% (all implemented; untested slice hardware/IME-gated); **MonoGame
    `MouseCursor`** (`CNAEXT`) complete for the exposed surface; **platform-dependent** items
    (Wayland global-mouse, live sensors/rumble, gamepad hotplug slot-assignment, `SetPosition`
-   letterbox) documented, not headless-verifiable. See `plan_input.md`'s "final split" table,
+   letterbox) documented, not headless-verifiable. See `plans/plan_input.md`'s "final split" table,
    `AUDIT.md`, `docs/platform-input-notes.md`, and `docs/demo-input-checklist.md` for detail.
 
 3. **Audio** — ✅ Done: SoundEffect/Instance, and XACT (AudioEngine/SoundBank/WaveBank/Cue) via a
@@ -954,7 +954,7 @@ behavior or a genuinely unimplemented feature).
 - `ContentSerializerAttribute` family (intentionally excluded)
 - **Updated 2026-07-09 (Task 481):** the 2 items previously listed here ("Vulkan pixel tests for
   BasicEffect/AlphaTestEffect/SkinnedEffect", "Bgfx 3D state blocks all Bgfx 3D pixel tests") are
-  now DONE — see Phases 71–73 in `plan_graphics.md` and `docs/graphics-renderer-feature-matrix.md`.
+  now DONE — see Phases 71–73 in `plans/plan_graphics.md` and `docs/graphics-renderer-feature-matrix.md`.
   Current real Graphics gaps, all individually tracked (not silently missing). **Updated
   2026-07-09**: Vulkan's `BlendState` (868), Bgfx's narrower `BlendState` gap (923), EasyGL's
   `Anisotropic` fallback (918), `Model`'s missing `rootBoneIndex` (916), `IndexElementSize`'s
@@ -971,7 +971,7 @@ behavior or a genuinely unimplemented feature).
     3 3D renderers (Task 871). Both confirmed real, scoped (touches new renderer virtual methods
     across the remaining hardware renderers plus a genuinely new
     stencil-verification pixel test), not yet started.
-  - A first-ever full row-by-row triage of `plan_graphics.md` Phases 72/73 (2026-07-09) found
+  - A first-ever full row-by-row triage of `plans/plan_graphics.md` Phases 72/73 (2026-07-09) found
     Bgfx is dramatically less pixel-test-covered than Vulkan for `DepthStencilState`/`SpriteFont`/
     `Model`/`SpriteBatch` behavior/most `BlendState` presets (zero Bgfx tests in these categories)
     — now the single largest known real gap in this project's pixel-verification coverage.

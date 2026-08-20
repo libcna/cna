@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-340: the opaque dial is visible through nearer approximated glass only when
+// plans/plan_gltf.md GLTF-340: the opaque dial is visible through nearer approximated glass only when
 // the application draws opaque first and transmission second.
 //
 // The committed material-variant fixture supplies both source-authored states without adding an

@@ -28,7 +28,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COVERAGE_PATH = REPO_ROOT / "docs" / "c-api" / "COVERAGE.md"
-PLAN_PATH = REPO_ROOT / "plan_binding.md"
+PLAN_PATH = REPO_ROOT / "plans/plan_binding.md"
 DECLARATION_PATH = Path(__file__).resolve().parent / "limitations.json"
 COMPATIBILITY_PATH = Path(__file__).resolve().parent / "compatibility_matrix.json"
 DOC_PATH = REPO_ROOT / "docs" / "c-api" / "LIMITATIONS.md"

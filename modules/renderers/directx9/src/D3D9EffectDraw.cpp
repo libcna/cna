@@ -1,4 +1,4 @@
-// plan_dx9.md Phase D9-8 (D9-82b/c/d/e/f): real effect-aware DrawPrimitivesEx/
+// plans/plan_dx9.md Phase D9-8 (D9-82b/c/d/e/f): real effect-aware DrawPrimitivesEx/
 // DrawIndexedPrimitivesEx dispatch, ALL 5 XNA Stock Effects: BasicEffect (D9-82b), AlphaTestEffect
 // (D9-82c), DualTextureEffect (D9-82d), EnvironmentMapEffect (D9-82e), SkinnedEffect (D9-82f) --
 // matching the priority-cascade shape DirectX11Renderer::DrawPrimitivesExImpl already
@@ -34,7 +34,7 @@
 // only) remains blocked by the same missing-vertex-layout gap as the untextured vertex-lit bucket
 // (8/9) above, unrelated to PreferPerPixelLighting itself.
 //
-// PreferPerPixelLighting (plan_dx9.md D9-81, item 1) and EnvironmentMapEffect's specularEnabled
+// PreferPerPixelLighting (plans/plan_dx9.md D9-81, item 1) and EnvironmentMapEffect's specularEnabled
 // (item 4) are RESOLVED 2026-07-16: GpuDrawParams now carries both real fields (see
 // IGraphicsRenderer.hpp), forwarded by BasicEffect/SkinnedEffect/EnvironmentMapEffect's own
 // FillGpuDrawParams(). This file's dispatch functions read them directly instead of hardcoding
@@ -228,7 +228,7 @@ namespace CNA::Internal::Renderers::DirectX9
             default:
                 throw std::out_of_range(
                     "GetBasicEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
-                    " has no matching CNA vertex layout (plan_dx9.md D9-82b)");
+                    " has no matching CNA vertex layout (plans/plan_dx9.md D9-82b)");
             }
         }
 
@@ -310,7 +310,7 @@ namespace CNA::Internal::Renderers::DirectX9
             default:
                 throw std::out_of_range(
                     "GetDualTextureEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
-                    " has no matching CNA vertex layout (plan_dx9.md D9-82d)");
+                    " has no matching CNA vertex layout (plans/plan_dx9.md D9-82d)");
             }
         }
 
@@ -622,12 +622,12 @@ namespace CNA::Internal::Renderers::DirectX9
                 " with lighting=" + (params.lightingEnabled ? "true" : "false") +
                 " vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
                 " texture=" + (params.textureEnabled ? "true" : "false") +
-                " has no matching CNA vertex layout (plan_dx9.md D9-82b)");
+                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82b)");
         }
 
         const bool oneLight = ComputeOneLightEXT(params);
 
-        // preferPerPixelLighting now reads GpuDrawParams' real field (plan_dx9.md D9-81 item 1,
+        // preferPerPixelLighting now reads GpuDrawParams' real field (plans/plan_dx9.md D9-81 item 1,
         // resolved 2026-07-16 -- see this file's own header comment).
         const int shaderIndex = ComputeBasicEffectShaderIndex(
             params.fogEnabled, params.vertexColorEnabled, params.textureEnabled,
@@ -666,7 +666,7 @@ namespace CNA::Internal::Renderers::DirectX9
             UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldInverseTranspose", worldInverseTranspose);
 
             // Real bug found and fixed 2026-07-16, while oracle-proving the PreferPerPixelLighting
-            // bucket (plan_dx9.md D9-73's own outstanding obligation): FNA's Lighting.fxh's
+            // bucket (plans/plan_dx9.md D9-73's own outstanding obligation): FNA's Lighting.fxh's
             // ComputeLights() runs in the VERTEX shader for every bucket EXCEPT PixelLighting, where
             // it runs in the PIXEL shader instead -- confirmed directly against
             // D3D9ShaderRegisters.hpp, where kBasicEffect_PSBasicPixelLightingTx_Registers (not the
@@ -783,7 +783,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!params.texture0)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (AlphaTestEffect): requires a non-null "
-                "texture0 (plan_dx9.md D9-82c)");
+                "texture0 (plans/plan_dx9.md D9-82c)");
 
         // AlphaTestEffect's only two VSInput shapes map 1:1 onto the existing CNA strides -- no
         // collision/missing-layout gap like BasicEffect's (see D3D9EffectDraw.cpp's own header
@@ -799,7 +799,7 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (AlphaTestEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
-                " has no matching CNA vertex layout (plan_dx9.md D9-82c)");
+                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82c)");
 
         // D9-81's own finding: alphaTest[1] (tolerance) > 0 is a lossless recovery of isEqNe --
         // AlphaTestEffect.cs's own OnApply() sets it to a fixed nonzero constant in EXACTLY the
@@ -864,7 +864,7 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!params.texture0 || !params.texture1)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): requires non-null "
-                "texture0 AND texture1 (plan_dx9.md D9-82d)");
+                "texture0 AND texture1 (plans/plan_dx9.md D9-82d)");
 
         // Only the no-vertex-color combination is drawable: VSInputTx2Vc (32 bytes) collides with
         // the existing Position+Normal+TexCoord layout, same category as BasicEffect's own D9-82b
@@ -873,7 +873,7 @@ namespace CNA::Internal::Renderers::DirectX9
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (DualTextureEffect): stride " + std::to_string(stride) +
                 " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
-                " has no matching CNA vertex layout (plan_dx9.md D9-82d)");
+                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82d)");
 
         const int shaderIndex = ComputeDualTextureEffectShaderIndex(params.fogEnabled, params.vertexColorEnabled);
         const DualTextureEffectRegisterTables regs = GetDualTextureEffectRegisterTablesEXT(shaderIndex);
@@ -931,16 +931,16 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!params.texture0 || !params.envMap)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (EnvironmentMapEffect): requires non-null "
-                "texture0 AND envMap (plan_dx9.md D9-82e)");
+                "texture0 AND envMap (plans/plan_dx9.md D9-82e)");
 
         // VSInputNmTx (Position+Normal+TexCoord) matches the existing stride-32 layout exactly --
         // no new vertex declaration needed here (unlike DualTextureEffect's D9-82d case).
         if (stride != 32)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (EnvironmentMapEffect): stride " +
-                std::to_string(stride) + " has no matching CNA vertex layout (plan_dx9.md D9-82e)");
+                std::to_string(stride) + " has no matching CNA vertex layout (plans/plan_dx9.md D9-82e)");
 
-        // specularEnabled now reads GpuDrawParams' real field (plan_dx9.md D9-81 item 4, resolved
+        // specularEnabled now reads GpuDrawParams' real field (plans/plan_dx9.md D9-81 item 4, resolved
         // 2026-07-16; same category as BasicEffect's PreferPerPixelLighting above).
         const bool oneLight = ComputeOneLightEXT(params);
         const int shaderIndex = ComputeEnvironmentMapEffectShaderIndex(
@@ -1036,17 +1036,17 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!params.texture0)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (SkinnedEffect): requires non-null texture0 "
-                "(plan_dx9.md D9-82f)");
+                "(plans/plan_dx9.md D9-82f)");
 
         // VSInputNmTxWeights (Position+Normal+TexCoord+BlendWeight+BlendIndices) matches the
         // existing stride-52 layout exactly -- no new vertex declaration needed here.
         if (stride != 52)
             throw std::runtime_error(
                 "DirectX9Renderer::DrawPrimitivesEx (SkinnedEffect): stride " + std::to_string(stride) +
-                " has no matching CNA vertex layout (plan_dx9.md D9-82f)");
+                " has no matching CNA vertex layout (plans/plan_dx9.md D9-82f)");
 
         const bool oneLight = ComputeOneLightEXT(params);
-        // preferPerPixelLighting now reads GpuDrawParams' real field (plan_dx9.md D9-81 item 1,
+        // preferPerPixelLighting now reads GpuDrawParams' real field (plans/plan_dx9.md D9-81 item 1,
         // resolved 2026-07-16; same gap as BasicEffect's own case above).
         const int shaderIndex = ComputeSkinnedEffectShaderIndex(
             params.fogEnabled, params.weightsPerVertex, params.preferPerPixelLighting, oneLight);

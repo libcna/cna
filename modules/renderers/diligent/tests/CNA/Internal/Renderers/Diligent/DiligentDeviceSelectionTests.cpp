@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-15: GTest coverage for the parts of the Diligent renderer that make a
+// plans/plan_diligent.md DILIGENT-15: GTest coverage for the parts of the Diligent renderer that make a
 // decision before any device exists. Diligent is the only CNA renderer whose native API is chosen at
 // runtime, so the preference order and the CNA_DILIGENT_DEVICE override are real, testable logic --
 // and they are the one piece of this renderer that can be verified with no GPU, no window and no
-// display, which is exactly the situation on a headless build machine (see plan_diligent.md's
+// display, which is exactly the situation on a headless build machine (see plans/plan_diligent.md's
 // "Verification status"). Everything that needs a real device lives in the Diligent_* CTest
 // binaries instead.
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_DILIGENT is defined project-wide.
@@ -72,7 +72,7 @@ TEST(DiligentDeviceSelectionTest, PreferenceOrderRanksExplicitApisAheadOfOpenGL)
     const std::vector<DiligentDeviceType> order = GetDeviceTypePreferenceOrder();
 
     // OpenGL is the last-resort device type: it is the one Diligent supports everywhere but with
-    // the fewest guarantees (see plan_diligent.md design decision 9).
+    // the fewest guarantees (see plans/plan_diligent.md design decision 9).
     if (Contains(order, DiligentDeviceType::OpenGL) && order.size() > 1)
         EXPECT_EQ(IndexOf(order, DiligentDeviceType::OpenGL), static_cast<int>(order.size()) - 1);
 
@@ -117,7 +117,7 @@ TEST(DiligentDeviceSelectionTest, UnknownOverrideThrowsInsteadOfSilentlyFallingB
     EXPECT_THROW(ParseDeviceTypeOverride("vulcan"), std::runtime_error);
 }
 
-// plan_diligent.md DILIGENT-64: PipelineKey::depthBias used to be packed into a single signed byte
+// plans/plan_diligent.md DILIGENT-64: PipelineKey::depthBias used to be packed into a single signed byte
 // (lround(depthBias * 1000) & 0xFF) inside PipelineKey::raster, which silently wraps sign once the
 // scaled value leaves [-128, 127] -- e.g. +0.129 (scaled 129) would come back out of an int8_t cast
 // as -127. ComputeDiligentDepthBiasRawUnits() now stores the full lossless Int32 instead; these are
@@ -153,7 +153,7 @@ TEST(DiligentDeviceSelectionTest, DepthBiasRawUnitsClampsInsteadOfOverflowingOnE
     EXPECT_EQ(ComputeDiligentDepthBiasRawUnits(-1.0e10f), minUnits);
 }
 
-// plan_diligent.md DILIGENT-61: SupportsCapability() used to answer WireFrame/OcclusionQuery
+// plans/plan_diligent.md DILIGENT-61: SupportsCapability() used to answer WireFrame/OcclusionQuery
 // unconditionally `true` and AnisotropicFiltering from a device-TYPE guess (`!= OpenGL`) instead of
 // the actual device facts DiligentRenderer::CreateOcclusionQuery()/ApplySamplerState()
 // themselves depend on. EvaluateCapability() is the decision logic extracted into a free function

@@ -10,7 +10,7 @@
 namespace CNA::Internal::Media
 {
     /// Produces genuinely downscaled thumbnails for Album::GetThumbnail()/Picture::GetThumbnail()
-    /// (plan_media.md MEDIA-209/210).
+    /// (plans/plan_media.md MEDIA-209/210).
     ///
     /// Both XNA methods previously returned the *full-size* image, making GetThumbnail a synonym
     /// for GetAlbumArt/GetImage rather than a thumbnail. XNA does not specify a thumbnail size, so

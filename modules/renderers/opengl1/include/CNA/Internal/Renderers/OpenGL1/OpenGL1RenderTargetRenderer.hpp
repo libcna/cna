@@ -5,7 +5,7 @@
 namespace CNA::Internal::Renderers::OpenGL1
 {
     /**
-     * @brief FBO-backed 2D render target for the OPENGL1 renderer (plan_opengl1.md phase 2).
+     * @brief FBO-backed 2D render target for the OPENGL1 renderer (plans/plan_opengl1.md phase 2).
      *
      * Requires the ARB_framebuffer_object/core (>=3.0) entry points to be loadable via
      * the platform GL resolver -- see TryLoadOpenGL1FramebufferObjectFunctions() below and
@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::OpenGL1
      * deliberately not supported: effectively unreachable on any GPU/driver from this decade,
      * and supporting it would meaningfully complicate this file for near-zero practical benefit.
      *
-     * plan_opengl1.md item 25 (further improvement beyond EasyGL parity, found 2026-07-20): real
+     * plans/plan_opengl1.md item 25 (further improvement beyond EasyGL parity, found 2026-07-20): real
      * MSAA. A REQUESTED multiSampleCount>1 builds a SEPARATE multisample draw FBO (msaaFbo_ --
      * multisample color+depth/stencil renderbuffers, glRenderbufferStorageMultisample) alongside
      * the single-sample fbo_/colorTex_ pair above -- BindAsRenderTarget() targets msaaFbo_ so all
@@ -35,7 +35,7 @@ namespace CNA::Internal::Renderers::OpenGL1
      * matches FNA3D's own "real, device-clamped value, possibly 0" MultiSampleCount semantics.
      * Requested sample counts are clamped to the driver's real GL_MAX_SAMPLES.
      *
-     * plan_opengl1.md item 21 (EasyGL parity, found 2026-07-20): mipMap now genuinely regenerates
+     * plans/plan_opengl1.md item 21 (EasyGL parity, found 2026-07-20): mipMap now genuinely regenerates
      * the color texture's mip chain from level 0 every time the target is unbound, following
      * FNA3D's own `OPENGL_ResolveTarget` mechanism (games never render into non-zero mip levels
      * directly -- the whole chain is always regenerated wholesale from level 0). Content is
@@ -89,7 +89,7 @@ namespace CNA::Internal::Renderers::OpenGL1
         bool HasMips() const { return hasMips_; }
 
         /**
-         * @brief plan_opengl1.md phase 8: drops the FBO/texture/renderbuffer handles without
+         * @brief plans/plan_opengl1.md phase 8: drops the FBO/texture/renderbuffer handles without
          * issuing any gl* calls. A render target's content is GPU-produced (no CPU shadow to
          * restore it from), so this only preserves the object's identity/dimensions/format --
          * RecreateGLResource() rebuilds an empty target, matching real XNA/FNA RenderTarget2D
@@ -106,7 +106,7 @@ namespace CNA::Internal::Renderers::OpenGL1
         unsigned int fbo_ = 0;
         unsigned int colorTex_ = 0;
         unsigned int depthRbo_ = 0;
-        // plan_opengl1.md item 25: the separate multisample draw FBO/renderbuffers -- only
+        // plans/plan_opengl1.md item 25: the separate multisample draw FBO/renderbuffers -- only
         // allocated when requestedMultiSampleCount_>1 and the driver genuinely supports it (see
         // the class doc comment). multiSampleCount_ is the honest, possibly-lower-than-requested
         // applied value (0 if the msaa path isn't active at all).
@@ -136,7 +136,7 @@ namespace CNA::Internal::Renderers::OpenGL1
     bool TryLoadOpenGL1FramebufferObjectFunctions();
 
     /**
-     * @brief FBO-backed cube-map render target for the OPENGL1 renderer (plan_opengl1.md item 24,
+     * @brief FBO-backed cube-map render target for the OPENGL1 renderer (plans/plan_opengl1.md item 24,
      * EasyGL parity).
      *
      * Combines the two pieces of machinery this renderer already has: an `ARB_texture_cube_map`
@@ -160,7 +160,7 @@ namespace CNA::Internal::Renderers::OpenGL1
      * `OpenGL1Capabilities::framebufferObject` and `::textureCubeMap`;
      * `OpenGL1Renderer::CreateRenderTargetCube()` returns nullptr when either is absent.
      * Does not support MSAA (`multiSampleCount` argument is accepted but ignored) -- out of scope
-     * for this item; plan_opengl1.md item 25 addresses `RenderTarget2D` MSAA specifically, and
+     * for this item; plans/plan_opengl1.md item 25 addresses `RenderTarget2D` MSAA specifically, and
      * does not attempt to extend to six separate cube-face resolve targets.
      */
     class OpenGL1RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public IOpenGL1Recoverable

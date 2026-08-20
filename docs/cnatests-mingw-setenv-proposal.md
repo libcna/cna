@@ -3,7 +3,7 @@
 **Status: FULLY IMPLEMENTED 2026-07-15 on `feature/dx9`, project-owner go-ahead given.** Originally
 written as a proposal-only document; the table below is kept as-written (62 call sites total, not
 64 — this table slightly overcounted `SoundEffectTests.cpp`, see the correction note at the bottom)
-for the historical record of what was scoped before implementation. See `plan_dx9.md`'s `D9-123`
+for the historical record of what was scoped before implementation. See `plans/plan_dx9.md`'s `D9-123`
 row for the full implementation/verification result: `CnaTests` now compiles cleanly under
 `CNA_GRAPHICS_RENDERER=D3D9` (first time ever for any Windows-cross renderer), AND the follow-up
 `gtest_discover_tests` CTest-registration blocker this fix surfaced (`ctest -L D3D9` couldn't
@@ -13,7 +13,7 @@ tests genuinely execute through Wine and pass.
 
 Originally written from `feature/dx9` (`D9-123`) because that is where this session hit the
 blocker, but the problem and the fix are **not D3D9-specific** — it already independently blocked
-`D3D11` (`plan_dx.md` `DX-15`) and `D3D12` (`DX-115`), both of which deferred it with near-identical
+`D3D11` (`plans/plan_dx.md` `DX-15`) and `D3D12` (`DX-115`), both of which deferred it with near-identical
 wording rather than fixing it inline. This fix has not been independently re-verified on D3D11/
 D3D12's own build directories (not configured in this worktree) — no regression is expected since
 only shared `tests/`/`examples/`/`tools/` files changed and `sharp-runtime`'s wrapper was already
@@ -55,7 +55,7 @@ purely a test-infrastructure gap, not a CNA API gap.
 
 ## Why it was never fixed inline (precedent)
 
-`plan_dx.md`'s own `DX-15` (closed 2026-07-13, `D3D11`) found the identical gap and explicitly
+`plans/plan_dx.md`'s own `DX-15` (closed 2026-07-13, `D3D11`) found the identical gap and explicitly
 deferred it: *"a real, pre-existing, much larger portability gap ... genuinely out of scope ...
 worth its own separate, explicitly-scoped task."* `DX-115` (`D3D12` docs closure) repeated the same
 deferral verbatim. `D9-123` (this plan) independently hit the same wall and predicted it in
@@ -119,7 +119,7 @@ needs is already shipped and already exercised by other code paths.
    process spawn costs ~1.2s; the 4367 individually-discovered test cases would cost ~87 minutes
    of pure process overhead if each became its own separately-spawned CTest entry) before choosing
    an approach. Set `CROSSCOMPILING_EMULATOR` on the `CnaTests` target — the same CMake-native
-   mechanism `plan_dx.md` `DX-80`'s own `cna_directx11_ctest_command` macro already uses for D3D11/
+   mechanism `plans/plan_dx.md` `DX-80`'s own `cna_directx11_ctest_command` macro already uses for D3D11/
    D3D12's own CTests — selecting the correct per-renderer Wine wrapper
    (`run-wine-dxvk9.sh`/`run-wine-dxvk.sh`/`run-wine-vkd3d.sh`) with that wrapper's own
    authenticity gate deliberately disabled inline (`env CNA_D3D9_SKIP_DXVK_GATE=1 <wrapper>`, no

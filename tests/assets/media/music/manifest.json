@@ -1,7 +1,7 @@
 {
-  "producer": "ffmpeg 7.1.5 (lavfi sine-tone sources), synthetic fixture authored for plan_media.md Phase 0",
+  "producer": "ffmpeg 7.1.5 (lavfi sine-tone sources), synthetic fixture authored for plans/plan_media.md Phase 0",
   "provenance": "100% self-generated synthetic audio (sine-wave tones) and metadata -- no third-party content, no NOTICE.md/THIRD_PARTY_NOTICES.md entry required (MEDIA-8)",
-  "purpose": "plan_media.md MEDIA-3/MEDIA-5: real tagged audio fixtures for AudioTagParser (MEDIA-47..51), MediaLibraryIndex (MEDIA-52..54), and PlaylistParser (MEDIA-57/58) tests",
+  "purpose": "plans/plan_media.md MEDIA-3/MEDIA-5: real tagged audio fixtures for AudioTagParser (MEDIA-47..51), MediaLibraryIndex (MEDIA-52..54), and PlaylistParser (MEDIA-57/58) tests",
   "songs": [
     {
       "path": "Artist One/Album Alpha/01 - Sunrise.ogg",

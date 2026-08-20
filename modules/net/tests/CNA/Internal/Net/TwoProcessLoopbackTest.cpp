@@ -196,7 +196,7 @@ TEST(TwoProcessLoopbackTest, StartHostingRollsBackCleanlyOnDiscoveryRegistration
     EXPECT_EQ(exitCode, 0) << "process exited with code " << exitCode << "; output: " << output;
 }
 
-// Task 5.5 (plan_net.md Phase 5): spawns 3 real, independent OS processes - one migration-host and
+// Task 5.5 (plans/plan_net.md Phase 5): spawns 3 real, independent OS processes - one migration-host and
 // two migration-survivor roles - and proves real host migration works across genuinely separate
 // address spaces: the host dies mid-session, exactly one survivor gets deterministically promoted
 // to a real new host (discoverable via a real ENetDiscoveryService::RegisterHost call, reachable

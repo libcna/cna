@@ -1,6 +1,6 @@
 # Avatar demo controls and troubleshooting
 
-**Date:** 2026-07-17 (`plan_net.md` Tasks 9.6/9.7)
+**Date:** 2026-07-17 (`plans/plan_net.md` Tasks 9.6/9.7)
 
 Quick reference for the 8 avatar-related demos (`demo_avatar`, `demo_avatar_animation_gallery`,
 `demo_avatar_appearance_tint_studio`, `demo_avatar_bone_state_boundary`,
@@ -10,7 +10,7 @@ network demo startup in general.
 
 ## Controls
 
-**The authoritative control reference is each demo's own in-app F1 help overlay** (`plan_net.md`
+**The authoritative control reference is each demo's own in-app F1 help overlay** (`plans/plan_net.md`
 Phase 8) — press F1 while any of the 8 demos is running to see its exact current controls. This
 file deliberately does not duplicate that text line-by-line (a duplicated list drifts out of sync
 the next time a control changes); it only summarizes what's common across demos and points at
@@ -31,7 +31,7 @@ Common to all 8: **F1** toggles the help overlay, **Esc** quits.
 
 `--smoke N` exits cleanly after N `Draw()` frames (automated verification, no interactive input
 needed). `--show-help`/`--screenshot <path>` together let a non-interactive run verify the F1
-overlay actually renders, without simulating keyboard input — see `plan_net.md` Phase 8 for why
+overlay actually renders, without simulating keyboard input — see `plans/plan_net.md` Phase 8 for why
 that pairing exists.
 
 ## Troubleshooting: avatar asset generation (mesh-craft + Blender pipeline)
@@ -52,12 +52,12 @@ See `tools/avatar_builder/README.md` for the full pipeline description. Common f
   original "monster" mesh-explosion symptoms if invoked directly by mistake.
   See `docs/avatar-real-rendering-ext.md`'s "Phase 7" section for the root cause.
   **Known, still-open residual gaps** (not bugs to re-report): a shoe-area dark artifact and a
-  `Wave`-pose chest-band artifact — see `plan_net.md` Phase 7's own "Honest overall assessment".
+  `Wave`-pose chest-band artifact — see `plans/plan_net.md` Phase 7's own "Honest overall assessment".
   Genuinely new/different-looking artifacts are worth investigating; these two specific ones are
   already tracked.
 - **`validate_gltf.py` passes but the content still looks wrong at runtime** — `validate_gltf.py`
   checks mesh/joint/animation/shape-key *presence*, not per-vertex correctness — it does not catch
-  NaN/Inf weight values or out-of-range bone indices (a known gap, `plan_net.md` Task 7.8/7.10).
+  NaN/Inf weight values or out-of-range bone indices (a known gap, `plans/plan_net.md` Task 7.8/7.10).
   If a model loads but renders garbled, inspect the actual buffer data, don't assume `validate_gltf.py`
   passing rules that out.
 - **CMake doesn't pick up regenerated `Content/` after re-running the pipeline** — CMake's own
@@ -82,7 +82,7 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
   past its own `NetworkSession::Create` call before the client starts searching. Launch the host
   process first, give it a moment to finish creating its session, then launch the client — a tight
   race between the two process launches (both started in the same shell command with no delay) is
-  the most common cause of a spurious "not found," not a real bug. `plan_net.md` Phase 5's own
+  the most common cause of a spurious "not found," not a real bug. `plans/plan_net.md` Phase 5's own
   cross-process integration test uses exactly this ordering (host, brief pause, then client) for
   the same reason.
 - **"Failed to bind discovery UDP socket."** — the discovery service binds a well-known UDP port
@@ -104,7 +104,7 @@ Applies to any Net-using demo (`demo_net_avatar_sync`, `demo_net_client_server_a
   behavior, not a CNA limitation) — both host and client must be on the same local broadcast
   domain (e.g. the same Wi-Fi/switch segment) for discovery to find each other automatically.
 - **Host migration (`AllowHostMigration`) doesn't seem to promote a new host** — host migration
-  targets the specific 3-real-process scenario `plan_net.md` Phase 5's own integration test
+  targets the specific 3-real-process scenario `plans/plan_net.md` Phase 5's own integration test
   exercises (the original host process actually exiting/disconnecting); it does not run
   speculatively or "just in case" — confirm the original host process actually terminated, not
   just became unresponsive within the same process.

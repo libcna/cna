@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-12: graphics-state oracle for the FNA3D renderer. Every state this renderer
+// plans/plan_fna3d.md FNA3D-12: graphics-state oracle for the FNA3D renderer. Every state this renderer
 // applies goes into one of FNA3D's four state structures, whose fields are the XNA 4.0 fields, so
 // these checks are about the mapping being real and complete rather than about FNA3D's own
 // rasterization.

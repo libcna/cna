@@ -6,7 +6,7 @@
 using Microsoft::Xna::Framework::Media::MediaSource;
 using Microsoft::Xna::Framework::Media::MediaSourceType;
 
-// plan_media.md MEDIA-61: real implementation -- no FNA logic to port (MediaSource is 100% stub
+// plans/plan_media.md MEDIA-61: real implementation -- no FNA logic to port (MediaSource is 100% stub
 // upstream), just the API shape.
 TEST(MediaSourceTest, GetAvailableMediaSourcesReturnsExactlyOneLocalDevice)
 {

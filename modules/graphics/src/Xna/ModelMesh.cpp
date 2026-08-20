@@ -57,7 +57,7 @@ namespace Microsoft::Xna::Framework::Graphics
             for (EffectPass& pass : technique->getPassesProperty())
             {
                 pass.Apply();
-                // plan_gltf.md GLTF-073: the part's own topology, not an assumed triangle list.
+                // plans/plan_gltf.md GLTF-073: the part's own topology, not an assumed triangle list.
                 // Every part built by any other path defaults to TriangleList, so this is a
                 // no-op for existing content and the one place a line or point part can be drawn
                 // as what it actually is.

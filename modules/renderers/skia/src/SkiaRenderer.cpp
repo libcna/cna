@@ -968,7 +968,7 @@ namespace CNA::Internal::Renderers::Skia
     void SkiaRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawIndexedPrimitivesEx"); }
     void SkiaRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer&, const IIndexBufferRenderer&, const Matrix&, const Matrix&, const Matrix&, PrimitiveType, int, int, const GpuDrawParams&) { ThrowSkiaUnsupported3D("DrawInstancedPrimitivesEx"); }
 
-    // --- Format boundaries (plan_runtimerenderer.md design decision 9) ---------------------
+    // --- Format boundaries (plans/plan_runtimerenderer.md design decision 9) ---------------------
     //
     // These three tables used to live as #ifdef CNA_RENDERER_SKIA blocks inside Texture2D.cpp and
     // RenderTarget2D.cpp. They are reproduced here unchanged; the only difference is that the XNA
@@ -1083,7 +1083,7 @@ namespace CNA::Internal::Renderers::Skia
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_SKIA
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Skia { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

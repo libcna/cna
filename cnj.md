@@ -1,6 +1,6 @@
 # CNJ: a lightweight, JSON-based content format for CNA (alternative to XNB)
 
-> Companion document to [`xnb.md`](xnb.md)/[`plan_xnb.md`](plan_xnb.md), which describe what it
+> Companion document to [`xnb.md`](xnb.md)/[`plans/plan_xnb.md`](plans/plan_xnb.md), which describe what it
 > would take to make CNA a *consumer* of original binary XNA `.xnb` files. This document describes
 > a **different, permanent strategic choice**: CNA never implements a binary `.xnb` reader at all.
 > Instead, CNA defines its own simple, human-readable `.cnj` (CNA content JSON) sidecar format, and
@@ -13,7 +13,7 @@
 > `CnjEnvelope`/`CnjSourceFile`, the `cnjVersion` envelope field, `RegisterCnjLoader<T>`, and this
 > plan's own `CNB-1`–`CNB-39` task numbering) to say plainly what it is.
 >
-> **Status: ✅ IMPLEMENTED 2026-07-15 — `plan_cnj.md`'s all 9 phases (`CNB-1`–`CNB-39`) closed.**
+> **Status: ✅ IMPLEMENTED 2026-07-15 — `plans/plan_cnj.md`'s all 9 phases (`CNB-1`–`CNB-39`) closed.**
 > `ContentManager` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`,
 > `include/Microsoft/Xna/Framework/Content/ContentManager.hpp`,
 > `include/CNA/Internal/CnjEnvelope.hpp`, `include/CNA/Internal/Json.hpp`,
@@ -28,19 +28,19 @@
 > (`.font.json`/`.shader.json`/`.model.json`) to `.cnj`; and `RegisterCnjLoader<T>` lets a game
 > register several differently-named `.cnj` `"type"`s that all produce the same C++ type, for
 > data with no dedicated `LooseFileContentTypeReader<T>` at all. `SkinnedModelTypeReader`/`.skinnedmodel.json`
-> (Avatar, `NOXNA`) was deliberately **kept separate, not migrated** — see `plan_cnj.md` `CNB-22`
+> (Avatar, `NOXNA`) was deliberately **kept separate, not migrated** — see `plans/plan_cnj.md` `CNB-22`
 > for the full reasoning (real cross-language tooling depends on that extension name, it already
 > has the most mature test coverage of any of the four readers, and it's explicitly a distinct
 > non-`Model`-shaped system). Phases 0–8 (`CNB-1`–`CNB-31`) landed first; a same-day external
 > review then found 2 real bugs (fixed) and prompted Phase 9 (`CNB-32`–`CNB-39`, also same day),
 > which added `sourceFile` path-safety enforcement, a per-reader capability matrix, a type-safe
 > asset cache, deterministic custom-loader registration, and a headless-runnable `.cnj` test lane
-> — see `plan_cnj.md` for the full task-by-task record. Final full-suite regression after all 9
+> — see `plans/plan_cnj.md` for the full task-by-task record. Final full-suite regression after all 9
 > phases: 4452 tests, 4450 passed, 2 pre-existing unrelated hardware skips, 0 failures. Dedicated
 > `.cnj` coverage: 61 test cases across 14 gtest suites, with a 47-test graphics-independent subset
-> verified under `SDL_VIDEODRIVER=dummy`. See `plan_cnj.md` for the complete,
+> verified under `SDL_VIDEODRIVER=dummy`. See `plans/plan_cnj.md` for the complete,
 > task-by-task implementation record — this document remains the design reference; that one is the
-> log of what actually landed and why. See also "Relationship to `xnb.md`/`plan_xnb.md`" below for
+> log of what actually landed and why. See also "Relationship to `xnb.md`/`plans/plan_xnb.md`" below for
 > how the two binary-vs-JSON strategies compare and that plan's own adoption status.
 >
 > **2026-07-16 update:** the title's "(alternative to XNB)" framing is now only half true — see
@@ -50,7 +50,7 @@
 >
 > **2026-07-17 update — Phase 10, `AnimationClipTypeReader`:** the "Per-type `.cnj` conventions"
 > table's `AnimationClip` row, previously a design sketch only, is now implemented
-> (`plan_cnj.md` `CNB-40`–`CNB-42`) — a standalone `.cnj` `AnimationClip` document, independent of
+> (`plans/plan_cnj.md` `CNB-40`–`CNB-42`) — a standalone `.cnj` `AnimationClip` document, independent of
 > any specific `Model`, loadable via `ContentManager::Load<Graphics::AnimationClipEXT>()`. Supports
 > both inline JSON keyframe tracks and a `"clipFile"` reference to an existing `.clip.bin` binary
 > blob, matching the two options this document's own table already described. 7 new tests (6 in
@@ -71,7 +71,7 @@
 >
 > **2026-07-17 update — Phase 11 continued, `AnimationClip` sharing:** `Model`'s/`SkinnedModel`'s
 > `"animations"` field can now name a standalone `.cnj` `AnimationClip` asset instead of only a raw
-> `.clip.bin` blob (`plan_cnj.md` `CNB-48`/`CNB-49`), letting multiple models share one clip
+> `.clip.bin` blob (`plans/plan_cnj.md` `CNB-48`/`CNB-49`), letting multiple models share one clip
 > (e.g. a common "Idle"/"Walk" library) through `ContentManager`'s normal caching. Dispatched by
 > extension; fully backward compatible with every existing `.clip.bin` reference. 3 new tests;
 > full-suite regression: 4683 tests, 4681 passed, same 2 pre-existing hardware skips, 0 failures.
@@ -88,7 +88,7 @@
 > playback) and a permanent, network-free adversarial regression test
 > (`GltfToCnjToolTests.cpp`).
 >
-> **Same-day follow-up (`plan_cnj.md` `CNB-53`), at the project owner's explicit request**: the
+> **Same-day follow-up (`plans/plan_cnj.md` `CNB-53`), at the project owner's explicit request**: the
 > three scope cuts above are closed. Sparse accessors now resolve correctly (every accessor read
 > goes through `cgltf_accessor_unpack_floats`, not the sparse-rejecting
 > `cgltf_accessor_read_float`). Each primitive's material base-color texture is extracted (embedded
@@ -100,9 +100,9 @@
 >
 > **Self-caught fix (`CNB-54`)**: the same-day refactor above accidentally dropped `STEP`
 > animation-interpolation handling (silently became `LINEAR`) -- found and fixed the same day, with
-> a regression test. See `plan_cnj.md` for the full root-cause writeup.
+> a regression test. See `plans/plan_cnj.md` for the full root-cause writeup.
 >
-> **Second follow-up (`plan_cnj.md` `CNB-55`), at the project owner's explicit "oprav vsechny tyto
+> **Second follow-up (`plans/plan_cnj.md` `CNB-55`), at the project owner's explicit "oprav vsechny tyto
 > diry" request**: TEXCOORD set selection now honors the base-color texture's own `"texcoord"`
 > index instead of always `TEXCOORD_0`; only nodes reachable from the file's default scene are
 > imported; an optional `unitScale` CLI argument corrects a source file not authored in meters
@@ -120,7 +120,7 @@
 
 ## Why this alternative exists
 
-`xnb.md`/`plan_xnb.md` estimate a full, high-quality native `.xnb` reader (binary container, LZX
+`xnb.md`/`plans/plan_xnb.md` estimate a full, high-quality native `.xnb` reader (binary container, LZX
 decompression, ~40 standard `ContentTypeReader`s, shared-resource fixups, `Model`/`Effect` object
 graphs, and eventually a Lua-scripted custom-reader layer for game-specific readers) at several
 hundred to well over a thousand hours/credits of work by the time broad real-world XNA compatibility
@@ -134,7 +134,7 @@ The alternative proposed here trades "drop-in binary compatibility with existing
 - No binary protocol to parse, version, or harden against malformed/adversarial input.
 - No LZX (de)compression code to write, test, and maintain.
 - No assembly-qualified generic type-name parsing, no shared-resource fixup graph, no reader-version
-  negotiation — none of the `.xnb`-specific machinery in `plan_xnb.md`'s Phase A–D exists at all.
+  negotiation — none of the `.xnb`-specific machinery in `plans/plan_xnb.md`'s Phase A–D exists at all.
 - A format that is trivially readable/diffable/editable by a human or a script, instead of an
   opaque binary blob.
 - No dependency on ever being able to decode a *future* or *unknown* `.xnb` variant (MonoGame vs.
@@ -155,7 +155,7 @@ with native extensions as the final fallback**:
 1. If "<name>.xnb" exists, load it through CNA's own (MVP-scoped) binary .xnb
    reader. A recognized-but-not-yet-implemented reader name, or malformed/
    unsupported content, is a hard ContentLoadException -- it does NOT fall
-   through to steps 2-4 below. See xnb.md/plan_xnb.md for what is actually
+   through to steps 2-4 below. See xnb.md/plans/plan_xnb.md for what is actually
    implemented at any given time.
 
 2. Otherwise, if the literal asset name/path as given by the caller (with
@@ -293,8 +293,8 @@ A `.cnj` file is always a single JSON object with (at least) these top-level fie
   game-specific type name for migrated custom data) identifying what the document is. As covered in
   "Note on dispatch" above, the primary dispatch key in CNA is still the requested C++ type `T` at
   the `Load<T>()` call site — `type` is a cross-check against that, structurally analogous to how
-  `plan_xnb.md`'s reader-name table lets `.xnb` verify what it's reading, but as a plain JSON string
-  instead of a binary assembly-qualified name — so no generic-name parsing (`plan_xnb.md`'s
+  `plans/plan_xnb.md`'s reader-name table lets `.xnb` verify what it's reading, but as a plain JSON string
+  instead of a binary assembly-qualified name — so no generic-name parsing (`plans/plan_xnb.md`'s
   XNB-13/13A problem) exists in this format at all. For tooling with no compile-time `T` (asset
   validators, migration scripts), `type` doubles as the actual dispatch key into a small
   string-to-handler table.
@@ -318,7 +318,7 @@ referencing its glyph atlas texture, or a `Model` referencing per-mesh textures)
 are just strings resolved through the same two-level dispatch rule above (`.cnj` first, then native
 extension), recursively, through the owning `ContentManager` — this gives asset caching and
 `Unload()` semantics "for free" reusing the identical mechanism already used for the top-level
-asset. There is no separate "external reference" object model needed (contrast with `plan_xnb.md`'s
+asset. There is no separate "external reference" object model needed (contrast with `plans/plan_xnb.md`'s
 `ContentReader::ReadExternalReference<T>()`, which exists only because raw `.xnb` has no such
 built-in path-resolution convention).
 
@@ -373,7 +373,7 @@ same two-step rule as the top-level asset (`.cnj` first, then native extension) 
 itself point at another `.cnj` with its own `sourceFile` (no chained/recursive sidecars; one `.cnj`
 per physical payload, matching how `Model`'s sidecars are never themselves JSON).
 
-**Enforced safety guarantees** (`plan_cnj.md` CNB-32, `CNA::Internal::ResolveCnjSourceFileSafely()`
+**Enforced safety guarantees** (`plans/plan_cnj.md` CNB-32, `CNA::Internal::ResolveCnjSourceFileSafely()`
 in `include/CNA/Internal/CnjSourceFile.hpp`): `sourceFile` cannot be an absolute path; its resolved
 target cannot escape the content root (including via `../` or a symlink); and it cannot resolve to
 another `.cnj`, whether named explicitly (`"foo.cnj"`) or implicitly (`"foo"`, where the normal
@@ -389,7 +389,7 @@ calling out explicitly as a content-authoring footgun, since nothing on disk vis
 "enrichment sidecar" from "unrelated same-named asset" other than opening the file and checking for
 `sourceFile`.
 
-### The `sourceFile` capability matrix (plan_cnj.md CNB-34)
+### The `sourceFile` capability matrix (plans/plan_cnj.md CNB-34)
 
 Not every built-in reader accepts `sourceFile` — the resolver tries `.cnj` for *every* registered
 type (per "The core rule"), but only types with an actual native, independently-loadable payload
@@ -437,21 +437,21 @@ read `"type"` to know what something is, exactly like a `.xnb`-aware tool would.
 
 Only a sketch of the initial set — the exact field names/shapes are a follow-up design task per
 type, not fixed by this document. The point of this section is to establish *scope and grouping*,
-matching the same practical asset categories `xnb.md`/`plan_xnb.md` already identified as mattering
+matching the same practical asset categories `xnb.md`/`plans/plan_xnb.md` already identified as mattering
 for real XNA content, so nothing important is silently dropped by switching strategies.
 
 | `.cnj` `type` | Replaces (from `xnb.md`'s XNA reader inventory) | Shape |
 |---|---|---|
 | `SpriteFont` | `SpriteFontReader` | JSON metadata (glyphs, kerning, line spacing) + a reference to a plain `.png` glyph atlas texture (no custom pixel packing logic needed inside `.cnj` itself — the atlas is just an ordinary image file). |
 | `Model` | `ModelReader` + `VertexBufferReader`/`IndexBufferReader`/`VertexDeclarationReader` | JSON metadata (bone hierarchy, mesh/mesh-part list, per-part material/effect references) referencing either (a) a conventional interchange mesh format CNA can already load (e.g. glTF/OBJ, if/when supported) for raw vertex/index data, or (b) a small CNA-owned binary vertex/index blob file referenced by path, kept *outside* the JSON (JSON is a poor fit for large raw float/index arrays). |
-| `AnimationClip` / skeletal animation data | `SkinningDataReader`-style custom readers seen in several samples (see `xnb.md`'s Lua discussion) | **Implemented** (`AnimationClipTypeReader`, `plan_cnj.md` `CNB-40`, Phase 10) — either inline JSON keyframe/bone-transform data (`"tracks"`), or, for large clips, a reference to an external raw binary blob via `"clipFile"` (the same `.clip.bin` format and shared reader `Model`'s/`SkinnedModelEXT`'s own `"animations"` field already used), to avoid bloating JSON with thousands of matrices. Standalone and independent of any specific `Model` — loaded via `ContentManager::Load<Graphics::AnimationClipEXT>()` (aliased as `Graphics::AnimationClip`). |
-| Stock effect parameters (`BasicEffect`/`SkinnedEffect`/etc.) | Stock-effect XNA readers (`xnb.md`'s "stock effects" section) | **Implemented** (`plan_cnj.md` `CNB-45`, Phase 11) — plain JSON parameter object (colors, texture references, lighting flags) dispatched from inside the existing `EffectTypeReader` by `.cnj` `"type"` (`"BasicEffect"`/`"AlphaTestEffect"`/`"DualTextureEffect"`/`"EnvironmentMapEffect"`/`"SkinnedEffect"`, alongside the pre-existing `"Effect"` custom-GLSL shape), consumed directly by CNA's existing native stock-effect C++ classes. Omitted fields fall back to each effect's own real constructor defaults, not an independently-chosen default. |
-| `Texture3D` (volume texture) | `Texture3DReader` | **Implemented** (`plan_cnj.md` `CNB-43`, Phase 11) — self-contained JSON (`"width"`/`"height"`/`"depth"`) + a raw RGBA8 binary sidecar (`"data"`), mirroring `Model`'s own vertex/index binary-sidecar convention (no native "volume texture" file format exists in CNA the way `.dds` serves `TextureCube`). Single mip level; no DXT decompression (hand-authored `.cnj` content has no natural source for pre-compressed DXT data). |
-| `Curve` | `CurveReader` | **Implemented** (`plan_cnj.md` `CNB-44`, Phase 11) — self-contained JSON (`"preLoop"`/`"postLoop"` + `"keys"`: `position`/`value`/`tangentIn`/`tangentOut`/`continuity`), a direct port of `CurveContentTypeReader.hpp`'s already-FNA-verified field order. |
-| General custom/`.fx`-based `Effect` | `EffectReader` (compiled platform shader bytecode) | **Explicitly out of scope**, exactly as `plan_xnb.md`'s XNB-32A/XNB-14B already conclude for the binary case: no format, JSON or binary, changes the fact that an original D3D9-era compiled shader blob cannot be run through bgfx. A `.cnj` `Effect` entry can only ever reference a *rebuilt* CNA-native shader (source `.fx`/CNA shader recompiled through CNA's own pipeline), never carry the original bytecode meaningfully. |
+| `AnimationClip` / skeletal animation data | `SkinningDataReader`-style custom readers seen in several samples (see `xnb.md`'s Lua discussion) | **Implemented** (`AnimationClipTypeReader`, `plans/plan_cnj.md` `CNB-40`, Phase 10) — either inline JSON keyframe/bone-transform data (`"tracks"`), or, for large clips, a reference to an external raw binary blob via `"clipFile"` (the same `.clip.bin` format and shared reader `Model`'s/`SkinnedModelEXT`'s own `"animations"` field already used), to avoid bloating JSON with thousands of matrices. Standalone and independent of any specific `Model` — loaded via `ContentManager::Load<Graphics::AnimationClipEXT>()` (aliased as `Graphics::AnimationClip`). |
+| Stock effect parameters (`BasicEffect`/`SkinnedEffect`/etc.) | Stock-effect XNA readers (`xnb.md`'s "stock effects" section) | **Implemented** (`plans/plan_cnj.md` `CNB-45`, Phase 11) — plain JSON parameter object (colors, texture references, lighting flags) dispatched from inside the existing `EffectTypeReader` by `.cnj` `"type"` (`"BasicEffect"`/`"AlphaTestEffect"`/`"DualTextureEffect"`/`"EnvironmentMapEffect"`/`"SkinnedEffect"`, alongside the pre-existing `"Effect"` custom-GLSL shape), consumed directly by CNA's existing native stock-effect C++ classes. Omitted fields fall back to each effect's own real constructor defaults, not an independently-chosen default. |
+| `Texture3D` (volume texture) | `Texture3DReader` | **Implemented** (`plans/plan_cnj.md` `CNB-43`, Phase 11) — self-contained JSON (`"width"`/`"height"`/`"depth"`) + a raw RGBA8 binary sidecar (`"data"`), mirroring `Model`'s own vertex/index binary-sidecar convention (no native "volume texture" file format exists in CNA the way `.dds` serves `TextureCube`). Single mip level; no DXT decompression (hand-authored `.cnj` content has no natural source for pre-compressed DXT data). |
+| `Curve` | `CurveReader` | **Implemented** (`plans/plan_cnj.md` `CNB-44`, Phase 11) — self-contained JSON (`"preLoop"`/`"postLoop"` + `"keys"`: `position`/`value`/`tangentIn`/`tangentOut`/`continuity`), a direct port of `CurveContentTypeReader.hpp`'s already-FNA-verified field order. |
+| General custom/`.fx`-based `Effect` | `EffectReader` (compiled platform shader bytecode) | **Explicitly out of scope**, exactly as `plans/plan_xnb.md`'s XNB-32A/XNB-14B already conclude for the binary case: no format, JSON or binary, changes the fact that an original D3D9-era compiled shader blob cannot be run through bgfx. A `.cnj` `Effect` entry can only ever reference a *rebuilt* CNA-native shader (source `.fx`/CNA shader recompiled through CNA's own pipeline), never carry the original bytecode meaningfully. |
 | Game-specific custom data (the ~82 hand-written `ContentTypeReader` classes found across `RolePlayingGame`, `Movipa`, `RobotGame`, etc. — see this session's sample survey) | Custom `ContentTypeReader` subclasses | A game-specific `type` string, with fields chosen by whoever migrates that game's content — no CNA core change needed per game, same "don't grow CNA core for one sample" principle `xnb.md`'s Lua section already argued for, just without needing a Lua sandbox/host at all: it is only ever *data*, read once by a small piece of C++ (or even generic reflection-free JSON field access) written for that one game. |
 
-Note the recurring pattern: every category that `plan_xnb.md` treats as a "hard, later-phase"
+Note the recurring pattern: every category that `plans/plan_xnb.md` treats as a "hard, later-phase"
 problem (stock effects vs. general `EffectReader`, custom readers, large binary payloads) keeps
 essentially the same hard/impossible boundary here. `.cnj` does not make the general `EffectReader`
 problem solvable, and does not make large per-vertex arrays pleasant in JSON — it only removes the
@@ -460,7 +460,7 @@ begin with (primitives, math structs, simple metadata, font/model metadata).
 
 ## `Model` `.cnj` version 2 — migration notes for consumers (`GLTF-455`)
 
-The `plan_gltf.md` campaign changed what a `Model` `.cnj` contains. This section is for anyone who
+The `plans/plan_gltf.md` campaign changed what a `Model` `.cnj` contains. This section is for anyone who
 **reads** one — a tool, a validator, or a game that shipped assets converted by an older
 `gltf_to_cnj`.
 
@@ -561,7 +561,7 @@ game code chosen at runtime by the `.cnj` itself — e.g. a game with both `"Ene
 parsing functions, not one.
 
 A second registry closes that gap: keyed by the `.cnj` `"type"` string instead of `std::type_index`.
-**Implemented** (`plan_cnj.md` CNB-24/25, `ContentManager.hpp`):
+**Implemented** (`plans/plan_cnj.md` CNB-24/25, `ContentManager.hpp`):
 
 ```cpp
 template <typename T>
@@ -610,9 +610,9 @@ This is the closest practical C++ analog of how real XNA's `.xnb` format let a r
 purely by an assembly-qualified name embedded in the file, decoupled from whatever the calling code
 asked for — except as a plain string key into an explicitly pre-registered table instead of runtime
 reflection over a loaded .NET assembly, so none of the dynamic type-loading/reflection machinery
-`plan_xnb.md` already argues against needs to exist for this either.
+`plans/plan_xnb.md` already argues against needs to exist for this either.
 
-**Registration contract (`plan_cnj.md` CNB-37):** `RegisterCnjLoader<T>` is deterministic and
+**Registration contract (`plans/plan_cnj.md` CNB-37):** `RegisterCnjLoader<T>` is deterministic and
 fails fast rather than silently accepting bad input — an empty `typeName` or an empty `factory`
 throws `std::invalid_argument` immediately, and re-registering an already-used `(T, typeName)`
 pair throws `std::logic_error` rather than quietly replacing the earlier factory (the same
@@ -623,7 +623,7 @@ repeat of both `T` and `typeName` is rejected.
 ## Relationship to CNA's existing per-type JSON conventions
 
 Before this document was implemented, CNA's JSON content readers predated the `.cnj` envelope and
-each used their own bespoke extension. Three of the four were migrated (`plan_cnj.md` Phases 3–5);
+each used their own bespoke extension. Three of the four were migrated (`plans/plan_cnj.md` Phases 3–5);
 one — `SkinnedModelTypeReader` — was deliberately kept separate (`CNB-22`):
 
 | Reader class | Extension before | Extension now | Real field names (for reference) |
@@ -645,7 +645,7 @@ Two things were genuinely net-new scope beyond the three-reader migration, not j
 `.cnj`-first resolution order (letting `.cnj` act as an optional metadata sidecar for `Texture2D` —
 proven via `sourceFile` + `colorKey` — which had no sidecar mechanism at all before) and the
 `RegisterCnjLoader<T>` custom-loader registry (nothing before provided an equivalent). See
-`plan_cnj.md` Phases 1–2 and 7 for how each was implemented and tested.
+`plans/plan_cnj.md` Phases 1–2 and 7 for how each was implemented and tested.
 
 This is separate from (and much smaller than) the XNA→CNA *content migration* effort described below
 in "What migration actually requires" (which is about converting original `.fbx`/`.png`/`.wav`/
@@ -660,7 +660,7 @@ This is the part that is easy to underestimate, and is the direct cost of not im
 1. **A working original-XNA (or MonoGame) runtime somewhere**, capable of loading the game's
    original `.xnb` files through the real `ContentManager`/`ContentTypeReader` machinery — typically
    Windows (or Wine) with XNA Game Studio 4.0, or a MonoGame-based content loader, since that is the
-   only reliably correct implementation of the very object graph `plan_xnb.md` would otherwise have
+   only reliably correct implementation of the very object graph `plans/plan_xnb.md` would otherwise have
    to reimplement in CNA. This session's survey of `/rv/tmp/XNAGameStudio/Samples` confirms these
    samples ship only source `.contentproj` projects and raw source assets (`.fbx`/`.x`/`.png`/`.fx`/
    `.spritefont`/`.wav`), not pre-built `.xnb` — so even testing migration requires a build step
@@ -675,7 +675,7 @@ This is the part that is easy to underestimate, and is the direct cost of not im
    caveat `xnb.md`'s Lua-porting discussion already raised for "AI-assisted, not guaranteed" C#→Lua
    conversion applies equally to C#→`.cnj`-exporter conversion. The export tool needs one small
    per-game plugin (or hand-written export function) for each custom `ContentTypeReader`, but this
-   is a strict subset of the same "port this one reader" work `plan_xnb.md`'s Phase H already
+   is a strict subset of the same "port this one reader" work `plans/plan_xnb.md`'s Phase H already
    accounted for — the difference is only where the ported logic ends up (an offline exporter vs. a
    runtime Lua reader), not whether porting work exists at all.
 4. **No solution for general custom `.fx` effects**, same as the binary approach — 83 `.fx` files
@@ -687,7 +687,7 @@ None of this is free, but it is a **bounded, one-time cost per game/asset pack**
 **permanent, open-ended maintenance surface inside CNA itself** (a binary parser + compression codec
 + reader registry that must keep working for every `.xnb` variant anyone might ever throw at it).
 
-## Relationship to `xnb.md`/`plan_xnb.md`
+## Relationship to `xnb.md`/`plans/plan_xnb.md`
 
 > **Update 2026-07-16:** the table below and the "freeze" recommendation after it describe the
 > *original* either/or framing (adopt `.cnj` and freeze `.xnb`, or adopt `.xnb` instead of `.cnj`).
@@ -699,28 +699,28 @@ None of this is free, but it is a **bounded, one-time cost per game/asset pack**
 > compatibility with an unconverted original asset) — only the "pick one" conclusion no longer
 > holds, and the Lua row below has been updated to reflect the 2026-07-16 rejection.
 
-This document does **not** retroactively invalidate `xnb.md`/`plan_xnb.md` — both remain accurate
+This document does **not** retroactively invalidate `xnb.md`/`plans/plan_xnb.md` — both remain accurate
 records of what a full binary `.xnb` reader costs and how it is sequenced. This document exists so
 that choice could be made explicitly, by comparing:
 
-| | Binary `.xnb` reader (`xnb.md`/`plan_xnb.md`) | `.cnj` JSON + native-by-extension (this document) |
+| | Binary `.xnb` reader (`xnb.md`/`plans/plan_xnb.md`) | `.cnj` JSON + native-by-extension (this document) |
 |---|---|---|
 | End-user experience | Drop original `.xnb` next to the game, it just loads | Must run a one-time migration/export step first |
 | CNA maintenance surface | Large for broad coverage: binary protocol, LZX, ~40-reader registry | Minimal: a JSON envelope + per-type field conventions CNA fully controls |
 | Implementation cost | Large for broad coverage (`xnb.md`'s own estimate); an MVP slice (container + primitives + `Texture2D`, uncompressed only) is active now | Small (a resolver + a handful of per-type (de)serializers; native-extension loading for PNG/JPEG/WAV already exists today) |
-| Handles unknown/future `.xnb` variants | Only if explicitly implemented (MonoGame vs. FNA vs. platform variants — `plan_xnb.md`'s XNB-27/XNB-30C, both still deferred) | Not applicable — `.cnj` never reads `.xnb` itself |
-| General custom `.fx` effects | Explicitly unsupported either way (`plan_xnb.md` XNB-32A) | Explicitly unsupported either way (same shader-porting problem) |
-| Game-specific custom readers | Native C++ registration (`plan_xnb.md` Phase G); a sandboxed-Lua alternative (former Phase H) was proposed and then **rejected outright** 2026-07-16 | Ported to a one-time export-tool plugin, or `RegisterCnjLoader<T>` at runtime (this document) |
+| Handles unknown/future `.xnb` variants | Only if explicitly implemented (MonoGame vs. FNA vs. platform variants — `plans/plan_xnb.md`'s XNB-27/XNB-30C, both still deferred) | Not applicable — `.cnj` never reads `.xnb` itself |
+| General custom `.fx` effects | Explicitly unsupported either way (`plans/plan_xnb.md` XNB-32A) | Explicitly unsupported either way (same shader-porting problem) |
+| Game-specific custom readers | Native C++ registration (`plans/plan_xnb.md` Phase G); a sandboxed-Lua alternative (former Phase H) was proposed and then **rejected outright** 2026-07-16 | Ported to a one-time export-tool plugin, or `RegisterCnjLoader<T>` at runtime (this document) |
 
 Both formats are active at once, ranked by `ContentManager`'s resolution order (`.xnb` above
-`.cnj` above native) — see "The core rule" above for the mechanics, and `xnb.md`/`plan_xnb.md`'s own
+`.cnj` above native) — see "The core rule" above for the mechanics, and `xnb.md`/`plans/plan_xnb.md`'s own
 status banners for exactly which `.xnb` phases are implemented versus still frozen at any given
 time.
 
 ## Implementation record
 
-The design above was implemented in full via `plan_cnj.md`'s numbered task list (`CNB-1`–`CNB-27`,
-Phases 0–7), mirroring how `plan_xnb.md` turned `xnb.md` into concrete tasks — see that file for
+The design above was implemented in full via `plans/plan_cnj.md`'s numbered task list (`CNB-1`–`CNB-27`,
+Phases 0–7), mirroring how `plans/plan_xnb.md` turned `xnb.md` into concrete tasks — see that file for
 the complete, phase-by-phase record (what changed, why, and each phase's regression-test tally).
 Summary of what landed, in the order it happened:
 
@@ -732,24 +732,24 @@ Summary of what landed, in the order it happened:
 5. `EffectTypeReader` migrated `.shader.json` → `.cnj` — Phase 4.
 6. `ModelTypeReader` migrated `.model.json` → `.cnj` (its pre-existing FNA-fidelity gaps —
    single-bone synthesis, unassigned `ParentBone`, unset `BoundingSphere`/`Tag` — were deliberately
-   *not* fixed in the same pass; see `plan_cnj.md` `CNB-21` for the reasoning) — Phase 5.
-7. `SkinnedModelTypeReader` decided to stay separate, not migrated — see `plan_cnj.md` `CNB-22` and
+   *not* fixed in the same pass; see `plans/plan_cnj.md` `CNB-21` for the reasoning) — Phase 5.
+7. `SkinnedModelTypeReader` decided to stay separate, not migrated — see `plans/plan_cnj.md` `CNB-22` and
    "Relationship to CNA's existing per-type JSON conventions" above — Phase 6.
 8. `RegisterCnjLoader<T>` — Phase 7.
 9. `AnimationClipTypeReader` — a standalone, directly-loadable `.cnj` `AnimationClip` document,
    independent of any specific `Model` (inline JSON tracks, or a `"clipFile"` reference to an
-   existing `.clip.bin` blob) — Phase 10 (`plan_cnj.md` `CNB-40`–`CNB-42`), added 2026-07-17 as the
+   existing `.clip.bin` blob) — Phase 10 (`plans/plan_cnj.md` `CNB-40`–`CNB-42`), added 2026-07-17 as the
    first of the "genuinely new `.cnj` type" follow-ups this section used to flag as open.
 10. `Texture3DTypeReader`/`CurveTypeReader`, and stock-effect `.cnj` support
     (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`,
-    dispatched from inside `EffectTypeReader`) — Phase 11 (`plan_cnj.md` `CNB-43`–`CNB-47`), closing
+    dispatched from inside `EffectTypeReader`) — Phase 11 (`plans/plan_cnj.md` `CNB-43`–`CNB-47`), closing
     the last `.xnb`-vs-`.cnj` type-coverage gaps identified by cross-referencing FNA's real
     `ContentTypeReader` inventory.
 11. `Model`'s/`SkinnedModel`'s `"animations"` field can now name a standalone, shareable `.cnj`
     `AnimationClip` asset (loaded/cached through `ContentManager`, real caching) instead of only a
-    raw `.clip.bin` blob per model — Phase 11 continued (`plan_cnj.md` `CNB-48`/`CNB-49`).
+    raw `.clip.bin` blob per model — Phase 11 continued (`plans/plan_cnj.md` `CNB-48`/`CNB-49`).
 12. A real glTF 2.0 → `Model`/`AnimationClip` import tool (`tools/gltf_to_cnj/`, `cna_tool_gltf_to_cnj`,
-    vendored `cgltf`), including skeleton/skinning/animation — Phase 12 (`plan_cnj.md` `CNB-50`–`CNB-52`).
+    vendored `cgltf`), including skeleton/skinning/animation — Phase 12 (`plans/plan_cnj.md` `CNB-50`–`CNB-52`).
 
 Further genuinely new `.cnj` types with no existing reader today (game-specific custom data beyond
 what a game registers itself) remain a natural, open-ended follow-up — `RegisterCnjLoader<T>`
@@ -759,25 +759,25 @@ already supports them without any CNA core change.
 
 CNA's owner decided `.xnb` should become a real, additional runtime format again — **not** a
 replacement for `.cnj`, which keeps everything described in this document exactly as implemented.
-See [`xnb.md`](xnb.md)'s and [`plan_xnb.md`](plan_xnb.md)'s own status banners for the full
+See [`xnb.md`](xnb.md)'s and [`plans/plan_xnb.md`](plans/plan_xnb.md)'s own status banners for the full
 decision; summarized here because it changes "The core rule" below:
 
 - `ContentManager`'s resolution order gains a new top tier: `<name>.xnb`, checked **before** even
   the literal caller-given path. If a real, externally-produced `.xnb` file is present, it wins
   over both `.cnj` and any native file — see the revised "The core rule" section below.
-- Only an MVP slice of `plan_xnb.md` is actually active (container parsing, binary primitives, the
+- Only an MVP slice of `plans/plan_xnb.md` is actually active (container parsing, binary primitives, the
   uncompressed case, a first real `Texture2D` reader — that plan's own M1/M2 milestones). LZX
   decompression, `SpriteFont`, stock effects, audio, `Model`, and top-quality hardening remain
   frozen/deferred. An unsupported/not-yet-implemented `.xnb` reader name fails with a clear error
   rather than silently falling through to `.cnj`/native — a present-but-unreadable `.xnb` is a hard
   error, not treated the same as an absent one.
-- `plan_xnb.md`'s former Phase H (a sandboxed-Lua custom-reader host) was rejected outright as
+- `plans/plan_xnb.md`'s former Phase H (a sandboxed-Lua custom-reader host) was rejected outright as
   disproportionate complexity — custom `.xnb` readers stay native C++ only, registered the same way
   `RegisterCnjLoader<T>` already works for custom `.cnj` types.
-- `ContentManager` also gains a startup content-manifest scan (`plan_xnb.md` Phase B3): an internal
+- `ContentManager` also gains a startup content-manifest scan (`plans/plan_xnb.md` Phase B3): an internal
   performance cache, a public `NOXNA` introspection API, and — for any `.xnb` files found — a
   reader-name inventory. This is orthogonal to `.cnj` itself but shares the same `ContentManager`.
-- Writing/producing `.xnb` files remains permanently out of scope, exactly as `plan_xnb.md`'s own
+- Writing/producing `.xnb` files remains permanently out of scope, exactly as `plans/plan_xnb.md`'s own
   "Scope" section already stated — CNA only ever consumes `.xnb` files built by real XNA/MonoGame/
   FNA tooling.
 - **Renamed:** the `.cnj`/loose-file loader interface described throughout this document as

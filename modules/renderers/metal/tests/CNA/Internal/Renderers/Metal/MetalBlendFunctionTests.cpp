@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-19: DescribeMetalBlendOperation() only reads a plain XNA BlendFunction
+// plans/plan_metal.md METAL-19: DescribeMetalBlendOperation() only reads a plain XNA BlendFunction
 // ordinal and returns a plain C++ enum -- zero Objective-C dependency, genuinely unit-tested on
 // this Linux machine. No #if defined(CNA_RENDERER_METAL) gate, deliberately.
 #include <gtest/gtest.h>

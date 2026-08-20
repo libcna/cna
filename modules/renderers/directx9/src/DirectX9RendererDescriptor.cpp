@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D20: the DirectX9 family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D20: the DirectX9 family's pre-construction contract.
 //
 // Real Direct3D 9 against the window's HWND.
 
@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::DirectX9
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *
@@ -27,7 +27,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     namespace
     {
-        // plan_runtimerenderer.md design decision 9: GraphicsAdapter's profile/format queries run
+        // plans/plan_runtimerenderer.md design decision 9: GraphicsAdapter's profile/format queries run
         // BEFORE any device exists, so they cannot go through an IGraphicsRenderer virtual. D3D9 is
         // the only renderer with a real capability structure (D3DCAPS9 / IDirect3D9::CheckDevice*)
         // to answer them from; every other family leaves these null and GraphicsAdapter keeps its

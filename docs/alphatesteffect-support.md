@@ -1,6 +1,6 @@
 # AlphaTestEffect Exactness Support Matrix
 
-Phase 43 (`plan_graphics.md` Tasks 371–380) audited and pixel-verified `AlphaTestEffect`
+Phase 43 (`plans/plan_graphics.md` Tasks 371–380) audited and pixel-verified `AlphaTestEffect`
 conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings and closes the phase.
 
@@ -143,4 +143,4 @@ Phase 43 opened 2 new tracked tasks:
 - ~~**Task 888**~~ — **fixed by Task 899** (closed 2026-07-07): real fog is now implemented on
   Vulkan and Bgfx, project-wide, for every 3D effect including `AlphaTestEffect`.
 
-This closes Phase 43 (`plan_graphics.md` Tasks 371–380) in full.
+This closes Phase 43 (`plans/plan_graphics.md` Tasks 371–380) in full.

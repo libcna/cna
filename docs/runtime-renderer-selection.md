@@ -4,7 +4,7 @@
 the table at the end). The renderer-gated test/example corpus has been audited and its applicable
 sites converted or deliberately retained as compile-time family/default gates. The remaining work
 is limited to the platform-specific validation sets and measurements listed at the end of
-`plan_runtimerenderer.md`.
+`plans/plan_runtimerenderer.md`.
 
 ---
 
@@ -75,7 +75,7 @@ mechanism rather than inventing one:
 `DILIGENT` carries a documented limitation here: SDL3 rejects a window created with both
 `SDL_WINDOW_VULKAN` and `SDL_WINDOW_OPENGL`, so an `auto` build whose first preference fails at
 runtime cannot fall through across that boundary against an already-created window
-(plan_diligent.md DILIGENT-57).
+(plans/plan_diligent.md DILIGENT-57).
 
 ---
 
@@ -196,7 +196,7 @@ Only the default renderer's `CNA_RENDERER_<X>` macro is defined project-wide; ea
 macro is private to that family's target. This keeps the compile-time accessors
 (`getCurrentGraphicsRendererType()`) and the existing renderer-gated tests and examples meaningful —
 they all describe the **default**. Making the test corpus itself renderer-agnostic is a separate
-piece of work (`plan_runtimerenderer.md` phase P9).
+piece of work (`plans/plan_runtimerenderer.md` phase P9).
 
 `CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in, and
 `CNA_RENDERER_PRESENT_<IDENTITY>` is defined on the test executable for **every** compiled-in
@@ -491,6 +491,6 @@ archive sizes overstates it by an order of magnitude here.
 
 ## See also
 
-- `plan_runtimerenderer.md` — the design decisions and the full task breakdown.
+- `plans/plan_runtimerenderer.md` — the design decisions and the full task breakdown.
 - `modules/core/include/CNA/GraphicsRendererType.hpp` — the public renderer identities.
 - `cmake/RendererSelection.cmake` — compile-time selection.

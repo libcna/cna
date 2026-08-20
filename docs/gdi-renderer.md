@@ -15,7 +15,7 @@ then presents the main RGBA8 backbuffer into SDL's native Win32 `HWND` with GDI 
 display path; it does not create an SDL renderer, D3D device, OpenGL context or GPU swap chain.
 
 Both the historical feature branch and current adapted branch passed their focused MinGW/Wine
-configurations. The native visible-Windows lifecycle/DPI and MSVC gates in `plan_gdi.md` remain
+configurations. The native visible-Windows lifecycle/DPI and MSVC gates in `plans/plan_gdi.md` remain
 open. Treat GDI as a compatibility renderer under validation, not yet as a release baseline.
 
 ## Scope
@@ -172,7 +172,7 @@ better served by `SDL_RENDERER`, `SDL_GPU`, or a Direct3D renderer.
 The bundled `cna_demo_2d` automatically uses a GDI compatibility profile (12–20 animated
 sprites at 30 FPS).  Its normal profile is a 50–100-sprite, 60-FPS GPU stress scene, which is not
 a useful default workload for a CPU rasterizer.  This keeps the manual display check responsive;
-it is not a replacement for the benchmark work described in `plan_gdi.md`.
+it is not a replacement for the benchmark work described in `plans/plan_gdi.md`.
 
 Final-window scaling defaults to nearest-neighbour (`COLORONCOLOR`) so pixel-art stays crisp.
 This is separate from `SamplerState`: it never changes the CPU rasterizer's point/linear texture

@@ -8,7 +8,7 @@
   `0a51f8647eb4ddf2fdcd2102756ea79bb49625b7`.
 - **Archive:** annotated `archive/preintegration/glide-20260804`, preserving the original head,
   fork `a7a49e3dc135cd3394b04dbc761123584b4e1d45`, and all 32 unique commits.
-- **Authoritative plan:** [`plan_glide.md`](plan_glide.md), especially its post-audit adaptation
+- **Authoritative plan:** [`plans/plan_glide.md`](plans/plan_glide.md), especially its post-audit adaptation
   record and capability boundaries.
 - **Scope:** authentic 32-bit Windows/x86 Glide 3.x only. Never add a software or modern-API
   fallback. The host had neither physical Voodoo hardware nor an external `glide3x.dll`; the
@@ -119,7 +119,7 @@ batch, all passing after every commit.
 
 ## Rules and assumptions
 
-- Use `plan_glide.md` together with this file for all Glide work. `NEXT.md` is outside this subsystem's continuity scope.
+- Use `plans/plan_glide.md` together with this file for all Glide work. `NEXT.md` is outside this subsystem's continuity scope.
 - Prefer testable x86 fake-DLL contracts and portable unit tests. Do not claim dgVoodoo or real-Voodoo visual validation without actually running it.
 - Preserve unrelated working-tree changes and make only focused Glide/backend/documentation edits.
 - When a fix's core logic is pure CPU math (clipping, lighting, blend-factor mapping, coordinate

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-36/37/38/39/40/41: end-to-end test for ModelReader (and its
+// plans/plan_xnb.md XNB-36/37/38/39/40/41: end-to-end test for ModelReader (and its
 // VertexDeclarationReader/VertexBufferReader/IndexBufferReader dependencies) against a real,
 // externally-produced fixture (MonoGame's BlenderDefaultCube.xnb, already vendored for XNB-32's
 // BasicEffectReader tests). Field values asserted below were independently verified with a

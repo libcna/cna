@@ -1,5 +1,5 @@
-# plan_dx9.md D9-A5 scene corpus: lit_textured_quad_pixellighting
-# First scene to exercise BasicEffect.PreferPerPixelLighting=true (plan_dx9.md D9-81 item 1,
+# plans/plan_dx9.md D9-A5 scene corpus: lit_textured_quad_pixellighting
+# First scene to exercise BasicEffect.PreferPerPixelLighting=true (plans/plan_dx9.md D9-81 item 1,
 # resolved 2026-07-16 -- GpuDrawParams now carries a real preferPerPixelLighting field, and this
 # renderer's dispatch selects BasicEffect.fx's own VSBasicPixelLightingTx/PSBasicPixelLightingTx --
 # one of the 5 shader variants D9-73 found do NOT byte-match Microsoft's shipped .fxb (a compiler-

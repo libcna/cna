@@ -121,7 +121,7 @@ namespace CNA::Internal::Renderers::SvgDom
     /**
      * @brief Texture backed by a CPU-side RGBA8 buffer, with lazily generated/cached PNG data URIs.
      *
-     * plan_svg_dom.md design decision 2. An SVG `<image>` element's `href` needs a URL; unlike
+     * plans/plan_svg_dom.md design decision 2. An SVG `<image>` element's `href` needs a URL; unlike
      * `HtmlDom` (which derives one from a private JS-side canvas via the async-free
      * `canvas.toDataURL()`), this renderer already owns the RGBA8 bytes in C++ (required for
      * `GetData`/`UpdatePixels` regardless) and encodes the PNG with CNA's shared image backend -- so the

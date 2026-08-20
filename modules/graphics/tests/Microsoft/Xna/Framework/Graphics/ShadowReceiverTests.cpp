@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-820..MOD-826: the receiving half of shadows.
+// plans/plan_modern.md MOD-820..MOD-826: the receiving half of shadows.
 //
 // Two things are worth pinning here and neither is visible in an image. First, the four lit
 // effects really do carry the shadow state into GpuDrawParams -- a setter that stores a value the

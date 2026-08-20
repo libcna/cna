@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: adapts examples/easygl_spritebatch_scale_test.cpp's own scene verbatim --
+// plans/plan_opengl2.md: adapts examples/easygl_spritebatch_scale_test.cpp's own scene verbatim --
 // verifies SpriteBatch::Draw(texture, position, sourceRectangle, color, rotation, origin, scale,
 // effects, layerDepth) -- both the scalar float and Vector2 scale overloads -- actually resize
 // the drawn sprite's on-screen destination rectangle by the given factor(s) relative to the

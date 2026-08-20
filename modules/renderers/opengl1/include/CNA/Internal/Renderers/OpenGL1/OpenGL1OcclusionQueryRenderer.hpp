@@ -4,7 +4,7 @@
 namespace CNA::Internal::Renderers::OpenGL1
 {
     /**
-     * @brief Real GPU occlusion queries for the OPENGL1 renderer (plan_opengl1.md item 23).
+     * @brief Real GPU occlusion queries for the OPENGL1 renderer (plans/plan_opengl1.md item 23).
      *
      * Backed by `ARB_occlusion_query`/core (>=1.5) -- `glGenQueries`/`glBeginQuery(GL_SAMPLES_
      * PASSED)`/`glEndQuery`/`glGetQueryObjectiv(GL_QUERY_RESULT_AVAILABLE)`/`glGetQueryObjectuiv

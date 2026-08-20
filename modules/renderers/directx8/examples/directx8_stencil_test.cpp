@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx8.md Phase S6: real stencil buffer write-then-test through the full XNA public API
+// plans/plan_dx8.md Phase S6: real stencil buffer write-then-test through the full XNA public API
 // (GraphicsDevice.DepthStencilState), proving stencil (unchanged from DIRECTX6, ported verbatim)
 // survives DIRECTX8's removal of the whole viewport object and its texture-binding simplification.
 // Mirrors the DX8-0 spike's own Test E/F shape (dx8-spike/dx8_spike1_flattened_device.cpp), but

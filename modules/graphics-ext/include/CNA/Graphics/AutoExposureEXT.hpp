@@ -24,7 +24,7 @@ namespace CNA::Graphics {
     /**
      * @brief Measures a frame's average luminance on the GPU and turns it into an exposure.
      *
-     * plan_modern.md `MOD-1552`, revisiting `MOD-308`. Auto-exposure was out of scope for the
+     * plans/plan_modern.md `MOD-1552`, revisiting `MOD-308`. Auto-exposure was out of scope for the
      * tonemapping phase for one concrete reason -- it needs a reduction over the whole frame, which
      * is a compute problem rather than a tonemapping one. Phase 15 gave CNA compute, so this is
      * that reduction and the small amount of control theory around it.

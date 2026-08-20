@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-175: the committed opposite-TANGENT.w fixture through the real PBR shader.
+// plans/plan_gltf.md GLTF-175: the committed opposite-TANGENT.w fixture through the real PBR shader.
 //
 // Its constant normal map decodes to tangent-space approximately +Y. With T=+X and N=+Z, the
 // left primitive's w=+1 reconstructs B=+Y and faces a +Y light; the right primitive's w=-1

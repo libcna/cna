@@ -115,7 +115,7 @@ namespace Microsoft::Xna::Framework::Media
          * FNA's "opaque library token" has no real equivalent source on desktop (it historically
          * came from a native Zune/Xbox picture-picker UI); the resolved file path is used as a
          * simple, real, stable token instead so the token API is actually usable end-to-end, not
-         * just present (plan_media.md MEDIA-62; no FNA logic to port, see plan §0).
+         * just present (plans/plan_media.md MEDIA-62; no FNA logic to port, see plan §0).
          *
          * @return Token string identifying this picture.
          */

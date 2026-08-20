@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact ShaderEffect (CreateEffectRenderer) proof for the native OpenGL 2.1
+// plans/plan_opengl2.md: pixel-exact ShaderEffect (CreateEffectRenderer) proof for the native OpenGL 2.1
 // graphics renderer -- a user-authored, runtime-compiled GLSL program bypassing every built-in
 // program entirely. GLSL 1.10/1.20 has no `layout(location=N)` qualifier (unlike EasyGL's GLES3
 // shaders), so a custom shader MUST use this renderer's own fixed attribute names (aPosition,

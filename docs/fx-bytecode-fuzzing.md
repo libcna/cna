@@ -1,7 +1,7 @@
 # Fuzzing compiled XNA effect bytecode
 
 A compiled Effect Framework binary is untrusted input handed to a native parser (MojoShader) and
-then read back through a large public reflection surface. `plan_fx.md` FX-051 therefore requires a
+then read back through a large public reflection surface. `plans/plan_fx.md` FX-051 therefore requires a
 fuzz entry point that covers the whole surface, not only the constructor.
 
 ## What is covered
@@ -172,7 +172,7 @@ asserted and then dereferenced -- was found earlier by the deterministic in-buil
 
 ## What "clean" has to mean
 
-Fuzzing cannot prove absence, so the gate needs a number rather than a feeling. For `plan_fx.md`
+Fuzzing cannot prove absence, so the gate needs a number rather than a feeling. For `plans/plan_fx.md`
 FX-051 the bar is:
 
 - **one million coverage-guided executions on each FNA3D driver** CNA can select at runtime

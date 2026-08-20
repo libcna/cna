@@ -6,7 +6,7 @@ The Stub renderer is a **deliberately minimal no-op graphics renderer**, verifie
 `Stub_Smoke` CTest passes 7/7 checks, and the full `CnaTests` corpus passes 5413/5423 (4
 hardware-sensor skips; 6 known failures — 5 inherent to `Texture3D`/`TextureCube`/custom-`Effect`
 needing a real renderer this one deliberately doesn't provide, 1 a pre-existing `EASYGL`-only test
-unrelated to this renderer; see `plan_stub.md` for the full breakdown). Select it with:
+unrelated to this renderer; see `plans/plan_stub.md` for the full breakdown). Select it with:
 
 ```bash
 cmake -S . -B cmake-build-stub \
@@ -48,7 +48,7 @@ bookkeeping"), not this renderer — see `docs/headless-renderer.md`.
 Named `Stub`, not `Null` — `NULL` is a `<cstddef>`/`<cstdlib>` macro (`0`/`nullptr` depending on
 context), so a bare `CNA_GRAPHICS_RENDERER=NULL`/`NullGraphicsRenderer` name risks silent macro
 substitution (e.g. in a `#if CNA_GRAPHICS_RENDERER == NULL` comparison) on top of just reading
-oddly. See `plan_stub.md`'s own "Naming" section for the full rationale.
+oddly. See `plans/plan_stub.md`'s own "Naming" section for the full rationale.
 
 ## Writing a Stub test
 
@@ -100,4 +100,4 @@ class MyStubTest : public Game
   that matrix's pixel/behavior rows are meaningful for this renderer, the same reasoning that
   already excludes `HEADLESS`.
 
-See `plan_stub.md` for the full design rationale.
+See `plans/plan_stub.md` for the full design rationale.

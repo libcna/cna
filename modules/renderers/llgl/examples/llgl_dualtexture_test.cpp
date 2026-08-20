@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-25 follow-up: DualTextureEffect, the first of the four still-open BasicEffect-
+// plans/plan_llgl.md LLGL-25 follow-up: DualTextureEffect, the first of the four still-open BasicEffect-
 // family stock effects to land on the LLGL renderer.
 //
 // Reuses the plain textured/colored_textured vertex shader as-is: DualTextureEffect samples its

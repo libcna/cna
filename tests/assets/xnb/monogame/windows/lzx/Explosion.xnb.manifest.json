@@ -20,5 +20,5 @@
     "mipLevelCount": 1,
     "level0ByteCount": 16384
   },
-  "notes": "Despite the folder name ('SoundTest') and filename ('Explosion'), this fixture's root type-reader is Texture2DReader, not SoundEffectReader -- confirmed by direct inspection, not assumption from the path (likely an explosion sprite/animation texture used by that sample). Single-block LZX payload (decompresses to under 32KB). Used by plan_xnb.md XNB-28/29/30B as the first real, externally-produced *compressed* .xnb fixture."
+  "notes": "Despite the folder name ('SoundTest') and filename ('Explosion'), this fixture's root type-reader is Texture2DReader, not SoundEffectReader -- confirmed by direct inspection, not assumption from the path (likely an explosion sprite/animation texture used by that sample). Single-block LZX payload (decompresses to under 32KB). Used by plans/plan_xnb.md XNB-28/29/30B as the first real, externally-produced *compressed* .xnb fixture."
 }

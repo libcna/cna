@@ -3,14 +3,14 @@
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
-// plan_dx5.md: real DirectX 5 graphics renderer -- DirectDraw v4 (IDirectDraw4/
+// plans/plan_dx5.md: real DirectX 5 graphics renderer -- DirectDraw v4 (IDirectDraw4/
 // IDirectDrawSurface4/DDSURFACEDESC2/DDSCAPS2) + Direct3D v3 (IDirect3D3/IDirect3DDevice3/
 // IDirect3DViewport3), the first DirectX release where execute buffers disappear entirely
 // (DrawPrimitive/DrawIndexedPrimitive, now selected via a DWORD FVF bitmask -- D3DFVF_TLVERTEX --
-// instead of the old D3DVERTEXTYPE enum, plan_dx5.md design decision 4). <ddraw.h> (and the real
+// instead of the old D3DVERTEXTYPE enum, plans/plan_dx5.md design decision 4). <ddraw.h> (and the real
 // <windows.h> it pulls in) is contained to this .cpp only -- see DirectX5Renderer.hpp's own
-// comment. This file's 2D layer is a mechanical port of DIRECTX3's own (plan_dx3.md, itself a port of
-// DIRECTX2's, plan_dx2.md), upgraded further: EVERY surface is v4 here (plan_dx5.md design decision 2),
+// comment. This file's 2D layer is a mechanical port of DIRECTX3's own (plans/plan_dx3.md, itself a port of
+// DIRECTX2's, plans/plan_dx2.md), upgraded further: EVERY surface is v4 here (plans/plan_dx5.md design decision 2),
 // not just the top DirectDraw object the way DIRECTX3 upgraded -- IDirectDraw4/IDirectDrawSurface4/
 // DDSURFACEDESC2/DDSCAPS2 only, never IDirectDraw7+/IDirectDrawSurface[23567]+. <d3d.h>/
 // IDirect3D3/IDirect3DDevice3 are not forbidden -- this renderer's 3D layer (a port of DIRECTX3's own
@@ -18,7 +18,7 @@
 // parameter) is built on them -- only the literal execute-buffer surface
 // (IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DOP_*/the un-versioned
 // IDirect3D/IDirect3DDevice) is permanently forbidden, asserted by the DirectX5_ExecuteBufferDiscipline
-// CTest (scripts/check-directx5-execute-buffer-discipline.sh, plan_dx5.md design decision 12).
+// CTest (scripts/check-directx5-execute-buffer-discipline.sh, plans/plan_dx5.md design decision 12).
 #include <ddraw.h>
 #include <d3d.h>
 
@@ -217,7 +217,7 @@ namespace CNA::Internal::Renderers::DirectX5
         // Fills the full (width, height) extent of `surface` with a solid RGBA8 color via
         // Lock()/Unlock() (not DDBLT_COLORFILL -- writing all 4 channels directly avoids relying on
         // whatever a given ddraw.dll implementation's ColorFill does with the alpha channel,
-        // matching DIRECTX3's own found-and-fixed lesson (plan_freedirect.md DX3-14) proactively instead of
+        // matching DIRECTX3's own found-and-fixed lesson (plans/plan_freedirect.md DX3-14) proactively instead of
         // re-discovering the same class of bug here). Writes into g_layout's real native byte
         // positions, not fixed (R,G,B,A) positions -- see DetectChannelLayout's own comment.
         void FillSurfaceColor(LPDIRECTDRAWSURFACE4 surface, int width, int height,
@@ -254,7 +254,7 @@ namespace CNA::Internal::Renderers::DirectX5
         // physical drawable size in the current surface snapshot, shared by Present() (the on-screen Blt
         // destination) and TransformWindowToLogical/TransformLogicalToWindow, so those three are
         // always mutually consistent and a resize/SetVirtualResolution change is correct on the
-        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plan_freedirect.md DX3-16).
+        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plans/plan_freedirect.md DX3-16).
         bool ComputeLetterbox(const PlatformRendererSurfaceState& surface,
                               int logicalWidth, int logicalHeight,
                               float& scale, float& offsetX, float& offsetY)
@@ -275,7 +275,7 @@ namespace CNA::Internal::Renderers::DirectX5
         // ---- Phase O4: CPU 2D compositor (design decision 5) ----
         // IDirectDrawSurface::Blt/BltFast has never supported rotation in any DirectX version, so
         // every DirectDraw-family CNA renderer needs this same architecture -- ported verbatim from
-        // DIRECTX3's own already-verified CompositeQuad (plan_dx1.md design decision 5), not re-derived.
+        // DIRECTX3's own already-verified CompositeQuad (plans/plan_dx1.md design decision 5), not re-derived.
 
         // Signed area of triangle (a, b, c) -- also the raw (un-normalized) edge function used by
         // BarycentricWeights below. Positive/negative depending on winding; consistent use of the
@@ -680,7 +680,7 @@ namespace CNA::Internal::Renderers::DirectX5
         PlatformRendererSurfaceState surface;
         HWND hwnd = nullptr;
 
-        // plan_dx5.md design decision 2: IDirectDraw4, not v1 -- upgraded via QueryInterface
+        // plans/plan_dx5.md design decision 2: IDirectDraw4, not v1 -- upgraded via QueryInterface
         // immediately after DirectDrawCreate() (see the constructor); every other DirectDraw call
         // this renderer makes, and every surface it creates, goes through v4 from here on
         // (LPDIRECTDRAWSURFACE4/DDSURFACEDESC2/DDSCAPS2 throughout), spike-confirmed (DX5-0a) to
@@ -695,7 +695,7 @@ namespace CNA::Internal::Renderers::DirectX5
         // logical/virtual resolution, that Clear() and SpriteBatch draws always composite into.
         LPDIRECTDRAWSURFACE4 backBuffer = nullptr;
 
-        // Phase O3 (plan_dx2.md design decisions 3/5): the real Direct3D v2 device, built directly
+        // Phase O3 (plans/plan_dx2.md design decisions 3/5): the real Direct3D v2 device, built directly
         // on the shadow backbuffer (design decision 4's DDSCAPS_3DDEVICE flag). d3d3 only needs `dd`
         // and is created once, reused across backbuffer resizes; zbuffer/device3/viewport3 are all
         // tied to the specific backBuffer surface instance and must be torn down and recreated
@@ -791,7 +791,7 @@ namespace CNA::Internal::Renderers::DirectX5
                 if (FAILED(hr)) ThrowHr("IDirectDraw4::QueryInterface(IID_IDirect3D3)", hr);
             }
 
-            // plan_dx5.md design decision 2: DDSURFACEDESC2 dropped the old top-level
+            // plans/plan_dx5.md design decision 2: DDSURFACEDESC2 dropped the old top-level
             // dwZBufferBitDepth/DDSD_ZBUFFERBITDEPTH entirely -- v4 describes Z-buffer depth via
             // ddpfPixelFormat's DDPF_ZBUFFER flag + dwZBufferBitDepth instead (spike-confirmed,
             // DX5-0a's own follow-up finding while building this exact surface).
@@ -809,7 +809,7 @@ namespace CNA::Internal::Renderers::DirectX5
             hr = backBuffer->AddAttachedSurface(zbuffer);
             if (FAILED(hr)) ThrowHr("IDirectDrawSurface4::AddAttachedSurface(z-buffer)", hr);
 
-            // plan_dx5.md design decision 3: IDirect3D3::CreateDevice takes an extra trailing
+            // plans/plan_dx5.md design decision 3: IDirect3D3::CreateDevice takes an extra trailing
             // IUnknown* outer parameter vs IDirect3D2::CreateDevice -- spike-confirmed (DX5-0b)
             // that nullptr is sufficient here, same as every other CNA renderer's COM aggregation.
             hr = d3d3->CreateDevice(IID_IDirect3DRGBDevice, backBuffer, &device3, nullptr);
@@ -868,7 +868,7 @@ namespace CNA::Internal::Renderers::DirectX5
         // Unlike DIRECTX3's own CreateSurfaces (which also recreated the primary via SetDisplayMode
         // every time), the primary here never changes size or needs recreation -- design decision
         // 4 -- so SetVirtualResolution only ever touches this shadow buffer.
-        // plan_dx2.md design decision 4: unlike DIRECTX1's plain DDSCAPS_OFFSCREENPLAIN, this ONE
+        // plans/plan_dx2.md design decision 4: unlike DIRECTX1's plain DDSCAPS_OFFSCREENPLAIN, this ONE
         // surface (the shadow backbuffer that Clear()/Present()/the default backbuffer all use) is
         // also flagged DDSCAPS_3DDEVICE, so a later phase (O3) can attach a DDSCAPS_ZBUFFER surface
         // and create a real Direct3D device against it -- 2D SpriteBatch draws and 3D
@@ -906,7 +906,7 @@ namespace CNA::Internal::Renderers::DirectX5
             throw std::runtime_error("DirectX5Renderer requires a Win32 native window.");
         impl_->hwnd = static_cast<HWND>(nativeWindow.hwnd);
 
-        // plan_dx5.md design decision 2, spike-confirmed (DX5-0a): DirectDrawCreate only ever
+        // plans/plan_dx5.md design decision 2, spike-confirmed (DX5-0a): DirectDrawCreate only ever
         // hands back a v1 IDirectDraw object -- this renderer immediately upgrades it to
         // IDirectDraw4 via QueryInterface and releases the v1 pointer, using the v4 object (and,
         // from here on, v4 surfaces -- LPDIRECTDRAWSURFACE4/DDSURFACEDESC2 throughout, unlike
@@ -1143,12 +1143,12 @@ namespace CNA::Internal::Renderers::DirectX5
     // premultiplied by invW the way Software's RasterVertex is -- real Direct3D's rasterizer
     // already performs perspective-correct attribute interpolation internally via rhw, so
     // premultiplying here would double-apply the correction (a load-bearing distinction found and
-    // documented before this code was written, see plan_dx2.md design decision 6).
+    // documented before this code was written, see plans/plan_dx2.md design decision 6).
 
     /// One vertex in clip space (before the perspective divide), matching
     /// SoftwareRenderer.cpp's own ClipVertex (position + un-premultiplied color/uv only --
     /// no world-space position/normal, unlike Software's, since envMap/skinning are out of scope).
-    /// `sr`/`sg`/`sb` (Phase O9, plan_dx2.md design decision 13): the specular highlight
+    /// `sr`/`sg`/`sb` (Phase O9, plans/plan_dx2.md design decision 13): the specular highlight
     /// contribution, additive, packed into D3DTLVERTEX::specular and composited by real
     /// D3DRENDERSTATE_SPECULARENABLE hardware AFTER the texture-modulate stage -- zero for every
     /// draw except a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx (stride 32/52, lightingEnabled).
@@ -1232,7 +1232,7 @@ namespace CNA::Internal::Renderers::DirectX5
         float specR = 0.0f, specG = 0.0f, specB = 0.0f;
     };
 
-    /// CPU-side BasicEffect-style per-vertex lighting (Phase O9, plan_dx2.md design decision 13):
+    /// CPU-side BasicEffect-style per-vertex lighting (Phase O9, plans/plan_dx2.md design decision 13):
     /// ambient + up to 3 directional lights, Lambertian diffuse + Blinn-Phong specular. Ported
     /// from EasyGLRenderer.cpp's EnsureLit3DVertexLitProgram() GLSL (CNA's default
     /// per-vertex-lit path -- BasicEffect::preferPerPixelLighting_ defaults to false, matching
@@ -1368,7 +1368,7 @@ namespace CNA::Internal::Renderers::DirectX5
 
     /// Perspective-divides the POSITION ONLY and maps into a real D3DTLVERTEX ready for
     /// DrawPrimitive/DrawIndexedPrimitive. Deliberately does NOT premultiply color/uv by invW --
-    /// see this section's own header comment and plan_dx2.md design decision 6 for why.
+    /// see this section's own header comment and plans/plan_dx2.md design decision 6 for why.
     D3DTLVERTEX DirectX5ClipVertexToD3DTLVERTEX(const DirectX5ClipVertex& cv, int viewportWidth, int viewportHeight)
     {
         const float invW = 1.0f / cv.w;
@@ -1408,7 +1408,7 @@ namespace CNA::Internal::Renderers::DirectX5
     /// backbuffer is resized (Create3DDevice) -- caching would need explicit invalidation on
     /// resize for no real benefit, since QueryInterface+GetHandle is a cheap COM call.
     ///
-    /// plan_dx5.md design decision 6: IDirect3DTexture2::GetHandle never gained an
+    /// plans/plan_dx5.md design decision 6: IDirect3DTexture2::GetHandle never gained an
     /// IDirect3DDevice3 overload -- it only ever accepts an IDirect3DDevice2*. Spike-confirmed
     /// (DX5-0f) that QueryInterface(IID_IDirect3DDevice2) on the real device3 object returns a
     /// valid, usable view for exactly this call (real historical COM aggregation), so a temporary
@@ -1450,7 +1450,7 @@ namespace CNA::Internal::Renderers::DirectX5
     /// order (i in [0, primitiveCount*3)); the caller supplies whichever stride/index-buffer
     /// resolution its own entry point needs. `texHandle` is applied via
     /// D3DRENDERSTATE_TEXTUREHANDLE every call (0 = no texture) since it is a per-draw state,
-    /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plan_dx2.md design decision 6).
+    /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plans/plan_dx2.md design decision 6).
     /// `specularEnabled` (Phase O9, design decision 13): sets D3DRENDERSTATE_SPECULARENABLE per
     /// draw -- true only for a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx call, spike-confirmed
     /// (dx2_spike10) to genuinely composite D3DTLVERTEX::specular additively after the
@@ -1954,7 +1954,7 @@ namespace CNA::Internal::Renderers::DirectX5
         impl_->device3->SetRenderState(D3DRENDERSTATE_ANISOTROPY, static_cast<DWORD>(maxAnisotropy));
     }
 
-    // plan_dx5.md design decision 5: color still goes through the same ActiveSurface() 2D
+    // plans/plan_dx5.md design decision 5: color still goes through the same ActiveSurface() 2D
     // Lock()+fill path Clear(r,g,b,a) always uses (unchanged -- a custom bound RenderTarget2D has
     // no Direct3D device/viewport of its own to Clear2 against, decision 4); only the depth
     // portion (ClearDepth, below) uses the new real IDirect3DViewport3::Clear2 call, since only the
@@ -1965,7 +1965,7 @@ namespace CNA::Internal::Renderers::DirectX5
         ClearDepth(depth);
     }
 
-    // plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DIRECTX2/DIRECTX3's
+    // plans/plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DIRECTX2/DIRECTX3's
     // manual Z-buffer Lock()-and-write-raw-values workaround (that workaround existed only because
     // IDirect3DViewport(2)::Clear() has no depth-value parameter at all -- Clear2, new at this
     // DirectX era, does). Spike-confirmed (DX5-0g) gotcha, must not be reintroduced: Clear2's
@@ -2189,7 +2189,7 @@ namespace CNA::Internal::Renderers::DirectX5
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_DIRECTX5
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX5 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

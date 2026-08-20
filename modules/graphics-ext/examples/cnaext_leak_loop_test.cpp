@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-743: 1000 frames and 50 resizes, for a leak checker to watch.
+// plans/plan_modern.md MOD-743: 1000 frames and 50 resizes, for a leak checker to watch.
 //
 // A pipeline that leaks one target per frame looks perfectly correct for the length of any other
 // test in this repository -- the frames render, the assertions pass, and the process exits before

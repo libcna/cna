@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengles1.md OPENGLES1-79: runtime coverage for OPENGLES1-29 (SetViewport/SetScissorRect)
+// plans/plan_opengles1.md OPENGLES1-79: runtime coverage for OPENGLES1-29 (SetViewport/SetScissorRect)
 // through the real fixed-function ES 1.1 pipeline, asserted with GetBackBufferData() readback.
 //
 // Both features are tested the same way: a quad covering the whole of NDC space is drawn, and the

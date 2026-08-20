@@ -4440,7 +4440,7 @@ layout(location = 7) in vec2 texCoord1;
 #endif
 layout(location = 3) in vec3 normal;
 layout(location = 6) in vec4 tangent;
-// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
 // colour. Location 1 is this renderer's colour slot -- the same one the pipeline used to strip
 // from every PBR shader's attribute list. Declared only for the variants whose vertex format
 // supplies it (strides 60 and 80); the others pass opaque white, the multiplier's identity.
@@ -4688,7 +4688,7 @@ layout(location = 7) in vec2 texCoord1;
 #endif
 layout(location = 3) in vec3 normal;
 layout(location = 6) in vec4 tangent;
-// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
 // colour. Location 1 is this renderer's colour slot -- the same one the pipeline used to strip
 // from every PBR shader's attribute list. Declared only for the variants whose vertex format
 // supplies it (strides 60 and 80); the others pass opaque white, the multiplier's identity.
@@ -5500,7 +5500,7 @@ void main()
 {
     vec4 baseColorTex = texture(colorMap, cnaPbrTransformUV(cnaPbrUv(0), 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), ambientColorPad.w);
-    // plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
+    // plans/plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
     // half is where a BLEND-mode vertex-coloured primitive's transparency comes from. specularState.z
     // is the effect's own VertexColorEnabledEXT, and the variants without a colour attribute pass
     // opaque white anyway, so this is inert for them either way.
@@ -5890,7 +5890,7 @@ layout(location = 3) in vec3  normal;
 layout(location = 4) in vec4  aBoneWeights;
 layout(location = 5) in uvec4 aBoneIndices;
 layout(location = 6) in vec4  tangent;
-// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
 // colour. Location 1 is this renderer's colour slot -- the same one the pipeline used to strip
 // from every PBR shader's attribute list. Declared only for the variants whose vertex format
 // supplies it (strides 60 and 80); the others pass opaque white, the multiplier's identity.
@@ -6291,7 +6291,7 @@ layout(location = 3) in vec3  normal;
 layout(location = 4) in vec4  aBoneWeights;
 layout(location = 5) in uvec4 aBoneIndices;
 layout(location = 6) in vec4  tangent;
-// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
 // colour. Location 1 is this renderer's colour slot -- the same one the pipeline used to strip
 // from every PBR shader's attribute list. Declared only for the variants whose vertex format
 // supplies it (strides 60 and 80); the others pass opaque white, the multiplier's identity.
@@ -6694,7 +6694,7 @@ layout(location = 3) in vec3  normal;
 layout(location = 4) in vec4  aBoneWeights;
 layout(location = 5) in uvec4 aBoneIndices;
 layout(location = 6) in vec4  tangent;
-// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
 // colour. Location 1 is this renderer's colour slot -- the same one the pipeline used to strip
 // from every PBR shader's attribute list. Declared only for the variants whose vertex format
 // supplies it (strides 60 and 80); the others pass opaque white, the multiplier's identity.

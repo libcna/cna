@@ -23,7 +23,7 @@ namespace CNA::Graphics {
     /**
      * @brief Runs `AsciiPostProcessEffect` as a post-process pass.
      *
-     * plan_modern.md `MOD-232`. The one of the three pre-existing CNAEXT effects that `EffectPass`
+     * plans/plan_modern.md `MOD-232`. The one of the three pre-existing CNAEXT effects that `EffectPass`
      * cannot carry, and the reason is worth knowing rather than working around: it is not an
      * `Effect`. It reads the source back to the CPU, quantises it into a glyph grid, and re-uploads
      * the result as one textured quad per cell — a multi-step CPU+GPU pass, not a shader program

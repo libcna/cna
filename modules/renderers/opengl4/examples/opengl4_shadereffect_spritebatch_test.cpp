@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-32: real SpriteBatch::SetCustomEffect integration for the OpenGL4 graphics
+// plans/plan_opengl4.md GL4-32: real SpriteBatch::SetCustomEffect integration for the OpenGL4 graphics
 // renderer -- discovered as a separate, newly-found gap while scoping GL4-30 (custom
 // ShaderEffect/CreateEffectRenderer), not attempted there since it's a separate feature (driving
 // 2D sprite rendering, not 3D DrawIndexedPrimitives). OpenGL4SpriteBatchRenderer previously had no

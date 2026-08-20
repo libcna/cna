@@ -203,7 +203,7 @@ namespace CNA::Internal::Xnb
         GraphicsDevice& device = RequireGraphicsDevice(input, "ModelReader");
         auto res = std::make_shared<ModelReaderOwnedResources>();
 
-        // --- Bone names, transforms, and hierarchy (plan_xnb.md XNB-37) ---
+        // --- Bone names, transforms, and hierarchy (plans/plan_xnb.md XNB-37) ---
         const uint32_t boneCount = input.ReadUInt32();
         if (boneCount > 100000)
         {
@@ -241,7 +241,7 @@ namespace CNA::Internal::Xnb
             }
         }
 
-        // --- Meshes, mesh parts, and shared resources (plan_xnb.md XNB-38/39/40) ---
+        // --- Meshes, mesh parts, and shared resources (plans/plan_xnb.md XNB-38/39/40) ---
         const int32_t meshCount = input.ReadInt32();
         if (meshCount < 0 || meshCount > 100000)
         {

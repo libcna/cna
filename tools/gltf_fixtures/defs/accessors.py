@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""bufferView / accessor fixtures -- owning group ``accessors`` (plan_gltf.md §24.2).
+"""bufferView / accessor fixtures -- owning group ``accessors`` (plans/plan_gltf.md §24.2).
 
 Two of these lock behaviour the forensic audit **verified correct** (`GLTF-041`): interleaving with
 non-zero offsets on both the bufferView and the accessor, and a sparse *attribute* accessor with no

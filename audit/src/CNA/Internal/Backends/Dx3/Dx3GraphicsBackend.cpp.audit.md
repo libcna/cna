@@ -146,7 +146,7 @@ honestly as a correction rather than silently changed.
 1031 lines, proportionate to a genuine CPU 2D compositor with real, distinct per-preset blend math and
 bilinear/point/wrap/mirror/clamp sampling — comparable in scope and quality to the Software backend's rasterizer.
 Comment density and quality matches this audit's other top-tier files (SdlRenderer, Software) — nearly every
-non-trivial decision cites its own design-decision number (`plan_dx3.md`) or task ID (`DX3-NN`) and explains *why*,
+non-trivial decision cites its own design-decision number (`plans/plan_dx3.md`) or task ID (`DX3-NN`) and explains *why*,
 not just *what*.
 
 ### Portability

@@ -34,7 +34,7 @@ reconfigured (virtual resolution, MSAA, swap interval, presentation format) — 
 real XNA's documented Resetting-before/Reset-after contract. `Disposing` fires in `Dispose()` (line
 457). `DeviceLost`/`DeviceResetting`/`DeviceReset` are ALSO wired to a real backend-reported
 device-lifecycle callback (`deviceEventCallback` in `createBackend()`, lines 1461-1475), gated by
-`plan_dx9.md D9-34`'s own honest disclosure that only the D3D9 backend actually calls this callback
+`plans/plan_dx9.md D9-34`'s own honest disclosure that only the D3D9 backend actually calls this callback
 today — every other backend leaves `deviceStatus_` at `Normal` permanently, matching this project's
 policy of not faking a capability no backend can really report.
 
@@ -117,7 +117,7 @@ buffer bound" `Draw*` failure would have caught this immediately.
 - `Reset()`'s own comments correctly identify and fix two previously-missing forwarding paths
   (`PresentationInterval` never reaching `SetSwapInterval`; back-buffer/depth-stencil
   format/fullscreen never reaching the backend) — both real, disclosed, tracked fixes
-  (`plan_dx9.md D9-30`/`D9-33`).
+  (`plans/plan_dx9.md D9-30`/`D9-33`).
 - Where `System::` exceptions ARE used (13 sites), they are used correctly and idiomatically.
 
 ## Final Assessment

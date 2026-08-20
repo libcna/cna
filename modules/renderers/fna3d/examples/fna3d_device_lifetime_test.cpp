@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-39/40: resource lifetime and device-identity regression test.
+// plans/plan_fna3d.md FNA3D-39/40: resource lifetime and device-identity regression test.
 //
 // Unlike Fna3d_Lifetime, this test deliberately destroys the native graphics renderer while
 // every resource wrapper is still alive. It then proves that use is rejected without entering the

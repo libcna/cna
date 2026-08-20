@@ -11,7 +11,7 @@
 //   B = 0
 //
 // This test also happens to re-expose Task 868 (Vulkan's blend state is almost entirely fake —
-// see plan_graphics.md) for real this time, unlike Task 305's NonPremultiplied test, which
+// see plans/plan_graphics.md) for real this time, unlike Task 305's NonPremultiplied test, which
 // coincidentally passed on Vulkan. Task 868's hardcoded equation uses InverseSourceAlpha for the
 // destination factor; at alpha=255 that evaluates to (1 - 1) = 0, meaning the destination would be
 // completely dropped instead of fully added. That gives a WRONG G of ~100 (source only) instead of

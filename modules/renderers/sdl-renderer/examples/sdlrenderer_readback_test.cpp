@@ -7,7 +7,7 @@
 // renderer"), meaning EVERY pixel-verification test written using this project's established
 // methodology (SpriteBatch/BasicEffect draw + GetBackBufferData readback, used by every EasyGL/
 // Vulkan/Bgfx test in this project) was structurally impossible on this renderer. This blocked the
-// entire SDL_Renderer-specific pixel-test audit phase (plan_graphics.md Tasks 666-861) before any
+// entire SDL_Renderer-specific pixel-test audit phase (plans/plan_graphics.md Tasks 666-861) before any
 // of it could even start.
 //
 // Fixed via SDL_RenderReadPixels(). One real subtlety found while implementing it: that function

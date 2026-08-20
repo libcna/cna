@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D42-style pre-construction contract for the NanoVg family.
+// plans/plan_runtimerenderer.md RTR-P1-D42-style pre-construction contract for the NanoVg family.
 //
 // NanoVG's GL2 backend runs on top of a real desktop OpenGL context this renderer creates itself
 // through the platform -- same "own GL context, no EasyGL" shape as OPENGL1/OPENGL2/OPENVG.

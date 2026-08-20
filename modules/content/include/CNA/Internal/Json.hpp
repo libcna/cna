@@ -28,7 +28,7 @@ namespace CNA::Internal
      * @brief A minimal, complete parsed JSON value (object/array/string/number/bool/null).
      *
      * Not a general-purpose JSON library -- just enough of the grammar for CNA's own `.cnj`
-     * content documents (plan_cnj.md CNB-35): correct nesting/depth tracking, correct string
+     * content documents (plans/plan_cnj.md CNB-35): correct nesting/depth tracking, correct string
      * escape decoding (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX` including
      * surrogate pairs), and correct number-token grammar (so `"1abc"` is a parse error, not a
      * silently-truncated `1`). Object member order is preserved; lookups are linear (`.cnj`

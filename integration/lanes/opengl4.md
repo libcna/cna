@@ -117,7 +117,7 @@ SpriteBatch), **hardware instancing**, real WireFrame, per-MRT-slot `ColorWriteC
 (draw-time guard); `MultiSampleMask` beyond all-ones (EasyGL's same documented gap); MSAA change
 after construction (inherited no-op, EasyGL's same limitation); cube faces in a multi-target set
 (throws); MRT depth attachment (EasyGL's same gap); anisotropy without the driver extension
-(truthful `false`); context-loss recovery (owner-deferred in `plan_opengl4.md`, 2026-07-22);
+(truthful `false`); context-loss recovery (owner-deferred in `plans/plan_opengl4.md`, 2026-07-22);
 Windows/macOS validation (environment-blocked, still open in the plan).
 
 ---
@@ -141,7 +141,7 @@ Windows/macOS validation (environment-blocked, still open in the plan).
 - The four omissions are `a81d8638`, `7e402c96`, `fe4a0a01`, `16d0b212` — per-session `NEXT.md`
   status summaries (one explicitly a "session handoff section"). Their content is the session
   narrative policy §2.2/F1 excludes, the campaign's own `NEXT.md` at the head supersedes the
-  file wholesale, and `plan_opengl4.md` carries the lane's technical continuity in full. Seven
+  file wholesale, and `plans/plan_opengl4.md` carries the lane's technical continuity in full. Seven
   replayed feat/docs commits also carried incidental `NEXT.md` hunks; those hunks were resolved
   keep-HEAD under the same reasoning (recorded here, per P5/P6).
 - Two replayed messages were reworded only to remove session-narrative phrasing (`4a4f1769`,
@@ -233,7 +233,7 @@ Unix Makefiles, GCC 14.2.0, ccache ON, `-DCNA_TEST_DISPLAY=:101`. Nothing under 
 - MSAA cube faces with `preserveContents` share one resolve path (EasyGL's pre-REMED-GFX-141
   shape); no current test exercises preserve+MSAA cube faces on this backend. Documented, not
   silent.
-- Windows/macOS validation remains environment-blocked (`plan_opengl4.md` remaining work).
+- Windows/macOS validation remains environment-blocked (`plans/plan_opengl4.md` remaining work).
 
 **New findings: none.** Nothing found in this lane is an independent production defect. The
 inherited capability default (§4) is adaptation fallout from a grown enum — the same class the

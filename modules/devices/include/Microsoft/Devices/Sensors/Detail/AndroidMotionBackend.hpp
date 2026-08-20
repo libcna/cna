@@ -157,7 +157,7 @@ namespace Microsoft::Devices::Sensors::Detail
          * Satisfies the required work's "expose counters" bullet for the
          * drop path that already existed (`MOTION-007`) before this task —
          * see this class's own `.cpp` `PublishReading()` and
-         * `plan_devices.md`'s `MOT2-003` resolution note for what this task
+         * `plans/plan_devices.md`'s `MOT2-003` resolution note for what this task
          * does and, just as importantly, does *not* yet implement (bounded
          * per-source sample queues and nearest/interpolated selection
          * within a tight, hardware-measured skew — deliberately deferred as

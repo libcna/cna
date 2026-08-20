@@ -38,12 +38,12 @@ any point. That makes it useful for:
 - **Cross-renderer diagnostics**: comparing a real GPU renderer's output against this renderer's
   independently-implemented rasterizer can help localize whether a rendering bug is in shared
   code, a specific GPU renderer, or expected-but-undocumented behavior (see "Cross-renderer
-  diagnostic" below, `plan_software.md` `SOFTWARE-61`/`SOFTWARE-84`).
+  diagnostic" below, `plans/plan_software.md` `SOFTWARE-61`/`SOFTWARE-84`).
 
 **What it proves:** "this triangle, with this effect state, this texture, and this blend mode,
 produces these exact pixels" — a real, independently-derived rendering result, not a fake one.
 **What it is not:** a real-time gameplay renderer. There is no SIMD, no multithreading, no
-tiling/binning — correctness and determinism are the goals, not speed (see `plan_software.md`
+tiling/binning — correctness and determinism are the goals, not speed (see `plans/plan_software.md`
 design decision 1).
 
 ## Writing a Software test
@@ -84,7 +84,7 @@ A reminder that both real games and this renderer's own tests need to remember: 
 `VertexColorEnabled` defaults to `false` in real XNA/FNA — a plain `BasicEffect` with no explicit
 opt-in ignores vertex colors entirely (this renderer faithfully reproduces that, and it's exactly
 what caused `Software_Rasterizer`'s tests to briefly fail while `DrawPrimitivesEx` was first wired
-up — see `plan_software.md` `SOFTWARE-50`'s notes for the full story).
+up — see `plans/plan_software.md` `SOFTWARE-50`'s notes for the full story).
 
 ## Cross-renderer diagnostic (SOFTWARE-61/84)
 
@@ -167,7 +167,7 @@ rather than always passing.
 - **Only two blend modes are distinguished**: `Opaque` (exact preset match: `colorSrcBlend=One`,
   `colorDstBlend=Zero`) and a single simplified "over" alpha-composite formula for everything else
   (`AlphaBlend`/`NonPremultiplied`/`Additive`-ish presets all get treated the same way). This is a
-  real, deliberate v1 simplification (`plan_software.md` design decision 7), not a full
+  real, deliberate v1 simplification (`plans/plan_software.md` design decision 7), not a full
   blend-equation interpreter.
 - **Bilinear texture sampling always on** (`SOFTWARE-80`) — standard half-texel-offset bilinear
   with clamp-to-edge at the boundaries, but no mipmapping and no real texture address modes
@@ -198,7 +198,7 @@ rather than always passing.
   pixel-shading path will render correctly.
 - **`Present()` is a no-op**; there is no way to visually inspect a Software-rendered frame on
   screen in this renderer's current form. An opt-in "blit the CPU framebuffer to a real window"
-  mode is a reasonable future addition (`plan_software.md` design decision 3) but isn't needed for
+  mode is a reasonable future addition (`plans/plan_software.md` design decision 3) but isn't needed for
   this renderer's actual value proposition (deterministic, GPU-free pixel tests).
 
-See `plan_software.md` for the full task-by-task status and design rationale.
+See `plans/plan_software.md` for the full task-by-task status and design rationale.

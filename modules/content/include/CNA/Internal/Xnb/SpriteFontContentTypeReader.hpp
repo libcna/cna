@@ -5,7 +5,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 
-// plan_xnb.md XNB-31: SpriteFontReader -- see PrimitiveContentTypeReaders.hpp's own note on why
+// plans/plan_xnb.md XNB-31: SpriteFontReader -- see PrimitiveContentTypeReaders.hpp's own note on why
 // this lives in CNA::Internal::Xnb (FNA's SpriteFontReader is `internal class`, never subclassed
 // by game code).
 

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12 (DX-106): explicit, deliberate per-resource D3D12_RESOURCE_STATES tracking
+// plans/plan_dx.md Phase DX12 (DX-106): explicit, deliberate per-resource D3D12_RESOURCE_STATES tracking
 // -- the plan's own row calls this "the single biggest source of 'silently wrong' bugs in a first
 // D3D12 renderer" and requires real state tracking, not ad-hoc barrier calls scattered through draw
 // code. This class is the single source of truth for "what state is this ID3D12Resource currently

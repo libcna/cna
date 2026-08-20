@@ -22,7 +22,7 @@ TEST(SongCollectionTest, CountReflectsConstructorArgument)
     EXPECT_FALSE(collection.getIsDisposedProperty());
 }
 
-// plan_media.md MEDIA-12: the indexer now throws System::ArgumentOutOfRangeException, matching
+// plans/plan_media.md MEDIA-12: the indexer now throws System::ArgumentOutOfRangeException, matching
 // the majority project precedent, instead of a bare std::out_of_range.
 TEST(SongCollectionTest, IndexerThrowsArgumentOutOfRangeExceptionWhenOutOfBounds)
 {

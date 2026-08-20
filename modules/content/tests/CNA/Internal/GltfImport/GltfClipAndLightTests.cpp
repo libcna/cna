@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-280 / GLTF-298 / GLTF-305 / GLTF-312 / GLTF-325 / GLTF-328: the clip-level and
+// plans/plan_gltf.md GLTF-280 / GLTF-298 / GLTF-305 / GLTF-312 / GLTF-325 / GLTF-328: the clip-level and
 // light-level rules that survive import.
 //
 // These are the decisions made once per file rather than once per vertex, which is exactly why they

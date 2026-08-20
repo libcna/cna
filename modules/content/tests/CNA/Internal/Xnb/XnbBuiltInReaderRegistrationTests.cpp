@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-46: before RegisterAllBuiltInXnbReaders() existed, no single call site
+// plans/plan_xnb.md XNB-46: before RegisterAllBuiltInXnbReaders() existed, no single call site
 // registered every built-in .xnb ContentTypeReader -- a real game had to discover and call all
 // thirteen individual Register*XnbReader()/RegisterXXXReaders() functions itself. This test proves
 // the umbrella function is both complete (every canonical name Phase A-F/D3 implements ends up
@@ -156,12 +156,12 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 // TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
 // deterministically instead of accepting the data and discarding it. Same constant and same
 // reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
-// plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
+// plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
 // PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
 // either (docs/portablegl-renderer.md).
-// plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
-// renderer rather than the build default. PIXIJS (plan_pixijs.md PIXIJS-71) is in the "no cube
+// plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
+// renderer rather than the build default. PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in the "no cube
 // resource exists" set: no cube override written, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
@@ -207,7 +207,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsASpriteFontFixt
     EXPECT_GT(font.getCharactersProperty().size(), 0u);
 }
 
-// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.

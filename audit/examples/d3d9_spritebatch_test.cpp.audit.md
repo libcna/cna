@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_spritebatch_test.cpp` (486 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note)
 - Subsystem: `examples-tests-d3d9` shard — the real D3D9 `SpriteBatch` backend, tested through the
-  public `SpriteBatch`/`Texture2D` API (`plan_dx9.md` D9-9, D9-90 through D9-93), `Game`-subclass,
+  public `SpriteBatch`/`Texture2D` API (`plans/plan_dx9.md` D9-9, D9-90 through D9-93), `Game`-subclass,
   CTest-registered, real device/window path.
 - XNA/FNA relevance: direct — `SpriteBatch.Draw()` overloads, `SpriteEffects.FlipHorizontally`,
   rotation/origin, `TextureAddressMode.Wrap`/`Mirror`, and `SpriteSortMode.Deferred`/`BackToFront`/

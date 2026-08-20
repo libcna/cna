@@ -30,7 +30,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief The complete identity of one native `SDL_GPUSampler`, as a comparable value. CNAEXT.
      *
-     * plan_fx.md FX-091. This replaces a hand-packed `std::uint64_t` whose 32-bit LOD-bias field
+     * plans/plan_fx.md FX-091. This replaces a hand-packed `std::uint64_t` whose 32-bit LOD-bias field
      * was shifted to bit 40 and therefore lost its top eight bits -- the float's sign and seven of
      * its eight exponent bits -- so `0.0`, `+/-0.5`, `+/-2.0` and `+/-8.0` all produced the same
      * key and were served the same native sampler. Every field a sampler is built from is a named
@@ -438,7 +438,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @brief Real GPU readback of this target's pixels (`SDLGPU-39`) -- reads from the
          * always-single-sample, sampleable color texture (already resolved-into if this target
          * is MSAA), a texture this renderer fully owns, unlike the swapchain -- so it does not hit
-         * the swapchain-download segfault documented in `plan_sdlgpu.md`'s `SDLGPU-39` row.
+         * the swapchain-download segfault documented in `plans/plan_sdlgpu.md`'s `SDLGPU-39` row.
          * Flushes any pending frame first so the read reflects this frame's draws.
          *
          * REMED-GFX-127: returns true only once the downloaded transfer buffer has been copied into
@@ -568,7 +568,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Real GPU readback of one face's pixels (pulled forward from `SDLGPU-39` -- this
          * targets a texture this renderer fully controls, unlike the swapchain-download path that
-         * segfaulted; see that row's notes in `plan_sdlgpu.md`). Flushes any pending frame first so
+         * segfaulted; see that row's notes in `plans/plan_sdlgpu.md`). Flushes any pending frame first so
          * the read reflects this frame's draws, not stale/uninitialized GPU memory.
          */
         /// REMED-GFX-130: true only once the download fence has signalled and the whole requested
@@ -925,7 +925,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records whether this batch is in `SpriteSortMode::Immediate`.
          *
-         * plan_fx.md FX-102: the two modes need different compiled-Effect pass granularity, and
+         * plans/plan_fx.md FX-102: the two modes need different compiled-Effect pass granularity, and
          * XNA's own `SpriteBatch` is where the difference comes from. See @ref End.
          *
          * @param immediate True when `SpriteSortMode::Immediate` is active for this batch.
@@ -962,7 +962,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief One deferred sprite, held until the batch flushes. CNAEXT.
          *
-         * plan_fx.md FX-102. Only a compiled Effect in a non-Immediate batch needs this: XNA runs
+         * plans/plan_fx.md FX-102. Only a compiled Effect in a non-Immediate batch needs this: XNA runs
          * the whole batch once per pass, so the sprites cannot be queued as they arrive.
          */
         struct PendingSpriteEXT
@@ -995,7 +995,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     /**
      * @brief `SDL_gpu`-backed graphics renderer (`CNA_GRAPHICS_RENDERER=SDL_GPU`).
      *
-     * See `plan_sdlgpu.md` for the phased implementation plan. As of Phase `SDLGPU-6`, device/
+     * See `plans/plan_sdlgpu.md` for the phased implementation plan. As of Phase `SDLGPU-6`, device/
      * window/swapchain lifecycle, color+depth+stencil clear/present, `Texture2D`, vertex/index
      * buffers, `SpriteBatch`, and the core 3D vertex formats (`colored3d`/`textured3d`/
      * `colored_textured3d`/`lit_textured3d`, i.e. `BasicEffect`) are real and verified.
@@ -1122,7 +1122,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         {
             Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Skinned, Sprite, Pbr
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-            // plan_fx.md FX-071: guarded like every other compiled-effect member in this header,
+            // plans/plan_fx.md FX-071: guarded like every other compiled-effect member in this header,
             // so a build without the option never declares an enumerator no switch handles.
             , CompiledEffect
 #endif
@@ -1236,12 +1236,12 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
-            /// plan_fx.md FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
+            /// plans/plan_fx.md FX-083: XNA's SamplerState.MaxMipLevel and MipMapLevelOfDetailBias,
             /// recorded by ApplySamplerMipState. Consumed by the compiled-effect draw route, which
             /// is where an Effect's own `sampler_state` block lands.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
-            /// plan_fx.md FX-091: XNA's SamplerState.AddressW, recorded by ApplySamplerAddressW.
+            /// plans/plan_fx.md FX-091: XNA's SamplerState.AddressW, recorded by ApplySamplerAddressW.
             /// This renderer samples 2D textures only, so W never reaches the hardware -- it is
             /// recorded and carried into the sampler key anyway, so the day a volume texture is
             /// sampled here it cannot be handed a sampler built for a different W mode.
@@ -1257,19 +1257,19 @@ namespace CNA::Internal::Renderers::SdlGpu
             int addressU = 0;
             int addressV = 0;
             int maxAnisotropy = 4;
-            /// plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
+            /// plans/plan_fx.md FX-083: the effect's own MaxMipLevel/MipMapLevelOfDetailBias, which
             /// SDL_GPU expresses exactly (min_lod and mip_lod_bias). Before this they were
             /// published on GraphicsDevice.SamplerStates and then dropped on the way to the GPU.
             int maxMipLevel = 0;
             float lodBias = 0.0f;
-            /// plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
+            /// plans/plan_fx.md FX-091: the effect's own AddressW. Carried into the sampler cache key so
             /// two passes differing only in W cannot share one native sampler, even though this
             /// renderer's 2D-only compiled sampling never observes the axis itself.
             int addressW = 1;
         };
 
         /**
-         * @brief plan_fx.md FX-071: everything a compiled-effect draw needs from the applied pass,
+         * @brief plans/plan_fx.md FX-071: everything a compiled-effect draw needs from the applied pass,
          * captured once so an ordinary 3D draw (`QueueCompiledEffectDraw`) and a SpriteBatch draw
          * (`QueueSprite`) share one implementation (`BuildCompiledEffectBindingEXT`) rather than two
          * that could silently drift apart. `vertexShader == nullptr` means "no compiled effect was
@@ -1315,7 +1315,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SdlGpuEffectRenderer* customEffect = nullptr;
             std::array<float, 32> customUniforms{};
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-            // plan_fx.md FX-071: the compiled-effect counterpart of customEffect/customUniforms
+            // plans/plan_fx.md FX-071: the compiled-effect counterpart of customEffect/customUniforms
             // above -- mutually exclusive with them, since one Effect is either ShaderEffect-derived
             // or compiled, never both. compiledEffect.vertexShader == nullptr means "not used",
             // matching customEffect's own not-set convention.
@@ -1629,7 +1629,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
             std::array<float, 72> pbrParams{};          ///< factors plus 14 affine transform rows
             bool skinned = false;
-            /// plan_gltf.md GLTF-462/GLTF-463: the record carries a packed COLOR_0 (stride 60 or 80).
+            /// plans/plan_gltf.md GLTF-462/GLTF-463: the record carries a packed COLOR_0 (stride 60 or 80).
             bool colored = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)
@@ -1660,7 +1660,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         /**
-         * @brief plan_fx.md FX-071: one compiled-effect draw, deferred like every other draw kind.
+         * @brief plans/plan_fx.md FX-071: one compiled-effect draw, deferred like every other draw kind.
          *
          * Unlike the eight stock-shader commands above, this one's shader pair, vertex attribute
          * set and uniform buffer bytes are captured at `Queue*Draw()` time rather than selected
@@ -1726,7 +1726,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         /**
-         * @brief Parses a compiled XNA effect for this device (plan_fx.md FX-061).
+         * @brief Parses a compiled XNA effect for this device (plans/plan_fx.md FX-061).
          * @param effectCode Compiled effect bytes.
          * @param effectCodeBytes Number of bytes at @p effectCode.
          * @return The runtime, or null if MojoShader has no context for this device.
@@ -1736,7 +1736,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         /**
          * @brief True: this renderer executes compiled XNA Effect Framework bytecode
-         * (plan_fx.md FX-071, FX-080/FX-083).
+         * (plans/plan_fx.md FX-071, FX-080/FX-083).
          *
          * Ordinary and indexed 3D draws and SpriteBatch all have a working compiled-effect route,
          * verified by a real (not simulated) golden-pixel test and by the FX-060 shared
@@ -1911,7 +1911,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` for a slot.
          *
-         * plan_fx.md FX-083. SDL_GPU expresses both exactly -- `min_lod` and `mip_lod_bias` on
+         * plans/plan_fx.md FX-083. SDL_GPU expresses both exactly -- `min_lod` and `mip_lod_bias` on
          * `SDL_GPUSamplerCreateInfo`, the same mapping FNA3D's own SDL_GPU driver makes -- and
          * both now participate in the sampler cache key so two slots asking for different LOD
          * clamps do not share one sampler object. The compiled-effect draw route consumes them.
@@ -1926,7 +1926,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         /**
          * @brief Records XNA's `SamplerState.AddressW` for a slot.
          *
-         * plan_fx.md FX-091. This renderer's compiled-effect route resolves 2D textures only, so
+         * plans/plan_fx.md FX-091. This renderer's compiled-effect route resolves 2D textures only, so
          * the third addressing axis is never observable in a sampled result today -- but it IS part
          * of a sampler's identity, and recording it keeps the cache key complete. Overriding the
          * hook also means the device's own W selection is what an unassigned slot reports, instead
@@ -2144,7 +2144,7 @@ namespace CNA::Internal::Renderers::SdlGpu
          * @param maxAnisotropy Public `SamplerState.MaxAnisotropy`, clamped to 1..16; applied only
          *        for `TextureFilter::Anisotropic`, but always part of the cache key.
          * @param family Public draw family, for `CNA_SDLGPU_SAMPLER_TRACE` only.
-         * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plan_fx.md
+         * @param maxMipLevel Public `SamplerState.MaxMipLevel`; becomes `min_lod` (plans/plan_fx.md
          *        FX-083), the same mapping FNA3D's own SDL_GPU driver makes.
          * @param lodBias Public `SamplerState.MipMapLevelOfDetailBias`; becomes `mip_lod_bias`.
          * @param addressW Raw `TextureAddressMode` ordinal for W. SDL_GPU's compiled-effect route
@@ -2293,7 +2293,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                          SDL_GPUGraphicsPipeline*& boundPipeline);
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-071: compiled-effect draw route. Unlike every stock family above, there is
+        // plans/plan_fx.md FX-071: compiled-effect draw route. Unlike every stock family above, there is
         // no fixed shader/pipeline table -- the pipeline is keyed on the applied pass's own linked
         // shader pair, vertex layout and render state, all captured at queue time (see
         // CompiledEffectDrawCommand's own doc comment for why).
@@ -2565,7 +2565,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // into the swapchain texture, and one SDL_BlitGPUTexture(proxy -> swapchain) presents it;
         // ReadBackbuffer then downloads from the proxy through the same transfer-buffer+fence path the
         // render targets already use. Lazily created on the first read, so a game that never reads the
-        // backbuffer pays NOTHING (this resolves plan_sdlgpu.md SDLGPU-39's per-frame-cost objection --
+        // backbuffer pays NOTHING (this resolves plans/plan_sdlgpu.md SDLGPU-39's per-frame-cost objection --
         // the deferred-frame model means the first read happens while the frame is still pending, so
         // the proxy genuinely can be allocated on demand rather than "before every frame's draws").
         SDL_GPUTexture* backbufferProxy_ = nullptr;
@@ -2583,7 +2583,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
         // targeted the swapchain.
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
-        /// REMED-GFX-170 / plan_fx.md FX-091: keyed on the complete sampler description as a
+        /// REMED-GFX-170 / plans/plan_fx.md FX-091: keyed on the complete sampler description as a
         /// struct with member-wise equality, so two states that differ in ANY component get their
         /// own native sampler and no field can be silently truncated out of the key.
         std::unordered_map<SamplerCacheKeyEXT, SDL_GPUSampler*, SamplerCacheKeyHashEXT> samplerCache_;
@@ -2663,7 +2663,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUShader* pbrVertexShader_ = nullptr;
         SDL_GPUShader* pbrSkinnedVertexShader_ = nullptr;
         SDL_GPUShader* pbrFragmentShader_ = nullptr;
-        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: the stride-60/80 twins, which declare the packed
+        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: the stride-60/80 twins, which declare the packed
         // COLOR_0 attribute glTF 3.9.2 makes a multiplier on base colour. Separate shaders rather
         // than a runtime flag because a SPIR-V input with no matching vertex attribute is invalid.
         SDL_GPUShader* pbrColorVertexShader_ = nullptr;
@@ -2683,7 +2683,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::unique_ptr<SdlGpuTextureRenderer> defaultFlatNormalTexture_;
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-071: unlike every stock family's cache above, this one is keyed on a
+        // plans/plan_fx.md FX-071: unlike every stock family's cache above, this one is keyed on a
         // linked shader pair rather than a fixed shader field, since arbitrary compiled effects
         // share it across effect instances (see GetOrCreatePipelineCompiledEffect).
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> compiledEffectPipelines_;

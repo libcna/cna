@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx9.md Phase D9-A (D9-A6): cross-renderer twin of scripts/run-oracle-corpus-diff.sh -- renders
+# plans/plan_dx9.md Phase D9-A (D9-A6): cross-renderer twin of scripts/run-oracle-corpus-diff.sh -- renders
 # every checked-in scene (tools/xna-oracle/scenes/*.scene) through cna_oracle_render_easygl (the SAME
 # tools/xna-oracle/CnaOracleRender.cpp D9-A3 wrote, built natively against the EasyGL renderer by this
 # repo's own CMakeLists.txt EasyGL-tests section) and diffs each result against the checked-in real

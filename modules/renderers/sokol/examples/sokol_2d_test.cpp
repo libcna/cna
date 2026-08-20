@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-17: 2D vertical-slice proof for the sokol_gfx graphics renderer -- a real
+// plans/plan_sokol.md SOKOL-17: 2D vertical-slice proof for the sokol_gfx graphics renderer -- a real
 // Texture2D upload and real SpriteBatch draws, every one of them verified by reading the rendered
 // pixels back off the real back buffer, not just "did not throw".
 //

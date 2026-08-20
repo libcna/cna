@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_headless.md: closes the remainder of HEADLESS-40 (trace log coverage for the last
+// plans/plan_headless.md: closes the remainder of HEADLESS-40 (trace log coverage for the last
 // untraced state-toggle/Clear-variant methods and the two remaining untraced Create* factories)
 // and HEADLESS-43 (trace-log comparison tooling, previously flagged aspirational/unimplemented).
 //

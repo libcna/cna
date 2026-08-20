@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-116 / GLTF-117 / GLTF-119 / GLTF-232: mirroring.
+// plans/plan_gltf.md GLTF-116 / GLTF-117 / GLTF-119 / GLTF-232: mirroring.
 //
 // A mirroring transform is the one placement that changes something a world matrix multiplication
 // does not express. Positions mirror the way any affine transform moves them -- every L4 assertion

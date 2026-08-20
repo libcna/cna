@@ -7,7 +7,7 @@
  * @file
  * @brief Direct3D 9 Effect Framework format constants used to build compiled-effect fixtures.
  *
- * plan_fx.md FX-060: the shared backend conformance suite has to build its own fixtures, and a
+ * plans/plan_fx.md FX-060: the shared backend conformance suite has to build its own fixtures, and a
  * fixture is a byte layout of the legacy Effect Framework format -- not of any particular
  * renderer's parser. These are therefore the format's own values (the `D3DRENDERSTATETYPE`,
  * `D3DSAMPLERSTATETYPE`, `D3DXPARAMETER_*` and related Direct3D 9 enumerations), spelled once here
@@ -52,7 +52,7 @@ namespace CNA::TestSupport::EffectFormat
     /**
      * @brief `D3DSAMPLER_TEXTURE_TYPE`, the sampler dimension a `dcl` names in a pixel shader.
      *
-     * plan_fx.md FX-110. Lives in bits 27..30 of a `dcl` instruction's usage token, and is what
+     * plans/plan_fx.md FX-110. Lives in bits 27..30 of a `dcl` instruction's usage token, and is what
      * makes MojoShader report `MOJOSHADER_SAMPLER_2D`, `_CUBE` or `_VOLUME` for a reflected
      * sampler -- the fact a renderer has to check the bound texture's kind against.
      */

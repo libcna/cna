@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx1.md Phase O7 (DX1-68): TransformWindowToLogical/TransformLogicalToWindow (real
+// plans/plan_dx1.md Phase O7 (DX1-68): TransformWindowToLogical/TransformLogicalToWindow (real
 // letterbox scale+offset) tests for the DIRECTX1 (real DirectDraw v1, run under Wine -- no
 // ../free-direct anywhere in this renderer) graphics renderer.
 //

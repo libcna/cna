@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-37: SkinnedEffect.VertexColorEnabled (CNAEXT extension property, CNB-66/67) --
+// plans/plan_llgl.md LLGL-37: SkinnedEffect.VertexColorEnabled (CNAEXT extension property, CNB-66/67) --
 // proves the stride-56 skinned+Color vertex layout's colour attribute (skinned3d_color.vert/frag.glsl,
 // selected instead of skinned3d.vert/frag.glsl only when the bound layout carries one -- see
 // AcquirePrimitiveSkinnedVertexShader()'s own doc comment) is actually read and correctly gated by

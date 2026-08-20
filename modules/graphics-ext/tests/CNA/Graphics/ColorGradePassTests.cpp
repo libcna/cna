@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2020, MOD-2021: colour grading through a 3D lookup table.
+// plans/plan_modern.md MOD-2020, MOD-2021: colour grading through a 3D lookup table.
 //
 // The test that matters most is the dullest one: an identity table must reproduce the frame
 // exactly. A strip lookup is all off-by-half-a-texel arithmetic, and every mistake in it produces

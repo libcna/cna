@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_metal.md Phase 14 (METAL-142-152): SpriteBatch::Begin(effect) wiring, real runtime-compiled
+// plans/plan_metal.md Phase 14 (METAL-142-152): SpriteBatch::Begin(effect) wiring, real runtime-compiled
 // MSL. Mirrors D3D9's own directx9_spritebatch_customeffect_test.cpp exactly (same 4 checks, same
 // deliberate RGB-inversion methodology), adapted to Metal's own fixed vertex/uniform contract (see
 // docs/metal-shader-effect-contract.md and MetalEffectRenderer's own header comment in
@@ -119,7 +119,7 @@ protected:
         check(invertEffect.IsEffectValid(),
               "ShaderEffect (Metal): a runtime-compiled custom MSL vertex+fragment pair for "
               "SpriteBatch's own fixed Sprite2D-shaped vertex contract compiles successfully "
-              "(plan_metal.md METAL-144)");
+              "(plans/plan_metal.md METAL-144)");
         invertEffect.SetUniformVec4(nullptr, 1.0f, 1.0f, 1.0f, 1.0f);
 
         Texture2D tex(dev, 1, 1);

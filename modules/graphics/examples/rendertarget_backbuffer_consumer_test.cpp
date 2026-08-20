@@ -154,7 +154,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
 #elif defined(CNA_RENDERER_SOKOL)
-    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `SokolRenderTargetRenderer`
+    // plans/plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `SokolRenderTargetRenderer`
     // now overrides `ITextureRenderer::GetData` via a throwaway GL FBO around the raw texture handle
     // `sg_gl_query_image_info()` exposes -- `RequireReadable`'s direct `ReadWholeTarget` (a
     // RenderTarget2D::GetData) round-trips real content, so `kRasterizes = true` is accurate.
@@ -1183,7 +1183,7 @@ class RenderTargetBackbufferConsumerTest : public Game
 
         // J2: mipmapped producer, sampled at level 0. Whether a renderer supports a mipmapped render
         // target AT ALL is measured, not assumed: WebGPU documents the chain regeneration
-        // unimplemented (plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not
+        // unimplemented (plans/plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not
         // an ordering result.
         {
             std::unique_ptr<RenderTarget2D> owner;

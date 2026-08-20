@@ -112,7 +112,7 @@ None at HIGH or above. See Missing or Weak Tests below for the one real coverage
   confirmed skinned-effect world-space-normal-transform bug (`WebGPUGraphicsBackend.cpp`'s
   `CreateSkinnedResources()`) does not apply here. `AlphaTestEffect` has no fog support surfaced in
   this backend either way (`CreateAlphaTestResources()`'s shader has no fog term at all,
-  matching `plan_webgpu.md`'s explicit, tracked "no fog, same deliberate deferral as every other
+  matching `plans/plan_webgpu.md`'s explicit, tracked "no fog, same deliberate deferral as every other
   [WebGPU 3D] shader" statement for `alpha_test3d.wgsl` specifically) — not a hidden regression,
   a documented scope boundary, and this file makes no claim about fog either way.
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // AsciiPostProcessEffect pixel oracle -- successor to the former ASCII graphics renderer's own
-// Ascii_Present ctest (plan_ascii.md Phase G5), rewritten against the renderer-neutral
+// Ascii_Present ctest (plans/plan_ascii.md Phase G5), rewritten against the renderer-neutral
 // post-process effect's public API instead of a renderer-internal testing hook.
 //
 // Renders a known solid-gray scene into an offscreen RenderTarget2D (proving the effect's source

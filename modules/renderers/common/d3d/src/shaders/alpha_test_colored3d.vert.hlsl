@@ -1,7 +1,7 @@
 // Shader Model 5.0 (vs_5_0). Sibling of alpha_test3d.vert.hlsl (stride 20, Position+UV only) for
 // stride-24 draws (VertexPositionColorTexture) -- AlphaTestEffect.VertexColorEnabled needs a real
 // vertex-color attribute to multiply against, which the plain alpha_test3d variant deliberately
-// doesn't carry (plan_dx.md DX-136). Mixes vertex color and diffuse exactly like
+// doesn't carry (plans/plan_dx.md DX-136). Mixes vertex color and diffuse exactly like
 // colored_textured3d.vert.hlsl's own established VertexColorEnabled pattern; the pixel shader
 // (alpha_test_colored3d.frag.hlsl) is otherwise identical to alpha_test3d.frag.hlsl's alpha-test
 // logic, since it only reads the already-combined Tint, not the vertex color directly.

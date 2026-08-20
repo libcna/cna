@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 1103 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): SkinnedEffect pixel test --
+// Task 1103 (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (Vulkan
 // renderer), mirroring the BasicEffect test exactly.
 //

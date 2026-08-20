@@ -40,7 +40,7 @@
 //   backbuffer's own render pass), AND the cube face itself must read back Red.
 // Check E -- CreateRenderTargetCube(mipMap=true) throws a clear exception rather than silently
 //   creating a single-level target while the XNA layer expects a full mip chain (a deliberate,
-//   documented scope cut -- see plan_webgpu.md WEBGPU-114).
+//   documented scope cut -- see plans/plan_webgpu.md WEBGPU-114).
 // Check F -- MultiSampleCount property fidelity: MSAA is not implemented for RenderTargetCube on
 //   this renderer (a deliberate, documented scope cut, separate from RenderTarget2D's own real MSAA
 //   support) -- requesting 4 must still honestly report 0.
@@ -233,7 +233,7 @@ protected:
         // untested because no existing WebGPU test draws INTO an off-screen target via
         // SpriteBatch (webgpu_rendertarget2d_test.cpp's own SpriteBatch check only samples FROM
         // render targets onto the backbuffer). Left unfixed here as a separate, real, honestly-
-        // reported finding -- see plan_webgpu.md's WEBGPU-114 row.
+        // reported finding -- see plans/plan_webgpu.md's WEBGPU-114 row.
         {
             RenderTargetCube rtc(dev, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None);
             const std::vector<std::uint8_t> white = { 255, 255, 255, 255 };

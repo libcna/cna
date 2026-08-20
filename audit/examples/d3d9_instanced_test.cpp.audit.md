@@ -167,7 +167,7 @@ No CRITICAL/HIGH findings.
   exactly on stream/offset/semantic-index assignment — no drift between the C++ declaration and the
   HLSL source it feeds.
 - `git log --oneline -- examples/d3d9_instanced_test.cpp` shows a single authoring commit
-  (`4636f435 feat(plan_dx9.md): close D9-83 -- real D3D9 hardware instancing via SetStreamSourceFreq`),
+  (`4636f435 feat(plans/plan_dx9.md): close D9-83 -- real D3D9 hardware instancing via SetStreamSourceFreq`),
   consistent with the file's own single-task scope.
 - This file and `d3d9_pbr_test.cpp` independently establish the same `Matrix::Transpose(...)`+
   `ToColumnMajor` "register=column, row-vector-convention" upload idiom for view/projection and

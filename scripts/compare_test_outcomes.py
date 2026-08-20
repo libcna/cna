@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Compare two CnaTests runs by OUTCOME, not by count (plan_runtimerenderer.md RTR-P9-27).
+r"""Compare two CnaTests runs by OUTCOME, not by count (plans/plan_runtimerenderer.md RTR-P9-27).
 
 Usage:
     scripts/compare_test_outcomes.py before.log after.log "label"

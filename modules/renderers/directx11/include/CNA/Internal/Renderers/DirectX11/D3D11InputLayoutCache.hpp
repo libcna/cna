@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX5 (DX-32): wires DX-16-vtx's stride-keyed D3D11_INPUT_ELEMENT_DESC inference
+// plans/plan_dx.md Phase DIRECTX5 (DX-32): wires DX-16-vtx's stride-keyed D3D11_INPUT_ELEMENT_DESC inference
 // (D3DVertexFormatHelper) together with DX-15-embed's per-variant vertex shader bytecode
 // (D3DShaderCache) into real ID3D11InputLayout objects, cached per (shader variant, stride) pair
 // -- CreateInputLayout() is a real, non-trivial device call (it validates the element array

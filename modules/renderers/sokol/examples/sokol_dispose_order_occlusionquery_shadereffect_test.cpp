@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-42: OcclusionQuery and ShaderEffect must release their raw-GL renderer objects
+// plans/plan_sokol.md SOKOL-42: OcclusionQuery and ShaderEffect must release their raw-GL renderer objects
 // during GraphicsDevice::Dispose(), before the renderer device/GL context is torn down.
 //
 // GraphicsDevice::Dispose() disposes every tracked GraphicsResource (calling each one's Dispose())

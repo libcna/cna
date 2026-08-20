@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-33: real hardware instancing (DrawInstancedPrimitivesEx) for the OpenGL4
+// plans/plan_opengl4.md GL4-33: real hardware instancing (DrawInstancedPrimitivesEx) for the OpenGL4
 // graphics renderer -- OpenGL4Renderer previously didn't override DrawInstancedPrimitivesEx
 // at all (inherited IGraphicsRenderer's default, which unconditionally throws
 // std::runtime_error("DrawInstancedPrimitives is not supported on this graphics renderer.")).

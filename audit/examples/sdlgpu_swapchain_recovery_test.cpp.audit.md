@@ -5,7 +5,7 @@
 - Source file: `examples/sdlgpu_swapchain_recovery_test.cpp`
 - Audit status: AUDITED
 - Subsystem: `examples-tests-sdlgpu` shard — hard swapchain-acquisition-failure recovery proof
-  (plan_sdlgpu.md SDLGPU-11)
+  (plans/plan_sdlgpu.md SDLGPU-11)
 - File type: standalone `Game`-subclass executable, CTest-registered
   (`cna_sdlgpu_test(cna_test_sdlgpu_swapchain_recovery …)` /
   `cna_register_backend_test(NAME SdlGpu_SwapchainRecovery …)`,

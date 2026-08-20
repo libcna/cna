@@ -423,7 +423,7 @@ functional native 2D baseline, not yet the 3D/effect parity of the established G
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
 implementation as CNA's fifth graphics backend.
 
-- WebGPU tasks live in **`plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
+- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
   limitations current as implementation proceeds.
 - The native backend uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_BACKEND=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
@@ -450,7 +450,7 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
 
 # Draco — optional, enables KHR_draco_mesh_compression decoding in GltfImportCore
-# (plan_cnj.md CNB-91, Phase 14F). Detected via CMake's find_package(draco CONFIG); when absent,
+# (plans/plan_cnj.md CNB-91, Phase 14F). Detected via CMake's find_package(draco CONFIG); when absent,
 # a Draco-compressed glTF primitive throws a clear "not supported" error at import time instead
 # of failing to build. Not vendored (unlike cgltf.h/stb_image.h) — a real multi-file C++ library,
 # not a single header.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_platform.md PLAT-129 — terminal capability spike.
+// plans/plan_platform.md PLAT-129 — terminal capability spike.
 //
 // Proves, before any TerminalPlatform code is written, that a process can find out at runtime
 // what the terminal it is attached to can actually do. Everything in Phase 10 keys off these

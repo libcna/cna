@@ -36,7 +36,7 @@ previously hid this was the actual bug, now fixed), not a regression being paper
 
 **Healthy** — every claim in the file's unusually detailed header comment was independently
 cross-checked against the live `ApplySamplerState` switch, the live `BgfxTextureBackend` constructor,
-and `plan_graphics.md`'s own Task 926 closure record, and all three sources corroborate the file's
+and `plans/plan_graphics.md`'s own Task 926 closure record, and all three sources corroborate the file's
 narrative without contradiction.
 
 ## Checklist Results
@@ -85,7 +85,7 @@ current code (line 233-240) creates the texture *without* initial `_mem` specifi
 mutable, then performs the real initial upload via an explicit `bgfx::updateTexture2D` call
 immediately after (lines 247-249) — this two-step "create mutable, then upload" restructuring is the
 concrete fix this file's comment references as "a deeper prerequisite gap than the row's own
-diagnosis anticipated," and `plan_graphics.md` row 926 independently corroborates this exact narrative
+diagnosis anticipated," and `plans/plan_graphics.md` row 926 independently corroborates this exact narrative
 in its own closure record.
 
 ## Detailed Findings
@@ -114,7 +114,7 @@ No CRITICAL/HIGH/MEDIUM findings.
 
 ## Cross-File Observations
 
-- Corroborated by `plan_graphics.md` row 926 ("Implement real GPU mip-level upload for `Texture2D` on
+- Corroborated by `plans/plan_graphics.md` row 926 ("Implement real GPU mip-level upload for `Texture2D` on
   Bgfx… `hasMips = (data.mipLevels > 1)` genuinely threaded through (previously hardcoded `false`)…
   Registered `Bgfx_TextureMipFilter_DualTextureEffect`… both checks correctly expect GREEN") — an
   independent, pre-existing project record matching this file's own header narrative in full, not just

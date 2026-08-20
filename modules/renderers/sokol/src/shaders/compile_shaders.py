@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile this directory's annotated-GLSL shaders into sokol_shaders.hpp via sokol-shdc.
 
-plan_sokol.md SOKOL-14 / design decision 4: shaders are compiled OFFLINE and the generated
+plans/plan_sokol.md SOKOL-14 / design decision 4: shaders are compiled OFFLINE and the generated
 header is checked in, so an ordinary CNA build needs no sokol-shdc binary and no network. Run
 this script only when a .glsl file in this directory changes, then commit the regenerated
 sokol_shaders.hpp alongside it. This mirrors the Bgfx renderer's own checked-in

@@ -37,7 +37,7 @@ None in this header -- see the paired `.cpp`.
 
 ## Cross-File Observations
 Each `Read()` correctly relies on `ContentReader::ReadExternalReference<T>()` for its texture field(s),
-consistent with `plan_xnb.md XNB-35`.
+consistent with `plans/plan_xnb.md XNB-35`.
 
 ## Missing or Weak Tests
 Not independently located in this pass.

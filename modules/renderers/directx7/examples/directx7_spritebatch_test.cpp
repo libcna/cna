@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw path tests for the DIRECTX2
+// plans/plan_dx2.md Phase O2 (DX2-12, 2D layer ported from DX1-30..DX1-39): CPU compositor / SpriteBatch draw path tests for the DIRECTX2
 // (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
 // Check A -- Draw() before Begin()/End() without Begin() throw (DX2-30 Begin/End contract).

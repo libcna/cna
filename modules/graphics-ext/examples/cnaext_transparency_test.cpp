@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2108: what transparency costs, and what each path gets wrong.
+// plans/plan_modern.md MOD-2108: what transparency costs, and what each path gets wrong.
 //
 // The unit tests assert that each path does what it says. What they cannot say is which one to
 // reach for, and that is a cost question with a correctness question attached: sorting is exact for

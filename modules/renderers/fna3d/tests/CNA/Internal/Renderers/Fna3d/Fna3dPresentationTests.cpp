@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fna3d.md FNA3D-16: GTest coverage for the FNA3D renderer's presentation geometry.
+// plans/plan_fna3d.md FNA3D-16: GTest coverage for the FNA3D renderer's presentation geometry.
 //
 // FNA3D presents through FNA3D_SwapBuffers(device, sourceRect, destinationRect, window), so CNA's
 // presentation modes are expressed directly as a destination rectangle rather than through a
@@ -9,7 +9,7 @@
 // here rather than by squinting at a scaled window.
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_FNA3D is defined project-wide.

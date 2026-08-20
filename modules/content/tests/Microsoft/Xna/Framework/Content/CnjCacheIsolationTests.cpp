@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-33: a .cnj sidecar's metadata transform (colorKey) must never leak into a
+// plans/plan_cnj.md CNB-33: a .cnj sidecar's metadata transform (colorKey) must never leak into a
 // separately-cached, separately-requested load of the same underlying native file, in either
 // load order. Investigation found the specific mechanism the task described -- ApplyColorKey's
 // SetData() mutating a texture renderer shared through the weak cache -- does not currently

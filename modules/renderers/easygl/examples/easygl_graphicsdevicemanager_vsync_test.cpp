@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Verifies GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() actually reaches
 // IGraphicsRenderer::SetSwapInterval() on a real renderer -- a real, renderer-independent gap found
-// while working on plan_sdlgpu.md: applyToExistingRenderer() calls GraphicsDevice::Reset(pp,
+// while working on plans/plan_sdlgpu.md: applyToExistingRenderer() calls GraphicsDevice::Reset(pp,
 // adapter), which set every other PresentationParameters field on the renderer (virtual resolution,
 // MSAA) but never forwarded PresentationInterval, unlike GraphicsDevice::SetPresentationParameters()
 // (a separate, rarely-called method) which already did. Fixed by adding the same

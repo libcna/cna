@@ -184,7 +184,7 @@ TEST(AndroidMotionMathTests, IdentityQuaternionProducesZeroYawPitchRoll)
 
 // Task MOTION-002: the CaseA/B/C round-trips above already cover the general
 // algebraic correctness of the extraction formula (arbitrary combined yaw+pitch+roll,
-// a stronger property than isolated cardinal angles), but plan_devices.md's own
+// a stronger property than isolated cardinal angles), but plans/plan_devices.md's own
 // acceptance criteria names 90/180/270-degree yaw specifically -- added here for
 // direct traceability, not because the general round-trip tests left a real gap.
 TEST(AndroidMotionMathTests, RoundTripsAtNinetyOneEightyTwoSeventyDegreesYaw)

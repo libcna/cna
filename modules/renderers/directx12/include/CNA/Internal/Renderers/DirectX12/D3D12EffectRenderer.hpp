@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX13 (DX-121): custom ShaderEffect -- runtime D3DCompile() of arbitrary HLSL
+// plans/plan_dx.md Phase DX13 (DX-121): custom ShaderEffect -- runtime D3DCompile() of arbitrary HLSL
 // vertex+fragment source, mirroring D3D11EffectRenderer's (DX-58) exact fixed-slot convention and
 // fixed Sprite2DVertex-shaped vertex contract (x,y|u,v|r,g,b,a, 32 bytes) -- this mechanism is a
 // SpriteBatch-custom-shader facility, not a general arbitrary-vertex-format one.

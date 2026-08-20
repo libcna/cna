@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-11 (D9-110): validates D3D9ConstantTable's real CTAB parser against real
+// plans/plan_dx9.md Phase D9-11 (D9-110): validates D3D9ConstantTable's real CTAB parser against real
 // Microsoft compiler output, per this task's own requirement: "Unit-test against a shader with
 // known constants before wiring it to anything."
 //

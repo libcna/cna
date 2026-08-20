@@ -73,7 +73,7 @@ namespace CNA::Internal::Media
         }
 
         // ---------------------------------------------------------------------------------
-        // Ogg page framing (plan_media.md MEDIA-47)
+        // Ogg page framing (plans/plan_media.md MEDIA-47)
         // ---------------------------------------------------------------------------------
 
         struct OggPage
@@ -128,7 +128,7 @@ namespace CNA::Internal::Media
         }
 
         // ---------------------------------------------------------------------------------
-        // ID3v2 text-frame character-encoding decoding (plan_media.md MEDIA-50/D11)
+        // ID3v2 text-frame character-encoding decoding (plans/plan_media.md MEDIA-50/D11)
         // ---------------------------------------------------------------------------------
 
         std::string Utf16ToUtf8(const uint8_t* data, std::size_t byteLen, bool bigEndian)
@@ -207,7 +207,7 @@ namespace CNA::Internal::Media
             return out;
         }
 
-        // ID3v2 text frames start with a 1-byte encoding selector (plan_media.md D11):
+        // ID3v2 text frames start with a 1-byte encoding selector (plans/plan_media.md D11):
         // 0x00=Latin-1, 0x01=UTF-16+BOM, 0x02=UTF-16BE (2.4 only), 0x03=UTF-8 (2.4 only).
         std::string DecodeId3TextFrame(const uint8_t* data, std::size_t size)
         {
@@ -251,7 +251,7 @@ namespace CNA::Internal::Media
     // Vorbis comments have no standardised RATING scale: different taggers write 0-100, 0-5 or
     // 0-10. 0-100 is treated as the source scale, being the most common convention among taggers
     // that write RATING at all -- the ambiguity is real and is recorded in CHECKLIST.md rather
-    // than presented as settled (plan_media.md MEDIA-183).
+    // than presented as settled (plans/plan_media.md MEDIA-183).
     void AudioTagParser::ApplyRatingIfPresent(AudioTags& out, const std::string& key,
                                                const std::string& value)
     {
@@ -313,7 +313,7 @@ namespace CNA::Internal::Media
     // Walks a Vorbis-comment list (count already read) of `commentCount` length-prefixed
     // "KEY=value" entries starting at `pos`. Shared by the Ogg-Vorbis, Ogg-Opus and FLAC readers:
     // all three embed the identical comment-list layout, differing only in how it is located
-    // (plan_media.md MEDIA-200/202). Every length is bounds-checked against `data` so a truncated
+    // (plans/plan_media.md MEDIA-200/202). Every length is bounds-checked against `data` so a truncated
     // or hostile file cannot read past the buffer.
     bool AudioTagParser::ParseVorbisCommentList(const std::vector<uint8_t>& data,
                                                  std::size_t pos,
@@ -352,7 +352,7 @@ namespace CNA::Internal::Media
         // Ogg-Opus stores the same Vorbis-comment list as Ogg-Vorbis, but behind an "OpusTags"
         // magic instead of "\x03vorbis", and with no trailing framing bit. The existing Vorbis
         // reader searches specifically for the \x03vorbis magic, so it finds nothing in an Opus
-        // file -- verified empirically before writing this, not assumed (plan_media.md MEDIA-202).
+        // file -- verified empirically before writing this, not assumed (plans/plan_media.md MEDIA-202).
         std::vector<OggPage> pages = ReadOggPages(fileBytes, 8);
         if (pages.empty())
         {
@@ -392,7 +392,7 @@ namespace CNA::Internal::Media
         // Native FLAC is NOT an Ogg container: after the "fLaC" marker comes a chain of metadata
         // blocks, each with a 4-byte header (1 bit last-block flag, 7 bits type, 24-bit big-endian
         // length). Block type 4 is VORBIS_COMMENT and holds the same comment list as Ogg
-        // (plan_media.md MEDIA-200).
+        // (plans/plan_media.md MEDIA-200).
         if (fileBytes.size() < 8 || std::memcmp(fileBytes.data(), "fLaC", 4) != 0)
         {
             return false;
@@ -486,7 +486,7 @@ namespace CNA::Internal::Media
             {
                 // POPM body: email/identifier (null-terminated), 1 rating byte, optional counter.
                 // A rating byte of 0 explicitly means "unrated" in the spec, so it must NOT be
-                // reported as a real rating of 0 (plan_media.md MEDIA-182).
+                // reported as a real rating of 0 (plans/plan_media.md MEDIA-182).
                 uint32_t q = 0;
                 while (q < frameSize && fileBytes[pos + q] != 0) ++q;
                 if (q + 1 < frameSize)

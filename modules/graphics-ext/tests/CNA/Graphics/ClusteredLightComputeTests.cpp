@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2043: the same sort on the GPU, and the only claim worth making about it --
+// plans/plan_modern.md MOD-2043: the same sort on the GPU, and the only claim worth making about it --
 // that it produces the *same list*, not a similar one.
 //
 // Everything downstream refers to lights by index, so "close enough" has no meaning here: an

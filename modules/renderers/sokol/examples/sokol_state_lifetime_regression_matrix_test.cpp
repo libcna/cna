@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-48: a compact state-transition/lifetime regression matrix covering the
+// plans/plan_sokol.md SOKOL-48: a compact state-transition/lifetime regression matrix covering the
 // failure dimensions the 2026-08-03 Phase 8 audit exposed but SOKOL-40..47's own per-ticket tests
 // did not each individually close.
 //
 // Two dimensions specifically deferred here by name in earlier tickets' own closing notes:
 //
 // Part 1 -- two independent OcclusionQuery instances, interleaved in BOTH begin/end orders,
-// followed by a fresh healthy query (plan_sokol.md SOKOL-43's own note: "a dedicated two-object
+// followed by a fresh healthy query (plans/plan_sokol.md SOKOL-43's own note: "a dedicated two-object
 // interleaving test is deferred to SOKOL-48"). Proves TryActivateOcclusionQueryEXT()/
 // ReleaseOcclusionQueryEXT() genuinely hand the context's one active-query slot back and forth
 // between two real objects rather than merely not-crashing -- each query's own PixelCount() must
@@ -15,7 +15,7 @@
 //
 // Part 2 -- DrawCustomEffect3D (the 3D custom-effect raw-GL path, not SpriteBatch's) must apply
 // its own RasterizerState.CullMode rather than inheriting whatever cull state a PRECEDING STOCK
-// draw left configured in the GL context (plan_sokol.md SOKOL-41's own note: "the DrawCustomEffect3D
+// draw left configured in the GL context (plans/plan_sokol.md SOKOL-41's own note: "the DrawCustomEffect3D
 // (3D) path [is] left to SOKOL-48's broader regression matrix" for the state axes beyond depth,
 // which SOKOL-41's own fix already covers via the shared ApplyCustomEffectRasterStateEXT() helper
 // -- this is the pixel-level proof that helper's cull/winding half works end-to-end).

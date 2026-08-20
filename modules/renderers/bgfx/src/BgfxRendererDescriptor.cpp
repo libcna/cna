@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D03: the Bgfx family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D03: the Bgfx family's pre-construction contract.
 //
 // BGFX is one of the four families that genuinely decide their window flags at RUNTIME: bgfx picks
 // its own native renderer (Vulkan, OpenGL, OpenGL ES, ...) and CNA has to create a window that
@@ -22,7 +22,7 @@ namespace CNA::Internal::Renderers::Bgfx
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *
@@ -33,7 +33,7 @@ namespace CNA::Internal::Renderers::Bgfx
 
     namespace
     {
-        /// plan_runtimerenderer.md RTR-P10-9: the window kind bgfx's OWN runtime choice implies.
+        /// plans/plan_runtimerenderer.md RTR-P10-9: the window kind bgfx's OWN runtime choice implies.
         ///
         /// This renderer has two levels of selection above it: CNA picks BGFX, and bgfx then picks
         /// its native API. Both the descriptor's windowKind and the platform window request have to follow
@@ -67,7 +67,7 @@ namespace CNA::Internal::Renderers::Bgfx
         static const GraphicsRendererDescriptor descriptor{
             .type                     = CNA::GraphicsRendererType::Bgfx,
             .name                     = CNA::getGraphicsRendererName(CNA::GraphicsRendererType::Bgfx),
-            // plan_runtimerenderer.md RTR-P10-9: taken from bgfx's OWN resolution, not assumed.
+            // plans/plan_runtimerenderer.md RTR-P10-9: taken from bgfx's OWN resolution, not assumed.
             //
             // This was hardcoded to Vulkan, with a comment saying that is what bgfx's default
             // preference order resolves to. On Linux that is simply untrue: Detail::

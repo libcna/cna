@@ -10,7 +10,7 @@ each one is, how to build it, and — most importantly — what evidence exists 
 | iOS simulator | `CMAKE_SYSTEM_NAME=iOS`, `iphonesimulator` sysroot | Experimental; one-frame app smoke run |
 | tvOS / watchOS / visionOS | — | Rejected at configure time |
 
-The corresponding tasks are `APPLE-1`…`APPLE-15` in [`plan_apple.md`](../plan_apple.md), which
+The corresponding tasks are `APPLE-1`…`APPLE-15` in [`plans/plan_apple.md`](../plans/plan_apple.md), which
 also lists what is deliberately left undone.
 
 ## Evidence boundary
@@ -187,7 +187,7 @@ destroys the rendering surface at the same moment. `Game`'s loop therefore stops
 operating system's "did enter background" and "will enter foreground" notifications: it blocks
 on the SDL event queue instead of ticking, and neither updates nor draws. This is a deliberate
 deviation from FNA, which tracks only `IsActive` on those events — it is documented in
-`Game.cpp` at the site and covered by `plan_apple.md` APPLE-7.
+`Game.cpp` at the site and covered by `plans/plan_apple.md` APPLE-7.
 
 On resume the performance counter is restarted, so the first frame after a resume measures only
 itself rather than the whole background period. `SDL_EVENT_TERMINATING` ends the loop so

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-3 (D9-30/D9-31): smoke test for the D3D9 graphics renderer's device
+// plans/plan_dx9.md Phase D9-3 (D9-30/D9-31): smoke test for the D3D9 graphics renderer's device
 // creation + Clear/Present/ReadBackbuffer foundation. Real window, real Direct3DCreate9/
 // CreateDevice, real Clear()+Present()+readback through the actual public GraphicsDevice API --
 // this renderer's first genuine pixel-correctness proof.
 //
-// Per plan_dx9.md's own "Definition of done": each of the 6 Clear* combo variants needs its own
+// Per plans/plan_dx9.md's own "Definition of done": each of the 6 Clear* combo variants needs its own
 // passing pixel-verified check here, not just "compiles" -- D3D11 shipped these implemented-but-
 // never-exercised and this plan deliberately raises the bar. No real draw path exists yet
 // (D9-82), so the depth/stencil-only variants are proven two ways: (1) the color buffer is

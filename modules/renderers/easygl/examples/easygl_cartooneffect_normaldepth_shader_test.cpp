@@ -2,7 +2,7 @@
 // Task 947 (Phase 78 rollout): HLSL->GLSL shader-conversion proof -- CartoonEffect.Fx's
 // `NormalDepth` technique (drawn once per frame unconditionally, `Game.cs:233`, to feed
 // `PostprocessEffect.fx`'s edge-detection filter -- that shader is a separate, not-yet-attempted
-// port, see plan_graphics.md Task 947's own row). With this, all 3 of `CartoonEffect.Fx`'s
+// port, see plans/plan_graphics.md Task 947's own row). With this, all 3 of `CartoonEffect.Fx`'s
 // techniques (`Lambert`/`Toon`/`NormalDepth`) are ported.
 //
 // FNA reference (`NonPhotoRealisticSample_4_0/NonPhotoRealistic/Content/CartoonEffect.Fx`,

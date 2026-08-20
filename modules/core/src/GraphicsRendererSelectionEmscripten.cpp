@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_runtimerenderer.md RTR-P10-23: the JS-side selection surface for a wasm bundle that holds
+// plans/plan_runtimerenderer.md RTR-P10-23: the JS-side selection surface for a wasm bundle that holds
 // several renderers.
 //
 // A browser build is the case where runtime selection earns the most: one bundle is downloaded and

@@ -88,7 +88,7 @@ namespace CNA::Graphics {
         /**
          * @brief Sets a real volume lookup table, borrowed rather than owned.
          *
-         * plan_modern.md `MOD-2130`. The same table the strip carries, in the layout the hardware
+         * plans/plan_modern.md `MOD-2130`. The same table the strip carries, in the layout the hardware
          * understands: one fetch replaces the strip's two fetches and the hand-written blend
          * between slices, and there is no half-texel arithmetic to get wrong because there are no
          * slice boundaries to stay off. It is not the default because it needs
@@ -108,7 +108,7 @@ namespace CNA::Graphics {
         /**
          * @brief Sets how colours between the table's entries are worked out.
          *
-         * plan_modern.md `MOD-2131`. See @ref LutInterpolation for what separates them; the short
+         * plans/plan_modern.md `MOD-2131`. See @ref LutInterpolation for what separates them; the short
          * version is that @ref LutInterpolation::Tetrahedral keeps neutrals neutral and
          * @ref LutInterpolation::Trilinear does not.
          *

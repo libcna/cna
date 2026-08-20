@@ -8,7 +8,7 @@
 - File type: standalone `Game`-subclass executable, CTest-registered as `D3D9_Pbr`
   (`cna_test_d3d9_pbr`, `cmake/Tests/D3D9Tests.cmake:74-77`, `TIMEOUT 60 LABELS "D3D9"`).
 - XNA/FNA relevance: NOXNA — XNA 4.0 has no PBR effect at all; `PbrEffect`/`SkinnedPbrEffect` are
-  CNA's own extensions (`plan_cnj.md` CNB-56..79), ported to D3D9 via CNA's own custom vs_3_0/ps_3_0
+  CNA's own extensions (`plans/plan_cnj.md` CNB-56..79), ported to D3D9 via CNA's own custom vs_3_0/ps_3_0
   `Pbr3D.hlsl`/`PbrSkinned3D.hlsl` shaders — **not** vendored Microsoft Stock Effect files, and
   therefore fully in-scope for correctness review (unlike `shaders/xna/**`, which is exempt per D-5).
 - Related production code: `src/CNA/Internal/Backends/D3D9/D3D9PbrDraw.cpp` (292 lines, the entire

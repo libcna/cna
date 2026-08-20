@@ -29,7 +29,7 @@ namespace CNA::Internal::Graphics
      * Internal bridge between the glTF/.cnj content readers and Model's public, index-based
      * material-variant property. A material can choose another UV set or texture transform, so an
      * Effect pointer alone is not enough: the vertex buffer, sampler state and morph carrier can
-     * all differ as well (plan_gltf.md GLTF-341/GLTF-342).
+     * all differ as well (plans/plan_gltf.md GLTF-341/GLTF-342).
      */
     struct ModelMaterialVariantPartStateEXT
     {

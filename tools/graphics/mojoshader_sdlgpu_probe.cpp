@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-061 existence gate: prove that the pinned MojoShader's SDL_GPU adapter turns a
+// plans/plan_fx.md FX-061 existence gate: prove that the pinned MojoShader's SDL_GPU adapter turns a
 // committed compiled effect into shaders SDL_GPU accepts, against a device this machine can
 // actually create -- before any CNA renderer code is written for it.
 //
@@ -16,7 +16,7 @@
 //
 // Usage: cna_mojoshader_sdlgpu_probe <file.fxb>...
 //
-// plan_fx.md FX-071 golden-pixel investigation (2026-08-16): a second mode,
+// plans/plan_fx.md FX-071 golden-pixel investigation (2026-08-16): a second mode,
 // `cna_mojoshader_sdlgpu_probe --render <file.fxb>`, goes one step further than the reflection
 // exercise below -- it links a real SDL_GPU pipeline from the effect's own compiled shaders,
 // draws a full-screen quad with it into an offscreen render target, and reads the pixels back.
@@ -137,7 +137,7 @@ namespace
         return 0;
     }
 
-    /// plan_fx.md FX-071 golden-pixel investigation: links the selected technique/pass's shaders
+    /// plans/plan_fx.md FX-071 golden-pixel investigation: links the selected technique/pass's shaders
     /// (PROBE_TECHNIQUE/PROBE_PASS env vars, default 0/0), draws a full-screen quad shaped for
     /// CnaConformanceEffect.fx's MainVertexShader (float3 POSITION0, float2 TEXCOORD0) into an
     /// offscreen R8G8B8A8_UNORM target, and reports whether any non-black pixel reached it. No CNA

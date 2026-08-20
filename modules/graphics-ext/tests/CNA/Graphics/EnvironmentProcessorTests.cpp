@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1109: equirectangular panorama to cube map.
+// plans/plan_modern.md MOD-1109: equirectangular panorama to cube map.
 //
 // The conversion is two coordinate mappings that have to agree, and the way they fail is that a
 // face comes out mirrored or rotated -- a complete cube, sampling correctly, with a sixth of the

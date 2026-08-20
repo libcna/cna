@@ -16,7 +16,7 @@ namespace CNA::Graphics {
     /**
      * @brief The exception the engine layer throws when a renderer cannot do what was asked.
      *
-     * plan_modern.md `MOD-9`. Nearly every failure in this layer is the same shape — a subsystem
+     * plans/plan_modern.md `MOD-9`. Nearly every failure in this layer is the same shape — a subsystem
      * wanted something the active renderer does not provide — and the useful message names all
      * three parts: which subsystem asked, what it wanted, and which renderer said no. Assembling
      * that by hand at each throw site produced three slightly different sentences for the same

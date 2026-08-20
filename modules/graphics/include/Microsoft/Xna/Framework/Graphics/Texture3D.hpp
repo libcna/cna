@@ -39,7 +39,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Copying is not allowed.
          *
          * CNAEXT, explicit for clarity: `renderer_`'s `std::unique_ptr` member already makes this
-         * implicit, but plan_xnb.md XNB-25 needed a real move path added (see below) and every
+         * implicit, but plans/plan_xnb.md XNB-25 needed a real move path added (see below) and every
          * other similarly-shaped GPU-resource class in this codebase (`VertexBuffer`,
          * `IndexBuffer`, `TextureCube`) already declares both explicitly rather than relying on
          * what the compiler happens to imply.
@@ -50,7 +50,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Move-constructs a Texture3D, transferring GPU handle ownership.
          *
-         * CNAEXT: this class had no move path at all until plan_xnb.md XNB-25's `Texture3DReader`
+         * CNAEXT: this class had no move path at all until plans/plan_xnb.md XNB-25's `Texture3DReader`
          * needed one -- a user-declared destructor already suppressed the implicit move
          * constructor the compiler would otherwise have generated, and the pre-existing
          * `std::unique_ptr` member independently blocks the implicit copy constructor, so this

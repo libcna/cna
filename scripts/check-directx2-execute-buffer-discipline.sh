@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# plan_dx2.md design decision 12: a real, automated proof that the DIRECTX2 renderer never quietly
+# plans/plan_dx2.md design decision 12: a real, automated proof that the DIRECTX2 renderer never quietly
 # reaches for the proven-broken execute-buffer Direct3D path (IDirect3D/IDirect3DDevice::Execute/
 # D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DINSTRUCTION/D3DOP_*) instead of the working
-# IDirect3DDevice2::DrawPrimitive/DrawIndexedPrimitive one -- see plan_dx2.md's status note (the
+# IDirect3DDevice2::DrawPrimitive/DrawIndexedPrimitive one -- see plans/plan_dx2.md's status note (the
 # DX2-0 spike) for why the execute-buffer surface is permanently off-limits here. Registered as the
 # DirectX2_ExecuteBufferDiscipline CTest (cmake/Tests/DirectX2Tests.cmake) -- pure text check, no compiled
 # binary, no Wine needed, runs identically whether cross-compiling or not.
@@ -10,7 +10,7 @@
 # Unlike scripts/check-directx1-v1-only.sh (which forbids ALL of IDirect3D*/d3d.h, since DirectX 1 has no
 # Direct3D at all), DIRECTX2 legitimately uses IDirect3D2/IDirect3DDevice2/IDirect3DViewport2/
 # IDirect3DTexture2/D3DTLVERTEX/DrawPrimitive/DrawIndexedPrimitive for its own real 3D layer
-# (plan_dx2.md section 1) -- those must NOT be flagged. What's forbidden here is narrower and
+# (plans/plan_dx2.md section 1) -- those must NOT be flagged. What's forbidden here is narrower and
 # permanent:
 #   - IDirect3DDevice::Execute (the literal execute-buffer submission call; IDirect3DDevice2::
 #     methods are unaffected -- matched as a literal substring, not just a bare `Execute` grep,
@@ -53,7 +53,7 @@ if [ "$violations" -ne 0 ]; then
     echo "layer (never IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/" >&2
     echo "D3DINSTRUCTION/D3DOP_*/the un-versioned IDirect3D/IDirect3DDevice), and ONLY v1 DirectDraw" >&2
     echo "interfaces for its 2D layer (never IDirectDraw2+/IDirectDrawSurface2+/DDSURFACEDESC2)," >&2
-    echo "per plan_dx2.md design decision 12." >&2
+    echo "per plans/plan_dx2.md design decision 12." >&2
     exit 1
 fi
 

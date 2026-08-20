@@ -36,7 +36,7 @@ ownership.
 
 ## Cross-File Observations
 The class comment's claim that "Task 2.6 confirmed real host migration was unimplemented, matching
-FNA's own reference" and that "Task 5.1-5.4 (plan_net.md Phase 5) implemented it for real" is
+FNA's own reference" and that "Task 5.1-5.4 (plans/plan_net.md Phase 5) implemented it for real" is
 consistent with `NetworkSession.hpp`'s own already-audited doc comment for
 `getAllowHostMigrationProperty()`, which documents the identical real, functional host-migration
 implementation this port adds beyond FNA's inert stub.

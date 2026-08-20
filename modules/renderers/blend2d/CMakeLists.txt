@@ -1,4 +1,4 @@
-# plan_blend2d.md: genuine CPU-raster 2D-only renderer built on the Blend2D vector graphics
+# plans/plan_blend2d.md: genuine CPU-raster 2D-only renderer built on the Blend2D vector graphics
 # engine (cmake/ThirdPartyBlend2D.cmake configured blend2d::blend2d before this file runs, from
 # RendererSelection.cmake's BLEND2D branch).
 # PUBLIC (not PRIVATE): Blend2DRenderer.hpp's own public class interfaces expose BLImage/

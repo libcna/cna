@@ -551,7 +551,7 @@ namespace Microsoft::Devices::Sensors
         // same instance, the guard (which runs after the callback returns)
         // still safely erases the entry via the token, never touching the
         // now-possibly-freed `this` again. See Accelerometer.hpp's
-        // dispatchToken_ doc comment and plan_devices_phase8.md Task P8-1
+        // dispatchToken_ doc comment and plans/plan_devices_phase8.md Task P8-1
         // for the full analysis, including the boundary this does not
         // cover (DispatchSensorReading() itself still touches `this` again
         // before conditionally raising ReadingChanged).

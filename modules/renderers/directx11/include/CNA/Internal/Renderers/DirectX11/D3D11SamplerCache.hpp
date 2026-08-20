@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX6 (DX-44): real ID3D11SamplerState creation + caching from XNA SamplerState
+// plans/plan_dx.md Phase DIRECTX6 (DX-44): real ID3D11SamplerState creation + caching from XNA SamplerState
 // fields, via D3DCommon's DX-12-state filter/address-mode mapping table.
 
 #include <d3d11.h>

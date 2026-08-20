@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect-style per-vertex lighting for
+// plans/plan_dx2.md Phase O9 (DX2-91..DX2-96): real CPU-side BasicEffect-style per-vertex lighting for
 // the normal-bearing vertex layouts (stride 32 = VertexPositionNormalTexture), computed on the CPU
 // before packing into D3DTLVERTEX, with the specular highlight composited by real Direct3D
 // fixed-function hardware via D3DRENDERSTATE_SPECULARENABLE (spike-confirmed real,

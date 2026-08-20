@@ -22,7 +22,7 @@
 #include "Microsoft/Devices/VibrateController.hpp"
 #include "CNA/CNAHelper.hpp"
 
-// Demo/manual-verification screen for Microsoft::Devices (plan_devices_phase4.md
+// Demo/manual-verification screen for Microsoft::Devices (plans/plan_devices_phase4.md
 // Task P4-14). Mirrors examples/demo_input's Game-subclass, rectangle-only visual
 // style (no SpriteFont/Content dependency) — see docs/devices-hardware-checklist.md
 // for what a human should look for when running this on real hardware.

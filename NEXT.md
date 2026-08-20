@@ -21,7 +21,7 @@
 > arm to the capability expectations -- all disjoint from the FX pass's `CNA_VULKAN_COMPILED_EFFECTS`
 > option and its Vulkan arm in `kExpectCompiledEffects`, both of which survived intact.
 
-## Compiled XNA effects: the 2026-08-18 follow-up pass (`plan_fx.md` Phase J, `FX-091`-`FX-110`)
+## Compiled XNA effects: the 2026-08-18 follow-up pass (`plans/plan_fx.md` Phase J, `FX-091`-`FX-110`)
 
 > **Carry this forward: the previous pass proved the compiled shader is what draws. It did not
 > prove anything about what that shader SAMPLES. Everything on the texture/sampler/pass side was
@@ -115,7 +115,7 @@ reverted, not merely to pass now:
 4. **A contract that builds a fresh object per assertion tests the easy case.** Every section of the
    sampler contract that made a new `Effect` per draw passed on a backend where the second draw with
    one `Effect` rendered nothing.
-5. **A refusal must say which KIND of limitation it is.** `plan_fx.md` section 10.5 now separates
+5. **A refusal must say which KIND of limitation it is.** `plans/plan_fx.md` section 10.5 now separates
    renderer-wide limitations (the renderer cannot do this at all; a compiled Effect is not expected
    to add it) from compiled-Effect-specific ones (the renderer does this elsewhere -- this is our
    debt, and it has a task ID). Folding them together is how a real debt gets excused.
@@ -168,10 +168,10 @@ created, so no Release claim is made.
 
 `GraphicsCapability::CompiledEffects` stays **true** on FNA3D, SDL_GPU and the EasyGL family, and it
 is now justified by drawing rather than by state inspection. Every remaining limitation on those
-three is either a named refusal or a renderer-wide gap, and section 10.5 of `plan_fx.md` says which.
+three is either a named refusal or a renderer-wide gap, and section 10.5 of `plans/plan_fx.md` says which.
 No known silent-corruption path remains open on them.
 
-## Compiled XNA effects: the 2026-08-17 repair pass (`plan_fx.md` `FX-080`-`FX-090`)
+## Compiled XNA effects: the 2026-08-17 repair pass (`plans/plan_fx.md` `FX-080`-`FX-090`)
 
 > **The finding worth carrying forward: three backends were advertising
 > `GraphicsCapability::CompiledEffects == true` while several of their draw routes quietly rendered
@@ -230,7 +230,7 @@ No known silent-corruption path remains open on them.
   found. Symmetric golden-pixel tests cannot see this; `RunCompiledEffectOrientationContract` draws
   an asymmetric half-target quad through a stock effect and through the compiled one and requires
   the same half, and was verified to fail when the old behaviour is restored.
-- **FNA3D could not create a device at all on this branch.** `plan_runtimerenderer.md` RTR-P1-D41
+- **FNA3D could not create a device at all on this branch.** `plans/plan_runtimerenderer.md` RTR-P1-D41
   replaced the renderer descriptor's `prepareWindowFlags` hook with static data -- correct for the
   window's visual, and it removed the only production call to `FNA3D_PrepareWindowAttributes()`,
   which is also where FNA3D *selects its driver*. Every `FNA3D_CreateDevice` failed with "Call
@@ -289,7 +289,7 @@ task.
   renderer-wide (its stock pipelines derive input elements from a byte stride) rather than an FX
   gap. **DirectX 11 (`FX-063`), DirectX 9 (`FX-070`) and Metal (`FX-066`)** remain unwritten. None
   of the three can be built, run or verified on this Linux machine, so they were deliberately NOT
-  written blind behind a capability gate; each carries a concrete requirements note in `plan_fx.md`
+  written blind behind a capability gate; each carries a concrete requirements note in `plans/plan_fx.md`
   for a session on a machine that can execute it. `FX-069`'s final matrix is blocked on exactly
   those three and nothing else.
 - **Vertex-stage sampling** is refused by name on SDL_GPU, EasyGL and Vulkan. A real functional gap,
@@ -323,11 +323,11 @@ task.
   `tests/HarnessAssertionPolicy.cpp`). It cannot reach production: no production translation unit in
   this repository uses `SDL_assert`/`SDL_SetAssertionHandler` at all, CNA's own assertions are plain
   `<cassert>`, and the file's only undefined symbol is `setenv`.
-- `plan_fx.md`'s global definition of done (section 10.2) is **not** satisfied, and says so.
+- `plans/plan_fx.md`'s global definition of done (section 10.2) is **not** satisfied, and says so.
 ## The compiled-effect and IGL merge, and the renderer nobody could reach (2026-08-17)
 
 > The branch caught up with `next` again, 128 commits of it: the compiled Effect Framework campaign
-> (`plan_fx.md`) and the IGL renderer. The reopening was the smallest of the three so far — 12
+> (`plans/plan_fx.md`) and the IGL renderer. The reopening was the smallest of the three so far — 12
 > planned rows — but it is the one that showed the coverage matrix can be wrong in a direction the
 > matrix itself cannot report.
 >
@@ -392,8 +392,8 @@ task.
 
 ## IGL renderer — audited, repaired and completed (2026-08-17 / 2026-08-18)
 
-> A full audit of the IGL renderer against `plan_igl.md` found four real defects and fixed them;
-> what remains open is listed below and in `plan_igl.md`'s own task table, which is the detailed
+> A full audit of the IGL renderer against `plans/plan_igl.md` found four real defects and fixed them;
+> what remains open is listed below and in `plans/plan_igl.md`'s own task table, which is the detailed
 > record. The theme of the fixed set is worth carrying forward: **a task marked "written, not yet
 > compiled" is not evidence that the code was ever written.** `IGL-7` (the window's render intent)
 > had carried that marker since the renderer landed, and the commit that added the renderer does
@@ -415,7 +415,7 @@ task.
 >
 > A second theme worth carrying: **four shared, renderer-keyed test tables had no IGL arm**, so an
 > IGL build was asserted against the default renderer's profile and stood red on behaviour
-> `plan_igl.md` documents as correct — an occlusion query IGL cannot have, an instanced path it does
+> `plans/plan_igl.md` documents as correct — an occlusion query IGL cannot have, an instanced path it does
 > implement, cube storage treated as implying cube readback, and a `RenderTargetCube.SetData`
 > refusal it deliberately does not make. Adding a renderer identity is not finished when the
 > registries accept it; these tables are part of the registry surface too. Fixing the cube one also
@@ -426,7 +426,7 @@ task.
 > **Status: the IGL renderer is complete on both backends.** 70/70 registered tests, and all 27
 > example binaries pass on OpenGL/GLX and on Vulkan alike. What remains open is upstream limits of
 > IGL `v1.1.1`, each established against the pinned source or by attempting it — not unfinished CNA
-> work. Details in `plan_igl.md`:
+> work. Details in `plans/plan_igl.md`:
 >
 > * **IGL-60 and IGL-67 — CLOSED on 2026-08-18.** Both were the same family of bug: Vulkan stored
 >   and read render-target rows three different ways, and each defect hid the other two by
@@ -555,7 +555,7 @@ task.
 > The `headless` and `software` trees pass 81/81; `sdlrenderer` and `asan` are blocked on that one
 > decision.
 
-> **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
+> **Active campaign — CNA platform separation (`feature/platform`):** `plans/plan_platform.md` is the
 > authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
 > guide, `docs/platform-sdl2.md` is the SDL2 backend's own boundary, and `NEXT_platform.md`
 > carries detailed continuity notes.
@@ -577,7 +577,7 @@ task.
 > hard failure, which is how the 0/0 floor was silently raised once already.
 >
 > **A completed plan is not a finished one.** The 2026-08-17 post-merge re-audit in
-> `plan_platform.md` found that later work had reintroduced a renderer holding a raw window
+> `plans/plan_platform.md` found that later work had reintroduced a renderer holding a raw window
 > pointer, raised the "irreversible" ratchet floor to accommodate it, and left an entire audio
 > selection unable to compile — none of it visible, because no configuration that would expose it
 > had been built and run. If you add a backend or a renderer, run the configuration end to end
@@ -592,7 +592,7 @@ task.
 
 ## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
 
-> `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
+> `plans/plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
@@ -1118,7 +1118,7 @@ task.
 >
 > CBIND-037C1 then opens that module with its 25 identity, visualization and media-source rows, in
 > `media.h` / `CnaCApiMedia.cpp` / `MediaSmoke.c`, and adds the `cna_media` link edge. The media
-> family is sub-partitioned into C1–C7 in `plan_binding.md`. Two decisions are recorded.
+> family is sub-partitioned into C1–C7 in `plans/plan_binding.md`. Two decisions are recorded.
 > `CNA_MediaSourceType` **keeps its canonical 0/4 gap** rather than being renumbered into a dense
 > range, so it deliberately has no `MAXIMUM` and consumers validate membership of the two defined
 > values — the same rule that kept the experiment log level at 100. And the canonical
@@ -1241,7 +1241,7 @@ task.
 > ctest, because test order is not a dependency. It now writes its own fixture. The inventory is now
 > 4,775 implemented, 30 partial, 1,432 planned and 178 N/A; all four trees green at 58/58. **Next:
 > CBIND-037D**, the 289-row devices slice — and note the standing owner decision recorded in
-> `plan_binding.md`: flip `CNA_DEVICES=ON` in the `sdlrenderer` and `asan` trees so the
+> `plans/plan_binding.md`: flip `CNA_DEVICES=ON` in the `sdlrenderer` and `asan` trees so the
 > `#ifdef CNA_DEVICES` half of `devices-ext` is actually exercised.
 >
 > That reconfigure is **done**: both trees now build with `CNA_DEVICES=ON` and stayed green, while
@@ -1586,7 +1586,7 @@ task.
 > flag. A fire-and-forget cue gets **no handle at all** — the caller never touches it. The inventory is
 > now 5,431 implemented, 32 partial, 665 planned and 287 N/A, and the `audio` module is closed at 217
 > implemented with 41 not applicable. All four trees green at 70/70, ASan+UBSan clean.
-> CBIND-037G was then split into seven slices in `plan_binding.md` — identities twice (the gamer/guide
+> CBIND-037G was then split into seven slices in `plans/plan_binding.md` — identities twice (the gamer/guide
 > vocabulary and the avatar one share nothing but their shape), the six exceptions as firewall arms,
 > the gamer and its collections, the guide with its dispatcher, achievements and leaderboards with
 > property storage, and the avatar surfaces last because the renderer composes the graphics module
@@ -1681,7 +1681,7 @@ task.
 > that gives a runtime-implemented component the same handle, registry entry and ownership
 > bookkeeping a caller-derived one gets. The inventory is now 5,866 implemented, 32 partial, 212
 > planned and 305 N/A; all four trees green at 74/74, ASan+UBSan clean.
-> CBIND-037G6 was then split into three slices in `plan_binding.md`, because its three families are
+> CBIND-037G6 was then split into three slices in `plans/plan_binding.md`, because its three families are
 > unrelated to each other but **not independent in order**: a leaderboard entry's columns *are* a
 > `PropertyDictionary`, so property storage has to land before leaderboards. The asynchronous question
 > is already answered too — `LeaderboardReader::Read` spins on `GamerServicesDispatcher::UpdateAsync`
@@ -1971,7 +1971,7 @@ task.
 > partial mapping is unapproved — verified by clearing one, which turns both red. A future session
 > that adds a partial mapping cannot quietly inherit somebody else's approval for it.
 >
-> **Final state: nothing in `plan_binding.md` is open.** 6,415 public C++ declarations, 6,083
+> **Final state: nothing in `plans/plan_binding.md` is open.** 6,415 public C++ declarations, 6,083
 > implemented, 12 approved partial, 0 planned, 320 not applicable; four verification trees green at
 > 81/81 and 88/88; the experimental release gate reads **ready**. What comes next is not in this
 > plan — publishing the experimental release, or opening a new plan for whatever the ABI should grow
@@ -2101,7 +2101,7 @@ task.
 > combined-FBO readback, unsized RGBA storage, split depth+stencil attach; MSAA/MRT/occlusion/
 > Texture3D/instancing/multi-stream truthfully refused). `check_renderer_identities.py` = 42;
 > OPENGLES1 and OPENGLES3 are untouched, so the family finally reads OPENGLES1/OPENGLES2/
-> OPENGLES3 exactly as `docs/RendererNamingMigration.md` §3 reserved. Plan: `plan_opengles2.md`;
+> OPENGLES3 exactly as `docs/RendererNamingMigration.md` §3 reserved. Plan: `plans/plan_opengles2.md`;
 > capability boundary and runtime-extension gates: `docs/opengles2-renderer.md`; registry:
 > `docs/renderer-registry.md` (42 rows). The full EasyGL example/pixel suite registers and runs
 > under this profile (first live GLSL ES 1.00 driver execution in this project), with OPENGLES3
@@ -2154,7 +2154,7 @@ task.
 > source, so `CreateEffectRenderer` returns null. `Instancing` is **false** — FNA3D instances fine,
 > but the stock effects declare no per-instance vertex input (in real XNA that needs a custom
 > Effect), so `DrawInstancedPrimitivesEx` refuses by name instead of stacking every instance on
-> record 0. Both are structural, not deferred. See `docs/fna3d-renderer.md` and `plan_fna3d.md`.
+> record 0. Both are structural, not deferred. See `docs/fna3d-renderer.md` and `plans/plan_fna3d.md`.
 >
 > **Validation.** Native runtime on Linux/Xvfb/Mesa llvmpipe through FNA3D's OpenGL driver: twelve
 > `Fna3d_*` CTest binaries, all pixel oracles, plus 41 device-free unit tests in the corpus. The
@@ -2285,7 +2285,7 @@ task.
 > `a116280e0`), so the promotion changed no implementation content. No merge commit
 > (`git merge --ff-only`); merge-base `ea61123e6`; 0 behind / 19 ahead; all 19 campaign commits
 > retained and `git verify-commit`-good. `feature/physical-modules` keeps pointing at the
-> implementation result. Promotion evidence: `MODULARIZATION_PLAN.md` §11.2.
+> implementation result. Promotion evidence: `plans/MODULARIZATION_PLAN.md` §11.2.
 >
 > **Owner-local `develop` work was preserved first**, not stashed. The same four items as the
 > previous promotion (the two ad hoc xvfb registrations in
@@ -2398,7 +2398,7 @@ task.
 > **`41028e995`**, tree **`d2a9ea265`** — byte-identical to the accepted `feature/modularization`
 > tree, so the promotion itself changed no content. No merge commit (`git merge --ff-only`);
 > merge-base `5f2c4e941`; 0 behind / 20 ahead; all 20 campaign commits retained with their GPG
-> signatures. Promotion evidence: `MODULARIZATION_PLAN.md` §10.
+> signatures. Promotion evidence: `plans/MODULARIZATION_PLAN.md` §10.
 >
 > **Owner-local `develop` work was preserved first**, not stashed: the two ad hoc xvfb test
 > registrations in `cmake/Tests/{EasyGL,SdlRenderer}Tests.cmake` plus untracked `AGENTS.md` and
@@ -2433,7 +2433,7 @@ task.
 ## MODULARIZATION PHASE 2 — **physical layout + architecture hardening complete on `feature/modularization`** (2026-08-10)
 
 > Continuation of the campaign below, same branch, from Phase-1 head `b072f0da6`. Authoritative
-> record: **`MODULARIZATION_PLAN.md` §9**; machine-readable evidence:
+> record: **`plans/MODULARIZATION_PLAN.md` §9**; machine-readable evidence:
 > `modularization/after-phase2-layout/` (incl. the 674-row `move-map.tsv`); item-by-item
 > classification: `modularization/RECONCILIATION.md` (Phase-2 section).
 >
@@ -2476,7 +2476,7 @@ task.
 
 > FUTURE.md Phase 1 work, on branch `feature/modularization` from base `5f2c4e941`. The
 > authoritative plan, evidence ledger, and deferred-scope record are in
-> **`MODULARIZATION_PLAN.md`**; the machine-readable no-loss baseline is in
+> **`plans/MODULARIZATION_PLAN.md`**; the machine-readable no-loss baseline is in
 > `modularization/baseline/`.
 >
 > **Done and proven:** the monolithic CNA library is split into twelve subsystem STATIC modules
@@ -2501,7 +2501,7 @@ task.
 > branch's audit-remediation campaign to reach an accepted checkpoint (it moved three times
 > during this session); the merge-preview resolution recipe and the one Net-only CNA
 > adaptation (`NetworkSessionProperties::operator[]` vs the new `IList<T>` ElementReference
-> contract) are recorded in MODULARIZATION_PLAN.md. Physical source moves are deliberately
+> contract) are recorded in plans/MODULARIZATION_PLAN.md. Physical source moves are deliberately
 > deferred (plan §6). The pre-existing environmental residuals recorded during control runs
 > (REMED-GFX-133, `Headless_Smoke` primitive-range abort, llvmpipe `Vulkan_DepthBias`) are
 > unchanged by modularization and remain open findings of their own.
@@ -2999,7 +2999,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > `SetData` branch now resets that shadow and its reordered `GetData` sends the read to a backend
 > that cannot serve it, so `CnjCacheIsolationTest` fails under `EASYGL`. Traced on both trees with
 > `CNA_TEXTURE_TRANSFER_TRACE=1`: the head reads `source=cpuPixels_` and passes, the lane reads
-> `source=backend` and throws. Recorded with its measurement in `plan_skia.md` rather than repaired
+> `source=backend` and throws. Recorded with its measurement in `plans/plan_skia.md` rather than repaired
 > unverified — the repair changes shared semantics every backend depends on.
 >
 > **Fixed in-lane:** `IsColorTransferFormatEXT` had narrowed the `Color*` overloads from "any
@@ -3261,7 +3261,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 >
 > **The three newly measured EasyGL failures were adjudicated individually:**
 > `EasyGL_DeviceValidation` = **REMED-GFX-222** (GFX-039 over-reached its own "per FNA" charter;
-> **discovered and resolved in-stabilization** — fix on the integration branch, plan_postaudit.md
+> **discovered and resolved in-stabilization** — fix on the integration branch, plans/plan_postaudit.md
 > §19); `EasyGL_GraphicsDevice_ReferenceStencil` = the pre-existing **documented known failure
 > Task 872** (AUDIT.md:128), carried visible; `easy-gl-resource-smoke-tests` = **upstream easy-gl
 > defect** (its own mock-GL assert, `SmokeResourceTests.cpp:336`, repo unmoved since 07-19),
@@ -3275,7 +3275,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > corpus transfer tests; ASan-silent because the bytes are in-bounds). Latent lane content, not
 > an integration regression — but an open production defect on a supported path, so the tag was
 > withheld under the same literal criterion that blocked Batch 1 on REMED-GFX-220. Reproducer
-> preserved in `cnaintegration/cmake-build-wicked/wicked-repro/`; OPEN row in `plan_wicked.md`.
+> preserved in `cnaintegration/cmake-build-wicked/wicked-repro/`; OPEN row in `plans/plan_wicked.md`.
 >
 > **Next task, exactly one, not begun — owner-decided: resolve `WICKED-80` in the next session
 > on the new machine** (the /rv tree migrates to the HP EliteBook 840 G9 first; the T14 goes to
@@ -3428,7 +3428,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > `BlendState.cpp`'s four namespace-scope presets copied `Color::White` from another translation
 > unit. Introduced **2026-06-06** by `2345f8fc`, proven an ancestor of the phase-1 checkpoint.
 > Fixed by constructing the value in place — `blendFactor_(255, 255, 255, 255)`, which packs to the
-> byte-identical `0xFFFFFFFF`. Ticket: `plan_postaudit.md` §17.
+> byte-identical `0xFFFFFFFF`. Ticket: `plans/plan_postaudit.md` §17.
 >
 > **Two things the original ticket got wrong, found by not trusting it.** Its suggested fix
 > `Color(UInt32{0xFFFFFFFFU})` **does not compile** — that constructor is private. And the wrong
@@ -3448,7 +3448,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > half the time and is **not** evidence the cause was fixed. Still **Outcome C**, unresolved, not
 > modified, skipped or weakened.
 >
-> **One new finding, non-blocking: `REMED-GFX-221`** (`plan_postaudit.md` §18) — `GestureDetector.cpp`
+> **One new finding, non-blocking: `REMED-GFX-221`** (`plans/plan_postaudit.md` §18) — `GestureDetector.cpp`
 > statics copy `Vector2::Zero` cross-unit, found by the same-pattern scan. LOW: `Vector2` is not
 > polymorphic so no sanitizer can see it, and `Vector2::Zero` is `(0,0)`, which is what the zeroed
 > `.bss` already holds — latent UB with no reachable wrong value. Deliberately not folded into
@@ -3477,7 +3477,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > 40/40 maintainer PGP, zero trailers, zero attribution, exactly as inventoried. **Nine** commit
 > bodies carried session narrative (opengl1 had three) and **two were caught only by a
 > multiline-aware sweep** — `this\nsession` wrapped across a line defeats a line-based grep.
-> Reworded at replay, patches untouched; "(plan_opengl2.md session N)" subject citations kept
+> Reworded at replay, patches untouched; "(plans/plan_opengl2.md session N)" subject citations kept
 > (the plan is organized by Session-N headings — factual references, not narration). Adapted as
 > **47 signed commits**: 40 replayed (27 byte-identical by range-diff, 0 lost, all 40
 > TRANSFERRED) + interface adaptation + capability + shared-table arming + build fix + two
@@ -3635,7 +3635,7 @@ evidence is in `integration/FINAL_RECONCILIATION.md`.
 > campaign's known non-maintainer key — **0 PGP, 0 genuinely unsigned**, the inventory row
 > re-verified with `git cat-file -p`. The first 8 carry both prohibited trailers across two
 > session IDs. Four per-session `NEXT.md` status commits were **OMITTED with justification**
-> (session narrative; `plan_opengl4.md` carries the technical record); the other 24 replayed with
+> (session narrative; `plans/plan_opengl4.md` carries the technical record); the other 24 replayed with
 > 32/41 files byte-identical at the replay boundary, 0 missing.
 >
 > ### The probe earned its place a third time — 23 errors, 13 drifts, two paid first here
@@ -4071,7 +4071,7 @@ byte-identical. Every testable claim the document makes was checked against the 
 The renumbering **invalidates four cross-references from files outside the lane**:
 `include/CNA/Graphics/PbrMaterial.hpp:19` and `noxna_devices.md:93` (cite `N11`, which no longer
 means `PbrEffect`), `docs/surface-format-support.md:184,220` (cite `N20` for float render targets,
-now `N11`/`N12`), and `plan_postaudit.md:1572-74` (quotes the old `N50`/`N51`/`N52` titles and an old
+now `N11`/`N12`), and `plans/plan_postaudit.md:1572-74` (quotes the old `N50`/`N51`/`N52` titles and an old
 section number). Two more live under `audit/`, which is frozen. `DitherMode.hpp:14`'s `N70` still
 resolves.
 
@@ -4142,7 +4142,7 @@ exception is the `REMED-GFX-DECL-GUARD` rejection — *"The VertexDeclaration co
 outside the uploaded vertex stride"* — which is **correct production behaviour**; the fuzz test's
 expected-exception set simply predates the guard. A test-side gap, not a production defect, so no
 remediation ticket was opened for it. It deserves an owner decision on whether to ticket it in
-`plan_postaudit.md`.
+`plans/plan_postaudit.md`.
 
 **Still open and unchanged after `gltf` and `ext`.** Neither lane was its cause or its fix: each
 changes one Markdown file and no compiled source, so neither can have affected this test in either
@@ -4179,7 +4179,7 @@ far). Recommended checkpoint scope:
 `INTEGRATION_ORDER.md` §4 carries `depthcrt`'s five process lessons and §4.2 carries `ext`'s two;
 read both before starting the next lane.
 
-**Direct2D is deliberately NOT first.** It is frozen *mid-backlog* — `plan_direct2d.md` records 128
+**Direct2D is deliberately NOT first.** It is frozen *mid-backlog* — `plans/plan_direct2d.md` records 128
 `D2D-*` rows with **96 not complete** (32 complete + 35 yellow + 61 blank; corrected from the
 historical stale count 88). Frozen is not complete. It sits in the deferred group pending
 an owner scope decision (`integration/lanes/direct2d.md`).
@@ -4287,23 +4287,23 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 > Three large, sequential efforts landed this session, each fully merged into both
 > `feature/graphics` and `develop`, pushed to `origin`:
 >
-> 1. **`plan_cnj.md` Phase 14 completed in full** — glTF import gaps (multi-UV-set diagnostics,
+> 1. **`plans/plan_cnj.md` Phase 14 completed in full** — glTF import gaps (multi-UV-set diagnostics,
 >    morph target CLI/.cnj serialization, CUBICSPLINE interpolation, DualTextureEffect occlusion
 >    fix, Draco mesh compression, angle-weighted tangent generation, `KHR_texture_transform`/
 >    `KHR_lights_punctual`/`KHR_materials_emissive_strength`), then **PBR (`PbrEffect`/
 >    `SkinnedPbrEffect`) + `SkinnedEffect.VertexColorEnabled` ported to all 7 remaining graphics
 >    backends** (Vulkan, Bgfx, SdlGpu, WebGPU unskinned-only, D3D9/D3D11/D3D12 compile-verified
->    only). See `plan_cnj.md`'s own top banner and Phases 14A–14J for full detail — this file does
+>    only). See `plans/plan_cnj.md`'s own top banner and Phases 14A–14J for full detail — this file does
 >    not duplicate it.
-> 2. **`plan_webgpu.md` grew substantially** — render state (blend/rasterizer/cull/wireframe/
+> 2. **`plans/plan_webgpu.md` grew substantially** — render state (blend/rasterizer/cull/wireframe/
 >    scissor/viewport/sampler/depth-stencil), `RenderTarget2D`/`RenderTargetCube`, MSAA,
 >    `EnvironmentMapEffect`, real instancing, `Texture3D`, `Texture2D`/`TextureCube` `GetData()`
->    readback, and real linear-filtered mip generation. **`plan_webgpu.md`'s own top banner has a
+>    readback, and real linear-filtered mip generation. **`plans/plan_webgpu.md`'s own top banner has a
 >    full, current "Remaining work" summary — read it directly, don't re-derive it here.** Only
 >    genuinely open item found requiring cross-backend design work: compressed (DXT/BC) texture
 >    upload needs a shared `ImageData`/`Texture2D.cpp` change, not a backend-local fix (no CNA
 >    backend anywhere does real native compressed upload today).
-> 3. **`plan_graphics.md` Task 863 closed** — `Texture3D`/`TextureCube` now inherit `Texture`
+> 3. **`plans/plan_graphics.md` Task 863 closed** — `Texture3D`/`TextureCube` now inherit `Texture`
 >    (matching FNA), closing the "cannot be sampled by any shader" architectural gap. EasyGL-only
 >    implementation (`BindTexture3D`, mirroring the existing `BindTextureCube`/Task 1081 path);
 >    Vulkan/Bgfx/WebGPU/SDL_Renderer/D3D9-12 are explicitly deferred follow-ups, not started.
@@ -4320,8 +4320,8 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 >   but always finish in-flight work regardless of temperature); low free RAM alone isn't urgent
 >   if swap still has headroom.
 >
-> **Remaining open items in `plan_graphics.md`** (35 `⬜` + 1 `🟨`, as of 2026-07-18 — re-grep
-> `plan_graphics.md` for `⬜|🟨` to confirm this hasn't drifted before trusting it blindly):
+> **Remaining open items in `plans/plan_graphics.md`** (35 `⬜` + 1 `🟨`, as of 2026-07-18 — re-grep
+> `plans/plan_graphics.md` for `⬜|🟨` to confirm this hasn't drifted before trusting it blindly):
 >
 > **New, found this session, no architecture decision needed:**
 > - **Task 1115** — `EasyGL_AvatarRenderer_TintRouting`/`cna_test_avatar_tint_routing` fails with
@@ -4388,27 +4388,27 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 > (2026-07-14).** This branch (`feature/dx9`, worktree `cnadx9`) is a parallel effort to the
 > established EasyGL/Vulkan/Bgfx/SDL_Renderer/WebGPU/Headless/Software/D3D11/D3D12 backends, all of
 > which are developed on other branches (`develop` and friends) and are **not tracked here**. For
-> their status, see `plan_graphics.md`, `plan_dx.md`, `plan_webgpu.md`, `plan_software.md`,
-> `plan_headless.md`, and `git log` on those branches — this file will not duplicate it, and will
+> their status, see `plans/plan_graphics.md`, `plans/plan_dx.md`, `plans/plan_webgpu.md`, `plans/plan_software.md`,
+> `plans/plan_headless.md`, and `git log` on those branches — this file will not duplicate it, and will
 > not be updated for non-D3D9 work. Full D3D9 task-by-task detail and history lives in
-> **`plan_dx9.md`** (`D9-0`–`D9-140`); this file is a short current-state index, the same relationship
-> `plan_dx.md`/`NEXT.md` had for D3D11/D3D12 before this branch existed.
+> **`plans/plan_dx9.md`** (`D9-0`–`D9-140`); this file is a short current-state index, the same relationship
+> `plans/plan_dx.md`/`NEXT.md` had for D3D11/D3D12 before this branch existed.
 >
 > **Status (2026-07-14): implementation authorized, Phase D9-0 spikes closed, no backend code written
-> yet.** The project owner has authorized implementation through Phase D9-13 (`plan_dx9.md`'s own
+> yet.** The project owner has authorized implementation through Phase D9-13 (`plans/plan_dx9.md`'s own
 > "Boundaries" still require asking before Phase D9-11 "custom `ShaderEffect`"; Phase D9-14 needs real
 > Windows hardware and is `needs_human`). The plan's one architectural blocker — the
 > `IGraphicsBackend`/`GraphicsBackendCreateArgs` boundary problem — is also resolved: an additive
 > extension (new optional presentation-parameter fields + a narrow device-event notification channel)
-> is approved, unblocking `D9-30`/`D9-32`/`D9-33`/`D9-34`. See `plan_dx9.md`'s top banner and "The
+> is approved, unblocking `D9-30`/`D9-32`/`D9-33`/`D9-34`. See `plans/plan_dx9.md`'s top banner and "The
 > `IGraphicsBackend` boundary problem" section for the full record.
 
 ---
 
-> **Separate, unrelated track — `plan_graphics.md` Phase 78 (DEFERRED.md item #11, HLSL→GLSL sample
+> **Separate, unrelated track — `plans/plan_graphics.md` Phase 78 (DEFERRED.md item #11, HLSL→GLSL sample
 > shader conversion) is now FULLY COMPLETE, as of 2026-07-16 (EasyGL only).** This is completely
-> independent of the D3D work above — it unblocks samples catalogued in `plan_samples.md`
-> (`../cna-samples`' own 153-sample re-audit), not `plan_dx.md`. **Task 945 decided** (project
+> independent of the D3D work above — it unblocks samples catalogued in `plans/plan_samples.md`
+> (`../cna-samples`' own 153-sample re-audit), not `plans/plan_dx.md`. **Task 945 decided** (project
 > owner, 2026-07-16): manual line-by-line HLSL→GLSL porting, no `SPIRV-Cross`/`dxc` pipeline — every
 > HLSL construct hit across every shader ported turned out to be a mechanical 1:1 substitution.
 > **Task 947 is now 13/13 — every sample originally blocked purely by DEFERRED.md #11 has its
@@ -4424,15 +4424,15 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 > vertex streams). **What remains is explicitly NOT `cna_graphics` scope**: the actual sample ports
 > (`.cpp`/`.hpp`/`Content/` under `../cna-samples/samples/<Name>/`) for these 13 (now-unblocked)
 > samples still need to be written in the sibling `../cna-samples` repo, tracked in that repo's own
-> plan file, not here or in `plan_graphics.md`/`plan_samples.md`. `plan_samples.md` also still has
+> plan file, not here or in `plans/plan_graphics.md`/`plans/plan_samples.md`. `plans/plan_samples.md` also still has
 > ~88 other `⬜` rows unrelated to this shader-conversion track (re-verification passes, other
-> DEFERRED.md items, etc.) — untouched by this work, standing backlog. Full detail: `plan_graphics.md`
+> DEFERRED.md items, etc.) — untouched by this work, standing backlog. Full detail: `plans/plan_graphics.md`
 > Task 947's own row (chronological per-shader history, discriminating-power mutation testing for
-> every one) and Tasks 1079–1082's own rows; `plan_samples.md` for the per-sample CNA-gap tracking.
+> every one) and Tasks 1079–1082's own rows; `plans/plan_samples.md` for the per-sample CNA-gap tracking.
 
 > **Separate, unrelated track — `feature/input` branch, `audit_input.md` remediation + full
 > phase-by-phase FNA-parity audit, in progress as of 2026-07-17.** Completely independent of the D3D9
-> work below (this `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`,
+> work below (this `NEXT.md`/`plans/plan_dx9.md` pair is D3D9-only) — tracked in full in `plans/plan_input.md`,
 > not duplicated here. **Status: this plan is now CLOSED as of 2026-07-17** — Phases 0-10, 12, and 13
 > are fully closed and pushed (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`,
 > `P4-001..070`, `P5-001..045`, `P6-001..045`, `P7-001..040`, `P8-001..040`, `P9-001..035`,
@@ -4459,18 +4459,18 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 > Every Input-filtered run this session (9 phases, dozens of invocations, including under
 > AddressSanitizer+UndefinedBehaviorSanitizer) has been 100% clean. This is a real, separate memory-
 > safety defect needing dedicated cross-subsystem bisection — flagged, not fixed, since it is unrelated
-> to and out of scope for this track. See `plan_input.md`'s P9-031 Result for full reproduction detail.
+> to and out of scope for this track. See `plans/plan_input.md`'s P9-031 Result for full reproduction detail.
 > Each phase closes with a
 > checkpoint task (`P{N}-0XX — Phase N checkpoint and summary`) recording pass/fail counts, files
 > changed, and follow-ups — read the **last completed phase's checkpoint Result** for the most
-> efficient overview, then check `plan_input.md`'s Phase overview table for the next open phase's
+> efficient overview, then check `plans/plan_input.md`'s Phase overview table for the next open phase's
 > starting task ID. Commits are per-phase (one `git commit` per closed phase); `git log --oneline` on
 > `feature/input` is the index. A whole-file status/Result consistency check (see any recent commit's
 > diff for the Python snippet, run before every commit) is a standing safety net — a prior session hit
 > an unexplained checkbox-revert bug once, never repeated since. Later phases (4-6) found dramatically
 > fewer gaps than Phases 1-3 (Phase 4 and most of Phase 5 needed **zero** code/test changes — the
 > pre-existing GamePad/Touch test suites were already exhaustive from earlier session work); when a
-> phase like that produces no diff beyond `plan_input.md` itself, that is a genuine, verified outcome
+> phase like that produces no diff beyond `plans/plan_input.md` itself, that is a genuine, verified outcome
 > (each task still gets independent evidence — re-derived FNA cross-checks, not just re-reading old doc
 > claims), not a shortcut. One recurring authoring mistake to avoid: writing multi-paragraph Result text
 > by hand (via a direct `Edit` call rather than the batch Python script) has twice left stray `"`
@@ -4480,20 +4480,20 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 > `xvfb-run` usage (dozens of invocations) has caused elevated-but-non-failing `GTEST_SKIP` counts on
 > video-dependent tests in later phases (host X11/Xvfb resource pressure, not a code regression —
 > confirmed via isolated single-test sanity checks each time); zero `[  FAILED  ]` lines have appeared
-> in any run this session. If resuming this track: read `plan_input.md`'s Phase overview + the last
+> in any run this session. If resuming this track: read `plans/plan_input.md`'s Phase overview + the last
 > `[x]`-marked checkpoint task's Result for the exact stopping point, not this file.
 
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model
 (`Microsoft::Xna::Framework`), built on SDL3 with a pluggable graphics backend layer. This branch
-adds a **Direct3D 9** backend — see `plan_dx9.md` for the full plan. Unlike every other CNA backend,
+adds a **Direct3D 9** backend — see `plans/plan_dx9.md` for the full plan. Unlike every other CNA backend,
 this one is not a coverage/parity effort: its stated goal (set by the project owner) is that a CNA
 game running on D3D9 be **indistinguishable** from the same game running on the original XNA 4.0
 runtime, verified against a real XNA 4.0 oracle running under Wine (Phase D9-A), not just "renders
 plausibly."
 
-- **Key decisions already made** (see `plan_dx9.md` design decisions 1–17 for the full rationale):
+- **Key decisions already made** (see `plans/plan_dx9.md` design decisions 1–17 for the full rationale):
   - Plain `Direct3DCreate9`, **not** D3D9Ex — `D3DPOOL_MANAGED` for user resources so they survive
     `Reset()`, and the real XNA device-lost lifecycle (`DeviceLost`/`DeviceResetting`/`DeviceReset`)
     is implemented for real, for the first time in this project.
@@ -4510,7 +4510,7 @@ plausibly."
   confirmed CNA-vs-XNA divergences that exist on **every** CNA backend today (worst: CNA always
   lights per-pixel; XNA's default is per-vertex, and CNA has no per-vertex lighting shader anywhere).
   This plan measures and reports them (Phase D9-A6, `D9-81`); it does **not** fix them — that is a
-  `plan_graphics.md`-level, project-owner decision. See `plan_dx9.md`'s "CNA's divergences from XNA
+  `plans/plan_graphics.md`-level, project-owner decision. See `plans/plan_dx9.md`'s "CNA's divergences from XNA
   4.0" section before touching any of this.
 
 ---
@@ -4545,7 +4545,7 @@ plausibly."
 | `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
 | `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
 | `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
-| `D9-A5` — growing scene corpus | 🟨 (31 scenes, all 5 XNA Stock Effects + `IEffectFog` + ALL 8 `AlphaTestEffect.AlphaFunction` values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage COMPLETE) + `EnvironmentMapEffect.FresnelFactor` + `SkinnedEffect` ALL 3 `WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage COMPLETE) + `SpriteBatch` core draw path, address modes, 3 of 5 `SpriteSortMode` values, and multi-texture `FlushBatch()`-on-texture-change batching (`D9-90`/`D9-91`/`D9-92`/`D9-93` all CLOSED; `D9-93` covers `Deferred`/`BackToFront`/`FrontToBack`, `Immediate`/`Texture` explicitly scoped out — see `plan_dx9.md` D9-93's own closure note) + ALL 4 `PrimitiveType` values (`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip` — `PrimitiveType` coverage COMPLETE) represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`, `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`, `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`, `skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad`, `sprite_basic_quad`, `sprite_rotated_quad`, `sprite_flipped_quad`, `sprite_wrap_quad`, `sprite_mirror_quad`, `sprite_sortmode_deferred_quad`, `sprite_sortmode_backtofront_quad`, `sprite_sortmode_fronttoback_quad`, `sprite_multitexture_quad`, `colored_trianglestrip_quad`, `colored_linelist_quad`, `colored_linestrip_quad`, all pixel-perfect) |
+| `D9-A5` — growing scene corpus | 🟨 (31 scenes, all 5 XNA Stock Effects + `IEffectFog` + ALL 8 `AlphaTestEffect.AlphaFunction` values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage COMPLETE) + `EnvironmentMapEffect.FresnelFactor` + `SkinnedEffect` ALL 3 `WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage COMPLETE) + `SpriteBatch` core draw path, address modes, 3 of 5 `SpriteSortMode` values, and multi-texture `FlushBatch()`-on-texture-change batching (`D9-90`/`D9-91`/`D9-92`/`D9-93` all CLOSED; `D9-93` covers `Deferred`/`BackToFront`/`FrontToBack`, `Immediate`/`Texture` explicitly scoped out — see `plans/plan_dx9.md` D9-93's own closure note) + ALL 4 `PrimitiveType` values (`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip` — `PrimitiveType` coverage COMPLETE) represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`, `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`, `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`, `skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad`, `sprite_basic_quad`, `sprite_rotated_quad`, `sprite_flipped_quad`, `sprite_wrap_quad`, `sprite_mirror_quad`, `sprite_sortmode_deferred_quad`, `sprite_sortmode_backtofront_quad`, `sprite_sortmode_fronttoback_quad`, `sprite_multitexture_quad`, `colored_trianglestrip_quad`, `colored_linelist_quad`, `colored_linestrip_quad`, all pixel-perfect) |
 | `D9-A6` — run the corpus against CNA's other backends too | ✅ (EasyGL: 10/31 pixel-perfect, 21/31 diverge; Vulkan/D3D11 not yet measured) |
 
 Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
@@ -4879,7 +4879,7 @@ simple "add a scene" task.
 described CMake line 288 as "a second Windows-only-related OR chain" needing a D3D9 sibling, but that
 line is actually the `D3DCommon` shared-core conditional — adding D3D9 there would have violated
 design decision 12 ("`D3DCommon` is not expanded"). Left untouched, with an explanatory comment;
-`plan_dx9.md`'s own `D9-10` row now records the correction. Line 392 (the `CNA` circular-link `OR`
+`plans/plan_dx9.md`'s own `D9-10` row now records the correction. Line 392 (the `CNA` circular-link `OR`
 chain) was also deliberately left out of D3D9's `OR` chain — nothing calls back into a CNA-defined
 symbol yet (that's `D9-112`, Phase D9-11, ask-first).
 
@@ -5014,7 +5014,7 @@ real XNA either). Mutation-verified: temporarily broke `CreateIndexBuffer32()` t
 buffer instead — caught immediately (a real, uncaught exception from the existing type-mismatch
 guard), reverted, reconfirmed green. Also confirmed and fixed the exact "pointer-inequality is not
 sound proof of recreation" false-negative this project's own D3D12 work already found once (see
-`plan_dx9.md`'s `D9-40` row). `D3D9_Smoke` is now 30/30 checks.
+`plans/plan_dx9.md`'s `D9-40` row). `D3D9_Smoke` is now 30/30 checks.
 
 ### Phase D9-5 — textures/render targets/readback: FULLY CLOSED (all 7 rows)
 
@@ -5167,7 +5167,7 @@ register file), exactly as this row's own note anticipated.
 
 `D9-74` (**Phase D9-7 now fully closed** — `D9-73` stays honestly 🟨, its own deferred obligation
 unaffected): took option (a) from this row's own recommendation — `dxvk-setup install` run against
-`~/.wine-cna-d3d9-spike` (same command `plan_dx.md`'s `DX-2` used for `~/.wine-cna-d3d11`), verified
+`~/.wine-cna-d3d9-spike` (same command `plans/plan_dx.md`'s `DX-2` used for `~/.wine-cna-d3d11`), verified
 for real (`d3d9.dll` now a DXVK symlink; `d3dcompiler_47.dll` untouched — confirmed by re-running the
 full `D3D9_Smoke` suite against this prefix, 53/53 pass). New `D3D9ShaderCache` (`CreateVertexShader`/
 `CreatePixelShader` per named entry point, e.g. `"BasicEffect_VSBasic"`, lazy-create-and-cache),
@@ -5194,7 +5194,7 @@ confirmed exactly the count-dependent checks went red). Full 3-CTest D3D9 suite 
 | `D9-83` — `DrawInstancedPrimitivesEx` via `SetStreamSourceFreq` | ✅ |
 | `D9-84` — every draw path validated against the oracle | ⬜ |
 
-`D9-81`: the audit's own findings were already fully written into the plan row when `plan_dx9.md`
+`D9-81`: the audit's own findings were already fully written into the plan row when `plans/plan_dx9.md`
 was first authored (2026-07-14) — this closure is an independent RE-VERIFICATION against the
 CURRENT source (not trusted from memory), via a forked agent that read every cited file directly.
 **Result: all 4 gaps are still real, and 2 of the 4 turn out resolvable without any `GpuDrawParams`
@@ -5221,7 +5221,7 @@ in the test file; re-ran the same mutation, now correctly caught (exact mismatch
 reconfirmed 23/23 green. Full D3D9 CTest suite (4 binaries) passes.
 
 `D9-82`: split from its own original single-row scope into `D9-82` (this narrow, non-effect-aware
-"colored3d-equivalent" slice) + `D9-82b` (full effect-aware dispatch) — mirrors `plan_dx.md`'s own
+"colored3d-equivalent" slice) + `D9-82b` (full effect-aware dispatch) — mirrors `plans/plan_dx.md`'s own
 `DX-61` vs. `DX-62..67` precedent exactly, same rationale (real, separate-scale work, not a
 same-sitting extension). This backend's first real 3D triangle: new `D3D9ConstantUpload.hpp`+`.cpp`
 (name-keyed register lookup + `Set{Vertex,Pixel}ShaderConstantF`, throws on a genuine
@@ -5582,7 +5582,7 @@ deliberately set aside (see below). All checks mutation-verified (the `SetGraphi
 propagation fix and `MaxTextureSizeForProfileEXT`, each independently disabled, correctly failed
 their own targeted checks and nothing else, then restored). Full `D3D9` CTest suite 13/13 green.
 
-**D9-105's own honest caveat, restated (not just in `plan_dx9.md`)**: every `D3DCAPS9`-consuming
+**D9-105's own honest caveat, restated (not just in `plans/plan_dx9.md`)**: every `D3DCAPS9`-consuming
 function here is REAL logic against a REAL `IDirect3D9`/`IDirect3DDevice9` — but in this Wine+DXVK
 dev loop, the `D3DCAPS9` VALUES those calls return are DXVK's own synthesized capability set, not
 what an authentic XNA-era (~2006-2013) Direct3D 9 driver would report. `IsProfileSupported(HiDef)`
@@ -5697,7 +5697,7 @@ real delta) and exits 1, restored, reconfirmed 31/31 green.
 New `docs/d3d9-divergence-report.md` — headline result **0/31 scenes diverge from real XNA 4.0 at
 tolerance=0**, with an explicit table of what the corpus does NOT yet cover (so the empty-list
 result isn't mistaken for total coverage) and an honest, current-status re-read of all six
-project-wide CNA-vs-XNA divergences `plan_dx9.md`'s own section names: Divergence 3
+project-wide CNA-vs-XNA divergences `plans/plan_dx9.md`'s own section names: Divergence 3
 (`GraphicsProfile` decorative) is now CLOSED on D3D9 (Phase D9-10); Divergence 4 (`SpriteBatch`
 half-texel convention never modeled) is now MEASURED AND CONFIRMED CORRECT on D3D9 (`D9-91`);
 Divergences 1/5/6 remain genuinely unmeasured or only partially measured; Divergence 2 is resolved
@@ -5739,7 +5739,7 @@ combined boolean assertion as the already-CONFIRMED `ADDRESSU`); Check R's volum
 (only the cube half was tested); `D3D9_Smoke` Checks B/C/D–I/J/L; `D3D9_Common`'s other 29 of 30
 checks (only 1 `CullMode`-mapping check has explicit evidence, judged lower-priority — homogeneous
 lookup-table checks, method already proven on one representative entry). Full detail in
-`plan_dx9.md`'s own `D9-122` row.
+`plans/plan_dx9.md`'s own `D9-122` row.
 
 **`D9-123` — FULLY CLOSED 2026-07-15, both the compile blocker and its own downstream follow-up.**
 The POSIX `::setenv()`/`::unsetenv()` wall (`AudioEngineTests.cpp`/`WaveBankTests.cpp`/
@@ -5770,7 +5770,7 @@ individual discovered cases plus `CnaInputTests` itself via `ctest -R` — all g
 through Wine and pass. **EasyGL regression-checked**: reconfigured + rebuilt, ran the same 2
 spot-checks natively — pass at native speed, `CMAKE_CROSSCOMPILING` guard correctly no-ops for the
 9 already-established non-cross backends. Not independently re-verified on D3D11/D3D12's own build
-dirs (not configured in this worktree); full detail in `plan_dx9.md`'s `D9-123` row.
+dirs (not configured in this worktree); full detail in `plans/plan_dx9.md`'s `D9-123` row.
 
 ### Phase D9-13 — docs: `D9-130` CLOSED, `D9-140` still open (`needs_human`)
 
@@ -5788,7 +5788,7 @@ current dispatch, `D9-82e`) — cells that couldn't be grounded this way are hon
 assumed `✅`. `README.md` gained a `D3D9` Project-Status bullet, a "Build (Windows
 cross-compilation — D3D9 backend)" section mirroring D3D11/D3D12's, and a Tested-Compilers row.
 `programs.md` §9 gained the D3D9-specific three-Wine-prefix subsection this document's own
-`plan_dx9.md` line 103 had flagged as a gap (`programs.md` previously documented only the D3D11
+`plans/plan_dx9.md` line 103 had flagged as a gap (`programs.md` previously documented only the D3D11
 prefix). `D9-140` (real Windows hardware) remains open, `needs_human`, unchanged.
 
 ### Does NOT work yet
@@ -5811,27 +5811,27 @@ the buffer-creation path, the texture/render-target-creation paths, and the draw
 
 ## 3. Recent changes
 
-Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
+Most recent first. Full detail lives in `plans/plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **RESOLVED the documented render-target-as-texture D3D9 crash from `08aba091`/§4 — a real CNA bug, not a DXVK/environment limitation.** Root cause: every `D3D9EffectDraw.cpp` texture-binding call site did `static_cast<const D3D9TextureBackend*>(params.texture0)` unconditionally, which is undefined behavior whenever `params.texture0` actually points at a `D3D9RenderTargetBackend` (a real, legal runtime type for that `const ITextureBackend*` field, since `IRenderTargetBackend : ITextureBackend`) — exactly what happens when a `RenderTarget2D` is sampled as an ordinary effect texture. `D3D11GraphicsBackend.cpp` already solves this exact problem (`GetSrvForTextureEXT`, a two-concrete-type `dynamic_cast` resolver) — `D3D9` never had the equivalent. Fixed with new `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT` helpers (mirroring D3D11's own precedent) replacing all 6 unsafe `static_cast` sites in `D3D9EffectDraw.cpp`, plus the same fix in `D3D9SpriteBatch.cpp`'s own analogous (already `dynamic_cast`-safe, non-crashing but silently-wrong) gap. **Mutation-verified**: temporarily reintroduced the exact original `static_cast`, reproduced the documented symptom verbatim (`terminate called after throwing an instance of 'dxvk::DxvkError'`); reverted, reconfirmed the fix. New `D3D9_DrawEx` Check Q (18 checks): a `D3D9RenderTargetBackend` created/bound/`Clear()`ed/unbound then sampled directly as an ordinary `BasicEffect` texture — exact readback, no crash. Full `ctest -L D3D9`: 17/17 green, zero regressions. Deliberately did not re-attempt the reverted oracle-corpus scene (`D9-A5`/`D9-84`'s own territory) as part of this fix. See §4's own updated record and `plan_dx9.md`'s `D9-84` row. |
-| *(pending)* | **`D9-A6` CLOSED — the oracle corpus run against a SECOND backend (EasyGL) for the first time ever.** Confirmed `tools/xna-oracle/CnaOracleRender.cpp` was already backend-agnostic before touching it (only two `printf` strings and one comment literally said `D3D9`) — added a small `OracleBackendName()` helper keyed off the `CNA_BACKEND_*` compile definitions, no other line changed. New, purely-additive `cna_easygl_test(cna_oracle_render_easygl ...)` CMake registration inside the existing EasyGL-tests section (not a CTest, same "comparison tool" precedent as `cna_oracle_render`); new non-Wine `scripts/run-oracle-corpus-diff-easygl.sh` twin driver script. Existing D3D9 registration/CTest/script untouched (`cmake --build cmake-build-d3d9 --target cna_oracle_render` re-verified still green after the change). **Result: 10/31 pixel-perfect (all `sprite_*` + `alphatest_never_quad`), 21/31 diverge in three evidenced patterns** — (1) 17 scenes diverge only in a thin silhouette-edge band (rasterization fill-rule/pixel-center convention gap vs. D3D9-over-DXVK, most likely), notably including 5 "lit" scenes that turn out structurally incapable of exposing the predicted `preferPerPixelLighting` gap (uniform normal/light by construction); (2) 2 scenes (`colored3d`, `colored_trianglestrip_quad`) diverge almost everywhere but by only 1-3/channel — ordinary Mesa/RADV-vs-DXVK float rounding noise, not a bug; (3) 2 real, previously-unmeasured `plan_graphics.md` candidates — `fog_gradient_quad` renders fully-fogged/black everywhere (including the near/unfogged edge) instead of the correct linear gradient (likely a negative-`FogEnd`-specific EasyGL bug), and `envmap_fresnel_quad` renders nearly the whole quad at the bright top-edge Fresnel value instead of Gouraud-interpolating to the dim bottom edge — a concrete confirmation of this plan's own predicted design-decision-8 gap, in the one scene actually shaped to detect it. All three patterns logged in `docs/d3d9-divergence-report.md`'s new "Cross-backend measurement (D9-A6)" section, **none investigated further or fixed**, per this row's own explicit rule. Vulkan/D3D11 remain unmeasured. |
+| *(pending)* | **RESOLVED the documented render-target-as-texture D3D9 crash from `08aba091`/§4 — a real CNA bug, not a DXVK/environment limitation.** Root cause: every `D3D9EffectDraw.cpp` texture-binding call site did `static_cast<const D3D9TextureBackend*>(params.texture0)` unconditionally, which is undefined behavior whenever `params.texture0` actually points at a `D3D9RenderTargetBackend` (a real, legal runtime type for that `const ITextureBackend*` field, since `IRenderTargetBackend : ITextureBackend`) — exactly what happens when a `RenderTarget2D` is sampled as an ordinary effect texture. `D3D11GraphicsBackend.cpp` already solves this exact problem (`GetSrvForTextureEXT`, a two-concrete-type `dynamic_cast` resolver) — `D3D9` never had the equivalent. Fixed with new `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT` helpers (mirroring D3D11's own precedent) replacing all 6 unsafe `static_cast` sites in `D3D9EffectDraw.cpp`, plus the same fix in `D3D9SpriteBatch.cpp`'s own analogous (already `dynamic_cast`-safe, non-crashing but silently-wrong) gap. **Mutation-verified**: temporarily reintroduced the exact original `static_cast`, reproduced the documented symptom verbatim (`terminate called after throwing an instance of 'dxvk::DxvkError'`); reverted, reconfirmed the fix. New `D3D9_DrawEx` Check Q (18 checks): a `D3D9RenderTargetBackend` created/bound/`Clear()`ed/unbound then sampled directly as an ordinary `BasicEffect` texture — exact readback, no crash. Full `ctest -L D3D9`: 17/17 green, zero regressions. Deliberately did not re-attempt the reverted oracle-corpus scene (`D9-A5`/`D9-84`'s own territory) as part of this fix. See §4's own updated record and `plans/plan_dx9.md`'s `D9-84` row. |
+| *(pending)* | **`D9-A6` CLOSED — the oracle corpus run against a SECOND backend (EasyGL) for the first time ever.** Confirmed `tools/xna-oracle/CnaOracleRender.cpp` was already backend-agnostic before touching it (only two `printf` strings and one comment literally said `D3D9`) — added a small `OracleBackendName()` helper keyed off the `CNA_BACKEND_*` compile definitions, no other line changed. New, purely-additive `cna_easygl_test(cna_oracle_render_easygl ...)` CMake registration inside the existing EasyGL-tests section (not a CTest, same "comparison tool" precedent as `cna_oracle_render`); new non-Wine `scripts/run-oracle-corpus-diff-easygl.sh` twin driver script. Existing D3D9 registration/CTest/script untouched (`cmake --build cmake-build-d3d9 --target cna_oracle_render` re-verified still green after the change). **Result: 10/31 pixel-perfect (all `sprite_*` + `alphatest_never_quad`), 21/31 diverge in three evidenced patterns** — (1) 17 scenes diverge only in a thin silhouette-edge band (rasterization fill-rule/pixel-center convention gap vs. D3D9-over-DXVK, most likely), notably including 5 "lit" scenes that turn out structurally incapable of exposing the predicted `preferPerPixelLighting` gap (uniform normal/light by construction); (2) 2 scenes (`colored3d`, `colored_trianglestrip_quad`) diverge almost everywhere but by only 1-3/channel — ordinary Mesa/RADV-vs-DXVK float rounding noise, not a bug; (3) 2 real, previously-unmeasured `plans/plan_graphics.md` candidates — `fog_gradient_quad` renders fully-fogged/black everywhere (including the near/unfogged edge) instead of the correct linear gradient (likely a negative-`FogEnd`-specific EasyGL bug), and `envmap_fresnel_quad` renders nearly the whole quad at the bright top-edge Fresnel value instead of Gouraud-interpolating to the dim bottom edge — a concrete confirmation of this plan's own predicted design-decision-8 gap, in the one scene actually shaped to detect it. All three patterns logged in `docs/d3d9-divergence-report.md`'s new "Cross-backend measurement (D9-A6)" section, **none investigated further or fixed**, per this row's own explicit rule. Vulkan/D3D11 remain unmeasured. |
 | *(pending)* | **`D9-112` CLOSED — `SpriteBatch::Begin(effect)` wiring, Phase D9-11 FULLY CLOSED.** New `D3D9SpriteBatchBackend::SetCustomEffect()` (flush-on-change, mirrors D3D11's identical pattern). `FlushBatch()` branches on a valid custom `D3D9EffectBackend`: uploads viewport size via `D9-111`'s own generic `SetUniformVec2("vpSize", ...)` (no dedicated method needed, unlike D3D11's `SetViewportSizeEXT()`), calls `Apply()` then `Bind()`, replacing the stock shader/`MatrixTransform` block — vertex declaration/texture/sampler binding stay unchanged between paths (D3D9's declaration is a decoupled device state, simpler than D3D11's shader-baked `InputLayout`). New `D3D9GraphicsBackend::CreateEffectBackend()` + the matching `CMakeLists.txt` circular-link fix (D3D9 joins the `CNA`-back-link `OR` chain, closing the gap `D9-10` deferred here). **Real bug found and fixed**: moving `D3D9EffectBackend.cpp` out of the main glob while `D3D9ConstantTable.cpp` stayed in it created a genuine link-order cycle between the two new targets (`undefined reference to ParseConstantTableEXT` on every D3D9 test binary) — root-caused and fixed by moving `D3D9ConstantTable.cpp` into the isolated effect target too (it has no other consumer). New `D3D9_SpriteBatch_CustomEffect` CTest (4/4) through the real public `SpriteBatch`/`ShaderEffect` API, mirroring D3D11's own `DX-71` test bar in real D3D9 SM2/SM3 HLSL — all 4 passed on the first successful build. Mutation-verified (forced the custom-effect branch unreachable, confirmed exactly the color-inversion discriminator failed while position/restore-to-stock checks correctly stayed green; reverted clean). Full D3D9 suite now 17/17; EasyGL/`CnaTests` regression-checked. |
 | `f69094dd` | **`D9-111` CLOSED — `D3D9EffectBackend`, real runtime `D3DCompile()` custom-ShaderEffect backend**. New `D3D9EffectBackend.{hpp,cpp}` (`IEffectBackend`): `CompileProgram()` compiles vertex+pixel source separately (`vs_2_0`/`ps_2_0` Reach, `vs_3_0`/`ps_3_0` HiDef), `SetUniform*` genuinely looks `name` up per-stage via `D9-110`'s own real register tables — not D3D11EffectBackend's own fixed-slot convention, since D3D9 registers are compiler-assigned and vary per shader. Build-isolated per design decision 16: `D3D9EffectBackend.cpp` excluded from the main backend source glob, built as its own `cna_backend_graphics_d3d9_effect` static library with `d3dcompiler` linked ONLY there — the stock D3D9 pipeline stays dependency-free, diverging from D3D11/D3D12's own simpler "link it to the whole backend" precedent. New `D3D9_EffectBackend` CTest (6/6), matching D3D11EffectBackend's own `DX-58` test bar (compile+bind+draw+uniform-driven pixel readback) on a real device — all 6 passed on the FIRST successful build. **Real finding via mutation-testing**: the original single "far-away WorldViewProj leaves background unpainted" check wasn't discriminating — a fully-disabled vertex-constant upload also leaves the register at zero, also degenerating the triangle to nothing, for a completely different reason. Fixed by splitting into a positive-case anchor (identity re-upload must still paint red) before the negative case; re-mutated and confirmed the anchor now correctly fails first. All mutations reverted (`diff`-confirmed byte-identical each time). Full D3D9 suite now 16/16; EasyGL/CNA build regression-checked. `D9-112` remains open. |
 | `d01bbfb1` | **Phase D9-11 authorized 2026-07-15; `D9-110` (CTAB constant-table parser) CLOSED**. New `D3D9ConstantTable.{hpp,cpp}` — real `D3DXSHADER_CONSTANTTABLE`/`D3DXSHADER_CONSTANTINFO` binary parsing (no D3DX/`ID3DXConstantTable`, design decision 9), locating the CTAB comment token via the same DWORD-walking strategy `compare_against_fxb.py` (`D9-73`) already proved against 66 real shaders. New `D3D9_ConstantTable` CTest (14/14): compiles a known 3-constant shader via real `D3DCompile()`, cross-checks against `D3DDisassemble()`'s own independent `"// Registers:"` text (same regex as `extract_shader_registers.py`). **Found and fixed a real bug via this cross-check**: first attempt returned 0 constants — a raw byte-dump against real compiler output found every CTAB offset field is relative to 4 bytes past the `'CTAB'` FourCC (where `Size` begins), not the FourCC itself. Mutation-verified (reverted the fix, parser reads garbage and crashes with `std::bad_alloc` — an even more dramatic catch than a value mismatch); reverted clean, reconfirmed 14/14. Added a defensive bound so malformed CTAB data returns empty instead of crashing. Full D3D9 suite now 15/15; EasyGL/CNA build unaffected (file only compiles under D3D9). |
-| `4ec9e781` | **`D9-123` FULLY CLOSED — the `gtest_discover_tests` cross-compile follow-up**. `CMakeLists.txt:7117`'s `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` had no `MINGW`/`CMAKE_CROSSCOMPILING` guard and tried to directly execute the cross-compiled `CnaTests.exe` (a PE32+ binary) to enumerate test names — invisible before the setenv fix landed. Measured the naive per-test-Wine-spawn cost first (~1.2s/spawn × 4367 discovered cases ≈ 87 minutes) before picking an approach. Fixed by setting `CROSSCOMPILING_EMULATOR` on the `CnaTests` target (same CMake-native mechanism `DX-80`'s own `cna_d3d11_ctest_command` macro already uses), routing through the correct per-backend Wine wrapper with its DXVK/vkd3d-proton authenticity gate deliberately disabled inline (`env CNA_D3D9_SKIP_DXVK_GATE=1 <wrapper>`) — `CnaTests` spans non-Graphics namespaces that never open a device. Also automatically fixed `CnaInputTests`' own separate `add_test`, no extra change needed. Deliberately kept `gtest_discover_tests` as-is rather than redesigning granularity: confirmed the real workflow (`ctest -L D3D9`) label-filters and none of the 4367 discovered cases carry that label, so the 87-minute concern never applies to the actual documented command. **Verified end-to-end**: `ctest -L D3D9` 14/14 pass (no more test-file-generation crash); `ctest -N` shows 4383 total registered tests; 2 individual discovered cases plus `CnaInputTests` itself explicitly run via `ctest -R` and genuinely execute through Wine, not just register. EasyGL regression-checked (reconfigured + rebuilt, same 2 spot-checks pass natively, `CMAKE_CROSSCOMPILING` guard correctly no-ops). Not independently re-verified on D3D11/D3D12's own build dirs. `plan_dx9.md`'s `D9-123` row now ✅ in full. |
+| `4ec9e781` | **`D9-123` FULLY CLOSED — the `gtest_discover_tests` cross-compile follow-up**. `CMakeLists.txt:7117`'s `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` had no `MINGW`/`CMAKE_CROSSCOMPILING` guard and tried to directly execute the cross-compiled `CnaTests.exe` (a PE32+ binary) to enumerate test names — invisible before the setenv fix landed. Measured the naive per-test-Wine-spawn cost first (~1.2s/spawn × 4367 discovered cases ≈ 87 minutes) before picking an approach. Fixed by setting `CROSSCOMPILING_EMULATOR` on the `CnaTests` target (same CMake-native mechanism `DX-80`'s own `cna_d3d11_ctest_command` macro already uses), routing through the correct per-backend Wine wrapper with its DXVK/vkd3d-proton authenticity gate deliberately disabled inline (`env CNA_D3D9_SKIP_DXVK_GATE=1 <wrapper>`) — `CnaTests` spans non-Graphics namespaces that never open a device. Also automatically fixed `CnaInputTests`' own separate `add_test`, no extra change needed. Deliberately kept `gtest_discover_tests` as-is rather than redesigning granularity: confirmed the real workflow (`ctest -L D3D9`) label-filters and none of the 4367 discovered cases carry that label, so the 87-minute concern never applies to the actual documented command. **Verified end-to-end**: `ctest -L D3D9` 14/14 pass (no more test-file-generation crash); `ctest -N` shows 4383 total registered tests; 2 individual discovered cases plus `CnaInputTests` itself explicitly run via `ctest -R` and genuinely execute through Wine, not just register. EasyGL regression-checked (reconfigured + rebuilt, same 2 spot-checks pass natively, `CMAKE_CROSSCOMPILING` guard correctly no-ops). Not independently re-verified on D3D11/D3D12's own build dirs. `plans/plan_dx9.md`'s `D9-123` row now ✅ in full. |
 | `5e5dcc7c` | **`D9-123` setenv compile blocker IMPLEMENTED (project-owner go-ahead given) — `CnaTests` compiles under D3D9 for the first time ever**. All 62 `::setenv()`/`::unsetenv()` call sites (60 setenv + 2 unsetenv — a small correction from the proposal's "63+2" estimate) across 13 files replaced with `System::Environment::SetEnvironmentVariable`; `#include "System/Environment.hpp"` added where missing. `tools/audio/audio_no_hardware_harness.cpp` already had a working `#if _WIN32` `_putenv_s()` branch (not actually blocking) — simplified to the shared wrapper for consistency anyway. EasyGL regression-checked: 491/491 tests pass across the 11 affected suites, full-output-grepped for `FAILED`. D3D9 verified: compiles and links with zero errors and zero remaining setenv/unsetenv. Surfaced a second, distinct `gtest_discover_tests` blocker (see the entry above, fixed the same day). |
 | `cf082a52` | **`D9-123` written proposal (superseded by implementation above)** — new `docs/cnatests-mingw-setenv-proposal.md`, grounded by actually grepping every call site rather than the earlier "~10 test files" estimate. Confirmed a zero-new-risk fix already exists: `sharp-runtime`'s `System::Environment::SetEnvironmentVariable` already branches `_putenv_s()` on `_WIN32`, already compiles/links in the existing D3D11/D3D12 MinGW builds, matches .NET's empty-value-unsets convention — a mechanical 1:1 replace, no new abstraction. |
-| `5e3a82c0` | **`D9-130` CLOSED (Phase D9-13 docs) — new `docs/d3d9-backend.md`, a full `D3D9` column across all 7 tables in `docs/graphics-backend-feature-matrix.md`, and a `README.md`/`programs.md` build-doc update**. `docs/d3d9-backend.md` leads with XNA pixel-authenticity (not a feature checklist), the real-Microsoft-shader fact, and the 0/31-divergence oracle result, following `docs/d3d11-backend.md`'s own structure. Every feature-matrix cell was grounded by reading `tools/xna-oracle/scenes/*.scene` directly (confirmed exact `SpriteSortMode`/`AlphaFunction`/`WeightsPerVertex` coverage, and that `EnvironmentMapEffect.specularEnabled` is structurally unreachable, `D9-82e`) rather than recalled from memory; ungrounded cells marked honestly `⬜`/`🟨`. New matrix section "Remaining genuine D3D9 limitations", matching the Vulkan/Bgfx precedent sections. `README.md`: new `D3D9` Project-Status bullet, a "Build (Windows cross-compilation — D3D9 backend)" section, a Tested-Compilers row. `programs.md` §9: new D3D9-specific three-Wine-prefix subsection, closing the gap `plan_dx9.md`'s own line 103 flagged. |
-| `2a0f1576` | **Phase D9-12 `D9-122` CLOSED — systematic mutation-verification of `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests**. Classified every check as CONFIRMED (explicit prior mutation evidence) or GAP, then ran 6 new mutation cycles against the highest-priority GAPs (`ApplyBlendState`'s `D3DRS_DESTBLEND`, `PerformResetRecovery`'s `deviceLost_` flag — which also surfaced that a broken recovery crashes the whole test binary via an uncaught `DeviceLostException`, not just failing one check — `SetRenderTargets`' per-slot MRT bind, `BindAsRenderTarget`, `D3D9VertexBufferBackend::Upload`, `D3D9TextureCubeBackend::SetData`), each confirmed to fail exactly the predicted check(s) and nothing else, then reverted clean. Full D3D9 CTest suite reconfirmed 14/14 independently (not just the closing agent's own self-report). Full detail in `plan_dx9.md`'s own `D9-122` row and §2's Phase D9-12 section above. |
+| `5e3a82c0` | **`D9-130` CLOSED (Phase D9-13 docs) — new `docs/d3d9-backend.md`, a full `D3D9` column across all 7 tables in `docs/graphics-backend-feature-matrix.md`, and a `README.md`/`programs.md` build-doc update**. `docs/d3d9-backend.md` leads with XNA pixel-authenticity (not a feature checklist), the real-Microsoft-shader fact, and the 0/31-divergence oracle result, following `docs/d3d11-backend.md`'s own structure. Every feature-matrix cell was grounded by reading `tools/xna-oracle/scenes/*.scene` directly (confirmed exact `SpriteSortMode`/`AlphaFunction`/`WeightsPerVertex` coverage, and that `EnvironmentMapEffect.specularEnabled` is structurally unreachable, `D9-82e`) rather than recalled from memory; ungrounded cells marked honestly `⬜`/`🟨`. New matrix section "Remaining genuine D3D9 limitations", matching the Vulkan/Bgfx precedent sections. `README.md`: new `D3D9` Project-Status bullet, a "Build (Windows cross-compilation — D3D9 backend)" section, a Tested-Compilers row. `programs.md` §9: new D3D9-specific three-Wine-prefix subsection, closing the gap `plans/plan_dx9.md`'s own line 103 flagged. |
+| `2a0f1576` | **Phase D9-12 `D9-122` CLOSED — systematic mutation-verification of `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests**. Classified every check as CONFIRMED (explicit prior mutation evidence) or GAP, then ran 6 new mutation cycles against the highest-priority GAPs (`ApplyBlendState`'s `D3DRS_DESTBLEND`, `PerformResetRecovery`'s `deviceLost_` flag — which also surfaced that a broken recovery crashes the whole test binary via an uncaught `DeviceLostException`, not just failing one check — `SetRenderTargets`' per-slot MRT bind, `BindAsRenderTarget`, `D3D9VertexBufferBackend::Upload`, `D3D9TextureCubeBackend::SetData`), each confirmed to fail exactly the predicted check(s) and nothing else, then reverted clean. Full D3D9 CTest suite reconfirmed 14/14 independently (not just the closing agent's own self-report). Full detail in `plans/plan_dx9.md`'s own `D9-122` row and §2's Phase D9-12 section above. |
 | `65ba7ce8` | **Phase D9-12 `D9-120`/`D9-121` CLOSED — the D9-A oracle corpus is now a real, checked-in CTest, plus a written divergence report**. All 31 real-XNA-4.0 reference PNGs regenerated fresh and confirmed byte-identical to earlier cached renders before committing (`tools/xna-oracle/reference/*.png`, 132 KB). New `scripts/run-oracle-corpus-diff.sh` + `D3D9_XNA_Diff` CTest -- diffs every scene against its checked-in reference at `tolerance=0`, needs only the D3D9 Wine prefix (never the XNA one) to run. Mutation-verified (corrupted one reference pixel, confirmed exactly that scene failed with the real delta, restored). New `docs/d3d9-divergence-report.md`: headline **0/31 scenes diverge from real XNA 4.0**, with an explicit "not yet covered" table and an honest status re-read of all 6 project-wide CNA-vs-XNA divergences (3 now closed on D3D9, 4 now measured-correct on D3D9, 1/5/6 still open). Full D3D9 CTest suite now 14/14. |
 | `389470fb` | **Phase D9-10 follow-up CLOSED — `TextureCube`/`Texture3D` profile size ceilings + `MaxRenderTargets` enforcement**. Reuses `D3D9ProfileCapabilities`' own already-written helpers (no new capability logic, just wiring): `TextureCube` throws past 512 (Reach)/4096 (HiDef); `Texture3D` throws UNCONDITIONALLY under Reach (volume textures unsupported entirely) and past 256 under HiDef; `GraphicsDevice::SetRenderTargets()` throws past 1 target under Reach (4 under HiDef) -- separate from `MAX_RENDERTARGET_BINDINGS` (XNA's general cap) and `D9-54`'s own hardware-cap enforcement. 8 new checks (`D3D9_GraphicsProfile` now 19/19), mutation-verified (disabled all 3 new profile functions at once, confirmed exactly the 6 tied checks failed, restored) -- also found and fixed a real bug in the CTest's OWN cleanup logic (only unbinding render targets on the throw path left them bound and crashed `Present()` when a mutation made the call NOT throw). Regression-checked again on EasyGL (150 relevant `CnaTests` cases, all green). Full D3D9 CTest suite 13/13 green. Only NPOT-wrap-on-`Reach` and hardware-instancing's HiDef-only gate remain open in Phase D9-10. |
 | `9c3210df` | **Phase D9-10 CLOSED (`D9-100`–`D9-105`) — `GraphicsProfile.Reach`/`HiDef` made real on D3D9, plus a real cross-backend `GraphicsProfile`-propagation bug found and fixed**. New `D3D9ProfileCapabilities.{hpp,cpp}` (`D3DCAPS9` probed via `IDirect3D9::GetDeviceCaps`/`CheckDeviceFormat`/`CheckDeviceType`/`CheckDeviceMultiSampleType`, all pre-device-creation, backend-local under `#ifdef CNA_BACKEND_D3D9`). `IsProfileSupported()`/`QueryRenderTargetFormat()`/`QueryBackBufferFormat()` real; `Texture2D` throws `System::NotSupportedException` past its own profile's size ceiling (2048 Reach/4096 HiDef). Real bug found in SHARED code: `Game`'s `GraphicsDevice_` member is eagerly default-constructed (hardcoded Reach) before `GraphicsDeviceManager` exists, and `applyToExistingBackend()` never wrote a changed profile back onto the live device -- `graphics.GraphicsProfile = HiDef; graphics.ApplyChanges();` had NO path to the real device at all. Fixed with new `GraphicsDevice::SetGraphicsProfileEXT()`. EasyGL's own `CnaTests` (70 cases) regression-checked, all green. New `D3D9_GraphicsProfile` CTest, 10/10, mutation-verified. Full D3D9 CTest suite 13/13 green. |
 | `47ca4a15` | **`D9-A5` grown to 31 scenes (`colored_linelist_quad`/`colored_linestrip_quad`) — completes ALL 4 real `PrimitiveType` values, both PIXEL-PERFECT (0/65536 differ) on the first attempt**. `LineList`: two SEPARATE horizontal segments at different Y rows, proving independent segments with nothing connecting them (confirmed on real XNA: RED/GREEN midpoints exact, the row between stays background). `LineStrip`: a 3-vertex "V" polyline, proving 2 CONNECTED segments share the middle vertex (confirmed on real XNA: 307 non-background pixels spanning the full expected extent, both leg midpoints exact RED). New `D3D9_Draw` Check E/F (now 6/6) — real bug found and fixed in the CTest's OWN color-packing, not CNA: `0x00FF00FFu` decodes (byte order R,G,B,A ascending, little-endian literal) to `R=255,G=0,B=255,A=0` — magenta at zero alpha, invisible — not green; fixed to `0xFF00FF00u`. Caught immediately via a full-frame debug scan showing the RED segment rendered exactly as predicted but no GREEN pixels anywhere. Mutation-verified after the fix (hardcoded both `primitiveCount`s to 1, confirmed exactly Check E/F went red, restored). All 31 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `426d8af7` | **`D9-A5` grown to 29 scenes (`colored_trianglestrip_quad`) — first scene to ever use `PrimitiveType.TriangleStrip`, PIXEL-PERFECT (0/65536 differ) on the first attempt**. Every earlier scene (and every existing `D3D9_Draw`/`D3D9_DrawEx` check) only ever used `TriangleList`, even though `GraphicsDevice::PrimitiveVerts()`/`ToD3D9Topology()` already handled all 4 `PrimitiveType` values unconditionally -- a real, previously-untested code path, not a new feature (no code changes needed). A 4-vertex colored quad in the canonical "Z" strip order (TL/TR/BL/BR), 4 distinct corner colors so a broken vertex-count<->primitiveCount conversion would show a missing quadrant or wrong Gouraud gradient. New `D3D9_Draw` Check D (now 4/4): an oversized strip quad sampled at the first triangle's own corner AND the second triangle's own corner (only covered if `primitiveCount` genuinely resolved to 2, not 1). Mutation-verified (hardcoded `primitiveCount=1`, confirmed exactly Check D went red, restored, reconfirmed green). All 29 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `b557c2bf` | **`D9-A5` grown to 28 scenes (`sprite_multitexture_quad`) — closes D9-90's own explicitly-named multi-texture-batching gap, PIXEL-PERFECT (0/65536 differ) on the first attempt**. 3 non-overlapping sprites, interleaved RED-texture/BLUE-texture/RED-texture (not RED-RED-BLUE, so the second red draw genuinely forces a SECOND rebind after the blue draw's own flush) -- new optional trailing `textureIndex` column on `spritedraw=` lines, reusing the scene format's existing `texture2*` keys rather than inventing new ones. Mutation-verified (disabled the texture-change flush trigger in `D3D9SpriteBatchBackend::Draw()`, confirmed the middle sprite's BLUE leaked into the third position -- `1600/65536` pixels wrong -- then restored and reconfirmed green). New `D3D9_SpriteBatch` Check I (now 10/10). All 28 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
-| `df682701` | **Phase D9-9 `D9-93` CLOSED (3 of 5 `SpriteSortMode` values) — found and fixed a real D3D9 backend bug (`BuildMatrixTransformEXT`'s Z-row clipped any nonzero `layerDepth` sprite)**. 3 new `D9-A5` scenes (`sprite_sortmode_deferred_quad`/`sprite_sortmode_backtofront_quad`/`sprite_sortmode_fronttoback_quad`) using 2 overlapping `NonPremultiplied`-blended RED/GREEN sprites at different `layerDepth`s. First scene in the whole corpus to draw with `layerDepth != 0` — surfaced that `CreateOrthographicOffCenter(0,W,H,0,0, zFarPlane=1)` gives `Z'=-layerDepth`, outside D3D9's valid `[0,1]` clip-space Z range, silently clipping the second sprite away entirely regardless of sort mode (root-caused via the real XNA oracle producing correct output while CNA didn't). Fixed with `zFarPlane=-1` (identity Z-row, `Z'=layerDepth`) — only the Z row changes, D9-91's own X/Y half-pixel math is unaffected. All 3 new scenes pixel-perfect against real XNA 4.0 after the fix; 3 new checks added to `D3D9_SpriteBatch` (now 9/9), mutation-verified (reverted the fix, confirmed the sort-mode checks failed, restored, reconfirmed green). `SpriteSortMode.Immediate`/`.Texture` explicitly scoped out (not pixel-observable / needs multi-texture design, respectively) — see `plan_dx9.md` D9-93's own closure note. All 27 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
+| `df682701` | **Phase D9-9 `D9-93` CLOSED (3 of 5 `SpriteSortMode` values) — found and fixed a real D3D9 backend bug (`BuildMatrixTransformEXT`'s Z-row clipped any nonzero `layerDepth` sprite)**. 3 new `D9-A5` scenes (`sprite_sortmode_deferred_quad`/`sprite_sortmode_backtofront_quad`/`sprite_sortmode_fronttoback_quad`) using 2 overlapping `NonPremultiplied`-blended RED/GREEN sprites at different `layerDepth`s. First scene in the whole corpus to draw with `layerDepth != 0` — surfaced that `CreateOrthographicOffCenter(0,W,H,0,0, zFarPlane=1)` gives `Z'=-layerDepth`, outside D3D9's valid `[0,1]` clip-space Z range, silently clipping the second sprite away entirely regardless of sort mode (root-caused via the real XNA oracle producing correct output while CNA didn't). Fixed with `zFarPlane=-1` (identity Z-row, `Z'=layerDepth`) — only the Z row changes, D9-91's own X/Y half-pixel math is unaffected. All 3 new scenes pixel-perfect against real XNA 4.0 after the fix; 3 new checks added to `D3D9_SpriteBatch` (now 9/9), mutation-verified (reverted the fix, confirmed the sort-mode checks failed, restored, reconfirmed green). `SpriteSortMode.Immediate`/`.Texture` explicitly scoped out (not pixel-observable / needs multi-texture design, respectively) — see `plans/plan_dx9.md` D9-93's own closure note. All 27 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `8de8e5b9` | **Phase D9-9 `D9-92` CLOSED — real `TextureAddressMode.Wrap`/`Mirror` for `SpriteBatch`, both oracle-verified with discriminating patterns**. `SetSamplerFilter()`/`SetSamplerAddressMode()` already plumbed through to the real `D9-63` `ApplySamplerState()` path -- the missing piece was purely test coverage, since `Begin()` with no args only exercises `LinearClamp`. New `spritesourcerect`/`spritesampler` scene keys + `Begin(sortMode, blendState, samplerState, null, null)` wiring. 2 new `D9-A5` scenes: `sprite_wrap_quad` (`PointWrap`, sourceRect double the texture width -- tiles RED/GREEN/RED/GREEN across 4 bands) and `sprite_mirror_quad` (manually-constructed Point/Mirror sampler, same geometry -- folds symmetrically to RED/GREEN/GREEN/RED instead, genuinely distinguishable from Wrap). Both patterns predicted before running either side, then confirmed pixel-for-pixel identical. 2 new checks added to `D3D9_SpriteBatch` (now 6/6). All 24 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `b889cab1` | **Phase D9-9 `D9-90`/`D9-91` CLOSED — real `D3D9SpriteBatchBackend`, half-pixel offset oracle- AND mutation-verified**. New `D3D9SpriteBatch.{hpp,cpp}`; reuses the existing stride-24 vertex layout and D3D11SpriteBatchBackend's own quad-geometry formula, real `SpriteEffect.fx` bytecode (already compiled/register-mapped by the general D9-71/72 sweep). `MatrixTransform` bakes SpriteBatch's own transform + a D3D9 half-pixel correction (`M41 += -0.5*M11` etc.) into one uniform. 3 new `D9-A5` scenes (`sprite_basic_quad`/`sprite_rotated_quad`/`sprite_flipped_quad`), all pixel-perfect on the first attempt. Real finding: a 1x1-texture scene and quadrant-center CTest sample points are BOTH structurally incapable of detecting the half-pixel offset (it shifts texture CONTENT sampling, not geometric edges) -- caught via mutation-testing, which showed the boundary check staying green with the offset removed while the multi-texel oracle scenes diverged by 4800/65536 pixels; fixed with a dedicated boundary-blend-color CTest check. New `D3D9_SpriteBatch` CTest, 4/4, mutation-verified. `D9-92` (sampler Wrap/Mirror) and `D9-93` (SpriteSortMode sweep) explicitly NOT closed -- honest gaps, not assumed. All 21 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `17a1a607` | **`D9-A5` grown to 19 scenes (`skinned_fourbone_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise a REAL 4-bone skinning blend, completing all 3 real `WeightsPerVertex` values**. Extended vertex line format to an optional 16 columns (3rd/4th boneindex/boneweight pair); new `bone2translate`/`bone3translate` scene keys. Four pure-translation bones weighted 0.4/0.3/0.2/0.1 blend to an exact hand-derived `Translate(0.12,0.03,0)` -- a genuine two-axis shift proving all four weighted terms sum correctly. Confirmed at predicted shifted boundaries in both X and Y on both sides. All 19 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
@@ -5876,11 +5876,11 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 | `70e81079` | **`D9-32` closed (shader-model floor) + `D9-33`'s dedicated resize test (Check L)**: `GraphicsProfile::HiDef` now checked against the real `D3DCAPS9` at construction, throwing the real XNA `NoSuitableGraphicsDeviceException` if below `vs_3_0`/`ps_3_0` (only the positive path provable on this real, already-SM3-capable GPU); a new `D3D9_Smoke` Check L resizes 64×64→96×80 via the real `GraphicsDeviceManager` path and confirms the viewport, a post-resize pixel readback at both the origin and the new far edge, and `PresentationParameters` all reflect the new size. `D3D9_Smoke` now 17/17. |
 | `50954798` | **`D9-30`/`D9-31` closed + `D9-33`'s resize mechanism + Phase D9-6's `D9-60`/`D9-61`/`D9-62` forced in early**: real `Direct3DCreate9`/`CreateDevice` using the game's actual requested back-buffer/depth-stencil format (the approved `GraphicsBackendCreateArgs` extension, finally consumed for real); all 6 `Clear*` combos + `Present` + `ReadBackbuffer` pixel-verified (`D3D9_Smoke` 12/12); a real `EnsureDeviceSize()` resize-via-`Reset()` mechanism (proven working, not theoretical — it's what makes the smoke test converge to the requested 64×64 size at all). Two real, unplanned findings fixed in place: DXVK genuinely rejects `SurfaceFormat::Color`'s own `D3DFMT_A8B8G8R8` as a *swap-chain* format (a real D3D9 display-format restriction, fixed with a back-buffer-specific substitution to `A8R8G8B8`); and `GraphicsDevice::Reset()` never forwarded updated presentation settings to an already-constructed backend, fixed with one more small additive `IGraphicsBackend` method (`UpdatePresentationFormatEXT`, same category as the already-approved extension). Separately, `GraphicsDevice`'s own constructor turned out to unconditionally push `BlendState`/`DepthStencilState`/`RasterizerState`/viewport defaults, forcing `D9-60`/`D9-61`/`D9-62` in immediately (real `D3DRS_*` `SetRenderState()` sequences) — no device could otherwise finish constructing. Also found 4 more silently-empty `IGraphicsBackend` virtuals `D9-11`'s own grep missed (multi-line `{}` defaults). Verified no regression on EasyGL (34 gtest+CTest checks, including 5 resize/reset-specific ones). |
 | `bf26d7d1` | **Phase D9-2 fully closed** (`D9-20`–`D9-23`): new `D3D9FormatMapping`/`D3D9StateMapping`/`D3D9VertexDeclarations` + a 28-check `D3D9_Common` CTest, mutation-verified. Two non-obvious, easy-to-get-backwards findings, both verified against Microsoft's own published D3D9→DXGI legacy-format table rather than assumed: `SurfaceFormat::Color` → `D3DFMT_A8B8G8R8` (not the superficially-obvious `A8R8G8B8`), and `Rgba1010102` → `D3DFMT_A2B10G10R10` (not `A2R10G10B10`, which has no real DXGI equivalent at all). `TextureFilter` needed a new `{min,mag,mip}` triple struct, not a single enum, since D3D9 has no composed filter value. One row (`D9-21`) is 🟨: the mapping table is done, but its own "pixel-test `D3DCULL` against the oracle" obligation is honestly deferred to `D9-84` (no draw path exists yet to test it with). |
-| `1a3ca71f` | **Phase D9-1 fully closed** (`D9-10`/`D9-11`/`D9-12`): D3D9 wired into `CMakeLists.txt` (6 of 7 `"D3D12"` sites, correcting a stale plan claim about the 7th — see `plan_dx9.md`'s `D9-10` row); new `D3D9GraphicsBackend` skeleton + shared `NotYetImplemented.hpp`; `GraphicsDevice.cpp` audited, zero changes needed. `CNA_GRAPHICS_BACKEND=D3D9` configures and builds clean; a runtime check confirms the skeleton's real bookkeeping methods work and its throwing methods actually throw. |
+| `1a3ca71f` | **Phase D9-1 fully closed** (`D9-10`/`D9-11`/`D9-12`): D3D9 wired into `CMakeLists.txt` (6 of 7 `"D3D12"` sites, correcting a stale plan claim about the 7th — see `plans/plan_dx9.md`'s `D9-10` row); new `D3D9GraphicsBackend` skeleton + shared `NotYetImplemented.hpp`; `GraphicsDevice.cpp` audited, zero changes needed. `CNA_GRAPHICS_BACKEND=D3D9` configures and builds clean; a runtime check confirms the skeleton's real bookkeeping methods work and its throwing methods actually throw. |
 | `09121309` | **Phase D9-0 fully closed** (`D9-2`–`D9-5`): confirmed `d3d9`-alone link set (no `dxguid`); a real Wine+DXVK D3D9 device/swap-chain/`Clear`/`Present`/`GetRenderTargetData`/`LockRect` round-trip with an exact pixel match plus a full `D3DCAPS9` dump (`vs_3_0`/`ps_3_0`, `NumSimultaneousRTs=4`, 16384 max texture size, DXVK reports unconditional NPOT support — flagged as provisional/synthetic, not an authentic XNA-era driver's caps); confirmed `D3DPOOL_MANAGED` textures are genuinely `LockRect`-readable and survive `Reset()` with no re-upload (so `Texture2D::GetData()` can be a plain `LockRect` later, `D9-52`); and a new `scripts/run-wine-dxvk9.sh` (mirrors `run-wine-dxvk.sh`'s DXVK-marker gate under new `CNA_D3D9_*` env-var names), proven both ways — passes against the real `~/.wine-cna-d3d11` DXVK prefix, and correctly fails (exit 3) against a freshly-initialized, DXVK-less prefix that silently fell back to WineD3D. |
-| `59a35d4c` | Recorded the project owner's two 2026-07-14 decisions in `plan_dx9.md`: implementation authorized through Phase D9-13, and the `IGraphicsBackend` boundary problem resolved via an approved additive extension. |
-| `d1ae928f` | Added `plan_dx9.md` and the proven Phase D9-0 spike artifacts (`dx9-spike/`: shader compiler, `.fxb` bytecode oracle, real XNA 4.0 reference renderer) to the `feature/dx9` worktree. |
-| many, see `plan_graphics.md` (2026-07-16) | **`plan_graphics.md` Phase 78 (HLSL→GLSL sample shader conversion, DEFERRED.md #11) fully closed — unrelated to the D3D work below, see this file's own top banner.** Task 945 decided (manual line-by-line porting). Task 947 went 0→**13/13**: `NetRumble` (`Clouds.fx` + the bloom trio), `PerPixelLighting`/`VertexLighting` (5 effect/technique combinations), `DistortionSample` (`Distort.fx` + `Distorters.fx`, 5 techniques), `NonPhotoRealistic` (`CartoonEffect.Fx` + `PostprocessEffect.Fx`, 8 techniques), `ShadowMapping`, `NormalMapping`, `BillboardSample`, `ShatterEffect`, `Particles3D`/`XmlParticles`, `ShipGame` (4 distinct shaders: `AnimSprite.fx`/`Blur.fx`/`NormalMapping.fx`/`Particle.fx`, incl. real GPU point sprites), `InstancedModel` (`InstancedModel.fx`, incl. real GPU hardware instancing). 4 new EasyGL-only backend capabilities landed along the way as their own tasks: **1079** (`ShaderEffect` into the 3D draw path), **1080** (custom vertex layouts for that path), **1081** (`TextureCube` sampling for custom shaders), **1082** (real GPU hardware instancing via `glVertexAttribDivisor`). `ctest -R "EasyGL_"` grew from ~190 to **231/233** across the whole campaign, same 2 pre-existing unrelated failures throughout, every task individually mutation-tested and committed separately. Full chronological detail (exact expected pixel values, discriminating-power mutation testing per shader) is in `plan_graphics.md`'s own Task 947/1079–1082 rows, not duplicated here. `plan_samples.md` updated per-sample (13 rows now say "No longer CNA-blocked"). **Not done**: the actual sample ports themselves in `../cna-samples` — out of `cna_graphics` scope. |
+| `59a35d4c` | Recorded the project owner's two 2026-07-14 decisions in `plans/plan_dx9.md`: implementation authorized through Phase D9-13, and the `IGraphicsBackend` boundary problem resolved via an approved additive extension. |
+| `d1ae928f` | Added `plans/plan_dx9.md` and the proven Phase D9-0 spike artifacts (`dx9-spike/`: shader compiler, `.fxb` bytecode oracle, real XNA 4.0 reference renderer) to the `feature/dx9` worktree. |
+| many, see `plans/plan_graphics.md` (2026-07-16) | **`plans/plan_graphics.md` Phase 78 (HLSL→GLSL sample shader conversion, DEFERRED.md #11) fully closed — unrelated to the D3D work below, see this file's own top banner.** Task 945 decided (manual line-by-line porting). Task 947 went 0→**13/13**: `NetRumble` (`Clouds.fx` + the bloom trio), `PerPixelLighting`/`VertexLighting` (5 effect/technique combinations), `DistortionSample` (`Distort.fx` + `Distorters.fx`, 5 techniques), `NonPhotoRealistic` (`CartoonEffect.Fx` + `PostprocessEffect.Fx`, 8 techniques), `ShadowMapping`, `NormalMapping`, `BillboardSample`, `ShatterEffect`, `Particles3D`/`XmlParticles`, `ShipGame` (4 distinct shaders: `AnimSprite.fx`/`Blur.fx`/`NormalMapping.fx`/`Particle.fx`, incl. real GPU point sprites), `InstancedModel` (`InstancedModel.fx`, incl. real GPU hardware instancing). 4 new EasyGL-only backend capabilities landed along the way as their own tasks: **1079** (`ShaderEffect` into the 3D draw path), **1080** (custom vertex layouts for that path), **1081** (`TextureCube` sampling for custom shaders), **1082** (real GPU hardware instancing via `glVertexAttribDivisor`). `ctest -R "EasyGL_"` grew from ~190 to **231/233** across the whole campaign, same 2 pre-existing unrelated failures throughout, every task individually mutation-tested and committed separately. Full chronological detail (exact expected pixel values, discriminating-power mutation testing per shader) is in `plans/plan_graphics.md`'s own Task 947/1079–1082 rows, not duplicated here. `plans/plan_samples.md` updated per-sample (13 rows now say "No longer CNA-blocked"). **Not done**: the actual sample ports themselves in `../cna-samples` — out of `cna_graphics` scope. |
 
 ---
 
@@ -6058,9 +6058,9 @@ for real once culling-sensitive scenes are drawn.
   updated 2026-07-16 — see below) — every combination whose `VSInput` shape has no matching CNA
   vertex layout (Position-only 12 bytes; Position+Normal 24 bytes, colliding with the existing
   Position+Color+TexCoord layout; Position+Normal+Color[+TexCoord] 28/36 bytes) throws a named
-  error instead of drawing. See `plan_dx9.md` `D9-82b`'s own closure note / `D3D9EffectDraw.cpp`'s
+  error instead of drawing. See `plans/plan_dx9.md` `D9-82b`'s own closure note / `D3D9EffectDraw.cpp`'s
   header comment for the exact enumeration.
-- **RESOLVED 2026-07-16 (`plan_graphics.md` Phase 80, project-owner-authorized cross-backend
+- **RESOLVED 2026-07-16 (`plans/plan_graphics.md` Phase 80, project-owner-authorized cross-backend
   fix): `GpuDrawParams` now carries real `preferPerPixelLighting`/`specularEnabled` fields, and
   this backend's dispatch reads them instead of hardcoding `false`.** `BasicEffect`'s
   pixel-lighting-textured bucket (`ShaderIndex` 28/29) and `SkinnedEffect`'s entire pixel-lighting
@@ -6070,21 +6070,21 @@ for real once culling-sensitive scenes are drawn.
   the SAME missing-vertex-layout gap as the untextured vertex-lit bucket above, unrelated to this
   fix. `EnvironmentMapEffect`'s specular buckets (all 8, `ShaderIndex` 4-7/12-15) are also now
   reachable — a real bug (constants uploaded to the wrong shader stage, or not at all for
-  `EnvironmentMapSpecular`) was found and fixed along the way, see `plan_dx9.md` `D9-73`/`D9-84`'s
+  `EnvironmentMapSpecular`) was found and fixed along the way, see `plans/plan_dx9.md` `D9-73`/`D9-84`'s
   own rows for the full record.
 - `DualTextureEffect` via `DrawPrimitivesEx` only supports 2 of its 4 `ShaderIndex` values — the
   vertex-color variant (`VSInputTx2Vc`, 32 bytes) collides with the existing
-  Position+Normal+TexCoord layout and throws a named error instead of drawing (`plan_dx9.md`
+  Position+Normal+TexCoord layout and throws a named error instead of drawing (`plans/plan_dx9.md`
   `D9-82d`'s own closure note). Unaffected by the above (no `PreferPerPixelLighting`/
   `specularEnabled` concept in this effect).
 - `D3DCULL` winding (`CullClockwiseFace`/`CullCounterClockwiseFace` vs. `D3DCULL_CW`/`_CCW`) is
-  mapped but not yet pixel-proven against the real XNA oracle (`plan_dx9.md` `D9-21`/`D9-84`).
+  mapped but not yet pixel-proven against the real XNA oracle (`plans/plan_dx9.md` `D9-21`/`D9-84`).
 
-See `plan_dx9.md`'s "CNA's divergences from XNA 4.0" for the six pre-existing, cross-cutting
+See `plans/plan_dx9.md`'s "CNA's divergences from XNA 4.0" for the six pre-existing, cross-cutting
 CNA-vs-XNA fidelity gaps this plan will measure (not fix) once Phase D9-A's oracle is complete.
 
 **Two standing, project-wide architecture-decision items, unrelated to D3D9** (not this plan's to
-decide — see `plan_graphics.md` for full detail): `Texture3D`/`TextureCube` inherit
+decide — see `plans/plan_graphics.md` for full detail): `Texture3D`/`TextureCube` inherit
 `GraphicsResource` directly instead of `Texture` (Task 863); `GraphicsDevice` stores state objects
 by value instead of FNA's reference-type aliasing (Task 869). Both need a project-owner direction
 before any backend acts on them — see §9.
@@ -6097,16 +6097,16 @@ before any backend acts on them — see §9.
 
 | Layer | Location | Notes |
 |---|---|---|
-| Backend contracts | `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp` | Being extended additively (approved) for D3D9's needs — see `plan_dx9.md`. |
+| Backend contracts | `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp` | Being extended additively (approved) for D3D9's needs — see `plans/plan_dx9.md`. |
 | **D3D9 backend** | `include/\|src/CNA/Internal/Backends/D3D9/` | Windows-only, MinGW-w64 cross-compiled, own format/state/vertex-declaration mapping (not `D3DCommon`). Device/present/buffers/textures/render-targets/render-state/stock-effect-shaders/colored draws, all 5 XNA Stock Effect draws (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), and hardware instancing (`DrawInstancedPrimitivesEx`) are real; `D9-84` (oracle validation)/`SpriteBatch` still pending. |
 | Vendored XNA stock effects | `src/CNA/Internal/Backends/D3D9/shaders/xna/` (destination) | Microsoft's `.fx`/`.fxh`, verbatim, MS-PL. |
 | Spike artifacts (temporary) | `dx9-spike/` | Proven Phase D9-0 code, being moved into the real tree task by task. |
 
 ### Critical invariants (do not break these)
 
-Same project-wide invariants as `plan_dx.md`'s `NEXT.md` used to list (Doxygen/SPDX/NOXNA/property
+Same project-wide invariants as `plans/plan_dx.md`'s `NEXT.md` used to list (Doxygen/SPDX/NOXNA/property
 convention/stride-keyed vertex layout/etc.) — see `CLAUDE.md` and `CHECKLIST.md`, not repeated here.
-D3D9-specific invariants (from `plan_dx9.md` design decisions): plain D3D9 not D3D9Ex;
+D3D9-specific invariants (from `plans/plan_dx9.md` design decisions): plain D3D9 not D3D9Ex;
 `D3DPOOL_MANAGED` for user resources; Microsoft's `.fx`/`.fxh` sources are never edited; shader
 targets stay `vs_2_0`/`ps_2_0` for stock effects (never "upgraded" to SM3); no D3DX linked, ever.
 
@@ -6152,14 +6152,14 @@ pixel-perfect (5 new since the 31-scene count above: `lit_textured_quad_pixellig
 `skinned_pixellighting_quad`/`_twobone_quad`/`_fourbone_quad`, `envmap_specular_quad`).
 
 **`D9-81`'s `PreferPerPixelLighting`/`specularEnabled` `GpuDrawParams` gap is now RESOLVED, 2026-07-16**
-(project owner authorized the full cross-backend fix, `plan_graphics.md` Phase 80, D3D9 first since
+(project owner authorized the full cross-backend fix, `plans/plan_graphics.md` Phase 80, D3D9 first since
 it needs no new shader — Microsoft's own `.fx` sources already have both shader families). This
-backend's dispatch now reads the real values; `plan_dx9.md`'s `D9-73`/`D9-84` rows have the full
+backend's dispatch now reads the real values; `plans/plan_dx9.md`'s `D9-73`/`D9-84` rows have the full
 record, including a real bug found and fixed along the way (lighting constants uploaded to the
 wrong shader stage for the pixel-lighting bucket, and a missing `EnvironmentMapSpecular` upload
 entirely). **The remaining 8 backends (EasyGL/Vulkan/Bgfx/WebGPU/D3D11/D3D12/Software each need a
 genuinely new per-vertex-lit shader; `SdlRenderer`/`Headless` don't render 3D lighting at all) are
-`plan_graphics.md`'s own scope, not this plan's** — see that file's Phase 80 for the per-backend
+`plans/plan_graphics.md`'s own scope, not this plan's** — see that file's Phase 80 for the per-backend
 task breakdown, sequenced one at a time by explicit project-owner request. **Phase D9-12 is
 now fully closed, including `D9-123`** — `D9-120`/`D9-121`/`D9-122`/`D9-123` all ✅ (see §2's own
 Phase D9-12 section for the full `D9-122`/`D9-123` detail, including the `gtest_discover_tests`
@@ -6174,7 +6174,7 @@ too** — `docs/d3d9-backend.md`, a full `D3D9` column across all 7 tables in
 **`D9-A6` (run the oracle corpus against CNA's other backends) is now CLOSED too (2026-07-16)** —
 measured EasyGL first: 10/31 scenes pixel-perfect (all `sprite_*` + `alphatest_never_quad`), 21/31
 diverge across three evidenced patterns (a rasterization-boundary gap spanning 17 scenes, GPU/driver
-floating-point rounding noise on 2 scenes, and 2 real, previously-unmeasured `plan_graphics.md`
+floating-point rounding noise on 2 scenes, and 2 real, previously-unmeasured `plans/plan_graphics.md`
 candidates — `fog_gradient_quad`'s negative-`FogEnd` handling and `envmap_fresnel_quad`'s Fresnel
 interpolation, the latter a concrete confirmation of this plan's own predicted `preferPerPixelLighting`
 gap). Logged in `docs/d3d9-divergence-report.md`'s new "Cross-backend measurement (D9-A6)" section,
@@ -6183,7 +6183,7 @@ by this pass — the same recipe (a `cna_*_test`-style CMake registration + a
 `run-oracle-corpus-diff-<backend>.sh` twin script) is the natural next step for either.
 
 **Only `D9-140` (real Windows hardware verification) remains in this entire plan** — `needs_human`,
-out of scope for this dev environment entirely. Every unilaterally-startable task in `plan_dx9.md`
+out of scope for this dev environment entirely. Every unilaterally-startable task in `plans/plan_dx9.md`
 is now closed (verified just now: `D9-A6`, the last one, is done above; the only other non-`✅` rows
 in the whole plan are `D9-A5`/`D9-84`, both deliberately-ongoing "growing with the plan" 🟨 rows with
 their own documented remaining scope, not blocked-and-unstarted work).
@@ -6192,7 +6192,7 @@ their own documented remaining scope, not blocked-and-unstarted work).
 paragraph, which had gone stale: it still said "`EnvironmentMapEffect` specular/
 `PreferPerPixelLighting` are blocked on `D9-81`'s cross-cutting `GpuDrawParams` gaps," contradicting
 this very section's own "RESOLVED 2026-07-16" paragraph above it — that gap is fixed, not still
-blocking). Every non-`✅` row in `plan_dx9.md` was re-read individually; here is what each one
+blocking). Every non-`✅` row in `plans/plan_dx9.md` was re-read individually; here is what each one
 actually still needs, if anything:
 
 - **`D9-21` (`D3DCULL`) — CLOSED 2026-07-16.** 3 new oracle scenes (`cullmode_none_quad`/
@@ -6209,7 +6209,7 @@ actually still needs, if anything:
   environment/driver limitation, not a CNA-side forwarding bug (unchanged, not suspected). See
   `D9-21`'s own plan row for the full investigation and the recommended next lead (try a real,
   non-identity perspective `Projection` — every scene in this corpus is `Identity` today).
-- **`SurfaceFormat` sweep** (`plan_graphics.md` Phase 81) — scoped, not decided: needs a project-
+- **`SurfaceFormat` sweep** (`plans/plan_graphics.md` Phase 81) — scoped, not decided: needs a project-
   owner call on which formats justify the effort, and `Texture2D`'s own API needs new construction/
   `SetData` paths for non-`Color` formats before the oracle can even describe one. Not started.
 - **`D9-A6` extended to Vulkan/D3D11** — offered, deferred by the project owner (2026-07-16). The
@@ -6227,18 +6227,18 @@ actually still needs, if anything:
 - A render-target-as-texture oracle scene can now safely be re-attempted (the crash blocking it is
   fixed, §4) but isn't itself a named remaining task — it would be new `D9-A5` growth, not a gap.
 
-See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
+See `plans/plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
-**Other standing backlog, unrelated to D3D9** (full history: `plan_dx.md` for the now-fully-closed
+**Other standing backlog, unrelated to D3D9** (full history: `plans/plan_dx.md` for the now-fully-closed
 D3D11/D3D12 work, this file's own top banner for Phase 78):
-- **`plan_samples.md` standing queue** (formerly Phase 79, `plan_graphics.md` Tasks 957–1076,
+- **`plans/plan_samples.md` standing queue** (formerly Phase 79, `plans/plan_graphics.md` Tasks 957–1076,
   moved+renumbered `SAMPLE-1`–`SAMPLE-120` on 2026-07-16): a full re-audit of all 153
   `../cna-samples`-catalogued samples, one row per sample. **13 rows** (`SAMPLE-32`/`33`/`34`/`35`/
   `36`/`38`/`39`/`40`/`42`/`43`/`45`/`62`/`66`) now say "No longer CNA-blocked" thanks to Phase 78
-  — their own CNA-side shader gap is closed, but they're still `⬜` in `plan_samples.md` because
+  — their own CNA-side shader gap is closed, but they're still `⬜` in `plans/plan_samples.md` because
   **the actual sample port itself** (`.cpp`/`.hpp`/`Content/` under `../cna-samples/samples/<Name>/`)
   hasn't been written yet — that's a different repo, out of `cna_graphics` scope, tracked in
-  `../cna-samples`'s own plan file. The other ~88 `⬜` rows in `plan_samples.md` are unrelated to
+  `../cna-samples`'s own plan file. The other ~88 `⬜` rows in `plans/plan_samples.md` are unrelated to
   shaders (re-verification passes, other DEFERRED.md items) — pick any of those, or any of the 13
   above if the sibling repo's own plan calls for it. Do not touch `⛔` rows (structural/permanent,
   no CNA action possible).
@@ -6249,11 +6249,11 @@ D3D11/D3D12 work, this file's own top banner for Phase 78):
 
 ## 9. Do not do yet
 
-- **Do not fix any of the six CNA-vs-XNA divergences** (`plan_dx9.md`'s own section) from inside this
-  branch — measure with the oracle, report, propose to the project owner for a `plan_graphics.md`
+- **Do not fix any of the six CNA-vs-XNA divergences** (`plans/plan_dx9.md`'s own section) from inside this
+  branch — measure with the oracle, report, propose to the project owner for a `plans/plan_graphics.md`
   task. Never "just add the flag while in there."
 - **Do not start Phase D9-11 (custom `ShaderEffect`)** without asking first — explicitly flagged
-  optional/ask-first in `plan_dx9.md`'s execution order.
+  optional/ask-first in `plans/plan_dx9.md`'s execution order.
 - **Do not edit Microsoft's vendored `.fx`/`.fxh` files**, ever, for any reason (`D9-70`).
 - **Do not "upgrade" stock effects to `vs_3_0`/`ps_3_0`** because the hardware supports it.
 - **Do not widen an oracle tolerance to turn a red test green** (`D9-A4`) — that silently converts
@@ -6263,7 +6263,7 @@ D3D11/D3D12 work, this file's own top banner for Phase 78):
 - **Do not touch `IGraphicsBackend.hpp` beyond the approved additive extension** (new
   `GraphicsBackendCreateArgs` fields + the one device-event channel) — nothing else, no drive-by
   refactors.
-- **`plan_dx.md` is entirely closed for both D3D11 and D3D12, through Phase DX16** (2026-07-15) —
+- **`plans/plan_dx.md` is entirely closed for both D3D11 and D3D12, through Phase DX16** (2026-07-15) —
   nothing left to authorize or implement there on this Debian machine. Only `DX-27`/`DX-90`/`DX-91`
   (D3D11) and `DX-110`/`DX-114` (D3D12) remain, all `needs_human` — a real Windows machine with a
   real GPU, or a real device-removed trigger neither backend can induce under Wine. **Do not open a
@@ -6271,7 +6271,7 @@ D3D11/D3D12 work, this file's own top banner for Phase 78):
   (e.g. the same way Phase DX16 itself started from an explicit percentage-audit request). Don't
   invent new gaps to close just because the plan file is open-ended in principle.
 - **When working Phase DX12, do not merge D3D11 and D3D12 into one shared device/backend class**
-  "for less duplication" — `plan_dx.md` design decision 4 already scoped what's genuinely shared
+  "for less duplication" — `plans/plan_dx.md` design decision 4 already scoped what's genuinely shared
   (`D3DCommon`); forcing the actual device/command/resource logic to share code across two
   structurally different APIs is exactly the kind of premature abstraction `CLAUDE.md` warns
   against.
@@ -6308,7 +6308,7 @@ D3D11/D3D12 work, this file's own top banner for Phase 78):
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first (this file, feature/dx9 branch), then plan_dx9.md in full before touching any
+Read NEXT.md first (this file, feature/dx9 branch), then plans/plan_dx9.md in full before touching any
 code -- this is a much stricter plan than the other CNA backends (indistinguishability from real
 XNA 4.0, verified against a real oracle, not just "renders plausibly").
 
@@ -6326,17 +6326,17 @@ generally.
 
 Make one small, verified improvement:
 1. Investigate/reproduce first (run the exact command named in the task).
-2. Implement the smallest correct thing per plan_dx9.md's design decisions -- do not improvise past
+2. Implement the smallest correct thing per plans/plan_dx9.md's design decisions -- do not improvise past
    what the plan already decided.
 3. Where the task is a rendering/behavior claim, verify it against the real XNA 4.0 oracle
    (tools/xna-oracle/, ~/.wine-cna-xna40), not just "looks right" -- that is this plan's whole
    point.
-4. Update plan_dx9.md's own task table (status + notes) with the real result.
+4. Update plans/plan_dx9.md's own task table (status + notes) with the real result.
 5. Update this NEXT.md: Sec.2/Sec.3/Sec.8, following the same short-index style as the rest of the
-   file -- do not let it grow into a duplicate of plan_dx9.md.
+   file -- do not let it grow into a duplicate of plans/plan_dx9.md.
 6. Commit (staged by explicit filename, one task per commit), following this repo's existing
    commit-message style (git log --oneline).
 
 Do not start a second task in the same session unless the first is fully closed, tested, and
-committed, and NEXT.md/plan_dx9.md are updated.
+committed, and NEXT.md/plans/plan_dx9.md are updated.
 ```

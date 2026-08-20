@@ -30,7 +30,7 @@
 //      deliberate divergence from FNA (see GraphicsDeviceManager::INTERNAL_OnClientSizeChanged's
 //      own comment: forwarding the physical window size into BackBufferWidth/Height on every
 //      resize, as FNA does, would corrupt FixedHeightDynamicWidth's virtual-resolution scaling).
-//      Pinned here as a regression marker — see plan_graphics.md Task 348.
+//      Pinned here as a regression marker — see plans/plan_graphics.md Task 348.
 //   4. GameWindow.ClientSizeChanged itself fired at least once during the resize (the FNA-API
 //      event contract, verified independently of check 2's Present()-driven refresh).
 //
@@ -103,7 +103,7 @@ class RealWindowResizeTest : public Game
               "Viewport width changed after a real window resize");
         check(newBackBufferWidth == initialBackBufferWidth_ && newBackBufferHeight == initialBackBufferHeight_,
               "PresentationParameters.BackBufferWidth/Height do NOT follow a real window resize "
-              "(confirmed, deliberate divergence from FNA -- see plan_graphics.md Task 348)");
+              "(confirmed, deliberate divergence from FNA -- see plans/plan_graphics.md Task 348)");
         check(clientSizeChangedCount_ > 0,
               "GameWindow.ClientSizeChanged fired at least once for the real window resize "
               "(FNA API event contract, checked independently of Present()'s per-frame refresh)");

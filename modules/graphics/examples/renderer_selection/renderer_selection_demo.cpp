@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_runtimerenderer.md RTR-P4-14: the reference for choosing a graphics renderer at runtime.
+// plans/plan_runtimerenderer.md RTR-P4-14: the reference for choosing a graphics renderer at runtime.
 //
 // This is the program a game author copies. It shows the three things that matter and nothing else:
 // what this build actually contains, how to ask for one of those renderers before CNA starts, and
@@ -61,7 +61,7 @@ int main(int argc, char** argv)
         }
     }
 
-    // 3. Optionally configure a fallback chain (plan_runtimerenderer.md RTR-P5-21).
+    // 3. Optionally configure a fallback chain (plans/plan_runtimerenderer.md RTR-P5-21).
     //
     // Off by default: a renderer that cannot run is an ERROR, and CNA never substitutes another
     // one behind your back. Pass renderer names as further arguments to opt in.

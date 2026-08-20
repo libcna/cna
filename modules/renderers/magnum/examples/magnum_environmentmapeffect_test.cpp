@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-51: EnvironmentMapEffect pixel test for the MAGNUM renderer.
+// plans/plan_magnum.md MAGNUM-51: EnvironmentMapEffect pixel test for the MAGNUM renderer.
 //
 // The reflection blend is a lerp, not an addition, so the two hypotheses only separate when the
 // cube map is a mid-tone and the lit/textured base is genuinely non-zero: a saturated cube map

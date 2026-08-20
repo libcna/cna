@@ -11,7 +11,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief Resolves one XNA sprite draw into the transform-ready command both draw paths replay.
      *
-     * plan_html_dom.md HTMLDOM-33/34/35. Pure function -- no DOM access -- so the geometry that
+     * plans/plan_html_dom.md HTMLDOM-33/34/35. Pure function -- no DOM access -- so the geometry that
      * matters most (pivot placement invariant under rotation, flip mirroring about the sprite's own
      * centre, source-rectangle clamping) is unit-testable without a browser.
      *
@@ -52,7 +52,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief `SpriteBatch` renderer that emits pooled, CSS-transformed `<div>` elements.
      *
-     * plan_html_dom.md design decision 5: `Draw()` does no DOM work at all. It encodes one
+     * plans/plan_html_dom.md design decision 5: `Draw()` does no DOM work at all. It encodes one
      * HtmlDomDrawCommand per sprite into a reusable `std::vector`, and `End()` hands the whole
      * array to JS in a single `EM_JS` call. The JS side then walks the array, assigning sprite *n*
      * of the frame to pool element *n* and writing only the CSS properties whose values actually
@@ -117,7 +117,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief CNAEXT. Records whether the current batch is SpriteSortMode::Immediate.
          *
-         * plan_html_dom.md HTMLDOM-118: called by SpriteBatch::Begin(), before Begin() itself, with
+         * plans/plan_html_dom.md HTMLDOM-118: called by SpriteBatch::Begin(), before Begin() itself, with
          * the sort mode actually requested for this batch. When true, each subsequent Draw() flushes
          * itself to the DOM/Canvas2D immediately (see QueueDraw()'s own comment) instead of being
          * queued for a single end-of-batch flush -- matching real XNA/FNA Immediate semantics, where

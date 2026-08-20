@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_gltf.md GLTF-005 / GLTF-006: the L2, L3 and L4 rungs of the numerical oracle ladder
-// (plan_gltf.md §7.1).
+// plans/plan_gltf.md GLTF-005 / GLTF-006: the L2, L3 and L4 rungs of the numerical oracle ladder
+// (plans/plan_gltf.md §7.1).
 //
 // DIAGNOSTIC/TEST SCOPE ONLY. Nothing here is CNA public API, CNAEXT surface, or part of
 // CNA::Internal::GltfImport. It is compiled into CnaTests and the standalone glTF converter's
 // `--dump-oracle` diagnostic mode; no translation unit under modules/*/src may call it. The
-// EXT-suffixed names are the ones plan_gltf.md's task rows cite, so a later session searching for
+// EXT-suffixed names are the ones plans/plan_gltf.md's task rows cite, so a later session searching for
 // DumpAccessorEXT / DumpMeshOutEXT / EvaluateWorldPositionsEXT finds them -- the namespace, not
 // the suffix, is what marks them non-runtime.
 //
@@ -105,7 +105,7 @@ namespace CnaTest::GltfOracle
      * @brief One extracted primitive's semantic streams, unpacked from `MeshOut` (oracle layer L3).
      *
      * `MeshOut` stores vertices as opaque bytes whose meaning is decided solely by `stride` (the
-     * de-facto CNA/glTF ABI, plan_gltf.md §2.3). This dump reverses that packing back into named
+     * de-facto CNA/glTF ABI, plans/plan_gltf.md §2.3). This dump reverses that packing back into named
      * streams so an L3 comparison can say *which attribute* diverged rather than *which byte*.
      */
     struct MeshOutDump
@@ -192,7 +192,7 @@ namespace CnaTest::GltfOracle
          *
          * `4` (`TRIANGLES`) for every primitive `ExtractMesh` returns. A fixture's
          * `l3.importPolicy` states this separately from `l3.mode`, because it is CNA's own
-         * documented conversion policy (plan_gltf.md §10.1) rather than a specification value.
+         * documented conversion policy (plans/plan_gltf.md §10.1) rather than a specification value.
          */
         int importedTopologyMode = -1;
         /** @brief The imported topology's specification name, empty when no topology is carried. */
@@ -256,7 +256,7 @@ namespace CnaTest::GltfOracle
         /** @brief The instance's vertex positions in world space. */
         std::vector<std::array<float, 3>> worldPositions;
         /**
-         * @brief plan_gltf.md `GLTF-461`: emitted vertex -> source vertex, empty when identity.
+         * @brief plans/plan_gltf.md `GLTF-461`: emitted vertex -> source vertex, empty when identity.
          *
          * Only the CNA-side evaluator fills this. §3.7.2.1's flat-normal split duplicates a vertex
          * shared between differently oriented faces, so CNA can legitimately emit more vertices

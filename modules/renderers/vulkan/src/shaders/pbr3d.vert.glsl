@@ -31,7 +31,7 @@ layout(location = 7) out vec4  vColor;
 // diffuseColor -> PBR base color factor; ambientColor -> PBR ambient; light0Dir/light0Diffuse ->
 // PBR's own DirectionalLight0. lightingEnabled/textureEnabled are unused here
 // (PbrEffect::FillGpuDrawParams always sets lightingEnabled=textureEnabled=true);
-// vertexColorEnabled gates the COLOR_0 multiply in the fragment stage (plan_gltf.md GLTF-465).
+// vertexColorEnabled gates the COLOR_0 multiply in the fragment stage (plans/plan_gltf.md GLTF-465).
 layout(push_constant) uniform PC {
     mat4  mvp;
     vec4  diffuseColor;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-912..MOD-915: cascaded shadow maps as an application uses them.
+// plans/plan_modern.md MOD-912..MOD-915: cascaded shadow maps as an application uses them.
 //
 // The unit tests measure the pieces; this runs the whole thing through the public calls a game
 // makes, on a scene that has the one property a cascade set exists for -- ground stretching far

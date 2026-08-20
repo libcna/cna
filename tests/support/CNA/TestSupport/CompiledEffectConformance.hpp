@@ -70,7 +70,7 @@
  * @file
  * @brief The shared compiled-effect contract every `CompiledEffects` backend must satisfy.
  *
- * plan_fx.md FX-060: a backend becomes supported only after it passes the same suite, so the
+ * plans/plan_fx.md FX-060: a backend becomes supported only after it passes the same suite, so the
  * assertions live here rather than in one renderer's test file. Each function is one contract
  * section and takes nothing but a ready GraphicsDevice; a new backend's test file supplies its own
  * device setup and calls them. Backend-specific evidence -- golden pixels, native parser
@@ -547,7 +547,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: the public parameter API reads and writes every reflected shape.
      *
-     * plan_fx.md FX-085. Reflection alone says a parameter is a 4x4 matrix; this says the value a
+     * plans/plan_fx.md FX-085. Reflection alone says a parameter is a 4x4 matrix; this says the value a
      * game writes through the XNA setter is the value the XNA getter reads back, for every class
      * and type the fixture declares -- scalars, vectors, matrices and their transpose variants,
      * arrays and their per-element views, and structure members. `RunCompiledEffectDrawContract`
@@ -632,7 +632,7 @@ namespace CNA::TestSupport
                      System::InvalidCastException);
         EXPECT_THROW((void) parameters["Tint"]->GetValueString(), System::InvalidCastException);
 
-        // plan_fx.md FX-104: and the positive half, on a parameter whose reflected type really is
+        // plans/plan_fx.md FX-104: and the positive half, on a parameter whose reflected type really is
         // String. Until this the pair was only ever exercised through its rejection path, so
         // "SetValue stores and GetValueString reads it back" was assumed rather than shown.
         Effect stringEffect(device, BuildSyntheticStringParameterEffect());
@@ -665,7 +665,7 @@ namespace CNA::TestSupport
         EXPECT_EQ(clonedCaption->GetValueString(), "clone only")
             << "and writing the source's string must not reach the clone";
 
-        // plan_fx.md FX-105: the OTHER direction of the type check, which XNA also makes. A
+        // plans/plan_fx.md FX-105: the OTHER direction of the type check, which XNA also makes. A
         // compiled effect's object parameters store an effect object-table INDEX at their byte
         // offset, not a number, so a numeric accessor used to read that index back as a float and
         // a numeric setter used to overwrite it -- detaching the parameter from its object. Both
@@ -702,7 +702,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: the compiled shader is what actually draws, across the XNA draw matrix.
      *
-     * plan_fx.md FX-084/FX-086. Every draw fills the render target with the effect's own `Tint`
+     * plans/plan_fx.md FX-084/FX-086. Every draw fills the render target with the effect's own `Tint`
      * parameter, which no stock CNA shader would produce for the same inputs -- so a silent
      * fallback to a stock program, or an attribute bound from the wrong stream/offset, changes
      * the read-back pixel instead of passing unnoticed. The matrix covers buffered and user draws,
@@ -856,7 +856,7 @@ namespace CNA::TestSupport
         }
 
         // A canonical built-in XNA vertex type through the overload that takes no declaration at
-        // all. plan_fx.md FX-081: GraphicsDevice stages these through the type's own
+        // all. plans/plan_fx.md FX-081: GraphicsDevice stages these through the type's own
         // VertexDeclaration, so a compiled Effect can match its POSITION0 input against a real
         // declaration instead of a bare byte stride.
         {
@@ -892,7 +892,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: a compiled effect reads attributes from more than one bound stream.
      *
-     * plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
+     * plans/plan_fx.md FX-082. Only for backends reporting `MultiStreamVertexInput`. The fixture's
      * vertex shader computes `mul(POSITION0 + TEXCOORD0 * StreamMix, Transform)`, POSITION0 comes
      * from stream 0 and TEXCOORD0 from stream 1, and `StreamMix` selects whether stream 1
      * contributes. With it on, the quad shifts far enough that the sampled pixel changes -- so
@@ -974,7 +974,7 @@ namespace CNA::TestSupport
 
         // --- Per-stream offsets that DIFFER, plus a non-zero vertexStart --------------------------
         //
-        // plan_fx.md FX-106. Everything above binds both streams at offset zero, so a route that
+        // plans/plan_fx.md FX-106. Everything above binds both streams at offset zero, so a route that
         // ignored VertexBufferBinding.VertexOffset entirely, or applied one stream's offset to
         // both, or folded the offsets together and lost the per-stream remainder, would pass. Here
         // each buffer carries a DIFFERENT amount of junk in front of its real data and the draw
@@ -1039,14 +1039,14 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: an instanced draw runs the compiled shader, not a stock one.
      *
-     * plan_fx.md FX-082. Only for backends reporting `Instancing` and `MultiStreamVertexInput`.
+     * plans/plan_fx.md FX-082. Only for backends reporting `Instancing` and `MultiStreamVertexInput`.
      * The per-instance stream supplies TEXCOORD0, so instance 0 draws the left half and instance
      * 1 the right; a step rate that never advances, or a stock shader taking over, leaves one of
      * the two halves unpainted.
      */
     inline void RunCompiledEffectInstancingDrawContract(GraphicsDevice& device)
     {
-        // plan_fx.md FX-112: gated on `Instancing` ALONE. This shape binds one per-vertex stream
+        // plans/plan_fx.md FX-112: gated on `Instancing` ALONE. This shape binds one per-vertex stream
         // and one per-instance stream, which is not what `MultiStreamVertexInput` describes --
         // that capability is about binding SEVERAL streams of the SAME rate, and
         // `GraphicsDevice::SetVertexBuffers` lets one-of-each through without consulting it. Gating
@@ -1099,7 +1099,7 @@ namespace CNA::TestSupport
         device.setDepthStencilStateProperty(DepthStencilState::None);
         device.setBlendStateProperty(BlendState::Opaque);
         pass.Apply();
-        // plan_fx.md FX-112: a backend whose compiled route cannot draw instanced primitives must
+        // plans/plan_fx.md FX-112: a backend whose compiled route cannot draw instanced primitives must
         // REFUSE here rather than fall through to a stock shader, and a named refusal skips the
         // rest -- the same shape the SpriteBatch contracts use. Silence is the one unacceptable
         // answer, and it is what an unwired route produces.
@@ -1138,7 +1138,7 @@ namespace CNA::TestSupport
 
         // --- Non-zero baseVertex, startIndex and per-instance stream offset ----------------------
         //
-        // plan_fx.md FX-107. The draw above uses zero for all three, so a route that dropped any of
+        // plans/plan_fx.md FX-107. The draw above uses zero for all three, so a route that dropped any of
         // them would still paint both halves. Here every buffer carries junk in front of its real
         // data: the vertex buffer's junk is a degenerate quad, the index buffer's junk addresses
         // it, and the instance buffer's junk would move both instances the same way. Any of those
@@ -1198,14 +1198,14 @@ namespace CNA::TestSupport
 
         // --- The instance divisor must not survive into a later non-instanced draw ---------------
         //
-        // plan_fx.md FX-107. A compiled route that shares one vertex-array object across every
+        // plans/plan_fx.md FX-107. A compiled route that shares one vertex-array object across every
         // compiled draw carries the divisor with it; left at 1, the next ordinary draw advances
         // TEXCOORD0 once per instance instead of once per vertex, so every vertex reads instance
         // 0's offset and the geometry stops depending on the stream at all. With StreamMix on and
         // a per-VERTEX stream whose values differ per vertex, that is visible: only a per-vertex
         // divisor moves the two halves apart.
         //
-        // plan_fx.md FX-112: this section, and only this section, binds TWO PER-VERTEX streams, so
+        // plans/plan_fx.md FX-112: this section, and only this section, binds TWO PER-VERTEX streams, so
         // it is the one part of this contract that genuinely needs MultiStreamVertexInput. It used
         // to gate the whole contract, which excused every instancing-capable renderer without
         // multi-stream input from the two sections above as well.
@@ -1249,7 +1249,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: SpriteBatch draws with the supplied compiled Effect, or refuses by name.
      *
-     * plan_fx.md FX-080. A compiled Effect handed to `SpriteBatch.Begin` must either run -- a
+     * plans/plan_fx.md FX-080. A compiled Effect handed to `SpriteBatch.Begin` must either run -- a
      * sprite covering the whole target comes out `Tint` -- or fail explicitly. What it must never
      * do is quietly render with the stock sprite program, which would put the sampled texture's
      * own colour on screen and look like success.
@@ -1313,7 +1313,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: a multi-pass compiled Effect batches the way XNA's SpriteBatch does.
      *
-     * plan_fx.md FX-102. XNA runs a compiled Effect's passes at FLUSH granularity, over a whole
+     * plans/plan_fx.md FX-102. XNA runs a compiled Effect's passes at FLUSH granularity, over a whole
      * contiguous run of same-texture sprites: FNA's `SpriteBatch.FlushBatch` splits the batch into
      * texture runs and `DrawPrimitives` wraps each run's draw in `foreach (pass)`. So for two
      * sprites sharing a texture and two passes the submission order is pass-major -- s0p0, s1p0,
@@ -1416,7 +1416,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: SpriteBatch gives a compiled Effect the sprite's own texture in slot 0.
      *
-     * plan_fx.md FX-103. FNA's `SpriteBatch.DrawPrimitives` sets `GraphicsDevice.Textures[0] =
+     * plans/plan_fx.md FX-103. FNA's `SpriteBatch.DrawPrimitives` sets `GraphicsDevice.Textures[0] =
      * texture` immediately AFTER `pass.Apply()`, with the comment "Set this _after_ Apply,
      * otherwise EffectParameters override it!". So a sprite effect samples the sprite being drawn,
      * not whatever texture the effect's own texture parameter names -- and a backend that binds the
@@ -1501,7 +1501,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: no truncation of a real effect wedges, crashes, or half-builds a runtime.
      *
-     * plan_fx.md FX-112. Every backend parses the effect container through the same pinned
+     * plans/plan_fx.md FX-112. Every backend parses the effect container through the same pinned
      * MojoShader, so this is shared rather than per-backend. Three outcomes are possible for a
      * truncated input and only two are acceptable. Refusing is the usual one. Parsing successfully
      * is also legitimate -- the last few lengths drop only trailing bytes MojoShader does not need
@@ -1515,7 +1515,7 @@ namespace CNA::TestSupport
      * not a proof of the harness assertion policy. The proof of that policy is the sweep that goes
      * at a renderer's compiled-effect runtime DIRECTLY, below the public validation, where the
      * assertion is genuinely reachable (`VulkanCompiledEffectTest.
-     * MalformedBytecodeIsRejectedWithoutCrashing`, plan_fx.md FX-111).
+     * MalformedBytecodeIsRejectedWithoutCrashing`, plans/plan_fx.md FX-111).
      *
      * Sweeping every 4-byte length rather than pinning one keeps it honest across fixture changes,
      * and under a sanitizer the sweep is the real question: a parser walking off the end of a
@@ -1577,7 +1577,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: many compiled draws in one frame each keep their own uniform values.
      *
-     * plan_fx.md FX-112. Every backend has to park each draw's constant values somewhere until the
+     * plans/plan_fx.md FX-112. Every backend has to park each draw's constant values somewhere until the
      * draw is actually submitted, and the natural shape -- one buffer, sliced per draw -- has a
      * fixed capacity. What happens at the end of it is the interesting part: a ring that WRAPS
      * hands two draws in one frame the same slice, so the earlier one silently renders with the
@@ -1660,7 +1660,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: switching effects, passes and techniques never leaks state between them.
      *
-     * plan_fx.md FX-087/FX-098. Two independent compiled effects draw alternately; each must render
+     * plans/plan_fx.md FX-087/FX-098. Two independent compiled effects draw alternately; each must render
      * its own `Tint`, not the one the other left in the shared register file. A clone drawing in
      * between is exercised for the same reason.
      *
@@ -1788,7 +1788,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: a compiled effect's geometry lands where a stock effect's would.
      *
-     * plan_fx.md FX-088. A compiled backend translates clip space itself -- MojoShader's GLSL, for
+     * plans/plan_fx.md FX-088. A compiled backend translates clip space itself -- MojoShader's GLSL, for
      * one, can negate `gl_Position.y` on request -- so a compiled draw can end up mirrored against
      * every other draw the same renderer issues while still passing any symmetric golden-pixel
      * test. This draws the same asymmetric half-target quad twice, once through a stock effect and
@@ -1862,7 +1862,7 @@ namespace CNA::TestSupport
     /**
      * @brief A full-target clip-space quad with a TEXCOORD0 the caller chooses. CNAEXT.
      *
-     * plan_fx.md FX-093. Every UV is the SAME value, so the sampled texel is a property of the
+     * plans/plan_fx.md FX-093. Every UV is the SAME value, so the sampled texel is a property of the
      * sampler alone: there is no interpolation across the quad and therefore no dependence on
      * where a rasterizer places a pixel centre. That is what keeps an addressing-mode or filter
      * assertion about a chosen texel rather than about the rounding of a coordinate.
@@ -1903,7 +1903,7 @@ namespace CNA::TestSupport
     /**
      * @brief The three-component sibling of @ref SamplingQuadVertex. CNAEXT.
      *
-     * plan_fx.md FX-110. A cube sampler takes a direction and a volume sampler a 3D coordinate, so
+     * plans/plan_fx.md FX-110. A cube sampler takes a direction and a volume sampler a 3D coordinate, so
      * the fixture's vertex shader forwards `oT0.xyz` and the stream has to carry three components.
      */
     struct SamplingQuadVertexXYZ
@@ -1943,7 +1943,7 @@ namespace CNA::TestSupport
     /**
      * @brief What a backend can represent of XNA's sampler state, for the GPU-visible contract.
      *
-     * plan_fx.md FX-093. Some sampler properties have no expression on some backends -- OpenGL ES
+     * plans/plan_fx.md FX-093. Some sampler properties have no expression on some backends -- OpenGL ES
      * has no `GL_TEXTURE_LOD_BIAS` at all, for one -- so the contract asks the backend's own test
      * file which subset to prove instead of guessing. A field left false is a documented gap, not
      * a silently skipped assertion: `docs/sampler-state-support.md` carries the same table.
@@ -1959,7 +1959,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: the compiled Effect's texture and sampler state reach the GPU.
      *
-     * plan_fx.md FX-093. `RunCompiledEffectSamplerContract` proves the Effect Framework's
+     * plans/plan_fx.md FX-093. `RunCompiledEffectSamplerContract` proves the Effect Framework's
      * `sampler_state` block is translated onto `GraphicsDevice.SamplerStates` correctly; this
      * proves the translated state is then APPLIED. Every section here binds a real texture,
      * applies a pass, issues a real draw and reads the pixel back, so a backend whose
@@ -2068,7 +2068,7 @@ namespace CNA::TestSupport
 
         // --- One effect, one pass, applied and drawn again and again ----------------------------
         //
-        // plan_fx.md FX-101. Every other section here builds a fresh Effect per draw, which is the
+        // plans/plan_fx.md FX-101. Every other section here builds a fresh Effect per draw, which is the
         // easy case: a backend reaches its "the applied pass changed" path every time. A game does
         // the opposite -- it holds one Effect for the whole frame and applies the same pass per
         // object -- and a backend that only establishes the pass's sampler binding when its
@@ -2324,7 +2324,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: a compiled Effect samples a render target the right way up.
      *
-     * plan_fx.md FX-099. A renderer whose render targets store their rows in the opposite order to
+     * plans/plan_fx.md FX-099. A renderer whose render targets store their rows in the opposite order to
      * a plain texture has to correct for it somewhere, and every such correction is written for the
      * shaders that renderer authors itself. A compiled Effect's shader is generated by MojoShader
      * from Direct3D 9 bytecode and contains none of it, so the correction has to reach the
@@ -2479,7 +2479,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: a compiled Effect's sampler state does not survive into a stock draw.
      *
-     * plan_fx.md FX-092. A renderer that keeps one long-lived native sampler per slot and mutates
+     * plans/plan_fx.md FX-092. A renderer that keeps one long-lived native sampler per slot and mutates
      * it in place -- EasyGL's `samplers_[slot]`, FNA3D's `samplerStates_[0]` -- writes only the
      * properties each call describes, so an Effect's own `MaxMipLevel`/`MipMapLevelOfDetailBias`
      * outlives the draw that asked for them. The next stock `SpriteBatch` flush passes filter and
@@ -2588,7 +2588,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: a compiled Effect can sample a cube and a volume texture, or refuse by name.
      *
-     * plan_fx.md FX-110. XNA's `TextureCube` and `Texture3D` reach a compiled Effect through the
+     * plans/plan_fx.md FX-110. XNA's `TextureCube` and `Texture3D` reach a compiled Effect through the
      * same texture parameter a `Texture2D` does, and MojoShader reflects the shader's own
      * expectation as `MOJOSHADER_SAMPLER_CUBE` or `_VOLUME`. Two things must hold, and neither was
      * observable before this section existed: a backend that resolves those kinds must sample the
@@ -2597,7 +2597,7 @@ namespace CNA::TestSupport
      * target and returning black rather than erroring.
      *
      * A backend that refuses skips rather than fails: refusing a kind it cannot bind is a valid,
-     * documented state (`plan_fx.md` section 10.5 classifies it), and the refusal's own text is
+     * documented state (`plans/plan_fx.md` section 10.5 classifies it), and the refusal's own text is
      * what this section then asserts on.
      *
      * @param device Device whose renderer claims CompiledEffects.
@@ -2773,7 +2773,7 @@ namespace CNA::TestSupport
     /**
      * @brief Contract: the pass a caller applies is the pass that draws.
      *
-     * plan_fx.md FX-094. The drawable fixture's pass `P0` binds a pixel shader that writes
+     * plans/plan_fx.md FX-094. The drawable fixture's pass `P0` binds a pixel shader that writes
      * `Tint.yzxw` while `StatePass` and `P1` write `Tint` unchanged, so applying the wrong pass --
      * or falling back to "the first pass" when a backend cannot resolve the requested one --
      * rotates the read-back colour's channels instead of producing identical pixels. Before this

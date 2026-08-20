@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2163: GPU timer queries.
+// plans/plan_modern.md MOD-2163: GPU timer queries.
 //
 // Every number in docs/cnaext-perf.md was measured with a CPU wall clock wrapped around a one-texel
 // read-back. That works, and it measures the wrong thing twice over: the clock starts when the

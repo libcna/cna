@@ -5,7 +5,7 @@
 - Audit status: AUDITED (full read, 140 lines, header-only)
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header (header-only implementation)
-- XNA/FNA relevance: N/A — NOXNA `.cnj` content-metadata support (plan_cnj.md CNB-32)
+- XNA/FNA relevance: N/A — NOXNA `.cnj` content-metadata support (plans/plan_cnj.md CNB-32)
 - Main related tests: not independently located in this pass
 
 ## Purpose

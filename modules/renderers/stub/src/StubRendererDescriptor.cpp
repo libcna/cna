@@ -1,6 +1,6 @@
-// plan_runtimerenderer.md RTR-P1-D09: the Stub family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D09: the Stub family's pre-construction contract.
 //
-// Deliberately minimal no-op renderer (plan_stub.md design decision 1): renders nothing, touches no
+// Deliberately minimal no-op renderer (plans/plan_stub.md design decision 1): renders nothing, touches no
 // platform window or video subsystem, keeps no bookkeeping of any kind.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -15,7 +15,7 @@ namespace CNA::Internal::Renderers::Stub
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

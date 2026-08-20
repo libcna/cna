@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_headless.md: closes a batch of small, previously-flagged test-coverage gaps that were
+// plans/plan_headless.md: closes a batch of small, previously-flagged test-coverage gaps that were
 // left as honest "implemented but not individually verified" notes after the first three
 // Headless renderer commits: HEADLESS-40 (trace log coverage for state-change methods),
 // HEADLESS-32/61 (GetLastFrameStatistics()'s diff math), HEADLESS-33 (per-type alive-resource

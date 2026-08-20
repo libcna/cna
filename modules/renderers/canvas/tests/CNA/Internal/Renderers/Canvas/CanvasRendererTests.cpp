@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_canvas.md CANVAS-80: structural GTest coverage for everything on the CANVAS renderer that
+// plans/plan_canvas.md CANVAS-80: structural GTest coverage for everything on the CANVAS renderer that
 // doesn't need a real CanvasRenderingContext2D -- ThrowNo3D coverage and the blend-mode->
 // globalCompositeOperation pure-function mapping. Runs either under `node CnaTests.js` (Design
 // decision 9) or in the native host-contract target. Neither loop has a real browser DOM, so every
@@ -8,7 +8,7 @@
 // by CANVAS-82's manual checklist.
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9 plus `next`'s own host-test build: two independent reasons to
+// plans/plan_runtimerenderer.md RTR-P9-9 plus `next`'s own host-test build: two independent reasons to
 // compile this suite, so both are kept -- picking one silently drops the other branch's coverage.
 #if defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_PRESENT_CANVAS) \
     || defined(CNA_CANVAS_HOST_TESTS)

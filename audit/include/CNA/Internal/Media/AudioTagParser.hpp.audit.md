@@ -8,7 +8,7 @@
 - File type: C++ header
 - XNA/FNA relevance: N/A -- NOXNA, entirely CNA-original functionality (neither XNA nor FNA parses audio tag
   metadata; `Song`'s Title/Artist/Album/Genre/Rating are populated from this from-scratch tag reader,
-  plan_media.md MEDIA-47..51/182/183/200/202/206/207/D2/D11)
+  plans/plan_media.md MEDIA-47..51/182/183/200/202/206/207/D2/D11)
 - Main related tests: not independently located in this pass
 
 ## Purpose

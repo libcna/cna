@@ -4,7 +4,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     file(GLOB _cna_software_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
     list(REMOVE_ITEM _cna_software_sources
         "${CMAKE_CURRENT_SOURCE_DIR}/src/SoftwareRenderer2D.cpp")
-    # plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the
+    # plans/plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the
     # global scalar, which names the build DEFAULT and is only correct here because the caller
     # happens to have overwritten it first.
     cna_renderer_target_name(_cna_software_target)

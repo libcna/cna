@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-083 / GLTF-089 / GLTF-098 / GLTF-154: the invariants every packed vertex buffer
+// plans/plan_gltf.md GLTF-083 / GLTF-089 / GLTF-098 / GLTF-154: the invariants every packed vertex buffer
 // holds, whatever stride it lands on.
 //
 // Each one is depended on somewhere that cannot check it. Position-at-offset-0 is assumed by every

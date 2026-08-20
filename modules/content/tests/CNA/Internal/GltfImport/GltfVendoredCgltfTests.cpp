@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-038: the vendored cgltf stays byte-identical to upstream, and every fault found
+// plans/plan_gltf.md GLTF-038: the vendored cgltf stays byte-identical to upstream, and every fault found
 // in it is answered on CNA's side of the call.
 //
 // A patched vendored header is invisible at exactly the moment it matters. The next upgrade is a
@@ -61,7 +61,7 @@ TEST(GltfVendoredCgltf, TheVendoredHeaderCarriesNoCnaEdits)
                "lost or silently kept by the next upgrade, and neither announces itself.";
     }
     EXPECT_FALSE(std::regex_search(source, std::regex("GLTF-[0-9]{3}")))
-        << "third_party/cgltf/cgltf.h cites a plan_gltf.md task, so it has been patched (GLTF-038)";
+        << "third_party/cgltf/cgltf.h cites a plans/plan_gltf.md task, so it has been patched (GLTF-038)";
 
     // The LICENSE must travel with it: the header is MIT, and vendoring it without its licence is
     // the other way this directory goes wrong.

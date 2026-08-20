@@ -1,4 +1,4 @@
-// plan_dx9.md Phase D9-4 (D9-40/D9-41).
+// plans/plan_dx9.md Phase D9-4 (D9-40/D9-41).
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
 

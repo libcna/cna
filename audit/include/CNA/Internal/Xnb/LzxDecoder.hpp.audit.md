@@ -23,7 +23,7 @@ out-of-bounds writes from corrupt match offsets/Huffman tables).
 The header candidly documents its own porting methodology and scope: a *line-by-line* port preserving
 FNA's variable names, control flow, and error-as-return-code style specifically so it can be verified
 against the original source directly, with "malformed/adversarial-input hardening beyond FNA's own bounds
-checks" explicitly called out as a deliberately separate, subsequent task (plan_xnb.md XNB-30) -- and,
+checks" explicitly called out as a deliberately separate, subsequent task (plans/plan_xnb.md XNB-30) -- and,
 per the `.cpp`'s own comments, that hardening pass has genuinely landed (not merely planned).
 
 ## Detailed Findings

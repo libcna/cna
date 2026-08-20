@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-27: custom ShaderEffect proof for the LLGL graphics renderer -- a REAL runtime
+// plans/plan_llgl.md LLGL-27: custom ShaderEffect proof for the LLGL graphics renderer -- a REAL runtime
 // GLSL->SPIR-V compile via libshaderc when the Vulkan module is loaded (LLGL's OpenGL module
 // accepts the same GLSL text directly), not just a "didn't throw" smoke test.
 //

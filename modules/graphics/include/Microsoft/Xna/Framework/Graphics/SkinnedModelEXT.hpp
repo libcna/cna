@@ -61,7 +61,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Which index space a clip's `BoneTrackEXT::BoneIndex` values live in.
      *
      * @note CNAEXT — not part of the XNA 4.0 API. The two are deliberately distinct and must never
-     * be silently interchanged (plan_gltf.md §15.1.2): a joint's palette slot has nothing to do
+     * be silently interchanged (plans/plan_gltf.md §15.1.2): a joint's palette slot has nothing to do
      * with its position in the scene, and a rigid scene node has no palette slot at all. A clip
      * that stated neither would let a reader apply one as the other, which is a silent corruption
      * in place of the silent drop `GLTF-293` removed.
@@ -91,7 +91,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Which index space @ref Tracks' bone indices are in.
          *
-         * @note CNAEXT — plan_gltf.md `GLTF-294`. Defaults to `JointPalette`, which is what every
+         * @note CNAEXT — plans/plan_gltf.md `GLTF-294`. Defaults to `JointPalette`, which is what every
          * clip was before rigid node animation existed, so no existing consumer's meaning changes.
          */
         ClipTargetSpaceEXT TargetSpace = ClipTargetSpaceEXT::JointPalette;

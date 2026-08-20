@@ -1,4 +1,4 @@
-// plan_dx9.md Phase D9-A (D9-A3): scene-driven XNA 4.0 reference renderer. No content pipeline.
+// plans/plan_dx9.md Phase D9-A (D9-A3): scene-driven XNA 4.0 reference renderer. No content pipeline.
 //
 // Reads a ".scene" file (the same declarative format CnaOracleRender.cpp reads) and renders it
 // with the real XNA 4.0 runtime, saving the result as a PNG -- the "oracle" half of the D9-A4

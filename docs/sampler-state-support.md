@@ -9,7 +9,7 @@
 > below are historical. See `docs/xna-4-api-coverage.md`'s per-class table or `NEXT.md` §5 for
 > current status.
 
-Phase 35 (`plan_graphics.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture
+Phase 35 (`plans/plan_graphics.md` Tasks 291–300) audited and pixel-verified `SamplerState` and texture
 sampling conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This
 document summarizes the findings.
 
@@ -109,7 +109,7 @@ clamping automatic LOD selection to level 0 regardless of filter) — all fixes 
 Vulkan `Texture2D` mips to work at all. The confounded Vulkan test variant was un-registered rather
 than left misleadingly failing for the wrong reason.
 
-## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (plan_fx.md FX-083, 2026-08-17)
+## 6b. `MaxMipLevel` and `MipMapLevelOfDetailBias` (plans/plan_fx.md FX-083, 2026-08-17)
 
 `IGraphicsRenderer::ApplySamplerMipState(slot, maxMipLevel, lodBias)` carries XNA's two LOD states
 across the renderer-neutral boundary. It has a default no-op body, so a renderer that has not
@@ -138,7 +138,7 @@ deferred command structs, so a game assigning `GraphicsDevice.SamplerStates[0].M
 then drawing with `BasicEffect` still gets `min_lod = 0`. Closing that means adding the two fields
 to each family's command struct; it is a stock-draw sampler task, not a compiled-effect one.
 
-### 6b.1 Sampler identity and state lifetime (plan_fx.md FX-091, FX-092, 2026-08-18)
+### 6b.1 Sampler identity and state lifetime (plans/plan_fx.md FX-091, FX-092, 2026-08-18)
 
 Two follow-up findings, both about the same thing: what a renderer's sampler is a function OF.
 

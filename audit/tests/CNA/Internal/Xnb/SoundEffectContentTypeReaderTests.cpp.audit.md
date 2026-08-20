@@ -8,7 +8,7 @@
 - File type: C++ test file (Google Test)
 - XNA/FNA relevance: Tests `CNA::Internal::Xnb::SoundEffectContentTypeReader` (backs `.xnb`-based
   loading of `Microsoft::Xna::Framework::Audio::SoundEffect`), Tasks XNB-33/33A + a long series of
-  `plan_audio.md` AUD-06 sub-tasks (2026-07-17 deep audit)
+  `plans/plan_audio.md` AUD-06 sub-tasks (2026-07-17 deep audit)
 - Main related tests: uses `SoundEffectInstanceTestAccess` (a test-only accessor);
   complements `SoundEffectContentTypeReaderPropertyTests.cpp`'s boundary-value sweep and
   `XnbContainerFuzzTests.cpp`'s whole-container fuzzing (both read earlier in this folder)

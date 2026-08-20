@@ -4,7 +4,7 @@
 - Source file: `docs/spritefont-support.md` (139 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 48, `plan_graphics.md` Tasks 421-430)
+- File type: Markdown documentation (closes Phase 48, `plans/plan_graphics.md` Tasks 421-430)
 - Cross-references: `xna-graphics` shard's `SpriteFont.cpp`/`SpriteBatch.cpp` audit (2 confirmed HIGH
   findings, audited directly by the parent session, not a fork)
 

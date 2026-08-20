@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-193 / GLTF-194 / GLTF-195 / GLTF-196: where a texture's pixels come from.
+// plans/plan_gltf.md GLTF-193 / GLTF-194 / GLTF-195 / GLTF-196: where a texture's pixels come from.
 //
 // §3.9.2 gives an image exactly three sources -- a `bufferView`, a `data:` URI, or a relative file
 // URI -- and every one of them has to arrive as the same bytes. A file, a `.glb` and a
@@ -292,7 +292,7 @@ TEST(GltfImageSource, AMissingExternalImageFileErrorsNamingThePath)
 
 TEST(GltfImageSource, TheBytesDecideTheExtensionAndTheDeclaredTypeIsOnlyAHint)
 {
-    // plan_gltf.md GLTF-199. The extension travels with the bytes -- the offline path writes a
+    // plans/plan_gltf.md GLTF-199. The extension travels with the bytes -- the offline path writes a
     // file named with it and a `.cnj` then references that file -- so it has to describe what the
     // bytes actually are. Both `mimeType` and a URI's media type are author-supplied strings, and
     // an exporter that writes `image/png` above JPEG bytes is not hypothetical: it is what a

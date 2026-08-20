@@ -85,7 +85,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // lookAheadTime/rendererId are intentionally unused: CNA has exactly one backend
         // (SDL3_mixer, see getRendererDetailsProperty()), so there is nothing to select between,
-        // and SDL3_mixer has no FACT-style scheduling look-ahead to configure (plan_audio.md XA-4).
+        // and SDL3_mixer has no FACT-style scheduling look-ahead to configure (plans/plan_audio.md XA-4).
         if (settingsFile.empty())
             throw System::ArgumentNullException("settingsFile");
 

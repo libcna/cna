@@ -4,7 +4,7 @@
 - Source file: `docs/rendertarget-support.md` (222 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 39, `plan_graphics.md` Tasks 331-340)
+- File type: Markdown documentation (closes Phase 39, `plans/plan_graphics.md` Tasks 331-340)
 - Cross-references: `xna-graphics` shard audit (191 files, 6 HIGH findings, none of which concern
   `RenderTarget2D`/`RenderTargetCube`/`Texture3D`/`TextureCube` directly — this doc's own findings
   are a disjoint, non-overlapping set)

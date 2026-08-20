@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX13 (DX-119): real, runtime-settable per-slot D3D12 SamplerState -- replaces
+// plans/plan_dx.md Phase DX13 (DX-119): real, runtime-settable per-slot D3D12 SamplerState -- replaces
 // D3D12RootSignatureCache's own hardcoded D3D12_STATIC_SAMPLER_DESC (fixed LINEAR/WRAP baked into
 // the root signature) with real D3D12_SAMPLER_DESC objects created from actual XNA SamplerState
 // fields into a real D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER shader-visible heap, mirroring D3D11's own

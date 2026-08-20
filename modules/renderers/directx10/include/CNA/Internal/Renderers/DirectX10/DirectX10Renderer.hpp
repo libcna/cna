@@ -1,13 +1,13 @@
 #pragma once
 
-// plan_d3d10.md: real Direct3D 10 graphics renderer. Unlike DIRECTX1..DIRECTX8, D3D10 removed the
+// plans/plan_d3d10.md: real Direct3D 10 graphics renderer. Unlike DIRECTX1..DIRECTX8, D3D10 removed the
 // fixed-function pipeline entirely -- every draw needs a real, compiled HLSL vertex+pixel shader
 // pair (vs_4_0/ps_4_0, D3D10's own shader-model ceiling), following this project's own D3DCompile
 // precedent (D3D9EffectRenderer.cpp/D3D11EffectRenderer.cpp), not DIRECTX1..DIRECTX8's CPU-transform-and-submit
 // model. Delivered via Wine's own builtin d3d10.dll/d3d10_1.dll (thin wrappers; DXVK 2.6.0 ships no
 // d3d10.dll at all) forwarding to DXVK's real d3d10core.dll + dxgi.dll.
 //
-// MVP scope (plan_d3d10.md design decision 3, mirroring DIRECTX1's own "baseline first, richness
+// MVP scope (plans/plan_d3d10.md design decision 3, mirroring DIRECTX1's own "baseline first, richness
 // later" precedent): DrawColoredPrimitives/DrawIndexedColoredPrimitives (required by
 // IGraphicsRenderer) are real shader draws (world*view*projection transform + vertex-color
 // passthrough, no lighting). DrawPrimitivesEx/DrawIndexedPrimitivesEx are intentionally NOT
@@ -27,7 +27,7 @@
 namespace CNA::Internal::Renderers::DirectX10
 {
     /**
-     * D3D10 graphics renderer (plan_d3d10.md): real Direct3D 10 (ID3D10Device), delivered via
+     * D3D10 graphics renderer (plans/plan_d3d10.md): real Direct3D 10 (ID3D10Device), delivered via
      * Wine's own builtin d3d10.dll/d3d10_1.dll forwarding to DXVK's real d3d10core.dll + dxgi.dll
      * (DXVK 2.6.0 ships no d3d10.dll of its own at all).
      *
@@ -111,7 +111,7 @@ namespace CNA::Internal::Renderers::DirectX10
             // ThreeD/DepthStencilBuffer/WireFrame/AnisotropicFiltering: real GPU via DXVK.
             // MultipleRenderTargets: real (unlike every DIRECTX1..DIRECTX8 renderer) -- D3D10 has genuine
             // OMSetRenderTargets(count>1,...) support. OcclusionQuery/CustomEffects: out of this
-            // v1's scope (plan_d3d10.md design decision 3), not a hardware limitation.
+            // v1's scope (plans/plan_d3d10.md design decision 3), not a hardware limitation.
             using CNA::GraphicsCapability;
             switch (capability)
             {

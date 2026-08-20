@@ -110,7 +110,7 @@ pipeline.
 algorithm), then re-uploads the result as textured quads via `SpriteBatch`. This is a real
 GPU-to-CPU readback on every `Draw()` call — the same cost class the former `ASCII` renderer's own
 `Present()` already paid every frame (it read `gameTarget_` back on every present too). This
-implementation intentionally does not depend on `plan_moderngraphics.md`, compute shaders, or any
+implementation intentionally does not depend on `plans/plan_moderngraphics.md`, compute shaders, or any
 Vulkan-specific functionality — it works identically on every CNA renderer, including 2D-only,
 non-shader ones (`SDL_RENDERER`, `HEADLESS`, `SOFTWARE`, ...).
 

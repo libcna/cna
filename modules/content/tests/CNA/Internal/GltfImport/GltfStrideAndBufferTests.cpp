@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-151 / GLTF-153 / GLTF-158 / GLTF-159 / GLTF-162 / GLTF-164 / GLTF-165 / GLTF-166.
+// plans/plan_gltf.md GLTF-151 / GLTF-153 / GLTF-158 / GLTF-159 / GLTF-162 / GLTF-164 / GLTF-165 / GLTF-166.
 //
 // The vertex/index buffer ABI, asserted at the layer a game actually meets it: the byte offsets a
 // renderer will read from, the index element size the GPU is told about, and what happens at the
@@ -226,7 +226,7 @@ TEST(GltfStrideAndBuffer, EveryCanonicalStrideHasExactlyTheElementsSection23Stat
         {VertexElementUsage::BlendIndices, 48, VertexElementFormat::Byte4},
         {VertexElementUsage::Color, 52, VertexElementFormat::Color},
     });
-    // plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved purely to keep this stride distinct
+    // plans/plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved purely to keep this stride distinct
     // from 56 are the packed COLOR_0 slot now, which is what lets a vertex-coloured primitive keep
     // its metallic-roughness material instead of being downgraded to a layout with no Normal at all.
     ExpectStrideLayout(60, {
@@ -385,7 +385,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
     {
         SCOPED_TRACE(fixture);
         Model model = cm.Load<Model>(fixture);
-        // plan_gltf.md GLTF-473 replaced the plain EXPECT_NO_THROW here, and it is a STRICTER
+        // plans/plan_gltf.md GLTF-473 replaced the plain EXPECT_NO_THROW here, and it is a STRICTER
         // requirement rather than a looser one. A fixed-function renderer has no attribute-per-
         // element freedom: it binds each client array at one literal offset, so a record it was not
         // written for is not "a stride it cannot reach" -- it is a stride it reaches through the
@@ -408,7 +408,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
             failure = error.what();
         }
         if (failure.empty()) { continue; }
-        // plan_gltf.md GLTF-477 adds the second legitimate refusal: a renderer with no
+        // plans/plan_gltf.md GLTF-477 adds the second legitimate refusal: a renderer with no
         // metallic-roughness shading path at all, which is a different state from a fixed-function
         // renderer misreading a layout. Both tokens come from a shared guard nobody can reproduce
         // by accident, which is the property that made the narrow check worth having.
@@ -422,7 +422,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
 
 TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesByName)
 {
-    // plan_gltf.md GLTF-465, at the draw boundary rather than in shader text. The audit above it
+    // plans/plan_gltf.md GLTF-465, at the draw boundary rather than in shader text. The audit above it
     // asks whether a renderer DECLARES the stride-60/80 colour; this asks whether a real
     // vertex-coloured metallic-roughness Model can be drawn through it at all.
     //
@@ -504,7 +504,7 @@ TEST(RendererStrideConformance, AColourCarryingPbrPrimitiveEitherDrawsOrRefusesB
 
 TEST(RendererStrideConformance, NoPbrOrSkinnedRecordIsEverReadThroughAnIncompatibleLayout)
 {
-    // plan_gltf.md GLTF-473, and the test that fails on the implementation this replaces.
+    // plans/plan_gltf.md GLTF-473, and the test that fails on the implementation this replaces.
     //
     // OPENGLES1 has no programmable pipeline, so PbrEffect, SkinnedEffect and a custom ShaderEffect
     // are permanent gaps (docs/opengles1-renderer.md). It did not refuse those draws: it routed them

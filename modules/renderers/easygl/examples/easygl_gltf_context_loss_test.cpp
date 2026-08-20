@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-439: a loaded glTF model survives a genuine EasyGL context loss.
+// plans/plan_gltf.md GLTF-439: a loaded glTF model survives a genuine EasyGL context loss.
 //
 // This is intentionally not a HEADLESS/STUB lifetime test: their context-loss hook is a no-op.
 // EasyGL's desktop hook destroys the SDL GL context, creates a fresh one, then rebuilds registered

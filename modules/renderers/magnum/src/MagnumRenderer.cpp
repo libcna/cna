@@ -962,7 +962,7 @@ namespace CNA::Internal::Renderers::Magnum
         program.SetVector4(program.LocationOf("uDiffuseColor"), Mg::Vector4{
             params.diffuseColor[0], params.diffuseColor[1],
             params.diffuseColor[2], params.diffuseColor[3]});
-        // plan_gltf.md GLTF-465: for the PBR programs this flag also decides whether `aColor` is read
+        // plans/plan_gltf.md GLTF-465: for the PBR programs this flag also decides whether `aColor` is read
         // at all, and only strides 60 and 80 actually supply that attribute. Raising it on stride
         // 48/68 would multiply base colour by GL's generic default (0,0,0,1) -- a black surface --
         // so the PBR family asks the layout as well as the effect.
@@ -1559,7 +1559,7 @@ namespace CNA::Internal::Renderers::Magnum
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_MAGNUM
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Magnum { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
@@ -1573,7 +1573,7 @@ namespace CNA::Internal::Renderers
         // reason, and refuse *here* rather than inside the constructor: the constructor creates the
         // platform GL context in its initializer list, and once that has happened the existing
         // renderer's Magnum objects are torn down against the wrong context and abort on the way
-        // out. Found by plan_modern.md Phase 16's second-device probe, which took the whole test
+        // out. Found by plans/plan_modern.md Phase 16's second-device probe, which took the whole test
         // process with it.
         if (Mg::GL::Context::hasCurrent())
             throw std::runtime_error(

@@ -94,7 +94,7 @@ Configured straight from the historical worktree at `261ea700`, with the pinned 
 | Build (`CNA` + backend + the four core harnesses) | **0 errors** |
 | `Sokol_Smoke` / `Sokol_2D` / `Sokol_3D` / `Sokol_Lit3D` | **13/13 · 15/15 · 10/10 · 10/10 — 48 checks, 0 failures** |
 
-Those are exactly the figures `plan_sokol.md` recorded, reproduced on a different machine from a
+Those are exactly the figures `plans/plan_sokol.md` recorded, reproduced on a different machine from a
 different checkout. **Everything measured after this point is therefore attributable to adaptation,
 not to an unknown starting state** — which is what the red-first baseline is for.
 

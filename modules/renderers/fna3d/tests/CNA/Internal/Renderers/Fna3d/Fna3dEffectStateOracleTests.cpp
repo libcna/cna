@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-005, state half: compare the device state CNA installs when a compiled pass is
+// plans/plan_fx.md FX-005, state half: compare the device state CNA installs when a compiled pass is
 // applied against the state FNA installs for the same pass on the same binary.
 //
 // The reflection half of the oracle answers "does CNA read the same object graph as FNA". This

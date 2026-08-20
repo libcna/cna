@@ -35,7 +35,7 @@
 
 namespace CNA::Internal::Renderers::SdlGpu
 {
-    // plan_fx.md FX-091: the sampler cache's key. REMED-GFX-170 established that the key must be
+    // plans/plan_fx.md FX-091: the sampler cache's key. REMED-GFX-170 established that the key must be
     // the COMPLETE sampler description; FX-083 then added the LOD clamp and bias to it by hand-
     // packing them into a uint64, which silently discarded the top eight bits of the 32-bit bias
     // -- a float's sign and most of its exponent -- and so aliased whole families of distinct
@@ -107,7 +107,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             PbrVertex,
             PbrSkinnedVertex,
             PbrFragment,
-            // plan_gltf.md GLTF-462/GLTF-463: stride-60 and stride-80 twins that declare COLOR_0.
+            // plans/plan_gltf.md GLTF-462/GLTF-463: stride-60 and stride-80 twins that declare COLOR_0.
             PbrColorVertex,
             PbrSkinnedColorVertex,
             Count
@@ -1276,9 +1276,9 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         ConstructionResources resources(window_, testHooks);
 
-        // plan_sdlgpu.md SDLGPU-6: request SPIR-V first -- the only shader format this device's
+        // plans/plan_sdlgpu.md SDLGPU-6: request SPIR-V first -- the only shader format this device's
         // vendored SDL3 compiles a driver for on Linux (Vulkan). DXBC/DXIL/MSL support (Windows/
-        // macOS drivers) is deferred to plan_sdlgpu.md's Phase SDLGPU-13.
+        // macOS drivers) is deferred to plans/plan_sdlgpu.md's Phase SDLGPU-13.
         // debug_mode mirrors DirectX11Renderer::CreateDeviceResources()'s own #ifndef NDEBUG
         // CNA-side toggle (design decision 12: the validation/debug layer is a debug-build
         // convenience, never a hard requirement) -- a debug build asks the Vulkan driver for
@@ -1361,7 +1361,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             registeredForWindow_ = false;
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-061: released before the device it was created against.
+        // plans/plan_fx.md FX-061: released before the device it was created against.
         if (mojoShaderContext_ != nullptr)
         {
             MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
@@ -1388,7 +1388,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         DestroyColoredResources();
         DestroySpriteResources();
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-071: unlike every stock family's own Destroy*Resources, there are no fixed
+        // plans/plan_fx.md FX-071: unlike every stock family's own Destroy*Resources, there are no fixed
         // shader fields here to release -- every shader module compiled-effect pipelines reference
         // is owned by mojoShaderContext_, already destroyed above.
         for (auto& [key, pipeline] : compiledEffectPipelines_)
@@ -1419,7 +1419,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
     SDL_GPUTextureFormat SdlGpuRenderer::QueryDepthStencilFormat(SDL_GPUDevice* device)
     {
-        // plan_sdlgpu.md: SDL_gpu guarantees at most one of D24_UNORM_S8_UINT/D32_FLOAT_S8_UINT
+        // plans/plan_sdlgpu.md: SDL_gpu guarantees at most one of D24_UNORM_S8_UINT/D32_FLOAT_S8_UINT
         // per device -- must query, never assume either is available. Queried once here (not
         // lazily inside EnsureDepthStencilTexture) so pipeline creation has a stable answer for
         // SDL_GPUGraphicsPipelineTargetInfo before any frame has actually rendered.
@@ -2462,7 +2462,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     void SdlGpuRenderer::ConfigureSwapchain(SDL_GPUDevice* device, SDL_Window* window,
                                                     int interval)
     {
-        // plan_sdlgpu.md: SDL_gpu has no "half-rate" present mode -- XNA's PresentInterval.Two
+        // plans/plan_sdlgpu.md: SDL_gpu has no "half-rate" present mode -- XNA's PresentInterval.Two
         // (swapInterval==2) falls back to plain VSYNC, same as swapInterval==1.
         SDL_GPUPresentMode presentMode = SDL_GPU_PRESENTMODE_VSYNC;
         if (interval == 0)
@@ -3080,7 +3080,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                               int addressW)
     {
         const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
-        // plan_fx.md FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
+        // plans/plan_fx.md FX-083: XNA's MaxMipLevel is the most detailed level the sampler may use,
         // i.e. a lower bound on the computed level of detail -- SDL_GPU's min_lod. That is the
         // same translation FNA3D's own SDL_GPU driver makes.
         const float minLod = static_cast<float>(std::max(maxMipLevel, 0));
@@ -3384,7 +3384,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.customUniforms = customEffect->SnapshotUniforms();
         }
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-071: the compiled-effect counterpart of the customEffect snapshot above --
+        // plans/plan_fx.md FX-071: the compiled-effect counterpart of the customEffect snapshot above --
         // captured NOW for the same reason (SpriteCommand's own doc comment) and against the same
         // fixed SpriteVertex layout every sprite shares, since SpriteBatch's vertex data is CNA's
         // own generated geometry, never a caller-supplied VertexDeclaration.
@@ -3964,7 +3964,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                                    PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
         // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
         // replay keeps every allocation on the queueing side, where a failure still has a
         // caller to report to.
@@ -4019,7 +4019,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                       const Matrix& world, const Matrix& view, const Matrix& projection,
                                                       PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
         // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
         // replay keeps every allocation on the queueing side, where a failure still has a
         // caller to report to.
@@ -4624,7 +4624,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SdlGpuFailurePointEXT::PbrSkinnedVertexShaderCreation, skinnedVsInfo,
             "CNA SDL_GPU: failed to create pbr_skinned3d vertex shader: ");
 
-        // plan_gltf.md GLTF-462/GLTF-465: the stride-60 and stride-80 twins. Same uniform/sampler
+        // plans/plan_gltf.md GLTF-462/GLTF-465: the stride-60 and stride-80 twins. Same uniform/sampler
         // shape as the two above -- only the vertex input set differs -- so they are created the same
         // way and cost nothing until a colour-carrying draw actually selects one.
         SDL_GPUShaderCreateInfo colorVsInfo = vsInfo;
@@ -4665,7 +4665,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         for (auto& [key, pipeline] : pbrSkinnedPipelines_)
             ReleaseGraphicsPipeline(pipeline);
         pbrSkinnedPipelines_.clear();
-        // plan_gltf.md GLTF-465: the two colour-carrying caches and their shaders, released the same
+        // plans/plan_gltf.md GLTF-465: the two colour-carrying caches and their shaders, released the same
         // way -- a pipeline cache nobody frees is exactly the leak this function exists to prevent.
         for (auto& [key, pipeline] : pbrColorPipelines_)
             ReleaseGraphicsPipeline(pipeline);
@@ -4710,7 +4710,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
-        // plan_gltf.md GLTF-462/GLTF-463: strides 60 and 80 are the same records with TEXCOORD_1 and
+        // plans/plan_gltf.md GLTF-462/GLTF-463: strides 60 and 80 are the same records with TEXCOORD_1 and
         // a packed COLOR_0 appended. This renderer's PBR shaders sample one UV set, so the second one
         // stays unbound; the colour does not, because glTF 3.9.2 makes it a term in base colour.
         vbDesc.pitch = skinned ? (colored ? 80 : 68) : (colored ? 60 : 48);
@@ -4773,7 +4773,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
                                                     PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
         // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
         // replay keeps every allocation on the queueing side, where a failure still has a
         // caller to report to.
@@ -4970,7 +4970,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
+        // plans/plan_gltf.md GLTF-474: the replay binds neutral white when no base-colour map is
         // bound, so the 1x1 texture has to exist by then. Creating it here rather than in the
         // replay keeps every allocation on the queueing side, where a failure still has a
         // caller to report to.
@@ -5033,7 +5033,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         const bool skinned = params.skinned;
-        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
+        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records with
         // TEXCOORD_1 and a packed COLOR_0 appended, and glTF 3.9.2 makes that colour a multiplier on
         // base colour. They select the colour-carrying shader variants; the second UV set stays
         // unbound, which is this renderer's own separate capability gap.
@@ -5244,7 +5244,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     std::string("CNA SDL_GPU: this compiled effect's pixel shader samples '") +
                     name + "', but no texture is bound to it.");
             }
-            // plan_fx.md FX-110: the shader's declared sampler dimension decides which resolver
+            // plans/plan_fx.md FX-110: the shader's declared sampler dimension decides which resolver
             // the bound texture has to go through, and the two must agree. SDL_GPU binds a texture
             // by handle rather than by target, so a cube bound where the shader declared sampler2D
             // is a validation error at best and a wrongly-sampled image at worst -- named here
@@ -5288,7 +5288,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                     std::to_string(slot) + ". This renderer samples Texture3D elsewhere, but its "
                     "compiled-effect draw route cannot yet keep a volume texture alive across the "
                     "deferred replay; the limitation is specific to compiled Effects, not to the "
-                    "renderer (plan_fx.md FX-110).");
+                    "renderer (plans/plan_fx.md FX-110).");
             }
 
             samplerBinding.texture =
@@ -5299,7 +5299,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                "CompiledEffect.Sampler");
             if (samplerAssigned)
             {
-                // plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
+                // plans/plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
                 // included -- SDL_GPU expresses both exactly.
                 samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
                 samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
@@ -5348,7 +5348,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "CNA SDL_GPU: the applied compiled effect was not created by this renderer.");
         }
 
-        // plan_fx.md FX-082: this renderer binds exactly one vertex stream, and reports
+        // plans/plan_fx.md FX-082: this renderer binds exactly one vertex stream, and reports
         // MultiStreamVertexInput false so GraphicsDevice refuses a wider binding set before it
         // ever reaches here. Draw*PrimitivesEx is still a public interface method a harness can
         // call with a hand-built GpuDrawParams, and a truncated binding list looks exactly like a
@@ -5515,7 +5515,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
         // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
         // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
         // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
@@ -5694,7 +5694,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
         // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
         // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
         // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
@@ -5758,7 +5758,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                     command.addressV, command.maxAnisotropy,
                                                     "Pbr3D");
-        // plan_gltf.md GLTF-465: slot 0 was the one PBR map with no fallback, so a material
+        // plans/plan_gltf.md GLTF-465: slot 0 was the one PBR map with no fallback, so a material
         // with only a baseColorFactor -- glTF's own default material, and what both COLOR_0
         // corpus fixtures author -- had to be refused upstream instead of multiplying the
         // factor by white. Same neutral-white contract as slots 1..6, and as every other
@@ -6007,7 +6007,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
         // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
         // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
         // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
@@ -6056,7 +6056,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
         SDL_GPUTextureSamplerBinding samplerBinding{};
-        // plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
+        // plans/plan_gltf.md GLTF-474: a stock effect's base-colour map is optional -- XNA lets
         // BasicEffect/SkinnedEffect/AlphaTestEffect run untextured, and glTF's own default
         // material has no baseColorTexture at all. Binding neutral white makes `tex * colour`
         // collapse to the colour, which is what EasyGL and Vulkan already do; without it this
@@ -6343,7 +6343,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                   const GpuDrawParams& params)
     {
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-071: a compiled effect's vertex layout is arbitrary and validated against
+        // plans/plan_fx.md FX-071: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BuildCompiledEffectVertexAttributes), not
         // against the fixed-stride table RequireFaithfulDeclarationEXT enforces below -- so this
         // dispatches before that guard runs, not after.
@@ -6369,7 +6369,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
+        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
         // base-colour map is optional in XNA and absent in glTF's own default material, and the
         // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
         // made the draw fall past every branch into the stride-16 colour path and be refused there.
@@ -6388,7 +6388,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
+        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
         // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
         // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
         // the only route into that queue, and a stride the dispatch omits falls through every
@@ -6429,7 +6429,7 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                          const GpuDrawParams& params)
     {
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-071: see DrawPrimitivesEx's identical guard for why this dispatches before
+        // plans/plan_fx.md FX-071: see DrawPrimitivesEx's identical guard for why this dispatches before
         // RequireFaithfulDeclarationEXT rather than after.
         if (params.compiledEffectRuntime != nullptr)
         {
@@ -6446,7 +6446,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
-        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
+        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` here any more. A stock effect's
         // base-colour map is optional in XNA and absent in glTF's own default material, and the
         // replay binds neutral white for it -- so requiring one here did not make the draw safe, it
         // made the draw fall past every branch into the stride-16 colour path and be refused there.
@@ -6465,7 +6465,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
+        // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the stride-48 and
         // stride-68 records with TEXCOORD_1 and a packed COLOR_0 appended, and QueuePbrDraw
         // selects the colour-carrying pipeline for them. They must be listed HERE too: this is
         // the only route into that queue, and a stride the dispatch omits falls through every
@@ -8026,7 +8026,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (begun_)
             throw std::logic_error("CNA SDL_GPU SpriteBatch.Begin called twice without End");
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
-        // plan_fx.md FX-102: a batch starts empty even if the previous one threw out of its flush.
+        // plans/plan_fx.md FX-102: a batch starts empty even if the previous one threw out of its flush.
         // Nothing else clears this, and a leftover sprite would be replayed into an unrelated batch
         // with that batch's transform and sampler.
         pendingSprites_.clear();
@@ -8049,7 +8049,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (pendingSprites_.empty()) return;
 
-        // plan_fx.md FX-102: XNA's own batching granularity, reproduced exactly.
+        // plans/plan_fx.md FX-102: XNA's own batching granularity, reproduced exactly.
         //
         // FNA's SpriteBatch.FlushBatch walks the (already sorted) sprites and splits them into
         // CONTIGUOUS RUNS OF ONE TEXTURE; DrawPrimitives then draws each run once per pass of the
@@ -8147,7 +8147,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuEffectRenderer* customEffectRenderer = customEffect_
             ? dynamic_cast<SdlGpuEffectRenderer*>(customEffect_->GetEffectRendererPtr())
             : nullptr;
-        // plan_fx.md FX-071: customEffect_ is either ShaderEffect-derived (resolved above) or a
+        // plans/plan_fx.md FX-071: customEffect_ is either ShaderEffect-derived (resolved above) or a
         // compiled effect (resolved here), never both -- Effect::GetCompiledRuntimePtr() returns
         // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
         ICompiledEffectRuntime* compiledEffectRuntime =
@@ -8155,7 +8155,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         if (compiledEffectRuntime != nullptr)
         {
-            // plan_fx.md FX-080: SpriteBatch applies the effect's passes itself, exactly as FNA's
+            // plans/plan_fx.md FX-080: SpriteBatch applies the effect's passes itself, exactly as FNA's
             // SpriteBatch.DrawPrimitives does -- once per pass of the current technique, drawing
             // the sprite again for each. Before this the route silently relied on the caller
             // having applied a pass already, so a game using only the public
@@ -8203,7 +8203,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace SdlGpu { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

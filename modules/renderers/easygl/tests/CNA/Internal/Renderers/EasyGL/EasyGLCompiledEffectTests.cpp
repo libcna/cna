@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-062: the EasyGL compiled-effect runtime and its draw route, exercised directly.
+// plans/plan_fx.md FX-062: the EasyGL compiled-effect runtime and its draw route, exercised directly.
 //
 // SupportsCompiledEffects() reports true (FX-062 is done: ordinary 3D draws draw with a compiled
 // pass, verified by RendersTheAppliedPassesExpectedPixelsIntoARenderTarget below and by
@@ -74,7 +74,7 @@ TEST(EasyGLCompiledEffectTest, TheCapabilityIsTrueNowThatDrawsExecuteTheEffect)
     GraphicsDevice device;
     if (RendererOf(device) == nullptr)
         GTEST_SKIP() << "this build did not select the EasyGL renderer";
-    // plan_fx.md FX-062: ordinary 3D draws draw with a compiled pass now
+    // plans/plan_fx.md FX-062: ordinary 3D draws draw with a compiled pass now
     // (RendersTheAppliedPassesExpectedPixelsIntoARenderTarget), verified by a real golden-pixel
     // readback and the FX-060 shared conformance contract (SharedBackendConformanceContract) -- so
     // this capability no longer means "will silently render with a stock shader instead".
@@ -272,7 +272,7 @@ TEST(EasyGLCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
 
 TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARenderTarget)
 {
-    // plan_fx.md FX-062 golden-pixel test: draws CnaConformanceEffect.fxb's MainPixelShader
+    // plans/plan_fx.md FX-062 golden-pixel test: draws CnaConformanceEffect.fxb's MainPixelShader
     // (texture-sampling, struct-driven preshader) and FlatPixelShader (no sampling, array-driven
     // preshader) into a RenderTarget2D through the real EasyGLRenderer::DrawPrimitivesEx path and
     // reads the centre pixel back via RenderTarget2D::GetData(), matching the exact bytes
@@ -314,7 +314,7 @@ TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
         device.Clear(Color(50, 50, 50, 255));  // a colour neither expected result is close to
         // Neither P0 nor P1 assign a CullMode render state of their own (only StatePass does), so
         // CompiledEffectDeviceState::rasterizer is never consulted for these two passes -- it only
-        // matters to a pass that itself changes that state group (plan_fx.md FX-071's own finding,
+        // matters to a pass that itself changes that state group (plans/plan_fx.md FX-071's own finding,
         // confirmed here too). What actually matters at draw time is this renderer's own live GL
         // rasterizer state, set through the ordinary public GraphicsDevice.RasterizerState.
         device.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -361,7 +361,7 @@ TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
 
 TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
 {
-    // plan_fx.md FX-060/FX-062: the same cross-renderer contract FNA3D's and SDL_GPU's own
+    // plans/plan_fx.md FX-060/FX-062: the same cross-renderer contract FNA3D's and SDL_GPU's own
     // SharedBackendConformanceContract tests run -- format, reflection, parameter API,
     // techniques/passes, render state, state policy, samplers, texture binding, clone and
     // lifetime -- through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
@@ -372,7 +372,7 @@ TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)
     CNA::TestSupport::RunCompiledEffectContract(device);
 }
 
-// plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
+// plans/plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
 // own Tint parameter into a render target and reads it back, so a draw that silently used a stock
 // shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.
 
@@ -480,7 +480,7 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchTextureSlotContract)
 
 TEST(EasyGLCompiledEffectDrawTest, CompiledDrawObjectsSurviveAContextRecreation)
 {
-    // plan_fx.md FX-108. The compiled route owns two GL objects outside easy-gl's recovery
+    // plans/plan_fx.md FX-108. The compiled route owns two GL objects outside easy-gl's recovery
     // registry: one shared vertex-array object and, per sampler slot, the row-order-corrected copy
     // of a render-target source. Their creation flags used to stay true across a context
     // recreation while the names behind them died with the old context, so every later compiled

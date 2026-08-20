@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Draco fixtures -- owning group ``draco`` (plan_gltf.md §20, §24.2).
+"""Draco fixtures -- owning group ``draco`` (plans/plan_gltf.md §20, §24.2).
 
 The four bitstreams below are immutable output of google/draco 1.5.7 at CNA's pinned commit
 ``8786740086a9f4d83f44aa83badfbea4dce7a1b5``. They use ``MESH_SEQUENTIAL_ENCODING``, speed 5/5,
@@ -181,7 +181,7 @@ def draco_vs_uncompressed_pair() -> Fixture:
         l3_primitive(mesh=mesh, mesh_name="DracoParityPairs", primitive=1, mode=TRIANGLES,
                      positions=_POSITIONS, normals=_NORMALS, tangents=_TANGENTS,
                      texcoords=_TEXCOORDS, indices=TRIANGLE_INDICES),
-        # plan_gltf.md GLTF-462: the two vertex-colour primitives keep their metallic-roughness
+        # plans/plan_gltf.md GLTF-462: the two vertex-colour primitives keep their metallic-roughness
         # material now, so they take the rigid PBR layout and need the generated tangent basis
         # stated. It is exactly solvable for this carrier: the UV axes match its +X/+Y geometry, so
         # the closed-form result is (+X, +1) at every vertex -- the same value `tangent-absent-

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-35: real-device proof for SkinnedEffect on the Diligent renderer,
+// plans/plan_diligent.md DILIGENT-35: real-device proof for SkinnedEffect on the Diligent renderer,
 // through the public XNA API only.
 //
 // The scene is a quad covering the LEFT half of the screen, every vertex bound to bone 0.

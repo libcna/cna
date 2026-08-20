@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1810: an imported glTF material through the engine layer, end to end.
+// plans/plan_modern.md MOD-1810: an imported glTF material through the engine layer, end to end.
 //
 // The engine layer's PBR and IBL work is verified against effects this repository constructs. This
 // program checks the join everything else assumes: that a material which arrived through the

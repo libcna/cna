@@ -15,7 +15,7 @@ and owns itself (via `PlatformGlContextOwner`, the same "own GL context, no Easy
 
 See `nanovg-spike/README.md` for the standalone existence-gate proof (a real GLSL-shader-driven
 path drawn and read back via `glReadPixels`, under Xvfb) that predates this renderer's CNA
-integration, and `plan_nanovg.md` for the delivery task list and design decisions.
+integration, and `plans/plan_nanovg.md` for the delivery task list and design decisions.
 
 NanoVG is a 2D-only vector-graphics API: it has no 3D pipeline, no vertex/index buffer concept
 reachable from CNA, and no caller-addressable depth/stencil surface (its own internal stencil
@@ -313,7 +313,7 @@ active `Viewport` and can change between two draws of one Immediate batch.
 | `RasterizerState.DepthBias`/`SlopeScaleDepthBias` | **Rejected when non-zero** (throws) | No depth buffer exists for either to bias against. |
 | `DepthStencilState` | **`DepthStencilState.None` is accepted; any meaningfully-enabled depth or stencil state, or a non-zero `ReferenceStencil`, is rejected** (throws) | Matches ordinary `SpriteBatch.Begin()` usage and normal `GraphicsDevice` construction. `SupportsDepthStencil()` reports `false`. |
 | Modern 3D `Draw*`/`DrawIndexed*`/`DrawInstanced*`/`DrawUser*` entry points | **Rejected by `Ensure3DSupported()`** (Throw policy) or safely no-op'd (WarnAndStub policy) | Verified through the public `GraphicsDevice` API (`nanovg_unsupported_3d_behavior_test`). |
-| Render targets (`RenderTarget2D`/`RenderTargetCube`) | **Unsupported** (`CreateRenderTarget2D` returns `nullptr`, the shared default) | NanoVG's own off-screen-framebuffer helper (`nanovg_gl_utils.h`'s `NVGLUframebuffer`) is deliberately out of this renderer's scope — see `plan_nanovg.md`'s "Known limitations". `GraphicsDevice::SetRenderTarget(RenderTarget2D*)` throws `System::NotSupportedException` transactionally, matching every renderer with no real render-target storage. |
+| Render targets (`RenderTarget2D`/`RenderTargetCube`) | **Unsupported** (`CreateRenderTarget2D` returns `nullptr`, the shared default) | NanoVG's own off-screen-framebuffer helper (`nanovg_gl_utils.h`'s `NVGLUframebuffer`) is deliberately out of this renderer's scope — see `plans/plan_nanovg.md`'s "Known limitations". `GraphicsDevice::SetRenderTarget(RenderTarget2D*)` throws `System::NotSupportedException` transactionally, matching every renderer with no real render-target storage. |
 | Custom `Effect` in `SpriteBatch` | **Rejected** (throws) | No caller-addressable programmable shader stage exists on this renderer (NanoVG's own GLSL pipeline is fixed, internal, and not exposed to CNA's `Effect` system). |
 | `GraphicsCapability.ThreeD`, `DepthStencilBuffer`, `MultipleRenderTargets`, `OcclusionQuery`, `CustomEffects`, `CompiledEffects`, `Texture3D`, `MultiSampleAntiAliasing`, `AnisotropicFiltering`, `WireFrame`, `Instancing`, `MultiStreamVertexInput`, `StencilBuffer` | All report `false` | See `NanoVgRenderer::SupportsCapability`'s own comment. |
 | `GraphicsCapability.AdditiveBlending` | Reports **`true`** | The one genuine capability edge over `OPENVG` — see above. |
@@ -473,7 +473,7 @@ assumed every renderer provides 3D/render-target/cube-texture storage:
 ## Known limitations
 
 - **No render targets.** NanoVG's own off-screen-framebuffer helper (`nanovg_gl_utils.h`'s
-  `NVGLUframebuffer`) was deliberately left out of this renderer's initial scope (`plan_nanovg.md`)
+  `NVGLUframebuffer`) was deliberately left out of this renderer's initial scope (`plans/plan_nanovg.md`)
   — a real follow-up, not attempted here.
 - **No custom `Effect`/shader stage.** NanoVG's GLSL pipeline is fixed and internal; there is no
   mechanism to inject a caller-supplied shader into it.

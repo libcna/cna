@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_svg_dom.md: end-to-end vertical-slice smoke test for the SVG_DOM graphics renderer, written
+// plans/plan_svg_dom.md: end-to-end vertical-slice smoke test for the SVG_DOM graphics renderer, written
 // to produce a real PASS/FAIL in a real browser (mirrors HTML_DOM's own
 // htmldom_smoke_test.cpp/HTMLDOM-15 precedent). Inspects the actual SVG DOM the renderer produced
 // -- the root element and its namespace, the per-sprite nested-<svg>+<image> structure, the tint

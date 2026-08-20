@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-57: vertex-array cache correctness for the MAGNUM renderer.
+// plans/plan_magnum.md MAGNUM-57: vertex-array cache correctness for the MAGNUM renderer.
 //
 // The renderer caches a built vertex array against the binding it was built for, and then applies
 // primitive, element count, instance count, base vertex and index offset as per-draw setters on

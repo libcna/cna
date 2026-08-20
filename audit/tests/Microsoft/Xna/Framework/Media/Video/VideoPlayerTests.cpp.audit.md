@@ -12,7 +12,7 @@
 The most extensive single test file in this shard: covers `VideoPlayer` construction defaults, disposal (including idempotency and post-dispose throw guards), `Play()` metadata validation, real decode-to-texture playback, audio-stream resume/pause fidelity, EOF/looping/audio-tail timing behavior, multi-track audio/video switching (including no-op reselection and out-of-range indices), and a first-frame-decode-failure teardown regression.
 
 ## Executive Verdict
-**PASS with two findings (one MEDIUM, one LOW-MEDIUM).** This file is exceptionally well-documented — nearly every test cites the exact `plan_media.md` defect it guards against, several explicitly describing bugs found only via external code review AFTER an initial "complete" pass. The findings below concern one exception-type inconsistency and one inherited cross-file global-state risk.
+**PASS with two findings (one MEDIUM, one LOW-MEDIUM).** This file is exceptionally well-documented — nearly every test cites the exact `plans/plan_media.md` defect it guards against, several explicitly describing bugs found only via external code review AFTER an initial "complete" pass. The findings below concern one exception-type inconsistency and one inherited cross-file global-state risk.
 
 ## Checklist Results
 - `MethodsThrowObjectDisposedExceptionAfterDispose` exhaustively lists every public method that must throw post-dispose (`Play`, `Stop`, `Pause`, `Resume`, `GetTexture`, `SetAudioTrackEXT`, `SetVideoTrackEXT`) in one place — good single-location coverage of the disposal contract across the whole public surface.

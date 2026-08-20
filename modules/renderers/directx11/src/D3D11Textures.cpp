@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42).
+// plans/plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42).
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
 
 #include <algorithm>

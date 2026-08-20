@@ -1,4 +1,4 @@
-# plan_magnum.md MAGNUM-2: Magnum::GL is the whole rendering surface this renderer uses, and
+# plans/plan_magnum.md MAGNUM-2: Magnum::GL is the whole rendering surface this renderer uses, and
 # Magnum::<platform>Context supplies the OpenGL function loader Platform::GLContext needs for a
 # context CNA creates through IPlatformGlContext. CNA_MAGNUM_CONTEXT_COMPONENT is resolved per platform in
 # cmake/ThirdPartyMagnum.cmake.

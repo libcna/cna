@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: adapts examples/easygl_spritebatch_sourcerect_test.cpp's own scene verbatim --
+// plans/plan_opengl2.md: adapts examples/easygl_spritebatch_sourcerect_test.cpp's own scene verbatim --
 // verifies SpriteBatch::Draw's sourceRectangle parameter correctly crops which region of the
 // texture is sampled, rather than always sampling (and stretching) the whole texture.
 //

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: end-to-end smoke test for the native OpenGL 2.1 graphics renderer's device/
+// plans/plan_opengl2.md: end-to-end smoke test for the native OpenGL 2.1 graphics renderer's device/
 // window/GL-context lifecycle and color+depth+stencil clear/present. Real window, real SDL GL
 // context, a real 60-frame Clear()+Present() loop -- the same bar SDLGPU-12/sdlgpu_smoke_test.cpp
 // established when that renderer was first bootstrapped.

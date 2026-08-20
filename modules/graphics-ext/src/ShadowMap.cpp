@@ -159,7 +159,7 @@ void main() {
         // names which one is missing rather than reporting "shadows unavailable" and leaving the
         // reader to guess.
         const bool canRaster = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-        // Two questions, not one (plan_modern.md `MOD-1699`): `CustomEffects` only means the
+        // Two questions, not one (plans/plan_modern.md `MOD-1699`): `CustomEffects` only means the
         // renderer *accepts* an effect. SOFTWARE and HEADLESS accept any shader source and go
         // on rendering with their own fixed path, so a caster that believed them would report
         // a working shadow map while writing depth nothing had shaded.
@@ -275,7 +275,7 @@ void main() {
         lightViewProjection_    = view * projection;
 
         // The pass counts as open only once the target is bound and cleared -- the same correction
-        // CubeShadowMap needed (plan_modern.md MOD-1697). Marking it open first meant that a
+        // CubeShadowMap needed (plans/plan_modern.md MOD-1697). Marking it open first meant that a
         // renderer refusing the bind left every later begin() reporting "already open", turning one
         // unsupported pass into an object that could never be used again.
         try

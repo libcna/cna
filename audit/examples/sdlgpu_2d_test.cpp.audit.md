@@ -13,7 +13,7 @@
   presets (`PointWrap`, `LinearWrap`) passed to `SpriteBatch::Begin`.
 - Related production code: `src/CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.cpp`
   (sprite pipeline / `RenderSprites`), `src/CNA/Internal/Backends/SdlGpu/shaders/sprite2d.vert.glsl`
-  / `sprite2d.frag.glsl`, `plan_sdlgpu.md` Phase `SDLGPU-13..25`.
+  / `sprite2d.frag.glsl`, `plans/plan_sdlgpu.md` Phase `SDLGPU-13..25`.
 
 ## Purpose
 
@@ -32,13 +32,13 @@ namespace `using`) is correct for this shard.
 own header comment this is deliberately a "didn't throw" test, not a pixel test: rotation math,
 the flip permutation, and sampler address-mode wrapping are each real, exercised code paths, but
 none of their *output* is asserted by the automated `SdlGpu_2D` CTest itself (see F1). The
-one-time manual screenshot verification this file's header cites is dated (`plan_sdlgpu.md`
+one-time manual screenshot verification this file's header cites is dated (`plans/plan_sdlgpu.md`
 `SDLGPU-25`, 2026-07-15) and is not re-run by CI.
 
 ## Checklist Results
 
 ### Purpose
-Correctly placed and scoped; matches `plan_sdlgpu.md SDLGPU-22..25`'s stated goal verbatim.
+Correctly placed and scoped; matches `plans/plan_sdlgpu.md SDLGPU-22..25`'s stated goal verbatim.
 
 ### API / XNA / FNA parity
 `SpriteBatch::Draw(Texture2D&, Rectangle, Rectangle, Color)`,
@@ -102,13 +102,13 @@ non-default sampler presets. See F1 for what is *not* covered (actual rendered o
 - Evidence: the file's own header comment (lines 8-12) states plainly: *"No pixel-level readback
   exists yet on this backend (`ReadBackbuffer` is not implemented … so this test cannot assert
   exact pixel colors …). It proves: real texture upload, a real multi-sprite scene … drawn over
-  many frames with no crash."* Cross-referenced against `plan_sdlgpu.md`'s `SDLGPU-39` row: this
+  many frames with no crash."* Cross-referenced against `plans/plan_sdlgpu.md`'s `SDLGPU-39` row: this
   is confirmed to be a **permanent, documented SDL_gpu API contract**, not a stub — the swapchain
   texture is write-only per `SDL_gpu.h`'s own doc comment on
   `SDL_WaitAndAcquireGPUSwapchainTexture`, so `ReadBackbuffer`/`GetBackBufferData` genuinely cannot
   be implemented for this backend's swapchain without a per-frame proxy-texture redesign the
   project explicitly chose not to pay for (`SDLGPU-39`, "Deliberately not implemented 2026-07-16").
-  `plan_sdlgpu.md`'s `SDLGPU-25` row states the *actual* proof of correctness was a one-time
+  `plans/plan_sdlgpu.md`'s `SDLGPU-25` row states the *actual* proof of correctness was a one-time
   manual screenshot taken 2026-07-15 (`import -window`), which "caught and led to fixing
   `SDLGPU-14`'s Y-flip bug."
 - Why it matters: this is a real, structurally-explained limitation (verified against a genuine

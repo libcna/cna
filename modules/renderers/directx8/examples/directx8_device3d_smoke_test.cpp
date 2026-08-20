@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DIRECTX8's real Direct3D v7 device bring-up (a port of DIRECTX6's own, itself a port of DIRECTX5/DIRECTX3/DIRECTX2's) --
+// plans/plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DIRECTX8's real Direct3D v7 device bring-up (a port of DIRECTX6's own, itself a port of DIRECTX5/DIRECTX3/DIRECTX2's) --
 // IDirect3D7/IDirect3DDevice7 creation against the shadow-backbuffer surface (no separate viewport
-// object at all, plan_dx8.md design decision 4), a real attached 32-bit depth+stencil Z-buffer, and
+// object at all, plans/plan_dx8.md design decision 4), a real attached 32-bit depth+stencil Z-buffer, and
 // the ClearColorAndDepth/ClearDepth/ClearStencil/etc entry points. VertexBuffer/IndexBuffer storage,
 // the 3D draw path, and state application (SetDepthTestEnabled/ApplyRasterizerState/etc) are all
 // real now -- pixel-verified 3D rendering is covered by directx8_colored_primitives_test.cpp/

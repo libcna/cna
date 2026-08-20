@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: proof that DynamicVertexBuffer/DynamicIndexBuffer SetData(..., SetDataOptions)
+// plans/plan_opengl2.md: proof that DynamicVertexBuffer/DynamicIndexBuffer SetData(..., SetDataOptions)
 // renders correctly on OpenGL2 across None/Discard/NoOverwrite -- reuses
 // examples/easygl_dynamic_buffer_stress_test.cpp's own scene and cycling scheme verbatim.
 //

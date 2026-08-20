@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_skinnedeffect_vertexcolor_test.cpp's own SkinnedEffect.VertexColorEnabled scene
 // verbatim: quad A (VertexColorEnabled=false, per-vertex black must be ignored, same red-dominant
 // lit/textured result as the plain SkinnedEffect golden test's identity-bone quad) vs quad B

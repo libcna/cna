@@ -1,6 +1,6 @@
 #version 450
 
-// Task 1103 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): real XNA's BasicEffect
+// Task 1103 (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): real XNA's BasicEffect
 // defaults PreferPerPixelLighting=false, which selects a per-vertex-lit shader family
 // (VSBasicVertexLighting*) -- lighting is computed ONCE per vertex and Gouraud-interpolated
 // across the triangle, not re-evaluated per fragment. lit_textured3d.vert/frag.glsl is the

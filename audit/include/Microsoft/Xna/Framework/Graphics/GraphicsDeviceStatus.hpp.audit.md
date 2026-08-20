@@ -23,7 +23,7 @@ None.
 ## Cross-File Observations
 Consumed by `GraphicsDevice::getGraphicsDeviceStatusProperty()` (audited separately) — its own
 comment correctly discloses this stays `Normal` on every backend except D3D9, which is the only
-backend whose `deviceEventCallback` is actually wired up (`plan_dx9.md D9-34`).
+backend whose `deviceEventCallback` is actually wired up (`plans/plan_dx9.md D9-34`).
 
 ## Missing or Weak Tests
 Not independently located in this pass.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: adapts examples/easygl_spritebatch_layerdepth_test.cpp's own scene verbatim --
+// plans/plan_opengl2.md: adapts examples/easygl_spritebatch_layerdepth_test.cpp's own scene verbatim --
 // proves layerDepth-driven draw ORDER (SpriteSortMode::FrontToBack) actually determines which
 // sprite is VISIBLE where 2 opaque sprites overlap (painter's algorithm, no depth test, matching
 // FNA's own default SpriteBatch behaviour).

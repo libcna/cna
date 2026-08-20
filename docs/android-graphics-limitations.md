@@ -43,7 +43,7 @@ outside this documentation task's own scope (a different repo, unrelated to XNA/
 and is tracked separately as new Task 920 below rather than fixed here.
 
 This is a **regression against `docs/devices-build.md`'s own dated write-up** (§4, dated
-2026-07-05/06 under `plan_devices_phase4.md`/`plan_devices_phase7.md`/`plan_devices_phase8.md`,
+2026-07-05/06 under `plans/plan_devices_phase4.md`/`plans/plan_devices_phase7.md`/`plans/plan_devices_phase8.md`,
 which documented this cross-compile succeeding for the configured CNA libraries at that
 time) — `sharp-runtime` is a separate, independently-evolving repository, and something committed
 there since has broken NDK compatibility. This document does not attempt to identify which

@@ -30,7 +30,7 @@ with the exact RGB565/alpha values they encode) and a real, cited security-relev
 - `DecompressDxt{1,3,5}_DataSizeTooSmall_ThrowsOutOfRange` and
   `DecompressDxt1_ExactlyEnoughData_DoesNotThrow` correctly test both sides of the boundary (too
   little data throws; exactly enough succeeds) for all three DXT variants — this file's own comment
-  cites `plan_xnb.md XNB-43/47` and states this exact scenario was "confirmed as a real
+  cites `plans/plan_xnb.md XNB-43/47` and states this exact scenario was "confirmed as a real
   heap-buffer-overflow under -DCNA_SANITIZE=address,undefined," found via a whole-container fuzz
   test — a real, previously-discovered security-relevant bug, not a hypothetical concern.
 - Correctly uses `std::out_of_range` for the bounds-check exception — consistent with this

@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX12 (DX-102/DX-103/DX-104/DX-105): D3D12 device-lifetime resources -- real
+// plans/plan_dx.md Phase DX12 (DX-102/DX-103/DX-104/DX-105): D3D12 device-lifetime resources -- real
 // ID3D12Device + command queue + descriptor heaps + per-frame command allocators/command list +
 // fence-based synchronization. Clear()/Present()/draw calls are still honest "not yet implemented"
 // stubs -- see DirectX12Renderer.hpp's class doc comment for exactly why and what's next.
@@ -19,7 +19,7 @@
 #include <stdexcept>
 #include <string>
 
-// plan_modern.md MOD-1605: ID3D12Debug and D3D12GetDebugInterface live in <d3d12sdklayers.h>, and
+// plans/plan_modern.md MOD-1605: ID3D12Debug and D3D12GetDebugInterface live in <d3d12sdklayers.h>, and
 // only MSVC's <d3d12.h> pulls it in for you -- MinGW-w64's does not, so the debug-layer block
 // below does not compile there ("'ID3D12Debug' was not declared in this scope; did you mean
 // 'ID3D11Debug'?"). It goes *last*, after every CNA header: it drags <windows.h> in with it, and
@@ -27,7 +27,7 @@
 // CNA/LogCategory.hpp stops parsing instead. Same hazard mingw-cnaext-spike/ exists to catch.
 #include <d3d12sdklayers.h>
 
-// plan_modern.md MOD-1605: two D3D12 spec constants that Ubuntu's MinGW-w64 13.2 <d3d12.h> does not
+// plans/plan_modern.md MOD-1605: two D3D12 spec constants that Ubuntu's MinGW-w64 13.2 <d3d12.h> does not
 // define, though the Windows SDK does. Both are fixed by the D3D12 specification rather than by any
 // header -- Tier 1's shader-visible CBV/SRV/UAV heap limit is 1 000 000 descriptors, and a
 // shader-visible sampler heap is capped at 2 048 -- so defining them when absent is a header-gap
@@ -119,7 +119,7 @@ namespace CNA::Internal::Renderers::DirectX12
     void DirectX12Renderer::NotYetImplemented(const char* what)
     {
         throw std::runtime_error(std::string("D3D12 renderer: ") + what +
-                                  " not yet implemented (plan_dx.md DX-106 onward -- barriers/PSOs/"
+                                  " not yet implemented (plans/plan_dx.md DX-106 onward -- barriers/PSOs/"
                                   "root signatures/resources)");
     }
 
@@ -1474,7 +1474,7 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             throw std::runtime_error(
                 "DirectX12Renderer::DrawColoredPrimitives: only stride-16 (VertexPositionColor) "
-                "is implemented so far (plan_dx.md DX-111); other strides are a follow-up");
+                "is implemented so far (plans/plan_dx.md DX-111); other strides are a follow-up");
         }
 
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/2, /*numSrvs=*/0, /*numSamplers=*/0);
@@ -1585,7 +1585,7 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             throw std::runtime_error(
                 "DirectX12Renderer::DrawIndexedColoredPrimitives: only stride-16 (VertexPositionColor) "
-                "is implemented so far (plan_dx.md DX-111); other strides are a follow-up");
+                "is implemented so far (plans/plan_dx.md DX-111); other strides are a follow-up");
         }
 
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/2, /*numSrvs=*/0, /*numSamplers=*/0);
@@ -1728,15 +1728,15 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
                 "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
-                "(plan_dx.md DX-13-hlsl)");
+                "(plans/plan_dx.md DX-13-hlsl)");
         // skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52 bytes);
-        // plan_cnj.md CNB-67 follow-up's own stride-56 sibling (skinned_colored3d) appends a
+        // plans/plan_cnj.md CNB-67 follow-up's own stride-56 sibling (skinned_colored3d) appends a
         // per-vertex Color, mirrors D3D11's own DrawPrimitivesExImpl exactly.
         if (needsSkinned && stride != 52 && stride != 56)
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
                 "52 (VertexPositionNormalTextureSkinned) or 56 (skinned + per-vertex Color, "
-                "plan_cnj.md CNB-67)");
+                "plans/plan_cnj.md CNB-67)");
         // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
         // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
         // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
@@ -1745,8 +1745,8 @@ namespace CNA::Internal::Renderers::DirectX12
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
                 "supports stride 20 (VertexPositionTexture) or 24 "
-                "(VertexPositionColorTexture, plan_dx.md DX-136)");
-        // plan_cnj.md CNB-58/GLTF-386 follow-up: PBR accepts the canonical single-UV layouts and
+                "(VertexPositionColorTexture, plans/plan_dx.md DX-136)");
+        // plans/plan_cnj.md CNB-58/GLTF-386 follow-up: PBR accepts the canonical single-UV layouts and
         // their TEXCOORD_1 suffix variants, mirroring D3D11's DrawPrimitivesExImpl exactly.
         if (needsPbr && !params.skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
@@ -1796,7 +1796,7 @@ namespace CNA::Internal::Renderers::DirectX12
         else if (needsPbr)
         {
             // Mirrors DirectX11Renderer::DrawPrimitivesExImpl's own needsPbr branch exactly.
-            // plan_gltf.md GLTF-463: stride 80 is the skinned dual-UV record with a packed COLOR_0
+            // plans/plan_gltf.md GLTF-463: stride 80 is the skinned dual-UV record with a packed COLOR_0
             // appended, so it needs the variant that declares the colour input; stride 76 has no
             // colour slot to bind. The rigid dual-UV variant always declares one because every
             // stride-60 record carries the slot (GLTF-462).
@@ -1815,8 +1815,8 @@ namespace CNA::Internal::Renderers::DirectX12
         }
         else if (needsSkinned)
         {
-            // plan_graphics.md Phase 80 (Task 1107): real XNA renders SkinnedEffect's lit path
-            // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. plan_cnj.md
+            // plans/plan_graphics.md Phase 80 (Task 1107): real XNA renders SkinnedEffect's lit path
+            // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. plans/plan_cnj.md
             // CNB-67 follow-up: stride 56 (per-vertex Color present) routes to the *Colored
             // siblings instead, mirroring D3D11's own needsSkinned branch exactly.
             variant = (stride == 56)
@@ -1853,7 +1853,7 @@ namespace CNA::Internal::Renderers::DirectX12
             default:
                 throw std::runtime_error(
                     "DirectX12Renderer::DrawPrimitivesEx: unsupported vertex stride " +
-                    std::to_string(stride) + " for the colored/textured bundle (plan_dx.md DX-111)");
+                    std::to_string(stride) + " for the colored/textured bundle (plans/plan_dx.md DX-111)");
             }
         }
 
@@ -2081,7 +2081,7 @@ namespace CNA::Internal::Renderers::DirectX12
             std::memcpy(perDraw.SpecularTextureTransformRows,
                         params.pbrSpecularTextureTransformRows,
                         sizeof(perDraw.SpecularTextureTransformRows));
-            // plan_gltf.md GLTF-465: §3.9.2's COLOR_0 multiplier switch. Only the stride-60 and
+            // plans/plan_gltf.md GLTF-465: §3.9.2's COLOR_0 multiplier switch. Only the stride-60 and
             // stride-80 variants declare a colour input, so this is inert for the others.
             perDraw.VertexColorFlags[0] = params.vertexColorEnabled ? 1.0f : 0.0f;
 
@@ -2661,7 +2661,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX12 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1309/MOD-1310: an imported glTF material as a PbrMaterial.
+// plans/plan_modern.md MOD-1309/MOD-1310: an imported glTF material as a PbrMaterial.
 //
 // The bridge is a template over a concept rather than a function of the importer's own struct, so
 // the engine layer does not have to link the content module. That decoupling is the thing worth

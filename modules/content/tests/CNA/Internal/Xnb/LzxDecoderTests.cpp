@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-28/29/30B: unit tests for LzxDecoder and DecompressXnbPayload, verified
+// plans/plan_xnb.md XNB-28/29/30B: unit tests for LzxDecoder and DecompressXnbPayload, verified
 // against real, externally-produced LZX-compressed .xnb fixtures (never hand-crafted -- valid
 // LZX-compressed bytes cannot be authored by hand).
 

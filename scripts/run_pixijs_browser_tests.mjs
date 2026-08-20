@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Runs a built Emscripten PIXIJS test page in a real headless browser and reports its result.
 //
-// plan_pixijs.md PIXIJS-85: the PixiJS renderer is Emscripten-only and its draw path is EM_JS, so
+// plans/plan_pixijs.md PIXIJS-85: the PixiJS renderer is Emscripten-only and its draw path is EM_JS, so
 // its pixel behaviour can only be verified in a browser with a real WebGL context -- `node` alone
 // has no DOM, and SDL_Init(SDL_INIT_VIDEO) fails there before any renderer code runs (the same
 // boundary docs/canvas-backend.md records for CANVAS). Every browser result quoted in
-// plan_pixijs.md comes from this script, so the run is reproducible rather than a one-off
+// plans/plan_pixijs.md comes from this script, so the run is reproducible rather than a one-off
 // hand-driven session.
 //
 // Usage:

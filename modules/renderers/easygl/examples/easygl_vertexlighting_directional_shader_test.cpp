@@ -2,7 +2,7 @@
 // Task 947 (Phase 78 rollout): HLSL->GLSL shader-conversion proof -- VertexLightingSample's OWN
 // `VertexLighting.fx` (technique `VertexLighting` = `DiffuseLighting` + `SimplePixelShader`).
 // Not to be confused with the same-named `VertexLighting.fx` already ported for the
-// `PerPixelLighting` sample (see plan_graphics.md Task 947's own row) -- confirmed via `diff`
+// `PerPixelLighting` sample (see plans/plan_graphics.md Task 947's own row) -- confirmed via `diff`
 // these are genuinely different files: this one is a simple single-directional-light model
 // (`lightDirection`/`lightColor`), not the point-light diffuse+Phong model already ported.
 //

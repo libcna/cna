@@ -3,7 +3,7 @@
 `-DCNA_GRAPHICS_RENDERER=OPENGL4` · enum `CNA::GraphicsRendererType::OpenGL4` · target
 `cna_renderer_opengl4` · sources `src/Graphics/Renderers/OpenGL4/`.
 
-Plan and per-task history: `plan_opengl4.md` (GL4-1 … GL4-33).
+Plan and per-task history: `plans/plan_opengl4.md` (GL4-1 … GL4-33).
 
 ## Identity
 
@@ -43,7 +43,7 @@ stride-dispatched programs (FNA fog-vector form, REMED-GFX-010) · real **occlus
 `TransformWindowToLogical`/`TransformLogicalToWindow` · resize/reset · disposal.
 
 The unrecognised-stride fallback renders the applied effect's `DiffuseColor`, gated by its
-`VertexColorEnabled` (`plan_gltf.md GLTF-475`). It used to reach that fallback through the
+`VertexColorEnabled` (`plans/plan_gltf.md GLTF-475`). It used to reach that fallback through the
 params-free colour route, which discarded `GpuDrawParams` and left the program painting attribute
 location 1 -- the `NORMAL` on every record from stride 32 upward -- as the surface colour. The
 stride-16 `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` entry points are unchanged: they
@@ -70,9 +70,9 @@ have no effect to read and state white with the attribute enabled, which is the 
   (single-face binds route to the real cube-face setter). MRT sets carry no depth attachment
   (EasyGL's same documented gap).
 - Context-loss recovery was explicitly deferred by the 2026-07-22 project-owner scoping decision
-  (`plan_opengl4.md`); `SetContextRecoveryEnabled` keeps the base no-op.
+  (`plans/plan_opengl4.md`); `SetContextRecoveryEnabled` keeps the base no-op.
 - Windows/macOS validation is environment-blocked in this dev loop and remains open in
-  `plan_opengl4.md`'s remaining work.
+  `plans/plan_opengl4.md`'s remaining work.
 
 ## Capability report
 

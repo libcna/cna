@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-27: BuildMetalVertexDescriptorPlan() is the plain-C++ core of the generic
+// plans/plan_metal.md METAL-27: BuildMetalVertexDescriptorPlan() is the plain-C++ core of the generic
 // VertexElement-driven descriptor builder -- everything except the final MTLVertexDescriptor
 // object construction itself, which stays in MetalRenderer.mm. Only reads VertexElement
 // (plain XNA framework type) and returns plain C++ structs, zero Objective-C dependency, so this

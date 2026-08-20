@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx8.md design decision 16: a real, automated proof that the DIRECTX8 renderer never quietly
+# plans/plan_dx8.md design decision 16: a real, automated proof that the DIRECTX8 renderer never quietly
 # reaches for any DirectDraw interface at all (this whole family's own DIRECTX1..DIRECTX7 lineage --
 # "DirectDraw+Direct3D merged" means DIRECTX8 genuinely has no DirectDraw concept, so any
 # IDirectDraw*/IDirectDrawSurface* reference here would mean accidental copy-paste from an earlier
@@ -41,7 +41,7 @@ if [ "$violations" -ne 0 ]; then
     echo "render-state-naming symbol above -- DIRECTX8 has no DirectDraw concept at all ('DirectDraw+" >&2
     echo "Direct3D merged'), no D3DTLVERTEX/D3DVT_* (both gone from the real headers), and uses" >&2
     echo "only the modern D3DRS_* render-state naming (never the legacy D3DRENDERSTATE_* names" >&2
-    echo "DIRECTX1..DIRECTX7 used), per plan_dx8.md design decision 16." >&2
+    echo "DIRECTX1..DIRECTX7 used), per plans/plan_dx8.md design decision 16." >&2
     exit 1
 fi
 

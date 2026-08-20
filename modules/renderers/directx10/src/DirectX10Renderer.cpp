@@ -1,5 +1,5 @@
-// plan_d3d10.md: real Direct3D 10 graphics renderer implementation. See the header's own class-level
-// doc comment for the architecture summary; design decisions are recorded in plan_d3d10.md itself.
+// plans/plan_d3d10.md: real Direct3D 10 graphics renderer implementation. See the header's own class-level
+// doc comment for the architecture summary; design decisions are recorded in plans/plan_d3d10.md itself.
 #include "CNA/Internal/Renderers/DirectX10/DirectX10Renderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 
@@ -61,7 +61,7 @@ namespace CNA::Internal::Renderers::DirectX10
         // ---- raw XNA int -> real D3D10 enum mapping. Numerically identical to D3D11's own
         // D3DCommon::*ToD3D11 mapping (D3D11 inherited D3D10's state-object model verbatim) --
         // re-expressed against D3D10_* types since this renderer deliberately stays self-contained
-        // (plan_d3d10.md: D3DCommon's own headers reference ID3D11 types directly, not reusable
+        // (plans/plan_d3d10.md: D3DCommon's own headers reference ID3D11 types directly, not reusable
         // as-is without adaptation).
         D3D10_BLEND BlendToD3D10(int blend)
         {
@@ -168,7 +168,7 @@ namespace CNA::Internal::Renderers::DirectX10
         }
 
         // ---- real HLSL shaders (D3DCompile, vs_4_0/ps_4_0 -- D3D10's own shader-model ceiling) ----
-        // Matrix convention (matches D3DCommon's own colored3d.vert.hlsl precedent, plan_dx.md
+        // Matrix convention (matches D3DCommon's own colored3d.vert.hlsl precedent, plans/plan_dx.md
         // design decision 14): cbuffer matrices are row_major so XNA's row-major Matrix uploads
         // unchanged (Matrix::ToColumnMajor, despite its name, flattens M11..M44 in row-major
         // order -- see that method's own body). `mul(v, M)` is the row-vector convention used
@@ -1386,7 +1386,7 @@ namespace CNA::Internal::Renderers::DirectX10
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX10 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

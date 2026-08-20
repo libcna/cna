@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-55: DualTextureEffect pixel conformance.
+// plans/plan_igl.md IGL-55: DualTextureEffect pixel conformance.
 //
 // XNA's DualTextureEffect multiplies the two textures together and DOUBLES the result before the
 // diffuse tint (`color *= texture(uTexture1, vTexCoord1) * 2.0;` in IglShaderLibrary.cpp) --

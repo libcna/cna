@@ -1,11 +1,11 @@
 #pragma once
 
-// plan_dx6.md: real DirectX 6 graphics renderer -- the EXACT SAME COM interfaces DIRECTX5 already uses
+// plans/plan_dx6.md: real DirectX 6 graphics renderer -- the EXACT SAME COM interfaces DIRECTX5 already uses
 // (IDirectDraw4/IDirectDrawSurface4/DDSURFACEDESC2 + IDirect3D3/IDirect3DDevice3/
 // IDirect3DViewport3) -- DIRECTX6 introduces no new interface revision at all. Its own delta: real
 // stencil buffer operations (D3DRENDERSTATE_STENCIL*, spike-confirmed real write+test behavior)
 // against a combined depth+stencil Z-buffer surface. Its 2D and 3D layers are otherwise a
-// verbatim port of DIRECTX5's own (plan_dx5.md, itself a port of DIRECTX3's, itself a port of DIRECTX2's).
+// verbatim port of DIRECTX5's own (plans/plan_dx5.md, itself a port of DIRECTX3's, itself a port of DIRECTX2's).
 // Cross-compiled via MinGW-w64 and run under Wine/Proton, the same Route B delivery mechanism
 // D3D9/D3D11/D3D12/DIRECTX1/DIRECTX2/DIRECTX3/DIRECTX5 already use.
 //
@@ -21,7 +21,7 @@
 namespace CNA::Internal::Renderers::DirectX6
 {
     /**
-     * DIRECTX6 graphics renderer (plan_dx6.md): a verbatim port of DirectX5Renderer (plan_dx5.md,
+     * DIRECTX6 graphics renderer (plans/plan_dx6.md): a verbatim port of DirectX5Renderer (plans/plan_dx5.md,
      * itself a port of DirectX3Renderer/DirectX2Renderer) -- DirectDraw v4
      * (IDirectDraw4/IDirectDrawSurface4/DDSURFACEDESC2/DDSCAPS2 throughout) and Direct3D v3
      * (IDirect3D3/IDirect3DDevice3/IDirect3DViewport3, DrawPrimitive/DrawIndexedPrimitive selected
@@ -59,7 +59,7 @@ namespace CNA::Internal::Renderers::DirectX6
      * O9's CPU-side BasicEffect lighting (ambient + directional Lambertian/Blinn-Phong specular
      * via real D3DRENDERSTATE_SPECULARENABLE) -- all ported from DIRECTX5's own already-proven 3D
      * layer. IDirect3DViewport3::Clear2 provides a real, direct depth/color/stencil clear with
-     * explicit values. NEW at this DirectX era (plan_dx6.md design decision 4/5): the Z-buffer is
+     * explicit values. NEW at this DirectX era (plans/plan_dx6.md design decision 4/5): the Z-buffer is
      * a combined depth+stencil surface (DDPF_ZBUFFER|DDPF_STENCILBUFFER, 32-bit: 24 depth + 8
      * stencil), and ApplyDepthStencilState's stencil parameters are real
      * (D3DRENDERSTATE_STENCILENABLE/FUNC/FAIL/ZFAIL/PASS/REF/MASK/WRITEMASK), spike-confirmed
@@ -123,7 +123,7 @@ namespace CNA::Internal::Renderers::DirectX6
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
 
-        // plan_dx6.md design decision 5: ApplyDepthStencilState now honors depth AND the
+        // plans/plan_dx6.md design decision 5: ApplyDepthStencilState now honors depth AND the
         // front-face stencil parameters (enable/func/fail/zfail/pass/mask/writemask/ref) --
         // spike-confirmed real write+test behavior (DX6-0), resolving the "no real stencil buffer
         // until DIRECTX6" boundary DIRECTX2/DIRECTX3/DIRECTX5 all documented. twoSidedStencilMode/ccwStencil* remain
@@ -148,14 +148,14 @@ namespace CNA::Internal::Renderers::DirectX6
                                int maxAnisotropy) override;
 
         // ---- 3D pipeline: real, built on IDirect3D3/IDirect3DDevice3::DrawPrimitive (not execute
-        // buffers -- gone entirely as of this device revision; see plan_dx5.md section 1).
+        // buffers -- gone entirely as of this device revision; see plans/plan_dx5.md section 1).
         // Device/viewport/Z-buffer bring-up (Phase O3), VertexBuffer/IndexBuffer storage (Phase
         // O5), the CPU transform/clip -> D3DTLVERTEX draw path (Phase O4), and per-draw state
         // application (Phase O6) are all real and pixel-verified. Unlike DIRECTX1 (which throws
         // PERMANENTLY -- DirectX 1 shipped no Direct3D at all, so there is genuinely no COM
         // interface reachable from a real DirectX-1-era header pairing to even call), this is a
         // working 3D pipeline, not a stub. What remains out of scope is documented per-method
-        // below and in plan_dx2.md's own Boundaries section (lighting/fog/multitexture/envMap/
+        // below and in plans/plan_dx2.md's own Boundaries section (lighting/fog/multitexture/envMap/
         // skinning accepted-and-ignored; stencil/MRT/instancing/occlusion-query/volume-and-cube
         // textures/custom-effects either accepted-and-ignored or genuinely unavailable at this
         // DirectX era, not "not yet implemented"). ----
@@ -167,10 +167,10 @@ namespace CNA::Internal::Renderers::DirectX6
             // -- all real as of this phase, so ThreeD now reports true. DepthStencilBuffer also
             // reports true (a real, if depth-only, buffer exists -- SupportsDepthStencil() already
             // says so). MultiSampleAntiAliasing/MultipleRenderTargets/OcclusionQuery/CustomEffects
-            // report false -- genuinely unavailable at this DirectX era (plan_dx2.md's Boundaries
+            // report false -- genuinely unavailable at this DirectX era (plans/plan_dx2.md's Boundaries
             // section).
             //
-            // WireFrame (Phase O9, plan_dx2.md design decision 13): reports true. A follow-up
+            // WireFrame (Phase O9, plans/plan_dx2.md design decision 13): reports true. A follow-up
             // spike (dx2_spike10_specular_wireframe_aniso.cpp, Test D) empirically confirmed
             // D3DRENDERSTATE_FILLMODE=D3DFILL_WIREFRAME genuinely renders edge-only output on this
             // environment's software RGB device (a point inside a filled triangle reads back the

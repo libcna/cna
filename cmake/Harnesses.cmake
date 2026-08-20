@@ -61,7 +61,7 @@ endif()
 # sharing that binary. See tools/devices/shutdown_ordering_harness.cpp's own top-of-file comment
 # for the "--skip-shutdown-call" flag used to confirm under ASan that this reproduces a genuine
 # heap-use-after-free when the fix's guard is bypassed.
-# plan_platform.md PLAT-SDL2-6: the whole point of this harness is to call the real SDL3
+# plans/plan_platform.md PLAT-SDL2-6: the whole point of this harness is to call the real SDL3
 # SDL_Quit(), so it is meaningful only where SDL3 is actually the selected edge. Under an
 # SDL2-only selection it would be the one remaining executable dragging SDL3 back in, to test an
 # ordering hazard that selection cannot reach.
@@ -92,7 +92,7 @@ endif()
 # `SDL3/SDL.h: No such file or directory` failure under every cross-compile toolchain (Emscripten,
 # D3D9/D3D11 MinGW) that has no such fallback -- link SDL3::SDL3 explicitly instead of relying on
 # transitive propagation, matching cna_devices_shutdown_ordering_harness's own pattern above.
-# plan_platform.md PLAT-SDL2-8: gated on the SDL3 audio selection because the harness calls
+# plans/plan_platform.md PLAT-SDL2-8: gated on the SDL3 audio selection because the harness calls
 # CNA::Internal::Audio::DestroyMixer() directly. That engine is the SDL3_mixer implementation and
 # is excluded from the archive for every other CNA_AUDIO_PLATFORM value, so under SDL2 or NULL
 # audio this source cannot compile at all -- and the suite that spawns it (AudioMixerTests) is
@@ -127,7 +127,7 @@ if(CNA_BUILD_TESTS AND CNA_AUDIO_PLATFORM STREQUAL "SDL3")
     )
 endif()
 
-# --- plan_audio.md AUD-06-025: standalone XNB SoundEffect metadata inspection tool ---
+# --- plans/plan_audio.md AUD-06-025: standalone XNB SoundEffect metadata inspection tool ---
 # A small standalone (non-GTest) executable that loads a .xnb SoundEffect asset through the real
 # production ContentManager::Load<SoundEffect>() path and emits its metadata (name, decoded
 # duration) as stable single-line JSON, without ever calling Play()/CreateInstance() -- for
@@ -143,7 +143,7 @@ if(CNA_BUILD_TESTS)
     )
 endif()
 
-# --- plan_audio.md AUD-11-028: standalone XWB wave-bank inspection/extraction tool ---
+# --- plans/plan_audio.md AUD-11-028: standalone XWB wave-bank inspection/extraction tool ---
 # A small standalone (non-GTest) executable that parses a .xwb wave bank via the real
 # CNA::Internal::Audio::ParseXwb() and emits every entry's metadata as stable JSON, optionally
 # also exporting each entry's real audio payload as a playable .wav file (via the same shared
@@ -173,7 +173,7 @@ endif()
 if(CNA_BUILD_EXAMPLES AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_reference_dump tools/cna-reference/CnaReferenceDump.cpp)
     target_link_libraries(cna_reference_dump PRIVATE CNA)
-    # plan_platform.md PLAT-SDL2-6: SDL3main supplies an entry-point shim for the SDL3 selection
+    # plans/plan_platform.md PLAT-SDL2-6: SDL3main supplies an entry-point shim for the SDL3 selection
     # only; an SDL2-only build must not acquire an SDL3 link input through it.
     if(TARGET SDL3::SDL3main AND NOT CNA_SDL2_ONLY_CONFIGURATION)
         target_link_libraries(cna_reference_dump PRIVATE SDL3::SDL3main)
@@ -297,7 +297,7 @@ if(CNA_SKIA_GANESH_BUILD_DIR)
     )
 endif()
 
-# --- plan_fx.md FX-051: compiled Effect Framework fuzz harness ---
+# --- plans/plan_fx.md FX-051: compiled Effect Framework fuzz harness ---
 # One entry point covering construction, reflection, clone, technique/pass selection, apply and
 # disposal of an untrusted compiled effect binary. Built by default in its standalone replay
 # shape, which is how a committed corpus is exercised and how a campaign's crashing input is
@@ -325,7 +325,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# --- plan_fx.md FX-053: compiled Effect Framework performance baseline ---
+# --- plans/plan_fx.md FX-053: compiled Effect Framework performance baseline ---
 # Measures construction, clone, dirty upload, clean apply and draw so the immutable-artifact-cache
 # question is decided on numbers. Manually invoked and never registered with ctest: wall-clock
 # timings on a shared machine are a baseline to compare, not a pass/fail signal.
@@ -334,7 +334,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     target_link_libraries(cna_compiled_effect_benchmark PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()
 
-# plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: proves the pinned MojoShader parses a
+# plans/plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: proves the pinned MojoShader parses a
 # compiled Effect Framework binary while linking only MojoShader -- no FNA3D and no CNA. Every
 # backend planned after FNA3D depends on that being true, and it was not obvious: MojoShader is
 # FNA3D's submodule, its include root is absent from FNA3D's install surface, and its header hides
@@ -352,7 +352,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
                      "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/CnaConformanceEffect.fxb")
 endif()
 
-# plan_fx.md FX-061 existence gate: proves the pinned MojoShader's SDL_GPU adapter binds a
+# plans/plan_fx.md FX-061 existence gate: proves the pinned MojoShader's SDL_GPU adapter binds a
 # committed effect's shader pairs against a device this machine can create, linking only MojoShader
 # and SDL3. CNA's SDL_GPU renderer already builds pipelines from SPIR-V and MojoShader has both a
 # SPIR-V profile and an SDL_GPU adapter, so the pairing looks obvious on paper -- what the probe
@@ -366,7 +366,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     target_link_libraries(cna_mojoshader_sdlgpu_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()
 
-# plan_fx.md FX-062 existence gate: proves the pinned MojoShader's OpenGL adapter (mojoshader_
+# plans/plan_fx.md FX-062 existence gate: proves the pinned MojoShader's OpenGL adapter (mojoshader_
 # opengl.c) links and renders a committed effect's shader pair against a real GLES3 context this
 # machine can create, linking only MojoShader and SDL3 -- no CNA, no EasyGL. EasyGL is the shared
 # implementation behind OPENGLES2/OPENGLES3/OPENGL33/OPENGL4/WEBGL1/WEBGL2, and its own stock
@@ -383,7 +383,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     target_link_libraries(cna_mojoshader_gl_probe PRIVATE cna_mojoshader SDL3::SDL3)
 endif()
 
-# plan_fx.md FX-064 existence gate: proves the pinned MojoShader's raw "spirv" profile
+# plans/plan_fx.md FX-064 existence gate: proves the pinned MojoShader's raw "spirv" profile
 # (MOJOSHADER_PROFILE_SPIRV, MOJOSHADER_linkSPIRVShaders) turns a committed effect's shader pair
 # into a real Vulkan graphics pipeline this machine can create and render with. Unlike GL, SDL_GPU
 # and D3D11, MojoShader ships no Vulkan adapter, so this probe implements the nine-function
@@ -403,7 +403,7 @@ if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 endif()
 
-# --- plan_platform.md PLAT-131: terminal restoration harness ---
+# --- plans/plan_platform.md PLAT-131: terminal restoration harness ---
 # A tiny standalone (non-GTest) executable that takes the terminal over with a TerminalSession and
 # then dies in a chosen way: normally, by SIGINT/SIGTERM/SIGHUP, by abort(), or by letting an
 # exception escape main. Four of those five destroy the process, so none can be asserted inside
@@ -426,7 +426,7 @@ if(CNA_BUILD_TESTS AND NOT WIN32)
     )
 endif()
 
-# --- plan_platform.md PLAT-136: terminal resize harness ---
+# --- plans/plan_platform.md PLAT-136: terminal resize harness ---
 # TerminalPlatform installs its SIGWINCH watcher only when attached to a terminal and reads the new
 # size from its own stdout -- neither of which holds inside CnaTests, where CI redirects output. So
 # the resize assertions run here, in a process whose standard descriptors really are a

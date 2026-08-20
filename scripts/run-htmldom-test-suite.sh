@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# plan_html_dom.md HTMLDOM-112: the one official command that builds and runs every HTML_DOM browser
+# plans/plan_html_dom.md HTMLDOM-112: the one official command that builds and runs every HTML_DOM browser
 # test page. Before this script existed, run-htmldom-browser-test.sh only ever served the smoke
 # page, so reproducing the pixel/stress/dispose PASS counts documented in docs/html-dom-renderer.md
-# and plan_html_dom.md required four separate manual `cmake --build --target ...` plus four manual/
+# and plans/plan_html_dom.md required four separate manual `cmake --build --target ...` plus four manual/
 # adjusted harness invocations -- this collapses that to one command.
 #
 # Usage: scripts/run-htmldom-test-suite.sh [build-dir]

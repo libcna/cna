@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan_direct2d.md D2D-113/D2D-124: turn the Direct2D debug-layer log into a real gate.
+"""plans/plan_direct2d.md D2D-113/D2D-124: turn the Direct2D debug-layer log into a real gate.
 
 Uploading `ReportLiveDeviceObjects` output as a CI artifact proves nothing on its own -- nobody
 reads a green build's artifact. This parser consumes the verbose CTest log produced by the native

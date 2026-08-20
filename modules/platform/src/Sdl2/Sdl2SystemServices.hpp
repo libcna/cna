@@ -6,7 +6,7 @@
 namespace CNA::Platform::Sdl2 {
 
     /**
-     * @brief SDL2 display enumeration (plan_platform.md PLAT-SDL2-5).
+     * @brief SDL2 display enumeration (plans/plan_platform.md PLAT-SDL2-5).
      *
      * SDL2 addresses displays by a dense 0-based index while the contract carries an opaque
      * `std::uint32_t` id. The two are not interchangeable: `GraphicsAdapter` treats id 0 as "no

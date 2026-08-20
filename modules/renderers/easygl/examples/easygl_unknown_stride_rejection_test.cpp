@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-157: an unknown raw vertex stride must fail loudly on EasyGL.
+// plans/plan_gltf.md GLTF-157: an unknown raw vertex stride must fail loudly on EasyGL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"

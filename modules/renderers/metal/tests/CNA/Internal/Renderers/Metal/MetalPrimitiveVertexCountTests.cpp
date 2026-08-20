@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-34-style extraction: ComputeMetalPrimitiveVertexCount() only reads a plain
+// plans/plan_metal.md METAL-34-style extraction: ComputeMetalPrimitiveVertexCount() only reads a plain
 // XNA framework enum and plain ints -- zero Objective-C/Metal-framework dependency, so it compiles
 // and runs on any platform CnaTests already builds for, no #if defined(CNA_RENDERER_METAL) gate.
 //
-// plan_metal.md METAL-13: PointListEXT previously fell through to the *3 (triangle) default -- a
+// plans/plan_metal.md METAL-13: PointListEXT previously fell through to the *3 (triangle) default -- a
 // real, previously-shipping bug, already fixed in the Metal renderer's own source. This test locks
 // that fix in against a future regression, and cross-checks every formula against
 // EasyGLRenderer's own already-tested equivalent switch (src/CNA/Internal/Renderers/EasyGL/

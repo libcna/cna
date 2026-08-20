@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_spritebatch_customeffect_test.cpp` (189 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note)
 - Subsystem: `examples-tests-d3d9` shard — `SpriteBatch::Begin(effect)` custom-shader wiring
-  (`plan_dx9.md` D9-11/D9-112), `Game`-subclass, CTest-registered, real device/window path.
+  (`plans/plan_dx9.md` D9-11/D9-112), `Game`-subclass, CTest-registered, real device/window path.
 - XNA/FNA relevance: direct — `SpriteBatch.Begin(SpriteSortMode, BlendState, SamplerState,
   DepthStencilState, RasterizerState, Effect)` is real XNA 4.0 API; the mechanics of a custom
   `Effect` replacing the stock `SpriteEffect` shaders for a batch is a genuine, documented XNA

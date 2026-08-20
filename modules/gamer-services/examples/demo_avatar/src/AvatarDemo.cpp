@@ -23,12 +23,12 @@ namespace
     constexpr float kCameraHeight = 1.0f;
     constexpr float kTargetHeight = 0.9f; // roughly chest height on our ~1.7m-tall avatar
 
-    // Post-plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
+    // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
     // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
     // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
     // (every character rendered as an identical rectangle) by an independent audit.
 
-    // Task 8.2 (plan_net.md Phase 8): decision 5a's own default text block, verbatim - kept as
+    // Task 8.2 (plans/plan_net.md Phase 8): decision 5a's own default text block, verbatim - kept as
     // one line per array entry rather than embedded '\n's, since MakeSimpleFont's synthetic glyph
     // table above only maps printable ASCII 32-126 (no newline glyph to fall back on).
     constexpr const char* kHelpLines[] = {
@@ -146,7 +146,7 @@ void AvatarDemo::LoadContent()
     renderer_->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
     renderer_->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
 
-    // Task 8.1/8.3 (plan_net.md Phase 8): F1 help overlay's own SpriteBatch/white-pixel/font -
+    // Task 8.1/8.3 (plans/plan_net.md Phase 8): F1 help overlay's own SpriteBatch/white-pixel/font -
     // must not crash if this fails, so LoadContent()'s own real device/content are reused here
     // (already known-good, since model_ loaded successfully above) rather than anything that
     // could plausibly fail independently.
@@ -187,7 +187,7 @@ void AvatarDemo::Update(GameTime& gameTime)
     }
     spaceWasDown_ = spaceDown;
 
-    // Task 8.2 (plan_net.md Phase 8): F1 toggles overlay visibility - edge-triggered, matching
+    // Task 8.2 (plans/plan_net.md Phase 8): F1 toggles overlay visibility - edge-triggered, matching
     // the Space-key clip-cycling pattern just above.
     const bool f1Down = kb.IsKeyDown(Keys::F1);
     if (f1Down && !f1WasDownEXT_)
@@ -198,7 +198,7 @@ void AvatarDemo::Update(GameTime& gameTime)
 
     clipPositionSeconds_ += static_cast<double>(dt);
 
-    // Task 7.1 (plan_net.md Phase 7): matches every other smoke-testable demo's own convention -
+    // Task 7.1 (plans/plan_net.md Phase 7): matches every other smoke-testable demo's own convention -
     // guarded by > 0, not >= 0, so Exit() (which doesn't halt Update()/Draw() immediately) can't
     // keep re-triggering this every subsequent frame.
     if (smokeFramesLeft_ > 0)
@@ -233,7 +233,7 @@ void AvatarDemo::Draw(const GameTime&)
 
     renderer_->DrawRealEXT(clipNames_[currentClipIndex_], System::TimeSpan::FromSeconds(clipPositionSeconds_), /*loop=*/true);
 
-    // Task 8.2 (plan_net.md Phase 8): 3D scene drawn first (above), then the 2D help overlay on
+    // Task 8.2 (plans/plan_net.md Phase 8): 3D scene drawn first (above), then the 2D help overlay on
     // top - decision 5d: translucent white rectangle behind black text.
     if (showHelpEXT_)
     {
@@ -268,7 +268,7 @@ void AvatarDemo::Draw(const GameTime&)
         spriteBatch_->End();
     }
 
-    // Task 7.1 (plan_net.md Phase 7): captured after DrawRealEXT so the just-rendered frame is
+    // Task 7.1 (plans/plan_net.md Phase 7): captured after DrawRealEXT so the just-rendered frame is
     // what ends up in the backbuffer read below. Fires on smokeFramesLeft_ == 1, not 0 - Exit()
     // (called by Update() once the countdown reaches 0) sets Game's own suppressDraw_ flag, which
     // skips this Draw() call entirely on that final frame, so capturing at 0 would never run at

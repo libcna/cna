@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-20: plain (non-render-target) TextureCube for the OpenGL4 graphics renderer
+// plans/plan_opengl4.md GL4-20: plain (non-render-target) TextureCube for the OpenGL4 graphics renderer
 // -- CreateTextureCube previously fell through to IGraphicsRenderer's default (returns nullptr),
 // so TextureCube::SetData/GetData silently no-op'd on this renderer. OpenGL4TextureCubeRenderer now
 // allocates a real GL_TEXTURE_CUBE_MAP with every face x every mip level pre-allocated via

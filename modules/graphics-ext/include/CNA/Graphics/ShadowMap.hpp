@@ -69,7 +69,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns whether this device can generate shadow maps at all.
          *
-         * plan_modern.md MOD-811, and design decision D1: no renderer is mandatory, and a
+         * plans/plan_modern.md MOD-811, and design decision D1: no renderer is mandatory, and a
          * subsystem that cannot run says so instead of failing. Generation needs two things --
          * the renderer must raster 3D triangles, and it must compile the caster's GLSL. Where
          * either is missing the object still constructs and `begin`/`end` still work; they simply
@@ -114,7 +114,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the effect skinned caster geometry must be drawn with.
          *
-         * plan_modern.md MOD-810. A skinned mesh drawn with the rigid caster above casts its
+         * plans/plan_modern.md MOD-810. A skinned mesh drawn with the rigid caster above casts its
          * *bind pose*, which is a shadow of a character standing still under one that is running.
          * This variant applies the same bone palette `SkinnedEffect` does, so the silhouette in
          * the map is the animated one.
@@ -217,7 +217,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the PCF filter radius, in map texels, that a quality level implies.
          *
-         * plan_modern.md MOD-840. The radius is what a receiving effect wants
+         * plans/plan_modern.md MOD-840. The radius is what a receiving effect wants
          * (`IShadowReceiverEXT::setShadowFilterRadiusEXT`), so the mapping lives here rather than
          * inside a renderer: two renderers reading the same quality must reach the same kernel.
          *

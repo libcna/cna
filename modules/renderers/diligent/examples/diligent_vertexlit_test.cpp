@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-37: real-device proof that the Diligent renderer implements real XNA's
+// plans/plan_diligent.md DILIGENT-37: real-device proof that the Diligent renderer implements real XNA's
 // own default (BasicEffect/SkinnedEffect's PreferPerPixelLighting == false) per-vertex-lit shader
 // family, rather than always rendering per-pixel regardless of the flag.
 //

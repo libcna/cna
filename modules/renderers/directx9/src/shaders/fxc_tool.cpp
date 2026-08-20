@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-7 (D9-71): compiles one entry point of a vendored XNA Stock Effect .fx to
+// plans/plan_dx9.md Phase D9-7 (D9-71): compiles one entry point of a vendored XNA Stock Effect .fx to
 // real D3D9 bytecode via the actual Microsoft d3dcompiler_47.dll (design decision 5 -- no native
 // Linux D3DCompile() implementation exists, so this cross-compiles with MinGW-w64 and runs under
 // Wine). Proven in Phase D9-0 (66/66 entry points compiled, 0 failures) -- moved here unchanged

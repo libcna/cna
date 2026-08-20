@@ -1001,7 +1001,7 @@ namespace Microsoft::Xna::Framework
 #else
         while (RunApplication)
         {
-            // plan_apple.md APPLE-7: a backgrounded mobile application keeps its main thread
+            // plans/plan_apple.md APPLE-7: a backgrounded mobile application keeps its main thread
             // alive but must neither render nor burn CPU. isMobilePlatform() is a
             // compile-time constant, so desktop builds keep the plain Tick() loop unchanged.
             if (CNA::isMobilePlatform() && isSuspended_)
@@ -1157,7 +1157,7 @@ namespace Microsoft::Xna::Framework
                 {
                     switch (platformEvent.kind)
                     {
-                    // plan_apple.md APPLE-7 — a deviation from FNA, which tracks only IsActive
+                    // plans/plan_apple.md APPLE-7 — a deviation from FNA, which tracks only IsActive
                     // here. A mobile operating system terminates an application that submits GPU
                     // work once it is in the background (iOS), or destroys the rendering surface
                     // at that point (Android), so the loop must actually stop between these two

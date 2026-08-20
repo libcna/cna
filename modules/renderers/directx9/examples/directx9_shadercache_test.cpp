@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-7 (D9-74): D3D9ShaderCache creates all 66 embedded stock-effect shaders
+// plans/plan_dx9.md Phase D9-7 (D9-74): D3D9ShaderCache creates all 66 embedded stock-effect shaders
 // through a real, live D3D9 device -- the first task in this plan that needs a D3D9 device
 // actually running under DXVK AND the real Microsoft d3dcompiler_47.dll's own output (embedded
 // as bytecode by D9-71, no longer needing the compiler DLL itself at this step) at once. Per

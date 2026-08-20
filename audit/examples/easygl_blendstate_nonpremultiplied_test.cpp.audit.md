@@ -30,7 +30,7 @@ result, deliberately, so the two tests together prove *which stage* performs the
 **Needs attention** — again, not for the assertion logic (correct, matches FNA's preset and CNA's own real blend
 math), but for an unusually strongly-worded, now-stale "CRITICAL CAVEAT" block that actively instructs the reader
 not to trust a passing Vulkan result and asserts Vulkan's blend handling "doesn't work in general" — a claim
-`plan_graphics.md`'s Task 868 closure entry directly contradicts (all 7 `Vulkan_BlendState_*` tests, this one
+`plans/plan_graphics.md`'s Task 868 closure entry directly contradicts (all 7 `Vulkan_BlendState_*` tests, this one
 included, are recorded as passing after the fix).
 
 ## Checklist Results
@@ -104,7 +104,7 @@ directly) and with `BlendState.cpp`'s real preset definitions.
   VULKAN RESULT *** Task 304 found that Vulkan's ApplyBlendState is almost entirely broken... This means: a PASSING
   result on Vulkan is NOT evidence that Task 868 is fixed, or that Vulkan's blend state handling works in general —
   it doesn't, for Additive or any custom BlendState... Do not close Task 868 based on this test passing."*
-- Evidence: `plan_graphics.md` line 393 records Task 868 as `✅ CLOSED`, with a verification note explicitly listing
+- Evidence: `plans/plan_graphics.md` line 393 records Task 868 as `✅ CLOSED`, with a verification note explicitly listing
   `Vulkan_BlendState_NonPremultiplied` as one of the 7 tests reconfirmed passing after a real fix (not a
   coincidental one) was implemented and verified by reverting/re-testing/restoring. The comment's core claim —
   "Vulkan's blend state handling... doesn't work in general" — is the single most sweeping and now most

@@ -15,7 +15,7 @@
 // AlphaBlendFunction ever leaked into the colour computation (or vice versa), Check A would
 // incorrectly show Add's result and/or Check B would incorrectly show Subtract's result.
 //
-// NOTE: Vulkan's ApplyBlendState (see plan_graphics.md Task 868) takes colorBlendFunc/
+// NOTE: Vulkan's ApplyBlendState (see plans/plan_graphics.md Task 868) takes colorBlendFunc/
 // alphaBlendFunc as unused parameters (commented out in the signature) and always hardcodes
 // VK_BLEND_OP_ADD — so Check A (expecting Subtract) is expected to fail there, while Check B
 // (expecting Add) is expected to coincidentally pass, mirroring the Task 305/306 pattern.

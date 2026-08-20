@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::Software
      * @brief Real CPU-owned RGBA8 colour, depth and optional resolved 4x MSAA storage.
      *
      * This is the Software renderer's actual state, not a bookkeeping fiction
-     * (plan_software.md design decision 3) -- every pixel written here is a genuinely correct
+     * (plans/plan_software.md design decision 3) -- every pixel written here is a genuinely correct
      * pixel a test can read back and assert on, with no GPU involved at all.
      */
     struct SoftwareFramebuffer
@@ -84,7 +84,7 @@ namespace CNA::Internal::Renderers::Software
             return declaration_;
         }
         /// Raw vertex bytes from the most recent SetData() call -- the rasterizer (Phase S4)
-        /// reads vertex attributes directly from here, keyed by Stride() (plan_software.md
+        /// reads vertex attributes directly from here, keyed by Stride() (plans/plan_software.md
         /// design decision 2: stride-based format inference).
         [[nodiscard]] const std::vector<std::uint8_t>& Data() const { return data_; }
 
@@ -505,7 +505,7 @@ namespace CNA::Internal::Renderers::Software
     };
 
     // Cube-map render targets, Texture3D, and hardware occlusion queries remain out of scope for
-    // v1 (plan_software.md Boundaries) -- CreateRenderTargetCube/CreateTexture3D/
+    // v1 (plans/plan_software.md Boundaries) -- CreateRenderTargetCube/CreateTexture3D/
     // CreateOcclusionQuery all keep IGraphicsRenderer's own shared default (returns nullptr).
     // REMED-CONTENT-004: Texture3D's own absence is now reported via
     // SupportsCapability(GraphicsCapability::Texture3D) => false, so Texture3D's constructor fails
@@ -516,7 +516,7 @@ namespace CNA::Internal::Renderers::Software
     public:
         // Mirrors HEADLESS-16: accepts any GLSL/HLSL/WGSL source string without compiling it --
         // this renderer's own fixed pixel-shading path (Phase S5/S6) is what actually renders,
-        // not the supplied shader source (plan_software.md design decision 8).
+        // not the supplied shader source (plans/plan_software.md design decision 8).
         bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
         void Bind() override { bound_ = true; }
         void Unbind() override { bound_ = false; }
@@ -541,7 +541,7 @@ namespace CNA::Internal::Renderers::Software
 
     /// Draws are wired to the shared rasterizer core in Phase S6 (SOFTWARE-51) -- a
     /// SpriteBatch::Draw() call is just a textured quad (2 triangles), reusing the same code
-    /// path DrawPrimitivesEx uses (plan_software.md design decision 5).
+    /// path DrawPrimitivesEx uses (plans/plan_software.md design decision 5).
     class SoftwareSpriteBatchRenderer final : public ISpriteBatchRenderer
     {
     public:
@@ -590,7 +590,7 @@ namespace CNA::Internal::Renderers::Software
     /**
      * @brief Software (CPU) rasterizer graphics renderer.
      *
-     * See plan_software.md for the full task breakdown and design rationale. Unlike HEADLESS
+     * See plans/plan_software.md for the full task breakdown and design rationale. Unlike HEADLESS
      * (which only does bookkeeping and never produces a real pixel), this renderer actually
      * rasterizes real triangles into a CPU-owned RGBA8 framebuffer -- GetBackBufferData()/
      * ReadBackbuffer() return genuinely correct pixels, with no GPU, display server, or driver

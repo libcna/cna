@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX6 (DX-47).
+// plans/plan_dx.md Phase DIRECTX6 (DX-47).
 #include "CNA/Internal/Renderers/DirectX11/D3D11OcclusionQuery.hpp"
 
 #include <algorithm>

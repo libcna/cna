@@ -1091,7 +1091,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_OcclusionQuery_PixelCount COMMAND cna_test_vulkan_occlusionquery_pixelcount
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plan_cnj.md CNB-58/91 Vulkan port: PbrEffect/SkinnedPbrEffect real glTF metallic-
+        # plans/plan_cnj.md CNB-58/91 Vulkan port: PbrEffect/SkinnedPbrEffect real glTF metallic-
         # roughness BRDF shader + CNB-67 SkinnedEffect.VertexColorEnabled on the stride-56 vertex
         # layout -- verbatim reuse of the shared, renderer-agnostic EasyGL sources (public XNA API
         # only, same PixelTestGame/ExpectPixel/CompareGoldenImage harness already used by
@@ -1111,7 +1111,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_SkinnedPbrEffect_Golden COMMAND cna_test_vulkan_skinnedpbreffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plan_gltf.md GLTF-344/373: all seven PBR texture bindings, with deliberately distinct
+        # plans/plan_gltf.md GLTF-344/373: all seven PBR texture bindings, with deliberately distinct
         # base/MR/emissive/occlusion/normal/specular-strength/specular-colour texels and both rigid
         # and skinned draw paths. The shared source uses only public renderer-agnostic XNA/CNA APIs.
         cna_vulkan_test(cna_test_vulkan_pbr_texture_slots

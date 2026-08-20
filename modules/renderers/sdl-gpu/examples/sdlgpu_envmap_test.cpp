@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect proof for the SDL_GPU graphics renderer -- a real
+// plans/plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect proof for the SDL_GPU graphics renderer -- a real
 // cube-map reflection, verified via RenderTarget2D::GetData() pixel readback (SDLGPU-39's
 // RenderTarget2D leg), mirroring this project's existing
 // vulkan_environmentmapeffect_amount_one_test.cpp: since the test cubemap is uniformly solid-colored

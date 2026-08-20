@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: alphatest_always_quad
+# plans/plan_dx9.md D9-A5 scene corpus: alphatest_always_quad
 # The last of the 8 XNA AlphaTestEffect.AlphaFunction values to land in this corpus:
 # AlphaFunction=Always. Confirmed against FNA's own AlphaTestEffect.cs source: Always sets
 # `alphaTest.Z = 1; alphaTest.W = 1;` (both branch targets positive) -- the shader's

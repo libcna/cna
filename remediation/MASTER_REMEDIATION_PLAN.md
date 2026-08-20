@@ -2307,7 +2307,7 @@ calling it externally — grep first, though such a call is precisely the bug.
 **Sev** MEDIUM · **Pri** P2 · **Owner** MEDIA · **Status** NOT STARTED
 **Root cause** Uses cached `width_`/`height_` rather than the decoded frame's own dimensions.
 **Evidence** `src/CNA/Internal/Media/VideoDecoder.cpp.audit.md`. Notable: this file has the **densest
-prior-review-fix documentation in the whole audit** (18+ cited `plan_media.md` findings) yet does not
+prior-review-fix documentation in the whole audit** (18+ cited `plans/plan_media.md` findings) yet does not
 address this case.
 **Audit refs** `AUDIT_FINDINGS_INDEX.md` MEDIUM § Content/Storage/Net/Media
 **Affected files** `src/CNA/Internal/Media/VideoDecoder.cpp`

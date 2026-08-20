@@ -22,7 +22,7 @@ else()
 endif()
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 
-# plan_runtimerenderer.md RTR-P6-8: the LLGL module set, applied to THIS target rather than to the
+# plans/plan_runtimerenderer.md RTR-P6-8: the LLGL module set, applied to THIS target rather than to the
 # whole project. cna_configure_llgl() used to call add_compile_definitions(), which is directory-
 # scoped even from inside a function, so every renderer's target in a multi-renderer build was told
 # which LLGL modules exist. PUBLIC because LlglRendererSelection.hpp is a public header of this
@@ -30,7 +30,7 @@ target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 if(CNA_LLGL_COMPILE_DEFINITIONS)
     target_compile_definitions(${RENDERER_TARGET} PUBLIC ${CNA_LLGL_COMPILE_DEFINITIONS})
 endif()
-# plan_llgl.md LLGL-27: LlglEffectRenderer needs a REAL runtime GLSL->SPIR-V compile for
+# plans/plan_llgl.md LLGL-27: LlglEffectRenderer needs a REAL runtime GLSL->SPIR-V compile for
 # arbitrary user ShaderEffect source when the Vulkan module is selected at runtime (LLGL's own
 # OpenGL module accepts the same GLSL text directly, no compiler needed there) -- the exact
 # same problem another runtime-selected effect renderer already solved with libshaderc, and the

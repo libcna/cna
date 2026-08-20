@@ -1,7 +1,7 @@
 # NEXT_platform.md — SDL3/CNA platform separation
 
 > Continuity document for the platform-abstraction campaign. The authoritative task list is
-> **`plan_platform.md`** (PLAT-1…PLAT-141 plus lettered follow-ups); this file records state,
+> **`plans/plan_platform.md`** (PLAT-1…PLAT-141 plus lettered follow-ups); this file records state,
 > discoveries and the next starting point. The design note that started it is `cnaplatform.md`.
 >
 > This file exists separately from the root `NEXT.md` following the repository's own convention
@@ -64,7 +64,7 @@ four renderer allowlist entries.
 The final serial non-network runs are SDL3 **6,553 passed / 55 skipped**, HEADLESS **6,367 / 49**
 and TERMINAL **6,349 / 56**, all with zero failures. Both registered platform CTest entries pass in
 all three profiles. The five ENet/UDP suites remain excluded because this execution sandbox denies
-their socket operations; see the completion record in `plan_platform.md`.
+their socket operations; see the completion record in `plans/plan_platform.md`.
 
 ---
 
@@ -186,7 +186,7 @@ for one later:
 
 ## 3. Where the campaign stands
 
-**127 ✅ · 3 🟨 · 24 ⬜ · 0 ⛔ · 1 ❌** across `plan_platform.md` — **82 %** of the 155
+**127 ✅ · 3 🟨 · 24 ⬜ · 0 ⛔ · 1 ❌** across `plans/plan_platform.md` — **82 %** of the 155
 task rows complete.
 
 - **Phase 0** (inventory, gates, baselines) — done except PLAT-7 (performance baseline).

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1400..MOD-1405: the instanced-draw helper.
+// plans/plan_modern.md MOD-1400..MOD-1405: the instanced-draw helper.
 //
 // What can be asserted without a window is everything except the pixels: the declaration a caller
 // has to match, the validation, the buffer reuse that makes a per-frame upload free, and the two
@@ -61,7 +61,7 @@ namespace {
 
         void SetUp() override
         {
-            // plan_modern.md MOD-1690. A vertex buffer is 3D work, and a 2D-only renderer refuses
+            // plans/plan_modern.md MOD-1690. A vertex buffer is 3D work, and a 2D-only renderer refuses
             // to create one -- the 2D-only renderers throw "does not support 3D:
             // CreateVertexBuffer" from this very line. Without this gate the whole fixture fails
             // there rather than skipping,

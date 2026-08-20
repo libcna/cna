@@ -1,9 +1,9 @@
 #pragma once
 
-// plan_dx9.md Phase D9-10 (D9-100/D9-101/D9-102/D9-103): XNA 4.0's GraphicsProfile.Reach/HiDef
+// plans/plan_dx9.md Phase D9-10 (D9-100/D9-101/D9-102/D9-103): XNA 4.0's GraphicsProfile.Reach/HiDef
 // capability floors, real on this renderer only (the other 9 CNA renderers have no D3DCAPS9 to
-// query and keep their honest GraphicsAdapter::IsProfileSupported() == true; -- see plan_dx9.md's
-// own "Boundaries" section). See plan_dx9.md's D9-100 closure note for the full researched table
+// query and keep their honest GraphicsAdapter::IsProfileSupported() == true; -- see plans/plan_dx9.md's
+// own "Boundaries" section). See plans/plan_dx9.md's D9-100 closure note for the full researched table
 // and its citations (FNA's own ProfileCapabilities.cs -- confirmed dead code, data-only, never
 // actually consulted by FNA's own resource-creation/validation paths -- cross-checked against
 // Shawn Hargreaves' official XNA team blog post, "Reach vs HiDef").
@@ -12,7 +12,7 @@
 // exactly (Reach=0, HiDef=1) -- plain int, matching this renderer's own established convention
 // for XNA enum interop (D3D9StateMapping.hpp).
 //
-// D9-105's own honest caveat, restated here (not just in plan_dx9.md) so it can't be missed by
+// D9-105's own honest caveat, restated here (not just in plans/plan_dx9.md) so it can't be missed by
 // reading code alone: every D3DCAPS9-consuming function below is REAL logic against a REAL
 // IDirect3D9/IDirect3DDevice9 -- but in this project's Wine+DXVK dev loop, the D3DCAPS9 VALUES
 // those calls return are DXVK's own synthesized capability set, not what an authentic XNA-era

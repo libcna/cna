@@ -87,7 +87,7 @@ code" instruction for this audit, since the claim survived scrutiny rather than 
   see Missing or Weak Tests.
 - Directly corroborates, from the production-code side, the address-mode gap independently found in this
   batch's audit of `sdlrenderer_samplerstate_default_test.cpp` (F1 there): this file's own header comment
-  explicitly states "Wrap/Mirror are BLOCKED pending a project-owner decision, see plan_graphics.md rows
+  explicitly states "Wrap/Mirror are BLOCKED pending a project-owner decision, see plans/plan_graphics.md rows
   686/687" and "Clamp is correct by accident of SDL_RenderTexture's fixed edge behavior" — both consistent
   with this audit's independent finding that `SetSamplerAddressMode` has no override on this backend at all.
 

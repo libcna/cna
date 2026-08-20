@@ -7,7 +7,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 5: a private off-screen canvas backing one render target.
+// plans/plan_svg_dom.md design decision 5: a private off-screen canvas backing one render target.
 // Registered under Module['cnaSvgDomTextures'][id] -- the same registry the sprite-batch
 // render-target draw path (SvgDomSpriteBatchRenderer.cpp) looks entries up in, keyed the same way
 // as an ordinary uploaded texture's own JS-side id (SvgDomTextureRenderer::GetCanvasIdEXT), so a

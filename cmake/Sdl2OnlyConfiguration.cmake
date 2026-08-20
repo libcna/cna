@@ -19,7 +19,7 @@ if(CNA_PLATFORM STREQUAL "SDL2" AND CNA_AUDIO_PLATFORM STREQUAL "SDL2")
             "links SDL3 itself. Choose OPENGLES2/OPENGLES3/OPENGL33, VULKAN, SOFTWARE, "
             "HEADLESS or another SDL-independent renderer.")
     endif()
-    # plan_platform.md PLAT-SDL2-6: once the check above has passed, no production target in this
+    # plans/plan_platform.md PLAT-SDL2-6: once the check above has passed, no production target in this
     # selection needs SDL3, and the test and harness layer must not quietly put it back. SDL2 and
     # SDL3 export identically named entry points -- SDL_Init, SDL_GetError, SDL_PollEvent and many
     # more -- so a binary linking both leaves the SDL2 backend's own calls bound to whichever

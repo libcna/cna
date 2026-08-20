@@ -21,7 +21,7 @@ namespace CNA::Graphics {
     /**
      * @brief Binds a render target for a scope and puts back whatever was bound before.
      *
-     * plan_modern.md `MOD-203`. A post-process pass binds its destination, draws, and moves on —
+     * plans/plan_modern.md `MOD-203`. A post-process pass binds its destination, draws, and moves on —
      * and if the draw throws, the destination stays bound. The next thing to render then draws into
      * a pass's private intermediate instead of the frame, which does not look like an error; it
      * looks like the frame stopped updating. Restoring in a destructor makes the unwind path do the

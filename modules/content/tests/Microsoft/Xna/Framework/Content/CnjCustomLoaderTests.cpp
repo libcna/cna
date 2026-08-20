@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-26/CNB-27: tests for RegisterCnjLoader<T> (CNB-24/CNB-25) -- a game-registered,
+// plans/plan_cnj.md CNB-26/CNB-27: tests for RegisterCnjLoader<T> (CNB-24/CNB-25) -- a game-registered,
 // .cnj "type"-string-keyed loader table, for asset types with no dedicated ContentTypeReader<T>.
 // Matches cnj.md's "Custom loaders" section worked example ("EnemyDefinition"/"LootTable" both
 // producing the same generic data struct via two different factories).
@@ -68,7 +68,7 @@ namespace
     };
 }
 
-// plan_cnj.md CNB-38: no GraphicsDevice here -- none of this fixture's tests touch graphics, so
+// plans/plan_cnj.md CNB-38: no GraphicsDevice here -- none of this fixture's tests touch graphics, so
 // none of them need to pay for real window/SDL-video-subsystem creation (which fails outright
 // under a genuinely headless environment, e.g. CNA_GRAPHICS_RENDERER=HEADLESS's whole point, or
 // a dummy video driver under EasyGL). Only FactoryCanRecursivelyLoadReferencedTexture actually
@@ -141,7 +141,7 @@ TEST_F(CnjCustomLoaderTest, MissingCnjVersionThrowsEvenWithRegisteredType)
     EXPECT_FALSE(factoryInvoked);
 }
 
-// plan_cnj.md CNB-35: the strict envelope/version policy applies equally to the
+// plans/plan_cnj.md CNB-35: the strict envelope/version policy applies equally to the
 // RegisterCnjLoader<T> dispatch path, not just built-in readers.
 TEST_F(CnjCustomLoaderTest, UnsupportedCnjVersionThrowsEvenWithRegisteredType)
 {
@@ -204,7 +204,7 @@ TEST_F(CnjCustomLoaderTest, RegisteringForAlreadyOwnedTypeThrowsLogicError)
         std::logic_error);
 }
 
-// plan_cnj.md CNB-37: deterministic, fail-fast registration guards.
+// plans/plan_cnj.md CNB-37: deterministic, fail-fast registration guards.
 
 TEST_F(CnjCustomLoaderTest, EmptyTypeNameThrowsInvalidArgument)
 {

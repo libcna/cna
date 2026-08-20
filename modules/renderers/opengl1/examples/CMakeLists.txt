@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_opengl1.md: OPENGL1 (native legacy fixed-function OpenGL) CTest registration --
+# plans/plan_opengl1.md: OPENGL1 (native legacy fixed-function OpenGL) CTest registration --
 # tests/opengl1/README.md's 8 priority smoke-coverage scenarios.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -17,7 +17,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # registrations. Reuses already-verified, renderer-agnostic example sources (real public
 # Game/GraphicsDevice/BasicEffect/SpriteBatch/AlphaTestEffect API only, no EasyGL-specific
 # code -- confirmed by inspection before reuse here) wherever OPENGL1's documented fixed-
-# function capability (plan_opengl1.md "Implemented foundation"/"Intentional OpenGL 1.x
+# function capability (plans/plan_opengl1.md "Implemented foundation"/"Intentional OpenGL 1.x
 # limitations") genuinely matches what the shared source exercises. Only scenario 7 (fog +
 # alpha-test) gets an OPENGL1-specific file: the shared EasyGL fog/alpha-test tests pin exact
 # blended RGB values tuned for a different (shader-exact) formula, which OpenGL1's real
@@ -103,14 +103,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGL1_DepthStencilState_StencilOps COMMAND cna_test_opengl1_depthstencilstate_stencil_ops
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 1: runtime GL version/extension discovery -- verifies the real
+    # plans/plan_opengl1.md phase 1: runtime GL version/extension discovery -- verifies the real
     # GL_EXT_texture_filter_anisotropic wiring in ApplySamplerState() reaches the driver.
     cna_opengl1_test(cna_test_opengl1_anisotropic_gl_state
                       opengl1_anisotropic_gl_state_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_Anisotropic_GlState COMMAND cna_test_opengl1_anisotropic_gl_state
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 2: RenderTarget2D via ARB_framebuffer_object/core FBO. Reused verbatim
+    # plans/plan_opengl1.md phase 2: RenderTarget2D via ARB_framebuffer_object/core FBO. Reused verbatim
     # from the SDL_Renderer renderer's own Task 705 test (renderer-agnostic: real public
     # RenderTarget2D/GraphicsDevice/SpriteBatch API only) -- its corner-marker check is exactly
     # the round-trip-orientation proof this phase needs (a render target sampled later as a plain
@@ -120,7 +120,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGL1_RenderTarget2D_Sample COMMAND cna_test_opengl1_rendertarget2d_sample
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 3: ARB_multitexture/core-1.3 DualTextureEffect fixed-function path.
+    # plans/plan_opengl1.md phase 3: ARB_multitexture/core-1.3 DualTextureEffect fixed-function path.
     # Reused verbatim from EasyGL's own Task 383 test (renderer-agnostic) -- isolates FNA's real
     # "texture0.rgb *= 2" doubling factor from a naive texture0*texture1*diffuse multiply, which
     # the GL_COMBINE/GL_RGB_SCALE=2 texture-environment chain in DrawInternal must reproduce.
@@ -129,14 +129,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGL1_DualTextureEffect_Doubling COMMAND cna_test_opengl1_dualtextureeffect_doubling
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 11: explicit GraphicsCapability reporting, backed by real evidence
+    # plans/plan_opengl1.md phase 11: explicit GraphicsCapability reporting, backed by real evidence
     # (not just the flag) for every checked value.
     cna_opengl1_test(cna_test_opengl1_graphics_capability
                       opengl1_graphics_capability_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_GraphicsCapability COMMAND cna_test_opengl1_graphics_capability
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 4: fixed-function texture environment/combine mappings, closing the
+    # plans/plan_opengl1.md phase 4: fixed-function texture environment/combine mappings, closing the
     # gap DrawInternal's stride==16/24 vertex-color paths had (vertex color used alone, ignoring
     # BasicEffect's material DiffuseColor/EmissiveColor entirely). Reused verbatim from EasyGL's
     # own Task 370 capstone test (renderer-agnostic) -- asserts the exact multiplicative formula
@@ -146,7 +146,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGL1_BasicEffect_Combined COMMAND cna_test_opengl1_basiceffect_combined
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 5: ARB_texture_cube_map cube maps + EnvironmentMapEffect's fixed-
+    # plans/plan_opengl1.md phase 5: ARB_texture_cube_map cube maps + EnvironmentMapEffect's fixed-
     # function reflection-mapping subset (OPENGL1-specific -- see the test file's own header for
     # why Fresnel/specular are deliberately out of scope for a fixed-function-only renderer).
     cna_opengl1_test(cna_test_opengl1_environmentmapeffect
@@ -154,14 +154,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGL1_EnvironmentMapEffect COMMAND cna_test_opengl1_environmentmapeffect
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 10: visual golden-image tests, reusing the EXACT same checked-in
+    # plans/plan_opengl1.md phase 10: visual golden-image tests, reusing the EXACT same checked-in
     # reference PNGs EasyGL's own golden-image suite uses (examples/golden/*.png) -- no new
     # images. Same precedent as Vulkan's own golden-image reuse (VulkanTests.cmake): the shared
     # PixelTestGame::CompareGoldenImage() helper and every one of these .cpp files is renderer-
     # agnostic (real public Game/GraphicsDevice/Effect/SpriteBatch API only). Deliberately
     # excluded: PbrEffect/SkinnedEffect/SkinnedPbrEffect (GLSL-shader-only, no fixed-function
-    # equivalent -- plan_opengl1.md's own design rule) and EnvironmentMapEffect (its golden scene
-    # exercises Fresnel/specular, which plan_opengl1.md phase 5 documents as an intentional,
+    # equivalent -- plans/plan_opengl1.md's own design rule) and EnvironmentMapEffect (its golden scene
+    # exercises Fresnel/specular, which plans/plan_opengl1.md phase 5 documents as an intentional,
     # unimplemented fixed-function limitation -- a guaranteed mismatch, not worth a test that can
     # never pass). WORKING_DIRECTORY is the repo root so each test's relative
     # "examples/golden/*.png" path resolves correctly regardless of which cmake-build-* directory
@@ -216,14 +216,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGL1_AlphaTestEffect_Golden COMMAND cna_test_opengl1_alphatesteffect_golden
         TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 8: context-loss resource recreation registry (OpenGL1ResourceRegistry/
+    # plans/plan_opengl1.md phase 8: context-loss resource recreation registry (OpenGL1ResourceRegistry/
     # IOpenGL1Recoverable, independent of EasyGL's own ::easygl::ResourceRegistry).
     cna_opengl1_test(cna_test_opengl1_context_loss
                       opengl1_context_loss_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_ContextLoss COMMAND cna_test_opengl1_context_loss
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md phase 6: automatic mipmap generation (glGenerateMipmap/GL_GENERATE_MIPMAP/
+    # plans/plan_opengl1.md phase 6: automatic mipmap generation (glGenerateMipmap/GL_GENERATE_MIPMAP/
     # CPU box-filter fallback) plus the full 9-value TextureFilter -> GL min/mag mapping needed to
     # actually sample the generated levels.
     cna_opengl1_test(cna_test_opengl1_mipmap_generation
@@ -238,73 +238,73 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME OpenGL1_SamplerState_BindOrder COMMAND cna_test_opengl1_samplerstate_bind_order
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 20 (EasyGL parity): runtime SetSwapInterval() override.
+    # plans/plan_opengl1.md item 20 (EasyGL parity): runtime SetSwapInterval() override.
     cna_opengl1_test(cna_test_opengl1_swapinterval
                       opengl1_swapinterval_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_SwapInterval COMMAND cna_test_opengl1_swapinterval
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 21 (EasyGL parity): RenderTarget2D mip-chain generation on unbind.
+    # plans/plan_opengl1.md item 21 (EasyGL parity): RenderTarget2D mip-chain generation on unbind.
     cna_opengl1_test(cna_test_opengl1_rendertarget2d_mip
                       opengl1_rendertarget2d_mip_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_RenderTarget2D_Mip COMMAND cna_test_opengl1_rendertarget2d_mip
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA.
+    # plans/plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA.
     cna_opengl1_test(cna_test_opengl1_msaa
                       opengl1_msaa_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_MSAA COMMAND cna_test_opengl1_msaa
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 14 (EasyGL parity): BasicEffect.DirectionalLight1/DirectionalLight2.
+    # plans/plan_opengl1.md item 14 (EasyGL parity): BasicEffect.DirectionalLight1/DirectionalLight2.
     cna_opengl1_test(cna_test_opengl1_directionallight12
                       opengl1_directionallight12_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_DirectionalLight12 COMMAND cna_test_opengl1_directionallight12
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 15 (EasyGL parity): BasicEffect specular highlights.
+    # plans/plan_opengl1.md item 15 (EasyGL parity): BasicEffect specular highlights.
     cna_opengl1_test(cna_test_opengl1_specular
                       opengl1_specular_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_Specular COMMAND cna_test_opengl1_specular
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 16 (EasyGL parity): TextureAddressMode.Mirror.
+    # plans/plan_opengl1.md item 16 (EasyGL parity): TextureAddressMode.Mirror.
     cna_opengl1_test(cna_test_opengl1_textureaddressmode_mirror
                       opengl1_textureaddressmode_mirror_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_TextureAddressMode_Mirror COMMAND cna_test_opengl1_textureaddressmode_mirror
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 17 (EasyGL parity): constant blend color.
+    # plans/plan_opengl1.md item 17 (EasyGL parity): constant blend color.
     cna_opengl1_test(cna_test_opengl1_blendfactor
                       opengl1_blendfactor_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_BlendFactor COMMAND cna_test_opengl1_blendfactor
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 18 (EasyGL parity): blend equation beyond additive.
+    # plans/plan_opengl1.md item 18 (EasyGL parity): blend equation beyond additive.
     cna_opengl1_test(cna_test_opengl1_blendequation
                       opengl1_blendequation_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_BlendEquation COMMAND cna_test_opengl1_blendequation
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 19 (EasyGL parity): separate alpha blend factors.
+    # plans/plan_opengl1.md item 19 (EasyGL parity): separate alpha blend factors.
     cna_opengl1_test(cna_test_opengl1_blendalphafactor
                       opengl1_blendalphafactor_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_BlendAlphaFactor COMMAND cna_test_opengl1_blendalphafactor
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 13 (EasyGL parity): virtual-resolution/presentation-mode scaling.
+    # plans/plan_opengl1.md item 13 (EasyGL parity): virtual-resolution/presentation-mode scaling.
     cna_opengl1_test(cna_test_opengl1_presentationmode
                       opengl1_presentationmode_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_PresentationMode COMMAND cna_test_opengl1_presentationmode
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 24 (EasyGL parity): RenderTargetCube support.
+    # plans/plan_opengl1.md item 24 (EasyGL parity): RenderTargetCube support.
     cna_opengl1_test(cna_test_opengl1_rendertargetcube
                       opengl1_rendertargetcube_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_RenderTargetCube COMMAND cna_test_opengl1_rendertargetcube
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_opengl1.md item 25: RenderTarget2D MSAA.
+    # plans/plan_opengl1.md item 25: RenderTarget2D MSAA.
     cna_opengl1_test(cna_test_opengl1_rendertarget2d_msaa
                       opengl1_rendertarget2d_msaa_test.cpp)
     cna_register_renderer_test(NAME OpenGL1_RenderTarget2D_MSAA COMMAND cna_test_opengl1_rendertarget2d_msaa

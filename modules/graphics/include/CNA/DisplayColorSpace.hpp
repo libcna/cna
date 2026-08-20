@@ -6,7 +6,7 @@ namespace CNA
     /**
      * @brief The colour space a swap chain's pixels are interpreted in.
      *
-     * plan_modern.md `MOD-2092`. Not a rendering setting: this describes what the *display* expects
+     * plans/plan_modern.md `MOD-2092`. Not a rendering setting: this describes what the *display* expects
      * to receive, and getting it wrong is not subtle -- PQ-encoded pixels shown as if they were
      * sRGB are washed out and grey, and sRGB pixels shown as PQ are almost black.
      */

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan_dx9.md Phase D9-A (D9-A4): diff a real-XNA-4.0 PNG against a CNA PNG.
+"""plans/plan_dx9.md Phase D9-A (D9-A4): diff a real-XNA-4.0 PNG against a CNA PNG.
 
 Usage:
     scripts/xna-diff.py <xna.png> <cna.png> [--diff-out diff.png] [--tolerance N]
@@ -14,7 +14,7 @@ support a narrowly bounded renderer variance: separate RGB/alpha thresholds, a r
 pixel budget, and a rectangle outside which even an otherwise tolerated raw difference is
 forbidden.
 
-Threshold discipline (plan_dx9.md's own "the whole ballgame" warning): --tolerance defaults to
+Threshold discipline (plans/plan_dx9.md's own "the whole ballgame" warning): --tolerance defaults to
 0 (exact match required). Every scene in tools/xna-oracle/scenes/ that involves no floating-point-
 sensitive lighting/blending math is expected to pass at tolerance 0 -- CNA/D3D9 and the real XNA
 4.0 runtime both execute through the SAME DXVK D3D9 implementation (see this file's own

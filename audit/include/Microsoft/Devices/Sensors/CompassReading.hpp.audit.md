@@ -43,7 +43,7 @@ Not independently located in this pass.
 The `TrueHeading`-equals-`MagneticHeading` limitation is one of the most honestly and precisely
 disclosed "known, real functional gap" write-ups encountered in this entire audit — explains
 exactly why (missing location API), what it would take to fix, and where that's documented
-(`docs/location-future-plan.md`), rather than a vague "not yet implemented" note.
+(`docs/location-future-plans/plan.md`), rather than a vague "not yet implemented" note.
 
 ## Final Assessment
 No findings.

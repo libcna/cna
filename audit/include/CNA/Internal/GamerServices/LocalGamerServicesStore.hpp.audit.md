@@ -21,7 +21,7 @@ sanitizer's own contract; otherwise clean, well-documented API design.
 ## Checklist Results
 ### API design
 Clearly documents the "never throws for missing/corrupt file, starts empty instead" contract (matching a
-named task requirement, `plan_net.md` Task 4.7) consistently across every loader. Explains its reuse of the
+named task requirement, `plans/plan_net.md` Task 4.7) consistently across every loader. Explains its reuse of the
 existing `StorageDevice::GetStorageRootEXT()` convention rather than inventing a new storage location.
 
 ### Security — sanitizer contract

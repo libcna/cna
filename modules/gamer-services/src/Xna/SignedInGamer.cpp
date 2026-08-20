@@ -67,7 +67,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         return FriendCollection::CreateInternal({});
     }
 
-    // Task 4.5 (plan_net.md Phase 4): persists to the local GamerServices store, so an
+    // Task 4.5 (plans/plan_net.md Phase 4): persists to the local GamerServices store, so an
     // achievement earned in one process run is still earned in the next. Real XNA gives no
     // catalog metadata here (AwardAchievement only ever takes a key) - only the fact-of-earning
     // and its timestamp are genuine local data (see Phase 4's own note on why Name/Description/

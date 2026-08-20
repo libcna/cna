@@ -1,7 +1,7 @@
 # Entrypoint / `SDL_main` audit (PLAT-5)
 
 > Audit of how CNA applications get a `main()`, and what of that the platform contract must own
-> versus what stays a build-system and preprocessor concern. `plan_platform.md` PLAT-54 acts on
+> versus what stays a build-system and preprocessor concern. `plans/plan_platform.md` PLAT-54 acts on
 > this.
 >
 > Hand-written. Re-derive with:

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: RenderTargetCube support (plan_opengl1.md item 24, EasyGL parity).
+// OPENGL1 renderer: RenderTargetCube support (plans/plan_opengl1.md item 24, EasyGL parity).
 //
 // Before this, CreateRenderTargetCube() inherited the IGraphicsRenderer nullptr default --
 // RenderTargetCube always failed to construct a usable renderer on OPENGL1, despite this renderer

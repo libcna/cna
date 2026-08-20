@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-55: real-device Texture2D mip-level SetData/GetData round-trip test.
+// plans/plan_diligent.md DILIGENT-55: real-device Texture2D mip-level SetData/GetData round-trip test.
 //
 // Unlike the EasyGL precedent (easygl_texture2d_mip_test.cpp, Task 171), which explicitly notes its
 // GetData() reads a pure CPU shadow buffer rather than the GPU, DiligentSampledTexture::GetData()

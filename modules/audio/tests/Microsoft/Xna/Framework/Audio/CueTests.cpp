@@ -358,7 +358,7 @@ namespace
     // table, generalizing BuildXsbFixtureBytesWithWeightedVariation above (which is hardcoded to
     // exactly 2 entries) to any number of entries with independently configurable weights --
     // needed to test 3+ entries, zero-weight entries, and deterministic-by-construction/by-seed
-    // edge cases (P9-XACT-001, `plan_audio.md`'s Phase 10 audit).
+    // edge cases (P9-XACT-001, `plans/plan_audio.md`'s Phase 10 audit).
     struct WeightedVariationEntrySpec
     {
         uint16_t categoryIndex;
@@ -3143,7 +3143,7 @@ TEST(CueTest, GetTypeNameIsDottedXnaName)
 // P10-VAR-001/002 (2026-07-06 audit): this test previously reused a single `Cue` object across
 // all 200 loop iterations, calling `Play()` on it repeatedly. That's not a real bug in the
 // selection algorithm itself (see the line-by-line comparison against FAudio's
-// get_active_variation_index below, and CHECKLIST.md/plan_audio.md's Phase 10 audit note) -- it's
+// get_active_variation_index below, and CHECKLIST.md/plans/plan_audio.md's Phase 10 audit note) -- it's
 // a bug in *this test*: neither sound in `fixture_weighted.xsb` references a real WaveBank, so
 // `Cue::active_` stays empty after the first `Play()`, `ReconcileState()`'s
 // `... || active_.empty()) return;` guard means `state_` can never reconcile back from
@@ -3627,7 +3627,7 @@ TEST(CueTest, PlayResolvesTrackVariationEventToOneOfTheAuthoredCandidates)
 //
 // Mirrors FAudio's real per-play pitch/volume/filter randomization (FACT_internal.c:309-425)
 // exactly for the "Initial Variation" branch (activeWave.wave == NULL) -- CNA's per-track single-
-// resolution model (see plan_audio.md's P11-XACT-003 note) only ever reaches that branch, so the
+// resolution model (see plans/plan_audio.md's P11-XACT-003 note) only ever reaches that branch, so the
 // NEW_ON_LOOP/_ADD combination logic for a later loop iteration re-triggering the same event is
 // out of scope, not simplified away. These tests exercise
 // CueTestAccess::ApplyEffectVariation's exact reproduction of that one-time draw directly, without

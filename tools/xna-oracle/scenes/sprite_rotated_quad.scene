@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_rotated_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_rotated_quad
 # The second SpriteBatch scene, proving D9-90's rotation/origin geometry (not just plain
 # translation, which sprite_basic_quad.scene already covers). Uses a 2x2 four-color texture (not
 # a 1x1 solid color) so a 90-degree rotation is independently verifiable: a clean, exact

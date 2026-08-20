@@ -1,6 +1,6 @@
 # XNA 4.0 oracle diff harness
 
-`plan_dx9.md` Phase D9-A (`D9-A3`/`D9-A4`). Renders the same declarative scene twice — once
+`plans/plan_dx9.md` Phase D9-A (`D9-A3`/`D9-A4`). Renders the same declarative scene twice — once
 through the real XNA 4.0 runtime (`Oracle.cs`, under Wine) and once through CNA's real public
 `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API, using any of the 5 real XNA Stock Effects
 (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`)
@@ -8,7 +8,7 @@ through the real XNA 4.0 runtime (`Oracle.cs`, under Wine) and once through CNA'
 `D3D9` on `feature/dx9`) — and diffs the two resulting PNGs pixel-for-pixel (`scripts/xna-diff.py`).
 
 This is what makes "indistinguishable from real XNA" a testable claim rather than an aspiration
-(`plan_dx9.md`'s own framing for Phase D9-A). Moved here from `dx9-spike/xna-oracle/Oracle.cs`
+(`plans/plan_dx9.md`'s own framing for Phase D9-A). Moved here from `dx9-spike/xna-oracle/Oracle.cs`
 (`D9-A1`/`D9-A2`'s original spike) and rewritten to be scene-driven, per `D9-A3`'s own instruction:
 "the scenes must be authored once, in a shared, declarative form, and rendered by both — not
 hand-transcribed twice, or the harness will drift."
@@ -81,7 +81,7 @@ calls `SetBoneTransforms(new[] { Matrix.Identity })` on both sides, hardcoded.
 
 ## Build and run — XNA side (the oracle)
 
-Needs the real XNA 4.0 runtime under Wine (`plan_dx9.md` `D9-A1`), **with DXVK installed into
+Needs the real XNA 4.0 runtime under Wine (`plans/plan_dx9.md` `D9-A1`), **with DXVK installed into
 that prefix too** (`D9-A4`'s own critical methodological requirement — otherwise real XNA runs on
 WineD3D while CNA/D3D9 runs on DXVK, and any diff would silently measure a *driver* difference,
 not a CNA one):
@@ -162,7 +162,7 @@ multi-texture `FlushBatch()`-on-texture-change batching (basic draw, rotation/or
 `SpriteEffects` flip, `Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack`, interleaved
 multi-texture sprites — `D9-90`/`D9-91`/`D9-92`/`D9-93` all COMPLETE, including `D9-90`'s own
 explicitly-named multi-texture-batching gap; `SpriteSortMode.Immediate`/`.Texture` explicitly
-scoped out of `D9-93`, see that task's own `plan_dx9.md` closure note), PLUS **ALL 4**
+scoped out of `D9-93`, see that task's own `plans/plan_dx9.md` closure note), PLUS **ALL 4**
 `PrimitiveType` values (`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip` — `PrimitiveType`
 coverage is now COMPLETE) is now represented in the corpus:
 

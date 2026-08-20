@@ -20,7 +20,7 @@ namespace Microsoft::Xna::Framework::Graphics
      *
      * @note CNAEXT — not part of the XNA 4.0 API. Real XNA predates the PBR/normal-mapping
      * content pipeline this describes. Mirrors VertexPositionNormalTextureSkinned's own
-     * established precedent for a CNA-original vertex format (plan_cnj.md CNB-57, Phase 13A).
+     * established precedent for a CNA-original vertex format (plans/plan_cnj.md CNB-57, Phase 13A).
      */
     CNAEXT struct VertexPositionNormalTangentTexture : public IVertexType
     {

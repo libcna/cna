@@ -36,7 +36,7 @@ namespace CNA::Graphics {
     /**
      * @brief One mesh at several levels of detail, and the rule for choosing between them.
      *
-     * plan_modern.md `MOD-1406`–`MOD-1408`. A group holds levels in increasing distance order and
+     * plans/plan_modern.md `MOD-1406`–`MOD-1408`. A group holds levels in increasing distance order and
      * answers one question: at this distance, which one do I draw? It owns no GPU resources and
      * issues no draws -- the parts belong to whatever loaded them, and drawing stays the caller's.
      *
@@ -116,7 +116,7 @@ namespace CNA::Graphics {
         /**
          * @brief Sets how far past a boundary the distance must go before the level changes.
          *
-         * plan_modern.md `MOD-1407`. Zero -- the default -- switches exactly at the boundary,
+         * plans/plan_modern.md `MOD-1407`. Zero -- the default -- switches exactly at the boundary,
          * which flickers when an object hovers there. A margin of 2 world units means the group
          * moves to the coarser level at `boundary + 2` and back to the finer one at `boundary - 2`.
          *
@@ -144,7 +144,7 @@ namespace CNA::Graphics {
         /**
          * @brief Sets the inputs the screen-space-error mode needs.
          *
-         * plan_modern.md `MOD-1408`. The error a level is compared against is
+         * plans/plan_modern.md `MOD-1408`. The error a level is compared against is
          *
          * ```
          * error = (radius * viewportHeight) / (distance * 2 * tan(fovY / 2))

@@ -20,7 +20,7 @@ function keeps this backend's scope proportionate to what it can actually delive
 
 DX8 (2000) is architecturally very different from every backend in this family so far:
 
-1. **No DirectDraw at all.** "DirectDraw+Direct3D merged" (`plan_dxold.md`'s own DX8 row) — a
+1. **No DirectDraw at all.** "DirectDraw+Direct3D merged" (`plans/plan_dxold.md`'s own DX8 row) — a
    single `IDirect3D8::CreateDevice(adapter, type, hFocusWindow, behaviorFlags, &presentParams,
    &device)` call creates BOTH the device and its own swap chain. No separate `ddraw` object, no
    manual "shadow backbuffer + `Blt` to primary" trick this whole family needed since `DX2-0`.

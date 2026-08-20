@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-17B/XNB-17C/XNB-17D/XNB-17E/XNB-17F: ContentManager's .xnb integration --
+// plans/plan_xnb.md XNB-17B/XNB-17C/XNB-17D/XNB-17E/XNB-17F: ContentManager's .xnb integration --
 // resolution order (.xnb wins first), path/cache-identity reuse, ContentLoadException
 // propagation, and Unload() behavior, proven end-to-end through ContentManager::Load<T>()
 // using only a test-only reader (a real Texture2DReader is Phase C/XNB-23).
@@ -178,7 +178,7 @@ TEST_F(ContentManagerXnbTest, MalformedXnbHeaderThrowsContentLoadException)
 
 TEST_F(ContentManagerXnbTest, Lz4CompressedXnbThrowsContentLoadException)
 {
-    // plan_xnb.md XNB-27/XNB-30C: CNA recognizes MonoGame's Lz4 compression flag but has no Lz4
+    // plans/plan_xnb.md XNB-27/XNB-30C: CNA recognizes MonoGame's Lz4 compression flag but has no Lz4
     // decoder yet -- must fail with a clear, specific error, not silently misdecode via LZX.
     ScratchContentRoot root;
     WriteBytes(root.path() / "fixture.xnb", {'X', 'N', 'B', 'w', 5, 0x40, 0, 0, 0, 0});
@@ -190,7 +190,7 @@ TEST_F(ContentManagerXnbTest, Lz4CompressedXnbThrowsContentLoadException)
 
 TEST_F(ContentManagerXnbTest, BothCompressionBitsSetThrowsContentLoadException)
 {
-    // plan_xnb.md XNB-27: neither a real LZX nor a real Lz4 signal -- rejected outright rather
+    // plans/plan_xnb.md XNB-27: neither a real LZX nor a real Lz4 signal -- rejected outright rather
     // than silently picking one.
     ScratchContentRoot root;
     WriteBytes(root.path() / "fixture.xnb", {'X', 'N', 'B', 'w', 5, 0xC0, 0, 0, 0, 0});
@@ -228,7 +228,7 @@ TEST_F(ContentManagerXnbTest, UnregisteredXnbReaderNameThrowsContentLoadExceptio
     EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
-// plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
+// plans/plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
 // totalLength header field independently of the file's actual on-disk size -- confirmed as a real
 // heap-buffer-overflow under -DCNA_SANITIZE=address,undefined (the Lzx branch's compressedSize =
 // totalLength - 14 was used to size a read straight from the just-read file buffer, with nothing

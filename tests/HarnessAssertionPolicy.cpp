@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-111: make a tripped native assertion fail this suite instead of wedging it.
+// plans/plan_fx.md FX-111: make a tripped native assertion fail this suite instead of wedging it.
 //
 // Pinned MojoShader's `assert` resolves to SDL's assertion macro, and SDL's DEFAULT handler stops
 // and waits for an interactive answer. In an interactive session that is helpful; in a test run it
 // means one malformed input hangs the whole suite instead of failing one case. That is not
 // hypothetical -- a truncated effect binary trips `mojoshader_effects.c`'s `readvalue` assertion,
-// and the run stops there with no output about which test did it (plan_fx.md FX-065).
+// and the run stops there with no output about which test did it (plans/plan_fx.md FX-065).
 //
 // The policy is selected through SDL's own `SDL_ASSERT` environment hint rather than through
 // `SDL_SetAssertionHandler`, deliberately. This translation unit is compiled into CnaTests for

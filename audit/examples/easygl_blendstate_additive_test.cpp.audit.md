@@ -31,7 +31,7 @@ saturates (`>=250`) and G channel lands in `[140,160]` (i.e. `100+50=150` exactl
 **Needs attention** — not for the test's own assertion logic, which is correct and well-reasoned against real
 production code and FNA's own preset definition, but because its header comment makes a definite, present-tense
 claim about Vulkan's blend-state implementation ("Vulkan's blend state is almost entirely fake") that is
-demonstrably **stale**: `plan_graphics.md`'s own Task 868 entry records this exact bug as fixed and this exact test
+demonstrably **stale**: `plans/plan_graphics.md`'s own Task 868 entry records this exact bug as fixed and this exact test
 (`Vulkan_BlendState_Additive`) as now passing. Since this file is literally the Vulkan test's source too, the
 stale comment sits inside the very file whose behavior it mischaracterizes.
 
@@ -115,10 +115,10 @@ backend behavior on EasyGL, not a coincidence.
 - Confidence: HIGH
 - Category: maintainability / documentation-accuracy
 - Location/symbol: file header comment, lines 13-18: *"This test also happens to re-expose Task 868 (Vulkan's
-  blend state is almost entirely fake — see plan_graphics.md) for real this time, unlike Task 305's
+  blend state is almost entirely fake — see plans/plan_graphics.md) for real this time, unlike Task 305's
   NonPremultiplied test, which coincidentally passed on Vulkan. Task 868's hardcoded equation uses
   InverseSourceAlpha for the destination factor..."*
-- Evidence: `plan_graphics.md`'s own Task 868 row (line 393) is marked `✅ CLOSED` with a detailed fix description:
+- Evidence: `plans/plan_graphics.md`'s own Task 868 row (line 393) is marked `✅ CLOSED` with a detailed fix description:
   `VulkanGraphicsBackend::ApplyBlendState` previously discarded all 6 real blend parameters and hardcoded one
   equation across 9 pipeline-creation functions; the fix added real `ToVkBlendFactor`/`ToVkBlendOp` mapping and a
   shared `FillBlendAttachmentState()` helper. The closure note explicitly states: *"reverted... reran the 7
@@ -135,7 +135,7 @@ backend behavior on EasyGL, not a coincidence.
 - FNA/XNA comparison: N/A (comment-accuracy issue, not an FNA parity issue).
 - Related files: `cmake/Tests/VulkanTests.cmake:120-125` carries an equivalent stale inline comment ("NOTE: expected
   to genuinely re-expose Task 868 here... unlike Task 305's coincidental pass") that should be updated in the same
-  pass if this is addressed; `plan_graphics.md` line 393 is the authoritative current-state source that resolves the
+  pass if this is addressed; `plans/plan_graphics.md` line 393 is the authoritative current-state source that resolves the
   discrepancy.
 - Suggested future action (not implemented by this audit): update or remove the stale Vulkan-bug narrative in this
   file's header comment (and the identical pattern in five sibling files in this batch — `nonpremultiplied`,

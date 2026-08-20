@@ -11,7 +11,7 @@ platform presentation" shape the SKIA renderer already established (`docs/skia-r
 renderer depends only on `IPlatformSurfacePresenter`; the selected platform owns the native upload,
 scaling and swap. No platform backend executes a Blend2D draw command.
 
-See `plan_blend2d.md` for the task-level remediation history and remaining boundaries.
+See `plans/plan_blend2d.md` for the task-level remediation history and remaining boundaries.
 
 The implemented surface is a real 2D vertical slice: `Clear`, `Present`, backbuffer/render-target
 readback, virtual-resolution resize, all five presentation modes, scissor clipping gated by

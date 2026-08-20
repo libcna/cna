@@ -1,6 +1,6 @@
 # Getting started with the CNAEXT engine layer
 
-`plan_modern.md` `MOD-1802`/`MOD-1803`/`MOD-1805`. From an ordinary CNA game to a bloomed HDR frame,
+`plans/plan_modern.md` `MOD-1802`/`MOD-1803`/`MOD-1805`. From an ordinary CNA game to a bloomed HDR frame,
 in the order you actually do it. Everything here is verified by tests in
 `modules/graphics-ext/tests/` and by the examples named beside each step; nothing is aspirational.
 
@@ -105,4 +105,4 @@ passes (`BloomPass`, `FxaaPass`, `TonemapPass`) are the worked examples.
 - [`cnaext-engine-layer.md`](cnaext-engine-layer.md) — what each subsystem does, and its limits.
 - [`cnaext-perf.md`](cnaext-perf.md) — what each of them costs, and how that was measured.
 - `../CNAEXT.md` — why the layer is shaped the way it is.
-- `../plan_modern.md` — the backlog, including every deviation from the original design.
+- `../plans/plan_modern.md` — the backlog, including every deviation from the original design.

@@ -4,7 +4,7 @@ Support for Apple's two platforms, treated as one build/runtime subsystem below 
 The renderer question is separate and stays in `plan_metal.md` / `docs/metal-renderer.md`.
 
 The current contract and validation boundary are maintained in
-[`docs/apple-platforms.md`](docs/apple-platforms.md).
+[`docs/apple-platforms.md`](../docs/apple-platforms.md).
 
 ## Design decisions
 

@@ -1,4 +1,4 @@
-# plan_dx8.md design decision 2/14: mingw-w64's x86_64 target ships NO real d3d8 import
+# plans/plan_dx8.md design decision 2/14: mingw-w64's x86_64 target ships NO real d3d8 import
 # library at all (only the unrelated libd3d8thk.a "thunk" library; only the i686/32-bit target
 # has a real one) -- DXVK's own d3d8.dll.a (D8VK, merged into DXVK 2.0+) exports the real
 # Direct3DCreate8 symbol and is linked against directly instead, spike-confirmed (DX8-0a).

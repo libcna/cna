@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-60: BasicEffect.PreferPerPixelLighting for the MAGNUM renderer.
+// plans/plan_magnum.md MAGNUM-60: BasicEffect.PreferPerPixelLighting for the MAGNUM renderer.
 //
 // The two lighting families cannot be told apart by a diffuse term on a flat quad -- the normal is
 // constant, so interpolating the light result and recomputing it give the same answer everywhere.

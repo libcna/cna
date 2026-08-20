@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-4 (D9-40/D9-41): real D3D9 vertex/index buffer renderers.
+// plans/plan_dx9.md Phase D9-4 (D9-40/D9-41): real D3D9 vertex/index buffer renderers.
 //
 // design decision 2: dynamic (mutable, SetData()-driven) buffers live in D3DPOOL_DEFAULT (D3D9
 // forbids D3DUSAGE_DYNAMIC with D3DPOOL_MANAGED) -- unlike D3DPOOL_MANAGED user resources, these do

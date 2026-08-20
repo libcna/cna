@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-/* plan_binding.md CBIND-040A: the handle lifetime and buffer boundary contract, measured.
+/* plans/plan_binding.md CBIND-040A: the handle lifetime and buffer boundary contract, measured.
  *
  * Every other pure-C test proves what a route *does*. This one proves what the ABI does when a
  * caller gets it wrong -- stale handles, handles of the wrong kind, a child destroyed after its

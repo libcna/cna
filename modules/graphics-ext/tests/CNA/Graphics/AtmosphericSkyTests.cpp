@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2053: a sky computed from the sun rather than sampled from a cube.
+// plans/plan_modern.md MOD-2053: a sky computed from the sun rather than sampled from a cube.
 //
 // What a parameterised sky has to earn is that its *physics* behave: a clear sky blue because short
 // wavelengths scatter more, a sunset red because the light path lengthened, a haze white because

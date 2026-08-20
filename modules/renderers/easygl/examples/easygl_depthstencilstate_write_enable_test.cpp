@@ -13,7 +13,7 @@
 //     compare is 0.5 < 0.2 -> FAILS -> centre stays GREEN (B's colour, drawn on top of A).
 // C is deliberately NOT drawn at the same depth as A: this project's Vulkan renderer hardcodes its
 // depth-compare op per pipeline (ignoring DepthStencilState.DepthBufferFunction entirely -- a
-// separate, already-tracked-shape bug, see plan_graphics.md), and at least one of those hardcoded
+// separate, already-tracked-shape bug, see plans/plan_graphics.md), and at least one of those hardcoded
 // ops is strict VK_COMPARE_OP_LESS rather than FNA's actual LessEqual default -- an equal-depth C
 // would then fail regardless of B's write behaviour, making the test unable to distinguish the two
 // cases. An in-between depth is unambiguous under either a strict or inclusive compare.

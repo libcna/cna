@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx1.md: DIRECTX1 (real DirectDraw v1, no ../free-direct) CTest registration, mirroring D3D9's
+# plans/plan_dx1.md: DIRECTX1 (real DirectDraw v1, no ../free-direct) CTest registration, mirroring D3D9's
 # own cna_directx9_test/cna_directx9_ctest_command shape (Windows-only, MinGW cross-compile + Wine
 # wrapper) rather than DIRECTX3's native-Linux shape, since DIRECTX1 genuinely needs real ddraw.h.
 
@@ -31,7 +31,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
         endif()
     endmacro()
 
-    # plan_dx1.md design decision 11: when cross-compiled from Linux (DIRECTX1 is Windows-only, design
+    # plans/plan_dx1.md design decision 11: when cross-compiled from Linux (DIRECTX1 is Windows-only, design
     # decision 1), CTest itself still runs on the Linux host, so the test COMMAND wraps the real
     # .exe with scripts/run-wine-directx1.sh -- a real, native Windows/MSVC configure needs no Wine
     # wrapper at all and runs the .exe directly, mirroring DirectX9Tests.cmake's own
@@ -44,7 +44,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
         endif()
     endmacro()
 
-    # DX1-1 (plan_dx1.md section 1): a real, automated proof this renderer never silently drifts
+    # DX1-1 (plans/plan_dx1.md section 1): a real, automated proof this renderer never silently drifts
     # into DIRECTX3+ (or Direct3D) territory -- greps its own source for any IDirectDraw2+/
     # IDirectDrawSurface2+/DDSURFACEDESC2 symbol or any d3d.h/IDirect3D token (comments that merely
     # document the discipline are excluded). Pure text check via scripts/check-directx1-v1-only.sh, no

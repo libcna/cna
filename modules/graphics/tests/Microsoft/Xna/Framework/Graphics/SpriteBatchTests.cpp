@@ -715,7 +715,7 @@ TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
     Texture2D tex = Texture2D::CreateWithRendererForTests(4, 4,
         std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(&texRenderer, [](auto*) {}));
 
-    // plan_graphics.md's own Task 164 example depths (0.5, 0.1, 0.9), deliberately submitted out
+    // plans/plan_graphics.md's own Task 164 example depths (0.5, 0.1, 0.9), deliberately submitted out
     // of order. Each dest-rect X coordinate (50/10/90) mirrors its own depth*100, purely as a
     // human-readable marker for which recorded call came from which Draw() call.
     batch.Begin(SpriteSortMode::FrontToBack, BlendState::AlphaBlend);
@@ -743,8 +743,8 @@ TEST(SpriteBatchSortModeTest, FrontToBackSortsByAscendingLayerDepth)
 // layerDepth (larger depth == farther from the camera == drawn first, so nearer sprites composite
 // on top). flushBatch() implements this as
 // std::stable_sort(..., [](a,b){ return a.layerDepth > b.layerDepth; }) -- the mirror image of
-// Task 415's FrontToBack. Reuses Task 415's exact same 3 draws (same plan_graphics.md Task 164/165
-// example depths) with only the sort mode and expected order reversed, per plan_graphics.md's own
+// Task 415's FrontToBack. Reuses Task 415's exact same 3 draws (same plans/plan_graphics.md Task 164/165
+// example depths) with only the sort mode and expected order reversed, per plans/plan_graphics.md's own
 // Task 165 note ("same 3 draws -- assert reverse delivery order").
 // -----------------------------------------------------------------------
 

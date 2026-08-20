@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-18A/XNB-19: unit tests for the primitive and math .xnb readers -- registration
+// plans/plan_xnb.md XNB-18A/XNB-19: unit tests for the primitive and math .xnb readers -- registration
 // under the real FNA canonical name, and correct field-order round-trips via ReadUntyped().
 
 #include <any>

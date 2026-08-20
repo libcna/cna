@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_wicked.md WICKED-80: Texture3D staged transfers corrupted dimension-dependent tail
+// plans/plan_wicked.md WICKED-80: Texture3D staged transfers corrupted dimension-dependent tail
 // rows/slices. At the pinned Wicked revision, GraphicsDevice_Vulkan::CreateTexture allocated
 // UPLOAD/READBACK staging buffers at the TIGHT texel size while the mapped layout it hands out
 // and CopyTexture's buffer addressing consume row pitches aligned to

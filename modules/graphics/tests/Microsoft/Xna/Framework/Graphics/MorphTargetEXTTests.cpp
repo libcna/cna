@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-62/63 (Phase 13B): engine-level tests for BlendMorphTargetsEXT/
+// plans/plan_cnj.md CNB-62/63 (Phase 13B): engine-level tests for BlendMorphTargetsEXT/
 // SetMorphWeightsEXT/EvaluateMorphWeightsEXT with hand-crafted synthetic data (no glTF involved --
 // see RuntimeGltfModelTests.cpp for the glTF-extraction integration tests). Proves the blend math
 // itself: weight=0 reproduces the base pose exactly, weight=1 applies the full delta, two targets
@@ -288,7 +288,7 @@ TEST(EvaluateMorphWeightsEXTTest, FallsBackToLinearWhenTangentsAreMissing)
     EXPECT_NEAR(mid[0], 0.5f, 1e-6f);
 }
 
-// --- plan_gltf.md GLTF-278: a normal delta must apply on EVERY stride with a Normal slot --------
+// --- plans/plan_gltf.md GLTF-278: a normal delta must apply on EVERY stride with a Normal slot --------
 //
 // The stride carrying the Normal is not a property of the morph target; it is a property of the
 // vertex layout the importer chose, and GLTF-215 changed that choice. A metallic-roughness
@@ -390,7 +390,7 @@ TEST(BlendMorphTargetsEXTTest, ThePbrStridesAreNotExcludedFromNormalBlending)
     }
 }
 
-// --- plan_gltf.md GLTF-279: TANGENT deltas, with the handedness left alone ------------------------
+// --- plans/plan_gltf.md GLTF-279: TANGENT deltas, with the handedness left alone ------------------------
 //
 // Morph tangent deltas were never extracted at all, so a morphed PBR surface kept its rest-pose
 // tangent basis while its positions and normals moved -- normal mapping then lit the deformed

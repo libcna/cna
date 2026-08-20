@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_blend2d.md remediation (post-3da643712 review): regression coverage for RenderTarget2D
+// plans/plan_blend2d.md remediation (post-3da643712 review): regression coverage for RenderTarget2D
 // public-property truthfulness and custom-Effect rejection, driven through the REAL public API
 // (Game/GraphicsDeviceManager/GraphicsDevice/RenderTarget2D/SpriteBatch) rather than the internal
 // Blend2DRenderer/Blend2DRenderTargetRenderer classes the other blend2d_*_test.cpp files drive

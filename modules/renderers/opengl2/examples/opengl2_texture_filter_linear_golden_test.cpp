@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_texture_filter_linear_golden_test.cpp's own scene verbatim: a 2-texel texture
 // (Red|Green) stretched across a wide quad, sampled with TextureFilter::Linear via a
 // DualTextureEffect (DiffuseColor=0.5 compensates the doubling factor), at the exact texel-centre

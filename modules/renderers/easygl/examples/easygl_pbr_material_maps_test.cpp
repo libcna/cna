@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-224..227/264/373: real pixel checks for all five PBR material-map bindings,
+// plans/plan_gltf.md GLTF-224..227/264/373: real pixel checks for all five PBR material-map bindings,
 // their channel semantics, and the skinned PBR joint normal matrix.
 //
 // The one-pixel textures are deliberately semantic sentinels. Base colour is red, emissive is

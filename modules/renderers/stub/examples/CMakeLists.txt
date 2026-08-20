@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_stub.md: Stub (no-op) graphics renderer tests. Deliberately no SDL_VIDEODRIVER/DISPLAY
+# plans/plan_stub.md: Stub (no-op) graphics renderer tests. Deliberately no SDL_VIDEODRIVER/DISPLAY
 # environment -- like HEADLESS/SOFTWARE, this renderer never needs either.
 
 # Example/test executables historically live at the build root (scripts, docs and

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MS-PL
 """The corpus registry: which fixtures exist, in which owning group, and what they emit.
 
-`plan_gltf.md` §24.1's ownership model is enforced structurally here: a fixture is defined in
+`plans/plan_gltf.md` §24.1's ownership model is enforced structurally here: a fixture is defined in
 exactly one ``defs`` module, that module's name *is* its owning group, and the distinct-asset count
 is the sum of the owning-group counts. Referencing a fixture from another group never re-counts it.
 """

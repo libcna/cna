@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-101 / GLTF-102: is the L3 sweep total, and does an arbitrary attribute set
+// plans/plan_gltf.md GLTF-101 / GLTF-102: is the L3 sweep total, and does an arbitrary attribute set
 // import without losing anything in silence?
 //
 // `GltfConformanceL3` already compares every manifest primitive field by field. What it cannot do
@@ -408,7 +408,7 @@ TEST(GltfAttributeCoverage, EveryAuthoredAttributeEitherArrivesOrIsNamedInARepor
         // A dropped NORMAL or TANGENT is a stride consequence, so the two reports must agree with
         // the layout that was actually selected rather than with each other.
         //
-        // plan_gltf.md GLTF-278/GLTF-462: asked of the CANONICAL TABLE rather than of a literal
+        // plans/plan_gltf.md GLTF-278/GLTF-462: asked of the CANONICAL TABLE rather than of a literal
         // stride list. The list this replaced said a tangent survives at stride 48 or 68 only, which
         // was already wrong for the dual-UV strides 60 and 76 and became reachable the moment a
         // vertex-coloured primitive started taking stride 60. A test carrying its own copy of an ABI

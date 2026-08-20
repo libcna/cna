@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-30A: differential tests against a reference LZX implementation. Compares
+// plans/plan_xnb.md XNB-30A: differential tests against a reference LZX implementation. Compares
 // CNA::Internal::Xnb::DecompressXnbPayload()'s output, byte-for-byte, against reference output
 // produced by FNA's own, unmodified src/Content/LzxDecoder.cs run under Mono -- see
 // tests/assets/xnb/monogame/windows/lzx/reference-decompressed/README.md for exactly how those

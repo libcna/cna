@@ -22,7 +22,7 @@ namespace CNA::Internal::Renderers::HtmlDom
      * call itself still happens every frame, since a real XNA game keeps resubmitting static
      * sprites regardless), and a frame in which sprites only moved costs one `transform` write each.
      *
-     * See `plan_html_dom.md` for the design decisions and `docs/html-dom-renderer.md` for the
+     * See `plans/plan_html_dom.md` for the design decisions and `docs/html-dom-renderer.md` for the
      * capability boundary. The 3D surface -- depth/stencil clears, vertex/index buffers, every
      * `Draw*Primitives` entry point -- throws "not yet implemented"; `SupportsCapability()` lets a
      * caller check ahead of time instead of relying on the throw.
@@ -44,7 +44,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Clears the active target and drops every sprite queued this frame.
          *
-         * plan_html_dom.md design decision 9: XNA's `Clear` overwrites everything drawn so far,
+         * plans/plan_html_dom.md design decision 9: XNA's `Clear` overwrites everything drawn so far,
          * which in retained mode means resetting the element pool cursor to 0 and setting the root
          * container's `background-color`. With a render target bound it clears that canvas instead.
          *
@@ -82,7 +82,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Updates the presentation/scaling policy at runtime.
          *
-         * plan_html_dom.md HTMLDOM-108: validates @p mode against `CnaPresentationMode`'s real
+         * plans/plan_html_dom.md HTMLDOM-108: validates @p mode against `CnaPresentationMode`'s real
          * range -- an earlier version accepted any int and stored it unchecked, so an invalid
          * ordinal silently corrupted every later geometry computation instead of failing where the
          * bad value was actually passed in.
@@ -96,7 +96,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Converts physical window coordinates to logical game coordinates.
          *
-         * plan_html_dom.md HTMLDOM-108: uses the same per-`CnaPresentationMode` `LogicalViewport`
+         * plans/plan_html_dom.md HTMLDOM-108: uses the same per-`CnaPresentationMode` `LogicalViewport`
          * geometry `Present()` renders with (`ComputeLogicalViewport()`), not a single
          * height-derived uniform scale that only happened to be correct for
          * `FixedHeightDynamicWidth`. Under `Letterbox`, a @p windowX/@p windowY that falls in the
@@ -117,7 +117,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Converts logical game coordinates to physical window coordinates.
          *
-         * plan_html_dom.md HTMLDOM-108: exact inverse of `TransformWindowToLogical`, using the same
+         * plans/plan_html_dom.md HTMLDOM-108: exact inverse of `TransformWindowToLogical`, using the same
          * per-mode `LogicalViewport` geometry.
          *
          * @param logX    Logical X.
@@ -138,7 +138,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Clips subsequent rendering to the given rectangle, in logical game pixels.
          *
-         * plan_html_dom.md HTMLDOM-80 / design decision 13: implemented as a real CSS
+         * plans/plan_html_dom.md HTMLDOM-80 / design decision 13: implemented as a real CSS
          * `clip-path: inset()`. HTMLDOM-102: only actually applied when
          * `RasterizerState.ScissorTestEnable` is true (see `ApplyRasterizerState`) -- an earlier
          * version applied it unconditionally, matching the native 2D renderer's omission (which never
@@ -172,12 +172,12 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Restricts rendering to a sub-rectangle of the current render target.
          *
-         * plan_html_dom.md HTMLDOM-98. Confirmed non-gap against every other 2D-only sibling
+         * plans/plan_html_dom.md HTMLDOM-98. Confirmed non-gap against every other 2D-only sibling
          * (the native 2D renderer, `CANVAS` and `DIRECTX3` all leave this inherited no-op), but a real,
          * closeable one against `EASYGL`, which supports a genuine GL sub-region `Viewport`
          * (split-screen/sub-panel rendering) -- nothing about DOM/CSS compositing rules that out.
          *
-         * plan_html_dom.md HTMLDOM-107: only RECORDS the viewport -- it does not touch the DOM at
+         * plans/plan_html_dom.md HTMLDOM-107: only RECORDS the viewport -- it does not touch the DOM at
          * all, the same shape `SetScissorRect` already uses. `#cna-dom-root` always stays at the
          * full backbuffer's own size/position; the viewport's own `(X,Y)` offset is instead
          * captured once per `SpriteBatch` flush and applied directly to that batch's own sprites
@@ -269,7 +269,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Reads back rendered pixels from the currently bound render target.
          *
-         * plan_html_dom.md design decision 11: no browser API rasterizes a live DOM subtree, so the
+         * plans/plan_html_dom.md design decision 11: no browser API rasterizes a live DOM subtree, so the
          * DOM backbuffer genuinely cannot be read back. A bound render target is a real canvas and
          * is read for real.
          *
@@ -314,7 +314,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         /**
          * @brief Records whether subsequent draws should honour the scissor rect.
          *
-         * plan_html_dom.md HTMLDOM-102: `CullMode::None` and SpriteBatch's default
+         * plans/plan_html_dom.md HTMLDOM-102: `CullMode::None` and SpriteBatch's default
          * `CullCounterClockwiseFace` both preserve the renderer's ordinary sprite path;
          * `CullClockwiseFace` is rejected because this retained DOM renderer cannot cull by
          * post-transform winding;
@@ -340,7 +340,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * @brief Reports every graphics capability as unsupported, except
          *        `GraphicsCapability::AdditiveBlending`, which is queried for real.
          *
-         * plan_html_dom.md HTMLDOM-117: `BlendState.Additive` degrades silently (not an exception)
+         * plans/plan_html_dom.md HTMLDOM-117: `BlendState.Additive` degrades silently (not an exception)
          * on a browser without CSS `mix-blend-mode: plus-lighter` support -- this lets a caller
          * check for that ahead of time instead of only discovering it by comparing pixels.
          *
@@ -410,7 +410,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * @brief The physical-pixel rectangle the logical (game-coordinate) surface occupies, and
          * the logical size itself.
          *
-         * plan_html_dom.md HTMLDOM-108: the single computation every `CnaPresentationMode` value's
+         * plans/plan_html_dom.md HTMLDOM-108: the single computation every `CnaPresentationMode` value's
          * geometry derives from, ported from the GPU reference viewport computation (the
          * "complete renderer" this task's own row names) rather than re-derived from scratch, so this
          * renderer's Letterbox/Overscan/Stretch/NativeBackBuffer math matches an already-tested

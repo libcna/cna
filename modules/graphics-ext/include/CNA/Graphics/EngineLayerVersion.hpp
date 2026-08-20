@@ -8,7 +8,7 @@
 /**
  * @brief Revision of the `CNA::Graphics` engine-layer API compiled into this build.
  *
- * plan_modern.md `MOD-8`. An integer that starts at 1 and increases whenever the engine layer's
+ * plans/plan_modern.md `MOD-8`. An integer that starts at 1 and increases whenever the engine layer's
  * public shape changes in a way a consumer could notice. It is a macro as well as a function
  * because the two answer different questions: the macro is what the *header* a translation unit
  * compiled against said, the function is what the *library* it ended up linked to says. When those

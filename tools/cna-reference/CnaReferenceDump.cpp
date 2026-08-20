@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 479 (plan_graphics.md Phase 53): CNA-side reference-value dump tool.
+// Task 479 (plans/plan_graphics.md Phase 53): CNA-side reference-value dump tool.
 //
 // Mirrors tools/fna-reference/{NonRenderingApiReference,PackedVectorReference,
 // ViewportReference}.cs exactly -- same enum list, same state-preset list, same PackedVector

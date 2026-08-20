@@ -177,8 +177,8 @@
 > tests added (3 for the scoping bug, 1 for the missing-`cnjVersion` bypass); full-suite regression
 > after both fixes: 4408 tests, 4406 passed, same 2 pre-existing skips, 0 failures.
 >
-> Turns [`cnj.md`](cnj.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
-> mirroring how [`plan_xnb.md`](plan_xnb.md) turned [`xnb.md`](xnb.md) into concrete tasks. Read
+> Turns [`cnj.md`](../cnj.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
+> mirroring how [`plan_xnb.md`](plan_xnb.md) turned [`xnb.md`](../xnb.md) into concrete tasks. Read
 > `cnj.md` first — this file assumes its design decisions (resolution order, envelope shape,
 > `sourceFile`, `RegisterCnjLoader<T>`) as given and does not re-argue them.
 >

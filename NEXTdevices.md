@@ -9,10 +9,10 @@ modern C++ internally. Branch: `feature/devices`.
 
 **Current effort: an independent "perfection re-audit" of `Microsoft::Devices`.**
 On 2026-07-17 the user supplied a fresh, independent 92-task re-audit
-(`audit_devices_2026-07-17.md`, merged verbatim into `plan_devices.md` as
+(`audit_devices_2026-07-17.md`, merged verbatim into `plans/plan_devices.md` as
 **"Section 16. Independent perfection re-audit backlog (2026-07-17)"**). This section
 is the primary source of truth for current work and **intentionally reopens areas
-older parts of `plan_devices.md` describe as CLOSED** — an older CLOSED label is not
+older parts of `plans/plan_devices.md` describe as CLOSED** — an older CLOSED label is not
 by itself a reason to skip re-examining a Section 16 finding.
 
 **Explicit execution order given by the user:**
@@ -32,10 +32,10 @@ by itself a reason to skip re-examining a Section 16 finding.
   established `NOXNA` policy and documentation.
 - Do not weaken tests to make them pass. Do not silence sanitizer findings without
   fixing the underlying issue or rigorously proving it safe.
-- Per-task workflow ends with: updating `plan_devices.md`'s Section 16 entry (status,
+- Per-task workflow ends with: updating `plans/plan_devices.md`'s Section 16 entry (status,
   resolution/implementation summary, files changed, tests run, sanitizer result,
   remaining limitations, hardware evidence status) **and** a focused git commit.
-- Keep `plan_devices.md` updated continuously, and update this file periodically —
+- Keep `plans/plan_devices.md` updated continuously, and update this file periodically —
   especially before context grows large enough that another session must resume cold.
 
 **Important labeling convention established this pass — read before closing anything:**
@@ -54,16 +54,16 @@ once the guard exists), not claims requiring a sanitizer or real hardware to act
 observe. Apply this distinction task-by-task: read the acceptance criteria literally
 and ask "can this specific sentence be verified by reading the code, or does it name a
 run that must actually happen?" `VIB2-003`, `VIB2-004`, and `ANDR2-002` (this pass) are
-the first three examples of the "stays OPEN" case — read their `plan_devices.md`
+the first three examples of the "stays OPEN" case — read their `plans/plan_devices.md`
 resolution notes as the template.
 
 ---
 
 ## 2. Current status (2026-07-18, P1 tractable backlog exhausted, moving into P2)
 
-**All P0 tasks closed** (see prior checkpoints / `plan_devices.md` for full detail).
+**All P0 tasks closed** (see prior checkpoints / `plans/plan_devices.md` for full detail).
 
-**Precise Section 16 task count (2026-07-18, counted directly from `plan_devices.md`,
+**Precise Section 16 task count (2026-07-18, counted directly from `plans/plan_devices.md`,
 not from memory — re-count with the script below before trusting this if picking up
 much later, since it will go stale):**
 - **92 real tasks total** in Section 16 (`### TASK-ID — ... — CLOSED/OPEN` headers;
@@ -88,7 +88,7 @@ Re-count anytime with:
 ```bash
 python3 - <<'PYEOF'
 import re
-with open('plan_devices.md') as f:
+with open('plans/plan_devices.md') as f:
     content = f.read()
 idx = content.find('## 16. Independent perfection re-audit backlog')
 blocks = re.split(r'\n(?=### )', content[idx:])
@@ -284,7 +284,7 @@ PYEOF
     Doxygen comment never disclosed this — a caller reading only the public doc could
     reasonably expect a real declination-corrected value. Fixed the doc comment.
     Deliberately did **not** stub a speculative "declination provider" extension point —
-    `docs/location-future-plan.md` (re-read, still accurate) already establishes any
+    `docs/location-future-plans/plan.md` (re-read, still accurate) already establishes any
     future location support belongs in a separate `System::Device::Location` namespace,
     not bolted onto `Microsoft::Devices::Sensors`. **Left OPEN**: doc fix is real and
     complete, but the declination-provider integration itself is correctly blocked on
@@ -500,7 +500,7 @@ memory for the full per-finding breakdown. Commit `422ed4c4`:
     UBSan, sharp-runtime `TimeSpan::copy_count` TSan, `NetworkSession.cpp` ASan — all
     live outside these suites). Dependency revisions + full logs recorded (logs kept
     in this session's scratchpad, not committed — matches this project's existing
-    convention of recording exact counts/commands/revisions in `plan_devices.md`
+    convention of recording exact counts/commands/revisions in `plans/plan_devices.md`
     itself rather than checking in raw build/run output). **Left OPEN**: only the
     `LSan` half of "`ASan/LSan`" is unachievable here; everything else fully delivered.
 34. `COMP2-003` (`77f8e0ec`) — the flat/upright heading formulas themselves were
@@ -684,7 +684,7 @@ was never required by the actual standing rule.)
 ---
 
 ## 3. Recent changes — see Section 2's numbered list plus prior checkpoints (git
-history / `plan_devices.md`) for full technical detail on each. Not duplicated here.
+history / `plans/plan_devices.md`) for full technical detail on each. Not duplicated here.
 
 ---
 
@@ -714,7 +714,7 @@ checkpoints (unchanged):
   end-to-end on real hardware** — no haptic device, no real SDL sensor, and no Android
   hardware/emulator exist in this container. Each has a documented hardware validation
   procedure in `docs/devices-hardware-checklist.md` (Sections 2a, 4a, 4b, 6a, 7a
-  respectively) and is explicitly left **OPEN** in `plan_devices.md` (see Section 1's
+  respectively) and is explicitly left **OPEN** in `plans/plan_devices.md` (see Section 1's
   labeling convention). `SDLCORE-005` additionally leaves its required work's
   mid-session live-disconnect bullet entirely unimplemented (see Section 2's own entry)
   — a real architectural gap, not just an untested one.
@@ -737,7 +737,7 @@ checkpoints (unchanged):
 - `ANDR2-011` ("consolidate Android sensor bridges onto a shared looper") was scanned
   and judged a major architecture redesign (up to 6 worker threads per `Motion`
   instance → one shared looper) — comparable to `LIFE-007`/`010`/`011`, not attempted.
-- 28+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
+- 28+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plans/plan_devices.md` is the
   actual source of truth — this file only tracks what's been *closed or progressed*).
 
 ---
@@ -814,12 +814,12 @@ sensors | grep -i tctl
 ## 8. Next smallest task
 
 Continue the P1 backlog. Not yet triaged/started, roughly in the order encountered
-scanning `plan_devices.md` Section 16 (no mandated order within P1 — pick by
+scanning `plans/plan_devices.md` Section 16 (no mandated order within P1 — pick by
 tractability):
 
 - **`LIFE-007`/`010`/`011`, `ANDR2-011` — deliberately set aside, not merely
   unstarted.** Large architecture tasks; `LIFE-011` specifically has a **real design
-  tension** already found (see prior checkpoint / its own `plan_devices.md` notes) — do
+  tension** already found (see prior checkpoint / its own `plans/plan_devices.md` notes) — do
   not attempt a naive symmetric `Stop()` wait, it reintroduces `TEST2-001`'s fixed
   deadlock. `ANDR2-011` ("consolidate Android sensor bridges onto a shared looper") was
   scanned and judged comparably large (up to 6 worker threads per `Motion` instance →
@@ -863,7 +863,7 @@ tractability):
   and fixed real oracle-independent bugs, `003` documented honest reachability, `004`
   confirmed prior work already correct, `005` closed outright (test-coverage gap, no
   oracle actually needed). `BASE2-006`/`007` remain: `007` is already `CLOSED` (see its
-  own `plan_devices.md` entry, done in an earlier pass); `BASE2-006` (float/NaN/hash
+  own `plans/plan_devices.md` entry, done in an earlier pass); `BASE2-006` (float/NaN/hash
   value-semantics audit) has not been started this pass.
 - `VIB2-005`–`007` — remaining Vibrate items (`005` needs a direct-backend Android
   validation; `006`/`007` are host-testable design/behavior questions).
@@ -912,9 +912,9 @@ tractability):
   has no task of its own yet — worth creating one if picked up, rather than bolting it
   onto `SDLCORE-005` retroactively.
 
-Before starting any task, grep `plan_devices.md` for other tasks touching the same
+Before starting any task, grep `plans/plan_devices.md` for other tasks touching the same
 file/function first — several tasks this pass and last overlapped with or were
-already resolved by a sibling task. Read each task's full `plan_devices.md` entry
+already resolved by a sibling task. Read each task's full `plans/plan_devices.md` entry
 before starting, and read Section 1's labeling-convention note above before deciding
 whether a finished implementation should be marked CLOSED or left OPEN.
 
@@ -973,7 +973,7 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ## 10. Resume prompt
 
 ```
-Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
+Read plans/plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
 file (NEXTdevices.md)'s own Section 2 top for the precise, directly-counted
 task breakdown (92 total / 27 CLOSED / 24 OPEN-but-progressed / 41
@@ -1055,14 +1055,14 @@ quick continuation). `VIB2-006` (P2) was the first P2 item picked up this
 pass for exactly this reason -- if the P1 backlog stays exhausted, continue
 into P2 (`VIB2-007`, `TEST2-003`, `TEST2-006`'s host-testable pieces if any,
 etc.) rather than forcing an unready P1 architecture task. Read each task's
-full plan_devices.md entry before starting. For each task worked: implement,
+full plans/plan_devices.md entry before starting. For each task worked: implement,
 add/extend tests where a real test seam exists (several P1 items are
 Android-only with zero host coverage -- verify those via a real NDK
 cross-compile of the exact translation unit instead), build
 cmake-build-devices-ubsan and re-run the Devices/Sensors filtered suite (use
 the precise filter in Section 7, not a broad one -- it incidentally trips a
 pre-existing, unrelated Vector3 UBSan finding), run devices-tsan (3-4x) if
-the task touches concurrent host-buildable logic, update plan_devices.md's
+the task touches concurrent host-buildable logic, update plans/plan_devices.md's
 Section 16 entry with a full resolution/progress note, and make one focused
 git commit per task or tightly-related group.
 

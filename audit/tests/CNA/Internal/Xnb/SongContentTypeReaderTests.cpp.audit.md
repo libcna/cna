@@ -26,7 +26,7 @@ conflating the two.
 ## Checklist Results
 - `IsRegisteredUnderRealFnaCanonicalName` correctly verifies the exact canonical name string.
 - `ReferenceToNonexistentFileFallsBackToUnstrippedPathThenSongCtorRejectsIt`'s comment additionally
-  cross-references `plan_media.md MEDIA-10/MEDIA-75` to confirm the specific exception type
+  cross-references `plans/plan_media.md MEDIA-10/MEDIA-75` to confirm the specific exception type
   (`System::IO::FileNotFoundException`, matching the established `AudioEngine`/`SoundBank`/
   `WaveBank` precedent) propagates correctly all the way through `ContentManager::Load<Song>()`,
   not just at the raw constructor level — a meaningful, specific assertion beyond "it throws

@@ -4,7 +4,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include <algorithm>
 
-// plan_metal.md METAL-34-style extraction: the actual letterbox/logical-viewport arithmetic is
+// plans/plan_metal.md METAL-34-style extraction: the actual letterbox/logical-viewport arithmetic is
 // pure C++ (plain floats/ints and CnaPresentationMode, a shared enum with zero Objective-C
 // dependency) -- only the caller-side physical window snapshot needs a real window, so that step
 // stays in MetalRenderer.mm's own computeLogicalViewport() wrapper. This is the established GPU
@@ -14,7 +14,7 @@ namespace CNA::Internal::Renderers::Metal
     /** @brief Physical and logical dimensions of Metal's active presentation rectangle. */
     struct MetalLogicalViewport { float x=0, y=0, width=0, height=0, logicalWidth=0, logicalHeight=0; };
 
-    // plan_metal.md METAL-155/156/157/158/159: real virtual-resolution/letterbox math, previously
+    // plans/plan_metal.md METAL-155/156/157/158/159: real virtual-resolution/letterbox math, previously
     // completely bypassed (SpriteBatch drew from raw physical drawable pixels). `pw`/`ph` are the
     // real physical window/drawable size in pixels; `virtualW`/`virtualH` are the requested virtual
     // resolution (<=0 means "none requested", degrading to the physical size unscaled). See

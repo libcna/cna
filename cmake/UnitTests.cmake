@@ -1,4 +1,4 @@
-# plan_runtimerenderer.md RTR-P9-19: renderer gates that decide whether a renderer's OWN tests are
+# plans/plan_runtimerenderer.md RTR-P9-19: renderer gates that decide whether a renderer's OWN tests are
 # compiled, or its libraries exposed to the test executable, test LIST MEMBERSHIP
 # (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In single-renderer mode the
 # list holds one entry and the two are identical; in a multi-renderer build a renderer's tests must
@@ -52,7 +52,7 @@ if(CNA_BUILD_TESTS)
     # as the Glide ABI programs just above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
 
-    # plan_binding.md CBIND-033: the C API module owns its own test executables
+    # plans/plan_binding.md CBIND-033: the C API module owns its own test executables
     # (modules/c-api/CMakeLists.txt) and none of its C++ translation units is a GTest unit --
     # HandleRegistryTest.cpp and BoundaryDetailTest.cpp define their own main(), and
     # AbiHeaderCpp.cpp is a pure ABI compile check linked into cna_c_api_abi_smoke. Letting the
@@ -61,13 +61,13 @@ if(CNA_BUILD_TESTS)
     # programs and the module probes above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/c-api/tests/.*\\.cpp$")
 
-    # plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
+    # plans/plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
     # program with its own main(), for the same reason as the two entries above. Swept into
     # CnaTests it does not merely add a case -- its main() replaces GTest's, so the test binary
     # links, runs the smoke app and exits without running a single test.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/apple/.*\\.cpp$")
 
-    # plan_platform.md PLAT-119: the platform module's SDL3-specific tests exercise
+    # plans/plan_platform.md PLAT-119: the platform module's SDL3-specific tests exercise
     # CNA::Platform::Sdl3, which is compiled only when CNA_PLATFORM=SDL3. Under any other
     # platform selection they would reference symbols that do not exist and fail to link -- found
     # by actually configuring CNA_PLATFORM=HEADLESS rather than by inspection. The
@@ -89,7 +89,7 @@ if(CNA_BUILD_TESTS)
             ".*/modules/platform/tests/.*/Sdl2PlatformTests\\.cpp$")
     endif()
 
-    # plan_platform.md PLAT-94: like the general platform implementation above, the native
+    # plans/plan_platform.md PLAT-94: like the general platform implementation above, the native
     # SDL3 audio test directly exercises a private implementation compiled only for its selected
     # audio platform. Contract/selection tests remain implementation-neutral.
     if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
@@ -102,7 +102,7 @@ if(CNA_BUILD_TESTS)
         # These suites exercise the SDL3_mixer implementation itself, not the portable XNA
         # facade.  The implementation is purposefully absent from SDL2/NULL link graphs.
         #
-        # plan_platform.md PLAT-SDL2-8 (2026-08-17): AudioCategoryTests and WaveBankTests were
+        # plans/plan_platform.md PLAT-SDL2-8 (2026-08-17): AudioCategoryTests and WaveBankTests were
         # missing from this list. They assert on real XACT playback -- `cue->getIsPlayingProperty()`
         # is true after Play(), instance limits evict a *playing* cue, a wave-bank entry decodes to
         # an exact frame count -- all of which need the engine that this branch just excluded, so
@@ -135,7 +135,7 @@ if(CNA_BUILD_TESTS)
             ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
     endif()
 
-    # plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
+    # plans/plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
     # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
     # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.
     # Everywhere else they always build, whatever CNA_PLATFORM says, because the implementation
@@ -165,11 +165,11 @@ if(CNA_BUILD_TESTS)
     # multi-process spawning exists in a single Node.js/Wasm module. Also excluded on Android: the
     # harness path baked in via CNA_NET_HARNESS_PATH is an absolute path on the build machine, not
     # the on-device filesystem, and CnaTests is run as a bare pushed executable, not a packaged app
-    # with its own bundled assets. iOS (plan_apple.md APPLE-5) is excluded for both of those
+    # with its own bundled assets. iOS (plans/plan_apple.md APPLE-5) is excluded for both of those
     # reasons at once: an app-sandboxed process may not spawn another executable at all, and the
     # baked-in build-machine harness path does not exist inside the .app either. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
-    # plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
+    # plans/plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
     # this glob picks up ENet-specific tests unconditionally, but those files include
     # <enet/enet.h> directly, which only resolves when CNA_ENABLE_NET actually configured
     # the vendored ENet target (cmake/ThirdPartyENet.cmake). CNA_ENABLE_NET=OFF is a real,
@@ -214,7 +214,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Audio/AudioMixerTests\\.cpp$")
     endif()
 
-    # GltfToCnjToolTests.cpp (plan_cnj.md CNB-52) uses the same POSIX-only posix_spawn/sys-wait
+    # GltfToCnjToolTests.cpp (plans/plan_cnj.md CNB-52) uses the same POSIX-only posix_spawn/sys-wait
     # process APIs to spawn cna_tool_gltf_to_cnj as an independent OS process, for the same
     # reasons as the harness-spawning tests above.
     if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
@@ -225,7 +225,7 @@ if(CNA_BUILD_TESTS)
     # (posix_spawn, poll, sys/wait.h) to spawn tools/devices/shutdown_ordering_harness.cpp as an
     # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
     # Excluded on the same platforms and for the same reasons.
-    # plan_platform.md PLAT-SDL2-6: also excluded for an SDL2-only selection, where its harness is
+    # plans/plan_platform.md PLAT-SDL2-6: also excluded for an SDL2-only selection, where its harness is
     # not built at all. That harness exists to call the real SDL3 SDL_Quit() at process teardown,
     # which is an ordering hazard this selection cannot reach -- and building it would put SDL3
     # back on a link line the selection is defined by not having (cmake/Sdl2OnlyConfiguration.cmake).
@@ -233,7 +233,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
-    # plan_wicked.md: the Wicked renderer's own regression suites live under
+    # plans/plan_wicked.md: the Wicked renderer's own regression suites live under
     # modules/renderers/wicked/tests/, and the pipeline-key test among them includes the
     # renderer's header, which resolves only when the WICKED renderer is configured (the
     # WickedEngine include directories come with the renderer target). Excluded from every other
@@ -245,7 +245,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Wicked/.*\\.cpp$")
     endif()
 
-    # plan_magnum.md: the MAGNUM renderer's own GTest suite lives under
+    # plans/plan_magnum.md: the MAGNUM renderer's own GTest suite lives under
     # modules/renderers/magnum/tests/ and includes the renderer's headers, which resolve only
     # when the MAGNUM renderer is configured (the Magnum::GL include directories come with the
     # renderer target). Excluded from every other renderer's corpus by the same convention as the
@@ -254,7 +254,7 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Magnum/.*\\.cpp$")
     endif()
 
-    # plan_fna3d.md: the FNA3D renderer's own GTest suites live under
+    # plans/plan_fna3d.md: the FNA3D renderer's own GTest suites live under
     # modules/renderers/fna3d/tests/ and include the renderer's headers, which resolve only when
     # the FNA3D renderer is configured (the FNA3D/MojoShader include roots come with the renderer
     # target). Excluded from every other renderer's corpus by the same convention as the Wicked
@@ -301,7 +301,7 @@ if(CNA_BUILD_TESTS)
             gtest_main
     )
 
-    # plan_platform.md PLAT-SDL2-6: SDL3 is a test-fixture dependency here (native renderer and
+    # plans/plan_platform.md PLAT-SDL2-6: SDL3 is a test-fixture dependency here (native renderer and
     # audio fixtures), not a framework one -- CNA's own modules link their platform library
     # privately and conditionally since PLAT-122. Under an SDL2-only selection every source that
     # needs SDL3 has already been filtered out above, and linking it anyway would put two
@@ -359,11 +359,11 @@ if(CNA_BUILD_TESTS)
     # not propagate to CnaTests via target_link_libraries and must be added here too.
     target_include_directories(CnaTests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
-            # plan_runtimerenderer.md RTR-P9-2: shared test-support headers reached by their
+            # plans/plan_runtimerenderer.md RTR-P9-2: shared test-support headers reached by their
             # namespace path (CNA/RendererTestGate.hpp), matching how every module's public headers
             # are spelled.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/tests
-            # plan_platform.md PLAT-77/PLAT-90: modules/platform/tests holds shared test
+            # plans/plan_platform.md PLAT-77/PLAT-90: modules/platform/tests holds shared test
             # scaffolding (PlatformTestDecorator.hpp) that tests in other modules include to drive
             # CNA against a controlled platform. It replaces the eight per-subsystem injectable
             # backend seams modules/input used to carry for the same purpose, so it has to be
@@ -377,7 +377,7 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
     )
 
-    # plan_fx.md FX-060: the shared compiled-effect conformance suite is header-only test support
+    # plans/plan_fx.md FX-060: the shared compiled-effect conformance suite is header-only test support
     # (fixtures plus the contract assertions every CompiledEffects backend must satisfy). It lives
     # under the top-level tests/ tree because it belongs to no single renderer module -- the point
     # is that a new backend runs the identical contract with only its own device setup.
@@ -385,7 +385,7 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
     )
 
-    # plan_runtimerenderer.md RTR-P9-9: one CNA_RENDERER_PRESENT_<IDENTITY> define per renderer
+    # plans/plan_runtimerenderer.md RTR-P9-9: one CNA_RENDERER_PRESENT_<IDENTITY> define per renderer
     # COMPILED INTO THIS BUILD, on the test executable only.
     #
     # A renderer's own test suite guards its body on `#if defined(CNA_RENDERER_<X>)`, and only the
@@ -412,7 +412,7 @@ if(CNA_BUILD_TESTS)
         endif()
     endforeach()
 
-    # plan_runtimerenderer.md RTR-P9-9, second half: a module's own include root is not enough when
+    # plans/plan_runtimerenderer.md RTR-P9-9, second half: a module's own include root is not enough when
     # its PUBLIC headers include a third-party library's headers in turn. LLGL is the case that
     # showed it -- modules/renderers/llgl/include/.../LlglSdlSurface.hpp opens with
     # `#include <LLGL/Surface.h>`, and LLGL's include directory reaches the llgl module through the
@@ -433,7 +433,7 @@ if(CNA_BUILD_TESTS)
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
-    # plan_runtimerenderer.md RTR-P10-12: FNA3D's suites include mojoshader.h, and that header
+    # plans/plan_runtimerenderer.md RTR-P10-12: FNA3D's suites include mojoshader.h, and that header
     # includes the GENERATED mojoshader_version.h unless MOJOSHADER_NO_VERSION_INCLUDE is defined.
     # cna_fna3d carries that switch for the renderer target, but RTR-P9-9 gave this executable the
     # present renderers' include PATHS only -- so CnaTests found the header and then failed on the
@@ -447,7 +447,7 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
     endif()
 
-    # plan_magnum.md MAGNUM-40: the MAGNUM renderer's own tests exercise its XNA-ordinal -> Magnum-enum
+    # plans/plan_magnum.md MAGNUM-40: the MAGNUM renderer's own tests exercise its XNA-ordinal -> Magnum-enum
     # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
     # Magnum PRIVATE on the renderer target (same discipline as wgpu-native above), so it is exposed
     # to this test executable only, and only in the Magnum configuration.
@@ -455,7 +455,7 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
     endif()
 
-    # plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
+    # plans/plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
     # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
     # renderer target (same discipline as WebGPU just above), so expose them here too.
     if("DILIGENT" IN_LIST CNA_RENDERER_IDENTITIES)
@@ -493,7 +493,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_tool_gltf_to_cnj)
-        # plan_cnj.md CNB-52: GltfToCnjToolTests.cpp spawns the real converter tool as a
+        # plans/plan_cnj.md CNB-52: GltfToCnjToolTests.cpp spawns the real converter tool as a
         # subprocess (same reasoning as cna_net_two_process_harness above -- a separate
         # executable with its own main(), not a library call) and needs its real built path
         # baked in at compile time.
@@ -514,7 +514,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_platform_terminal_restoration_harness)
-        # plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
+        # plans/plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
         # sharply -- four of the five exit paths TerminalSession must restore on destroy the
         # process, so they cannot be asserted inside this binary at all.
         add_dependencies(CnaTests cna_platform_terminal_restoration_harness)
@@ -524,7 +524,7 @@ if(CNA_BUILD_TESTS)
     endif()
 
     if(TARGET cna_platform_terminal_resize_harness)
-        # plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
+        # plans/plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
         add_dependencies(CnaTests cna_platform_terminal_resize_harness)
         target_compile_definitions(CnaTests PRIVATE
             CNA_PLATFORM_TERMINAL_RESIZE_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_resize_harness>"
@@ -551,7 +551,7 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE easy-gl)
     endif()
 
-    # plan_dx.md DX-15 follow-up + plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
+    # plans/plan_dx.md DX-15 follow-up + plans/plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
     # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12/Direct2D MinGW cross-targets,
     # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
     # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
@@ -579,8 +579,8 @@ if(CNA_BUILD_TESTS)
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX1")
-            # plan_dx2.md DX2-84 follow-up: this gap pre-dates DIRECTX2 (DIRECTX1 never got this wiring
-            # either, plan_dx1.md's own DX1-88 full-suite regression must have run CnaTests.exe
+            # plans/plan_dx2.md DX2-84 follow-up: this gap pre-dates DIRECTX2 (DIRECTX1 never got this wiring
+            # either, plans/plan_dx1.md's own DX1-88 full-suite regression must have run CnaTests.exe
             # directly through run-wine-directx1.sh by hand rather than via `ctest -L DIRECTX1`'s
             # gtest_discover_tests(PRE_TEST) step) -- fixed here for both renderers together, same
             # skip-gate reasoning as D3D9/D3D11/D3D12 above (a bare --gtest_list_tests never opens
@@ -591,30 +591,30 @@ if(CNA_BUILD_TESTS)
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX2_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx2.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX3")
-            # plan_dx3.md: wired proactively (not discovered by a from-scratch regression this
+            # plans/plan_dx3.md: wired proactively (not discovered by a from-scratch regression this
             # time) -- same DX2-84 finding/fix, applied up front for this new renderer.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX3_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx3.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
-            # plan_dx5.md: same proactive wiring as DIRECTX3.
+            # plans/plan_dx5.md: same proactive wiring as DIRECTX3.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX5_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx5.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX6")
-            # plan_dx6.md: same proactive wiring as DIRECTX3/DIRECTX5.
+            # plans/plan_dx6.md: same proactive wiring as DIRECTX3/DIRECTX5.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX6_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx6.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
-            # plan_dx7.md: same proactive wiring as DIRECTX3/DIRECTX5/DIRECTX6.
+            # plans/plan_dx7.md: same proactive wiring as DIRECTX3/DIRECTX5/DIRECTX6.
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX7_SKIP_DDRAW_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx7.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
-            # plan_dx8.md: DXVK-delivered (not DirectDraw-based), same proactive wiring shape as
+            # plans/plan_dx8.md: DXVK-delivered (not DirectDraw-based), same proactive wiring shape as
             # D3D9's own run-wine-dxvk9.sh gate -- CNA_DX8_SKIP_DXVK_GATE for a binary that
             # legitimately never opens a real D3D8 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_DX8_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx8.sh")
         elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
-            # plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DIRECTX8's
+            # plans/plan_d3d10.md: DXVK-delivered (via d3d10core), same proactive wiring shape as DIRECTX8's
             # own gate -- CNA_D3D10_SKIP_DXVK_GATE for a binary that legitimately never opens a
             # real D3D10 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
@@ -663,7 +663,7 @@ if(CNA_BUILD_TESTS)
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
-    # plan_gltf.md GLTF-010: the glTF conformance ladder as one runnable label.
+    # plans/plan_gltf.md GLTF-010: the glTF conformance ladder as one runnable label.
     #
     # `ctest -L gltf-conformance` runs the whole ladder. Each rung is registered as its OWN ctest
     # entry rather than one filter over all of them, because the ladder's whole point is that a
@@ -681,7 +681,7 @@ if(CNA_BUILD_TESTS)
     # parses this exact list out of this file and asserts that every registered Gltf* suite falls
     # into exactly one rung -- so a new suite that matches no rung fails the run instead of
     # silently sitting outside `ctest -L gltf-conformance`. Keep the entries here only.
-    # plan_modern.md MOD-1309/MOD-1310 add two suites that exist only when the engine layer is
+    # plans/plan_modern.md MOD-1309/MOD-1310 add two suites that exist only when the engine layer is
     # compiled in. They are named here unconditionally -- the rung list is parsed as TEXT by
     # GltfConformanceLadderTests, so a CMake variable inside one of these strings would be read
     # literally -- and that test knows which of them are CNAEXT-gated.
@@ -706,7 +706,7 @@ if(CNA_BUILD_TESTS)
             TIMEOUT 300 LABELS "gltf-conformance" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     endforeach()
 
-    # plan_platform.md PLAT-91: audio has its own platform contract and selection axis rather
+    # plans/plan_platform.md PLAT-91: audio has its own platform contract and selection axis rather
     # than inheriting from CNA::Platform. Keep its native-SDK-free/lifecycle/buffer-granularity
     # contract visible as a dedicated CTest; the shared conformance suite runs every implementation
     # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
@@ -714,7 +714,7 @@ if(CNA_BUILD_TESTS)
         COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl2AudioDeviceTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
         LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
-    # plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
+    # plans/plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
     # future identifier, and an unknown value without spawning six full nested project configs.
     # The selection file is intentionally script-mode-safe for exactly this validation path.
     foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 SDL2 NULL OPENAL WASAPI ALSA BOGUS)
@@ -748,7 +748,7 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Sdl2OnlyRendererGate.cmake)
     set_tests_properties(CnaSdl2OnlyRendererGate PROPERTIES LABELS "platform;configuration")
 
-    # plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
+    # plans/plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
     # get one from SDL's dummy driver rather than a display server. That only works in a process
     # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
     # another suite usually has, so these skip there and would otherwise contribute no coverage

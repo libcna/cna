@@ -14,7 +14,7 @@
 // pattern, already used consistently by `BasicEffect`/`DualTextureEffect`/etc.).
 //
 // REAL BUG FOUND AND FIXED ON BGFX by writing this test (see the Bgfx variant of this test and
-// plan_graphics.md's Task 379 entry for the full finding): Bgfx's texture-binding code only ever
+// plans/plan_graphics.md's Task 379 entry for the full finding): Bgfx's texture-binding code only ever
 // called `bgfx::setTexture()` when a real texture was present (`if (params.texture0 && ...)`),
 // with **no fallback at all** — meaning a null-texture draw silently left whatever texture the
 // *previous* draw call had bound, a stale, undefined result inconsistent with EasyGL's and

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_media.md MEDIA-79: no test file existed for VisualizationData at all before this task.
+// plans/plan_media.md MEDIA-79: no test file existed for VisualizationData at all before this task.
 
 #include <gtest/gtest.h>
 #include "Microsoft/Xna/Framework/Media/VisualizationData.hpp"

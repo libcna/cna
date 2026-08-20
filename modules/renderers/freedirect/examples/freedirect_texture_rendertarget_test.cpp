@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture and render-target renderer tests for the DIRECTX3
+// plans/plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture and render-target renderer tests for the DIRECTX3
 // (DirectDraw, via the ../free-direct sibling) graphics renderer.
 //
 // Check A -- Texture2D construction (CreateTexture, a real offscreen surface) + SetData(level=0,

@@ -1,6 +1,6 @@
 # Who deletes what in `CNA::Graphics`
 
-`plan_modern.md` **MOD-1903**. One table, so that no class in the engine layer is ambiguous about
+`plans/plan_modern.md` **MOD-1903**. One table, so that no class in the engine layer is ambiguous about
 ownership. Derived by reading every member of every public header in
 `modules/graphics-ext/include/CNA/Graphics/` on 2026-08-18; re-derive it if that set changes.
 

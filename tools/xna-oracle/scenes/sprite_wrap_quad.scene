@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_wrap_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_wrap_quad
 # The first scene to exercise D9-92: SpriteBatch with a REAL, discriminating TextureAddressMode
 # (PointWrap), proving Wrap addressing genuinely tiles the source texture rather than clamping to
 # its edge texel. Extends the shared scene format with two new SpriteBatch-mode keys:

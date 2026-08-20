@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: fog_gradient_quad
+# plans/plan_dx9.md D9-A5 scene corpus: fog_gradient_quad
 # The first scene to exercise IEffectFog (BasicEffect.FogEnabled/FogColor/FogStart/FogEnd), a
 # feature shared by all 5 XNA Stock Effects but not yet touched by any earlier scene in this
 # corpus. A solid-white VertexColorEnabled quad spanning z=0 (near/top edge) to z=1 (far/bottom

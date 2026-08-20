@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-25: real fog for the OpenGL4 graphics renderer -- adds fog uniforms
+// plans/plan_opengl4.md GL4-25: real fog for the OpenGL4 graphics renderer -- adds fog uniforms
 // (uFogEnabled/uFogColor/uFogStart/uFogEnd) and Task 1111's own already-verified fog-factor
 // formula (matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly when
 // World=View=Identity) to all 7 GpuDrawParams-driven stride/dispatch shaders: the new

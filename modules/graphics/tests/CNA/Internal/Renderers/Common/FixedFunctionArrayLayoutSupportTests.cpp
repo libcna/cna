@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-473. A fixed-function renderer binds each client array at a literal byte offset,
+// plans/plan_gltf.md GLTF-473. A fixed-function renderer binds each client array at a literal byte offset,
 // and that literal is right only for the records its route was written for. OPENGLES1 routed every
 // draw it has no fixed-function equivalent for -- PbrEffect, SkinnedEffect, a custom ShaderEffect,
 // instancing, an unmet dual-texture or environment-map precondition -- into its colour path, which

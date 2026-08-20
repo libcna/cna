@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX8 (DX-60/DX-60a): explicit GPU-side constant-buffer POD structs matching the
+// plans/plan_dx.md Phase DIRECTX8 (DX-60/DX-60a): explicit GPU-side constant-buffer POD structs matching the
 // real HLSL `cbuffer` declarations DX-13-hlsl already wrote (register scheme recorded in that
 // task's own plan row) -- NOT a raw memcpy of the whole-surface GpuDrawParams convenience struct.
 // Each struct's field order/offsets are verified via static_assert against the actual HLSL source
@@ -221,7 +221,7 @@ namespace CNA::Internal::Renderers::D3DCommon
     static_assert(sizeof(D3DSprite2DConstants) == 16, "D3DSprite2DConstants must be a 16-byte buffer (sprite2d's real PerDraw cbuffer is only 8 bytes of shader-visible data)");
     static_assert(sizeof(D3DSprite2DConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
-    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.frag.hlsl and
+    /// plans/plan_cnj.md CNB-58 follow-up: matches pbr3d.frag.hlsl and
     /// pbr_skinned3d.frag.hlsl's `cbuffer PerDraw : register(b0)` byte-for-byte (496 bytes) -- the
     /// metallic-roughness BRDF's material-level constants (PbrEffect/SkinnedPbrEffect). The vertex
     /// stages declare only the prefix they consume. Includes World (unlike D3DPerDrawConstants)
@@ -242,7 +242,7 @@ namespace CNA::Internal::Renderers::D3DCommon
         float SpecularFresnelInputs[4]; ///< offset 400: xyz = unclamped F0, w = specular factor
         float SpecularMapFlags[4]; ///< offset 416: x = decode specular-colour sample from sRGB
         float SpecularTextureTransformRows[4][4]; ///< offset 432: two rows per specular map
-        /// plan_gltf.md GLTF-465: offset 496, x = COLOR_0 multiplier enable
+        /// plans/plan_gltf.md GLTF-465: offset 496, x = COLOR_0 multiplier enable
         /// (PbrEffect/SkinnedPbrEffect::VertexColorEnabledEXT). Declared for every PBR variant so
         /// the cbuffer stays one shape; only the variants whose vertex record carries a colour slot
         /// read it.
@@ -264,7 +264,7 @@ namespace CNA::Internal::Renderers::D3DCommon
     static_assert(offsetof(D3DPbrPerDrawConstants, VertexColorFlags) == 496, "D3DPbrPerDrawConstants vertex-colour-flag offset mismatch vs HLSL");
     static_assert(sizeof(D3DPbrPerDrawConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
-    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's shared
+    /// plans/plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's shared
     /// `cbuffer PbrLights : register(b1)` (unskinned Pbr3d) and pbr_skinned3d.vert.hlsl/
     /// pbr_skinned3d.frag.hlsl's `cbuffer PbrLights : register(b2)` (PbrSkinned3d, since BoneBlock
     /// claims b1 there) byte-for-byte (144 bytes) either way -- the same struct, only the bind

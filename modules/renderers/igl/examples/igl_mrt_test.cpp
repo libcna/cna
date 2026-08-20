@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-22/IGL-55: multiple simultaneous colour attachments (MRT), the first cut for
+// plans/plan_igl.md IGL-22/IGL-55: multiple simultaneous colour attachments (MRT), the first cut for
 // this renderer -- proves the render pass genuinely carries more than one colour attachment at
 // once and that binding/unbinding an MRT set does not corrupt the back buffer.
 //

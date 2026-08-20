@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2035: does this renderer sample a half-float image in a loop the way it
+// plans/plan_modern.md MOD-2035: does this renderer sample a half-float image in a loop the way it
 // samples an 8-bit one?
 //
 // The question matters because `DepthNormalPrepass` stopped storing depth in a half-float target.

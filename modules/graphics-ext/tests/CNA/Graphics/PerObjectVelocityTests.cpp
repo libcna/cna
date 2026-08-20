@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2033: per-object velocity.
+// plans/plan_modern.md MOD-2033: per-object velocity.
 //
 // The claim is precisely the one the docs have said for several phases the layer could NOT make: a
 // car crossing a static shot blurs. So the camera is held perfectly still in every case here, which

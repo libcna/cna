@@ -5,7 +5,7 @@
 namespace CNA::Internal::Renderers::Stub
 {
     /// Vertex-buffer handle for the Stub renderer. Stores only the vertex count it was given --
-    /// no backing storage of any kind (plan_stub.md design decision 3).
+    /// no backing storage of any kind (plans/plan_stub.md design decision 3).
     class StubVertexBufferRenderer : public IVertexBufferRenderer
     {
     public:
@@ -106,7 +106,7 @@ namespace CNA::Internal::Renderers::Stub
     /**
      * @brief CNAEXT. The Stub graphics renderer -- a deliberately minimal `IGraphicsRenderer`
      * implementation that renders nothing, touches no window, no GPU library, and no SDL video
-     * subsystem, and keeps no bookkeeping of any kind (see `plan_stub.md`'s design decisions).
+     * subsystem, and keeps no bookkeeping of any kind (see `plans/plan_stub.md`'s design decisions).
      *
      * Every method either does nothing or returns a fixed/trivial value. This is not a cut corner:
      * it is the entire point of this renderer -- the smallest possible complete `IGraphicsRenderer`

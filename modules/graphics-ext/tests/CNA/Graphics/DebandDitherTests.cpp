@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2132: debanding dither on the step from scene-referred to display-referred.
+// plans/plan_modern.md MOD-2132: debanding dither on the step from scene-referred to display-referred.
 //
 // An eight-bit frame has 256 values to hold a gradient with. Where the tonemapper compresses -- and
 // it always compresses somewhere, that being what it is for -- a long stretch of scene values lands

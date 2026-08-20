@@ -52,7 +52,7 @@ namespace CNA::Internal::Xnb
         // Reject an adversarial/corrupt width/height/depth before any allocation is attempted --
         // see Texture2DReader's own note for why both the individual-positivity check and
         // CheckedMultiplyOrThrow() (rather than raw int64_t multiplication, which can itself
-        // overflow -- REMED-CONTENT-009) are both needed (plan_xnb.md XNB-43). This product has
+        // overflow -- REMED-CONTENT-009) are both needed (plans/plan_xnb.md XNB-43). This product has
         // one more factor than Texture2DReader's own (width*height*depth*4 vs width*height*4), so
         // it is if anything more overflow-prone, not less.
         if (width <= 0 || height <= 0 || depth <= 0)

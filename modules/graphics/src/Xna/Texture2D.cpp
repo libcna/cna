@@ -47,7 +47,7 @@ namespace Microsoft::Xna::Framework::Graphics
     // Private helpers
     // -----------------------------------------------------------------------
 
-    // plan_runtimerenderer.md design decision 9 / plan_dx9.md D9-103: GraphicsProfile.Reach/HiDef
+    // plans/plan_runtimerenderer.md design decision 9 / plans/plan_dx9.md D9-103: GraphicsProfile.Reach/HiDef
     // texture-size ceilings. Only a renderer with a real capability structure to consult (D3D9)
     // enforces one; every other renderer reports no ceiling, which is exactly what it did when this
     // was a compile-time renderer branch. Checked as a profile CEILING, not a hardware
@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     static void ValidateTexture2DFormatEXT(const GraphicsDevice* device, SurfaceFormat format)
     {
-        // plan_runtimerenderer.md design decision 9: a renderer that stores each format in its own
+        // plans/plan_runtimerenderer.md design decision 9: a renderer that stores each format in its own
         // native layout (SKIA) answers this itself; every other renderer defers to the framework's
         // own rule, which is what the #else branch of the former #ifdef did.
         if (device == nullptr)
@@ -378,7 +378,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Texture2D's renderer is shareable -- ContentManager's weak texture cache hands the same
         // ITextureRenderer to every wrapper reconstructed from a cache hit -- so updating it in
         // place would publish this upload to every other holder of that texture, which is exactly
-        // the aliasing CnjCacheIsolationTests pins (plan_cnj.md CNB-33). Building a fresh renderer
+        // the aliasing CnjCacheIsolationTests pins (plans/plan_cnj.md CNB-33). Building a fresh renderer
         // detaches this wrapper, which is what a full-level upload has always done here.
         if (renderer_ && gpuOnlyContent_)
         {

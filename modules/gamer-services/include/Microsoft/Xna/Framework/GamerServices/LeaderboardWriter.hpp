@@ -19,7 +19,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Gets the leaderboard entry identified by the given leaderboard identity.
          *
-         * Task 4.3 (plan_net.md Phase 4): loads (or creates, on first access) a real entry for
+         * Task 4.3 (plans/plan_net.md Phase 4): loads (or creates, on first access) a real entry for
          * the owning gamer from the local store, keyed by LeaderboardIdentity. The returned
          * pointer is owned by this writer (stored by value in entriesByLeaderboardKeyEXT_, a
          * std::map - reference/pointer-stable across further insertions) and stays valid until

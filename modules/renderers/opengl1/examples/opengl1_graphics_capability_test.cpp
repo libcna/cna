@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl1.md phase 11: locks in GraphicsDevice::SupportsCapability()'s truth table for the
+// plans/plan_opengl1.md phase 11: locks in GraphicsDevice::SupportsCapability()'s truth table for the
 // OPENGL1 renderer against concrete, independently-checkable evidence -- not just "it returns
 // true/false", but that the *reason* it returns that value is real: AnisotropicFiltering is
 // cross-checked against OpenGL1Renderer's own runtime extension detection (not a static
@@ -8,7 +8,7 @@
 // sdlrenderer_graphics_capability_test.cpp/directx3_graphics_capability_test.cpp/
 // canvas_graphics_capability_test.cpp do for their own (much narrower) 2D-only renderers.
 //
-// plan_opengl1.md item 23 (EasyGL parity, found 2026-07-20): OcclusionQuery is no longer
+// plans/plan_opengl1.md item 23 (EasyGL parity, found 2026-07-20): OcclusionQuery is no longer
 // unconditionally false -- real ARB_occlusion_query/core-1.5 support is now cross-checked the
 // same way AnisotropicFiltering already is (a raw GL_VERSION/GL_EXTENSIONS scan independent of
 // OpenGL1Capabilities' own bookkeeping), and backed by a real, functionally meaningful occlusion
@@ -95,7 +95,7 @@ protected:
         check(!dev.SupportsCapability(GraphicsCapability::MultipleRenderTargets), "MultipleRenderTargets not supported");
         check(!dev.SupportsCapability(GraphicsCapability::CustomEffects), "CustomEffects not supported");
 
-        // plan_opengl1.md item 23: OcclusionQuery must track the REAL driver version/extension,
+        // plans/plan_opengl1.md item 23: OcclusionQuery must track the REAL driver version/extension,
         // not a hardcoded guess in either direction -- same cross-check style as
         // AnisotropicFiltering above, independent of OpenGL1Capabilities' own bookkeeping.
         int glMajor = 1, glMinor = 1;

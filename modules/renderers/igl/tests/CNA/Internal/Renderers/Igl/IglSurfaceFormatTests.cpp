@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_igl.md IGL-65: the IGL renderer's surface-format boundary and transfer byte arithmetic.
+// plans/plan_igl.md IGL-65: the IGL renderer's surface-format boundary and transfer byte arithmetic.
 //
 // Two real defects this suite exists to keep out.
 //
@@ -19,7 +19,7 @@
 // still admits only `SurfaceFormat::Color` for every renderer but Skia.
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not only the identity macro -- this is device-free
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not only the identity macro -- this is device-free
 // policy coverage, worth running whenever the family is compiled in.
 #if defined(CNA_RENDERER_IGL) || defined(CNA_RENDERER_PRESENT_IGL)
 #include "CNA/Internal/Renderers/Igl/IglSurfaceFormats.hpp"

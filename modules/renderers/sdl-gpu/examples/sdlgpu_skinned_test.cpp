@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-34: SkinnedEffect proof for the SDL_GPU graphics renderer, and the
+// plans/plan_sdlgpu.md SDLGPU-34: SkinnedEffect proof for the SDL_GPU graphics renderer, and the
 // empirical spike this task itself needed: whether SDL_gpu's push-uniform-data mechanism can
 // carry a full 72-bone (4608-byte) palette. Verified: SDL_PushGPUVertexUniformData follows std140
 // UBO layout conventions (per its own doc comment), not a hardware push-constant register file, so
@@ -9,7 +9,7 @@
 // Checks A/B are directly ported from this project's own existing
 // vulkan_skinnedeffect_translation_bone_test.cpp / vulkan_skinnedeffect_twobone_blend_test.cpp
 // (same geometry/bone values), using RenderTarget2D::GetData() instead of GetBackBufferData()
-// since this renderer's swapchain-download path segfaults (see plan_sdlgpu.md's SDLGPU-39 row).
+// since this renderer's swapchain-download path segfaults (see plans/plan_sdlgpu.md's SDLGPU-39 row).
 //
 // Check A -- a single translation bone (index 0, weight 1): a textured quad shifted right by the
 //   bone's translation -- left/right sample points show the cleared background, only the centre

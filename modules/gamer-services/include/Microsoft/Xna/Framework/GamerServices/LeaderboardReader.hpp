@@ -82,7 +82,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to advance to the next page.
          *
-         * Task 4.4 (plan_net.md Phase 4): completes synchronously (a local reslice of the
+         * Task 4.4 (plans/plan_net.md Phase 4): completes synchronously (a local reslice of the
          * already-cached entries, no disk I/O) - unlike a real networked page fetch, there is no
          * real deferred work to wait on.
          *
@@ -129,7 +129,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Synchronously reads a page of a leaderboard.
          *
-         * Task 4.4 (plan_net.md Phase 4): real, local-store-backed implementation. Entries are
+         * Task 4.4 (plans/plan_net.md Phase 4): real, local-store-backed implementation. Entries are
          * sorted by Rating descending (CNA-original default - no FNA reference behavior exists to
          * match, since FNA's own LeaderboardReader is identically all-NotSupportedException); a
          * persisted gamertag with no currently signed-in Gamer* match is skipped (documented
@@ -271,7 +271,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * calling this: passing a full, un-sliced leaderboard here (rather than the specific page
          * `[start, start + size)`) will silently produce a wrong (too-short-or-shifted) page,
          * since this constructor trusts its input completely and never re-derives the intended
-         * slice itself. Task 4.4 (plan_net.md Phase 4): every real `BeginRead` overload now calls
+         * slice itself. Task 4.4 (plans/plan_net.md Phase 4): every real `BeginRead` overload now calls
          * this with the *full* local leaderboard as `entries` (not pre-sliced to one page),
          * relying on the slicing loop above to derive the actual page - the real (non-stub)
          * implementation this precondition originally anticipated, now in place.

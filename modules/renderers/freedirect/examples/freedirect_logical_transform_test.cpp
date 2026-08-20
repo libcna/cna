@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X7 (DX3-68): TransformWindowToLogical/TransformLogicalToWindow (real
+// plans/plan_freedirect.md Phase X7 (DX3-68): TransformWindowToLogical/TransformLogicalToWindow (real
 // letterbox scale+offset) tests for the DIRECTX3 (DirectDraw, via the ../free-direct sibling)
 // graphics renderer.
 //

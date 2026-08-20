@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: TextureAddressMode.Mirror (plan_opengl1.md item 16, EasyGL parity).
+// OPENGL1 renderer: TextureAddressMode.Mirror (plans/plan_opengl1.md item 16, EasyGL parity).
 //
 // Before this, WrapMode()'s only two outcomes were GL_REPEAT (Wrap=0) and GL_CLAMP_TO_EDGE
 // (everything else, including Mirror=2) -- a game requesting Mirror silently got Clamp instead,

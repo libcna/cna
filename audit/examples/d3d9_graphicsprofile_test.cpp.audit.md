@@ -200,7 +200,7 @@ No CRITICAL/HIGH/MEDIUM findings. Two LOW/INFO observations:
   counter-example showing the later-added profile check was written more defensively than the
   pre-existing code path it sits next to.
 - `git log --oneline -- examples/d3d9_graphicsprofile_test.cpp` shows a single authoring commit
-  (`a1b60cb2 feat(plan_dx9.md): close Phase D9-10 -- GraphicsProfile.Reach/HiDef made real on D3D9`)
+  (`a1b60cb2 feat(plans/plan_dx9.md): close Phase D9-10 -- GraphicsProfile.Reach/HiDef made real on D3D9`)
   plus a follow-up (`905362ab ... TextureCube/Texture3D/MaxRenderTargets profile enforcement`) that
   extended this same file — consistent with the file's own two-part Check A-I / J-R structure.
 

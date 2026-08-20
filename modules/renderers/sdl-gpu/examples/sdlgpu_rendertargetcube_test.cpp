@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-36: RenderTargetCube proof for the SDL_GPU graphics renderer -- a single
+// plans/plan_sdlgpu.md SDLGPU-36: RenderTargetCube proof for the SDL_GPU graphics renderer -- a single
 // SDL_GPU_TEXTURETYPE_CUBE texture (6 layers), one face bound as the active render target at a
 // time, including real MSAA (auto-resolved via SDL_GPUColorTargetInfo.resolve_texture/
 // resolve_layer at render-pass end) and mip generation.
@@ -9,7 +9,7 @@
 // header comment documents as unable to discriminate between individual faces), verification here
 // uses a real per-face GPU readback (SdlGpuRenderTargetCubeRenderer::GetData, pulled forward from
 // SDLGPU-39 -- targets a texture this renderer fully controls, not the swapchain, so it does not
-// hit the segfault documented in plan_sdlgpu.md's SDLGPU-39 row) -- a stronger, per-face-precise
+// hit the segfault documented in plans/plan_sdlgpu.md's SDLGPU-39 row) -- a stronger, per-face-precise
 // check than the reflection-based "some face came back non-garbage" bar other renderers settle for.
 //
 // Check A -- all 6 faces filled with distinct solid colors via Clear() (no draw), each read back

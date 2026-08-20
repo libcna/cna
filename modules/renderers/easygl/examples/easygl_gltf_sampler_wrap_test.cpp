@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-189: the three generated out-of-range UV fixtures at the real sampler.
+// plans/plan_gltf.md GLTF-189: the three generated out-of-range UV fixtures at the real sampler.
 //
 // At source position (13/15,14/15), the shared authored UV is (1.05,1.6). CLAMP therefore samples
 // the reference image's bottom-right yellow quadrant, REPEAT its bottom-left blue quadrant, and

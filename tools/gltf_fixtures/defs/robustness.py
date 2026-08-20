@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Malformed-input fixtures -- owning group ``robustness`` (plan_gltf.md §24.2).
+"""Malformed-input fixtures -- owning group ``robustness`` (plans/plan_gltf.md §24.2).
 
 Each asset here violates a structural constraint whose violation would make decoding read outside
 the file's own buffers. They exist to prove the validation pass actually runs: without them,

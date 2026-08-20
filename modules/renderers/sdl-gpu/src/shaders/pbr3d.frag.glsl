@@ -31,7 +31,7 @@ layout(set = 3, binding = 0) uniform PC {
     vec3  light0Dir;
     float textureEnabled;  // unused -- PbrEffect always samples the base color texture
     vec3  light0Diffuse;
-    float vertexColorEnabled; // plan_gltf.md GLTF-465: gates the COLOR_0 product below
+    float vertexColorEnabled; // plans/plan_gltf.md GLTF-465: gates the COLOR_0 product below
 } pc;
 
 layout(set = 3, binding = 1) uniform LitLightParams {
@@ -121,7 +121,7 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot) {
 void main() {
     vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(fragUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x);
-    // plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
+    // plans/plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
     // half is where a BLEND-mode vertex-coloured primitive's transparency comes from. The colour is
     // linear, so unlike the base-colour texture it is not sRGB-decoded.
     vec4 cnaVertexColor = (pc.vertexColorEnabled > 0.5) ? fragColor0 : vec4(1.0);

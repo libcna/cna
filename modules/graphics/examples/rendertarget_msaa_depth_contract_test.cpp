@@ -174,7 +174,7 @@ namespace
      *
      * False on WEBGPU, whose `RenderTarget2D` constructor raises
      * `std::runtime_error("... mip-chain regeneration (mipMap=true) is not implemented on this
-     * renderer yet -- see plan_webgpu.md WEBGPU-53/54")`. That is a deliberate, separately tracked
+     * renderer yet -- see plans/plan_webgpu.md WEBGPU-53/54")`. That is a deliberate, separately tracked
      * boundary and -- importantly for this file -- it is a CATCHABLE public refusal rather than a
      * process abort, which is exactly the contract leg M14 asserts there.
      */

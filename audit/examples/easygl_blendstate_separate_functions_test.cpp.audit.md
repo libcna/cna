@@ -32,7 +32,7 @@ complicate the *function* check) and opposite `BlendFunction` assignments per ch
 
 **Needs attention** — same finding class as its `separate_factors_test.cpp` sibling: correct test design and math,
 but a stale Vulkan/Task-868 comment that specifically predicts Check A must fail on Vulkan
-("Vulkan... always hardcodes VK_BLEND_OP_ADD"), a claim `plan_graphics.md`'s Task 868 closure entry directly
+("Vulkan... always hardcodes VK_BLEND_OP_ADD"), a claim `plans/plan_graphics.md`'s Task 868 closure entry directly
 contradicts by name (`SeparateFunctions` listed among the 5 tests now fully passing post-fix).
 
 ## Checklist Results
@@ -105,11 +105,11 @@ Its `Add`/`Subtract` math is independently confirmed against FNA's own `BlendFun
 - Severity: MEDIUM
 - Confidence: HIGH
 - Category: maintainability / documentation-accuracy
-- Location/symbol: lines 18-21: *"NOTE: Vulkan's ApplyBlendState (see plan_graphics.md Task 868) takes
+- Location/symbol: lines 18-21: *"NOTE: Vulkan's ApplyBlendState (see plans/plan_graphics.md Task 868) takes
   colorBlendFunc/alphaBlendFunc as unused parameters (commented out in the signature) and always hardcodes
   VK_BLEND_OP_ADD — so Check A (expecting Subtract) is expected to fail there, while Check B (expecting Add) is
   expected to coincidentally pass, mirroring the Task 305/306 pattern."*
-- Evidence: `plan_graphics.md` line 393 (Task 868, `✅ CLOSED`) explicitly names `SeparateFunctions` among the 5
+- Evidence: `plans/plan_graphics.md` line 393 (Task 868, `✅ CLOSED`) explicitly names `SeparateFunctions` among the 5
   tests reconfirmed to fully pass (not just Check B) after the fix added real `ToVkBlendOp` mapping, described as
   mirroring "EasyGL's already-correct `ToEasyGLBlendEquation` tables exactly."
 - Why it matters: identical risk profile to the other five stale-Vulkan-comment findings in this batch — a reader

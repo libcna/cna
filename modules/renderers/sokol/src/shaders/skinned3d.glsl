@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-35: the Sokol renderer's skinned 3D program -- SkinnedEffect, always
+// plans/plan_sokol.md SOKOL-35: the Sokol renderer's skinned 3D program -- SkinnedEffect, always
 // textured and lit (ambient + up to 3 directional lights, Blinn-Phong specular, emissive, fog,
 // alpha test), matching FNA's SkinnedEffect.fx exactly (it always samples a texture and always
 // lights, unlike BasicEffect's toggles). The fragment stage is a byte-for-byte copy of

@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Per-vertex-lit sibling of skinned3d.vert.hlsl/.frag.hlsl --
-// plan_graphics.md Phase 80 (Task 1106/1107): real XNA renders SkinnedEffect's lit path
+// plans/plan_graphics.md Phase 80 (Task 1106/1107): real XNA renders SkinnedEffect's lit path
 // per-vertex by default (PreferPerPixelLighting == false). Skinning math is unchanged; the
 // Blinn-Phong lighting evaluation (identical to skinned3d.frag.hlsl's own) moves into this vertex
 // stage instead, interpolated across the triangle rather than recomputed per pixel. Only selected

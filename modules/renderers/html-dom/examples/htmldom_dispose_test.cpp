@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md HTMLDOM-95: verifies that HtmlDomTextureRenderer/HtmlDomRenderTargetRenderer
+// plans/plan_html_dom.md HTMLDOM-95: verifies that HtmlDomTextureRenderer/HtmlDomRenderTargetRenderer
 // dispose/cleanup is REAL, not just "looks right on paper". Code review alone showed
 // ~HtmlDomTextureRenderer() calling CNA_HtmlDom_DestroyTexture (which deletes
 // Module['cnaDomTextures'][id]) and ~HtmlDomRenderTargetRenderer() unbinding itself if it was the
@@ -50,7 +50,7 @@ namespace
         return Module['cnaDomTextures'] ? Object.keys(Module['cnaDomTextures']).length : 0;
     });
 
-    // plan_html_dom.md HTMLDOM-109: total live entries in the global variant cache, across every
+    // plans/plan_html_dom.md HTMLDOM-109: total live entries in the global variant cache, across every
     // texture/render target -- the same size a texture/render-target destruction or a render-target
     // rebind must shrink by exactly its own contribution, not leave behind as orphaned records.
     EM_JS(int, JsVariantCacheSize, (), {
@@ -58,11 +58,11 @@ namespace
         return cache ? cache.size : 0;
     });
 
-    // plan_html_dom.md HTMLDOM-114: whether the shared DOM surface (#cna-dom-root and everything
+    // plans/plan_html_dom.md HTMLDOM-114: whether the shared DOM surface (#cna-dom-root and everything
     // CNA_HtmlDom_EnsureRoot owns) currently exists at all.
     EM_JS(int, JsSurfaceExists, (), { return Module['cnaDomRoot'] ? 1 : 0; });
 
-    /// plan_html_dom.md HTMLDOM-114: how many live HtmlDomRenderer instances currently
+    /// plans/plan_html_dom.md HTMLDOM-114: how many live HtmlDomRenderer instances currently
     /// reference the shared DOM surface -- see CNA_HtmlDom_EnsureRoot/DestroyRoot's own comments.
     EM_JS(int, JsRendererRefCount, (), { return Module['cnaDomRendererRefCount'] || 0; });
 
@@ -196,7 +196,7 @@ protected:
 
         if (frame_ == 3)
         {
-            // plan_html_dom.md HTMLDOM-95d: rapid create-then-immediately-destroy churn, the
+            // plans/plan_html_dom.md HTMLDOM-95d: rapid create-then-immediately-destroy churn, the
             // pattern most likely to expose an off-by-one in registry bookkeeping or an
             // accumulating leak that a single batch (frame 1's own check) is too coarse to catch.
             // Texture ids are assigned monotonically and never reused (NextTextureId()), so this
@@ -218,7 +218,7 @@ protected:
                   "texture ids leave the registry exactly where it started, not accumulating");
         }
 
-        // plan_html_dom.md HTMLDOM-109: destroying a texture must remove exactly its own live
+        // plans/plan_html_dom.md HTMLDOM-109: destroying a texture must remove exactly its own live
         // records from the global variant cache -- previously the cache's own LRU array kept a
         // now-meaningless (id,key) pair around until it happened to reach the front of the eviction
         // queue, at which point it could wrongly delete a DIFFERENT, still-live texture's variant
@@ -257,7 +257,7 @@ protected:
                   "records, not leaving them behind as orphaned entries the cache never reclaims");
         }
 
-        // plan_html_dom.md HTMLDOM-109: rebinding a render target as a render target -- the
+        // plans/plan_html_dom.md HTMLDOM-109: rebinding a render target as a render target -- the
         // invalidation path that used to just reset `entry.variants = {}` -- must drop exactly that
         // target's own cache records too, without disturbing any other live texture's entries.
         if (frame_ == 5)
@@ -295,7 +295,7 @@ protected:
                   "(id,key) pairs the cache never reclaims");
         }
 
-        // plan_html_dom.md HTMLDOM-114: a SECOND HtmlDomRenderer, constructed while the
+        // plans/plan_html_dom.md HTMLDOM-114: a SECOND HtmlDomRenderer, constructed while the
         // FIRST (this test's own, real) one is still alive and sharing the SAME window, must not
         // silently ADOPT the shared DOM surface and then rip it out from under the first renderer
         // when the second one alone is destroyed. This is a real, confirmed defect the reference-

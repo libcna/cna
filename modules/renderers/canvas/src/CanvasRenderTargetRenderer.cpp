@@ -9,7 +9,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_canvas.md CANVAS-22: switches Module['cnaCurrentCtx'] (see CanvasRenderer.cpp) to
+// plans/plan_canvas.md CANVAS-22: switches Module['cnaCurrentCtx'] (see CanvasRenderer.cpp) to
 // this render target's own off-screen context, so subsequent Clear()/Draw()/ReadBackbuffer() calls
 // target it instead of the main canvas. The counterpart, CNA_Canvas2D_UnbindRenderTarget(), lives
 // in CanvasRenderer.cpp (SetRenderTarget2D(nullptr)'s path).
@@ -74,7 +74,7 @@ namespace CNA::Internal::Renderers::Canvas
         if (level < 0)
             throw System::ArgumentOutOfRangeException(
                 "level", std::to_string(level), "level must not be negative.");
-        // plan_canvas.md CANVAS-21's boundary: Canvas2D has no mip chain, so a level > 0 request is
+        // plans/plan_canvas.md CANVAS-21's boundary: Canvas2D has no mip chain, so a level > 0 request is
         // rejected rather than answered from level 0.
         if (level > 0)
             throw System::NotSupportedException(

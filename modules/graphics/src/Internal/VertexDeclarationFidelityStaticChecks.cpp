@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-156: the canonical stride table, tied to the GPU stream structs it describes.
+// plans/plan_gltf.md GLTF-156: the canonical stride table, tied to the GPU stream structs it describes.
 //
 // `InferredLayoutForStride` states, for each stride the importer can emit, which attribute lives at
 // which byte offset. Every renderer reads a vertex buffer through that table. The buffers

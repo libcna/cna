@@ -5,7 +5,7 @@
 - Source file: `examples/cross_backend_diagnostic_compare.cpp`
 - Audit status: AUDITED
 - Subsystem: `examples-tests-generic` shard — standalone comparator tool for the cross-backend
-  diagnostic pair (`plan_software.md` SOFTWARE-61/SOFTWARE-84).
+  diagnostic pair (`plans/plan_software.md` SOFTWARE-61/SOFTWARE-84).
 - File type: standalone `main()` executable (`cna_diag_compare`), **not** a `Game` subclass, **not**
   CTest-registered (`cmake/Harnesses.cmake:150-152`: `if(CNA_BUILD_TESTS) add_executable(cna_diag_compare
   examples/cross_backend_diagnostic_compare.cpp) endif()` — no `add_test`/`cna_register_backend_test`

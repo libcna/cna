@@ -5,7 +5,7 @@
 // scale, at the level that actually exists here. See docs/skia-ganesh-artifact.md's "SKIA-163"
 // section for why the "2D parity oracle"/"performance" halves of this task's acceptance text are
 // explicitly NOT attempted by this file -- they need a real Ganesh IGraphicsRenderer that does not
-// exist yet, a genuine gap in plan_skia.md's own Phase S17 task sequencing, not something this
+// exist yet, a genuine gap in plans/plan_skia.md's own Phase S17 task sequencing, not something this
 // file can honestly claim to close.
 //
 // This source only compiles its real assertions in a GANESH-mode build (CNA_SKIA_MODE_GANESH).

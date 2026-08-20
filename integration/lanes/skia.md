@@ -267,7 +267,7 @@ Verified by reading their overrides. The refusal itself is already pinned by `Sk
 The EasyGL control is the campaign's principal instrument, and it had **never been run against this
 lane** — its own validation has always been the Skia suite. Running it, and then building a *third*
 backend from these sources, found **two defects in shared code, neither reachable from any Skia
-test**. Both are fixed here; both are recorded in `plan_postaudit.md` §20 and §22.
+test**. Both are fixed here; both are recorded in `plans/plan_postaudit.md` §20 and §22.
 
 ### Fixed and verified during adaptation
 

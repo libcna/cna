@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof #3 -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof #3 -- reuses
 // examples/easygl_alphatesteffect_golden_test.cpp's own AlphaTestEffect scene verbatim
 // (ReferenceAlpha=128, AlphaFunction=Greater, Alpha=192/255, strictly above reference -> drawn,
 // not discarded) and its own golden PNG (examples/golden/easygl_alphatesteffect_golden_test.png).

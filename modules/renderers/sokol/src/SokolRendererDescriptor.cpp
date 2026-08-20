@@ -1,7 +1,7 @@
-// plan_runtimerenderer.md RTR-P1-D35: the Sokol family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D35: the Sokol family's pre-construction contract.
 //
 // sokol_gfx creates no window or context of its own -- this renderer calls the platform window request on
-// CNA's window (plan_sokol.md SOKOL-4, design decision 1). CNA_SOKOL_API stays a compile-time
+// CNA's window (plans/plan_sokol.md SOKOL-4, design decision 1). CNA_SOKOL_API stays a compile-time
 // choice; the GL APIs are the only ones that context path can currently reach.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -18,7 +18,7 @@ namespace CNA::Internal::Renderers::Sokol
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

@@ -11,7 +11,7 @@ if(ANDROID)
     # ASensorManager_*/ASensorEventQueue_*/ALooper_* API directly (no JNI) --
     # those symbols live in libandroid.so, not libc/libc++. PUBLIC so any
     # executable linking the devices module (e.g. cna_demo_devices) picks up the
-    # transitive dependency automatically (plan_devices.md Task DEVICES-0121).
+    # transitive dependency automatically (plans/plan_devices.md Task DEVICES-0121).
     #
     # Task ANDR2-006 (2026-07-17): the same file's debug-only
     # __android_log_print() diagnostic (disable/destroy failure reporting)

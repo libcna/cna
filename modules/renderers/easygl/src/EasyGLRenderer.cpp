@@ -6,7 +6,7 @@ namespace CNA::Internal::Renderers::EasyGL
 {
     namespace
     {
-        // plan_runtimerenderer.md phase P11: the runtime replacements for this file's former
+        // plans/plan_runtimerenderer.md phase P11: the runtime replacements for this file's former
         // CNA_GL_PROFILE_* preprocessor guards. Argument-less on purpose -- they read the active
         // profile themselves, so a guard converts to a one-line condition with no plumbing through
         // the many free helpers this file is built from.
@@ -129,13 +129,13 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
 
-/// plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer, pasted into the PbrEffect shaders. The text
+/// plans/plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer, pasted into the PbrEffect shaders. The text
 /// is not written here -- it comes from CNA/Internal/Graphics/SrgbTransfer.hpp, which is also
 /// where the C++ implementation of the same formula lives, so the two cannot drift into two
 /// slightly different curves.
 #define CNA_GL_SRGB_TRANSFER_DECL CNA_GLSL_SRGB_TRANSFER
 
-// plan_gltf.md GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
+// plans/plan_gltf.md GLTF-264: a normal follows the inverse transpose of the blended skin matrix.
 // All EasyGL profiles, including GLSL ES 1.00, support cross/dot but ES 1.00 has no inverse() for
 // matrices. The three cross products are the columns of det(m)*inverseTranspose(m). Normalisation
 // cancels abs(det); multiplying by sign(det) retains the orientation under a mirrored joint. A
@@ -150,7 +150,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n" \
 "}\n"
 
-// plan_gltf.md GLTF-176: a tangent frame changes orientation under a negative-determinant
+// plans/plan_gltf.md GLTF-176: a tangent frame changes orientation under a negative-determinant
 // direction transform. GLSL ES 1.00 has no determinant(mat3), so compute the scalar triple product
 // shared by both PBR vertex programs. A singular transform has no meaningful tangent frame; +1 is
 // the stable fallback and, unlike sign(0), does not erase an otherwise valid authored sign.
@@ -176,7 +176,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "vec4 cnaInstancePosition(vec4 p){return (uCnaInstanced>0.5)?cnaInstanceMatrix()*p:p;}\n" \
 "vec3 cnaInstanceDirection(vec3 d){return (uCnaInstanced>0.5)?mat3(cnaInstanceMatrix())*d:d;}\n"
 
-// plan_modern.md MOD-836..MOD-841: shadow reception, shared by every lit fragment shader so the
+// plans/plan_modern.md MOD-836..MOD-841: shadow reception, shared by every lit fragment shader so the
 // four of them cannot drift into four subtly different shadows.
 //
 // The map holds light-space distance rather than a depth buffer: CNA cannot sample a depth
@@ -292,7 +292,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "    return vec3(1.0,1.0,0.6);\n" \
 "}\n"
 
-// plan_modern.md MOD-1005/MOD-1006: one punctual light -- point or spot -- with its own shadow.
+// plans/plan_modern.md MOD-1005/MOD-1006: one punctual light -- point or spot -- with its own shadow.
 // Kept beside the directional lookup rather than folded into it because the two shadow different
 // lights: one answers "is the sun blocked here", the other "is that lamp blocked here", and
 // multiplying one light's contribution by the other's visibility produces a plausible image and no
@@ -363,7 +363,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "    return uPunctualDiffuse*ndotl*attenuation*cnaPunctualShadow(worldPos,toLight,distanceToLight);\n" \
 "}\n"
 
-// plan_modern.md MOD-1225: the split-sum ambient term, replacing the flat uAmbientColor when an
+// plans/plan_modern.md MOD-1225: the split-sum ambient term, replacing the flat uAmbientColor when an
 // environment is bound. Three inputs that were generated together (CNA::Graphics::
 // EnvironmentProcessor): the irradiance cube read by the normal, the prefiltered specular cube
 // whose mip IS the roughness, and the BRDF table that says how much of the reflection survives at
@@ -414,7 +414,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        // MERGE (plan_platform.md PLAT-* x plan_runtimerenderer.md P11): the version/profile the
+        // MERGE (plans/plan_platform.md PLAT-* x plans/plan_runtimerenderer.md P11): the version/profile the
         // platform is asked for is DATA, so it is computed from the runtime profile rather than
         // from `#if defined(CNA_GL_PROFILE_*)`. The compile-time form could only ever describe one
         // profile, which is exactly what P11 removed: a single binary may hold up to five, and the
@@ -823,7 +823,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    // plan_glbackends.md Phase B (GLB-10/11): every embedded shader in this file is authored
+    // plans/plan_glbackends.md Phase B (GLB-10/11): every embedded shader in this file is authored
     // once, against GLSL ES 3.00 (the OPENGLES3/WEBGL2 profiles' native syntax). Body syntax
     // (in/out, texture(), no varying/attribute) is shared with desktop GLSL 3.30 core -- only
     // the "#version ...\nprecision ... float;\n" header two lines differ, so OPENGL33 does not
@@ -832,7 +832,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        // plan_glbackends.md GLB-36 helper: true whole-word replace (identifiers only), used for
+        // plans/plan_glbackends.md GLB-36 helper: true whole-word replace (identifiers only), used for
         // rewriting FragColor -> gl_FragColor in fragment shader bodies without touching
         // substrings inside longer identifiers.
         std::string ReplaceWholeWord(std::string text, const std::string& word, const std::string& replacement)
@@ -858,7 +858,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return text;
         }
 
-        // plan_glbackends.md GLB-36 helper: GLSL ES 1.00 has no unified texture() overload set --
+        // plans/plan_glbackends.md GLB-36 helper: GLSL ES 1.00 has no unified texture() overload set --
         // callers must use texture2D()/textureCube() depending on the sampler's declared type.
         // Scans the ORIGINAL ES 3.00 source for "uniform samplerCube NAME;" declarations first
         // (the only non-sampler2D case any shader in this file uses, confirmed by a full survey
@@ -884,7 +884,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return line;
         }
 
-        // plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 has no integer vertex attribute types
+        // plans/plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 has no integer vertex attribute types
         // at all -- "layout(location=N) in uvec4 aBoneIndices;" (this file's
         // SkinnedEffect/SkinnedPbrEffect shaders) has no direct equivalent. Encodes bone indices
         // as a float vec4 instead (the matching C++-side change is
@@ -916,7 +916,7 @@ namespace CNA::Internal::Renderers::EasyGL
             return text;
         }
 
-        // plan_glbackends.md GLB-36: rewrites a GLSL ES 3.00 shader body to GLSL ES 1.00
+        // plans/plan_glbackends.md GLB-36: rewrites a GLSL ES 3.00 shader body to GLSL ES 1.00
         // (WebGL 1). Real syntax differences handled, confirmed exhaustive by a full survey of
         // every shader in this file during GLB-36 (no texelFetch/textureSize/derivatives/
         // gl_FragDepth/flat/#extension/MRT usage anywhere):
@@ -1006,7 +1006,7 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
-    // plan_glbackends.md GLB-36: extracts (location, name) pairs from
+    // plans/plan_glbackends.md GLB-36: extracts (location, name) pairs from
     // "layout(location=N) in TYPE NAME;" declarations in the ORIGINAL (unmodified) ES 3.00 vertex
     // shader source, so the caller can rebind the same numeric locations via
     // Program::bind_attrib_location() before linking on WEBGL1/OPENGLES2 (where the layout
@@ -1105,12 +1105,12 @@ if (ProfileIsDesktopCore())
         return std::string(es300Source);
     }
 
-    // plan_runtimerenderer.md P11: always compiled now; the call site is runtime-gated on the
+    // plans/plan_runtimerenderer.md P11: always compiled now; the call site is runtime-gated on the
     // active profile instead. Loading the entry point is harmless on a non-core profile because it
     // is only ever invoked when IsDesktopCoreProfile() holds.
     namespace
     {
-        // plan_glbackends.md GLB-40: desktop GL core profile -- unlike GLES/WebGL, which always
+        // plans/plan_glbackends.md GLB-40: desktop GL core profile -- unlike GLES/WebGL, which always
         // honor a vertex shader's gl_PointSize output automatically for GL_POINTS primitives --
         // requires this capability explicitly enabled, or gl_PointSize is silently ignored and
         // every point renders at the fixed 1.0-pixel default size. Found investigating why
@@ -1144,7 +1144,7 @@ if (ProfileIsDesktopCore())
     }
 
     // =============================================================================================
-    // OPENGLES2 profile support (plan_opengles2.md)
+    // OPENGLES2 profile support (plans/plan_opengles2.md)
     //
     // The OPENGLES2 public profile drives this same renderer through a NATIVE OpenGL ES 2.0
     // context request combined with WEBGL1's GLSL ES 1.00 shader dialect (see
@@ -1168,7 +1168,7 @@ if (ProfileIsDesktopCore())
     /// reads then come from the bound framebuffer's single color attachment implicitly. The MSAA
     /// resolve paths keep their separate READ/DRAW targets -- they are unreachable under
     /// OPENGLES2, which forces every sample count to 1.
-    /// plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
+    /// plans/plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
     [[nodiscard]] inline ::easygl::FramebufferTarget ReadbackFramebufferTarget()
     {
         // GL_READ_FRAMEBUFFER is ES 3.0; WebGL 1, like ES 2.0, has only the combined target.
@@ -1182,7 +1182,7 @@ if (ProfileIsDesktopCore())
     /// UNSIZED internal formats (sized RGBA8 arrived with ES 3.0 / GL_OES_required_internalformat),
     /// so the OPENGLES2 profile allocates GL_RGBA; every other profile keeps the sized RGBA8
     /// allocation unchanged.
-    /// plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
+    /// plans/plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
     [[nodiscard]] inline ::metagl::InternalFormat RgbaTexImageInternalFormat()
     {
         // The sized internal format RGBA8 is ES 3.0; WebGL 1, like ES 2.0, needs the unsized one.
@@ -1213,7 +1213,7 @@ if (ProfileIsEs2ApiGeneration())
         fbo.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer, attachment, rbo);
     }
 
-    // plan_runtimerenderer.md P11: always compiled now. Every entry point below is called only
+    // plans/plan_runtimerenderer.md P11: always compiled now. Every entry point below is called only
     // from a runtime-gated path, so an ES 3.0 profile simply never reaches this bookkeeping.
     namespace
     {
@@ -1879,7 +1879,7 @@ if (!ProfileIsEs2ApiGeneration())
     }
 
     // ---------------------------------------------------------------------------------------
-    // plan_modern.md MOD-1511..MOD-1515: compute shaders and shader storage buffers.
+    // plans/plan_modern.md MOD-1511..MOD-1515: compute shaders and shader storage buffers.
 
     EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(const std::size_t byteSize)
         : byteSize_(byteSize)
@@ -2050,7 +2050,7 @@ if (ProfileIsEs2ApiGeneration())
 }
     }
 
-    // plan_graphics.md Task 863: same shape as BindTextureCube(), but for a sampler3D --
+    // plans/plan_graphics.md Task 863: same shape as BindTextureCube(), but for a sampler3D --
     // ITexture3DRenderer is its own interface (not a subtype of ITextureRenderer), so this can't
     // just overload/reuse BindTexture() at the call site.
     void EasyGLEffectRenderer::BindTexture3D(int unit, ITexture3DRenderer* texture)
@@ -2365,7 +2365,7 @@ else
         }
     }
 
-    // plan_modern.md MOD-116: maps a Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal to
+    // plans/plan_modern.md MOD-116: maps a Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal to
     // the GL colour storage a render target of that format needs. Data, not a switch chain buried in
     // the allocation code, because the identical triple is needed in three places: the texture's
     // per-level storage, the multisample colour renderbuffer, and the probe that decides whether
@@ -2525,7 +2525,7 @@ if (ProfileIsEs2ApiGeneration())
         // GetMultiSampleCount() then reports 0, keeping the public applied count truthful.
         multiSampleCount_ = 0;
 }
-        // plan_modern.md MOD-115: the colour storage this target's SurfaceFormat calls for. The
+        // plans/plan_modern.md MOD-115: the colour storage this target's SurfaceFormat calls for. The
         // request is validated before construction (EasyGLRenderer::CreateRenderTarget2DEXT refuses
         // a format this context cannot render to), so an unmapped ordinal here would be a caller
         // bypassing that route; fall back to Color rather than leaving the storage undefined.
@@ -2666,7 +2666,7 @@ else
             }
         }
 
-        // plan_modern.md MOD-119: ask GL whether the combination it was just handed is actually
+        // plans/plan_modern.md MOD-119: ask GL whether the combination it was just handed is actually
         // renderable, and say so if it is not. A driver can accept every individual call above and
         // still refuse the assembled framebuffer -- a colour format that is sampleable but not
         // renderable, a sample count the depth attachment cannot match, a size beyond a limit. All
@@ -2729,7 +2729,7 @@ else
     bool EasyGLRenderTargetRenderer::GetData(
         int level, int x, int y, int w, int h, void* data, int dataLength) const
     {
-        // plan_modern.md MOD-108: a float target's texels are 2, 4, 8 or 16 bytes wide, not always
+        // plans/plan_modern.md MOD-108: a float target's texels are 2, 4, 8 or 16 bytes wide, not always
         // 4. Reading one back as RGBA8 would silently clamp exactly the above-1.0 values the format
         // was chosen to keep -- the readback has to speak the target's own format.
         RenderTargetColorStorage colorStorage{};
@@ -2778,7 +2778,7 @@ else
             }
         }
 
-GLint previousFramebuffer = 0;  // plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
+GLint previousFramebuffer = 0;  // plans/plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
 if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has only the combined GL_FRAMEBUFFER binding (ReadbackFramebufferTarget()), so
@@ -2973,7 +2973,7 @@ if (ProfileIsEs2ApiGeneration())
         // renderbuffers/blit, so the requested preference degrades to single-sample.
         multiSampleCount_ = 0;
 }
-        // plan_modern.md MOD-107: the same storage description the 2D targets use, so a float cube
+        // plans/plan_modern.md MOD-107: the same storage description the 2D targets use, so a float cube
         // face and a float 2D target cannot end up with different GL formats.
         RenderTargetColorStorage cubeStorage{};
         if (!MapRenderTargetColorFormat(surfaceFormat_, cubeStorage))
@@ -3194,7 +3194,7 @@ else
         if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize) return false;
         if (dataLength < w * h * 4) return false;
 
-GLint previousFramebuffer = 0;  // plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
+GLint previousFramebuffer = 0;  // plans/plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
 if (ProfileIsEs2ApiGeneration())
 {
         // See EasyGLRenderTargetRenderer::GetData -- the combined GL_FRAMEBUFFER binding must be
@@ -3367,7 +3367,7 @@ void main()
         program_.attach(fragmentShader);
 if (ProfileUsesGlslEs100())
 {
-        // plan_glbackends.md GLB-36: see CompileAndLink's identical comment -- rebind the same
+        // plans/plan_glbackends.md GLB-36: see CompileAndLink's identical comment -- rebind the same
         // numeric attribute locations the ES 3.00 source's layout(location=N) qualifiers
         // specified, since the GLSL ES 1.00 shader text these profiles compile has no
         // layout(location=N) at all.
@@ -3466,7 +3466,7 @@ if (ProfileUsesGlslEs100())
         if (pending_vertices_.empty()) return;
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plan_fx.md FX-080: a compiled XNA Effect gets its own route. Before this branch existed
+        // plans/plan_fx.md FX-080: a compiled XNA Effect gets its own route. Before this branch existed
         // the code below silently kept the stock sprite program for one -- GetEffectRendererPtr()
         // returns null for a compiled effect, so `prog` stayed `&program_` -- and rendered the
         // batch with a shader the game never asked for, reporting nothing.
@@ -3592,7 +3592,7 @@ if (ProfileUsesGlslEs100())
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
     void EasyGLSpriteBatchRenderer::FlushBatchWithCompiledEffect()
     {
-        // plan_fx.md FX-080. Sprite vertices reach a custom effect in the target's own pixel
+        // plans/plan_fx.md FX-080. Sprite vertices reach a custom effect in the target's own pixel
         // space, exactly as in FNA: `SpriteBatch` sets `MatrixTransform` on the STOCK sprite
         // effect only (`PrepRenderState`), never on a custom one, so a ported XNA sprite effect
         // carries its own projection parameter and the game assigns it. Nothing is invented here.
@@ -3820,7 +3820,7 @@ if (ProfileUsesGlslEs100())
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
     {
-        // plan_runtimerenderer.md P11: publish the profile before anything else runs -- the context
+        // plans/plan_runtimerenderer.md P11: publish the profile before anything else runs -- the context
         // attributes, the shader adaptation and the API-generation checks all read it, and they run
         // from free helpers that have no other way to reach this instance.
         profile_ = profile;
@@ -3838,7 +3838,7 @@ if (ProfileUsesGlslEs100())
             sampleCount_ = 1;
         }
 
-        // plan_glbackends.md GLB-8: context attributes depend on which of the 5 public GL
+        // plans/plan_glbackends.md GLB-8: context attributes depend on which of the 5 public GL
         // profiles this translation unit was compiled for (see cmake/RendererSelection.cmake).
         // OPENGLES3/WEBGL2 request GLES 3.0 (today's original, unchanged behavior); WEBGL1
         // requests GLES 2.0 (Emscripten maps this to a real WebGL 1 context); OPENGLES2 requests
@@ -3931,7 +3931,7 @@ if (ProfileUsesGlslEs100())
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
                       << "; texture SurfaceFormat: Color only (Task 176)"
-                      // plan_modern.md MOD-117: render targets are no longer Color-only, and the
+                      // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
                       << (ProbeFloatRenderTargetSupportEXT(false) ? " + half-float (RGBA16F)" : "")
@@ -4197,7 +4197,7 @@ if (ProfileIsEs2ApiGeneration())
         default_flat_normal_texture_.reset_handle_no_gl();
         default_flat_normal_texture_ready_ = false;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plan_fx.md FX-108: the compiled-effect route's own GL objects live on this renderer
+        // plans/plan_fx.md FX-108: the compiled-effect route's own GL objects live on this renderer
         // rather than in the recovery registry (they are not `RecoverableResource`s, because they
         // hold nothing to recreate CONTENT from -- a fresh empty array object and a fresh scratch
         // copy are as good as the originals). They still have to be forgotten here, or their
@@ -4437,7 +4437,7 @@ if (!ProfileIsEs2ApiGeneration())
         int w, int h, int depthFormat, bool preserveContents, bool mipMap,
         int multiSampleCount, int surfaceFormat)
     {
-        // plan_modern.md MOD-115: refuse rather than substitute. The shared default of this factory
+        // plans/plan_modern.md MOD-115: refuse rather than substitute. The shared default of this factory
         // drops the format and hands back a Color target, which is invisible to the caller; a
         // renderer that has genuinely implemented formats owes an honest answer instead, and
         // GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() is the way to ask in advance.
@@ -4454,7 +4454,7 @@ if (!ProfileIsEs2ApiGeneration())
 
     RendererFormatVerdict EasyGLRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
     {
-        // plan_modern.md MOD-104/MOD-117. Color and the float formats are this renderer's own
+        // plans/plan_modern.md MOD-104/MOD-117. Color and the float formats are this renderer's own
         // answer; everything else defers to the framework rule, exactly as before this change --
         // widening the verdict beyond what CreateResources can actually allocate would put the
         // caller back in the "asked for one format, silently got another" position.
@@ -5439,7 +5439,7 @@ else
         s.set_parameter(::easygl::SamplerParameter::WrapS, toWrap(addressU));
         s.set_parameter(::easygl::SamplerParameter::WrapT, toWrap(addressV));
 
-        // plan_fx.md FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
+        // plans/plan_fx.md FX-092: samplers_[slot] is ONE long-lived GL object, mutated in place and
         // reused for every later application on that slot -- the same shape that made REMED-GFX-174
         // necessary for anisotropy. Every property this call does not write therefore survives from
         // whoever wrote it last, and ApplySamplerMipState (a compiled Effect's own MaxMipLevel and
@@ -5538,7 +5538,7 @@ else
     const ::easygl::Texture& EasyGLRenderer::AcquireCompiledEffectFlippedSourceEXT(
         int slot, const EasyGLRenderTargetRenderer& source)
     {
-        // plan_fx.md FX-099. See the declaration for why the correction is applied to the pixels
+        // plans/plan_fx.md FX-099. See the declaration for why the correction is applied to the pixels
         // rather than to the sampling coordinate.
         if (ProfileIsEs2ApiGeneration())
         {
@@ -5675,7 +5675,7 @@ else
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
     void EasyGLRenderer::ReleaseCompiledEffectGlObjectsForContextLossEXT()
     {
-        // plan_fx.md FX-108. Handles are dropped WITHOUT a GL call: the names belong to a context
+        // plans/plan_fx.md FX-108. Handles are dropped WITHOUT a GL call: the names belong to a context
         // that is gone, and deleting them would either be a no-op or address someone else's object
         // in the replacement context. The `*Created`/extent bookkeeping is reset with them so the
         // lazy creators rebuild on next use instead of trusting a stale flag.
@@ -5760,7 +5760,7 @@ else
             case VertexElementFormat::Byte4:
 if (ProfileUsesGlslEs100())
 {
-                // plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 (WEBGL1 and OPENGLES2) has no
+                // plans/plan_glbackends.md GLB-36 follow-up: GLSL ES 1.00 (WEBGL1 and OPENGLES2) has no
                 // integer vertex attributes at all -- glVertexAttribIPointer isn't available.
                 // Byte4 is used exclusively for BLENDINDICES-style bone-index attributes
                 // (confirmed: only VertexPositionNormalTangentTextureSkinned/
@@ -6094,7 +6094,7 @@ else
             vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
             break;
         case 48:
-            // plan_cnj.md CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (packed):
+            // plans/plan_cnj.md CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (packed):
             // float3 position + float3 normal + float4 tangent (xyz + bitangent handedness in w)
             // + float2 texcoord -- the layout PbrEffect's normal mapping needs to build a
             // per-pixel TBN basis.
@@ -6111,7 +6111,7 @@ else
             // GLTF-182/183: collision-free rigid PBR dual-UV layout. Bytes 0..47 are the
             // established stride-48 prefix and UV1 is appended at 48.
             //
-            // plan_gltf.md GLTF-462: bytes 56..59 were reserved padding and are the packed COLOR_0
+            // plans/plan_gltf.md GLTF-462: bytes 56..59 were reserved padding and are the packed COLOR_0
             // slot now, which is what lets a vertex-coloured metallic-roughness primitive keep its
             // material instead of falling back to a layout with no Normal at all. Location 5
             // mirrors the stride-52/56 precedent exactly: the slot is always bound, and
@@ -6219,7 +6219,7 @@ else
             vao.set_attribute_pointer(6, 2, ::easygl::DataType::Float, false, s, (void*)68);
             break;
         case 80:
-            // plan_gltf.md GLTF-463: the stride-76 skinned PBR record with a packed COLOR_0
+            // plans/plan_gltf.md GLTF-463: the stride-76 skinned PBR record with a packed COLOR_0
             // appended at 76 -- the skinned counterpart of stride 60's own colour slot. Locations
             // 0..6 stay byte-for-byte identical to stride 76, so one shader serves both, and
             // GpuDrawParams::vertexColorEnabled (from SkinnedPbrEffect::VertexColorEnabledEXT)
@@ -6242,7 +6242,7 @@ else
             vao.set_attribute_pointer(7, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)76);
             break;
         default:
-            // plan_gltf.md GLTF-157: a byte stride does not describe which attributes exist.
+            // plans/plan_gltf.md GLTF-157: a byte stride does not describe which attributes exist.
             // Treating every unknown record as position-only left the other locations in stale
             // VAO state and rendered normals, UVs or skin weights from unrelated buffers. Refuse
             // it loudly; a genuinely custom layout reaches the generic declaration path above.
@@ -6483,7 +6483,7 @@ else
             prog.attach(fs);
 if (ProfileUsesGlslEs100())
 {
-            // plan_glbackends.md GLB-36: these profiles' GLSL ES 1.00 shader text has no
+            // plans/plan_glbackends.md GLB-36: these profiles' GLSL ES 1.00 shader text has no
             // layout(location=N) (GLSL ES 1.00 doesn't support it) -- rebind the SAME numeric
             // locations here, extracted from the ORIGINAL ES 3.00 source, so every
             // VertexArray/VAO attribute-binding call site elsewhere in this file (all hardcoded
@@ -6797,7 +6797,7 @@ CNA_GL_PUNCTUAL_DECL
         CNA_RENDER_LOG("lit+textured3D ready loc_wvp=" << prog_lit_textured_.loc_wvp);
     }
 
-    // Task 1102 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): real XNA's
+    // Task 1102 (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): real XNA's
     // BasicEffect/SkinnedEffect default to PreferPerPixelLighting=false, which selects a
     // per-vertex-lit shader family (VSBasicVertexLighting*) -- lighting is computed ONCE per
     // vertex and Gouraud-interpolated across the triangle, not re-evaluated per fragment.
@@ -7353,7 +7353,7 @@ CNA_GL_PUNCTUAL_DECL
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
-    // Task 1102b (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): SkinnedEffect's own
+    // Task 1102b (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect's own
     // per-vertex-lit sibling, mirroring Task 1102's EnsureLit3DVertexLitProgram() for BasicEffect
     // exactly -- same technique (move FNA's Lighting.fxh ComputeLights() Blinn-Phong math from the
     // fragment stage into the vertex stage, Gouraud-interpolate the result via varyings, keep the
@@ -7515,7 +7515,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         CNA_RENDER_LOG("skinned3D (vertex-lit) ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
-    // plan_cnj.md CNB-58 (Phase 13A): real glTF metallic-roughness BRDF (glTF 2.0 spec Appendix
+    // plans/plan_cnj.md CNB-58 (Phase 13A): real glTF metallic-roughness BRDF (glTF 2.0 spec Appendix
     // B) -- GGX/Trowbridge-Reitz normal distribution, Smith-Schlick-GGX visibility, Schlick
     // Fresnel -- driven by the same 3-DirectionalLight + AmbientLightColor convention every other
     // CNA stock effect already uses (so existing scene-lighting setup code transfers directly),
@@ -7544,7 +7544,7 @@ std::string("#version 300 es\n") +
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
 + (dualUv ? "layout(location=4) in vec2 aUV1;\n"
-          // plan_gltf.md GLTF-462: only the stride-60 program declares the colour, for the reason
+          // plans/plan_gltf.md GLTF-462: only the stride-60 program declares the colour, for the reason
           // in this function's own opening comment -- an unused varying added to the stride-48
           // program moved thousands of llvmpipe fragments by one RGB unit, and stride 60 is the only
           // rigid PBR record that HAS a colour slot.
@@ -7612,17 +7612,17 @@ std::string("#version 300 es\n") +
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
-// plan_gltf.md GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
+// plans/plan_gltf.md GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
 // FillGpuDrawParams to the exact shader-ready Fresnel endpoints. xyz is dielectric F0; w is F90.
 "uniform vec4 uDielectricFresnel;\n"
 // GLTF-344: the colour texture is multiplied before clamping, so this must retain the pre-clamp
 // value instead of attempting to reconstruct it from uDielectricFresnel.
 "uniform vec4 uSpecularFresnelInputs;\n"
-// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// plans/plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec4 uSrgb;\n"
-// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// plans/plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
@@ -7683,7 +7683,7 @@ CNA_GL_PUNCTUAL_DECL
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
-// plan_gltf.md GLTF-462. §3.7.2.1: "if a primitive specifies a vertex color using the attribute
+// plans/plan_gltf.md GLTF-462. §3.7.2.1: "if a primitive specifies a vertex color using the attribute
 // semantic property COLOR_0, then this value acts as an additional linear multiplier to base
 // color". LINEAR is the operative word and the reason there is no transfer function here: the
 // attribute is a normalized integer already in linear space, unlike the base-colour TEXTURE. Both
@@ -7716,7 +7716,7 @@ CNA_GL_PUNCTUAL_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-// plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// plans/plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
 // touch. The ambient/occlusion term below stands for light arriving from the rest of the
 // environment, which an occluder between the surface and this one light does not block.
 "    Lo*=cnaShadowFactor(vWorldPos);\n"
@@ -7830,7 +7830,7 @@ std::string("#version 300 es\n") +
 "layout(location=4) in vec4 aBoneWeights;\n"
 "layout(location=5) in uvec4 aBoneIndices;\n"
 + (dualUv ? "layout(location=6) in vec2 aUV1;\n"
-          // plan_gltf.md GLTF-463: only the stride-76/80 program declares the colour, for the same
+          // plans/plan_gltf.md GLTF-463: only the stride-76/80 program declares the colour, for the same
           // reason the rigid pair splits -- an unused varying added to the stride-68 program moved
           // llvmpipe fragments by one RGB unit, and stride 80 is the only skinned PBR record that
           // HAS a colour slot.
@@ -7910,14 +7910,14 @@ std::string("#version 300 es\n") +
 "uniform vec3 uEmissiveColor;\n"
 "uniform float uMetallicFactor;\n"
 "uniform float uRoughnessFactor;\n"
-// plan_gltf.md GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
+// plans/plan_gltf.md GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
 "uniform vec4 uDielectricFresnel;\n"
 "uniform vec4 uSpecularFresnelInputs;\n"
-// plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
+// plans/plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
 "uniform vec4 uSrgb;\n"
-// plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
+// plans/plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
@@ -7974,7 +7974,7 @@ CNA_GL_PUNCTUAL_DECL
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
-// plan_gltf.md GLTF-463. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base color".
+// plans/plan_gltf.md GLTF-463. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base color".
 // LINEAR is why there is no transfer function here -- the attribute is a normalized integer already
 // in linear space, unlike the base-colour TEXTURE -- and both RGB and alpha are multiplied because
 // §3.9.2's base colour is an RGBA product. Identical to the rigid program's own term.
@@ -8006,7 +8006,7 @@ CNA_GL_PUNCTUAL_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-// plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// plans/plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
 // touch. The ambient/occlusion term below stands for light arriving from the rest of the
 // environment, which an occluder between the surface and this one light does not block.
 "    Lo*=cnaShadowFactor(vWorldPos);\n"
@@ -8110,7 +8110,7 @@ CNA_GL_PUNCTUAL_DECL
         default_white_texture_ready_ = true;
     }
 
-    // plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound -- a "flat"
+    // plans/plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound -- a "flat"
     // tangent-space normal (0,0,1) encoded as RGB (128,128,255), so the sampled/decoded (rgb*2-1)
     // normal is exactly the geometric normal (no perturbation). The other 3 PBR map fallbacks
     // (metallic-roughness, emissive, occlusion) all reuse the existing default_white_texture_
@@ -8133,7 +8133,7 @@ CNA_GL_PUNCTUAL_DECL
     {
         if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
         if (params.pbr) return StockProgramShape::Pbr;
-        // plan_modern.md MOD-840. A receiving draw is forced onto the per-pixel family whatever
+        // plans/plan_modern.md MOD-840. A receiving draw is forced onto the per-pixel family whatever
         // PreferPerPixelLighting says. Per-vertex lighting evaluates the shadow lookup at the
         // corners and interpolates the result across the triangle, so a ground plane drawn as two
         // large triangles would carry one shadow value per corner -- a gradient, not a shadow.
@@ -8142,7 +8142,7 @@ CNA_GL_PUNCTUAL_DECL
         const bool receivesShadow = params.shadowsEnabled && params.shadowMap != nullptr;
         if (params.skinned)
         {
-            // Task 1102b (plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
+            // Task 1102b (plans/plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
             // PreferPerPixelLighting=false too, same as BasicEffect (Task 1102). Only
             // meaningfully distinct while lighting is actually on, same reasoning as Task 1102's
             // own stride-32 gate.
@@ -8163,7 +8163,7 @@ CNA_GL_PUNCTUAL_DECL
         case 20: return StockProgramShape::Textured;
         case 24: return StockProgramShape::ColoredTextured;
         case 32:
-            // Task 1102 (plan_dx9.md Divergence 1): real XNA's BasicEffect defaults
+            // Task 1102 (plans/plan_dx9.md Divergence 1): real XNA's BasicEffect defaults
             // PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting), the opposite of
             // what this renderer rendered unconditionally before this task. Only meaningfully
             // distinct while lighting is actually on -- with lighting disabled, both programs
@@ -8573,7 +8573,7 @@ CNA_GL_PUNCTUAL_DECL
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
 
-        // plan_cnj.md CNB-58 (Phase 13A): PbrEffect's 4 additional maps (units 1-4, bound before
+        // plans/plan_cnj.md CNB-58 (Phase 13A): PbrEffect's 4 additional maps (units 1-4, bound before
         // unit 0 to leave it active last, matching the envMap/texture2 precedent above). Each
         // falls back to a texture whose sampled value is the correct "map absent" constant for
         // its own semantic (see EnsureDefaultFlatNormalTexture()'s own doc comment).
@@ -8669,7 +8669,7 @@ CNA_GL_PUNCTUAL_DECL
                 params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
                 params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
         }
-        // plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
+        // plans/plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
         // components: two about what a bound texture contains, one about where the fragment is
         // going. A renderer that ignored this field entirely would keep the pre-GLTF-209
         // behaviour exactly, which is what makes adopting it a per-renderer step.
@@ -8884,7 +8884,7 @@ if (ProfileIsEs2ApiGeneration())
             }
         }
 
-        // plan_modern.md MOD-1225: image-based lighting, units 10-12. Bound only when the
+        // plans/plan_modern.md MOD-1225: image-based lighting, units 10-12. Bound only when the
         // program has the uniforms at all, and each unit falls back to a texture whose sampled
         // value is the "no environment" constant -- but with uIblEnabled at 0 the shader never
         // reads them, so the fallbacks exist to keep the units complete rather than to be seen.
@@ -9246,7 +9246,7 @@ else
         }
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        /// plan_fx.md FX-082: the streams a compiled-effect draw reads its attributes from, in
+        /// plans/plan_fx.md FX-082: the streams a compiled-effect draw reads its attributes from, in
         /// public binding-slot order. The internal staged routes (`DrawUser*`, SpriteBatch,
         /// `DrawColoredPrimitives`) bind no public `VertexBufferBinding` and leave
         /// `vertexStreamCount` at 0; they contribute the one buffer the draw named, at its own
@@ -9317,7 +9317,7 @@ else
     {
         if (metagl::IsContextLost()) return;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
+        // plans/plan_fx.md FX-062: a compiled effect's vertex layout is arbitrary and validated against
         // the applied pass's own shader reflection (BindCompiledEffectForDrawEXT), not against the
         // fixed-stride table RequireDeclarationFitsStockProgramEXT enforces below -- so this
         // dispatches before that guard runs, not after.
@@ -9409,7 +9409,7 @@ else
     {
         if (metagl::IsContextLost()) return;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
+        // plans/plan_fx.md FX-062: see DrawPrimitivesEx's own compiled-effect branch for why this
         // dispatches before RequireDeclarationFitsStockProgramEXT runs.
         if (params.compiledEffectRuntime != nullptr)
         {
@@ -9581,7 +9581,7 @@ if (ProfileIsEs2ApiGeneration())
 else
 {
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plan_fx.md FX-082: an instanced draw recognizes a compiled effect exactly as the other
+        // plans/plan_fx.md FX-082: an instanced draw recognizes a compiled effect exactly as the other
         // two routes do. Before this branch existed the compiled runtime was ignored here and the
         // draw silently fell through to SelectProgram() -- a stock shader rendering geometry the
         // game had asked a compiled Effect to render. The per-instance streams keep their real
@@ -9936,7 +9936,7 @@ else
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_EASYGL
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace EasyGL
@@ -9963,7 +9963,7 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> EasyGL::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        // plan_runtimerenderer.md P11: the build's default profile. Every registry entry uses
+        // plans/plan_runtimerenderer.md P11: the build's default profile. Every registry entry uses
         // CreateGraphicsRendererForProfile with its own identity's profile instead.
         return EasyGL::CreateGraphicsRendererForProfile(args, EasyGL::kCompileTimeGlProfile);
     }

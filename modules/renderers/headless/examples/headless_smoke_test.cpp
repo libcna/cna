@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_headless.md HEADLESS-50/51/53/60/61/62/64: end-to-end headless smoke test for the Headless graphics
+// plans/plan_headless.md HEADLESS-50/51/53/60/61/62/64: end-to-end headless smoke test for the Headless graphics
 // renderer. Constructs a real Game (VertexBuffer, IndexBuffer, Texture2D, SpriteBatch, a custom
 // Effect), runs a few frames entirely under CNA_GRAPHICS_RENDERER=HEADLESS, and asserts:
 //

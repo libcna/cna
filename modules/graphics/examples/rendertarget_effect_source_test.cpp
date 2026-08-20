@@ -218,7 +218,7 @@ namespace
      * `SurfaceFormat`. So `SurfaceFormat::Color` is the only sampleable colour format it genuinely
      * offers, and leg J1 declares that boundary instead of pretending to measure a second one.
      */
-    // plan_runtimerenderer.md RTR-P9-10: this guard used to answer `false` in BOTH arms, so it
+    // plans/plan_runtimerenderer.md RTR-P9-10: this guard used to answer `false` in BOTH arms, so it
     // decided nothing and every renderer printed the boundary note below -- a note whose text
     // ("creates every Texture2D and render target as one fixed native colour format") is true of
     // SDL_GPU and of no other renderer here. It now says what its own comment above always
@@ -239,7 +239,7 @@ namespace
      * want normal/tangent-bearing strides, and some renderers enforce that where others tolerate it:
      * WEBGPU falls through to DrawColoredPrimitives and throws "requires a stride-16
      * (VertexPositionColor) vertex buffer", D3D9 reports "stride 20 has no matching CNA vertex
-     * layout (plan_dx9.md D9-82f)". Their texture SLOT is the same ITextureRenderer binding the
+     * layout (plans/plan_dx9.md D9-82f)". Their texture SLOT is the same ITextureRenderer binding the
      * other families use, so the contract is still covered there by the remaining families.
      */
     constexpr bool kSkinnedFamiliesAcceptPositionTexture =
@@ -254,7 +254,7 @@ namespace
      * @brief Whether BasicEffect accepts VertexColorEnabled on a VertexPositionTexture stream.
      *
      * D3D9 has no vertex layout for "stride 20, lighting off, vertex colour on, textured"
-     * (plan_dx9.md D9-82b) and rejects it deterministically. A vertex-layout boundary, unrelated to
+     * (plans/plan_dx9.md D9-82b) and rejects it deterministically. A vertex-layout boundary, unrelated to
      * how a texture is resolved -- the plain BasicEffect family covers the same binding site there.
      */
     constexpr bool kBasicEffectAcceptsVertexColorWithoutColorStream =
@@ -268,7 +268,7 @@ namespace
      * @brief Whether `DualTextureEffect` accepts this fixture's `VertexPositionTexture` geometry.
      *
      * D3D9 rejects it outright -- "stride 20 with vertexColor=false has no matching CNA vertex
-     * layout (plan_dx9.md D9-82d)" -- a documented, pre-existing vertex-layout boundary of that
+     * layout (plans/plan_dx9.md D9-82d)" -- a documented, pre-existing vertex-layout boundary of that
      * renderer and nothing to do with texture resolution. The same declaration REMED-GFX-151's own
      * fixture already carries.
      */
@@ -282,7 +282,7 @@ namespace
     /**
      * @brief Whether EnvironmentMapEffect accepts a VertexPositionTexture stream.
      *
-     * D3D9 requires a normal-bearing stride for it (plan_dx9.md D9-82e); D3D11 and D3D12 say so
+     * D3D9 requires a normal-bearing stride for it (plans/plan_dx9.md D9-82e); D3D11 and D3D12 say so
      * outright -- "EnvironmentMapEffect (env_map3d) requires stride 32
      * (VertexPositionNormalTexture)". Same kind of boundary as above; leg L1's cube-sampling
      * sub-check is recorded rather than asserted there, and its face-aliasing checks still run.
@@ -298,7 +298,7 @@ namespace
     /**
      * @brief Whether a mipMap=true RenderTarget2D is implemented at all.
      *
-     * WEBGPU declares this unimplemented (plan_webgpu.md WEBGPU-53/54) and throws when the target's
+     * WEBGPU declares this unimplemented (plans/plan_webgpu.md WEBGPU-53/54) and throws when the target's
      * mip chain would have to be regenerated. That predates and is unrelated to texture resolution,
      * so leg J1 records the boundary there instead of a value.
      */
@@ -1082,14 +1082,14 @@ class RenderTargetEffectSourceTest : public Game
             {
                 boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": DualTextureEffect rejects this fixture's stride-20 stream "
-                         "(plan_dx9.md D9-82d)");
+                         "(plans/plan_dx9.md D9-82d)");
                 continue;
             }
             if (f == Family::BasicVertexColor && !kBasicEffectAcceptsVertexColorWithoutColorStream)
             {
                 boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": no vertex layout for a textured, vertex-coloured, unlit stride-20 stream "
-                         "(plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
+                         "(plans/plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
                          "texture is resolved");
                 continue;
             }
@@ -1097,7 +1097,7 @@ class RenderTargetEffectSourceTest : public Game
             {
                 boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": EnvironmentMapEffect requires a normal-bearing stream here "
-                         "(plan_dx9.md D9-82e)");
+                         "(plans/plan_dx9.md D9-82e)");
                 continue;
             }
             if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
@@ -1300,14 +1300,14 @@ class RenderTargetEffectSourceTest : public Game
             {
                 boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": DualTextureEffect rejects this fixture's stride-20 stream "
-                         "(plan_dx9.md D9-82d)");
+                         "(plans/plan_dx9.md D9-82d)");
                 continue;
             }
             if (f == Family::BasicVertexColor && !kBasicEffectAcceptsVertexColorWithoutColorStream)
             {
                 boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": no vertex layout for a textured, vertex-coloured, unlit stride-20 stream "
-                         "(plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
+                         "(plans/plan_dx9.md D9-82b) -- a vertex-layout boundary, unrelated to how a "
                          "texture is resolved");
                 continue;
             }
@@ -1315,7 +1315,7 @@ class RenderTargetEffectSourceTest : public Game
             {
                 boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
                          ": EnvironmentMapEffect requires a normal-bearing stream here "
-                         "(plan_dx9.md D9-82e)");
+                         "(plans/plan_dx9.md D9-82e)");
                 continue;
             }
             if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
@@ -1649,7 +1649,7 @@ class RenderTargetEffectSourceTest : public Game
 
         if (!kMipmappedRenderTargetSupported)
             boundary(std::string("J1 ") + kRendererName + " does not implement a mipMap=true "
-                     "RenderTarget2D at all (plan_webgpu.md WEBGPU-53/54) -- boundary recorded");
+                     "RenderTarget2D at all (plans/plan_webgpu.md WEBGPU-53/54) -- boundary recorded");
 
         // A mipmapped target must still be sampleable at level 0 through a 3D effect.
         if (kMipmappedRenderTargetSupported)
@@ -1804,7 +1804,7 @@ class RenderTargetEffectSourceTest : public Game
         if (!kEnvMapAcceptsPositionTexture)
         {
             boundary(std::string("L1 ") + kRendererName + " needs a normal-bearing stream for "
-                     "EnvironmentMapEffect (plan_dx9.md D9-82e), so the cube-slot draw is recorded "
+                     "EnvironmentMapEffect (plans/plan_dx9.md D9-82e), so the cube-slot draw is recorded "
                      "rather than asserted here; the face-aliasing checks below still run");
         }
         else try

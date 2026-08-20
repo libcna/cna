@@ -1,5 +1,5 @@
 // DX6-0 existence-gate spike: confirm real stencil buffer operations work in this environment's
-// Wine, the one genuinely new capability plan_dxold.md's roadmap assigns to DX6 that DX2/DX3/DX5
+// Wine, the one genuinely new capability plans/plan_dxold.md's roadmap assigns to DX6 that DX2/DX3/DX5
 // have all explicitly documented as "no real stencil buffer exists at this DirectX era (DX6+)".
 //
 // Unlike DX2->DX30->DX5's progression, DX6 introduces NO new COM interface revision at all --
@@ -9,7 +9,7 @@
 // (D3DRENDERSTATE_STENCILENABLE/STENCILFUNC/STENCILFAIL/STENCILZFAIL/STENCILPASS/STENCILREF/
 // STENCILMASK/STENCILWRITEMASK, all confirmed present in d3dtypes.h), multitexturing
 // (SetTextureStageState/D3DTSS_*, also confirmed present), and DXTn compression (not spiked here --
-// see plan_dx6.md for why).
+// see plans/plan_dx6.md for why).
 //
 // This spike tests ONLY stencil (the primary DX6 deliverable for this plan): a combined
 // depth+stencil Z-buffer surface (DDPF_ZBUFFER|DDPF_STENCILBUFFER, 32 bits total: 24 depth + 8

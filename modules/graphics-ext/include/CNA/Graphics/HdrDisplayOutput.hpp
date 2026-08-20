@@ -25,7 +25,7 @@ namespace CNA::Graphics {
     /**
      * @brief Encodes a scene-referred frame for whatever the display actually is.
      *
-     * plan_modern.md `MOD-2092`. The last step before presenting, and the one that decides what the
+     * plans/plan_modern.md `MOD-2092`. The last step before presenting, and the one that decides what the
      * numbers in the frame *mean*. In `Srgb` it **copies through, pixel for pixel** -- SDR output is
      * unchanged, because `TonemapPass` has already produced display-encoded sRGB and a second
      * transfer function applied to it would be visibly wrong. In an HDR space it takes the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact RenderTarget2D/FBO proof for the native OpenGL 2.1 graphics
+// plans/plan_opengl2.md: pixel-exact RenderTarget2D/FBO proof for the native OpenGL 2.1 graphics
 // renderer -- render into an off-screen target, read it back directly, sample it as an ordinary
 // Texture2D via SpriteBatch, and prove a depth-test occlusion inside the FBO itself.
 //

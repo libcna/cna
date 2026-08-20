@@ -16,7 +16,7 @@
 // used here). Exit codes: 0 success, 1 internal timeout, 2 unexpected exception or protocol
 // mismatch, 64 bad usage.
 //
-// Task 5.5 (plan_net.md Phase 5): two more roles, migration-host/migration-survivor, prove real
+// Task 5.5 (plans/plan_net.md Phase 5): two more roles, migration-host/migration-survivor, prove real
 // host migration across 3 genuinely independent processes (a real NetworkSession per process is
 // still exactly one each - see above). Unlike host/client, migration-survivor's own reconnect to
 // the newly-promoted peer *does* go through the real ENetDiscoveryService LAN rediscovery path
@@ -197,7 +197,7 @@ namespace {
         return 0;
     }
 
-    // Task 5.5 (plan_net.md Phase 5): the host role for a genuine 3-process host migration test.
+    // Task 5.5 (plans/plan_net.md Phase 5): the host role for a genuine 3-process host migration test.
     // Waits for both migration-survivor roles below to join (3 total gamers: this host + 2
     // survivors), then Dispose()s - a graceful Dispose() sends real ENet DISCONNECT notifications
     // to both peers immediately, the fastest, most deterministic way to trigger their own real

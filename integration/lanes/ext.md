@@ -336,7 +336,7 @@ compiled source and so cannot have affected either in any direction:
 - `XnbContainerFuzzTest.MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly` — the escaping
   exception is the correct `REMED-GFX-DECL-GUARD` rejection; the fuzz test's expected-exception set
   predates the guard. **A test-side gap, not a production defect.** Owner triage for
-  `plan_postaudit.md`.
+  `plans/plan_postaudit.md`.
 - `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`
   — 30 s timeout in a real two-process networking test, environment-dependent.
 
@@ -365,7 +365,7 @@ four of those citations resolve to. Swept with
 | `noxna_devices.md:93` | `N11` | *(quotes the header)* | *(same)* | ❌ **broken** |
 | `docs/surface-format-support.md:184` | `N20` | RGBA16F `RenderTarget2D` support in EasyGL | `RenderPipeline` + `HdrSceneTarget` | ⚠️ **drifted** — the float-RT work is now `N11`/`N12` |
 | `docs/surface-format-support.md:220` | `N20` | *(same)* | *(same)* | ⚠️ **drifted** |
-| `plan_postaudit.md:1572-74` | `N50`/`N51`/`N52` + "§4.4 *Geometry & Instancing*" | `DrawInstancedPrimitives` overload · instance-VB helper · LOD helper | `InstancedRendererEXT` · `LodGroupEXT` · glTF→`PbrMaterial` bridge; section is now §8 *Geometry helpers* | ❌ **broken** — it quotes the old titles and the old section number inline |
+| `plans/plan_postaudit.md:1572-74` | `N50`/`N51`/`N52` + "§4.4 *Geometry & Instancing*" | `DrawInstancedPrimitives` overload · instance-VB helper · LOD helper | `InstancedRendererEXT` · `LodGroupEXT` · glTF→`PbrMaterial` bridge; section is now §8 *Geometry helpers* | ❌ **broken** — it quotes the old titles and the old section number inline |
 | `audit/include/CNA/Graphics/PbrMaterial.hpp.audit.md`, `audit/examples/noxna_settings_example.cpp.audit.md` | `N11` | *(quote the header)* | *(same)* | ❌ **broken — but `audit/` is frozen and must not be modified** |
 
 **Not fixed here, on purpose.** Repairing them means editing four files outside a one-file lane, and
@@ -386,7 +386,7 @@ independently. It is the natural place: it already reviews the batch's combined 
 > citations were repaired semantically — `PbrMaterial.hpp:19` and `noxna_devices.md:93` `N11`→**`N52`**
 > (the `applyMaterial` binding, because `PbrEffect` itself now ships),
 > `docs/surface-format-support.md:184` `N20`→**`N11`** and `:220` `N20`→**`N11`/`N12`**, and
-> `plan_postaudit.md:1572-74` to **`N50`/`N51`** under **§8 *Geometry helpers***. `DitherMode.hpp:14`'s
+> `plans/plan_postaudit.md:1572-74` to **`N50`/`N51`** under **§8 *Geometry helpers***. `DitherMode.hpp:14`'s
 > `N70` was confirmed to still resolve and was left alone. The three `audit/` citations (two files)
 > remain **untouched by owner decision** — they are dated evidence of what the header said when it was
 > audited. One point this card did not anticipate: the same citations on `feature/audit` are

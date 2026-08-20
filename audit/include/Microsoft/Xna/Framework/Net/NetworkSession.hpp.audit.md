@@ -7,7 +7,7 @@
 - File type: C++ header
 - XNA/FNA relevance: Direct, central XNA type; FNA has no reference material for this namespace
   (see shard-wide cross-cutting note) — this file is instead cross-verified against a large set of
-  specific, externally-tracked task IDs (`plan_net.md` Phases 2-12) and a sibling repo's
+  specific, externally-tracked task IDs (`plans/plan_net.md` Phases 2-12) and a sibling repo's
   `DEFERRED.md`
 - Main related tests: not independently located in this pass; `NetworkSessionTests.cpp` is
   referenced by name in `AddRemoteGamer`'s own comment as covering `AddRemoteGamer*` scenarios
@@ -19,7 +19,7 @@ The central XNA networking type: manages a session's gamers, properties, and lif
 ## Executive Verdict
 Correct and unusually thoroughly documented. This is the most heavily cross-referenced file in the
 shard: nearly every non-trivial member's doc comment cites a specific `Task N.M` from
-`plan_net.md` and/or a `DEFERRED.md` item number, describing a concrete real bug found (often via
+`plans/plan_net.md` and/or a `DEFERRED.md` item number, describing a concrete real bug found (often via
 a real tool: AddressSanitizer for the Dispose UAF) and fixed, or a concrete real functional gap in
 FNA's own stubbed-out networking layer that this port genuinely closes (host migration, simulated
 latency/packet loss, real gamer ids/host flags). The class's own top-of-file doc comment (lines

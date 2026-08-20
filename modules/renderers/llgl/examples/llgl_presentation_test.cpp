@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-20: the five CnaPresentationMode policies, verified by where pixels actually
+// plans/plan_llgl.md LLGL-20: the five CnaPresentationMode policies, verified by where pixels actually
 // land rather than only by the numbers GetViewportSize() reports.
 //
 // The window is 800x480 and the logical canvas is 100x100 -- a deliberately different aspect ratio,

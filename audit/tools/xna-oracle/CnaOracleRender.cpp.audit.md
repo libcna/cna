@@ -7,7 +7,7 @@
 - File type: C++ tool (standalone renderer, one of two halves of the oracle diff harness)
 - XNA/FNA relevance: this IS the project's own FNA-comparison oracle tooling — foundational trust
   infrastructure for this entire audit's "confirmed against FNA" claims
-- Main related tests: consumed by `plan_dx9.md` Phase D9-A/D9-9x workflow; not a CTest itself
+- Main related tests: consumed by `plans/plan_dx9.md` Phase D9-A/D9-9x workflow; not a CTest itself
   (produces a PNG for `scripts/xna-diff.py` to judge, per the shard's own README)
 
 ## Purpose

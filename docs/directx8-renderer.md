@@ -8,12 +8,12 @@ via **DXVK 2.6.0's D8VK** (`Direct3DCreate8` resolved from DXVK's own `d3d8.dll`
 built-in `ddraw.dll`/`d3d8.dll` — the same "Route B" pattern D3D9/D3D11/D3D12 already use in this
 project, not the Wine-native pattern `DIRECTX1`..`DIRECTX7` use. Scope is **fixed-function 3D only**, matching
 `DIRECTX1`..`DIRECTX7`'s own CPU-transform-and-submit shape — not real Shader Model 1.x programmable shaders
-(a project-owner decision recorded in `plan_dx8.md` and `dx8-spike/README.md`, since real XNA
+(a project-owner decision recorded in `plans/plan_dx8.md` and `dx8-spike/README.md`, since real XNA
 effects need `ps_2_0`+ regardless of SM1.x support).
 
 **This document covers what's specific to `DIRECTX8`.** Unlike `DIRECTX3`..`DIRECTX7` (each a mechanical port of
 its predecessor with a documented delta), `DIRECTX8`'s 2D layer, device bring-up, and readback path are
-all genuinely new designs, not ports — see `plan_dx8.md` for the full design-decision record.
+all genuinely new designs, not ports — see `plans/plan_dx8.md` for the full design-decision record.
 
 ---
 
@@ -164,16 +164,16 @@ modern `D3DRS_*` render-state naming, not just claimed.
 
 ## 5. Boundaries — explicitly out of scope
 
-Same DirectX-8-era boundaries as documented in `plan_dx8.md`: no Shader Model 1.x programmable
+Same DirectX-8-era boundaries as documented in `plans/plan_dx8.md`: no Shader Model 1.x programmable
 shaders/`CreateEffectRenderer` (project-owner scope decision), no multitexture, no DXTn compressed
 formats, no cube environment maps, no MRT (`SetRenderTargets(count>1)` throws), no occlusion query,
 no native mip chain (`SetData(level>0)` throws).
 
 ## See also
 
-- `plan_dx8.md` — this renderer's own implementation plan and design-decision record.
+- `plans/plan_dx8.md` — this renderer's own implementation plan and design-decision record.
 - `dx8-spike/README.md` — the full `DX8-0` spike record plus the two further runtime-bug
   investigations (§3 above).
 - `docs/directx7-renderer.md` — the last DirectDraw-based renderer in this family; `DIRECTX8` diverges from it
   architecturally rather than porting it.
-- `plan_dxold.md` — the roadmap this renderer is a row of.
+- `plans/plan_dxold.md` — the roadmap this renderer is a row of.

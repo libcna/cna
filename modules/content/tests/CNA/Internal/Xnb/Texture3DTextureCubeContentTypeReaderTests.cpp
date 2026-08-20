@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-25 (Phase D3): unit tests for Texture3DReader and TextureCubeReader.
+// plans/plan_xnb.md XNB-25 (Phase D3): unit tests for Texture3DReader and TextureCubeReader.
 // TextureCubeReader is verified end-to-end against a real, externally-produced fixture
 // (MonoGame's SampleCube64DXT1Mips.xnb -- 6 faces, full DXT1 mip chain including the sub-4x4
 // rounding edge cases). No Texture3DReader fixture was found anywhere in the available library
@@ -51,14 +51,14 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 // cannot store a cube face now throws System::NotSupportedException out of TextureCubeReader's own
 // SetData call, so the whole ContentManager::Load fails instead of quietly returning an empty cube.
 // Software gained real per-mip cube storage in that finding, so its mip readback is now exact.
-// plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
+// plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow, so its readback is exact at every level too.
 // PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
 // either (docs/portablegl-renderer.md).
-// plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so these describe the ACTIVE renderer
+// plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so these describe the ACTIVE renderer
 // rather than the build default. The three-way split is preserved exactly.
 //
-// PIXIJS (plan_pixijs.md PIXIJS-71) is in the "no cube resource exists" set: no cube override
+// PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in the "no cube resource exists" set: no cube override
 // written, so it keeps the shared nullptr CreateTextureCube default, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
@@ -81,7 +81,7 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 ///
 /// The same split cube faces already have here. IGL owns real volume pixels but IGL v1.1.1 cannot
 /// attach a 3D texture to a framebuffer, which is its only readback route -- verified by attempting
-/// it (`GL_INVALID_OPERATION ... invalid textarget GL_TEXTURE_3D`), see plan_igl.md IGL-17. GetData
+/// it (`GL_INVALID_OPERATION ... invalid textarget GL_TEXTURE_3D`), see plans/plan_igl.md IGL-17. GetData
 /// refuses rather than fabricating voxels, and the shared layer raises NotSupportedException.
 [[nodiscard]] inline bool VolumeReadbackSupported()
 {
@@ -198,7 +198,7 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
 
 // REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plan_software.md Boundaries). On a renderer that doesn't support it, reading now throws a clean
+// (plans/plan_software.md Boundaries). On a renderer that doesn't support it, reading now throws a clean
 // System::NotSupportedException (from Texture3D's own constructor) instead of previously silently
 // succeeding with all-zero pixel data.
 TEST_F(Texture3DTextureCubeContentTypeReaderTest, Texture3DReaderParsesHandConstructedBytesMatchingFnaByteOrder)

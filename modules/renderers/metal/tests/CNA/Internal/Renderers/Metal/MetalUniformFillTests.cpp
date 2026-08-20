@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-34-style extraction: FillMetalLitUniforms/FillMetalEnvUniforms/
+// plans/plan_metal.md METAL-34-style extraction: FillMetalLitUniforms/FillMetalEnvUniforms/
 // FillMetalSkinnedUniforms/FillMetalPbrUniforms/FillMetalSkinnedPbrUniforms only read GpuDrawParams
 // and a MetalMat4 (plain C++, zero Objective-C dependency) and write plain float-array uniform
 // structs -- the connective tissue between per-draw XNA-effect state and the actual bytes memcpy'd

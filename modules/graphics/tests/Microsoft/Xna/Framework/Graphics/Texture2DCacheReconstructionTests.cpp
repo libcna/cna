@@ -210,7 +210,7 @@ TEST_F(Texture2DCacheReconstructionTest, RepeatedReconstructionCyclesStayCorrect
 // CPU-shadowed Texture2D behaviour. Same "no genuine render-target storage" shape as this file's
 // pre-existing TextureCube/RenderTargetCube gates elsewhere use, just for the 2D case; no other
 // current renderer lacks RenderTarget2D, so this is the first gate of its kind here.
-/// plan_runtimerenderer.md RTR-P9-8: asked of the ACTIVE renderer, so a multi-renderer build gets
+/// plans/plan_runtimerenderer.md RTR-P9-8: asked of the ACTIVE renderer, so a multi-renderer build gets
 /// the right answer per run instead of the build default's.
 [[nodiscard]] inline bool RenderTarget2DSupported()
 {

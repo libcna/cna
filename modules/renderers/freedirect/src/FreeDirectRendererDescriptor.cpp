@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D19: the FreeDirect family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D19: the FreeDirect family's pre-construction contract.
 //
 // DirectDraw semantics via the ../free-direct sibling reimplementation, which presents through SDL
 // itself.
@@ -15,7 +15,7 @@ namespace CNA::Internal::Renderers::FreeDirect
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

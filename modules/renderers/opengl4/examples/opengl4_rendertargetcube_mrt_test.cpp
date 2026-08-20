@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube + real MRT for the OpenGL4
+// plans/plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube + real MRT for the OpenGL4
 // graphics renderer.
 //
 // RenderTargetCube (OpenGL4RenderTargetCubeRenderer, one shared cube-map texture + FBO,

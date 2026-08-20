@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-14: DescribeMetalVertexElementFormat() only reads a plain XNA framework enum
+// plans/plan_metal.md METAL-14: DescribeMetalVertexElementFormat() only reads a plain XNA framework enum
 // (VertexElementFormat) and returns a plain C++ struct -- zero Objective-C dependency, so this is
 // genuinely unit-tested on this Linux machine without an Apple toolchain. No
 // #if defined(CNA_RENDERER_METAL) gate, deliberately.

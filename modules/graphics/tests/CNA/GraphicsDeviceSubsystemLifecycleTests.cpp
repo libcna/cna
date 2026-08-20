@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_runtimerenderer.md RTR-P5-15 and design decisions 6/7: GraphicsDevice's platform
+// plans/plan_runtimerenderer.md RTR-P5-15 and design decisions 6/7: GraphicsDevice's platform
 // video-subsystem reference is balanced on EVERY resolution path.
 //
 // Why this suite exists rather than being folded into the fallback suites: the defect it pins was

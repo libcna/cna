@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1000..MOD-1004, MOD-1008: point and spot shadow generation.
+// plans/plan_modern.md MOD-1000..MOD-1004, MOD-1008: point and spot shadow generation.
 //
 // The failures worth catching here are orientations and factors of two, and all of them render a
 // perfectly convincing shadow of the wrong thing: a cube face whose up vector is inverted mirrors
@@ -155,7 +155,7 @@ TEST(CubeShadowMapTest, TheFaceSizeIsCappedWhateverTheQualityAsks)
 TEST(CubeShadowMapTest, TheCubeIsAllocatedAndTheLightRoundTrips)
 {
     GraphicsDevice gd;
-    // plan_modern.md MOD-1612: some renderers refuse a RenderTargetCube outright -- LLGL's
+    // plans/plan_modern.md MOD-1612: some renderers refuse a RenderTargetCube outright -- LLGL's
     // validated OpenGL path throws from the constructor -- so the cube cannot even be built there.
     CNA_SKIP_WITHOUT_CUBE_RENDER_TARGETS(gd);
     CubeShadowMap cube(gd, ShadowQuality::Low);

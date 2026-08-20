@@ -55,7 +55,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         }
     }
 
-    // plan_opengl2.md (context-loss recovery): mirrors easy-gl's RecoverableResource.hpp exactly
+    // plans/plan_opengl2.md (context-loss recovery): mirrors easy-gl's RecoverableResource.hpp exactly
     // (release_gl_handle_only()/recreate_gl_resource()), reimplemented locally rather than
     // depending on EasyGL/easy-gl. Defined here (not inside the anonymous namespace below) so it
     // matches the forward declaration in OpenGL2Renderer.hpp and is visible both to the
@@ -226,7 +226,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         }
 #endif
 
-        // Hardware instancing (DrawInstancedPrimitivesEx, plan_opengl2.md follow-up): GL_ARB_
+        // Hardware instancing (DrawInstancedPrimitivesEx, plans/plan_opengl2.md follow-up): GL_ARB_
         // draw_instanced/GL_ARB_instanced_arrays are NOT GL 2.1 core, and -- unlike this file's own
         // GL 2.0/2.1 CORE calls, which link directly via GL_GLEXT_PROTOTYPES's extern declarations
         // on Linux/macOS (see the file-header comment) -- true ARB extension entry points are not
@@ -493,7 +493,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         }
 
         // ShaderEffect renderer: a user-authored, runtime-compiled GLSL program (Task
-        // CreateEffectRenderer / plan_opengl2.md follow-up). Reuses LinkProgram() -- so a custom
+        // CreateEffectRenderer / plans/plan_opengl2.md follow-up). Reuses LinkProgram() -- so a custom
         // vertex shader binds to the SAME fixed attribute locations as every built-in program
         // here (0=aPosition, 1=aColor, 2=aTexCoord, 3=aNormal, 4=aBoneWeight, 5=aBoneIndices) --
         // required because GLSL 1.10/1.20 (this file's target) has no `layout(location=N)`
@@ -724,7 +724,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(stride), reinterpret_cast<void*>(baseByteOffset + 40));
                 glDisableVertexAttribArray(1);
                 glVertexAttrib4f(1, 1, 1, 1, 1);
-                // plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and,
+                // plans/plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and,
                 // for 80, a packed COLOR_0 appended; their skinning suffix sits at 48/64 exactly as
                 // stride 68's does, so all three share this branch.
                 if (stride == 68 || stride == 76 || stride == 80)
@@ -739,7 +739,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                     glDisableVertexAttribArray(4);
                     glDisableVertexAttribArray(5);
                 }
-                // plan_gltf.md GLTF-465: location 1 is this file's `aColor` for every program, and
+                // plans/plan_gltf.md GLTF-465: location 1 is this file's `aColor` for every program, and
                 // the two colour-carrying PBR records bind the real attribute there instead of the
                 // constant white set above. The PBR fragment shader gates it on uVertexColorEnabled,
                 // so an uncoloured stride-60/80 buffer -- whose slot the importer fills with opaque
@@ -753,7 +753,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                                           static_cast<GLsizei>(stride),
                                           reinterpret_cast<void*>(baseByteOffset + colorOffset));
                 }
-                // plan_gltf.md GLTF-462. Stride 60 is the rigid PBR record with a second UV set at
+                // plans/plan_gltf.md GLTF-462. Stride 60 is the rigid PBR record with a second UV set at
                 // 48 and a packed COLOR_0 at 56, and it had NO case here at all: it fell into the
                 // `stride >= 32` catch-all below, which reads the TEXCOORD at offset 24 -- inside
                 // the tangent. So a dual-UV PBR mesh (live since GLTF-182) textured itself from the
@@ -783,7 +783,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             }
         }
 
-        // Task 1080 (this renderer's own follow-up item -- see plan_opengl2.md): maps a
+        // Task 1080 (this renderer's own follow-up item -- see plans/plan_opengl2.md): maps a
         // VertexElementFormat to the (component count, GL type, normalized) triple
         // glVertexAttribPointer() needs, mirroring EasyGLRenderer::
         // DescribeVertexElementFormat's identical table -- except Byte4, which GL 2.1 cannot read
@@ -951,7 +951,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             // Task 924 precedent (EasyGLTextureRenderer's own identical field): real mip level
             // count this texture was created for (1 = no mipmapping).
             int mipLevels{1};
-            // plan_opengl2.md (context-loss recovery): Texture2D.cpp already unconditionally calls
+            // plans/plan_opengl2.md (context-loss recovery): Texture2D.cpp already unconditionally calls
             // renderer_->ShareCpuPixels(cpuPixels_) on every pixel upload -- previously silently
             // discarded by the shared base-class no-op default. Storing it here lets
             // recreate_gl_resource() restore level 0 exactly like EasyGLTextureRenderer::
@@ -1093,7 +1093,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 if (renderer_) renderer_->RegisterRecoverable(this);
             }
 
-            // plan_opengl2.md (context-loss recovery): the constructor's own allocation logic,
+            // plans/plan_opengl2.md (context-loss recovery): the constructor's own allocation logic,
             // extracted so recreate_gl_resource() can reuse it verbatim -- mirrors
             // EasyGLRenderTargetRenderer::CreateResources()'s identical role. A render target's
             // GPU-rendered content cannot be CPU-shadowed (unlike VB/IB/Texture2D), so recreation
@@ -1271,7 +1271,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 return static_cast<int>(result);
             }
 
-            // plan_opengl2.md (context-loss recovery): a query result is inherently ephemeral
+            // plans/plan_opengl2.md (context-loss recovery): a query result is inherently ephemeral
             // (valid only for the single draw sequence between Begin/End) -- there is no CPU-side
             // "content" to shadow, matching EasyGLOcclusionQueryRenderer's own identical
             // regen-only recreate_gl_resource().
@@ -1344,7 +1344,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         // GL_TEXTURE_CUBE_MAP_POSITIVE_X+face), plus one depth/(stencil) renderbuffer shared
         // across all 6 faces (matches the common convention of clearing depth per-face rather
         // than needing 6 independent depth buffers). Single-sample only -- MSAA cube render
-        // targets are a follow-up item (plan_opengl2.md), unlike RenderTarget2D's own MSAA support.
+        // targets are a follow-up item (plans/plan_opengl2.md), unlike RenderTarget2D's own MSAA support.
         class RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public RecoverableResource
         {
         public:
@@ -1365,7 +1365,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 if (renderer_) renderer_->RegisterRecoverable(this);
             }
 
-            // plan_opengl2.md (context-loss recovery): see RenderTarget::CreateResources's
+            // plans/plan_opengl2.md (context-loss recovery): see RenderTarget::CreateResources's
             // identical doc comment -- content is not shadow-able, recreation is always blank.
             void CreateResources()
             {
@@ -1473,7 +1473,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             {
                 glGenTextures(1, &id);
                 glBindTexture(GL_TEXTURE_3D, id);
-                // Task (plan_opengl2.md follow-up, session 8): real FNA3D_Driver_OpenGL.c
+                // Task (plans/plan_opengl2.md follow-up, session 8): real FNA3D_Driver_OpenGL.c
                 // OPENGL_CreateTexture3D confirms depth halves per level (max(depth >> i, 1))
                 // exactly like width/height, even though Texture3D.cpp's own CalculateMipLevels
                 // (matching Texture3D.cs's LevelCount formula) deliberately excludes depth from the
@@ -1507,7 +1507,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
             bool GetData(int level, int x, int y, int z, int sw, int sh, int sd, void* data, int /*dataLength*/) const override
             {
-                // Task (plan_opengl2.md follow-up, session 8): glGetTexImage returns THIS level's
+                // Task (plans/plan_opengl2.md follow-up, session 8): glGetTexImage returns THIS level's
                 // own (smaller, halved-per-level) dimensions, not level 0's -- both the buffer size
                 // and the row/slice stride math below must use the level's real dimensions, not
                 // w/h/d (which are always level 0's). Exposed by the mip-storage-allocation fix
@@ -1541,12 +1541,12 @@ namespace CNA::Internal::Renderers::OpenGL2
             // matching EasyGLVertexBufferRenderer::uploadWithOptions's identical strategy.
             int capacity{};
             bool gpuAllocated{};
-            // Task 1080 (this renderer's own follow-up item, see plan_opengl2.md): non-empty only
+            // Task 1080 (this renderer's own follow-up item, see plans/plan_opengl2.md): non-empty only
             // when the caller supplied a genuinely custom VertexDeclaration via
             // VertexBuffer::SetDataRaw() -- see SetVertexDeclaration() below and
             // BindVertexAttributesForDeclaration()'s own doc comment for how this is consumed.
             std::vector<VertexElement> declaration;
-            // plan_opengl2.md (context-loss recovery): full copy of the last uploaded content,
+            // plans/plan_opengl2.md (context-loss recovery): full copy of the last uploaded content,
             // used by recreate_gl_resource() to restore it after a lost GL context -- mirrors
             // EasyGLVertexBufferRenderer's own cpu_data_ member exactly.
             std::vector<uint8_t> cpuShadow_;
@@ -1655,7 +1655,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             bool thirtyTwoBit{};
             int capacity{};   // index capacity requested at CreateIndexBufferNN() time; see VB::capacity.
             bool gpuAllocated{};
-            // plan_opengl2.md (context-loss recovery): see VB::cpuShadow_'s identical doc comment.
+            // plans/plan_opengl2.md (context-loss recovery): see VB::cpuShadow_'s identical doc comment.
             std::vector<uint8_t> cpuShadow_;
             OpenGL2Renderer* renderer_ = nullptr;
 
@@ -1792,7 +1792,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 {-ox, destination.Height - oy},
             };
             const float uv[4][2] = {{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
-            // Task (plan_opengl2.md follow-up): the translation term used to be
+            // Task (plans/plan_opengl2.md follow-up): the translation term used to be
             // `+ destination.X + origin.X` (and Y) -- origin is already subtracted into
             // localCorners above (matches FNA's own SpriteBatch.cs SpriteBatchItem.Texture
             // formula: cornerX = -originX*destinationW, then position = rotate(corner) +
@@ -1834,7 +1834,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 addressU_ = addressU;
                 addressV_ = addressV;
             }
-            // CNAEXT follow-up (plan_opengl2.md): only Draw()'s direct 3D counterpart
+            // CNAEXT follow-up (plans/plan_opengl2.md): only Draw()'s direct 3D counterpart
             // (customEffectRenderer in drawInternal()) was implemented first; this wires the same
             // EffectRenderer infrastructure into the 2D SpriteBatch path too.
             void SetCustomEffect(Effect* effect) override { customEffect_ = effect; }
@@ -1960,7 +1960,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 glGenBuffers(1, &vbo_);
             }
 
-            // SpriteBatch.Begin(..., Effect effect) path (Task follow-up, plan_opengl2.md): unlike
+            // SpriteBatch.Begin(..., Effect effect) path (Task follow-up, plans/plan_opengl2.md): unlike
             // the built-in shader above (which pre-transforms every vertex to clip space on the
             // CPU, `gl_Position=vec4(aPosition,1.0)` with no projection uniform at all), a custom
             // effect's vertex shader is expected to apply a `MatrixTransform` uniform itself --
@@ -2414,7 +2414,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             "void main(){"
             "vec4 baseColorTex=texture2D(uTex,cnaPbrTransformUV(vTex,0));"
             "vec3 baseColor=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),vec3(uSrgb.x));"
-            // plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base color".
+            // plans/plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base color".
             // LINEAR is why there is no transfer function here -- the attribute is a normalized
             // integer already in linear space, unlike the base-colour TEXTURE -- and both RGB and
             // alpha are multiplied because §3.9.2's base colour is an RGBA product.
@@ -2458,7 +2458,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
         const char* pbrVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
-            // plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+            // plans/plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
             "attribute vec4 aColor;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;"
             "uniform float uFogEnabled;uniform vec4 uFogVector;"
@@ -2487,7 +2487,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
         const char* pbrSkinnedVertexSrc =
             "attribute vec3 aPosition;attribute vec3 aNormal;attribute vec4 aTangent;attribute vec2 aTexCoord;"
-            // plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+            // plans/plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
             "attribute vec4 aColor;"
             "attribute vec4 aBoneWeight;attribute vec4 aBoneIndices;"
             "uniform mat4 uWVP;uniform mat4 uWorld;uniform mat3 uNormalMatrix;uniform mat4 uBones[72];uniform int uWeightsPerVertex;"
@@ -2764,7 +2764,7 @@ namespace CNA::Internal::Renderers::OpenGL2
     std::unique_ptr<IRenderTargetCubeRenderer> OpenGL2Renderer::CreateRenderTargetCube(
         int size, int depthFormat, bool /*preserveContents*/, bool mipMap, int /*multiSampleCount*/)
     {
-        // plan_opengl2.md follow-up: MSAA cube render targets are not implemented (unlike
+        // plans/plan_opengl2.md follow-up: MSAA cube render targets are not implemented (unlike
         // RenderTarget2D's own MSAA support) -- multiSampleCount is accepted (matching the
         // interface signature) but ignored. preserveContents is likewise accepted and needs no
         // storage: this renderer renders cube faces into persistent GL texture storage directly
@@ -3136,7 +3136,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             throw std::runtime_error("OPENGL2: incompatible vertex buffer");
         const auto* ib = dynamic_cast<const IB*>(ibi);
 
-        // Task CreateEffectRenderer (plan_opengl2.md): a user-authored ShaderEffect entirely
+        // Task CreateEffectRenderer (plans/plan_opengl2.md): a user-authored ShaderEffect entirely
         // bypasses every built-in program/uniform above -- bind it directly, upload the XNA-HLSL-
         // style "World"/"Projection"/"View" semantic names a custom shader is expected to declare
         // (matches EasyGLRenderer::BindCustomEffectMatrices's identical uniform names), and
@@ -3198,7 +3198,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
         const bool pbrSkinned = params && params->pbr && params->skinned &&
                                 (vb->stride == 68 || vb->stride == 76 || vb->stride == 80);
-        // plan_gltf.md GLTF-465: stride 60 is the rigid PBR record too (dual-UV, and since GLTF-462
+        // plans/plan_gltf.md GLTF-465: stride 60 is the rigid PBR record too (dual-UV, and since GLTF-462
         // vertex-coloured). It was missing here, so a stride-60 PBR draw fell through to `lit` below
         // and was shaded by the Blinn-Phong program instead of the metallic-roughness one -- the
         // layout fix alone was not enough to actually get PbrEffect's own shader.
@@ -3283,7 +3283,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             // litProgram_/skinnedProgram_ both declare uVertexColorEnabled (see litFragmentSrc's
             // own doc comment above for why BasicEffect needs this too, not just SkinnedEffect);
             // ignored (-1 location, silent no-op) by every other program in this `if` block.
-            // plan_gltf.md GLTF-465 adds the two PBR programs: the stride-60 and stride-80 records
+            // plans/plan_gltf.md GLTF-465 adds the two PBR programs: the stride-60 and stride-80 records
             // always carry a colour slot, so the shader must be told whether it means anything.
             if (lit || skinned || pbr || pbrSkinned)
                 glUniform1f(glGetUniformLocation(program, "uVertexColorEnabled"), params->vertexColorEnabled ? 1.0f : 0.0f);
@@ -3486,7 +3486,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         const int vertexCount = VertexCountForPrimitives(primitive, primitiveCount);
         if (ib)
         {
-            // Task (plan_opengl2.md follow-up): params->startIndex/baseVertex were previously
+            // Task (plans/plan_opengl2.md follow-up): params->startIndex/baseVertex were previously
             // ignored entirely (always drew from index 0, no base-vertex offset) -- a real gap
             // EasyGLRenderer does not have (see its own params.startIndex/params.baseVertex
             // handling). glDrawElementsBaseVertex is GL 3.2+/ARB_draw_elements_base_vertex, not
@@ -3503,7 +3503,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         }
         else
         {
-            // Task (plan_opengl2.md follow-up): params->vertexStart was previously ignored
+            // Task (plans/plan_opengl2.md follow-up): params->vertexStart was previously ignored
             // entirely (always drew from vertex 0) -- a real gap EasyGLRenderer does not
             // have (see its own params.vertexStart-driven draw_arrays call). This broke any
             // DrawPrimitives() sequence that draws multiple sub-ranges of ONE VertexBuffer at
@@ -3563,7 +3563,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                                                             PrimitiveType primitive, int primitiveCount, int instanceCount,
                                                             const GpuDrawParams& params)
     {
-        // plan_opengl2.md follow-up: hardware instancing is only supported through the custom-
+        // plans/plan_opengl2.md follow-up: hardware instancing is only supported through the custom-
         // ShaderEffect path (mirrors EasyGLRenderer::DrawInstancedPrimitivesEx's own
         // identical, documented scope reduction -- a non-1 VertexBufferBinding.InstanceFrequency
         // is not threaded through here either) -- the shared base-class default's
@@ -3983,7 +3983,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace OpenGL2 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

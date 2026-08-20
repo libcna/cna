@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-6: pixel oracle for the FNA3D renderer's 2D SpriteBatch path, which draws
+// plans/plan_fna3d.md FNA3D-6: pixel oracle for the FNA3D renderer's 2D SpriteBatch path, which draws
 // through XNA's own stock SpriteEffect executed by MojoShader -- FNA3D has no other shader entry
 // point, so this also proves the vendored Effect binary really runs on the GPU.
 //

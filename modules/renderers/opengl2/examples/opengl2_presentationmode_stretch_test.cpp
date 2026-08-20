@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact proof for real CnaPresentationMode::Stretch semantics --
+// plans/plan_opengl2.md: pixel-exact proof for real CnaPresentationMode::Stretch semantics --
 // previously fell back to the virtual size verbatim (no actual non-uniform scaling), a documented
 // shared gap with EasyGL. Mirrors SdlGpuRenderer::ComputeLogicalViewport's algorithm (the
 // established "this renderer actually does it right" reference elsewhere in this codebase).

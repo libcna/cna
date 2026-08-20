@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: skinned_pixellighting_twobone_quad
+# plans/plan_dx9.md D9-A5 scene corpus: skinned_pixellighting_twobone_quad
 # Second D9-73 oracle-proof scene for SkinnedEffect.PreferPerPixelLighting=true (see
 # skinned_pixellighting_quad.scene's own header for the full split-normal discriminator
 # rationale) -- this one selects VSSkinnedPixelLightingTwoBones/PSSkinnedPixelLighting (one of

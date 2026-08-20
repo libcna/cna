@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-18/19/20: real dynamic BlendState/DepthStencilState/RasterizerState proof
+// plans/plan_sdlgpu.md SDLGPU-18/19/20: real dynamic BlendState/DepthStencilState/RasterizerState proof
 // for the SDL_GPU graphics renderer -- before this task every pipeline hardcoded Opaque blending,
 // CullMode::None, FillMode::Solid, and no stencil test at all; GraphicsDevice.BlendState/
 // DepthStencilState/RasterizerState assignments never reached SDL_gpu's own pipeline-baked state.

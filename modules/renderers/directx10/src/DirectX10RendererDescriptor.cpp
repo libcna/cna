@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D28: the DirectX10 family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D28: the DirectX10 family's pre-construction contract.
 //
 // Real ID3D10Device, DXVK-delivered via d3d10core.
 
@@ -14,7 +14,7 @@ namespace CNA::Internal::Renderers::DirectX10
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

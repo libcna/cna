@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-57: real-device proof that runtime device selection and SDL window API
+// plans/plan_diligent.md DILIGENT-57: real-device proof that runtime device selection and SDL window API
 // selection are one consistent transaction, through the public XNA API only (GraphicsDeviceManager,
 // not a hand-built IGraphicsRenderer -- unlike diligent_backbuffer_readback_bounds_test.cpp, this is
 // exactly the path a real game takes).

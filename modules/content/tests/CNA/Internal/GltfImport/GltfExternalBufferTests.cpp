@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-028 / GLTF-030: a glTF file whose buffer lives in a separate `.bin`.
+// plans/plan_gltf.md GLTF-028 / GLTF-030: a glTF file whose buffer lives in a separate `.bin`.
 //
 // This is the shape most exported glTF actually has -- a `.gltf` next to a `.bin`, sometimes next
 // to a `textures/` directory. `gltf-external-bin`, `gltf-data-uri-bin`, and

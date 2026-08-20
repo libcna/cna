@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-50: real-device proof that GraphicsDevice.ReferenceStencil is used by
+// plans/plan_diligent.md DILIGENT-50: real-device proof that GraphicsDevice.ReferenceStencil is used by
 // the Diligent renderer independently of the currently-assigned DepthStencilState's own
 // ReferenceStencil field, mirroring Task 319's cross-renderer test
 // (examples/easygl_graphicsdevice_reference_stencil_test.cpp).

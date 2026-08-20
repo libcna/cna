@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D proof for the OpenGL4 graphics renderer --
+// plans/plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D proof for the OpenGL4 graphics renderer --
 // a colour texture attachment, an optional depth/stencil renderbuffer, an optional multisampled
 // colour renderbuffer resolved into the colour texture on unbind, and an optional mip chain
 // regenerated from level 0 on unbind (OpenGL4RenderTargetRenderer, modeled on

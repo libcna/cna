@@ -5,13 +5,13 @@
 - Audit status: AUDITED (full read, 52 lines)
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header
-- XNA/FNA relevance: N/A -- NOXNA (plan_media.md MEDIA-52/53)
+- XNA/FNA relevance: N/A -- NOXNA (plans/plan_media.md MEDIA-52/53)
 - Main related tests: not independently located in this pass
 
 ## Purpose
 Declares a one-shot recursive Music-root scanner producing an in-memory song index, with symlink-cycle and
 permission-denied hardening, and case-insensitive Artist/Genre display-value normalization
-(first-seen-casing wins, plan_media.md D10).
+(first-seen-casing wins, plans/plan_media.md D10).
 
 ## Executive Verdict
 Healthy -- see the paired `.cpp` for independent verification.

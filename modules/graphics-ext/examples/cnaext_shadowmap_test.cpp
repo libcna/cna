@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-852/MOD-856: the shadow subsystem as an application actually uses it.
+// plans/plan_modern.md MOD-852/MOD-856: the shadow subsystem as an application actually uses it.
 //
 // The unit tests reach into the pieces -- the fitted matrices, the state each effect hands to the
 // renderer, a quad's shadow on another quad. This is the whole thing from the outside: a cube on a
@@ -398,7 +398,7 @@ protected:
         Exit();
     }
 
-    /// plan_modern.md MOD-857. Off by default -- a timing on a software rasterizer is a recording,
+    /// plans/plan_modern.md MOD-857. Off by default -- a timing on a software rasterizer is a recording,
     /// not a budget, and running it in every CI job would spend minutes to learn nothing.
     void RunBenchmark(GraphicsDevice& device,
                       const std::vector<VertexPositionNormalTexture>& cube,

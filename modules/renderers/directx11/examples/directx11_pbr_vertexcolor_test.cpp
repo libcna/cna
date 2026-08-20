@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md CNB-58/CNB-67 follow-up: real-GPU pixel test for the D3D11 renderer's new
+// plans/plan_cnj.md CNB-58/CNB-67 follow-up: real-GPU pixel test for the D3D11 renderer's new
 // PbrEffect (stride 48)/SkinnedPbrEffect (stride 68)/SkinnedEffect vertex-color-on-skinned-mesh
 // (stride 56, Skinned3dColored/Skinned3dVertexLitColored) shader variants -- proves each new
 // stride/variant is actually selected and executes correctly end-to-end via a real D3D11 draw

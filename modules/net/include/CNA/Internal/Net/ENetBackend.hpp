@@ -210,7 +210,7 @@ namespace CNA::Internal::Net
         static std::string GetLastMigrationReconnectAttemptGamertagForTesting(NetworkSession* session);
 
         /**
-         * @brief Task 6.3 (plan_net.md Phase 6): overrides the time source SimulatedLatency's
+         * @brief Task 6.3 (plans/plan_net.md Phase 6): overrides the time source SimulatedLatency's
          * delayed-delivery queue reads `Now()` from, fixing it at `time` instead of the real
          * `std::chrono::steady_clock`.
          *

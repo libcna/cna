@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-063: the sparse-safe, bounds-checked index reader, and D4's regression witness.
+// plans/plan_gltf.md GLTF-063: the sparse-safe, bounds-checked index reader, and D4's regression witness.
 //
 // The defect these lock out (D4) was that CNA read primitive indices through
 // cgltf_accessor_read_index, which returns 0 -- with no error channel -- for a sparse accessor and

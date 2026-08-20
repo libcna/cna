@@ -37,7 +37,7 @@ namespace CNA::Internal::Renderers::SvgDom
     /**
      * @brief One sprite in a batch, encoded for a single wasm->JS handoff.
      *
-     * plan_svg_dom.md design decision 6, matching `HtmlDom::HtmlDomDrawCommand`'s own "one crossing
+     * plans/plan_svg_dom.md design decision 6, matching `HtmlDom::HtmlDomDrawCommand`'s own "one crossing
      * per batch" strategy: `Draw()` appends one of these per sprite and `End()` hands the whole
      * array to JS in one call. All geometry is resolved on the C++ side (see BuildDrawCommandEXT)
      * into the same `translate(destX,destY) rotate(rotation) scale(scaleX,scaleY) [flip]
@@ -126,7 +126,7 @@ namespace CNA::Internal::Renderers::SvgDom
     /**
      * @brief `SpriteBatch` renderer that emits real `<svg>`/`<image>` sprite elements.
      *
-     * plan_svg_dom.md design decision 6: `Draw()` does no DOM work at all -- it encodes one
+     * plans/plan_svg_dom.md design decision 6: `Draw()` does no DOM work at all -- it encodes one
      * SvgDomDrawCommand per sprite into a reusable `std::vector`, and `End()` hands the whole array
      * to JS in a single call. The JS side pools/reuses sprite elements across frames and
      * dirty-diffs every attribute/style write against each element's own last-applied state (the

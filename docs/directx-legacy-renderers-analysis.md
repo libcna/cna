@@ -6,7 +6,7 @@
 > each version onto the `IGraphicsRenderer` contract CNA actually requires, and estimates build/runtime
 > feasibility against the two renderer-delivery patterns this repo already uses. It does **not** open
 > tasks, edit any plan file, or change any build. Any real renderer would need its own `plan_dx*.md`,
-> its own owner authorization, and its own existence-gate spike — exactly as `plan_freedirect.md`/`plan_dx9.md`
+> its own owner authorization, and its own existence-gate spike — exactly as `plans/plan_freedirect.md`/`plans/plan_dx9.md`
 > already did.
 
 ---
@@ -195,7 +195,7 @@ Two things worth calling out from the matrix:
   unique to legacy renderers: CNA's own shipping `D3D9` and `D3D12` renderers don't wire it either
   (`docs/graphics-renderer-feature-matrix.md`).
 - **Update (2026-07-20, `DX2-90`, superseding the row above for `DIRECTX2` specifically): the ~15%
-  execute-buffer estimate was analysis-level and did not hold up empirically.** `plan_dx2.md`'s
+  execute-buffer estimate was analysis-level and did not hold up empirically.** `plans/plan_dx2.md`'s
   `DX2-0` existence-gate spike found the literal execute-buffer Direct3D (`IDirect3D`/
   `IDirect3DDevice::Execute`) genuinely non-functional in this environment's Wine — 14 variants
   tried, every one produced black output despite every API call succeeding (`dx2-spike/README.md`
@@ -337,7 +337,7 @@ a translation layer exists for that DirectX version. That "if" is the whole game
 | **DIRECTX3 (DirectDraw)** | `ddraw.h` (yes) | Wine `ddraw`, *or* Route A (chosen) | Already shipped via Route A |
 
 > The header/library availability above is the expected MinGW-w64 state and should be spike-verified
-> before any real work — exactly as `plan_dx9.md`'s "D9-0 existence gate" spiked `d3d9.h` + real XNA
+> before any real work — exactly as `plans/plan_dx9.md`'s "D9-0 existence gate" spiked `d3d9.h` + real XNA
 > before a line of renderer code was written. This document deliberately does **not** claim those
 > spikes have been run.
 
@@ -347,7 +347,7 @@ a translation layer exists for that DirectX version. That "if" is the whole game
 
 ### DirectX 3 — **already shipping** (`DIRECTX3`)
 Nothing to analyze; it exists. Complete 2D-only DirectDraw renderer via `free-direct`, Route A, native
-Linux, `ThrowNo3D` on everything 3D. Full status in `docs/freedirect-renderer.md` and `plan_freedirect.md`. If the
+Linux, `ThrowNo3D` on everything 3D. Full status in `docs/freedirect-renderer.md` and `plans/plan_freedirect.md`. If the
 owner's "a co DirectX 3?" was asking whether it *could* be done — it is done. If it was asking whether
 the *analysis* here changes anything for it — it does not.
 
@@ -422,7 +422,7 @@ Ranked by value-for-effort, purely as input to an owner decision — **no task i
    renderer if that path is ever taken.
 4. **DIRECTX3: already done.** No action.
 
-Whatever is chosen, it should follow the exact discipline `plan_dx9.md`/`plan_freedirect.md` set:
+Whatever is chosen, it should follow the exact discipline `plans/plan_dx9.md`/`plans/plan_freedirect.md` set:
 
 - **Run an existence-gate spike first** (does MinGW ship the header? does DXVK-`d3d8`/Wine-`wined3d`
   render a triangle under Wine on this machine?) — *before* authorizing renderer code.
@@ -457,7 +457,7 @@ Whatever is chosen, it should follow the exact discipline `plan_dx9.md`/`plan_fr
   oracle bar that legacy renderers cannot meet.
 - `docs/graphics-renderer-feature-matrix.md` — cross-renderer feature matrix and the Wine+DXVK/vkd3d
   verification caveat.
-- `plan_freedirect.md`, `plan_dx9.md`, `plan_dx.md` — the existing DirectX-family plans and their
+- `plans/plan_freedirect.md`, `plans/plan_dx9.md`, `plans/plan_dx.md` — the existing DirectX-family plans and their
   existence-gate discipline any legacy plan should copy.
 - `cmake/RendererSelection.cmake`, `cmake/BackendLibraries.cmake`, `cmake/toolchains/mingw-w64.cmake` —
   the renderer-selection, link-set, and cross-compile wiring a new renderer would extend.

@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: lit_textured_quad
+# plans/plan_dx9.md D9-A5 scene corpus: lit_textured_quad
 # A single BasicEffect (TextureEnabled=true, LightingEnabled=true, VertexColorEnabled=false) quad
 # facing the camera (Normal=(0,0,1) at every vertex), lit by one directional light travelling
 # straight at the surface (Direction=(0,0,-1) -> dot(-Direction,Normal)=1, full-facing but

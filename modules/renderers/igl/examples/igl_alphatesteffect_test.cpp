@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-55: AlphaTestEffect pixel conformance -- the first stock-effect parity test for
+// plans/plan_igl.md IGL-55: AlphaTestEffect pixel conformance -- the first stock-effect parity test for
 // this renderer family beyond BasicEffect's colour-only path.
 //
 // Scene: a red-cleared 64x64 back buffer, two textured quads side by side (left half, right half),

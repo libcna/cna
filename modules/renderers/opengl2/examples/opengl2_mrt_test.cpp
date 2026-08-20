@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: real Multiple Render Targets (MRT) proof via SetRenderTargets.
+// plans/plan_opengl2.md: real Multiple Render Targets (MRT) proof via SetRenderTargets.
 //
 // Until this task, IGraphicsRenderer::SetRenderTargets() was not overridden on OpenGL2 (the shared
 // base-class default binds only rts[0] via SetRenderTarget2D and silently drops every other

@@ -4,7 +4,7 @@
 
 Every renderer family owns one `GraphicsRendererDescriptor` translation unit -- the
 pre-construction contract `GraphicsDevice` consults before a window or a renderer exists
-(plan_runtimerenderer.md design decision 2). `scripts/check_runtime_renderer_discipline.py`
+(plans/plan_runtimerenderer.md design decision 2). `scripts/check_runtime_renderer_discipline.py`
 already checks that each family HAS one and that its factory is family-namespaced, but it does
 that with regular expressions: it never parses the file, let alone compiles it.
 

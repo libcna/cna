@@ -53,7 +53,7 @@ struct VSOutput
 };
 
 // Returns transpose(inverse(m)) directly (the cofactor matrix over the determinant) -- see
-// plan_dx.md DX-13-hlsl's task notes: HLSL has no built-in inverse()/GLSL-style mat3(mat4)
+// plans/plan_dx.md DX-13-hlsl's task notes: HLSL has no built-in inverse()/GLSL-style mat3(mat4)
 // equivalent, so this is a deliberate, documented deviation from the 1:1 GLSL port.
 float3x3 InverseTranspose3x3(float3x3 m)
 {

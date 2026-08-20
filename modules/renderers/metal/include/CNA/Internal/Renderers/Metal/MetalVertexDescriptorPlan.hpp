@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <vector>
 
-// plan_metal.md METAL-27: the core, plain-C++ logic of building a generic vertex-attribute layout
+// plans/plan_metal.md METAL-27: the core, plain-C++ logic of building a generic vertex-attribute layout
 // from an arbitrary VertexElement list -- everything except the final MTLVertexDescriptor object
 // construction itself (which stays in MetalRenderer.mm, the one piece that must touch
 // Objective-C). Reads only VertexElement (plain XNA framework type) and MetalVertexAttribFormat

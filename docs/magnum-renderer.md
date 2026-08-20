@@ -113,7 +113,7 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 - **Context loss** — `SetContextRecoveryEnabled`/`DebugSimulateContextLoss` keep
   `IGraphicsRenderer`'s defaults; desktop GL contexts are not lost the way an ES/WebGL one can be.
 
-`plan_magnum.md` tracks these as explicit tasks rather than leaving them implicit.
+`plans/plan_magnum.md` tracks these as explicit tasks rather than leaving them implicit.
 
 ## Post-audit contract
 

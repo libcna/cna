@@ -7,8 +7,8 @@ depth/stencil buffer, no MSAA. It exists to run genuinely 2D-only XNA games (`Sp
 than silently misbehave.
 
 This document is the final compatibility/completeness status after the full SDL_Renderer audit,
-`plan_graphics.md` Phase 70 ("SDL_Renderer: 2D renderer verified perfection"), Tasks 666–731. Every
-row below cites the task(s) that verified it — see `plan_graphics.md`'s own task table for full
+`plans/plan_graphics.md` Phase 70 ("SDL_Renderer: 2D renderer verified perfection"), Tasks 666–731. Every
+row below cites the task(s) that verified it — see `plans/plan_graphics.md`'s own task table for full
 FNA-comparison detail, discriminating-power proof, and exact fix code where applicable.
 
 **Status legend**
@@ -169,7 +169,7 @@ as SDL_Renderer `ctest` entries and passing.
 ## 11. BLOCKED decisions — still open
 
 Two architecture/behavior decisions were deliberately **not** guessed at and remain open pending a
-project-owner call. Both are documented in full in `plan_graphics.md` (rows 686/687 and 725) and in
+project-owner call. Both are documented in full in `plans/plan_graphics.md` (rows 686/687 and 725) and in
 `NEXT.md` §5 ("Known bugs and limitations").
 
 ### Tasks 686/687 — `TextureAddressMode::Wrap`/`Mirror` via `SpriteBatch`

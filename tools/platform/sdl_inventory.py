@@ -5,7 +5,7 @@ PLAT-1 - machine-readable inventory of CNA's direct SDL coupling.
 
 Purpose
 -------
-plan_platform.md separates CNA from SDL3 behind a CNA-owned platform contract. That work needs a
+plans/plan_platform.md separates CNA from SDL3 behind a CNA-owned platform contract. That work needs a
 number it can drive to zero, per module and per subsystem, rather than a hand-counted table that
 goes stale after the first migration commit. This script is that number.
 
@@ -56,7 +56,7 @@ Usage
     python3 tools/platform/sdl_inventory.py --format json
     python3 tools/platform/sdl_inventory.py --format csv --level file
     python3 tools/platform/sdl_inventory.py --symbols 40        # top-N symbol frequencies
-    python3 tools/platform/sdl_inventory.py --update            # rewrite plan_platform.md §2
+    python3 tools/platform/sdl_inventory.py --update            # rewrite plans/plan_platform.md §2
     python3 tools/platform/sdl_inventory.py --check             # fail if plan §2 is stale
 
 --check is what keeps §2 generated rather than hand-maintained; --update regenerates it in place
@@ -376,7 +376,7 @@ def splice(plan_text: str, generated: str) -> str:
     end = plan_text.find(END_MARKER)
     if begin == -1 or end == -1 or end < begin:
         raise SystemExit(
-            f"error: plan_platform.md is missing the generated-block markers\n"
+            f"error: plans/plan_platform.md is missing the generated-block markers\n"
             f"  expected {BEGIN_MARKER!r} … {END_MARKER!r}"
         )
     head = plan_text[: begin + len(BEGIN_MARKER)]
@@ -390,27 +390,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=("markdown", "csv", "json"), default="markdown")
     parser.add_argument("--level", choices=("module", "file", "symbol"), default="module", help="CSV granularity")
     parser.add_argument("--symbols", type=int, metavar="N", help="also print the N most frequent SDL symbols")
-    parser.add_argument("--update", action="store_true", help="rewrite plan_platform.md §2 in place")
-    parser.add_argument("--check", action="store_true", help="exit non-zero if plan_platform.md §2 is stale")
+    parser.add_argument("--update", action="store_true", help="rewrite plans/plan_platform.md §2 in place")
+    parser.add_argument("--check", action="store_true", help="exit non-zero if plans/plan_platform.md §2 is stale")
     args = parser.parse_args(argv)
 
     repo_root: Path = args.repo.resolve()
     inv = scan(repo_root)
 
     if args.update or args.check:
-        plan_path = repo_root / "plan_platform.md"
+        plan_path = repo_root / "plans/plan_platform.md"
         plan_text = plan_path.read_text(encoding="utf-8")
         updated = splice(plan_text, render_markdown(inv))
 
         if args.check:
             if updated != plan_text:
                 print(
-                    "plan_platform.md §2 is out of date with the measured inventory.\n"
+                    "plans/plan_platform.md §2 is out of date with the measured inventory.\n"
                     "Regenerate it with: python3 tools/platform/sdl_inventory.py --update",
                     file=sys.stderr,
                 )
                 return 1
-            print("plan_platform.md §2 matches the measured inventory.")
+            print("plans/plan_platform.md §2 matches the measured inventory.")
             return 0
 
         if updated != plan_text:

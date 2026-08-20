@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Material / PBR fixtures -- owning group ``materials`` (plan_gltf.md §24.2).
+"""Material / PBR fixtures -- owning group ``materials`` (plans/plan_gltf.md §24.2).
 
 Proves **D7**: a metallic-roughness material expressed purely as factors, with no texture maps at
 all, is downgraded to an untextured white `BasicEffect`. ``baseColorFactor``, ``alphaMode``,
@@ -1063,7 +1063,7 @@ _UNLIT_TEXCOORDS = [(0.0, 0.0), (0.75, 0.125), (0.25, 0.875)]
 def mat_unlit() -> Fixture:
     """A `KHR_materials_unlit` material -- the fixture that reaches vertex stride 32.
 
-    plan_gltf.md `GLTF-149`. Every other unskinned material fixture lands on the PBR stride (48),
+    plans/plan_gltf.md `GLTF-149`. Every other unskinned material fixture lands on the PBR stride (48),
     because metallic-roughness is glTF's default in two separate ways. Stride 32 --
     Position+Normal+TextureCoordinate, the plain `BasicEffect` layout -- is reached only by a
     material declaring a model CNA's PBR shaders do not implement, and it is the layout most

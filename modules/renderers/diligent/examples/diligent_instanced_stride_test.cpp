@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-65: real-device proof that hardware instancing respects the ACTUAL
+// plans/plan_diligent.md DILIGENT-65: real-device proof that hardware instancing respects the ACTUAL
 // bound vertex/instance stream strides instead of a hardcoded slot-0 stride 16 / an
 // AUTO_STRIDE-derived slot-1 stride 64.
 //

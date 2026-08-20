@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: alphatest_never_quad
+# plans/plan_dx9.md D9-A5 scene corpus: alphatest_never_quad
 # The first scene to exercise AlphaFunction=Never, the last untested PSAlphaTestLtGt value.
 # Confirmed against FNA's own AlphaTestEffect.cs source: Never sets `alphaTest.Z = -1;
 # alphaTest.W = -1;` (both branch targets negative) with alphaTest.X left at its zero default --

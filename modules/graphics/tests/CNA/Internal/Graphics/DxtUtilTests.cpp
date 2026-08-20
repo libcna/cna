@@ -135,7 +135,7 @@ TEST(DxtUtil, DecompressDxt1_NonSquare_Width8_Height4)
         }
 }
 
-// plan_xnb.md XNB-43/47: a dataSize too small for the requested width/height must be rejected
+// plans/plan_xnb.md XNB-43/47: a dataSize too small for the requested width/height must be rejected
 // before any block read, not discovered mid-decode -- found via a whole-container fuzz test that
 // mutated a real .xnb's own declared byteCount field, confirmed as a real heap-buffer-overflow
 // under -DCNA_SANITIZE=address,undefined (Read8/16/32 never themselves bounds-checked pos against

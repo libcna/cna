@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D34: the Wicked family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D34: the Wicked family's pre-construction contract.
 //
 // Wicked Engine's RHI creates its own Vulkan (or D3D12) device from the native window handle, like
 // LLGL's Vulkan module -- no graphics-API window intent, which is just as well since the platform refuses a window that is
@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::Wicked
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

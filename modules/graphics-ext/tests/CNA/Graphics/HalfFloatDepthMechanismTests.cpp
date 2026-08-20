@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2035, the mechanism: *why* did a half-float depth target defeat every
+// plans/plan_modern.md MOD-2035, the mechanism: *why* did a half-float depth target defeat every
 // screen-space effect in this layer?
 //
 // The ticket was closed by changing the format. The reason stayed open, and the previous attempt --

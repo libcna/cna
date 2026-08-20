@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_gltf.md GLTF-473: the shared refusal for a fixed-function renderer about to read one
+// plans/plan_gltf.md GLTF-473: the shared refusal for a fixed-function renderer about to read one
 // layout's bytes through another layout's rule.
 //
 // A renderer with a programmable pipeline binds a vertex attribute per declared element, so a
@@ -132,7 +132,7 @@ namespace CNA::Internal::Renderers
         message +=
             ". Reading it anyway would reinterpret one layout's bytes through another's rule and "
             "produce a plausible but wrong surface reported as a successful draw, so the draw is "
-            "refused instead (plan_gltf.md GLTF-473).";
+            "refused instead (plans/plan_gltf.md GLTF-473).";
         if (unsupportedSemantic != nullptr)
         {
             message += " This draw reached a fixed-function route because ";

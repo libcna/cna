@@ -11,7 +11,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_html_dom.md HTMLDOM-23 / design decision 7: installs the two JS helpers the draw paths use
+// plans/plan_html_dom.md HTMLDOM-23 / design decision 7: installs the two JS helpers the draw paths use
 // to turn a texture's pixels into something CSS (or a render target's Canvas2D context) can draw.
 //
 // They are installed onto `Module` rather than declared as their own EM_JS functions on purpose:
@@ -40,7 +40,7 @@
 // The untinted straight variant is the base canvas itself, not a copy: it is by far the most common
 // case (an ordinary untinted sprite) and copying it would double every texture's memory for nothing.
 //
-// plan_html_dom.md HTMLDOM-106: mode 1's "RGB divided by alpha" is only correct for an UPLOADED
+// plans/plan_html_dom.md HTMLDOM-106: mode 1's "RGB divided by alpha" is only correct for an UPLOADED
 // texture, whose bytes are the game's own and are, by XNA/FNA's AlphaBlend convention, assumed
 // already premultiplied. A render target's own backing canvas is never in that state: any Canvas2D
 // read or redraw of it (getImageData, or using it as a drawImage source) is guaranteed straight
@@ -57,7 +57,7 @@
 EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
     if (Module['cnaDomGetVariant']) return;
 
-    // plan_html_dom.md HTMLDOM-109: memory-owning variants (everything except the one free, shared,
+    // plans/plan_html_dom.md HTMLDOM-109: memory-owning variants (everything except the one free, shared,
     // untinted-straight base variant below) live in ONE global `Module['cnaDomVariantCache']` -- a
     // real `Map`, keyed `id + ':' + key`, whose OWN insertion order is the recency order this cache
     // relies on. A cache HIT deletes and re-inserts its entry (`cnaDomVariantCacheGet`), which is
@@ -108,7 +108,7 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
     Module['cnaDomGetVariant'] = function(id, mode, r, g, b) {
         const entry = Module['cnaDomTextures'] && Module['cnaDomTextures'][id];
         if (!entry || !entry.ctx) return null;
-        // plan_html_dom.md HTMLDOM-106: a render target's own canvas is always straight (non-
+        // plans/plan_html_dom.md HTMLDOM-106: a render target's own canvas is always straight (non-
         // premultiplied) alpha on ANY Canvas2D read or redraw -- getImageData/drawImage's own
         // contract, unaffected by whatever blend mode drew the content -- whereas an UPLOADED
         // texture's bytes are the game's own and are, by XNA/FNA's AlphaBlend convention, assumed
@@ -119,7 +119,7 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         if (entry.isRenderTarget && mode === 1) mode = 0;
         const tinted = (r !== 255 || g !== 255 || b !== 255);
 
-        // plan_html_dom.md HTMLDOM-109: the untinted straight variant is the base canvas itself, not
+        // plans/plan_html_dom.md HTMLDOM-109: the untinted straight variant is the base canvas itself, not
         // a copy -- by far the most common case (an ordinary untinted sprite) -- so it is memoized
         // directly on the entry, OUTSIDE the capped global cache entirely. It owns no memory of its
         // own and must never compete with real (memory-owning) variants for one of the 256 slots.
@@ -162,9 +162,9 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         return variant;
     };
 
-    // plan_html_dom.md HTMLDOM-97: TextureAddressMode::Mirror (symmetric on both axes) has no CSS
+    // plans/plan_html_dom.md HTMLDOM-97: TextureAddressMode::Mirror (symmetric on both axes) has no CSS
     // background-repeat equivalent, so it is emulated the same way CANVAS's own equivalent gap was
-    // closed (plan_canvas.md CANVAS-44): a lazily-built, cached 2x2 tile where the source variant's
+    // closed (plans/plan_canvas.md CANVAS-44): a lazily-built, cached 2x2 tile where the source variant's
     // pixels are drawn once per quadrant, alternate quadrants horizontally/vertically flipped.
     // Tiling THAT image with ordinary CSS/CanvasPattern 'repeat' reproduces mirror-repeat exactly,
     // by construction -- repeating a 2x2 mirror tile at period 2*width/2*height IS mirror-repeat.
@@ -202,7 +202,7 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         return variant;
     };
 
-    // plan_html_dom.md HTMLDOM-104: TextureAddressMode::Clamp with an out-of-bounds sourceRectangle
+    // plans/plan_html_dom.md HTMLDOM-104: TextureAddressMode::Clamp with an out-of-bounds sourceRectangle
     // samples the nearest EDGE TEXEL for the overflow, not a crop -- this builds a cached, edge-
     // extended copy of a texture's own variant so the ordinary single-background-image sprite path
     // (unchanged otherwise) can sample straight through the padding as if it were real texture data.
@@ -258,7 +258,7 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
         return variant;
     };
 
-    // plan_html_dom.md HTMLDOM-104: given a draw's raw (possibly out-of-bounds) source rectangle and
+    // plans/plan_html_dom.md HTMLDOM-104: given a draw's raw (possibly out-of-bounds) source rectangle and
     // which axes are tiled (Wrap/Mirror -- never padded), decides whether a plain or edge-extended
     // variant is needed and returns BOTH the variant to sample from and the source coordinates
     // shifted to match it. Shared by both CNA_HtmlDom_FlushSprites paths (DOM and Canvas2D) so the
@@ -295,7 +295,7 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
     };
 });
 
-// plan_html_dom.md HTMLDOM-20: every texture owns one private off-screen canvas (OffscreenCanvas
+// plans/plan_html_dom.md HTMLDOM-20: every texture owns one private off-screen canvas (OffscreenCanvas
 // where available, else a detached <canvas>), registered by integer id in Module['cnaDomTextures'].
 // The canvas holds the pixels; every derived form of those pixels (HTMLDOM-109) lives in the global
 // `Module['cnaDomVariantCache']`, dropped for this entry specifically whenever its pixels change.
@@ -303,7 +303,7 @@ EM_JS(void, CNA_HtmlDom_InstallTextureHelpers, (), {
 // willReadFrequently: every variant this texture ever produces starts with a getImageData on this
 // context, so the browser should keep it CPU-backed instead of repeatedly reading back from the GPU.
 //
-// isRenderTarget: plan_html_dom.md HTMLDOM-106. True only for HtmlDomRenderTargetRenderer's own
+// isRenderTarget: plans/plan_html_dom.md HTMLDOM-106. True only for HtmlDomRenderTargetRenderer's own
 // backing canvas (its constructor is this function's only caller with isRenderTarget != 0) -- see
 // cnaDomGetVariant's own comment for why AlphaBlend sampling needs to know this.
 EM_JS(void, CNA_HtmlDom_CreateTexture, (int id, int width, int height, const uint8_t* rgba, int isRenderTarget), {
@@ -330,7 +330,7 @@ EM_JS(void, CNA_HtmlDom_CreateTexture, (int id, int width, int height, const uin
                                      sharedBaseVariant: null, isRenderTarget: !!isRenderTarget };
 });
 
-// plan_html_dom.md HTMLDOM-21/HTMLDOM-109: full level-0 re-upload. Every cached variant derived from
+// plans/plan_html_dom.md HTMLDOM-21/HTMLDOM-109: full level-0 re-upload. Every cached variant derived from
 // this entry's OLD pixels is dropped -- both the free shared base variant (its `.canvas` is `entry`'s
 // own canvas, so it always reflects the CURRENT pixels live and needs no data of its own re-created,
 // but its already-encoded `.url`, if any, is now a stale PNG of the old pixels and must not survive)
@@ -346,7 +346,7 @@ EM_JS(void, CNA_HtmlDom_UpdateTexture, (int id, int width, int height, const uin
     if (Module['cnaDomVariantCacheClearOwner']) Module['cnaDomVariantCacheClearOwner'](entry);
 });
 
-// plan_html_dom.md HTMLDOM-109: drops this texture's own live records from the global variant cache
+// plans/plan_html_dom.md HTMLDOM-109: drops this texture's own live records from the global variant cache
 // BEFORE the registry entry itself is removed -- otherwise those records would become orphaned,
 // unreachable-by-owner stale `(id,key)` pairs sitting in the cache until eviction finally reaches
 // them, wasting a cache slot a real, still-live variant could have used instead.
@@ -408,7 +408,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         , width_(data.width)
         , height_(data.height)
     {
-        // plan_html_dom.md HTMLDOM-120: neither Texture2D's own constructors nor this one validate
+        // plans/plan_html_dom.md HTMLDOM-120: neither Texture2D's own constructors nor this one validate
         // width/height are positive anywhere upstream -- a zero/negative size would otherwise reach
         // `new OffscreenCanvas(w,h)`/`canvas.width=w` (CNA_HtmlDom_CreateTexture below), whose
         // behavior for a degenerate size is browser-implementation-defined and untested here.
@@ -442,7 +442,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         , width_(width)
         , height_(height)
     {
-        // plan_html_dom.md HTMLDOM-120: this constructor is used exclusively by
+        // plans/plan_html_dom.md HTMLDOM-120: this constructor is used exclusively by
         // HtmlDomRenderTargetRenderer (see this class's own header comment) -- RenderTarget2D's own
         // constructor (RenderTarget2D.cpp) validates neither width nor height before calling
         // CreateRenderTarget2D, so this is the only place in the whole chain that can catch it.
@@ -458,7 +458,7 @@ namespace CNA::Internal::Renderers::HtmlDom
                 "dimensions", std::to_string(width_) + "x" + std::to_string(height_),
                 "RGBA8 render-target storage must fit the platform address space.");
 #if defined(__EMSCRIPTEN__)
-        // plan_html_dom.md HTMLDOM-106: isRenderTarget=1 -- this constructor is used exclusively by
+        // plans/plan_html_dom.md HTMLDOM-106: isRenderTarget=1 -- this constructor is used exclusively by
         // HtmlDomRenderTargetRenderer (see this class's own header comment), never for a plain
         // Texture2D, so it can be hardcoded here rather than threaded through as its own parameter.
         CNA_HtmlDom_CreateTexture(id_, width_, height_, nullptr, 1);

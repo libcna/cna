@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_d3d10.md: smoke test for the D3D10 (real Direct3D 10 via DXVK's d3d10core, real HLSL
+// plans/plan_d3d10.md: smoke test for the D3D10 (real Direct3D 10 via DXVK's d3d10core, real HLSL
 // shaders) graphics renderer's device/swap-chain/back-buffer foundation.
 //
 // Check A -- GameWindow handle returns a real, non-null window.

@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P0-7: contract tests for the runtime-dispatch value types.
+// plans/plan_runtimerenderer.md RTR-P0-7: contract tests for the runtime-dispatch value types.
 //
 // These types carry no behaviour of their own beyond the window-kind compatibility rule, so what
 // is worth pinning is exactly that rule, the trivial-copyability the generated registry table
@@ -43,7 +43,7 @@ namespace
     static_assert(RendererIdentityCount == 49,
                   "the number of public renderer identities changed -- update "
                   "scripts/check_renderer_identities.py, cmake/RendererRegistry.cmake and the "
-                  "documented count in the same change (plan_runtimerenderer.md design "
+                  "documented count in the same change (plans/plan_runtimerenderer.md design "
                   "decision 10)");
 
     constexpr std::array<GraphicsRendererType, RendererIdentityCount> MakeAllRendererTypes()
@@ -86,7 +86,7 @@ TEST(GraphicsRendererDescriptorTest, DefaultsAreInertRatherThanPlausible)
     EXPECT_FALSE(descriptor.needsWindow);
     EXPECT_FALSE(descriptor.needsVideoSubsystem);
     EXPECT_EQ(descriptor.windowKind, RendererWindowKind::None);
-    // MERGE (plan_platform.md PLAT-8): the two pre-window hooks became data. An inert default now
+    // MERGE (plans/plan_platform.md PLAT-8): the two pre-window hooks became data. An inert default now
     // means "asks the platform for nothing", which is the same guarantee one step earlier: a
     // forgotten registry entry cannot silently acquire a high-density backing or a GL visual.
     EXPECT_FALSE(descriptor.wantsHighDpi);
@@ -113,7 +113,7 @@ TEST(GraphicsRendererDescriptorTest, PreWindowRequestDefaultsMatchPresentationDe
 }
 
 // ---------------------------------------------------------------------------
-// Window-kind compatibility (plan_runtimerenderer.md design decision 8)
+// Window-kind compatibility (plans/plan_runtimerenderer.md design decision 8)
 // ---------------------------------------------------------------------------
 
 TEST(RendererWindowKindTest, IdenticalKindsAreAlwaysCompatible)

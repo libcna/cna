@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: proof for Texture3D (GL_TEXTURE_3D, core desktop GL since 1.2) on the native
+// plans/plan_opengl2.md: proof for Texture3D (GL_TEXTURE_3D, core desktop GL since 1.2) on the native
 // OpenGL 2.1 graphics renderer. Verified via SetData()/GetData() round-trips across multiple
 // depth slices, since no stock effect samples a volume texture.
 //

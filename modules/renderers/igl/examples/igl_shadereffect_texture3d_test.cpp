@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-17/IGL-42/IGL-43/IGL-44/IGL-45/IGL-55: the first custom ShaderEffect exercise
+// plans/plan_igl.md IGL-17/IGL-42/IGL-43/IGL-44/IGL-45/IGL-55: the first custom ShaderEffect exercise
 // for this renderer family, and the only way to verify Texture3D actually works -- IGL has no
 // volume-texture readback path (IglTexture3DRenderer::GetData() refuses by name, see
 // IglResources.cpp), so sampling one through a real custom shader and reading the RENDERED pixel
@@ -75,7 +75,7 @@ void main() {
 }
 )";
 
-    // The SPIR-V variant (plan_igl.md IGL-43): explicit locations on every user in/out, the
+    // The SPIR-V variant (plans/plan_igl.md IGL-43): explicit locations on every user in/out, the
     // parameter in the std140 block CNA reserves for a custom effect, and the volume sampler bound
     // by its own layout qualifier instead of by an int uniform naming its unit.
     const char* kVulkanVertSrc = R"(#version 460

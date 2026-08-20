@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-28: real per-draw-call OcclusionQuery for the LLGL graphics renderer, asserted
+// plans/plan_llgl.md LLGL-28: real per-draw-call OcclusionQuery for the LLGL graphics renderer, asserted
 // against real pixels AND real pixel counts read back from the GPU.
 //
 // LLGL-specific counterpart of examples/vulkan_occlusionquery_pixelcount_test.cpp: same three

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-229 and MOD-230: three stacked passes on a live window, and what each costs.
+// plans/plan_modern.md MOD-229 and MOD-230: three stacked passes on a live window, and what each costs.
 //
 // A chain is not three passes run three times -- it is three passes that must each read what the
 // previous one wrote and never their own destination. That is what this program checks, using

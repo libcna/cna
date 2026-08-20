@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_multitexture_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_multitexture_quad
 # Closes D9-90's own explicitly-named "known, explicitly-scoped-out gap": multi-texture
 # SpriteBatch batching, i.e. a genuine FlushBatch()-on-texture-change mid-batch. Every earlier
 # spritebatchmode scene either draws exactly one sprite, or (D9-93's sortmode scenes) 2+ sprites

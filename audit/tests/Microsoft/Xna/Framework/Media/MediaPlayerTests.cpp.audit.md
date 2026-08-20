@@ -33,7 +33,7 @@ None at MEDIUM or higher.
 - None identified beyond the already-acknowledged, environment-imposed gap above.
 
 ## Positive Findings
-- The comment history embedded in this file (MEDIA-129, MEDIA-188/189/190, MEDIA-220, MEDIA-222, MEDIA-225) is an unusually transparent record of a test suite iteratively catching and fixing its own vacuous/overclaiming assertions — exactly the discipline the project's CLAUDE.md and `plan_media.md` documentation aim for.
+- The comment history embedded in this file (MEDIA-129, MEDIA-188/189/190, MEDIA-220, MEDIA-222, MEDIA-225) is an unusually transparent record of a test suite iteratively catching and fixing its own vacuous/overclaiming assertions — exactly the discipline the project's CLAUDE.md and `plans/plan_media.md` documentation aim for.
 - `GetVisualizationDataZeroesTheBuffersWhileDisabled` pre-fills the buffers with `1.0f` sentinel values before calling `GetVisualizationData`, so a no-op implementation that merely fails to touch the buffer could not pass — good defense against a "looks tested but isn't" false pass.
 
 ## Final Assessment

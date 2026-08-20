@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-20/DILIGENT-21: real-device proof that RenderTarget2D on the Diligent
+// plans/plan_diligent.md DILIGENT-20/DILIGENT-21: real-device proof that RenderTarget2D on the Diligent
 // renderer renders off-screen and reads back, through the public XNA API only.
 //
 // Check A -- a Clear() while a render target is bound lands in the target, read back via

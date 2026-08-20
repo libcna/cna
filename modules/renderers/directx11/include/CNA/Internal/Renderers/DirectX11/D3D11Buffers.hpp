@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX5 (DX-30/DX-31): real D3D11 vertex/index buffer renderers.
+// plans/plan_dx.md Phase DIRECTX5 (DX-30/DX-31): real D3D11 vertex/index buffer renderers.
 //
 // Both renderers hold their own Microsoft::WRL::ComPtr<ID3D11Device>/ComPtr<ID3D11DeviceContext>
 // (copied/AddRef'd from DirectX11Renderer, design decision 10) rather than a raw owner pointer

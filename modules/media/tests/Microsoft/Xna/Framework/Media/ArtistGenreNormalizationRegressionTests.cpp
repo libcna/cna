@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_media.md MEDIA-119: a dedicated, isolated regression guard for MEDIA-54's case-insensitive
+// plans/plan_media.md MEDIA-119: a dedicated, isolated regression guard for MEDIA-54's case-insensitive
 // Artist normalization fix -- deliberately separate from ArtistTests.cpp/GenreTests.cpp (which
 // cover Artist/Genre's broader public API) so this one specific regression can't silently
 // disappear inside a larger file's future edits. See MediaLibraryIndexTests.cpp's
@@ -28,7 +28,7 @@ namespace
     }
 }
 
-// plan_media.md MEDIA-54/D10: "ARTIST ONE" (Twilight.mp3's case-variant tag) must NOT create a
+// plans/plan_media.md MEDIA-54/D10: "ARTIST ONE" (Twilight.mp3's case-variant tag) must NOT create a
 // second, distinct Artist entry -- confirms the normalization applied in MediaLibraryIndex flows
 // through end-to-end into the real public API.
 TEST_F(MediaLibraryTestFixture, CaseVariantArtistTagDidNotCreateADuplicateArtist)

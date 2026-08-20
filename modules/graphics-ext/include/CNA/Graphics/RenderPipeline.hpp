@@ -162,7 +162,7 @@ namespace CNA::Graphics {
         /**
          * @brief Supplies the prepass's per-object velocity image, where one was produced.
          *
-         * plan_modern.md `MOD-2033`. Optional, and null is the normal case: `DepthNormalPrepass`
+         * plans/plan_modern.md `MOD-2033`. Optional, and null is the normal case: `DepthNormalPrepass`
          * produces this only when a game has opted in with `setVelocityEnabledEXT` **and** supplies
          * a previous world matrix per draw. With it, motion blur smears a moving object in a static
          * shot; without it, motion blur is the camera's alone, exactly as before.
@@ -174,7 +174,7 @@ namespace CNA::Graphics {
         /**
          * @brief Registers the transparent half of the scene.
          *
-         * plan_modern.md `MOD-2104`. Run after the opaque draw and **before** the post-process
+         * plans/plan_modern.md `MOD-2104`. Run after the opaque draw and **before** the post-process
          * chain, so transparent geometry is tonemapped and graded with everything else — a
          * transparent surface composited after the tonemapper would be the one thing in the frame
          * that was never scene-referred.
@@ -204,7 +204,7 @@ namespace CNA::Graphics {
         /**
          * @brief Measures each post-process pass with its own GPU timer query.
          *
-         * plan_modern.md `MOD-2164`. **Off by default.** Results are read a frame late and never
+         * plans/plan_modern.md `MOD-2164`. **Off by default.** Results are read a frame late and never
          * waited for, so switching it on does not insert the stall it exists to look for; a pass
          * whose result has not landed yet keeps the last one it reported.
          *
@@ -237,7 +237,7 @@ namespace CNA::Graphics {
         /**
          * @brief Supplies the shadow pass `begin` should run before the frame.
          *
-         * plan_modern.md MOD-858/MOD-859. The pipeline cannot draw the scene by itself, for the
+         * plans/plan_modern.md MOD-858/MOD-859. The pipeline cannot draw the scene by itself, for the
          * same reason it cannot produce the depth and normals SSAO wants: only the game knows what
          * its casters are. Registering the draw here is a convenience over calling
          * `ShadowMap::begin`/`end` directly, not a replacement for it -- `ShadowMap` stays usable
@@ -261,7 +261,7 @@ namespace CNA::Graphics {
         /**
          * @brief Supplies a skybox for `begin` to draw behind the scene.
          *
-         * plan_modern.md MOD-1104. Drawn immediately after the scene target is bound and cleared,
+         * plans/plan_modern.md MOD-1104. Drawn immediately after the scene target is bound and cleared,
          * which is *before* the game's own geometry rather than after it. The ordering is the one
          * decision here, and it follows from the mechanism: the sky is a fullscreen `SpriteBatch`
          * draw and carries no depth configuration, so it cannot be made to lose a depth test
@@ -383,7 +383,7 @@ namespace CNA::Graphics {
         /**
          * @brief What the last frame actually did.
          *
-         * plan_modern.md `MOD-717`. The four numbers a reader needs to answer "why is this frame
+         * plans/plan_modern.md `MOD-717`. The four numbers a reader needs to answer "why is this frame
          * slower than I expected", gathered where the pipeline already knows them. A POD rather
          * than a set of accessors, so a caller can snapshot a frame and compare it with another.
          *
@@ -417,7 +417,7 @@ namespace CNA::Graphics {
         /**
          * @brief Drops every target the pipeline owns, so the next frame allocates fresh ones.
          *
-         * plan_modern.md `MOD-715`. Called automatically when the device raises `DeviceReset`, and
+         * plans/plan_modern.md `MOD-715`. Called automatically when the device raises `DeviceReset`, and
          * exposed because a game that recreates its device by some other route needs the same
          * effect. After a context loss every GPU object the pipeline held names storage the driver
          * has already destroyed, and rendering into one is undefined rather than merely wrong.

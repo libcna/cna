@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md: real chronological draw-order proof for the SDL_GPU graphics renderer
+// plans/plan_sdlgpu.md: real chronological draw-order proof for the SDL_GPU graphics renderer
 // (adversarial-review finding #4) -- the renderer used to always render all 7 3D shader families
 // first and every SpriteBatch sprite last, regardless of the real order the game called
 // Draw()/SpriteBatch.Draw() in. drawOrder_ + RenderQueuedDraws() now replay every queued draw in

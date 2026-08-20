@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""L5 golden vertex/index buffers (`GLTF-007`, plan_gltf.md §7.1).
+"""L5 golden vertex/index buffers (`GLTF-007`, plans/plan_gltf.md §7.1).
 
 L5 is the layer at which the numbers stop being values and become **bytes**: exactly what CNA hands
 to `VertexBuffer::SetData`/`IndexBuffer::SetData`, at the boundary immediately before GPU resource
@@ -11,7 +11,7 @@ A golden buffer is derived from two things, and it is worth being precise about 
 
 * **the values** come from the fixture's own L3 expectation, which is spec-derived and independent
   of CNA; and
-* **the placement** comes from CNA's own vertex stride ABI (plan_gltf.md §2.3), which is a CNA
+* **the placement** comes from CNA's own vertex stride ABI (plans/plan_gltf.md §2.3), which is a CNA
   decision, not a specification one -- including its fill values for a slot whose attribute the
   file omits (normal ``(0,0,1)``, texcoord ``(0,0)``, colour alpha ``255``).
 
@@ -28,7 +28,7 @@ from typing import Any, Sequence
 
 from .builder import MODE_NAMES, TRIANGLES, primitive_count_for_mode
 
-#: The vertex stride ABI (plan_gltf.md §2.3) as a byte layout: stride -> [(field, offset, size)].
+#: The vertex stride ABI (plans/plan_gltf.md §2.3) as a byte layout: stride -> [(field, offset, size)].
 #: Every renderer's own ApplyLayout switch is a re-statement of this table; the C++ side of this
 #: oracle carries an independent copy and a test asserts the two agree.
 STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
@@ -56,7 +56,7 @@ STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
 
 #: What ExtractMesh writes into a slot whose attribute the source file does not author. These are
 #: CNA's own choices, not the specification's, and they are recorded here rather than assumed.
-#: The normal a vertex gets when the L3 record states none. plan_gltf.md GLTF-173: since the
+#: The normal a vertex gets when the L3 record states none. plans/plan_gltf.md GLTF-173: since the
 #: importer now COMPUTES a flat normal for a primitive that authors none, this constant is only
 #: still correct for the fixtures it applies to because every one of them is a planar CCW triangle
 #: whose own face normal is exactly (0,0,1). A fixture that is not planar must state its computed
@@ -66,7 +66,7 @@ DEFAULT_NORMAL = (0.0, 0.0, 1.0)
 DEFAULT_TEXCOORD = (0.0, 0.0)
 #: The colour a vertex gets when the primitive authors no ``COLOR_0`` but its layout has the slot.
 #:
-#: plan_gltf.md `GLTF-462`: strides 60 and 80 always carry a colour, because those four bytes were
+#: plans/plan_gltf.md `GLTF-462`: strides 60 and 80 always carry a colour, because those four bytes were
 #: stride 60's reserved discriminator and are now the packed ``COLOR_0``. §3.7.2.1 makes vertex
 #: colour a linear MULTIPLIER on base colour, so the identity value is opaque white -- a zero fill
 #: would multiply an uncoloured surface to black on any renderer that read the slot.
@@ -131,7 +131,7 @@ def select_stride(primitive: dict[str, Any]) -> int:
         return 20
     skinned = bool(primitive.get("joints")) and bool(primitive.get("weights"))
     colored = bool(primitive.get("colors"))
-    # plan_gltf.md GLTF-462: a vertex-coloured primitive is no longer excluded from the
+    # plans/plan_gltf.md GLTF-462: a vertex-coloured primitive is no longer excluded from the
     # metallic-roughness model. §3.7.2.1 makes COLOR_0 an additional linear multiplier on base
     # colour, which is a TERM in that model rather than a reason to leave it -- so the layout is the
     # PBR one and the colour rides in the four bytes stride 60 had reserved as its discriminator
@@ -250,7 +250,7 @@ def pack_index_buffer(indices: Sequence[int], vertex_count: int) -> tuple[bytes,
 
 
 def primitive_count(mode: int, index_count: int) -> int:
-    """The draw-call primitive count for a topology (plan_gltf.md §12.3).
+    """The draw-call primitive count for a topology (plans/plan_gltf.md §12.3).
 
     ``mode`` is the topology the buffer is in *after* import, not the one the file declared. A
     strip or fan is converted to a triangle list by then (`GLTF-072`), so a triangle-list count is

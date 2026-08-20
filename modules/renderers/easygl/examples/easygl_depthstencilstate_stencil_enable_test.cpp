@@ -14,7 +14,7 @@
 //      StencilPass=Replace, ReferenceStencil=0), in the background colour -- this establishes a
 //      known baseline explicitly via a real draw, NOT via GraphicsDevice::Clear(), because
 //      GraphicsDevice::Clear ignores ClearOptions::Stencil entirely on every renderer (confirmed
-//      while writing this test, tracked as a new Task 871 -- see plan_graphics.md) and this
+//      while writing this test, tracked as a new Task 871 -- see plans/plan_graphics.md) and this
 //      project's Vulkan render passes use stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE, so the
 //      stencil aspect's initial content is genuinely undefined there. Depth testing is disabled
 //      for every draw in this test (DepthBufferEnable=false throughout) to isolate stencil

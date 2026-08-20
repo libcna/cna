@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_blend2d.md: deep correctness/safety regression suite for the Blend2D renderer, exercising
+// plans/plan_blend2d.md: deep correctness/safety regression suite for the Blend2D renderer, exercising
 // Blend2DRenderer/Blend2DSpriteBatchRenderer/Blend2DTextureRenderer/Blend2DRenderTargetRenderer
 // DIRECTLY (no Game/GraphicsDeviceManager/SpriteBatch front-end) so every internal EXT hook
 // (ApplyBlendState, SetScissorRect/ApplyRasterizerState, SetSamplerFilter/SetSamplerAddressMode,

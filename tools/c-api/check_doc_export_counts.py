@@ -6,7 +6,7 @@
 already fails when that number changes without review. Three *sentences* repeat the same number in
 `docs/c-api/` and in `limitations.json`, and no gate read them: they said **2,720** for months while
 the baseline measured 2,838, were corrected by hand on 2026-08-17, and went stale again at the very
-next slice that added exports. `plan_binding.md` recorded that as "nothing prevents it happening
+next slice that added exports. `plans/plan_binding.md` recorded that as "nothing prevents it happening
 again". This is the thing that prevents it.
 
 The rule is deliberately narrow. A four-digit-or-more number counts as an export claim only when its

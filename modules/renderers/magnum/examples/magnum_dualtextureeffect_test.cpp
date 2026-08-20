@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-50: DualTextureEffect pixel test for the MAGNUM renderer.
+// plans/plan_magnum.md MAGNUM-50: DualTextureEffect pixel test for the MAGNUM renderer.
 //
 // Checks the two things a two-layer shader can get wrong without any other test noticing: FNA's
 // `color.rgb *= 2` overbright factor on the base layer, and whether the second layer participates

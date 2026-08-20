@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P4-13: the selection API's contract.
+// plans/plan_runtimerenderer.md RTR-P4-13: the selection API's contract.
 //
 // These live in the graphics module's test tree, not core's, because a meaningful test needs the
 // compiled-in renderer set to have been published -- and that is the graphics module's side of the

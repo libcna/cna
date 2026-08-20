@@ -51,7 +51,7 @@ namespace CNA::Internal::Xnb
         // Reject an adversarial/corrupt size before any allocation is attempted -- see
         // Texture2DReader's own note for why both the positivity check and CheckedMultiplyOrThrow()
         // (rather than raw int64_t multiplication, which can itself overflow -- REMED-CONTENT-009)
-        // are needed (plan_xnb.md XNB-43).
+        // are needed (plans/plan_xnb.md XNB-43).
         if (size <= 0)
         {
             throw ContentLoadException("TextureCubeReader: invalid size.");

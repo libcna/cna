@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-008 -- see GltfDrawParamsOracleEXT.hpp for the scope rules. Test scope only.
+// plans/plan_gltf.md GLTF-008 -- see GltfDrawParamsOracleEXT.hpp for the scope rules. Test scope only.
 
 #include "GltfDrawParamsOracleEXT.hpp"
 
@@ -321,7 +321,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 dump.skinned            = p.skinned;
                 dump.dualTexture        = p.dualTexture;
                 dump.lightingEnabled    = p.lightingEnabled;
-                // plan_gltf.md GLTF-376: the three directional lights as the shader receives them.
+                // plans/plan_gltf.md GLTF-376: the three directional lights as the shader receives them.
                 // A disabled light is a zero diffuse colour, not a flag -- the shader adds all
                 // three unconditionally.
                 const float* const dirs[3] = {p.light0Dir, p.light1Dir, p.light2Dir};
@@ -336,7 +336,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 }
                 dump.textureEnabled     = p.textureEnabled;
                 dump.vertexColorEnabled = p.vertexColorEnabled;
-                // plan_gltf.md GLTF-377: fog is state no glTF file can request. Both the flag and
+                // plans/plan_gltf.md GLTF-377: fog is state no glTF file can request. Both the flag and
                 // the vector are captured, because they can disagree -- a renderer that ignores
                 // the flag still fogs on a non-zero vector.
                 dump.fogEnabled = p.fogEnabled;

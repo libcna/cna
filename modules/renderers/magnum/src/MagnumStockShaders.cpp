@@ -351,7 +351,7 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
                 source += "layout(location=4) in vec4 aBoneWeights;\n";
                 source += "layout(location=5) in uvec4 aBoneIndices;\n";
             }
-            // plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on
+            // plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on
             // base colour. One program serves both of its family's strides (48/60 rigid, 68/80
             // skinned), so the attribute is declared unconditionally and uVertexColorEnabled decides
             // whether it is read. The renderer raises that flag only for the two strides that
@@ -518,7 +518,7 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot){
             source += "void main(){\n";
             source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 0), uRtFlipV.x));\n";
             source += "    vec3 baseLinear = mix(baseColor.rgb, cnaSrgbToLinear(baseColor.rgb), uSrgb.x);\n";
-            // plan_gltf.md GLTF-465: COLOR_0 multiplies the base-colour product, ALPHA INCLUDED --
+            // plans/plan_gltf.md GLTF-465: COLOR_0 multiplies the base-colour product, ALPHA INCLUDED --
             // the alpha half is where a BLEND-mode vertex-coloured primitive's transparency comes
             // from. COLOR_0 is linear, so unlike the base-colour texture it is not sRGB-decoded.
             source += "    vec4 cnaVertexColor = (uVertexColorEnabled > 0.5) ? vColor : vec4(1.0);\n";
@@ -742,7 +742,7 @@ vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot){
         // frame, so `pbr && skinned` is one program rather than a choice between two.
         if (selector.pbr)
         {
-            // plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records
+            // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465: strides 60 and 80 are the same two records
             // with a packed COLOR_0 (and a second UV set this renderer does not sample). They select
             // the same programs -- the colour is a term in the base-colour product, not a different
             // material model -- and the renderer raises uVertexColorEnabled for exactly these two.

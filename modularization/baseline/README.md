@@ -7,7 +7,7 @@ production change, per the campaign's no-loss/completeness gate.
   tracked file in the respective areas (`capture_inventory.py`).
 - `api-decls.tsv` — mechanical class/struct/enum declaration inventory over `include/`.
 - `graph.py` / `graph.json` — the include-graph derivation tool and its full edge data
-  (MODULARIZATION_PLAN.md §1.4).
+  (plans/MODULARIZATION_PLAN.md §1.4).
 - `ctest-names-opengles.txt` — `ctest -N` registration names of the pristine OPENGLES
   (default) configuration, 6526 entries.
 - `gtest-list-opengles.txt` — `CnaTests --gtest_list_tests` output of the pristine binary.

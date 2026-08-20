@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: dualtexture_quad
+# plans/plan_dx9.md D9-A5 scene corpus: dualtexture_quad
 # The second non-BasicEffect Stock Effect in the corpus: DualTextureEffect (VertexColorEnabled=
 # false), on a NEW custom vertex format (Position+TexCoord0+TexCoord1, stride 28 -- VSInputTx2,
 # D9-82d's own new D3D9-only vertex declaration; real XNA has no built-in dual-UV vertex struct

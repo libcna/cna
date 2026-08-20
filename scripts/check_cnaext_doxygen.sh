@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_modern.md MOD-7: the CNA::Graphics engine layer builds one Doxygen module page, with no
+# plans/plan_modern.md MOD-7: the CNA::Graphics engine layer builds one Doxygen module page, with no
 # undocumented public member.
 #
 # Usage: scripts/check_cnaext_doxygen.sh <repo-root>

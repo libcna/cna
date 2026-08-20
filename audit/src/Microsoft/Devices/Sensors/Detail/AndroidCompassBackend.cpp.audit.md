@@ -27,7 +27,7 @@ None.
 Directly consumes `ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()` and `ShouldRaiseCalibrateForAccuracyStatus()`/`ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees()` from `AndroidCompassMath.hpp` (audited separately, no findings) — confirmed this file passes the raw `sample.Values[0..3]`/`sample.Status` straight through with no intermediate transformation of its own that could introduce a mismatch with that header's own documented parameter conventions.
 
 ## Missing or Weak Tests
-Android-only, no host-side test seam reaches this exact multi-callback reentrancy chain, per this file's own comment (citing `plan_devices.md`'s `COMPASS-008` closing note) — an honestly disclosed gap, not a silent one.
+Android-only, no host-side test seam reaches this exact multi-callback reentrancy chain, per this file's own comment (citing `plans/plan_devices.md`'s `COMPASS-008` closing note) — an honestly disclosed gap, not a silent one.
 
 ## Positive Findings
 The `PublishReading()`-before-`calibrationCallback()` ordering fix (Task COMPASS-008) is a genuine, subtle reentrancy bug correctly identified and fixed, with the fix's correctness independently confirmed in this pass by tracing the actual call sequence.

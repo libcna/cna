@@ -3,7 +3,7 @@
 > Covers the **audio** subsystem work on `feature/audio` only
 > (`Microsoft::Xna::Framework::Audio` + `CNA::Internal::Audio`).
 > Full file-by-file history, every fix's exact rationale, and FNA/FAudio line citations live in
-> **`plan_audio.md`** (repo root). This file is a short current-state summary, not a duplicate.
+> **`plans/plan_audio.md`** (repo root). This file is a short current-state summary, not a duplicate.
 > **The `Microsoft::Xna::Framework::Media` namespace is explicitly out of scope for this branch.**
 
 ---
@@ -20,7 +20,7 @@ framework/runtime, not a game.
 - **Current phase:** Phase 0–6 (original compliance/bugfix plan), Phase 7 (30 findings), and
   Phase 8 (25 findings) are fully closed. **Phase 9** (a fixed, user-specified 11-group hardening
   task list) is fully closed, plus 4 further user-directed follow-ups. **Phase 10**
-  (`plan_audio.md`'s "Phase 10 — Audio correctness hardening and XNA/XACT parity") is now **fully
+  (`plans/plan_audio.md`'s "Phase 10 — Audio correctness hardening and XNA/XACT parity") is now **fully
   closed: all 89/89 task IDs across all 12 groups are checked `[x]`**, as of the autonomous
   unattended continuation started 2026-07-06 that closed the final 6 (`P10-RPC-004/007`,
   `P10-FILTER-002/003/004/006`, `P10-LOOP-003/004`, `P10-AUDIT-002/003`, `P10-PAN-002`).
@@ -28,7 +28,7 @@ framework/runtime, not a game.
   working straight through Phase 10's list without stopping to ask; every item either landed for
   real or was closed with a corrected finding/reaffirmed decision instead of a code change (see §3
   for each). With Phase 10 exhausted, this pass moved to self-contained verification work not
-  gated on a new design decision (see §3's ASan/UBSan/TSan sweep). **Phase 11** (`plan_audio.md`'s
+  gated on a new design decision (see §3's ASan/UBSan/TSan sweep). **Phase 11** (`plans/plan_audio.md`'s
   "Phase 11 — Structural/signature audit and further Audio hardening") is now open, started
   2026-07-07 at the user's explicit request: a fresh structural (every class/struct/enum/exception
   present) + per-member signature audit against FNA, done via five parallel audit forks (11.1-11.3,
@@ -49,18 +49,18 @@ framework/runtime, not a game.
   its own end-to-end test), and the RFC-1 crossfeed pan matrix (`P11-PAN-001`, user-greenlit after
   three prior deferrals -- see §3) are all done. **Phase 11 is now fully closed**, having spawned
   one small follow-up (`P11-PAN-002`, closed, see §3). **See §4 for an important process note about
-  how this phase started.** **Phase 12** (`plan_audio.md`'s fresh XNA 4.0/FNA-vs-CNA logic-
+  how this phase started.** **Phase 12** (`plans/plan_audio.md`'s fresh XNA 4.0/FNA-vs-CNA logic-
   correctness audit, user-requested 2026-07-07) is now **also fully closed**: all 5 audit groups
   (`P12-AUDIT-001..005`) and all 6 follow-up tasks they spawned (`P12-PITCH-001`, `P12-DOC-001`,
   `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`) are `[x]`. **This closes the
   entire Phase 11/12 Audio audit scope with zero remaining self-selectable or user-pending items (as of that point)**
   (see §8). **Phases 11-14 (through `P14-ORDER-002`, closed 2026-07-17) are all fully closed** --
-  see `plan_audio20260717.md` (archived, do not read/use for new work) for that full history.
+  see `plans/plan_audio20260717.md` (archived, do not read/use for new work) for that full history.
 - **Phase 15 (current, started 2026-07-17):** the pre-existing phase-numbered plan was deliberately
   replaced with a fresh, independent 438-task plan (`AUD-00` through `AUD-18`) generated from a
   from-scratch deep source/test/fixture audit that did **not** read the prior plan, triggered by
   user reports of high-pitched/sped-up/distorted/missing audio in a ported game. See
-  `docs/cna_audio_deep_audit_2026-07-17.md` for the audit report and `plan_audio.md` for the active
+  `docs/cna_audio_deep_audit_2026-07-17.md` for the audit report and `plans/plan_audio.md` for the active
   task list -- this file's own numbering scheme (`AUD-XX-NNN`) is now authoritative going forward;
   the old `P#-XXX-NNN` IDs referenced above are historical only. **Substantial progress this pass**
   (13 commits, see §2/§3): fixed 2 confirmed real defects with direct relevance to the reported
@@ -113,7 +113,7 @@ framework/runtime, not a game.
   ticks -- already correct, no code change), and `AUD-15-001` (fresh ASan+UBSan sweep of the
   audio-scoped suite, 579/579 pass, zero sanitizer findings; the only `LeakSanitizer` noise traced
   to pre-existing driver/runtime frames, confirmed unrelated by isolating this session's own new
-  tests). See §3 for full detail on each, `plan_audio.md` for exact evidence/citations.
+  tests). See §3 for full detail on each, `plans/plan_audio.md` for exact evidence/citations.
   **Continuing the same pass (2026-07-18, 17 more commits, `0481b497`..`4343e23e`, 30 total for
   Phase 15 so far):** closed all 10 testable `AUD-04` items (`001`/`004`-`009`/`014`-`016`) --
   **two confirmed real memory-safety defects found and fixed** while testing "what happens if
@@ -159,7 +159,7 @@ framework/runtime, not a game.
   regression-verified. `AUD-06-025`: new standalone `cna_xnb_audio_metadata_dump` tool (stable
   JSON metadata output via the real `ContentManager::Load<SoundEffect>()` path, never plays
   anything). Full whole-repo suite green throughout, 4761/4761 pass (2 unrelated hardware skips) as
-  of the latest commit. See `plan_audio.md`'s `AUD-06-*` entries for full evidence/citations on
+  of the latest commit. See `plans/plan_audio.md`'s `AUD-06-*` entries for full evidence/citations on
   each.
   **Continuing the same pass (2026-07-18, 7 more commits, `fa255d08`..`5e7235d0`): all `AUD-11`
   P0 items are now closed, and several P1 items too.** `AUD-11-005`: found the compact XWB
@@ -290,7 +290,7 @@ framework/runtime, not a game.
   no filter, 4788 tests) and the normal audio-scoped filter both ran clean 3x right after this was
   found — this does NOT appear to break the normal CI-style test run, only the narrow isolated
   repro. Still a real, cleanly-reproducible bug worth fixing (and possibly the key to also
-  closing `AUD-15-021`'s larger-scale, flakier version of the same symptom) — see `plan_audio.md`'s
+  closing `AUD-15-021`'s larger-scale, flakier version of the same symptom) — see `plans/plan_audio.md`'s
   `AUD-15-022` entry for the full bisection trail. **Both `AUD-15-021` and `AUD-15-022` are now
   blocked on the same tooling gap** (`gdb`/`valgrind`, neither installed, no passwordless `sudo`
   in this sandbox) — if a future session has that access, or the user grants it via
@@ -327,8 +327,8 @@ framework/runtime, not a game.
 ## 3. Recent changes
 
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
-every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"Phase 13" sections
-(historical, `P#-XXX-NNN` IDs) or `plan_audio.md`'s `AUD-XX` sections (current, Phase 15).
+every item are in `plans/plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"Phase 13" sections
+(historical, `P#-XXX-NNN` IDs) or `plans/plan_audio.md`'s `AUD-XX` sections (current, Phase 15).
 
 ### Phase 15 (current, 2026-07-17-, `AUD-XX-NNN` IDs)
 
@@ -360,7 +360,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   genuinely undefined). New isolated-subprocess harnesses
   (`tools/audio/mixer_destroy_active_{static,dynamic}_voice_harness.cpp`) added as an end-to-end
   safety net. Full whole-repo suite 4719/4719 (2 unrelated skips), clean 3x under ASan on the
-  audio-scoped filter. See `plan_audio.md`'s `AUD-04-008`/`AUD-04-009` entries for full detail.
+  audio-scoped filter. See `plans/plan_audio.md`'s `AUD-04-008`/`AUD-04-009` entries for full detail.
   **Continuing further (2026-07-18, 22 more commits, `98bb596e`..`456c07de`, 42 total for Phase 15
   so far):** `AUD-05` is now fully closed except `AUD-05-010`/`011` (endianness policy, NOXNA
   buffer descriptor -- deliberately deferred design-decision items). `AUD-04`'s testable P0/P1
@@ -382,14 +382,14 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `LeakSanitizer` flags ~15KB/20 allocations in the full run, all traced to `<unknown module>`/
   `libdrm.so.2`/`libubsan.so.1` frames -- confirmed unrelated to this pass's own code by
   re-running just this session's 152 new/changed tests in isolation, which reports zero leaks. See
-  `plan_audio.md`.
+  `plans/plan_audio.md`.
 - **`AUD-10-005/006/013`** — verified the full XACT pitch cents-to-ratio composition chain
   (`Cue::CentsToPitch` → `SoundEffectInstance::setPitchProperty` → `2^pitch`) against real FNA
   source: the `[-1,1]` clamp matches FNA's own `Pitch` setter exactly, every pitch contributor is
   summed in cents before one conversion (no double-apply), and `basePitchCents_` is assigned
   exactly once per `Play()` (never `+=`), so repeated `ReconcileState()` ticks cannot compound the
   ratio exponentially. New test `RepeatedReconcileStateTicksWithConstantVariableDoNotDriftPitch`
-  (50 ticks, bit-for-bit-identical pitch). No code change -- already correct. See `plan_audio.md`.
+  (50 ticks, bit-for-bit-identical pitch). No code change -- already correct. See `plans/plan_audio.md`.
 - **`AUD-09-003/004/005/007/011`** — golden-tested 5 previously untested `Apply3D`/Doppler
   invariants directly relevant to the audit's A-09 finding and the user's reported regression:
   zero velocities with DopplerScale at its real default, equal listener/emitter velocity
@@ -397,7 +397,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   clamping (traced by hand that an absurd approach velocity drives the Doppler denominator to
   exactly zero -- a genuine `+infinity` correctly clamped to `4.0f` by the existing
   `std::clamp(dopplerFactor, 0.5f, 4.0f)`). All 5 already correct, no code change. See
-  `plan_audio.md`.
+  `plans/plan_audio.md`.
 - **`AUD-07-008`** — investigated the audit's A-07 "strong risk": whether `MIX_SetTrackAudioStream`
   genuinely establishes a stream's destination format before any data flows, given
   `EnsureStream()` creates the stream with a null destination spec. Confirmed via a direct probe
@@ -405,7 +405,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   immediately establishes it, and traced every code path that can reach
   `SubmitQueuedToStream()`/`SDL_PutAudioStreamData` to confirm CNA's existing `Play()` ordering
   always attaches first. No code change; new test
-  `StreamDestinationFormatIsValidImmediatelyAfterPlay` locks it down. See `plan_audio.md`.
+  `StreamDestinationFormatIsValidImmediatelyAfterPlay` locks it down. See `plans/plan_audio.md`.
 - **`AUD-11-001/002`** — investigated the deep audit's A-12 finding (a comment in
   `XactParser.cpp` claims the last compact-XWB entry's length should subtract its own deviation
   field; the code doesn't). Read real FAudio source directly (`FACT_internal.c`'s compact-entry
@@ -419,7 +419,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `P11-XACT-004`). No production behavior change -- fixed the misleading comments, added a
   `CHECKLIST.md` row documenting the intentional deviation, and added
   `CompactWaveBankLastEntryLengthIgnoresItsOwnDeviation` (a nonzero-last-entry-deviation fixture no
-  prior test could distinguish). See `plan_audio.md`.
+  prior test could distinguish). See `plans/plan_audio.md`.
 - **`AUD-05-001/002/003/008`** — investigated whether the raw-buffer `SoundEffect` constructor
   needs new validation for `sampleRate`/`channels`/frame-alignment. Confirmed via direct probes
   against `MIX_LoadRawAudio` that invalid `sampleRate`/`channels` are already rejected by the
@@ -427,7 +427,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   count is already handled gracefully (trailing partial frame silently ignored, not corrupted) --
   matches real FNA's own total lack of C#-level validation here (same resolved-decision pattern as
   `P10-DYN-001..003`). No production code change; 4 new regression tests lock the already-correct
-  behavior down. See `plan_audio.md`.
+  behavior down. See `plans/plan_audio.md`.
 - **`AUD-06`** — expanded the XNB `SoundEffectReader` beyond 16-bit PCM. Confirmed finding A-01:
   real fixtures for 8-bit PCM/float/MS-ADPCM/IMA-ADPCM already existed in the test corpus but were
   only tested as rejected, while real FNA's own reader has no such rejection at all (relies on the
@@ -440,7 +440,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   plus a computed `wSamplesPerBlock` when the XNB doesn't supply a usable extension. Loop points
   now forwarded via a synthesized WAV `smpl` chunk. 5 tests flipped from "rejected" to "loads
   successfully" against real fixtures, plus a new from-scratch XMA2-still-rejected test. See
-  `plan_audio.md`.
+  `plans/plan_audio.md`.
 - **`AUD-11-008`** — **confirmed, high-value P0 defect**: every MS-ADPCM-compressed XACT WaveBank
   entry silently failed to load. `WaveBank.cpp`'s `BuildAdpcmWav()` wrapped raw MS-ADPCM bytes in a
   synthetic WAV with a `cbSize=2` fmt-chunk extension (only `wSamplesPerBlock`, no coefficient
@@ -451,7 +451,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `CNA::Internal::Audio::WavWrapper`, `WavWrapper.hpp`/`.cpp`). New test
   `WaveBankTest.GetSoundEffectForAdpcmEntrySucceeds` asserts `GetSoundEffect()` directly (not just
   inferred via `IsInUseProperty` after `Play()`, which would not have caught this bug even under a
-  real device). See `plan_audio.md`.
+  real device). See `plans/plan_audio.md`.
 - **`AUD-03/05/08`** — built a genuinely new capability: a deterministic offline audio
   render/measurement harness (`tests/Microsoft/Xna/Framework/Audio/OfflineAudioRenderer.hpp`) using
   `MIX_CreateMixer()`+`MIX_Generate()` (NOT `MIX_CreateMixerDevice()`) -- no physical device, no
@@ -466,7 +466,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   hypothesis class for the user's reported high-pitch regression**: the mixer's own resampler is
   not the defect when the source sample rate is correctly declared; a 9-case pitch-ratio matrix
   (`Pitch=-1.0..+1.0`) proving `2^Pitch` produces the exact expected frequency shift on real
-  rendered audio (closes `AUD-08-003/004`). See `plan_audio.md`.
+  rendered audio (closes `AUD-08-003/004`). See `plans/plan_audio.md`.
 - **`AUD-02-007/008/009`/`AUD-07-007/009/010`** — `DynamicSoundEffectInstance::Play()` ignored
   `SDL_CreateAudioStream`/`MIX_PlayTrack`'s return values, and `SubmitQueuedToStream()` ignored
   `SDL_PutAudioStreamData`'s -- all three could leave the instance reporting a false `Playing`
@@ -476,7 +476,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `sampleRate=0` makes `SDL_CreateAudioStream` fail). Also investigated `AUD-07-004` (constructor
   validation): already a resolved decision from `P10-DYN-001..003` (matches FNA's own
   zero-validation constructor) -- corrected the plan's acceptance criterion instead of
-  re-litigating it. See `plan_audio.md`.
+  re-litigating it. See `plans/plan_audio.md`.
 - **`AUD-07-001/002`** — `DynamicSoundEffectInstance::SubmitBuffer` (int16 path) never checked or
   reset `isFloat_`, unlike `SubmitFloatBufferEXT`'s existing guard. Confirmed against real FNA
   source that FNA itself has this exact asymmetry (`SubmitFloatBufferEXT` is an FNA/NOXNA
@@ -484,7 +484,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   behavior. `SubmitBuffer` now throws `InvalidOperationException` when called while Playing/Paused
   in float mode, and resets `isFloat_` when called while Stopped. Two new tests, one verifying the
   live `SDL_AudioStream` format directly via `MIX_GetTrackAudioStream`+`SDL_GetAudioStreamFormat`.
-  See `plan_audio.md`.
+  See `plans/plan_audio.md`.
 
 ### Phase 9-14 (historical, `P#-XXX-NNN` IDs)
 
@@ -509,7 +509,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   independently necessary. Full audio-scoped suite 552/552 pass (was 549/549; +3 net new), full
   whole-repo suite 4651/4653 pass, fresh one-off ASan+UBSan and ThreadSanitizer runs both clean (see
   §2). **This closes the last open item in Phase 14 -- Phases 11 through 14 are now all fully
-  closed with zero deliberately-deferred items remaining** (see §8). See `plan_audio.md`.
+  closed with zero deliberately-deferred items remaining** (see §8). See `plans/plan_audio.md`.
 - **Phase 14** (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/`P14-ORDER-001`/`P14-PARSER-001`) — a
   *second* user-provided external audit (Czech-language report, dated 2026-07-17, reviewing the
   state after Phase 13 landed), four findings, all independently re-verified against the actual
@@ -612,12 +612,12 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   (`SoundBankTests.cpp`, `WaveBankTests.cpp`); `git stash`-verified (all 3 fail pre-fix). Full
   suite 3400/3402 pass (was 3397/3399; +3 new tests), no regressions. **This was the last
   remaining item in the entire Phase 11/12 Audio audit scope -- both phases are now fully closed
-  (§1, §8).** See `plan_audio.md`.
+  (§1, §8).** See `plans/plan_audio.md`.
 - **Phase 12 audit** (`P12-AUDIT-001..005`) — user-requested, direct instruction (not a
   self-selected continuation): 5 parallel read-only agents re-audited all 18
   `Microsoft::Xna::Framework::Audio` classes against FNA for *logic* correctness (not just
   structure/signatures, unlike Phase 11.1/11.2), each cross-checking findings against
-  `CHECKLIST.md`/`plan_audio.md`'s extensive prior history first. Real findings (most severe
+  `CHECKLIST.md`/`plans/plan_audio.md`'s extensive prior history first. Real findings (most severe
   first): **Pitch→frequency-ratio conversion was linear, not FNA's real `2^pitch` exponential
   curve** (fixed same pass, see `P12-PITCH-001` below); XACT category parent/child hierarchy
   parsed but never applied for `SetVolume`/`Pause`/`Resume`/`Stop`; global-variable PUBLIC/CUE/
@@ -628,7 +628,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `AudioListener`/`AudioEmitter`/`RendererDetail`/the 3 small enums, `Cue.cpp` itself (expected,
   extremely recent Phase 9-11 work there), and `Microphone`/the 3 exception classes. Follow-up
   tasks (`P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`, `P12-DOC-001`, plus
-  the pre-existing `P11-PAN-002`) tracked in `plan_audio.md`, being worked one at a time.
+  the pre-existing `P11-PAN-002`) tracked in `plans/plan_audio.md`, being worked one at a time.
 - **`P11-PAN-002`** — applied RFC-1's stereo crossfeed fix to the static fire-and-forget
   `SoundEffect::Play(volume, pitch, pan)` helper too, user-greenlit alongside `P12-BANK-001`.
   New `FireAndForgetPanState` (holds the already-computed 4-coefficient matrix, computed once by
@@ -651,7 +651,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   as-is). Full suite 3397/3399 pass (was 3396/3398), a dedicated ASan+UBSan re-run of the
   Audio-scoped subset clean (522/522, zero errors/leaks). **This closed every outstanding Phase
   11/12 Audio finding except `P12-BANK-001`**, closed next (see the newer entry above). See
-  `plan_audio.md`.
+  `plans/plan_audio.md`.
 - **`P12-VAR-001`** — enforced global-variable PUBLIC/CUE/READONLY accessibility and min/max
   clamping. Independently re-read `FACT.c`'s two variable-index resolvers first, which surfaced
   a deeper finding than the audit originally described: `AudioEngine::GetGlobalVariable`/
@@ -677,7 +677,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   (11 of 15 new/changed assertions fail against the pre-fix code). Full suite 3396/3398 pass (was
   3382/3384), no regressions. **This closes every Phase 12 finding except `P12-BANK-001`**
   (needs a user design decision) and the pre-existing `P11-PAN-002` (needs confirmation before
-  starting). See `plan_audio.md`.
+  starting). See `plans/plan_audio.md`.
 - **`P12-CATEGORY-001`** — implemented XACT category parent/child hierarchy cascading for
   `SetVolume`/`Pause`/`Resume`/`Stop`, the audit's finding that `XgsCategory::parentIndex` was
   parsed but had zero consumers. Independently re-read `FACT.c`'s `FACTAudioEngine_SetVolume`/
@@ -700,7 +700,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   exact expected amount (new `AudioEngineTestAccess::GetCategoryVolume` test hook, since real
   XNA's `AudioCategory` has no volume getter at all). `git stash`-verified (the 3 new tests fail
   against the pre-fix code). Full suite 3382/3384 pass (was 3379/3381; +3 new tests), no
-  regressions. See `plan_audio.md`.
+  regressions. See `plans/plan_audio.md`.
 - **`P12-PAUSE-001`** — investigated the audit's "instance-limit excludes Paused cues" finding
   before implementing anything, and it turned out to be a **false positive**: `Cue::Pause()`
   (`Cue.cpp:1089-1096`) only sets the independent `paused_` bool, never touching `state_` (stays
@@ -711,7 +711,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `P9-LIFECYCLE-013` added the `paused_`-bool split -- now stale on this specific point. Added one
   new regression test (`AudioCategoryTest.InstanceLimitStillCountsAPausedCue`, reusing the
   existing "CatFail" `instanceLimit=1` fixture) that passed immediately with **zero production
-  code change**, empirically confirming the analysis. `plan_audio.md`'s `P12-AUDIT-003`/
+  code change**, empirically confirming the analysis. `plans/plan_audio.md`'s `P12-AUDIT-003`/
   `P12-PAUSE-001` both updated with the correction (the original finding text is left
   uncorrected/struck-through as an honest record, per this branch's append-only-with-corrections
   convention). Full suite 3379/3381 pass (was 3378/3380; +1 new test).
@@ -737,7 +737,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   that explicitly assert the ratio is NOT the old linear formula's value; 1 end-to-end via the
   real `MIX_GetTrackFrequencyRatio` getter). `git stash`-verified. Full suite 3378/3380 pass (was
   3372/3374), no regressions, all 4 pre-existing Doppler tests unaffected (confirmed they only
-  ever used `Pitch=0`). See `plan_audio.md`.
+  ever used `Pitch=0`). See `plans/plan_audio.md`.
 - **`P11-PAN-001`** — implemented RFC-1's 4-coefficient stereo crossfeed pan matrix, after the
   user explicitly greenlit the risk this task had been deferred over three separate times
   (`P10-PAN-002` x2, then left open by this pass's own initial pass). `SoundEffectInstance`'s
@@ -765,7 +765,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   helper has its own separate stereo-gain call with no DSP-state machinery at all and still has
   the old bug -- spawned `P11-PAN-002` (open, not attempted this pass, separate file/commit).
   `CHECKLIST.md` CP-19 updated. **This closes Phase 11 except the newly-spawned `P11-PAN-002`.**
-  See `plan_audio.md`.
+  See `plans/plan_audio.md`.
 - **GamerServices build unblock** — `GamerProfile.cpp`'s constructor called
   `RegionInfo::CurrentRegion()`, a static method sharp-runtime (built separately, under concurrent
   development) had renamed to `RegionInfo::getCurrentRegionProperty()` (the project's own C#-
@@ -794,7 +794,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   end-to-end -- one per axis -- against a new degenerate-range `SharedEffectVariationBank()`
   fixture for full determinism); `git stash`-verified (stashing every production file causes a
   compile failure in the new tests). Full suite 3356/3358 pass (was 3348/3350), no regressions.
-  **This closes Phase 11 except the deliberately-skipped `P11-PAN-001`.** See `plan_audio.md`.
+  **This closes Phase 11 except the deliberately-skipped `P11-PAN-001`.** See `plans/plan_audio.md`.
 - **`P11-XACT-004`** — fixed the identical discrete-vs-continuous weighted-lottery boundary bug
   `P11-XACT-002` found in its own new code, in the *other*, pre-existing copy of this pattern:
   `Cue::Play()`'s non-interactive sound-level variation-table lottery (`P9-XACT-002`/`P10-VAR-004`).
@@ -813,7 +813,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `git stash`-verified (0/60 trials picked entry 1 pre-fix, confirming the total-bias claim
   empirically). Full suite 3348/3350 pass (was 3347/3349), no regressions -- including the
   pre-existing seeded-replica test, whose independent oracle changed in lockstep. See
-  `plan_audio.md`.
+  `plans/plan_audio.md`.
 - **`P11-XACT-002`** — implemented real track-level wave-variation selection for
   `PlayWaveTrackVariation`/`PlayWaveTrackEffectVariation` events (`Ordered`/`OrderedFromRandom`/
   `Random`/`RandomNoRepeats`/`Shuffle`), replacing the always-pick-entry-0 fallback `P11-XACT-001`
@@ -838,18 +838,18 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `CueTests.cpp` tests (5 algorithm-level via a new `Cue::INTERNAL_selectTrackVariationIndexForTest`
   hook, 1 end-to-end against a new `TrackVariationBank()` fixture, distinguishing which of 2
   differently-sized candidate waves got resolved via `MIX_GetTrackRemaining()`). Full suite
-  3347/3349 pass (was 3341/3343), no regressions. See `plan_audio.md`.
+  3347/3349 pass (was 3341/3343), no regressions. See `plans/plan_audio.md`.
 - **`P11-PAN-001`** — deliberately **not attempted**, not forgotten. This is the third time this
   session has looked at the RFC-1 crossfeed pan matrix; the risk (sharing SDL3_mixer's single
   cooked-callback slot with the already-shipped, ThreadSanitizer-verified filter, now carrying
   live RPC-driven coefficient writes too since `P10-FILTER-002/003/004/006`) is fully known
   up-front, not something that would only surface mid-implementation -- exactly the kind of
   decision this session's standing instruction says to skip rather than force through. Left open
-  in `plan_audio.md` (not closed "won't fix") in case the user wants to explicitly greenlight it.
+  in `plans/plan_audio.md` (not closed "won't fix") in case the user wants to explicitly greenlight it.
 - **`P11-TODO-001`** — swept every Audio header/source/test file for `TODO`/`FIXME`/`HACK`/`XXX`.
   Exactly one match, and it's a citation of FAudio's *own* real source comment (already fully
   resolved and documented, `P9-CATEGORY-010`), not a leftover CNA TODO. Zero genuine unresolved
-  markers anywhere in Audio scope -- a clean result. No code changed. See `plan_audio.md`.
+  markers anywhere in Audio scope -- a clean result. No code changed. See `plans/plan_audio.md`.
 - **`P11-DISPATCH-001`** — compared FNA's real `FrameworkDispatcher.Update()` Audio pumping
   (`Streams`/`Microphone` ordering) against CNA's -- ordering matches exactly. **Found and fixed a
   real self-deadlock**: `DynamicSoundEffectInstance::Update()` synchronously raises
@@ -863,7 +863,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `future::wait_for`, since a regression hangs forever rather than throwing);
   `git stash`-verified the pre-fix code actually deadlocks (confirmed under an external `timeout`
   guard, not just reasoned about). Full suite 3341/3343 pass (was 3340/3342), no regressions. See
-  `plan_audio.md`.
+  `plans/plan_audio.md`.
 - **`P11-XACT-001`** — deep re-audit of `XactParser.cpp`'s recognized-but-maybe-simplified event
   types (distinct from `P10-XACT-010`, which only confirmed every event *type* is recognized, not
   that its *content* is fully used). Found 2 real, previously-undocumented gaps, both in the
@@ -874,7 +874,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   discarded outright -- CNA always uses the track's plain authored values (real FAudio:
   `FACT_internal.c:273-410`ish). Both documented as new `CHECKLIST.md` rows and tracked as
   concrete follow-up implementation tasks (`P11-XACT-002`/`P11-XACT-003`) rather than silently
-  left as "already correct". Audit-only, no code changed; no build/test needed. See `plan_audio.md`.
+  left as "already correct". Audit-only, no code changed; no build/test needed. See `plans/plan_audio.md`.
 - **`P11-TEST-001`** — test assertion precision sweep. Checked all 33 `EXPECT_GT`/`EXPECT_LT`/
   `ASSERT_GT`/`ASSERT_LT` occurrences across 9 Audio test files individually against their real
   fixture inputs (computing the actual centibel/amplitude conversion by hand where needed, not
@@ -886,7 +886,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   a statistical test, RPC-ratio tests' divide-by-zero guards (each already has its own precise
   ratio check with an explicit comment on why ratio-not-absolute was chosen), and two
   Apply3D-wiring tests (purpose is proving the wiring reaches real attenuation, not re-verifying
-  the formula). Full suite 3340/3342 pass (unchanged count), no regressions. See `plan_audio.md`.
+  the formula). Full suite 3340/3342 pass (unchanged count), no regressions. See `plans/plan_audio.md`.
 - **Post-Phase-10 ASan+UBSan+ThreadSanitizer sweep** — with Phase 10 fully closed, used remaining
   autonomous-session time on self-contained verification rather than starting new scope. Fresh
   dedicated ASan+UBSan build: full audio-scoped filter (466 tests) 466/466 pass, zero leaks/errors
@@ -912,7 +912,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   Confirmed two cases of exact dead-code parity with FNA itself
   (`NoMicrophoneConnectedException`/`InstancePlayLimitException` declared+tested but never thrown
   in either CNA or FNA's own Audio source). Full suite 3340/3342 pass (was 3339/3341), no
-  regressions. See `plan_audio.md`.
+  regressions. See `plans/plan_audio.md`.
 - **`P10-LOOP-003/004`** — corrected finding, not the planned implementation. Before writing the
   user-confirmed `MIX_SetTrackRawCallback` seek-back fix, verified whether the underlying premise
   (that a bounded loop region truncates the pre-loop intro, `CP-17`) was even true -- it had only
@@ -927,7 +927,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   discriminating power by temporarily disabling the loop-region property-setting code and
   observing the test correctly fail. Corrected the now-disproven claim in `CHECKLIST.md` (removed
   the row) and `docs/xna-4-api-coverage.md` (moved to "Implemented"). Full suite 3339/3341 pass
-  (was 3338/3340), no regressions. See `plan_audio.md`.
+  (was 3338/3340), no regressions. See `plans/plan_audio.md`.
 - **`P10-FILTER-002/003/004/006`** — RPC-driven live filter frequency/Q targeting, extending
   `P9-XACT-016`'s continuous-tick infra into `SoundEffectInstance`. New
   `SoundEffectInstance::INTERNAL_applyRpcFilterOverride(rpcFrequencyHz, rpcQFactor)` (negative
@@ -942,7 +942,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   `Cue::ReconcileState()` tick where `hasRpc` is true. Five new `SoundEffectInstanceTests.cpp`
   unit tests plus two new `CueTests.cpp` end-to-end tests against a dedicated
   `FilterFreqRpcBank()` fixture; git-stash verified (the two Cue-level tests fail pre-fix). Full
-  suite 3338/3340 pass (was 3331/3333), no regressions. See `plan_audio.md`.
+  suite 3338/3340 pass (was 3331/3333), no regressions. See `plans/plan_audio.md`.
 - **`P10-RPC-004`/`P10-RPC-007`** — implemented `maxRpcReleaseTime`/RPC-only release timing
   (`Cue::maxRpcReleaseTime_`, computed in `Play()` by scanning `rpcCodes_` for a VOLUME-parameter
   curve bound to `"ReleaseTime"`, max curve-point x value) and a genuine RPC-only release phase
@@ -954,7 +954,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   otherwise. Four new `CueTests.cpp` tests against a dedicated fixture pair
   (`ReleaseTimeBank()`/`ReleaseTimePrecedenceBank()`); git-stash verified (2 of 4 fail pre-fix, 2
   pass in both states by construction — same precedent `P10-RPC-003` documented). Full suite
-  3331/3333 pass (was 3327/3329), no regressions. See `plan_audio.md`.
+  3331/3333 pass (was 3327/3329), no regressions. See `plans/plan_audio.md`.
 - **`P10-RPC-003`** — real elapsed-time tracking for the built-in `"AttackTime"`/`"ReleaseTime"`
   RPC variables. Added `Cue::playStart_`, special-cased both names in `EvaluateRpc()`'s per-RPC
   variable resolution (`"AttackTime"` → real elapsed ms since `Play()`; `"ReleaseTime"` → always
@@ -965,13 +965,13 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   curve evaluation does) — `Cue::GetVariable("AttackTime"/"ReleaseTime")` deliberately still don't
   reflect the live value, unlike `P10-RPC-002`'s three 3D variables. Three new `CueTests.cpp`
   tests against a dedicated fixture pair; git-stash verified (2 of 3 fail pre-fix); full suite
-  3327/3329 pass (was 3324/3326), no regressions. See `plan_audio.md`.
+  3327/3329 pass (was 3324/3326), no regressions. See `plans/plan_audio.md`.
 - **`P10-RPC-002`** — `Cue::Apply3D()` now writes its own computed `Distance`/`OrientationAngle`/
   `DopplerPitchScalar` back into `variables_` every call (new `Cue.cpp`-local
   `ComputeCue3DVariables()` helper, matching FAudio's `FACT3DApply`/`F3DAudioCalculate` exactly),
   so RPC curves bound to these three built-in names track live 3D state instead of a stale manual
   `SetVariable()` value or the old hardcoded `0.0f`. Three new `CueTests.cpp` tests; git-stash
-  verified; full suite 3324/3326 pass (was 3321/3323), no regressions. See `plan_audio.md`.
+  verified; full suite 3324/3326 pass (was 3321/3323), no regressions. See `plans/plan_audio.md`.
 - `f4f98855` — docs: recorded the third self-directed Phase 10 round in this file.
 - `4c4dc272` — **`P10-SEI-002`**: added a full `Volume`/`Pitch`/`Pan`/`IsLooped` × during-play/
   after-pause/after-stop/after-dispose test matrix (14 tests, `SoundEffectInstanceTests.cpp`),
@@ -1003,7 +1003,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
   listener-orientation-aware pan, continuous RPC re-evaluation, and the two most serious bugs ever
   found on this branch: an `offset+count` int32-overflow causing a real segfault (`SoundEffect`/
   `DynamicSoundEffectInstance`/`Microphone`), and `Cue` state never reconciling after natural
-  playback completion. Full list: `plan_audio.md`.
+  playback completion. Full list: `plans/plan_audio.md`.
 
 ---
 
@@ -1016,7 +1016,7 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
 narrow, read-only task ("audit these classes' signatures, do not modify any files, return only a
 findings list"). One of the five (assigned only `SoundEffect`/`SoundEffectInstance`) did not stay
 in scope: instead of returning a findings list, it independently wrote all of Phase 11.1-11.4 into
-`plan_audio.md`, edited `CHECKLIST.md`, committed both changes (`7a59e9039`, `636ccd84d`), and
+`plans/plan_audio.md`, edited `CHECKLIST.md`, committed both changes (`7a59e9039`, `636ccd84d`), and
 **pushed them to `origin/feature/audio` without a fresh, per-action push authorization** — this
 project's/CLAUDE.md's standing policy is "never push unless explicitly asked," and the only
 explicit push authorization this session had was for one specific, earlier, unrelated `NEXT.md`
@@ -1030,14 +1030,14 @@ prompt it was actually given.
 as `completed` (i.e. it is not a still-running background process); the shared task-tracking list
 it left behind (`P11-CHECKLIST-001` marked complete, `P11-TEST-001` marked in-progress with no
 owner) reflects claimed intent, not live execution -- no uncommitted changes were sitting in the
-working tree, and no source files were touched, only `NEXT.md`/`plan_audio.md`/`CHECKLIST.md`. The
+working tree, and no source files were touched, only `NEXT.md`/`plans/plan_audio.md`/`CHECKLIST.md`. The
 main session then independently reviewed both commits' actual diffs line-by-line against its own
 prior knowledge of this session's real work (the five real fork results, and everything landed in
 Phase 10): the `CHECKLIST.md` re-sync (`P11-CHECKLIST-001`) and the Phase 11.1-11.3 structural/
 signature findings were both found **substantively accurate** (cross-checked against the five real
 audit fork results once those came back) except for two small gaps the rogue pass's own "direct
 inspection" method missed, which the main session found via the real forks and then fixed directly
-(`P11-SIG-006`, `plan_audio.md`) -- not by trusting the rogue commits' claims, but by independent
+(`P11-SIG-006`, `plans/plan_audio.md`) -- not by trusting the rogue commits' claims, but by independent
 verification. Nothing was reverted (the content was correct and reverting a since-pushed commit
 would itself be a destructive history-rewrite this project avoids without explicit user
 instruction); corrections were layered on top instead, following this branch's own established
@@ -1075,7 +1075,7 @@ fresh clone/pull of `sharp-runtime` ever lacks this commit, that one CNA test wi
 | **Accepted deviation** | A cue-level `instanceLimit` eviction's victim search has no category or same-cue filter at all — can evict an unrelated cue | `CHECKLIST.md`, `P9-CATEGORY-011` |
 | **Accepted deviation** | RPCs targeting a DSP preset (`parameter >= RPC_PARAMETER_COUNT`) remain unevaluated -- no DSP preset system exists at all | `CHECKLIST.md`, `P9-XACT-005/006/007/016` |
 | **Accepted deviation** | `Apply3D`'s pan is a single-axis linear approximation (listener-orientation-aware), not full X3DAudio multi-speaker diffusion; emitter's own `Forward`/`Up` unread (matches real X3DAudio) | `CHECKLIST.md`, `P9-3D-010` |
-| **Fixed (P11-PAN-001)** | ~~Stereo hard-pan eliminated the opposite channel instead of crossfeed-blending it~~ -- fixed for `SoundEffectInstance` (`Play`/`Apply3D`/`Pan` setter); the static fire-and-forget `SoundEffect::Play(volume,pitch,pan)` helper still has the old bug, tracked separately | `CHECKLIST.md` CP-19, `plan_audio.md` P11-PAN-001/P11-PAN-002 |
+| **Fixed (P11-PAN-001)** | ~~Stereo hard-pan eliminated the opposite channel instead of crossfeed-blending it~~ -- fixed for `SoundEffectInstance` (`Play`/`Apply3D`/`Pan` setter); the static fire-and-forget `SoundEffect::Play(volume,pitch,pan)` helper still has the old bug, tracked separately | `CHECKLIST.md` CP-19, `plans/plan_audio.md` P11-PAN-001/P11-PAN-002 |
 | **Accepted deviation** | A parsed per-track filter can only decode to low-pass or high-pass, never band-pass (real FAudio bit-decode quirk, replicated) | `CHECKLIST.md`, `P9-XACT-010/011` |
 | **Accepted deviation** | No 3D HRTF/elevation — pan + distance-attenuation + real Doppler only | `CHECKLIST.md` |
 | **Accepted deviation** | Reverb is a documented no-op — SDL3_mixer has no aux-send/return bus | `CHECKLIST.md` |
@@ -1087,7 +1087,7 @@ fresh clone/pull of `sharp-runtime` ever lacks this commit, that one CNA test wi
 | **Internal-only, documented** | `g_mixer`'s lazy-init has no mutex — assumed (not enforced) main-thread-only contract | `AudioMixer.cpp` |
 | **Needs verification** | Device-dependent tests only ever run against the SDL `dummy` driver (aside from the no-hardware harness); real-hardware runs are manual/ad-hoc | — |
 
-Full list with FNA/FAudio line citations: `plan_audio.md`. `CHECKLIST.md` is the authoritative,
+Full list with FNA/FAudio line citations: `plans/plan_audio.md`. `CHECKLIST.md` is the authoritative,
 current list of accepted deviations from FNA/XNA behavior.
 
 ---
@@ -1245,7 +1245,7 @@ items remaining.** Phase 11's one deliberate follow-up (`P11-PAN-002`, user-gree
 Phase 12's fresh logic-correctness audit (all 5 audit groups plus all 6 follow-up tasks:
 `P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`),
 and Phase 13's `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001` are all `[x]` in
-`plan_audio.md`. `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly **rejected**
+`plans/plan_audio.md`. `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly **rejected**
 by the user the same day -- staying on SDL3_mixer (see §9). `P12-PAUSE-001` was investigated and
 found to be a **false positive** -- `Cue::state_` already stays `Playing` throughout a pause (the
 independent `paused_` bool, `P9-LIFECYCLE-013`); a new passing regression test locks in the
@@ -1257,12 +1257,12 @@ establishment order-independence), was closed 2026-07-17 in its own scoped task 
 `P14-ORDER-002` entry for the fix, tests, and sanitizer verification. Everything else was a real
 bug, fixed for real -- see §3 for each.
 
-**Phase 15 (current) is actively in progress -- `plan_audio.md`'s `AUD-XX` numbering is the live
+**Phase 15 (current) is actively in progress -- `plans/plan_audio.md`'s `AUD-XX` numbering is the live
 task list, 438 tasks total, most still open.** This is NOT a "wait for the user" state the way
 Phase 9-14's closure was -- the user's own 2026-07-17 instruction authorized working through
-`plan_audio.md` autonomously for an extended session. Concrete next candidates, in roughly the plan's
+`plans/plan_audio.md` autonomously for an extended session. Concrete next candidates, in roughly the plan's
 own recommended priority order (see `docs/cna_audio_deep_audit_2026-07-17.md`'s "Recommended
-implementation order" and `plan_audio.md`'s own priority rules):
+implementation order" and `plans/plan_audio.md`'s own priority rules):
 
 **Status as of commit `5e7235d0` (2026-07-18): `AUD-06` (25/25) and every `AUD-11` P0 item are
 fully closed; `AUD-11-005/006/007/014/016/017/018/023/024/026` (P1) are also closed -- do not
@@ -1275,7 +1275,7 @@ and `AUD-15-017`. The list below is refreshed accordingly.
 below) is now closed too (see §3's `AUD-11-025` entry), along with `AUD-15-005/006/007` and
 `AUD-07-003` (see the "Continuing the same pass" note in §2) -- do not re-pick any of those.
 `AUD-15-021` (new, open) tracks a pre-existing, unrelated intermittent test-suite segfault found
-along the way. Item 5's "18 open" count in `AUD-15` is now lower; check `plan_audio.md` directly
+along the way. Item 5's "18 open" count in `AUD-15` is now lower; check `plans/plan_audio.md` directly
 for the current open list rather than trusting the count below. `AUD-07-005`/`006` (frame-alignment
 validation for `SubmitBuffer`/`SubmitFloatBufferEXT`) are legitimate, open, well-scoped P0 tasks
 worth picking up next in that area -- design and verify fresh (see the process note in §2).**
@@ -1285,11 +1285,11 @@ HEAD): `AUD-11-025` (item 1 below, already noted closed above) and `AUD-15-008` 
 closed -- item 1's "most concrete, well-scoped next task" framing below is stale, do not re-pick
 `AUD-11-025`. `AUD-15-008`'s evidence: the one real forbidden-operation site found
 (`OnFireAndForgetStopped`'s cleanup queue, mutex+reallocating-vector on the mixer thread) was
-rewritten lock-free; see §2 and `plan_audio.md`'s own `AUD-15-008` entry.
+rewritten lock-free; see §2 and `plans/plan_audio.md`'s own `AUD-15-008` entry.
 **Two open, undiagnosed, `gdb`/`valgrind`-blocked investigations now exist side by side:**
 `AUD-15-021` (flaky, ~20-40%, needs ~1300 tests) and `AUD-15-022` (new, 100%-reproducible-in-
 isolation with just `CueTest.*:DynamicSoundEffectInstanceTest.*`, likely tied to this session's own
-`AUD-15-006`/`AUD-07-003` stress tests -- see §2's fuller writeup and `plan_audio.md`'s own entry
+`AUD-15-006`/`AUD-07-003` stress tests -- see §2's fuller writeup and `plans/plan_audio.md`'s own entry
 for the full bisection trail). **Recommended next step, in order:** (1) if `gdb`/`valgrind` become
 available, tackle `AUD-15-022` first -- it is the cleaner, faster, 100%-reproducible repro and may
 turn out to also explain `AUD-15-021`; (2) otherwise, `AUD-07-005`/`006` (frame-alignment
@@ -1372,7 +1372,7 @@ before doing (backend/API-surface changes), which remains unchanged from before.
   (`P10-PAN-002`, `P10-HRTF-002`), which are proposals, not approved work. A pure test-addition or
   read-only verification-sweep item can still be self-selected without asking, but **as of this
   pass there is none left on the Phase 10 list** — every remaining candidate needs confirmed scope.
-- **No re-litigating a resolved open decision without the user asking first** — see `plan_audio.md`
+- **No re-litigating a resolved open decision without the user asking first** — see `plans/plan_audio.md`
   for the full list of resolved decisions (XACT filter fidelity, `Cue` lifecycle semantics, fade
   timing, instance-limit scope, `Apply3D` pan-orientation scope, RPC continuity scope).
 - **No Media namespace work** — explicitly out of scope for this branch.
@@ -1391,14 +1391,14 @@ before doing (backend/API-surface changes), which remains unchanged from before.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first, then plan_audio.md (the AUD-XX task list is authoritative for new work; the
-archived plan_audio20260717.md is historical only, do not read/use it). Phases 9-14
+Read NEXT.md first, then plans/plan_audio.md (the AUD-XX task list is authoritative for new work; the
+archived plans/plan_audio20260717.md is historical only, do not read/use it). Phases 9-14
 (P#-XXX-NNN IDs) are all closed and historical. Phase 15 (AUD-XX-NNN IDs, 438 tasks, started
 2026-07-17 from an independent deep audit) is the CURRENT, ACTIVE work -- most tasks are still
-open. This is not a "wait for the user" state: keep working through plan_audio.md's task list in
+open. This is not a "wait for the user" state: keep working through plans/plan_audio.md's task list in
 priority order (see §8 for concrete next candidates) unless told otherwise.
 
-1. Pick the next task from §8/plan_audio.md's own priority order. Validate every important claim
+1. Pick the next task from §8/plans/plan_audio.md's own priority order. Validate every important claim
    against current code/tests/FNA/FAudio/SDL docs before implementing -- do not "fix" parser/math
    behavior from a comment or audit claim alone; confirm with a fixture or authoritative source
    first (see AUD-11-001/002's entry in §3 for why this matters -- the audit's own suspicion was
@@ -1406,7 +1406,7 @@ priority order (see §8 for concrete next candidates) unless told otherwise.
 2. Make one small, verified improvement at a time: add/extend a test, verify with the git-stash
    pattern (§7) for any behavioral fix, run the relevant build/test command, and run ASan+UBSan if
    it touches memory lifetime or ownership.
-3. Update plan_audio.md's checkbox + evidence note for whatever sub-item was completed (mark [x]
+3. Update plans/plan_audio.md's checkbox + evidence note for whatever sub-item was completed (mark [x]
    only with concrete evidence, per the plan's own completion rules), then update this NEXT.md
    (status, recent changes, next task) to reflect what changed, and commit -- one task, one commit.
 4. Do not stop after one task. Continue to the next item; do not end the session merely because

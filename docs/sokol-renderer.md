@@ -4,7 +4,7 @@
 single-header GPU abstraction that itself dispatches onto OpenGL 4.1 core, GLES3, D3D11, Metal or
 WebGPU. CNA keeps ownership of the SDL window and the game loop; this renderer creates only the GPU
 context inside it (`sokol_app` is deliberately unused). The implementation plan, task list and
-design rationale live in [`../plan_sokol.md`](../plan_sokol.md).
+design rationale live in [`../plans/plan_sokol.md`](../plans/plan_sokol.md).
 
 **This renderer is experimental.** It covers 2D in full, the stock 3D effects (`BasicEffect`,
 `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, instanced draws), a custom

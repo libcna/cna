@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MS-PL
-"""plan_modern.md MOD-1900 -- the engine layer's naming rule, as a gate.
+"""plans/plan_modern.md MOD-1900 -- the engine layer's naming rule, as a gate.
 
 MOD-6 settled the one rule that differs from the XNA layer, because there is no XNA name to
 preserve here: **verbs are lowerCamelCase**. Types and enum values stay UpperCamelCase, which is the

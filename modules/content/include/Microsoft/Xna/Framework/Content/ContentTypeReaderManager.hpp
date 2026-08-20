@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Content
 {
     /**
      * @brief Matches FNA's real, public `Microsoft.Xna.Framework.Content.ContentTypeReaderManager`
-     *        (`src/Content/ContentTypeReaderManager.cs`) -- this task (plan_xnb.md XNB-14/14A)
+     *        (`src/Content/ContentTypeReaderManager.cs`) -- this task (plans/plan_xnb.md XNB-14/14A)
      *        implements its type-creator registration surface; `LoadAssetReaders`/`GetTypeReader`
      *        (which need a real `ContentReader` to exist) land with that class (XNB-15/16).
      *
@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Content
     class ContentTypeReaderManager
     {
     public:
-        /** @brief Factory signature: constructs one fresh reader instance (plan_xnb.md XNB-14A). */
+        /** @brief Factory signature: constructs one fresh reader instance (plans/plan_xnb.md XNB-14A). */
         using ReaderFactory = std::function<std::unique_ptr<ContentTypeReaderBase>()>;
 
         /**
@@ -36,7 +36,7 @@ namespace Microsoft::Xna::Framework::Content
          *        ContentTypeReader> createFunction)`, made `CNAEXT`-callable from ordinary CNA
          *        code since CNA has no reflection fallback ahead of it.
          *
-         * Registers a global, process-wide factory (plan_xnb.md XNB-14A) -- @p factory is called
+         * Registers a global, process-wide factory (plans/plan_xnb.md XNB-14A) -- @p factory is called
          * once per `.xnb` file that references @p canonicalName, producing one fresh, unshared
          * reader instance per file (see CreateReader()). Matches FNA's own behavior of silently
          * ignoring a repeat registration of the same key (`if (!typeCreators.ContainsKey(...))`),
@@ -78,7 +78,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief CNAEXT query-only check: is a factory registered for @p canonicalName, without
-         *        constructing an instance (plan_xnb.md XNB-67 -- the manifest's reader-usage
+         *        constructing an instance (plans/plan_xnb.md XNB-67 -- the manifest's reader-usage
          *        summary needs this without any construction side effect).
          */
         CNAEXT [[nodiscard]] static bool IsRegistered(const std::string& canonicalName);

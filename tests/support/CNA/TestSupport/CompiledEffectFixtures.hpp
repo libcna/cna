@@ -13,7 +13,7 @@
  * @file
  * @brief Deterministic compiled-effect fixtures for the shared backend conformance suite.
  *
- * plan_fx.md FX-060: every backend that claims `GraphicsCapability::CompiledEffects` runs the same
+ * plans/plan_fx.md FX-060: every backend that claims `GraphicsCapability::CompiledEffects` runs the same
  * contract, and that contract needs fixtures with known reflection, known pass states and known
  * sampler assignments. These builders emit an Effect Framework 9.1 container -- and, on request, a
  * hand-assembled Shader Model 2.0 program with its Direct3D 9 constant table -- straight from the
@@ -157,7 +157,7 @@ namespace CNA::TestSupport
     /**
      * @brief The dimension of the sampler a fixture declares. CNAEXT.
      *
-     * plan_fx.md FX-110. XNA's `Texture2D`, `Texture3D` and `TextureCube` all reach a compiled
+     * plans/plan_fx.md FX-110. XNA's `Texture2D`, `Texture3D` and `TextureCube` all reach a compiled
      * Effect through the same texture parameter, and MojoShader reflects the shader's own
      * expectation as `MOJOSHADER_SAMPLER_2D` / `_VOLUME` / `_CUBE`. A backend has to match the two.
      */
@@ -192,7 +192,7 @@ namespace CNA::TestSupport
         /// MojoShader then fails while it is already several objects into building the effect,
         /// which is the deterministic mid-construction failure the lifecycle suite needs.
         bool breakShaderSymbolBinding = false;
-        /// plan_fx.md FX-084: adds a hand-assembled Shader Model 2.0 **vertex** shader alongside
+        /// plans/plan_fx.md FX-084: adds a hand-assembled Shader Model 2.0 **vertex** shader alongside
         /// the pixel shader, so `StatePass` binds a complete program pair and the fixture can
         /// actually be DRAWN. Without it the suite could only observe reflection and state, never
         /// whether the compiled shader is the one that ran.
@@ -202,25 +202,25 @@ namespace CNA::TestSupport
         /// full-target quad in the space `Transform` maps to NDC comes out exactly `Tint`, which
         /// no stock shader in any CNA renderer would produce for the same inputs.
         bool includeDrawableProgram = false;
-        /// plan_fx.md FX-084: the vertex shader additionally consumes TEXCOORD0, scaled by a new
+        /// plans/plan_fx.md FX-084: the vertex shader additionally consumes TEXCOORD0, scaled by a new
         /// `StreamMix` float4 parameter that defaults to zero -- `oPos = mul(TEXCOORD0 * StreamMix
         /// + POSITION0, Transform)`. That is what makes a genuine multi-stream compiled-effect
         /// draw observable: with `StreamMix` at zero the second stream contributes nothing, and
         /// with it set the geometry moves by exactly the second stream's own values, so binding
         /// that stream from the wrong buffer, stride or offset changes the pixels.
         bool vertexShaderReadsSecondStream = false;
-        /// plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
+        /// plans/plan_fx.md FX-104: adds a `Caption` parameter of reflected type String, with an initial
         /// value, so the XNA `SetValue(string)`/`GetValueString()` pair can be exercised on a
         /// parameter that really is one instead of only through its rejection path.
         bool includeStringParameter = false;
-        /// plan_fx.md FX-110: which sampler dimension the fixture declares. A compiled Effect can
+        /// plans/plan_fx.md FX-110: which sampler dimension the fixture declares. A compiled Effect can
         /// bind a cube or volume texture to a sampler just as easily as a 2D one, and a renderer
         /// that resolves only 2D has to say so rather than bind the wrong kind -- so the suite
         /// needs a fixture of each shape. Affects the texture and sampler parameters' reflected
         /// object types, the pixel shader's `dcl_<kind>` token and its constant-table entry, and
         /// the width of the texture coordinate the vertex shader forwards.
         SyntheticSamplerKind samplerKind = SyntheticSamplerKind::Sampler2D;
-        /// plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
+        /// plans/plan_fx.md FX-093: the drawable pixel shader SAMPLES the effect's own sampler instead
         /// of writing `Tint` flat -- `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint` -- and the vertex
         /// shader forwards TEXCOORD0 to it. Without this every drawable fixture had no sampler at
         /// all, so the whole texture/sampler half of a compiled Effect could break with the draw
@@ -369,7 +369,7 @@ namespace CNA::TestSupport
 
         if (samplesTexture)
         {
-            // plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
+            // plans/plan_fx.md FX-110: a cube or volume sampler reads three components, a 2D one reads
             // two, and the declaration has to say which -- both in the coordinate register's write
             // mask and in the sampler's own texture-type field.
             const bool threeComponent = samplerKind != SyntheticSamplerKind::Sampler2D;
@@ -405,7 +405,7 @@ namespace CNA::TestSupport
         else
         {
             // mov oC0, c0 -- or c0.yzxw for the alternate program that makes one pass
-            // GPU-observably different from another (plan_fx.md FX-094).
+            // GPU-observably different from another (plans/plan_fx.md FX-094).
             AppendUInt32(shader, 0x00000001u | (2u << 24));
             AppendUInt32(shader, destination(regColorOut, 0, 0xFu));
             AppendUInt32(shader, source(regConst, 0,
@@ -418,14 +418,14 @@ namespace CNA::TestSupport
     /**
      * Assembles a Shader Model 2.0 vertex-shader program and its Direct3D 9 constant table.
      *
-     * plan_fx.md FX-084. The program is
+     * plans/plan_fx.md FX-084. The program is
      * `oPos = mul(POSITION0 + TEXCOORD0 * StreamMix, Transform)` (the TEXCOORD0 term only when
      * @p readsSecondStream), written straight in Direct3D 9 shader tokens so the shared
      * conformance suite stays free of any compiler dependency, exactly like its pixel-shader
      * sibling above.
      *
      * @param readsSecondStream Whether the shader declares and consumes a TEXCOORD0 input.
-     * @param forwardsTexCoord plan_fx.md FX-093: whether the shader also declares TEXCOORD0 and
+     * @param forwardsTexCoord plans/plan_fx.md FX-093: whether the shader also declares TEXCOORD0 and
      *        writes it to `oT0`, which is what a sampling pixel shader reads.
      * @return The complete vertex-shader token buffer.
      */
@@ -558,7 +558,7 @@ namespace CNA::TestSupport
         if (forwardsTexCoord)
         {
             // mov oT0.xy(z), v1 -- the interpolated coordinate the sampling pixel shader reads.
-            // plan_fx.md FX-110: a cube or volume sampler needs three components, so the mask
+            // plans/plan_fx.md FX-110: a cube or volume sampler needs three components, so the mask
             // follows the sampler the pixel shader declares rather than being fixed at .xy.
             AppendUInt32(shader, 0x00000001u | (2u << 24));
             AppendUInt32(shader, destination(regTexCoordOut, 0,
@@ -611,7 +611,7 @@ namespace CNA::TestSupport
         // this is the initial value the reflected parameter reports before a game assigns one.
         const std::string captionInitial = "initial caption";
 
-        // plan_fx.md FX-084: a drawable fixture needs a shader pair on StatePass; the multi-stream
+        // plans/plan_fx.md FX-084: a drawable fixture needs a shader pair on StatePass; the multi-stream
         // variant additionally declares StreamMix, the parameter its vertex shader scales
         // TEXCOORD0 by. Both are opt-in so the reflection contract's parameter/object counts, and
         // every existing assertion about them, are untouched by this addition.
@@ -642,7 +642,7 @@ namespace CNA::TestSupport
             AppendScalarType(bytes, EffectFormat::TypeInt, qualityName, empty);
         const std::uint32_t passTagType =
             AppendScalarType(bytes, EffectFormat::TypeInt, passTagName, empty);
-        // plan_fx.md FX-110: the reflected object types follow the sampler dimension the shader
+        // plans/plan_fx.md FX-110: the reflected object types follow the sampler dimension the shader
         // declares, so a cube fixture reports TextureCube/SamplerCube through the public API too.
         const std::uint32_t reflectedTextureType =
             options.samplerKind == SyntheticSamplerKind::SamplerCube
@@ -677,7 +677,7 @@ namespace CNA::TestSupport
         constexpr std::uint32_t textureObjectIndex = 1;
         const std::uint32_t pixelShaderObjectIndex = options.includeSampler ? 2u : 1u;
         const std::uint32_t vertexShaderObjectIndex = pixelShaderObjectIndex + 1u;
-        // plan_fx.md FX-094: a drawable fixture carries a SECOND pixel shader, `oC0 = Tint.yzxw`,
+        // plans/plan_fx.md FX-094: a drawable fixture carries a SECOND pixel shader, `oC0 = Tint.yzxw`,
         // and gives it to pass P0 alone. Before this every pass of a drawable fixture bound the
         // identical program pair, so a backend that applied pass 0 where the contract asked for
         // pass 1 -- or fell back to "the first pass" when it could not resolve one -- rendered
@@ -841,7 +841,7 @@ namespace CNA::TestSupport
         AppendUInt32(bytes, qualityType);
         AppendUInt32(bytes, qualityValue);
 
-        // plan_fx.md FX-084: a drawable fixture binds the same program in every pass, so any pass a
+        // plans/plan_fx.md FX-084: a drawable fixture binds the same program in every pass, so any pass a
         // contract applies -- including the one SpriteBatch picks for itself -- has a shader pair.
         const auto appendProgramStates = [&](int passOrdinal) {
             if (includeVertexShader)
@@ -974,7 +974,7 @@ namespace CNA::TestSupport
     }
 
     /**
-     * @brief plan_fx.md FX-084: the conformance fixture with a real, drawable program pair.
+     * @brief plans/plan_fx.md FX-084: the conformance fixture with a real, drawable program pair.
      *
      * `StatePass` (technique 0, pass 1) binds `oPos = mul(POSITION0, Transform)` and a pixel
      * shader that writes `Tint` unchanged, so a full-target quad comes out exactly `Tint` and a
@@ -993,7 +993,7 @@ namespace CNA::TestSupport
     }
 
     /**
-     * @brief plan_fx.md FX-093: a drawable fixture whose pixel shader actually SAMPLES a texture.
+     * @brief plans/plan_fx.md FX-093: a drawable fixture whose pixel shader actually SAMPLES a texture.
      *
      * `StatePass` (technique 0, pass 1) binds `oPos = mul(POSITION0, Transform)` with TEXCOORD0
      * forwarded, and `oC0 = tex2D(FxSampler, TEXCOORD0) * Tint`. With `Tint` at (1,1,1,1) the
@@ -1006,11 +1006,11 @@ namespace CNA::TestSupport
      *
      * @param samplerStates The `sampler_state` assignments the pass declares, in order.
      * @param samplerRegister The sampler register the shader declares.
-     * @param samplerKind Which sampler dimension the shader declares (plan_fx.md FX-110).
+     * @param samplerKind Which sampler dimension the shader declares (plans/plan_fx.md FX-110).
      * @return The complete effect bytecode.
      */
     /**
-     * @brief plan_fx.md FX-104: the conformance fixture plus a reflected String parameter.
+     * @brief plans/plan_fx.md FX-104: the conformance fixture plus a reflected String parameter.
      *
      * `Caption` is an Effect Framework string object with an initial value, which is what
      * `EffectParameter.SetValue(string)` and `GetValueString()` are actually specified against.

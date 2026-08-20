@@ -1,6 +1,6 @@
 # Viewport / DisplayMode / GraphicsAdapter Support Matrix
 
-Phase 40 (`plan_graphics.md` Tasks 341–350) audited `Viewport`, `DisplayMode`,
+Phase 40 (`plans/plan_graphics.md` Tasks 341–350) audited `Viewport`, `DisplayMode`,
 `DisplayModeCollection`, and `GraphicsAdapter` against FNA, verified the real window-resize and
 render-target-switch chains end-to-end, and fixed several real bugs along the way. This document
 summarizes those findings and closes the phase with a look at non-desktop (Android/Web) platform
@@ -72,7 +72,7 @@ diffing against `Viewport` itself.
 
 **Current reality: CNA has never actually run its display/adapter code on a non-desktop
 platform.** This section is scoped strictly to what has and hasn't actually been checked, per this
-project's verify-over-assume standard everywhere else in `plan_graphics.md`.
+project's verify-over-assume standard everywhere else in `plans/plan_graphics.md`.
 
 ### What actually exists today
 
@@ -147,4 +147,4 @@ before any of the above could move from "anticipated" to "confirmed."
 
 ---
 
-This closes Phase 40 (`plan_graphics.md` Tasks 341–350) in full.
+This closes Phase 40 (`plans/plan_graphics.md` Tasks 341–350) in full.

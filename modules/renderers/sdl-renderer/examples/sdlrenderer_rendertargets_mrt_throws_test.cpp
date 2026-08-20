@@ -17,7 +17,7 @@
 // 704-708's own regression write-ups because only the touched example-test targets and the CNA
 // static library were rebuilt before each ctest run, not the separate CnaTests unit-test binary
 // (ctest never builds anything itself). The TRUE SDL_Renderer known-failure baseline from Task
-// 704 onward should have read 11, not 13 -- corrected here; see NEXT.md/plan_graphics.md for the
+// 704 onward should have read 11, not 13 -- corrected here; see NEXT.md/plans/plan_graphics.md for the
 // full note. SetRenderTargets_FourTargets_DoesNotThrow now needed updating for THIS task's own
 // decision (added a CNA_RENDERER_SDL_RENDERER conditional expecting a throw instead, since 4
 // targets now correctly throws here due to this renderer's genuine MRT limitation, not the

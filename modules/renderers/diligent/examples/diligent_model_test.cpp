@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-54: real-device Model/ModelMesh/ModelMeshPart/ModelBone orchestration
+// plans/plan_diligent.md DILIGENT-54: real-device Model/ModelMesh/ModelMeshPart/ModelBone orchestration
 // test, mirroring D3D11's own DX-128 and D3D12's DX-148 (examples/directx12_smoke_test.cpp, Check KK6).
 //
 // Drives ModelMesh::Draw()'s REAL orchestration (SetVertexBuffer + setIndicesProperty +

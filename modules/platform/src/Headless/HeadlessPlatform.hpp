@@ -24,7 +24,7 @@ namespace CNA::Platform::Headless {
      * capabilities as `false`, which is what exercises every refusal path.
      *
      * It is also useful in its own right: it runs game logic in CI with no display server, the
-     * same argument `plan_headless.md` already made for the headless *renderer*.
+     * same argument `plans/plan_headless.md` already made for the headless *renderer*.
      *
      * Always compiled, regardless of `CNA_PLATFORM`, because the conformance suite needs two
      * implementations live in one process.

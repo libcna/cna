@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-52: SkinnedEffect pixel test for the MAGNUM renderer.
+// plans/plan_magnum.md MAGNUM-52: SkinnedEffect pixel test for the MAGNUM renderer.
 //
 // Skinning is measured by WHERE the quad lands, not by its colour: a bone palette that never
 // reaches the shader, or a weight sum taken over the wrong number of pairs, moves the geometry

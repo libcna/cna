@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-33A: end-to-end M3 milestone test -- content.Load<SoundEffect>("fixture")
+// plans/plan_xnb.md XNB-33A: end-to-end M3 milestone test -- content.Load<SoundEffect>("fixture")
 // against a real, externally-produced .xnb fixture, going through ContentManager (not a
 // standalone parser call).
 
@@ -30,7 +30,7 @@ namespace
     };
 }
 
-// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.

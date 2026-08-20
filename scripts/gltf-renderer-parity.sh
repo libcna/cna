@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_gltf.md GLTF-017 / GLTF-383: the same corpus, the same conformance ladder, two renderers.
+# plans/plan_gltf.md GLTF-017 / GLTF-383: the same corpus, the same conformance ladder, two renderers.
 #
 # The oracle harness is supposed to be renderer-independent below L7: L1 is the container, L2 the
 # decoded accessors, L3 the semantic mesh, L4 world geometry and L5 the packed GPU bytes -- none of
@@ -57,7 +57,7 @@ run "$A" "$LAYERS" > "$tmp_a"
 run "$B" "$LAYERS" > "$tmp_b"
 if ! diff -u "$tmp_a" "$tmp_b"; then
     echo "gltf-renderer-parity: the two renderers DISAGREE below L6 -- a renderer has reached a" >&2
-    echo "  layer it does not own. Per plan_gltf.md §6 that is a shared-importer defect, and it" >&2
+    echo "  layer it does not own. Per plans/plan_gltf.md §6 that is a shared-importer defect, and it" >&2
     echo "  must not be fixed inside a renderer directory (GLTF-392)." >&2
     exit 1
 fi

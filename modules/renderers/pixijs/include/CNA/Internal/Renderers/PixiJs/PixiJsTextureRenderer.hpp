@@ -26,7 +26,7 @@ namespace CNA::Internal::Renderers::PixiJs
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
-        /// plan_pixijs.md PIXIJS-31: investigated and decided, 2026-08-17 (not merely undecided) --
+        /// plans/plan_pixijs.md PIXIJS-31: investigated and decided, 2026-08-17 (not merely undecided) --
         /// `PIXI.BufferResource` (this renderer's own upload path) exposes only `upload()`/
         /// `dispose()`, and `PIXI.BaseTexture` exposes only a `mipmap` on/off mode, no per-level
         /// upload hook at all (confirmed live via a browser probe of both prototypes). PixiJS

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: separate alpha blend factors (plan_opengl1.md item 19, EasyGL parity).
+// OPENGL1 renderer: separate alpha blend factors (plans/plan_opengl1.md item 19, EasyGL parity).
 //
 // Before this, ApplyBlendState() reused the color factors for alpha too -- a game with different
 // BlendState.ColorSourceBlend/ColorDestinationBlend vs AlphaSourceBlend/AlphaDestinationBlend

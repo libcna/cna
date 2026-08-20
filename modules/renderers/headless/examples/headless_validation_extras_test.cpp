@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_headless.md: closes HEADLESS-23 (viewport/scissor bounds vs. the currently-bound target's
+// plans/plan_headless.md: closes HEADLESS-23 (viewport/scissor bounds vs. the currently-bound target's
 // real size), HEADLESS-41 (debug-label creation-site tracking in HeadlessTrace mode), and
 // HEADLESS-42 (trace log export) -- all three were flagged as narrower-than-planned or unverified
 // after the first two Headless renderer commits.

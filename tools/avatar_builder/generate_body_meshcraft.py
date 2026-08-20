@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task 7.4/7.5 (plan_net.md Phase 7): builds CNA's procedural avatar body via the sibling
+"""Task 7.4/7.5 (plans/plan_net.md Phase 7): builds CNA's procedural avatar body via the sibling
 `../mesh-craft` tool instead of `generate_body.py`'s bpy-primitive construction, per decision 4b
 ("Body/head ... geometry should be generated as glTF via the sibling ../mesh-craft tool going
 forward"). Replaces `generate_body.build_body()` as a drop-in: same signature, same BODY_NAME
@@ -105,7 +105,7 @@ def _mc3_position(point):
 
 
 def _recalculate_smooth_normals(obj):
-    """Post-plan_net.md remediation (2026-07-18, independent post-completion audit): mc3togltf's
+    """Post-plans/plan_net.md remediation (2026-07-18, independent post-completion audit): mc3togltf's
     CSG evaluator exports *flat* per-triangle normals (`mc3togltf/src/CsgEvaluator.cpp`'s own
     comment: "Convert Manifold -> MeshData (flat face normals, no UVs)"), with duplicated
     coincident vertices at every merge seam (one vertex copy per adjacent flat-shaded triangle).

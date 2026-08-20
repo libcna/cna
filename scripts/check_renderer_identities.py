@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Renderer-identity registry gate (MODULARIZATION_PLAN.md §2.3).
+"""Renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §2.3).
 
 CNA has exactly 49 public renderer identities. This check mechanically compares
 the authoritative registries -- the public GraphicsRendererType enum, the
@@ -19,7 +19,7 @@ cannot catch that; check_runtime_registry() below closes it by following each
 identity through to the C++ accessor that is supposed to return its descriptor.
 
 It also checks the DOCUMENTED count, in the handful of documents that state one
-(plan_runtimerenderer.md RTR-P13-8). A count written into prose is a fact with no
+(plans/plan_runtimerenderer.md RTR-P13-8). A count written into prose is a fact with no
 owner: TINYGL, IGL and PIXIJS were each added without it, so documents went on
 saying 46 and 47 while the registry said 49, and a reader has no way to tell which
 number is the live one. Correcting them by hand does not hold either -- the pass
@@ -45,7 +45,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # "SDL renderer/GPU (5 families)") is not reported as a stale total. The cost of that precision is
 # recall: a count phrased any other way is not checked at all, and a check that cannot see a count
 # leaves it exactly as unowned as one nobody wrote down. That is not hypothetical -- the first
-# attempt at plan_platform.md's rule 5 wrote "is **49** today" and this check sailed straight past
+# attempt at plans/plan_platform.md's rule 5 wrote "is **49** today" and this check sailed straight past
 # it.
 #
 # So a document marked True must keep stating its count in the canonical phrasing. Rewording it
@@ -54,11 +54,11 @@ COUNTED_DOCUMENTS = {
     "docs/runtime-renderer-selection.md": True,
     "docs/renderer-expansion-candidates.md": True,
     "docs/physical-modules.md": True,
-    # plan_platform.md states the count in three load-bearing places -- rule 5 ("no task may
+    # plans/plan_platform.md states the count in three load-bearing places -- rule 5 ("no task may
     # reduce renderer coverage"), PLAT-76's allowlist evidence and the definition of done -- and
     # every one of them read "46" for three identities after the count moved. It is the document
     # a reviewer checks the boundary against, so a stale number there is worse than elsewhere.
-    "plan_platform.md": True,
+    "plans/plan_platform.md": True,
     # These two deliberately state no total: both used to, and both now name the registry instead,
     # which is the outcome this check recommends in its own failure message. Listed rather than
     # dropped so that a count reappearing in them is still checked.
@@ -78,7 +78,7 @@ COUNTED_DOCUMENTS = {
 #
 # The family pattern needs a whole-registry marker for the same reason the identity pattern needs
 # "public", and "renderer families" is NOT one -- it is how sub-counts are phrased too. Adding
-# plan_platform.md produced three false positives in one run, each a true statement:
+# plans/plan_platform.md produced three false positives in one run, each a true statement:
 #
 #   "SDL renderer/GPU (5 families)"                 the families touching a native window
 #   "(11 renderer families need it)"                the families needing IPlatformGlContext
@@ -215,7 +215,7 @@ def check_runtime_registry(identities):
          is a FATAL_ERROR at configure time for anyone selecting that identity.
       2. Some renderer translation unit DEFINES that namespace's descriptor accessor. Without it
          the generated registry names a symbol nothing provides and the link fails.
-      3. The same namespace declares its own CreateGraphicsRenderer. plan_runtimerenderer.md
+      3. The same namespace declares its own CreateGraphicsRenderer. plans/plan_runtimerenderer.md
          design decision 4 moved the factory out of the shared CNA::Internal::Renderers namespace
          precisely so several renderer archives can link into one binary; a family left behind in
          the shared namespace both fails to satisfy its own descriptor and collides with every
@@ -257,7 +257,7 @@ def check_runtime_registry(identities):
         if not any(factory.search(text) for text in in_namespace):
             problems.append(
                 f"{cmake_name}: CNA::Internal::Renderers::{namespace} has no family-scoped "
-                f"CreateGraphicsRenderer. plan_runtimerenderer.md design decision 4 requires the "
+                f"CreateGraphicsRenderer. plans/plan_runtimerenderer.md design decision 4 requires the "
                 f"factory to live in the family's own namespace, not the shared one.")
 
     for cmake_name in sorted(set(mapping) - {c for c, _ in identities}):

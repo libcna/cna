@@ -44,7 +44,7 @@
 
 // Renderers whose CnaTests build reaches a rasterizing device and reads pixels back through
 // RenderTarget2D::GetData -- VertexDeclarationLayoutTests.cpp's own oracle set.
-/// plan_runtimerenderer.md RTR-P9-7: the same four sets, asked of the ACTIVE renderer instead of
+/// plans/plan_runtimerenderer.md RTR-P9-7: the same four sets, asked of the ACTIVE renderer instead of
 /// the build default, so a multi-renderer binary answers them per run rather than once at compile
 /// time. Each predicate keeps the name and the meaning its macro had.
 namespace CnaTest::WireFrameOracle

@@ -1,6 +1,6 @@
 # Issues found while implementing runtime renderer selection
 
-Found on 2026-08-15 while implementing `plan_runtimerenderer.md`. **None of them is caused by
+Found on 2026-08-15 while implementing `plans/plan_runtimerenderer.md`. **None of them is caused by
 that work**, and none is fixed by it — each was surfaced by exercising code paths the campaign
 happened to reach, and each is recorded here so it can be decided on its own merits rather than
 silently absorbed into an unrelated change.
@@ -62,7 +62,7 @@ points its context does not provide, or relying on state objects it does not hav
 
 ### Why it probably happened
 
-`WEBGL1` was added later than `OPENGLES2` (`plan_glbackends.md`, tasks GLB-30…GLB-35). The 11 sites
+`WEBGL1` was added later than `OPENGLES2` (`plans/plan_glbackends.md`, tasks GLB-30…GLB-35). The 11 sites
 that name both are consistent with the ES-2.0 sites having been extended to `WEBGL1` **as they were
 encountered**, rather than systematically.
 

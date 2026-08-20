@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link-closure gate for the CNA module probes (MODULARIZATION_PLAN.md §4).
+"""Link-closure gate for the CNA module probes (plans/MODULARIZATION_PLAN.md §4).
 
 Reads the generated link line of a probe executable (the Makefiles generator's
 CMakeFiles/<target>.dir/link.txt) and fails if any token matches a forbidden

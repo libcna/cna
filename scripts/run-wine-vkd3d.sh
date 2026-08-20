@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx.md DX-100/DX-102: run a Windows cross-compiled .exe (D3D12 renderer) under Wine with
+# plans/plan_dx.md DX-100/DX-102: run a Windows cross-compiled .exe (D3D12 renderer) under Wine with
 # vkd3d-proton, using a dedicated Wine prefix distinct from D3D11's own DXVK prefix
 # (run-wine-dxvk.sh / ~/.wine-cna-d3d11) -- D3D11 and D3D12 need different translation layers
 # (DXVK vs. vkd3d-proton) with different native-DLL overrides, so sharing one prefix would require
@@ -15,7 +15,7 @@
 #
 # Mirrors DX-85's DXVK-engagement gate: vkd3d-proton's own logger (VKD3D_DEBUG=info, set below)
 # prints a real, distinguishing "vkd3d-proton - applicationVersion: <version>" line the moment it
-# actually initializes -- confirmed empirically by this project's own real run (plan_dx.md DX-102's
+# actually initializes -- confirmed empirically by this project's own real run (plans/plan_dx.md DX-102's
 # row) against this exact prefix. A vanilla Wine WineD3D fallback for D3D12 does not exist at all
 # (WineD3D never implemented D3D12) -- if device creation had silently gone through some other
 # path, feature-level negotiation itself would have failed outright (D3D12CreateDevice has no
@@ -36,7 +36,7 @@ export VKD3D_DEBUG="${VKD3D_DEBUG:-info}"
 
 if [ ! -f "${WINEPREFIX}/system.reg" ]; then
     echo "error: WINEPREFIX '${WINEPREFIX}' is not an initialized Wine prefix." >&2
-    echo "Set it up first (see plan_dx.md DX-100's own row for the exact steps this machine used)." >&2
+    echo "Set it up first (see plans/plan_dx.md DX-100's own row for the exact steps this machine used)." >&2
     exit 1
 fi
 

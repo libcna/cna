@@ -188,7 +188,7 @@ def main() -> int:
     policy = json.loads(policy_path.read_text(encoding="utf-8"))
     assets = corpus_manifest["assets"]
     asset_ids = [asset["id"] for asset in assets]
-    # plan_gltf.md GLTF-463 grew the corpus, and this check had the old size written into it as a
+    # plans/plan_gltf.md GLTF-463 grew the corpus, and this check had the old size written into it as a
     # constant -- so the harness refused to run at all rather than covering the new asset. The
     # strength worth keeping is that the asset list agrees with what the manifest itself declares and
     # with the campaign's own target, which is what actually catches a truncated or half-regenerated
@@ -314,7 +314,7 @@ def main() -> int:
             )
             for output_text in (run_1["output"], run_2["output"]):
                 for line in output_text.splitlines():
-                    # plan_gltf.md GLTF-467: matched ANYWHERE in the line, not only at its start.
+                    # plans/plan_gltf.md GLTF-467: matched ANYWHERE in the line, not only at its start.
                     # CNA's own logger prefixes its output with a severity/category tag
                     # ("[INFO][RENDER] CNA: graphics renderer: SOFTWARE"), and the SOFTWARE and
                     # DIRECTX11 markers go through that logger while EasyGL's and Vulkan's are

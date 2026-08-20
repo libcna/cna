@@ -1,4 +1,4 @@
-# --- Apple platform support (macOS + iOS) — plan_apple.md ---
+# --- Apple platform support (macOS + iOS) — plans/plan_apple.md ---
 #
 # This file owns everything that is true for an Apple target *before* a renderer is chosen:
 # which Apple platform the configure is targeting, the deployment-target/architecture defaults,

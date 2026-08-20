@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-200 / GLTF-350: a texture whose pixels are in a format CNA has no decoder for
+// plans/plan_gltf.md GLTF-200 / GLTF-350: a texture whose pixels are in a format CNA has no decoder for
 // must be reported, never silently absent.
 //
 // `KHR_texture_basisu` (KTX2/Basis) and `EXT_texture_webp` both attach their own image to a
@@ -282,7 +282,7 @@ TEST(GltfUnsupportedTexture, RequiringEitherExtensionIsRefusedOutrightRatherThan
     }
 }
 
-// --- plan_gltf.md GLTF-184/GLTF-336: independent per-map transform state ------------------------
+// --- plans/plan_gltf.md GLTF-184/GLTF-336: independent per-map transform state ------------------------
 
 namespace
 {
@@ -368,7 +368,7 @@ TEST(GltfUnsupportedTexture, ATransformlessMaterialKeepsAllFiveIdentityDefaults)
         EXPECT_EQ(identity, transform);
 }
 
-// --- plan_gltf.md GLTF-339: KHR_materials_transmission -----------------------------------------
+// --- plans/plan_gltf.md GLTF-339: KHR_materials_transmission -----------------------------------------
 //
 // The extension was read by nobody, so a glass material imported fully opaque -- the
 // ChronographWatch defect, where the crystal hides the dial it exists to reveal. A real

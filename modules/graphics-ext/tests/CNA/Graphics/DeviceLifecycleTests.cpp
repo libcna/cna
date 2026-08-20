@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1714, MOD-1715: device loss across the whole layer, and two devices at once.
+// plans/plan_modern.md MOD-1714, MOD-1715: device loss across the whole layer, and two devices at once.
 //
 // Both are about state a subsystem holds that outlives the thing it describes. After a device reset
 // every GPU object names storage the driver destroyed; with two devices, an object built on one
@@ -74,7 +74,7 @@ TEST(DeviceLossTest, EverySubsystemSurvivesAResetAndRendersAgain)
     CNA::Graphics::ShadowMap          shadowMap(gd, ShadowQuality::Low);
     CNA::Graphics::CascadedShadowMap  cascades(gd, ShadowQuality::Low, 3);
     CNA::Graphics::SpotShadowMap      spot(gd, ShadowQuality::Low);
-    // plan_modern.md MOD-1612. The one subsystem here that some renderers cannot even construct:
+    // plans/plan_modern.md MOD-1612. The one subsystem here that some renderers cannot even construct:
     // a point-light shadow needs a RenderTargetCube, and LLGL's validated OpenGL path refuses one
     // outright. Held by pointer so the rest of the sweep still runs there rather than the whole
     // test failing on the subsystem the renderer never claimed to have.

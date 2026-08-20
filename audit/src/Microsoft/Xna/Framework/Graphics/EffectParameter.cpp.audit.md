@@ -31,7 +31,7 @@ deliberate design choice.
 - `GetValueQuaternion`/`SetValue(Quaternion)`: correct, matches FNA's X,Y,Z,W straight copy.
 - `GetValueTexture2D/3D/Cube`/`SetValue(Texture*/Texture2D*/Texture3D*/TextureCube*)`: correct,
   reasonable adaptation of FNA's single `Texture texture` field into four separately-typed slots
-  (documented in the header as an intentional, scoped-out unification, `plan_graphics.md` Task 863).
+  (documented in the header as an intentional, scoped-out unification, `plans/plan_graphics.md` Task 863).
 
 ## Detailed Findings
 

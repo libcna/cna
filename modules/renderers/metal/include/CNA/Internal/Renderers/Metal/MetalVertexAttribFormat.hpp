@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 
-// plan_metal.md METAL-14: the XNA VertexElementFormat -> Metal attribute-shape table this whole
+// plans/plan_metal.md METAL-14: the XNA VertexElementFormat -> Metal attribute-shape table this whole
 // renderer's generic-declaration path (METAL-26/27) is built on. Only reads a plain XNA framework
 // enum and returns a plain C++ struct -- zero Objective-C/Metal-framework dependency -- so unlike
 // the real MTLVertexFormat translation this stays in the .mm (see MetalRenderer.mm's own

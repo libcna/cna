@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-53: DepthStencilState's full front/back stencil test, wired into the 3D
+// plans/plan_llgl.md LLGL-53: DepthStencilState's full front/back stencil test, wired into the 3D
 // pipeline for the first time (AcquirePrimitivePipeline()'s own `pipelineDesc.stencil`).
 //
 // Minimal, focused differential check avoiding RenderTargetCube entirely (this sandbox's OpenGL

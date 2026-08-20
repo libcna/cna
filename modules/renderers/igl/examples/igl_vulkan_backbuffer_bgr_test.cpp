@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-60: the Vulkan back buffer's physical format is whatever the platform window
+// plans/plan_igl.md IGL-60: the Vulkan back buffer's physical format is whatever the platform window
 // system surface natively offers -- on this renderer's Linux/X11/Mesa target that is
 // `BGRA_UNorm8`, not `RGBA_UNorm8` (`igl::IFramebuffer::copyBytesColorAttachment()` copies raw
 // physical bytes with no channel reordering on either backend). Every other renderer family, and
@@ -7,7 +7,7 @@
 // order unconditionally silently swapped red and blue on Vulkan: a pure-red clear read back as
 // pure blue. Green was accidentally unaffected (R and B are both already zero), which is what let
 // this ship unnoticed until a from-scratch investigation of `Igl_2D`/`Igl_3D`'s existing Vulkan
-// failures (see plan_igl.md's IGL-60 note) traced it to something Vulkan-specific and simple
+// failures (see plans/plan_igl.md's IGL-60 note) traced it to something Vulkan-specific and simple
 // enough to isolate with clears alone, no draws at all.
 //
 // This test forces the Vulkan backend via its own `CNA_IGL_BACKEND=vulkan` ctest ENVIRONMENT

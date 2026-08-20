@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: adapts examples/easygl_spritebatch_blendstate_leak_test.cpp's own scene
+// plans/plan_opengl2.md: adapts examples/easygl_spritebatch_blendstate_leak_test.cpp's own scene
 // verbatim -- verifies SpriteBatch::Begin() does not clobber the real GL blend state with a
 // hardcoded SrcAlpha/OneMinusSrcAlpha, and that a 3D draw issued after a SpriteBatch Begin()/End()
 // pair -- without the game explicitly reassigning BlendState -- correctly inherits whatever

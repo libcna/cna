@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-134 / GLTF-139 / GLTF-140 / GLTF-141 / GLTF-142 / GLTF-144 / GLTF-238.
+// plans/plan_gltf.md GLTF-134 / GLTF-139 / GLTF-140 / GLTF-141 / GLTF-142 / GLTF-144 / GLTF-238.
 //
 // What shape the imported `Model` has, as distinct from where its geometry is. Every row here is
 // about a mapping decision rather than a number, and each has one wrong answer that renders

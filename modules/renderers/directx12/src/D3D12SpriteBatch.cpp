@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX12 (DX-111/DX-112 follow-up).
+// plans/plan_dx.md Phase DX12 (DX-111/DX-112 follow-up).
 #include "CNA/Internal/Renderers/DirectX12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
@@ -196,7 +196,7 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             throw std::runtime_error(
                 "D3D12SpriteBatchRenderer::FlushBatch: no off-screen color target bound -- "
-                "BindOffscreenColorTargetEXT (plan_dx.md DX-111's own scaffolding; a real D3D12 swap "
+                "BindOffscreenColorTargetEXT (plans/plan_dx.md DX-111's own scaffolding; a real D3D12 swap "
                 "chain back buffer is unusable under this machine's Wine+vkd3d-proton dev loop, DX-100)");
         }
 

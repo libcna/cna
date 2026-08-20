@@ -4,7 +4,7 @@
 - Source file: `docs/sampler-state-support.md` (173 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 35, `plan_graphics.md` Tasks 291-300, with a
+- File type: Markdown documentation (closes Phase 35, `plans/plan_graphics.md` Tasks 291-300, with a
   2026-07-11 status-update banner for later fixes)
 - Cross-references: `xna-graphics` shard audit (no `SamplerState`-specific HIGH finding)
 
@@ -41,7 +41,7 @@ shard audit's own findings (no contradiction, no overlapping/duplicated bug).
 
 ## Cross-File Observations
 Consistent in methodology and update-banner convention with `docs/rasterizerstate-support.md`/
-`docs/rendertarget-support.md` (same `plan_graphics.md` phase-sequence family) — all three documents
+`docs/rendertarget-support.md` (same `plans/plan_graphics.md` phase-sequence family) — all three documents
 share the same disciplined "dated update note, not silent rewrite" and "🔍 = not verified this
 phase, not silently omitted" conventions, reinforcing that this is a deliberate project-wide
 documentation practice, not incidental to any one file.

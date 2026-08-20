@@ -4,7 +4,7 @@
 // pre-existing `ApplyLayout()` switch recognizes (one stock `VertexPositionXxx` type per case).
 //
 // Background: Task 1079 wired `ShaderEffect` into the 3D draw path, but scoped it to those 5
-// existing strides (see plan_graphics.md Task 1079's own row). Several remaining Task 947
+// existing strides (see plans/plan_graphics.md Task 1079's own row). Several remaining Task 947
 // samples (`NormalMapping.fx`'s Position+Normal+Binormal+Tangent+TexCoord,
 // `BillboardSample`/`InstancedModel`/particle per-vertex data) use vertex layouts that don't
 // match any of those 5 -- this was split out as Task 1080 rather than attempted alongside 1079.

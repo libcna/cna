@@ -152,14 +152,14 @@ namespace CNA::Internal::Renderers::DirectX9
         // MatrixTransform, compensating for Direct3D 9's texel-center-at-integer-coordinate
         // convention (D3D10+/modern APIs put texel centers at pixel centers instead, which is
         // why FNA's own SpriteBatch.cs -- a modern-API-targeting reimplementation, not real XNA --
-        // has no equivalent term at all; see this project's own plan_dx9.md "Divergence 4").
+        // has no equivalent term at all; see this project's own plans/plan_dx9.md "Divergence 4").
         //
         // Formula empirically verified against the real XNA 4.0 runtime (D9-A oracle,
         // sprite_halfpixel_quad.scene): CreateOrthographicOffCenter(0, W, H, 0, 0, 1), then shift
         // the projection's own translation terms (M41/M42) by -0.5 texel's worth of NDC space
         // (half of one full-texel step, which CreateOrthographicOffCenter's own M11/M22 already
         // encode as "NDC units per pixel") -- NOT reasoned out from first principles and assumed
-        // correct; see D9-91's own plan_dx9.md row for the verification record.
+        // correct; see D9-91's own plans/plan_dx9.md row for the verification record.
         //
         // D9-93 finding: zFarPlane=1 (as originally written above and used by every D9-90/91/92
         // scene, all of which only ever pass layerDepth=0.0f) makes CreateOrthographicOffCenter's

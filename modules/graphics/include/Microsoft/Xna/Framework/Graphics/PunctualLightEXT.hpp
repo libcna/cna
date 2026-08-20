@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      * CNAEXT: not part of the XNA 4.0 API. XNA's lit effects carry three *directional* lights and
      * nothing else, so a point or spot light is an addition rather than a reinterpretation.
      *
-     * **One per draw** (plan_modern.md `MOD-1007`). Three directional slots plus one shadowed
+     * **One per draw** (plans/plan_modern.md `MOD-1007`). Three directional slots plus one shadowed
      * punctual light is the budget, and it is a deliberate ceiling rather than an implementation
      * limit that happened: each additional shadowed light is another full generation pass -- six of
      * them for a point light -- so a second one doubles the frame's shadow cost before it draws a

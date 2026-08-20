@@ -9,7 +9,7 @@
   trust-critical file in this entire audit's FNA-comparison methodology, since every "confirmed
   against FNA" claim this project makes ultimately traces back to either direct FNA source reading
   or this tool's rendered output
-- Main related tests: consumed by `plan_dx9.md` Phase D9-A/D9-9x workflow; not a unit test itself
+- Main related tests: consumed by `plans/plan_dx9.md` Phase D9-A/D9-9x workflow; not a unit test itself
 
 ## Purpose
 Parses a `.scene` file and renders it using the **real XNA 4.0 runtime** (compiled against real

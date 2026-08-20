@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
-/* plan_binding.md CBIND-040B: a libFuzzer entry point for the string-view surface.
+/* plans/plan_binding.md CBIND-040B: a libFuzzer entry point for the string-view surface.
  *
  * The exhaustive sweep in `tests/cpp/Utf8OracleTest.cpp` settles every byte sequence up to three
  * bytes and samples the rest from a fixed seed. This target covers what neither can: inputs a

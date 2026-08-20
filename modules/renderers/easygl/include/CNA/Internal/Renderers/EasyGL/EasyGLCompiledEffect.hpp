@@ -3,7 +3,7 @@
 
 /**
  * @file EasyGLCompiledEffect.hpp
- * @brief plan_fx.md FX-062: compiled XNA Effect Framework bytecode on the EasyGL renderer.
+ * @brief plans/plan_fx.md FX-062: compiled XNA Effect Framework bytecode on the EasyGL renderer.
  *
  * MojoShader's own OpenGL adapter (`mojoshader_opengl.c`) owns translation, shader compilation,
  * program linking and uniform pushing; the renderer-neutral reflection and state translation live
@@ -18,7 +18,7 @@
  * way SDL_GPU does -- so a compiled-effect draw route can read the live shared register files
  * directly at `MOJOSHADER_glProgramReady()` time, in the same synchronous call chain as `ApplyPass`.
  * That draw route lives in `EasyGLRenderer.cpp`'s `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`
- * (plan_fx.md FX-062), calling the global `MOJOSHADER_gl*` functions directly rather than through
+ * (plans/plan_fx.md FX-062), calling the global `MOJOSHADER_gl*` functions directly rather than through
  * a per-effect accessor the way `SdlGpuCompiledEffect::LinkAndGetShadersEXT` does -- MojoShader's
  * OpenGL adapter keeps its "currently bound program" as context-level state, not an object this
  * class would need to hand back.
@@ -122,7 +122,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. Returns the texture and sampler state currently bound to one sampler slot.
          *
-         * plan_fx.md FX-062: mirrors `SdlGpuCompiledEffect::GetBoundSamplerEXT` for the same reason
+         * plans/plan_fx.md FX-062: mirrors `SdlGpuCompiledEffect::GetBoundSamplerEXT` for the same reason
          * -- a compiled effect's texture/sampler bindings are arbitrary and do not route through
          * `GraphicsDevice`'s fixed texture0/texture1/envMap slots, and `ApplyPass()` keeps this
          * state persistent across passes/techniques, matching real XNA behavior: a pass that
@@ -134,7 +134,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param sampler Receives the bound sampler state; only meaningful when @p samplerAssigned
          *        comes back true.
          * @param samplerAssigned Receives whether any applied pass has assigned sampler state to
-         *        this slot at all. plan_fx.md FX-083: the draw route pushes an assigned state to
+         *        this slot at all. plans/plan_fx.md FX-083: the draw route pushes an assigned state to
          *        the GPU, and must leave the slot exactly as the game selected it otherwise --
          *        writing a default-constructed SamplerState there would silently override, for
          *        example, the filter SpriteBatch.Begin just installed.

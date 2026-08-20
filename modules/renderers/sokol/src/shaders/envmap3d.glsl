@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-34: the Sokol renderer's environment-mapped 3D program --
+// plans/plan_sokol.md SOKOL-34: the Sokol renderer's environment-mapped 3D program --
 // EnvironmentMapEffect (reflection cube mapping), always textured (a real base Texture2D, or the
 // renderer's 1x1 white fallback, same convention lit3d.glsl already uses) and always lit (ambient
 // folded into `emissiveColor` CPU-side -- EnvironmentMapEffect::FillGpuDrawParams's own

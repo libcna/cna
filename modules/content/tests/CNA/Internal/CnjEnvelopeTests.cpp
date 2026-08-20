@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-3: unit tests for CNB-1 (ParseCnjEnvelope) and CNB-2 (ValidateCnjEnvelope).
+// plans/plan_cnj.md CNB-3: unit tests for CNB-1 (ParseCnjEnvelope) and CNB-2 (ValidateCnjEnvelope).
 // First gtest coverage of any .cnj JSON-envelope-level parsing, independent of any one reader.
 
 #include <gtest/gtest.h>
@@ -208,7 +208,7 @@ TEST(ValidateCnjEnvelopeTest, NegativeCnjVersionThrows)
     EXPECT_THROW(ValidateCnjEnvelope(env, "SpriteFont", "wrong.cnj"), ContentLoadException);
 }
 
-// plan_gltf.md GLTF-129 (Phase 5): the version ceiling is a PER-TYPE argument, not a global
+// plans/plan_gltf.md GLTF-129 (Phase 5): the version ceiling is a PER-TYPE argument, not a global
 // constant. Model understands version 2 (the "bones" hierarchy and per-mesh "parentBone"); every
 // other type still understands only version 1. The four cases below are the whole contract --
 // raising the ceiling globally would have made SpriteFont silently accept a version whose meaning

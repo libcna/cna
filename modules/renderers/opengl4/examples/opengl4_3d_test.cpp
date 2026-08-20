@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-11/GL4-12: real 3D proof for the OpenGL4 graphics renderer -- a colored
+// plans/plan_opengl4.md GL4-11/GL4-12: real 3D proof for the OpenGL4 graphics renderer -- a colored
 // (VertexPositionColor, BasicEffect.VertexColorEnabled=true) triangle/quad through
 // DrawColoredPrimitives, a real depth-test occlusion proof (a nearer quad drawn BEFORE a farther
 // one still occludes it, verified by an actual pixel readback rather than "didn't throw"), and an
 // indexed draw through DrawIndexedColoredPrimitives.
 //
-// This renderer does not yet implement DrawPrimitivesEx (plan_opengl4.md remaining work) -- it
+// This renderer does not yet implement DrawPrimitivesEx (plans/plan_opengl4.md remaining work) -- it
 // inherits IGraphicsRenderer's own default fallback to DrawColoredPrimitives, which ignores
 // texture/lighting and only reproduces vertex color correctly for the stride-16
 // VertexPositionColor layout. This test therefore only exercises that stride, matching what is
@@ -75,7 +75,7 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
 
-        // plan_opengl4.md GL4-16: RasterizerState.CullMode now really applies, and
+        // plans/plan_opengl4.md GL4-16: RasterizerState.CullMode now really applies, and
         // GraphicsDevice's own default RasterizerState (CullCounterClockwiseFace, XNA's real
         // default) would otherwise cull this file's own quad winding -- irrelevant to what this
         // test actually checks (colour/depth, not winding), so opt out explicitly. Same idiom

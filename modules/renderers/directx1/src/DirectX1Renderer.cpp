@@ -1,8 +1,8 @@
 #include "CNA/Internal/Renderers/DirectX1/DirectX1Renderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 
-// plan_dx1.md design decision 9: <ddraw.h> (and the real <windows.h> it pulls in) is contained to
-// this .cpp only -- see DirectX1Renderer.hpp's own comment. plan_dx1.md section 1's discipline:
+// plans/plan_dx1.md design decision 9: <ddraw.h> (and the real <windows.h> it pulls in) is contained to
+// this .cpp only -- see DirectX1Renderer.hpp's own comment. plans/plan_dx1.md section 1's discipline:
 // this file may only name v1 DirectDraw symbols (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC/
 // DirectDrawCreate) -- never IDirectDraw2+/IDirectDrawSurface2+/DDSURFACEDESC2, and never anything
 // from <d3d.h> (DX1-1's grep-based CTest asserts this automatically).
@@ -196,7 +196,7 @@ namespace CNA::Internal::Renderers::DirectX1
         // Fills the full (width, height) extent of `surface` with a solid RGBA8 color via
         // Lock()/Unlock() (not DDBLT_COLORFILL -- writing all 4 channels directly avoids relying on
         // whatever a given ddraw.dll implementation's ColorFill does with the alpha channel,
-        // matching DIRECTX3's own found-and-fixed lesson (plan_freedirect.md DX3-14) proactively instead of
+        // matching DIRECTX3's own found-and-fixed lesson (plans/plan_freedirect.md DX3-14) proactively instead of
         // re-discovering the same class of bug here). Writes into g_layout's real native byte
         // positions, not fixed (R,G,B,A) positions -- see DetectChannelLayout's own comment.
         void FillSurfaceColor(LPDIRECTDRAWSURFACE surface, int width, int height,
@@ -233,7 +233,7 @@ namespace CNA::Internal::Renderers::DirectX1
         // platform surface snapshot, shared by Present() (the on-screen Blt
         // destination) and TransformWindowToLogical/TransformLogicalToWindow, so those three are
         // always mutually consistent and a resize/SetVirtualResolution change is correct on the
-        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plan_freedirect.md DX3-16).
+        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plans/plan_freedirect.md DX3-16).
         bool ComputeLetterbox(const PlatformRendererSurfaceState& surface,
                               int logicalWidth, int logicalHeight,
                               float& scale, float& offsetX, float& offsetY)
@@ -254,7 +254,7 @@ namespace CNA::Internal::Renderers::DirectX1
         // ---- Phase O4: CPU 2D compositor (design decision 5) ----
         // IDirectDrawSurface::Blt/BltFast has never supported rotation in any DirectX version, so
         // every DirectDraw-family CNA renderer needs this same architecture -- ported verbatim from
-        // DIRECTX3's own already-verified CompositeQuad (plan_dx1.md design decision 5), not re-derived.
+        // DIRECTX3's own already-verified CompositeQuad (plans/plan_dx1.md design decision 5), not re-derived.
 
         // Signed area of triangle (a, b, c) -- also the raw (un-normalized) edge function used by
         // BarycentricWeights below. Positive/negative depending on winding; consistent use of the
@@ -1179,7 +1179,7 @@ namespace CNA::Internal::Renderers::DirectX1
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_DIRECTX1
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX1 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

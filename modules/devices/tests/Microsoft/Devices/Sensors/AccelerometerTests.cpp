@@ -113,7 +113,7 @@ TEST(AccelerometerTests, ConstructorSucceedsUnderInstanceLimit)
 
 // Task SENSORBASE-002: confirmed via a MonoGame source cross-check (Medium
 // confidence, no direct MSDN Remarks stating a default -- see
-// plan_devices.md's SENSORBASE-002 closing note) that the real WP7
+// plans/plan_devices.md's SENSORBASE-002 closing note) that the real WP7
 // SensorBase<T>'s single shared 2ms default (not a per-sensor-class
 // override) is architecturally correct: MonoGame's own SensorBase()
 // constructor sets exactly `TimeSpan.FromMilliseconds(2)` at the shared base
@@ -1340,7 +1340,7 @@ TEST(AccelerometerTests, DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReus
 // whether to also raise the legacy ReadingChanged event — so destroying this same
 // instance from within a *CurrentValueChanged* handler is NOT safe for
 // Accelerometer specifically (documented, not tested — see this class's own
-// dispatchToken_ doc comment and plan_devices_phase8.md Task P8-1; the project has
+// dispatchToken_ doc comment and plans/plan_devices_phase8.md Task P8-1; the project has
 // no death-test convention to exercise the known-unsafe path directly). ReadingChanged
 // is the *last* statement DispatchSensorReading() executes, though — nothing touches
 // `this` afterward — so destroying the instance from within ReadingChanged's handler
@@ -1442,7 +1442,7 @@ TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanc
 // fault-injection layer capable of safely mocking sensor enumeration/open/close
 // (Task TEST2-005's own separate scope),
 // neither of which exists in this environment. See this task's own
-// plan_devices.md resolution note and docs/devices-hardware-checklist.md for
+// plans/plan_devices.md resolution note and docs/devices-hardware-checklist.md for
 // the full, honest accounting of what remains unexercised.
 TEST(AccelerometerTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen)
 {
@@ -1458,7 +1458,7 @@ TEST(AccelerometerTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRea
 // scale (the largest prior stress test, ConcurrentConstructDestroyKeepsInstanceCountBalanced,
 // covers only 8*50=400 iterations). LeakSanitizer (ASan's own built-in leak detector) does not
 // work in this specific container (needs ptrace, unavailable here -- see this task's own
-// plan_devices.md resolution note), so this /proc-based tracking is the primary host-available
+// plans/plan_devices.md resolution note), so this /proc-based tracking is the primary host-available
 // leak signal for this task, not a substitute for a real LSan run.
 TEST(AccelerometerTests, OneHundredThousandConstructProbeStartStopDisposeCyclesLeaveNoResourceLeak)
 {

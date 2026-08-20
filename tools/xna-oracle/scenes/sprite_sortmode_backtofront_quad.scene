@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_sortmode_backtofront_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_sortmode_backtofront_quad
 # D9-93: the BackToFront counterpart of sprite_sortmode_deferred_quad.scene -- see that scene's
 # own header comment for the full design rationale. Identical geometry, colors, depths and API
 # insertion order (RED depth=0.0 drawn first, GREEN depth=1.0 drawn second), the ONLY difference

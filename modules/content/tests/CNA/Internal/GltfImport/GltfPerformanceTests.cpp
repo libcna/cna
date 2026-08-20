@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md Phase 22 (`GLTF-433` … `GLTF-443`): the import path's cost and lifetime, measured.
+// plans/plan_gltf.md Phase 22 (`GLTF-433` … `GLTF-443`): the import path's cost and lifetime, measured.
 //
 // Every row in that phase accepts "measured; fixed or documented with numbers", and the numbers are
 // the point: "a GLB is re-parsed on every load" is a design fact, not a defect, and whether it

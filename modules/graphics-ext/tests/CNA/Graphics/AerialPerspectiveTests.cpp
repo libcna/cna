@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2140..MOD-2142: the atmosphere on geometry, not only on the sky.
+// plans/plan_modern.md MOD-2140..MOD-2142: the atmosphere on geometry, not only on the sky.
 //
 // The layer has had an atmospheric sky since MOD-1100 and has drawn everything in front of it as
 // though the air between were not there. A mountain twenty kilometres away arriving at full

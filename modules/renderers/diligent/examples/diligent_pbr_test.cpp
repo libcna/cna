@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-36: real-device proof of the glTF metallic-roughness BRDF (PbrEffect
+// plans/plan_diligent.md DILIGENT-36: real-device proof of the glTF metallic-roughness BRDF (PbrEffect
 // and SkinnedPbrEffect), using the same analytically hand-derived technique as
 // vulkan_pbreffect_handderived_test.cpp.
 //

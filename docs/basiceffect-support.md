@@ -10,7 +10,7 @@
 > and has not been refreshed row-by-row; treat §4 and the matrix below as historical, and
 > `docs/graphics-renderer-feature-matrix.md`/`docs/xna-4-api-coverage.md` as current.
 
-Phase 42 (`plan_graphics.md` Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
+Phase 42 (`plans/plan_graphics.md` Tasks 361–370) audited and pixel-verified `BasicEffect` conformance
 against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document summarizes
 the findings and closes the phase.
 
@@ -142,6 +142,6 @@ Phase 42 opened 2 new tracked tasks, both since closed:
 - ~~**Task 886**~~ — **fixed.** Real specular highlights (`SpecularColor`/`SpecularPower`) now
   implemented on all 3 renderers.
 
-This closes Phase 42 (`plan_graphics.md` Tasks 361–370) in full. Note `BasicEffect` is unrelated to
+This closes Phase 42 (`plans/plan_graphics.md` Tasks 361–370) in full. Note `BasicEffect` is unrelated to
 `EnvironmentMapEffect`/`SkinnedEffect`, whose own `DirectionalLight1`/`2` forwarding gaps (Tasks
 890/891/893) remain genuinely open — see `NEXT.md` §5.

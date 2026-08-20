@@ -1,4 +1,4 @@
-// plan_audio.md AUD-06-021: standalone differential-testing tool, NOT part of the CMake build.
+// plans/plan_audio.md AUD-06-021: standalone differential-testing tool, NOT part of the CMake build.
 //
 // Parses a real, uncompressed .xnb file's SoundEffectReader body using FNA's own real field-
 // reading logic (the exact same order/types as FNA's Content/ContentReaders/SoundEffectReader.cs
@@ -14,7 +14,7 @@
 // fixture bytes CNA's own SoundEffectContentTypeReaderTests.cpp loads, so the two field sets are
 // produced by two independent implementations reading the same file, not one implementation
 // checked against a hand-authored expectation. It intentionally does NOT depend on FAudio (no
-// actual audio decode/construction) -- see plan_audio.md AUD-06-021 for why decoded-*sample*
+// actual audio decode/construction) -- see plans/plan_audio.md AUD-06-021 for why decoded-*sample*
 // differential testing is a documented, separate limitation in this environment.
 //
 // Build:  mcs FnaSoundEffectMetadataDump.cs -out:FnaSoundEffectMetadataDump.exe

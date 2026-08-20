@@ -18,7 +18,7 @@ namespace
     constexpr const char* kNocturneWav = "tests/assets/media/music/Artist Two/Album Gamma/01 - Nocturne.wav";
 }
 
-// plan_media.md MEDIA-47/48: real Ogg Vorbis-comment field extraction.
+// plans/plan_media.md MEDIA-47/48: real Ogg Vorbis-comment field extraction.
 TEST(AudioTagParserTest, ReadsRealVorbisCommentsFromOgg)
 {
     AudioTags tags = AudioTagParser::ReadTags(kSunriseOgg);
@@ -39,7 +39,7 @@ TEST(AudioTagParserTest, ReadsNonAsciiVorbisCommentTitleCorrectly)
     EXPECT_EQ(tags.trackNumber, 3);
 }
 
-// plan_media.md MEDIA-49/50: real ID3v2.4 text-frame extraction (Twilight.mp3 is ID3v2.4,
+// plans/plan_media.md MEDIA-49/50: real ID3v2.4 text-frame extraction (Twilight.mp3 is ID3v2.4,
 // confirmed via raw header bytes during fixture authoring).
 TEST(AudioTagParserTest, ReadsRealId3v24TagsFromMp3)
 {
@@ -52,7 +52,7 @@ TEST(AudioTagParserTest, ReadsRealId3v24TagsFromMp3)
     EXPECT_EQ(tags.trackNumber, 1);
 }
 
-// plan_media.md MEDIA-49/50: real ID3v2.3 text-frame extraction (Daybreak.mp3 is ID3v2.3).
+// plans/plan_media.md MEDIA-49/50: real ID3v2.3 text-frame extraction (Daybreak.mp3 is ID3v2.3).
 TEST(AudioTagParserTest, ReadsRealId3v23TagsFromMp3)
 {
     AudioTags tags = AudioTagParser::ReadTags(kDaybreakMp3);
@@ -64,7 +64,7 @@ TEST(AudioTagParserTest, ReadsRealId3v23TagsFromMp3)
     EXPECT_EQ(tags.trackNumber, 2);
 }
 
-// plan_media.md MEDIA-51: filename/folder fallback heuristic for untagged files.
+// plans/plan_media.md MEDIA-51: filename/folder fallback heuristic for untagged files.
 TEST(AudioTagParserTest, FallsBackToFilenameFolderHeuristicForUntaggedWav)
 {
     AudioTags tags = AudioTagParser::ReadTags(kNocturneWav);
@@ -107,7 +107,7 @@ namespace
 {
     // Hand-builds a minimal, real ID3v2.4 tag containing a single TIT2 (title) frame whose text
     // payload uses the given encoding byte, matching AudioTagParser.cpp's own documented matrix
-    // (plan_media.md D11): 0x00=Latin-1, 0x01=UTF-16+BOM, 0x02=UTF-16BE, 0x03=UTF-8. All frame/tag
+    // (plans/plan_media.md D11): 0x00=Latin-1, 0x01=UTF-16+BOM, 0x02=UTF-16BE, 0x03=UTF-8. All frame/tag
     // sizes are synchsafe (7 significant bits per byte), matching real ID3v2.4 (Twilight.mp3's own
     // real fixture format).
     std::vector<uint8_t> BuildId3v24WithTitleFrame(uint8_t encoding, const std::vector<uint8_t>& textPayload)
@@ -139,7 +139,7 @@ namespace
     }
 }
 
-// plan_media.md MEDIA-111: the full text-encoding-byte matrix (Latin-1/UTF-16+BOM/UTF-16BE/UTF-8)
+// plans/plan_media.md MEDIA-111: the full text-encoding-byte matrix (Latin-1/UTF-16+BOM/UTF-16BE/UTF-8)
 // -- the two real MP3 fixtures only ever exercise whichever single encoding their own real tagger
 // happened to write, not all four documented in AudioTagParser.cpp's own DecodeId3TextFrame.
 TEST(AudioTagParserTest, Id3v2TextFrameDecodesLatin1Encoding)
@@ -189,7 +189,7 @@ TEST(AudioTagParserTest, Id3v2TextFrameDecodesUtf8Encoding)
     EXPECT_EQ(tags.title, "A\xC3\xA9");
 }
 
-// plan_media.md MEDIA-200/202: FLAC and Opus store the SAME Vorbis-comment list as Ogg Vorbis but
+// plans/plan_media.md MEDIA-200/202: FLAC and Opus store the SAME Vorbis-comment list as Ogg Vorbis but
 // locate it completely differently -- FLAC in a native METADATA_BLOCK (type 4) after the "fLaC"
 // marker, Opus behind an "OpusTags" magic instead of "\x03vorbis". The pre-existing Vorbis reader
 // searches specifically for \x03vorbis, so it finds nothing in either; verified empirically before
@@ -237,7 +237,7 @@ TEST(AudioTagParserTest, TruncatedFlacIsRejectedWithoutReadingPastTheBuffer)
     });
 }
 
-// plan_media.md MEDIA-206: embedded ID3v2 APIC cover art. This closes the long-standing R2/
+// plans/plan_media.md MEDIA-206: embedded ID3v2 APIC cover art. This closes the long-standing R2/
 // MEDIA-123 follow-up. The fixture's album folder deliberately contains NO cover file, so the art
 // can only come from inside the MP3 itself.
 TEST(AudioTagParserTest, ExtractsEmbeddedApicArtFromMp3)
@@ -267,7 +267,7 @@ TEST(AudioTagParserTest, ReturnsFalseForAFileWithNoEmbeddedArt)
     EXPECT_TRUE(image.empty());
 }
 
-// plan_media.md MEDIA-182: ID3v2 POPM (Popularimeter). Fixture is hand-built byte-by-byte because
+// plans/plan_media.md MEDIA-182: ID3v2 POPM (Popularimeter). Fixture is hand-built byte-by-byte because
 // ffmpeg cannot write POPM -- same technique this project already uses for hand-constructed .xnb
 // containers. The rating byte is 196, and 196*10/255 rounds to 8 on XNA's 0-10 scale.
 TEST(AudioTagParserTest, ReadsId3v2PopmRatingAndConvertsToXnaScale)
@@ -283,7 +283,7 @@ TEST(AudioTagParserTest, ReadsId3v2PopmRatingAndConvertsToXnaScale)
     EXPECT_EQ(tags.trackNumber, 4);
 }
 
-// plan_media.md MEDIA-183: the Vorbis RATING comment, treated as a 0-100 scale (80 -> 8).
+// plans/plan_media.md MEDIA-183: the Vorbis RATING comment, treated as a 0-100 scale (80 -> 8).
 TEST(AudioTagParserTest, ReadsVorbisRatingCommentAndConvertsToXnaScale)
 {
     auto tags = CNA::Internal::Media::AudioTagParser::ReadTags(

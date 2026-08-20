@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-526, MOD-527, MOD-528: SSAO end to end, from the prepass to the darkened frame.
+// plans/plan_modern.md MOD-526, MOD-527, MOD-528: SSAO end to end, from the prepass to the darkened frame.
 //
 // This is the first program that drives the whole depth/normal chain the way a game does: it renders
 // a scene into the prepass, hands the two images to the pipeline, and checks that the frame comes

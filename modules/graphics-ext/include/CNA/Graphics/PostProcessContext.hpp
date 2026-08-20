@@ -89,7 +89,7 @@ namespace CNA::Graphics {
         /**
          * @brief Per-object screen velocity from the prepass, or null when none was produced.
          *
-         * plan_modern.md `MOD-2033`. `DepthNormalPrepass::getVelocityTextureEXT()`, and it is
+         * plans/plan_modern.md `MOD-2033`. `DepthNormalPrepass::getVelocityTextureEXT()`, and it is
          * **null by default** because producing it is an obligation on the application rather than
          * a switch. A pass that reads it must still work without it: reprojecting depth through the
          * previous camera gives the camera's half of the same answer, which is what motion blur did

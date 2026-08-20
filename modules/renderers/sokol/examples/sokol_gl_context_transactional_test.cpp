@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-45: SokolRenderer construction must be fully transactional, including
+// plans/plan_sokol.md SOKOL-45: SokolRenderer construction must be fully transactional, including
 // the GL-context-creation step itself.
 //
 // Before this fix, context creation ran before the constructor's cleanup boundary. A successful

@@ -25,29 +25,29 @@ on it) rather than assuming either way.
   pipeline, post-process passes, shadows, sky, image-based lighting, materials, instancing/LOD,
   compute), which lives behind the `CNA_CNAEXT` CMake option and is **OFF by default**. Start here
   for "what does the engine layer do on renderer X"; the design is `../CNAEXT.md`, the task backlog
-  `../plan_modern.md`, the running ledger `../NEXT_modern.md`, the measurements
+  `../plans/plan_modern.md`, the running ledger `../NEXT_modern.md`, the measurements
   [`cnaext-perf.md`](cnaext-perf.md), and the fifteen-minute introduction
   [`cnaext-getting-started.md`](cnaext-getting-started.md).
 - **[`tinygl-renderer.md`](tinygl-renderer.md)** — capability boundary for `TINYGL`, the
-  fixed-function CPU OpenGL renderer (C-Chads/tinygl); task breakdown in `../plan_tinygl.md`, and
+  fixed-function CPU OpenGL renderer (C-Chads/tinygl); task breakdown in `../plans/plan_tinygl.md`, and
   the pre-implementation probe in `../tinygl-spike/README.md`.
 - **[`renderer-expansion-candidates.md`](renderer-expansion-candidates.md)** — surveyed catalog of
   **41** possible future renderer identities, screened against the live registry and against the
   "no alias identities" rule, plus the list of things that must *not* become identities. A
   catalog only: it authorizes nothing, exactly like `../FUTURE.md`.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
-  limitations for the experimental fifth renderer; detailed remaining work is in `../plan_webgpu.md`.
+  limitations for the experimental fifth renderer; detailed remaining work is in `../plans/plan_webgpu.md`.
 - **[`sokol-renderer.md`](sokol-renderer.md)** — capability boundary, build options and known
   limitations for the experimental `sokol_gfx` renderer (a pixel-verified 2D baseline; no 3D path,
-  render targets or custom effects yet); task breakdown is in `../plan_sokol.md`.
+  render targets or custom effects yet); task breakdown is in `../plans/plan_sokol.md`.
 - **[`diligent-renderer.md`](diligent-renderer.md)** — capability boundary, build options, the
   runtime device-type selection (`CNA_DILIGENT_DEVICE`) and known limitations for the experimental
   Diligent Engine renderer, the one renderer whose native graphics API is chosen at run time rather
-  than by the CMake option; task breakdown is in `../plan_diligent.md`.
+  than by the CMake option; task breakdown is in `../plans/plan_diligent.md`.
 - **[`skia-renderer.md`](skia-renderer.md)** — current verified CPU-raster 2D capability boundary,
   dependency policy, tests, and explicit direct/emulation decisions; the 249-entry API ledger is
   [`skia-easygl-parity-ledger.md`](skia-easygl-parity-ledger.md), active work is in
-  `../plan_skia.md`, Skia-only continuity is in `../NEXT_skia.md`, and the fresh-checkout procedure
+  `../plans/plan_skia.md`, Skia-only continuity is in `../NEXT_skia.md`, and the fresh-checkout procedure
   is [`skia-developer-build.md`](skia-developer-build.md). The accepted raster-versus-GPU decision
   and future acceleration reopening gate are in
   [`skia-surface-mode-adr.md`](skia-surface-mode-adr.md); the final CPU-raster checklist is
@@ -65,13 +65,13 @@ on it) rather than assuming either way.
   construction remains gated by SKIA-126 and later tasks.
 - **[`canvas-renderer.md`](canvas-renderer.md)** — current status for the Emscripten-only HTML Canvas
   2D renderer, incl. a manual browser verification checklist (this dev loop has no real browser DOM
-  to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.
+  to pixel-verify against); detailed task breakdown is in `../plans/plan_canvas.md`.
 - **[`glide-renderer.md`](glide-renderer.md)** — build/runtime setup and current native
   fixed-function 2D plus constrained color/textured-vertex 3D scope of the Windows-only historical
   Glide 3.x renderer, which dynamically loads an external emulator DLL.
 - **[`html-dom-renderer.md`](html-dom-renderer.md)** — current status for the Emscripten-only HTML DOM
   renderer, which renders SpriteBatch output as pooled CSS-transformed `<div>` elements instead of
-  rasterizing into a canvas; detailed task breakdown is in `../plan_html_dom.md`.
+  rasterizing into a canvas; detailed task breakdown is in `../plans/plan_html_dom.md`.
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
@@ -101,7 +101,7 @@ original phase closed — check each file's own status banner/date.
 - `rendertarget-support.md`, `texture3d-texturecube-support.md`, `surface-format-support.md`,
   `texture-stream-formats.md`, `vertex-format-support.md`, `spritefont-support.md`,
   `viewport-displaymode-adapter-support.md` — not re-verified in the 2026-07-11 pass.
-- `shader-effect-vs-fx-bytecode.md`, `fx-bytecode-support-plan.md` — planning docs for the
+- `shader-effect-vs-fx-bytecode.md`, `fx-bytecode-support-plans/plan.md` — planning docs for the
   compiled `.fx` bytecode gap (the single biggest real gap in the project — see the migration guide).
 
 ## Graphics — historical audits and dated snapshots
@@ -131,7 +131,7 @@ Kept for their investigation methodology and root-cause detail, not as current s
   renderer allow-list, bundle/lifecycle/storage behavior, and an explicit per-claim evidence
   boundary (macOS has a native CI gate; iOS final-links for device and runs a one-frame smoke app
   in the simulator, but still lacks physical-device and feature evidence). Task breakdown is in
-  `../plan_apple.md`.
+  `../plans/plan_apple.md`.
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
 - **[`skia-renderer.md`](skia-renderer.md)** — the experimental Skia CPU-raster 2D renderer; unlike
   an accelerated Skia/GPU path, only its evidence-linked bounded feature table is advertised.
@@ -145,9 +145,9 @@ Kept for their investigation methodology and root-cause detail, not as current s
   the former `ASCII` graphics-renderer identity.
 - `ascii-renderer.md` — **historical**: completeness status for the former `ASCII` (SDL-windowed
   retro glyph-grid) graphics renderer, removed 2026-08 in favor of the post-process effect above;
-  see `../plan_ascii.md` for the full historical task-by-task detail.
+  see `../plans/plan_ascii.md` for the full historical task-by-task detail.
 - `freedirect-renderer.md` — FreeDirect (formerly `DIRECTX3`; DirectDraw via the `../free-direct` sibling)'s own completeness status,
-  current as of `plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
+  current as of `plans/plan_freedirect.md`'s Phase X1-X7 closure (2026-07-15).
 - `glide-renderer.md` — Glide 3.x's native-API SpriteBatch and constrained color-vertex 3D path;
   runtime verification needs a separately supplied `glide3x.dll`, so this repository does not
   claim a bundled emulator.
@@ -166,7 +166,7 @@ documentation-accuracy pass; check each file's own date before relying on it.
 
 `devices-android.md`, `devices-api-coverage.md`, `devices-build.md`, `devices-hardware-checklist.md`,
 `devices-native-backend-design.md`, `devices_sensor_hardware_qa_template.md`,
-`devices-thread-safety.md`, `cna-devices-camera-design.md`, `location-future-plan.md` — not in
+`devices-thread-safety.md`, `cna-devices-camera-design.md`, `location-future-plans/plan.md` — not in
 scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's own date.
 
 ## Other

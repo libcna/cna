@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_d3d10.md: verifies GraphicsDevice::SupportsCapability() correctly reports D3D10's
-// capability set (plan_d3d10.md design decision 5). ThreeD/DepthStencilBuffer/WireFrame/
+// plans/plan_d3d10.md: verifies GraphicsDevice::SupportsCapability() correctly reports D3D10's
+// capability set (plans/plan_d3d10.md design decision 5). ThreeD/DepthStencilBuffer/WireFrame/
 // AnisotropicFiltering/MultipleRenderTargets all report true (real GPU via DXVK, real
 // OMSetRenderTargets(count>1,...) support -- a genuine difference from every DIRECTX1..DIRECTX8 renderer).
-// OcclusionQuery/CustomEffects report false -- out of this v1's scope (plan_d3d10.md design
+// OcclusionQuery/CustomEffects report false -- out of this v1's scope (plans/plan_d3d10.md design
 // decision 3), not a hardware limitation.
 //
 // Exit code 0 = PASS, 1 = FAIL.

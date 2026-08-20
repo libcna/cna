@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_html_dom.md HTMLDOM-15/72: the HTML_DOM (CSS-composited DOM elements) renderer's smoke test.
+# plans/plan_html_dom.md HTMLDOM-15/72: the HTML_DOM (CSS-composited DOM elements) renderer's smoke test.
 # Like CANVAS's above it is a real executable rather than a ctest -- it needs a browser, not node --
 # but unlike CANVAS it has a driver that actually runs it here
 # (scripts/run-htmldom-browser-test.sh, headless Chromium via Playwright).
@@ -15,7 +15,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 # the graphics module's examples directory.
 include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
-# plan_html_dom.md HTMLDOM-15/HTMLDOM-72: the HTML_DOM renderer's end-to-end smoke test.
+# plans/plan_html_dom.md HTMLDOM-15/HTMLDOM-72: the HTML_DOM renderer's end-to-end smoke test.
 #
 # Deliberately NOT registered as a CTest, for the same reason every CANVAS entry is not: this
 # renderer produces a wasm module that only runs inside a browser -- SDL_Init(SDL_INIT_VIDEO) itself
@@ -45,7 +45,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     set_target_properties(cna_htmldom_visual_demo PROPERTIES SUFFIX ".html")
     target_link_options(cna_htmldom_visual_demo PRIVATE -sALLOW_MEMORY_GROWTH=1)
 
-    # plan_html_dom.md Phase D9 (HTMLDOM-84/85/86/87): pixel-exact verification of the tint,
+    # plans/plan_html_dom.md Phase D9 (HTMLDOM-84/85/86/87): pixel-exact verification of the tint,
     # AlphaBlend un-premultiply, Opaque alpha-strip and Additive composite maths against real
     # rendered/read-back pixels, not just structural checks. Driven by the same
     # run-htmldom-browser-test.sh / htmldom-browser-test.mjs harness as the smoke test.
@@ -56,7 +56,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
 
-    # plan_html_dom.md Phase D9 (HTMLDOM-89/90): a performance benchmark (500 animated sprites/
+    # plans/plan_html_dom.md Phase D9 (HTMLDOM-89/90): a performance benchmark (500 animated sprites/
     # frame, steady-state ms/frame) and a 300-frame stability run (oscillating sprite counts,
     # cycling tints forcing real variant-cache LRU eviction). Driven by the same harness.
     add_executable(cna_test_htmldom_stress htmldom_stress_test.cpp)
@@ -66,7 +66,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
 
-    # plan_html_dom.md HTMLDOM-95: proves texture/render-target dispose actually shrinks the JS-side
+    # plans/plan_html_dom.md HTMLDOM-95: proves texture/render-target dispose actually shrinks the JS-side
     # texture registry (Module['cnaDomTextures']) back down, rather than trusting the destructor
     # chain by code review alone. Driven by the same harness.
     add_executable(cna_test_htmldom_dispose htmldom_dispose_test.cpp)
@@ -76,7 +76,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
 
-    # plan_html_dom.md HTMLDOM-116: measures and bounds the sprite pool's own compositor-layer/DOM
+    # plans/plan_html_dom.md HTMLDOM-116: measures and bounds the sprite pool's own compositor-layer/DOM
     # memory retention (5,000/10,000-sprite bursts, then a genuinely settled long idle period) rather
     # than trusting the "targets normal 2D games" claim on paper. Driven by the same harness.
     add_executable(cna_test_htmldom_memory htmldom_memory_test.cpp)
@@ -86,7 +86,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
         -sALLOW_MEMORY_GROWTH=1
         -sEXIT_RUNTIME=1)
 
-    # plan_html_dom.md HTMLDOM-112: one target that builds every browser test page, so
+    # plans/plan_html_dom.md HTMLDOM-112: one target that builds every browser test page, so
     # scripts/run-htmldom-test-suite.sh (and CI) can build the whole suite with a single
     # `cmake --build ... --target cna_test_htmldom_all` instead of four separate target names.
     add_custom_target(cna_test_htmldom_all DEPENDS

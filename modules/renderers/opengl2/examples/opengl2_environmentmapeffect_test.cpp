@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact EnvironmentMapEffect proof for the native OpenGL 2.1 graphics
+// plans/plan_opengl2.md: pixel-exact EnvironmentMapEffect proof for the native OpenGL 2.1 graphics
 // renderer -- the one remaining piece needed for cube-map feature parity, now that both
-// TextureCube and RenderTargetCube exist (see plan_opengl2.md's session 6 status entries).
+// TextureCube and RenderTargetCube exist (see plans/plan_opengl2.md's session 6 status entries).
 //
 // Checks A/B use World=View=Projection=Identity (this project's own established convention --
 // see opengl2_effects_test.cpp) with the quad at local Z=-0.8 and eye derived from

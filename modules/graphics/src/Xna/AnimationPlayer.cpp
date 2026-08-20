@@ -190,7 +190,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void ApplyClipToBonesEXT(Model& model, const AnimationClip& clip, System::TimeSpan time)
     {
-        // plan_gltf.md GLTF-294. Refusing a palette clip here is the whole reason
+        // plans/plan_gltf.md GLTF-294. Refusing a palette clip here is the whole reason
         // AnimationClipEXT carries a target space at all: its indices name joint slots, and
         // applying them to Model::Bones would pose the wrong bones with no symptom but wrong
         // motion -- a silent corruption in place of the silent drop GLTF-293 removed.

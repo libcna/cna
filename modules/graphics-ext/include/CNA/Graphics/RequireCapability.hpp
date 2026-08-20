@@ -28,7 +28,7 @@ namespace CNA::Graphics::detail {
     /**
      * @brief Returns, or throws @ref CNA::Graphics::EngineException, if a capability is missing.
      *
-     * plan_modern.md `MOD-10`. The single choke point for "this subsystem needs something the
+     * plans/plan_modern.md `MOD-10`. The single choke point for "this subsystem needs something the
      * renderer does not have". Written once so the sentence is the same everywhere and so the
      * renderer's name is always resolved from the device rather than guessed at the call site —
      * "not supported" without naming the renderer is the least useful log line in graphics.

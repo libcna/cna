@@ -22,7 +22,7 @@
 // changes only this process's own view of that one gamer). HostChanged used to never fire (Task
 // 2.6 confirmed real host migration was unimplemented, matching FNA's own reference, so the host
 // disconnecting always ended the session outright instead of electing a new host) - Task 5.1-5.4
-// (plan_net.md Phase 5) implemented it for real; the client role now opts in via
+// (plans/plan_net.md Phase 5) implemented it for real; the client role now opts in via
 // setAllowHostMigrationProperty(true) (see RosterGame::Initialize()), so killing the host process
 // mid-session now really does elect a new host and fire this event, instead of ending the session.
 class RosterGame : public Microsoft::Xna::Framework::Game

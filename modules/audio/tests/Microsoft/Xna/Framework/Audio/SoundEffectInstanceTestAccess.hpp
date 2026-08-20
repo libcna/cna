@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 
-// plan_platform.md PLAT-SDL2-8: the mixer header, and the one accessor that needs its type, are
+// plans/plan_platform.md PLAT-SDL2-8: the mixer header, and the one accessor that needs its type, are
 // behind SOUND_ENABLED. Everything else in this struct reaches CNA-side state and pure XNA math
 // that exist in every audio profile, and three suites outside the mixer's own coverage
 // (WaveBankTests, SoundEffectContentTypeReaderTests, MediaLibraryTestAccess) use only those.

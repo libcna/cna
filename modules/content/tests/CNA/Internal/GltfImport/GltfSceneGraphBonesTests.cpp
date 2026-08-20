@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-114 / GLTF-252 / GLTF-297 (Phase 5): the scene-graph <-> ModelBone contract.
+// plans/plan_gltf.md GLTF-114 / GLTF-252 / GLTF-297 (Phase 5): the scene-graph <-> ModelBone contract.
 //
 // GLTF-113/GLTF-114 gave the imported model a real ModelBone per glTF scene node, and everything
 // downstream leans on one invariant that was, until this file existed, only implicit:
@@ -15,7 +15,7 @@
 // is locked BEFORE rigid animation starts consuming the same indices.
 //
 // The second contract in this file is the deliberate asymmetry between rigid and skinned meshes
-// (plan_gltf.md §15.1):
+// (plans/plan_gltf.md §15.1):
 //
 //     rigid mesh   -> ModelMesh::ParentBone == its own scene node's bone
 //     skinned mesh -> its scene node's bone EXISTS and carries the node's transform,
@@ -248,7 +248,7 @@ TEST(GltfSceneGraphBones, SkinnedMeshAncestryIsPreservedInTheSceneModelButDoesNo
     // intact, while the mesh itself hangs off the identity root.
     //
     // This fixture's own mesh node is untransformed, so the non-identity mesh-node case is not
-    // covered here; that is skin-mesh-node-transform (plan_gltf.md §15.4), which P0-D adds together
+    // covered here; that is skin-mesh-node-transform (plans/plan_gltf.md §15.4), which P0-D adds together
     // with GLTF-247/GLTF-260. Asserting a translation this fixture does not declare would be
     // fabricated coverage, so it is deliberately absent rather than approximated.
     const LoadedFixture fixture("skin-armature-ancestor");
@@ -995,7 +995,7 @@ TEST(GltfRigidAnimation, APaletteClipIsRefusedRatherThanPosingTheWrongBones)
                  std::invalid_argument);
 }
 
-// --- plan_gltf.md GLTF-299: a clip whose first key is not at t = 0 ---------------------------------
+// --- plans/plan_gltf.md GLTF-299: a clip whose first key is not at t = 0 ---------------------------------
 
 // glTF animations live on an absolute timeline anchored at 0, so two questions have exactly one
 // spec-conformant answer each and `anim-nonzero-start` states both in its own manifest rather than
@@ -1098,7 +1098,7 @@ TEST(GltfRigidAnimation, BeforeTheFirstKeyTheClipHoldsThatKeyNotTheRestPose)
     }
 }
 
-// --- plan_gltf.md GLTF-249: skin.skeleton is a root hint, never a traversal stop --------------------
+// --- plans/plan_gltf.md GLTF-249: skin.skeleton is a root hint, never a traversal stop --------------------
 
 // The half that was missing entirely: `skin.skeleton` was parsed by cgltf and read by nobody, so an
 // application had no way to find the rig root the file declares. It is carried now -- and carried
@@ -1202,7 +1202,7 @@ TEST(GltfSkinSpaces, AnAncestorAboveTheDeclaredRootStillContributesItsTransform)
     EXPECT_NEAR(0.0f, skinned.Z, kTolerance);
 }
 
-// --- plan_gltf.md GLTF-281 / GLTF-282: node.weights, and two instances that differ -----------------
+// --- plans/plan_gltf.md GLTF-281 / GLTF-282: node.weights, and two instances that differ -----------------
 
 // §3.7.2.2 gives the instancing node the final say, and OVERRIDE is the operative word: node A
 // declaring [1] and node B declaring [0] for a mesh whose own weights are [0.5] must start at 1 and
@@ -1267,7 +1267,7 @@ TEST(GltfMorphWeights, NodeWeightsOverrideTheMeshsOwnRatherThanMergingWithThem)
     }
 }
 
-// --- plan_gltf.md GLTF-256: weights that do not sum to 1 (the audit's H12) -------------------------
+// --- plans/plan_gltf.md GLTF-256: weights that do not sum to 1 (the audit's H12) -------------------------
 
 // The skin equation is a weighted sum of joint matrices, so weights summing to 0.75 apply 0.75 of
 // the vertex's transform -- which for a joint near the origin drags the vertex three-quarters of
@@ -1354,7 +1354,7 @@ TEST(GltfSkinSpaces, UnnormalisedWeightsAreRenormalisedAndReportedButOnlyWhenThe
     }
 }
 
-// --- plan_gltf.md GLTF-095/GLTF-257: influence sets past the first --------------------------------
+// --- plans/plan_gltf.md GLTF-095/GLTF-257: influence sets past the first --------------------------------
 
 // glTF puts no limit on JOINTS_n/WEIGHTS_n sets; XNA's BlendIndices/BlendWeight carry exactly four
 // influences, and no CNA vertex layout or shader has room for more. So a second set cannot be
@@ -1448,7 +1448,7 @@ TEST(GltfSkinSpaces, TruncatedInfluencesAreRenormalisedSoTheVertexIsNotDraggedTo
     }
 }
 
-// --- plan_gltf.md GLTF-261: a rig past the GPU palette (the audit's H6) ----------------------------
+// --- plans/plan_gltf.md GLTF-261: a rig past the GPU palette (the audit's H6) ----------------------------
 
 // The palette is 72 mat4s -- a real XNA constant every renderer's uniform array is sized by -- so a
 // 73-joint rig is refused rather than truncated. Truncating leaves the joints past the limit at the

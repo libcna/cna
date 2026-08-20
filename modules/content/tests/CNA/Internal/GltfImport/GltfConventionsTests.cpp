@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-104 / GLTF-105 / GLTF-106 / GLTF-108 / GLTF-191.
+// plans/plan_gltf.md GLTF-104 / GLTF-105 / GLTF-106 / GLTF-108 / GLTF-191.
 //
 // The coordinate conventions glTF 2.0 and XNA 4.0 already agree on -- handedness, up axis, forward
 // axis, UV origin and quaternion component order -- and therefore the conversions the importer

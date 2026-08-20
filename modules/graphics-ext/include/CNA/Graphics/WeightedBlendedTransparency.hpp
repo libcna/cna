@@ -25,7 +25,7 @@ namespace CNA::Graphics {
     /**
      * @brief Transparency that does not need sorting, and cannot be got wrong by ordering.
      *
-     * plan_modern.md `MOD-2106`. `TransparentDrawList` orders draws back to front, which is correct
+     * plans/plan_modern.md `MOD-2106`. `TransparentDrawList` orders draws back to front, which is correct
      * for surfaces that do not interpenetrate and has no answer at all for surfaces that do — two
      * intersecting panes have no correct order, and no per-object sort can invent one. This is the
      * other answer: McGuire and Bavoil's weighted blended order-independent transparency, where
@@ -141,7 +141,7 @@ namespace CNA::Graphics {
         /**
          * @brief The weight one surface contributes with, the CPU twin of `cnaOitWeight`.
          *
-         * plan_modern.md `MOD-2107`. Takes the same three arguments in the same units as the GLSL
+         * plans/plan_modern.md `MOD-2107`. Takes the same three arguments in the same units as the GLSL
          * and computes them in the same order, so the two can be compared on the GPU rather than
          * read side by side — the pattern Phase 20 named after six rows hit it. A twin that took a
          * pre-normalised depth would have been a second function that merely resembled the first.

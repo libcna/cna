@@ -1,4 +1,4 @@
-# plan_cnj.md CNB-50/51/52 (Phase 12): standalone offline glTF 2.0 -> .cnj Model/AnimationClip
+# plans/plan_cnj.md CNB-50/51/52 (Phase 12): standalone offline glTF 2.0 -> .cnj Model/AnimationClip
 # converter. Not a test/example -- a developer content tool, so built unconditionally rather than
 # gated behind CNA_BUILD_TESTS (matches cna_diag_compare's own "standalone tool, not wired into
 # ctest" precedent in Harnesses.cmake). Links against CNA and its declared sharp-runtime component

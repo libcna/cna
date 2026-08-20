@@ -15,7 +15,7 @@ namespace CNA::Internal::Media
         std::vector<std::string> songPaths; // resolved, existing paths only
     };
 
-    /// Minimal M3U/M3U8 reader (plan_media.md MEDIA-57/58/D5). Both extensions parse identically:
+    /// Minimal M3U/M3U8 reader (plans/plan_media.md MEDIA-57/58/D5). Both extensions parse identically:
     /// path-per-line, with optional "#EXTINF:" comment lines tolerated and ignored, entries
     /// resolved relative to the playlist's own directory. On this platform std::string is already
     /// byte-transparent UTF-8 throughout the codebase, so there is no separate "legacy encoding"

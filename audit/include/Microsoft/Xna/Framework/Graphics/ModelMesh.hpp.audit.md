@@ -15,7 +15,7 @@ mesh parts.
 ## Executive Verdict
 Correct. `setBoundingSphereProperty()`'s doc comment (lines 47-56) honestly discloses that real
 XNA's `BoundingSphere` property is genuinely public read-write (not `internal set`) and that this
-port's setter was only added later (plan_xnb.md XNB-39) once a real caller needed it — an honest
+port's setter was only added later (plans/plan_xnb.md XNB-39) once a real caller needed it — an honest
 account of the property having been getter-only for a period, not a silent gap.
 
 ## Checklist Results

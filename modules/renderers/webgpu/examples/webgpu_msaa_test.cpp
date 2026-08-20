@@ -71,7 +71,7 @@
 // RasterizerState::CullNone before drawing, matching the established pattern of every other WebGPU
 // 3D test -- this test's actual subject is MSAA resolve quality, not backface culling (already
 // covered by WebGPU_GraphicsState). No production renderer code changed; WebGPURenderer.cpp
-// is untouched by this fix. See plan_webgpu.md's WEBGPU-58 row for the full investigation writeup.
+// is untouched by this fix. See plans/plan_webgpu.md's WEBGPU-58 row for the full investigation writeup.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"

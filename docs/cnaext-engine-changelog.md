@@ -1,6 +1,6 @@
 # `CNA::Graphics` engine-layer revisions
 
-`plan_modern.md` **MOD-1904**. `CNA_CNAEXT_ENGINE_VERSION` only earns its place if a reader can find
+`plans/plan_modern.md` **MOD-1904**. `CNA_CNAEXT_ENGINE_VERSION` only earns its place if a reader can find
 out what a number means, so this file says what each revision changed.
 
 The number is a **revision marker, not an ABI promise** — see `CNAEXT.md` §9 and `MOD-1905`. It

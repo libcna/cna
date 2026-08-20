@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-8 (D9-83): real vs_2_0/ps_2_0 bytecode for CNA's own CNAEXT
+// plans/plan_dx9.md Phase D9-8 (D9-83): real vs_2_0/ps_2_0 bytecode for CNA's own CNAEXT
 // "Instanced3D" shader (src/CNA/Internal/Renderers/DirectX9/shaders/cna/Instanced3D.hlsl -- see that
 // file's own header comment for why this is not a Microsoft Stock Effect port), compiled through
 // the same real d3dcompiler_47.dll (D9-71's own fxc_tool.exe, under Wine) used for the vendored

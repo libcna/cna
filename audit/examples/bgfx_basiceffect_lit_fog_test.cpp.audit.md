@@ -94,7 +94,7 @@ observation doesn't apply here.
 
 - Third and final occurrence, in this batch, of the fog-formula defect first fully derived in
   `bgfx_alphatest_fog_test.cpp`'s report; see that file for the complete symbolic proof and git-history
-  corroboration (commit `74ad3bae` / Task 1111, `plan_dx9.md D9-A6`).
+  corroboration (commit `74ad3bae` / Task 1111, `plans/plan_dx9.md D9-A6`).
 - The header's claim of "same expected values as `examples/vulkan_basiceffect_fog_test.cpp`" is consistent
   with Vulkan's `colored3d.vert.glsl` sharing the identical formula (confirmed in this batch's
   `bgfx_alphatest_fog_test.cpp` cross-file check) — i.e. Bgfx and Vulkan are mutually consistent with each

@@ -4,7 +4,7 @@
 
 - Source file: `examples/easygl_shadereffect_texture3d_test.cpp`
 - Audit status: AUDITED
-- Subsystem: `examples-tests-easygl` shard — plan_graphics.md Task 863: `ShaderEffect::SetTexture(int, Texture3D&)`
+- Subsystem: `examples-tests-easygl` shard — plans/plan_graphics.md Task 863: `ShaderEffect::SetTexture(int, Texture3D&)`
   binding a volume texture to a custom shader's `sampler3D` uniform
 - File type: raw `Game`-derived executable, two checks (A/B), with a deliberate "decoy texture" false-positive
   guard

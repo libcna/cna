@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent renderer's 3D draw path,
+// plans/plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent renderer's 3D draw path,
 // through the public BasicEffect / DrawUserPrimitives API rather than the renderer interface.
 //
 // Check A -- non-indexed DrawUserPrimitives renders a vertex-coloured quad.

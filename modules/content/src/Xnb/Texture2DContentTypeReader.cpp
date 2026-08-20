@@ -91,7 +91,7 @@ namespace CNA::Internal::Xnb
         // must be positive individually (two negatives would otherwise multiply to a
         // small-looking positive product and slip past the byte-size check below). The
         // decoded-byte-size product is computed via CheckedMultiplyOrThrow(), not raw int64_t
-        // multiplication (plan_xnb.md XNB-43) -- widening to int64_t alone is not sufficient: two
+        // multiplication (plans/plan_xnb.md XNB-43) -- widening to int64_t alone is not sufficient: two
         // dimensions near INT32_MAX multiply to a value still representable in int64_t, but the
         // subsequent "* 4" can itself overflow int64_t, which is undefined behavior (confirmed by
         // UBSan, REMED-CONTENT-009). CheckedMultiplyOrThrow() rejects that case as a clean

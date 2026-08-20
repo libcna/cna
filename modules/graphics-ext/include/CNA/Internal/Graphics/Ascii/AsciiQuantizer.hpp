@@ -59,7 +59,7 @@ namespace CNA::Internal::Graphics::Ascii
 
     /**
      * @brief Parses `CNA_ASCII_MODE` (`BLACKWHITE`/`COLOR`, case-insensitive) at construction
-     * time, same pattern as `HEADLESS`'s `ParseHeadlessModeFromEnvironment()` (plan_ascii.md
+     * time, same pattern as `HEADLESS`'s `ParseHeadlessModeFromEnvironment()` (plans/plan_ascii.md
      * design decision 5). Unset or unrecognized values default to `Color`.
      *
      * @return The parsed mode.

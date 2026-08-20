@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-210/212/223: discriminating EasyGL pixel test for PBR colour transfer.
+// plans/plan_gltf.md GLTF-210/212/223: discriminating EasyGL pixel test for PBR colour transfer.
 //
 // A texture byte of 128 is the load-bearing witness: sRGB decoding maps 128/255 to
 // 0.2158605 linear. Encoding that result for the ordinary UNORM backbuffer returns byte 128,

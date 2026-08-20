@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-32: safe, non-recursive "sourceFile" resolution. A .cnj's "sourceFile" must
+// plans/plan_cnj.md CNB-32: safe, non-recursive "sourceFile" resolution. A .cnj's "sourceFile" must
 // never be able to escape the content root, chain into another .cnj, or cycle back into itself.
 
 #include <filesystem>

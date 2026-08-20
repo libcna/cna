@@ -1,7 +1,7 @@
 # igl renderer example/test registration (module-local, the shape every renderer family uses since
 # the module-examples campaign).
 #
-# plan_igl.md: IGL (facebook/igl) renderer integration tests. Like the LLGL/VULKAN/MAGNUM blocks
+# plans/plan_igl.md: IGL (facebook/igl) renderer integration tests. Like the LLGL/VULKAN/MAGNUM blocks
 # these need a real windowing system and a real driver -- IGL creates its device from the platform
 # window itself -- so they run against CNA_TEST_DISPLAY (a live X server, or an Xvfb one with Mesa's
 # software rasterizer behind it). Which native API is underneath is decided at runtime by
@@ -243,7 +243,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "IGL")
         COMMAND cna_test_igl_public_surfaceformat
         TIMEOUT 90 LABELS "Igl"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_IGL_BACKEND=vulkan")
-    # plan_igl.md IGL-43: the three custom-effect tests now carry a SPIR-V variant of their shaders
+    # plans/plan_igl.md IGL-43: the three custom-effect tests now carry a SPIR-V variant of their shaders
     # and declare the std140 block their parameters live in, so they run on Vulkan too. Registered
     # here rather than left to a manual run: the whole point of IGL-43 was that nothing guarded the
     # Vulkan half of the custom-effect path.

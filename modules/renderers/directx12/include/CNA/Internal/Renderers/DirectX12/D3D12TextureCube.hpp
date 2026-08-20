@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12 (DX-111, closing env_map3d): real D3D12 cube-map texture renderer, RGBA8
+// plans/plan_dx.md Phase DX12 (DX-111, closing env_map3d): real D3D12 cube-map texture renderer, RGBA8
 // storage only (matches this project's own established simplification -- D3D12Textures.hpp's own
 // header comment applies identically here). Same explicit upload-heap-staging discipline as
 // D3D12Textures.hpp/.cpp's D3D12TextureRenderer::UploadRegion(), just parameterized per face: a

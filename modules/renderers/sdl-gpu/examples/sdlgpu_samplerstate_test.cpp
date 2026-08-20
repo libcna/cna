@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-21: real dynamic SamplerState proof for direct 3D draws on the SDL_GPU
+// plans/plan_sdlgpu.md SDLGPU-21: real dynamic SamplerState proof for direct 3D draws on the SDL_GPU
 // graphics renderer -- before this task, every 3D draw (BasicEffect/AlphaTestEffect/
 // DualTextureEffect/EnvironmentMapEffect/SkinnedEffect) hardcoded Linear+Wrap-then-Clamp
 // regardless of what GraphicsDevice.SamplerStates[slot] was assigned; only SpriteBatch's own

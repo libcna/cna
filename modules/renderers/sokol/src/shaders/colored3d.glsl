@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-20: the Sokol renderer's vertex-coloured 3D program, written in sokol-shdc's
+// plans/plan_sokol.md SOKOL-20: the Sokol renderer's vertex-coloured 3D program, written in sokol-shdc's
 // annotated GLSL. Compiled offline by compile_shaders.py into sokol_shaders.hpp, which is
 // checked in.
 //

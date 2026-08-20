@@ -15,7 +15,7 @@
 // Happy-path SetData/GetData round-trip coverage (per-slice colour verification) lives in
 // the EasyGL pixel-readback integration test: modules/renderers/easygl/examples/easygl_texture3d_slices_test.cpp.
 //
-// plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), instead of
+// plans/plan_graphics.md Task 863: Texture3D now inherits Texture (matching FNA), instead of
 // GraphicsResource directly, so it can be assigned into GraphicsDevice.Textures/VertexTextures
 // (a TextureCollection, which stores Texture* slots) -- previously a compile-time impossibility.
 // See the "TextureCollection assignment / Texture base class (Task 863)" section below.
@@ -62,7 +62,7 @@ namespace
 /// same way. So `GetData` refuses rather than fabricating voxels, and the shared layer turns that
 /// into a NotSupportedException.
 ///
-/// Verified by attempting it, not assumed -- see plan_igl.md IGL-17. Without this arm an IGL build
+/// Verified by attempting it, not assumed -- see plans/plan_igl.md IGL-17. Without this arm an IGL build
 /// asserts a readback the renderer honestly cannot perform, in four tests at once.
 [[nodiscard]] bool VolumeReadbackSupported()
 {
@@ -76,7 +76,7 @@ namespace
 
 // REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
-// (plan_software.md Boundaries). Every test below constructs a real Texture3D, so on a renderer that
+// (plans/plan_software.md Boundaries). Every test below constructs a real Texture3D, so on a renderer that
 // doesn't support it the constructor now throws System::NotSupportedException before any test body
 // logic runs -- skip cleanly rather than fail, matching this project's own hardware-capability-skip
 // convention (e.g. Accelerometer/Gyroscope). See Texture3DUnsupportedRendererTest below for the
@@ -471,7 +471,7 @@ TEST_F(Texture3DTest, DoubleDisposeDoesNotThrow)
 }
 
 // -----------------------------------------------------------------------
-// TextureCollection assignment / Texture base class (plan_graphics.md Task 863)
+// TextureCollection assignment / Texture base class (plans/plan_graphics.md Task 863)
 //
 // Before Task 863, Texture3D inherited GraphicsResource directly (not Texture), so it could
 // never be stored in a TextureCollection (std::vector<Texture*>) at all -- a Texture3D* could

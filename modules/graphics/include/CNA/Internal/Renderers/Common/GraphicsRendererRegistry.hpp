@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_runtimerenderer.md design decision 3: the set of renderer families linked into this build is
+// plans/plan_runtimerenderer.md design decision 3: the set of renderer families linked into this build is
 // an EXPLICIT, generated table -- not static-initializer self-registration.
 //
 // Self-registration is the obvious design and the wrong one here: inside a static archive the

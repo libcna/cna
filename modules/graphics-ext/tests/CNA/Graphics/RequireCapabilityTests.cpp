@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-10: the single choke point for "the renderer cannot do this".
+// plans/plan_modern.md MOD-10: the single choke point for "the renderer cannot do this".
 //
 // Two things need pinning. The pass case must be *silent* -- a helper on a hot-ish path that
 // allocates a message before deciding it does not need one is a helper nobody keeps calling. And
@@ -65,7 +65,7 @@ TEST(RequireCapabilityTest, ASupportedCapabilityReturnsWithoutThrowing)
         ++checked;
         EXPECT_NO_THROW(requireCapability(gd, capability, "RequireCapabilityTest"));
     }
-    // plan_modern.md MOD-1693. This used to be an EXPECT_GT, on the assumption that every renderer
+    // plans/plan_modern.md MOD-1693. This used to be an EXPECT_GT, on the assumption that every renderer
     // supports at least one thing. OpenVG is the counterexample: it answers no to every capability
     // in the enum. That makes the quiet path genuinely unreachable there rather than untested, and
     // this test is about the helper, not about the renderer -- so it skips, and says why.

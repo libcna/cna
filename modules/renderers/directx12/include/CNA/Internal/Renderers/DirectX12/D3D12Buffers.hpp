@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12 (DX-109): real D3D12 vertex/index buffer renderers via explicit
+// plans/plan_dx.md Phase DX12 (DX-109): real D3D12 vertex/index buffer renderers via explicit
 // upload-heap staging + CopyBufferRegion -- D3D12 has no implicit driver-managed Map/Unmap-onto-a-
 // GPU-resident-resource path the way D3D11 does (D3D11Buffers.hpp/.cpp's own D3D11_USAGE_DYNAMIC +
 // Map/Unmap convention). Each SetData()/SetDataWithOptions() call: (1) ensures a DEFAULT-heap

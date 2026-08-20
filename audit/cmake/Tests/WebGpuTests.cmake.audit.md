@@ -55,5 +55,5 @@ the evidence.
 
 ## Final Assessment
 No findings requiring action — the one visibly-failing test is intentional, disclosed, and
-tracked (`plan_webgpu.md`'s WEBGPU-58 row), consistent with CLAUDE.md's explicit instruction to not
+tracked (`plans/plan_webgpu.md`'s WEBGPU-58 row), consistent with CLAUDE.md's explicit instruction to not
 describe the WebGPU backend as further along than it is.

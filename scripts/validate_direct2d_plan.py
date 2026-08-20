@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan_direct2d.md D2D-132: keep the Direct2D plan's statuses and its evidence consistent.
+"""plans/plan_direct2d.md D2D-132: keep the Direct2D plan's statuses and its evidence consistent.
 
 A plan row is only worth reading if its status can be trusted. This checker fails when
 
@@ -131,7 +131,7 @@ def main(argv: list[str]) -> int:
     root = pathlib.Path(arguments[0] if arguments else pathlib.Path(__file__).resolve().parents[1])
     root = root.resolve()
     try:
-        plan = load(root, "plan_direct2d.md")
+        plan = load(root, "plans/plan_direct2d.md")
     except OSError as error:
         print(f"Direct2D plan checker failed to read the plan: {error}", file=sys.stderr)
         return 1
@@ -247,7 +247,7 @@ def main(argv: list[str]) -> int:
     still_open = sum(1 for status in statuses.values() if status in {OPEN, SPIKE})
     if marker is None:
         errors.append(
-            "plan_direct2d.md has no '<!-- direct2d-plan-status: total=N done=N partial=N "
+            "plans/plan_direct2d.md has no '<!-- direct2d-plan-status: total=N done=N partial=N "
             "open=N -->' marker, so nothing pins its own summary against the rows"
         )
     else:

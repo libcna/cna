@@ -1,4 +1,4 @@
-// plan_fx.md FX-005: emit the device state FNA itself installs when a compiled effect pass is
+// plans/plan_fx.md FX-005: emit the device state FNA itself installs when a compiled effect pass is
 // applied, so CNA's state translation can be compared against ground truth produced by *running*
 // FNA rather than by reading its source.
 //

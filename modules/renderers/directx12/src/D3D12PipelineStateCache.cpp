@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX12 (DX-107).
+// plans/plan_dx.md Phase DX12 (DX-107).
 #include "CNA/Internal/Renderers/DirectX12/D3D12PipelineStateCache.hpp"
 
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"

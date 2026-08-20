@@ -1,10 +1,10 @@
 #pragma once
 
-// plan_dx9.md D9-11: a small shared "loud, explicit failure" helper for renderer methods that are
+// plans/plan_dx9.md D9-11: a small shared "loud, explicit failure" helper for renderer methods that are
 // not implemented yet. DirectX12Renderer already had an identical private static helper of its
 // own (DirectX12Renderer::NotYetImplemented); rather than duplicate it a second time for D3D9,
 // it is lifted here so both renderers' skeletons can share one implementation. D3D12's own private
-// copy is left as-is (out of scope for this plan -- see plan_dx9.md cold-start Sec.4, D3D12/ stays
+// copy is left as-is (out of scope for this plan -- see plans/plan_dx9.md cold-start Sec.4, D3D12/ stays
 // untouched); new renderer work should prefer this shared header instead.
 
 #include <stdexcept>

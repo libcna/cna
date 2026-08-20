@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-310 / GLTF-313 / GLTF-315 / GLTF-316: what an animation import does with the
+// plans/plan_gltf.md GLTF-310 / GLTF-313 / GLTF-315 / GLTF-316: what an animation import does with the
 // channels it cannot use, and what it says about it.
 //
 // Everything asserted here is invisible in a `ClipOut`. A channel whose target lies outside the

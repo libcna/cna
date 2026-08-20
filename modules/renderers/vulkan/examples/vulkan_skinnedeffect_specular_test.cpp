@@ -65,7 +65,7 @@ static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 // Precisely computed offline (Python) from the exact FNA half-vector Blinn-Phong formula --
 // identical numbers to BasicEffect's own specular test (same shared Lighting.fxh formula).
 //
-// Task 1103 (plan_graphics.md Phase 80): PreferPerPixelLighting now really defaults to false
+// Task 1103 (plans/plan_graphics.md Phase 80): PreferPerPixelLighting now really defaults to false
 // (XNA's own default, per-vertex/Gouraud lighting). This scene never sets
 // PreferPerPixelLighting=true, so it now genuinely exercises the vertex-lit path -- Gouraud-
 // interpolating the specular VALUE across the quad's two triangles differs from evaluating

@@ -821,7 +821,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
-        // plan_gltf.md GLTF-344: widened from 56 to 76 floats (304 bytes) for KHR_materials_specular's own two
+        // plans/plan_gltf.md GLTF-344: widened from 56 to 76 floats (304 bytes) for KHR_materials_specular's own two
         // inputs -- the UNCLAMPED dielectric F0 plus the specular factor, and two affine transform
         // rows per specular map. The unclamped value is the point: `specularColorTexture` multiplies
         // BEFORE the min(...,1), so a shader handed the pre-clamped F0 cannot reproduce the
@@ -1358,7 +1358,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (mipMap)
             throw std::runtime_error("CNA WebGPU: RenderTargetCube mip-chain regeneration "
                                      "(mipMap=true) is not implemented on this renderer -- see "
-                                     "plan_webgpu.md WEBGPU-114");
+                                     "plans/plan_webgpu.md WEBGPU-114");
         // Always allocates a Depth24PlusStencil8 attachment regardless of the requested
         // depthFormat -- identical simplification to WebGPURenderTargetRenderer's own constructor
         // (see that class's constructor comment for the full rationale).
@@ -1990,7 +1990,7 @@ namespace CNA::Internal::Renderers::WebGPU
         if (level != 0)
             throw std::invalid_argument("CNA WebGPU: RenderTarget2D.GetData: mip level > 0 is not "
                                         "supported on this renderer (no mip chain, see "
-                                        "plan_webgpu.md WEBGPU-53/54)");
+                                        "plans/plan_webgpu.md WEBGPU-53/54)");
 
         // Mirrors WebGPURenderer::ReadBackbuffer()'s own on-demand-flush pattern -- if
         // this render target is STILL the currently bound target, render whatever has been
@@ -2899,7 +2899,7 @@ struct VertexOutput {
             return;
 
         // Uniform layout matches VulkanRenderer::FillExtPushConst()'s 128-byte/32-float
-        // push-constant layout byte-for-byte (see plan_webgpu.md's Phase 57 entry-point note):
+        // push-constant layout byte-for-byte (see plans/plan_webgpu.md's Phase 57 entry-point note):
         // [0..15] MVP, [16..19] diffuseColor, [20..23] ambient+lightingEnabled,
         // [24..27] light0Dir+textureEnabled, [28..31] light0Diffuse+vertexColorEnabled. Only the
         // fields this minimal DrawColoredPrimitives slice actually reads are named; the rest keep
@@ -3078,7 +3078,7 @@ struct VertexOutput {
             return;
 
         // Uniform layout is the exact same group-0 UBO as colored3d.wgsl (coloredBindGroupLayout_,
-        // reused verbatim -- see plan_webgpu.md's WEBGPU-13 note). Group 1 (sampler + texture)
+        // reused verbatim -- see plans/plan_webgpu.md's WEBGPU-13 note). Group 1 (sampler + texture)
         // mirrors the SpriteBatch bind group layout shape exactly.
         static constexpr char shaderSource[] = R"WGSL(
 struct Uniforms {
@@ -3504,7 +3504,7 @@ struct VertexOutput {
         shaderDescriptor.nextInChain = &wgsl.chain;
         litTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
 
-        // Task 1105 (plan_graphics.md Phase 80): real per-vertex-lit sibling -- identical
+        // Task 1105 (plans/plan_graphics.md Phase 80): real per-vertex-lit sibling -- identical
         // Blinn-Phong math to shaderSource above (FNA's Lighting.fxh ComputeLights()), moved from
         // fs_main into vs_main and passed onward as litRGB/specularRGB varyings (WGSL naturally
         // interpolates any @location(n) VertexOutput field across the triangle -- this alone is
@@ -7079,7 +7079,7 @@ struct VSOut {
         if (mipMap)
             throw std::runtime_error("CNA WebGPU: RenderTarget2D mip-chain regeneration "
                                      "(mipMap=true) is not implemented on this renderer yet -- see "
-                                     "plan_webgpu.md WEBGPU-53/54");
+                                     "plans/plan_webgpu.md WEBGPU-53/54");
         // WEBGPU-58: the per-instance requested multiSampleCount argument is intentionally NOT
         // read here -- WebGPURenderTargetRenderer's own constructor unconditionally mirrors this
         // renderer's CURRENT global sampleCount_ instead (see that class's own top-of-class doc
@@ -7230,7 +7230,7 @@ struct VSOut {
     {
         throw std::runtime_error(std::string("CNA WebGPU: ") + method +
                                  " is not implemented in the initial renderer. Clear/present, Texture2D, "
-                                 "SpriteBatch and buffer upload are implemented; see plan_webgpu.md Phase 58+ for 3D parity.");
+                                 "SpriteBatch and buffer upload are implemented; see plans/plan_webgpu.md Phase 58+ for 3D parity.");
     }
 
     void WebGPURenderer::QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
@@ -7372,7 +7372,7 @@ struct VSOut {
             QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` clause. A stock effect's
+        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` clause. A stock effect's
         // base-colour map is optional in XNA and absent in glTF's own default material, and the
         // replay binds neutral white for it -- so requiring one here did not make the draw safe,
         // it made an untextured primitive fall past every branch into the stride-16 colour path
@@ -7391,7 +7391,7 @@ struct VSOut {
         // SkinnedPbrEffect (PBR + skinning combo, stride 68). Checked BEFORE the unskinned-PBR
         // branch below, matching EasyGLRenderer::SelectProgram()'s own priority order
         // (pbr&&skinned combo first, then pbr-only, then skinned-only).
-        // plan_gltf.md GLTF-465: strides 80 and 60 join their bare twins, and the `texture0` clause
+        // plans/plan_gltf.md GLTF-465: strides 80 and 60 join their bare twins, and the `texture0` clause
         // is gone -- a base-colour map is optional in glTF (3.9.2's default material has none) and
         // the PBR replay already binds a neutral-white default for it, so requiring one here only
         // made such a draw fall through to a route that refuses it.
@@ -7464,7 +7464,7 @@ struct VSOut {
             QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        // plan_gltf.md GLTF-474: no `params.texture0 != nullptr` clause. A stock effect's
+        // plans/plan_gltf.md GLTF-474: no `params.texture0 != nullptr` clause. A stock effect's
         // base-colour map is optional in XNA and absent in glTF's own default material, and the
         // replay binds neutral white for it -- so requiring one here did not make the draw safe,
         // it made an untextured primitive fall past every branch into the stride-16 colour path
@@ -7482,7 +7482,7 @@ struct VSOut {
         }
         // See DrawPrimitivesEx()'s identical branch for the SkinnedPbrEffect/PbrEffect/SkinnedEffect
         // priority ordering rationale.
-        // plan_gltf.md GLTF-465: strides 80 and 60 join their bare twins, and the `texture0` clause
+        // plans/plan_gltf.md GLTF-465: strides 80 and 60 join their bare twins, and the `texture0` clause
         // is gone -- a base-colour map is optional in glTF (3.9.2's default material has none) and
         // the PBR replay already binds a neutral-white default for it, so requiring one here only
         // made such a draw fall through to a route that refuses it.
@@ -7958,7 +7958,7 @@ struct VSOut {
         if (webgpuVb.Stride() != 32)
             throw std::invalid_argument("CNA WebGPU: QueueLitTexturedDraw requires a stride-32 "
                                         "(VertexPositionNormalTexture) vertex buffer");
-        // plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
+        // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         LitTexturedDrawCommand command;
@@ -7987,7 +7987,7 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        // plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
+        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
         command.texture = params.texture0 != nullptr
@@ -8126,7 +8126,7 @@ struct VSOut {
         if (stride != 20 && stride != 24 && stride != 32)
             throw std::invalid_argument("CNA WebGPU: QueueAlphaTestDraw requires a stride-20, "
                                         "-24, or -32 vertex buffer");
-        // plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
+        // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         AlphaTestDrawCommand command;
@@ -8157,7 +8157,7 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        // plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
+        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
         command.texture = params.texture0 != nullptr
@@ -8397,7 +8397,7 @@ struct VSOut {
             throw std::invalid_argument("CNA WebGPU: QueueTexturedDraw requires a stride-20 "
                                         "(VertexPositionTexture) or stride-24 "
                                         "(VertexPositionColorTexture) vertex buffer");
-        // plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
+        // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         TexturedDrawCommand command;
@@ -8427,7 +8427,7 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        // plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
+        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
         command.texture = params.texture0 != nullptr
@@ -8472,7 +8472,7 @@ struct VSOut {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
         }
         pbrPipelines_.clear();
-        // plan_gltf.md GLTF-465: the stride-60 cache and module are released the same way -- a
+        // plans/plan_gltf.md GLTF-465: the stride-60 cache and module are released the same way -- a
         // pipeline cache nobody frees is exactly the leak this function exists to prevent.
         for (auto& [key, pipe] : pbrColorPipelines_)
         {
@@ -8493,7 +8493,7 @@ struct VSOut {
 
 namespace
 {
-    /// plan_gltf.md GLTF-465: expands the PBR WGSL's colour markers for one pipeline variant.
+    /// plans/plan_gltf.md GLTF-465: expands the PBR WGSL's colour markers for one pipeline variant.
     ///
     /// WGSL rejects a shader input with no matching vertex attribute, so the stride-48/68 records
     /// and their stride-60/80 twins need different modules -- and a second copy of a 600-line
@@ -8574,7 +8574,7 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
-    // plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
+    // plans/plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
     textureTransformRows: array<vec4f, 10>,
@@ -8591,7 +8591,7 @@ struct PbrFactors {
 @group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
 @group(1) @binding(4) var emissiveTex: texture_2d<f32>;
 @group(1) @binding(5) var occlusionTex: texture_2d<f32>;
-// plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
+// plans/plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
 // sampling renderer uses -- strength in the scalar map's ALPHA, colour in the colour map's RGB.
 @group(1) @binding(6) var specularTex: texture_2d<f32>;
 @group(1) @binding(7) var specularColorTex: texture_2d<f32>;
@@ -8677,7 +8677,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
-    // plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
+    // plans/plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
     // base-colour product, alpha included -- the alpha half is where a BLEND-mode vertex-coloured
     // primitive's transparency comes from. Expanded to the opaque-white identity in the variants
     // whose vertex layout supplies no colour, so one fragment body serves both.
@@ -8707,7 +8707,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    // plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
+    // plans/plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
     // colour from the colour map's sRGB-decoded RGB, each through its own affine transform; the
     // dielectric F0 is min(unclampedF0 * colourSample, 1) * strength, which is the extension's own
     // ordering and the reason the unclamped value is uploaded. A material without either map samples
@@ -8751,7 +8751,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 }
 )WGSL";
 
-        // plan_gltf.md GLTF-465: two modules from one marked source -- the stride-48 record has no
+        // plans/plan_gltf.md GLTF-465: two modules from one marked source -- the stride-48 record has no
         // colour element, and WGSL rejects a vertex input with no matching attribute.
         const std::string bareWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, false, 4);
         const std::string colorWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, true, 4);
@@ -8796,7 +8796,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         uboLayoutDescriptor.entries = uboEntries.data();
         pbrBindGroupLayout0_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
 
-        // plan_gltf.md GLTF-344: eight entries -- the sampler, the five core PBR maps, and
+        // plans/plan_gltf.md GLTF-344: eight entries -- the sampler, the five core PBR maps, and
         // KHR_materials_specular's strength and colour maps at 6 and 7.
         std::array<WGPUBindGroupLayoutEntry, 8> texEntries{};
         texEntries[0].binding = 0;
@@ -8846,7 +8846,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 
         // Matches VertexPositionNormalTangentTexture's 48-byte layout: Position(12) + Normal(12)
         // + Tangent(16, xyz + bitangent-handedness in w) + TextureCoordinate(8).
-        // plan_gltf.md GLTF-465: stride 60 is that record with TEXCOORD_1 at 48 and a packed,
+        // plans/plan_gltf.md GLTF-465: stride 60 is that record with TEXCOORD_1 at 48 and a packed,
         // normalized COLOR_0 at 56. The second UV set stays unbound -- this renderer's PBR shader
         // samples one set, which is a separate capability gap and unchanged here.
         struct PbrVertex { float x, y, z, nx, ny, nz, tx, ty, tz, tw, u, v; };
@@ -8967,7 +8967,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                                               const GpuDrawParams& params)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        // plan_gltf.md GLTF-465: stride 60 is the same record with TEXCOORD_1 and a packed COLOR_0
+        // plans/plan_gltf.md GLTF-465: stride 60 is the same record with TEXCOORD_1 and a packed COLOR_0
         // appended, and it selects the colour-carrying pipeline and shader module.
         const std::size_t pbrStride = webgpuVb.Stride();
         if (pbrStride != 48 && pbrStride != 60)
@@ -9004,7 +9004,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        // plan_gltf.md GLTF-474/GLTF-465: neutral white when the material carries no base-colour
+        // plans/plan_gltf.md GLTF-474/GLTF-465: neutral white when the material carries no base-colour
         // map -- glTF's own default material (3.9.2) has none, and `tex * colour` then collapses
         // to the colour, which is what every other renderer's PBR base-colour bind already does.
         command.baseColorTexture = params.texture0 != nullptr
@@ -9028,7 +9028,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         command.occlusionMap = params.pbrOcclusionMap != nullptr
             ? ResolveSamplable(params.pbrOcclusionMap)
             : pbrDefaultWhiteTexture_->Sampled();
-        // plan_gltf.md GLTF-344: white is the identity for both -- alpha 1 leaves the specular
+        // plans/plan_gltf.md GLTF-344: white is the identity for both -- alpha 1 leaves the specular
         // factor alone, RGB 1 leaves the unclamped F0 alone -- so a material with neither map
         // renders exactly as the factor-only path already did.
         command.specularMap = params.pbrSpecularMap != nullptr
@@ -9124,7 +9124,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.maxAnisotropy,
                                                      "Pbr3D");
-        // plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
+        // plans/plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
         // resolve to the white identity when the material declares neither.
         std::array<WGPUBindGroupEntry, 8> texEntries{};
         texEntries[0].binding = 0;
@@ -9191,7 +9191,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     }
 
     // ------------------------------------------------------------------------------------------
-    // plan_cnj.md Phase 14J: SkinnedEffect (skinned3d.wgsl family) -- closes this renderer's
+    // plans/plan_cnj.md Phase 14J: SkinnedEffect (skinned3d.wgsl family) -- closes this renderer's
     // pre-existing "no skinning shader at all" gap. See CreateSkinnedResources()'s own doc
     // comment for the full formula-fidelity rationale (ported line-for-line from
     // EasyGLRenderer::EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram()).
@@ -9907,7 +9907,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
             throw std::invalid_argument("CNA WebGPU: QueueSkinnedDraw requires a stride-52 "
                                         "(VertexPositionNormalTextureSkinned) or stride-56 "
                                         "(with vertex colour) vertex buffer");
-        // plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
+        // plans/plan_gltf.md GLTF-474: an absent base-colour map is no longer refused -- the command
         // takes the neutral-white default below, which is the identity for `tex * colour`.
 
         SkinnedDrawCommand command;
@@ -9937,7 +9937,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        // plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
+        // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
         command.texture = params.texture0 != nullptr
@@ -10102,7 +10102,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
         }
         skinnedPbrPipelines_.clear();
-        // plan_gltf.md GLTF-463/GLTF-465: the stride-80 cache and module.
+        // plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 cache and module.
         for (auto& [key, pipe] : skinnedPbrColorPipelines_)
         {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
@@ -10164,7 +10164,7 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
-    // plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
+    // plans/plan_gltf.md GLTF-344: w decodes the specular COLOUR sample from sRGB.
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
     textureTransformRows: array<vec4f, 10>,
@@ -10187,7 +10187,7 @@ struct SkinningParams {
 @group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
 @group(1) @binding(4) var emissiveTex: texture_2d<f32>;
 @group(1) @binding(5) var occlusionTex: texture_2d<f32>;
-// plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
+// plans/plan_gltf.md GLTF-344: KHR_materials_specular's own two inputs, at the same slots every other
 // sampling renderer uses -- strength in the scalar map's ALPHA, colour in the colour map's RGB.
 @group(1) @binding(6) var specularTex: texture_2d<f32>;
 @group(1) @binding(7) var specularColorTex: texture_2d<f32>;
@@ -10312,7 +10312,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
-    // plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
+    // plans/plan_gltf.md GLTF-465: glTF 3.9.2 makes COLOR_0 an additional LINEAR multiplier on the whole
     // base-colour product, alpha included -- the alpha half is where a BLEND-mode vertex-coloured
     // primitive's transparency comes from. Expanded to the opaque-white identity in the variants
     // whose vertex layout supplies no colour, so one fragment body serves both.
@@ -10342,7 +10342,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    // plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
+    // plans/plan_gltf.md GLTF-344: KHR_materials_specular. strength comes from the scalar map's ALPHA and
     // colour from the colour map's sRGB-decoded RGB, each through its own affine transform; the
     // dielectric F0 is min(unclampedF0 * colourSample, 1) * strength, which is the extension's own
     // ordering and the reason the unclamped value is uploaded. A material without either map samples
@@ -10383,7 +10383,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 }
 )WGSL";
 
-        // plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin. Location 6 is the first free vertex
+        // plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin. Location 6 is the first free vertex
         // input here, because the skinned record already uses 0..5.
         const std::string bareWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, false, 6);
         const std::string colorWgsl = ExpandPbrVertexColourWgslEXT(shaderSource, true, 6);
@@ -10462,7 +10462,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 
         // Matches ApplyLayout's stride==68 case (VertexPositionNormalTangentTextureSkinned):
         // Position(12)+Normal(12)+Tangent(16)+TextureCoordinate(8)+BlendWeight(16)+BlendIndices(4).
-        // plan_gltf.md GLTF-463/GLTF-465: stride 80 is this record with TEXCOORD_1 at 68 and a
+        // plans/plan_gltf.md GLTF-463/GLTF-465: stride 80 is this record with TEXCOORD_1 at 68 and a
         // packed, normalized COLOR_0 at 76. The second UV set stays unbound, as on the rigid twin.
         std::array<WGPUVertexAttribute, 7> attributes{};
         attributes[0].format = WGPUVertexFormat_Float32x3;
@@ -10557,7 +10557,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                                                      const GpuDrawParams& params)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        // plan_gltf.md GLTF-463/GLTF-465: stride 80 is the same record with TEXCOORD_1 and a packed
+        // plans/plan_gltf.md GLTF-463/GLTF-465: stride 80 is the same record with TEXCOORD_1 and a packed
         // COLOR_0 appended.
         const std::size_t skinnedPbrStride = webgpuVb.Stride();
         if (skinnedPbrStride != 68 && skinnedPbrStride != 80)
@@ -10594,7 +10594,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
-        // plan_gltf.md GLTF-474/GLTF-465: neutral white when the material carries no base-colour
+        // plans/plan_gltf.md GLTF-474/GLTF-465: neutral white when the material carries no base-colour
         // map -- glTF's own default material (3.9.2) has none, and `tex * colour` then collapses
         // to the colour, which is what every other renderer's PBR base-colour bind already does.
         command.baseColorTexture = params.texture0 != nullptr
@@ -10618,7 +10618,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         command.occlusionMap = params.pbrOcclusionMap != nullptr
             ? ResolveSamplable(params.pbrOcclusionMap)
             : pbrDefaultWhiteTexture_->Sampled();
-        // plan_gltf.md GLTF-344: white is the identity for both -- alpha 1 leaves the specular
+        // plans/plan_gltf.md GLTF-344: white is the identity for both -- alpha 1 leaves the specular
         // factor alone, RGB 1 leaves the unclamped F0 alone -- so a material with neither map
         // renders exactly as the factor-only path already did.
         command.specularMap = params.pbrSpecularMap != nullptr
@@ -10725,7 +10725,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
                                                      command.addressV, command.maxAnisotropy,
                                                      "SkinnedPbr3D");
-        // plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
+        // plans/plan_gltf.md GLTF-344: entries 6 and 7 are KHR_materials_specular's own maps, which
         // resolve to the white identity when the material declares neither.
         std::array<WGPUBindGroupEntry, 8> texEntries{};
         texEntries[0].binding = 0;
@@ -10796,7 +10796,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace WebGPU { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

@@ -7,7 +7,7 @@
 #include <limits>
 #include <vector>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_DIRECT2D is defined project-wide.

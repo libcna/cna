@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-209: a disabled pass is skipped entirely, not run with its effect turned off.
+// plans/plan_modern.md MOD-209: a disabled pass is skipped entirely, not run with its effect turned off.
 //
 // The distinction matters and is invisible from a screenshot. A pass "disabled" inside its own
 // shader still costs a fullscreen draw, a target bind and a sampler read every frame -- so a game

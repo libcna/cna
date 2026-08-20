@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_rasterizerstate_cullmode_golden_test.cpp's own RasterizerState.CullMode scene
 // verbatim: two quads with opposite winding order (column 0 = CW, column 1 = CCW) drawn under
 // RasterizerState{CullMode=None} -- both windings must render since culling is disabled. Samples

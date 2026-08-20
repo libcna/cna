@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer function itself.
+// plans/plan_gltf.md GLTF-210/GLTF-212: the sRGB transfer function itself.
 //
 // The formula exists in two languages that cannot share code -- C++ and GLSL -- so
 // CNA/Internal/Graphics/SrgbTransfer.hpp states it once as text and derives both. These tests hold

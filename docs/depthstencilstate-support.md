@@ -9,7 +9,7 @@
 > markers for Vulkan in them are historical, not current. See `AUDIT.md`'s `DepthStencilState` row
 > or `NEXT.md` §5 for current status.
 
-Phase 37 (`plan_graphics.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
+Phase 37 (`plans/plan_graphics.md` Tasks 311–320) audited and pixel-verified `DepthStencilState`
 conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings.
 

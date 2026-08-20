@@ -1,10 +1,10 @@
 #pragma once
 
-// plan_dx9.md Phase D9-3 (D9-30/D9-31): real Direct3DCreate9/CreateDevice + Clear/Present/
+// plans/plan_dx9.md Phase D9-3 (D9-30/D9-31): real Direct3DCreate9/CreateDevice + Clear/Present/
 // ReadBackbuffer. Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows
 // CNA_GRAPHICS_RENDERER=D3D9).
 //
-// Unlike D3D11/D3D12, this renderer does not use D3DCommon (plan_dx9.md design decision 12 --
+// Unlike D3D11/D3D12, this renderer does not use D3DCommon (plans/plan_dx9.md design decision 12 --
 // D3DFORMAT is a different enum space from DXGI_FORMAT, and D3D9 has no state objects at all).
 // Unlike D3D11, D3D9 has no separate device/swap-chain split -- CreateDevice() creates the
 // implicit swap chain (back buffer + optional depth-stencil) in the same call.
@@ -48,7 +48,7 @@ namespace CNA::Internal::Renderers::DirectX9
     };
 
     /**
-     * D3D9 graphics renderer (plan_dx9.md). Implements IGraphicsRenderer on top of plain Direct3D 9
+     * D3D9 graphics renderer (plans/plan_dx9.md). Implements IGraphicsRenderer on top of plain Direct3D 9
      * (Direct3DCreate9, not D3D9Ex -- design decision 2), targeting Microsoft's own XNA 4.0 Stock
      * Effects HLSL compiled to real vs_2_0/ps_2_0 bytecode (design decision 3/5), with the
      * project's stated goal of pixel-for-pixel indistinguishability from the original XNA 4.0
@@ -57,7 +57,7 @@ namespace CNA::Internal::Renderers::DirectX9
      * Phase D9-3 (device/present/device-lost) and D9-6 (render states) are fully closed: real
      * device creation using the game's actual requested back-buffer/depth-stencil format,
      * fullscreen flag, and swap interval (via the project owner-approved additive
-     * GraphicsRendererCreateArgs extension -- see plan_dx9.md's "IGraphicsRenderer boundary problem"
+     * GraphicsRendererCreateArgs extension -- see plans/plan_dx9.md's "IGraphicsRenderer boundary problem"
      * section) -- not D3D11's own hardcoded-format precedent, which is fine for D3D11 (parity, not
      * authenticity) but would be a direct fidelity violation here. Clear()/all 6 Clear*
      * combos/Present()/ReadBackbuffer()/resize/the real XNA device-lost lifecycle/render-state
@@ -69,7 +69,7 @@ namespace CNA::Internal::Renderers::DirectX9
     class DirectX9Renderer final : public IGraphicsRenderer
     {
     public:
-        // plan_runtimerenderer.md design decision 9 / plan_dx9.md D9-100/D9-103: D3D9 is the one
+        // plans/plan_runtimerenderer.md design decision 9 / plans/plan_dx9.md D9-100/D9-103: D3D9 is the one
         // renderer with a real capability structure to consult, so it is the one renderer that can
         // enforce GraphicsProfile ceilings honestly. These used to live as
         // #ifdef CNA_RENDERER_DIRECTX9 blocks inside Texture2D/Texture3D/TextureCube/GraphicsDevice.
@@ -325,7 +325,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
         // Every other IGraphicsRenderer virtual (e.g. CreateOcclusionQuery, CreateTexture3D)
         // already has a throwing or harmlessly-inert default on the base interface -- left
-        // un-overridden here on purpose (plan_dx9.md D9-11): inheriting "throws" is fine, only
+        // un-overridden here on purpose (plans/plan_dx9.md D9-11): inheriting "throws" is fine, only
         // inheriting silence is the trap.
 
         /// Exposes the real IDirect3DDevice9 for tests/diagnostics and later D3D9 renderer files
@@ -640,11 +640,11 @@ namespace CNA::Internal::Renderers::DirectX9
         /// on first `DrawPbrEffectEXT()` call. Not `D3DPOOL_DEFAULT` resources -- survive `Reset()`
         /// unaffected, same as `shaderCache_`/`instancedVS_` above.
         ComPtr<IDirect3DVertexShader9> pbrVS_;
-        /// plan_gltf.md GLTF-465: the stride-60 twin, whose input struct declares COLOR0.
+        /// plans/plan_gltf.md GLTF-465: the stride-60 twin, whose input struct declares COLOR0.
         ComPtr<IDirect3DVertexShader9> pbrColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrPS_;
         ComPtr<IDirect3DVertexShader9> pbrSkinnedVS_;
-        /// plan_gltf.md GLTF-465: the stride-80 twin.
+        /// plans/plan_gltf.md GLTF-465: the stride-80 twin.
         ComPtr<IDirect3DVertexShader9> pbrSkinnedColorVS_;
         ComPtr<IDirect3DPixelShader9> pbrSkinnedPS_;
         /// D3D9 skinned-vertex-color porting task: CNA's own CNAEXT SkinnedVertexColor3D shader

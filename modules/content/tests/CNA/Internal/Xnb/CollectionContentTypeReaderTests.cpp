@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-21/XNB-22: unit tests for the generic collection .xnb readers (ArrayReader<T>,
+// plans/plan_xnb.md XNB-21/XNB-22: unit tests for the generic collection .xnb readers (ArrayReader<T>,
 // ListReader<T>, DictionaryReader<TKey,TValue>, NullableReader<T>), each instantiated with a
 // representative element type and registered element reader, matching how a real consumer would
 // use them.
@@ -185,7 +185,7 @@ TEST_F(CollectionReaderTest, ArrayReaderThrowsWhenElementReaderIsUnregistered)
     EXPECT_THROW(reader.ReadUntyped(*contentReader, std::any{}), ContentLoadException);
 }
 
-// plan_xnb.md XNB-43: an adversarial/corrupt declared element count must be rejected before any
+// plans/plan_xnb.md XNB-43: an adversarial/corrupt declared element count must be rejected before any
 // collection allocation is attempted, not discovered only once the stream itself runs out (which
 // would already have triggered a huge allocation attempt for e.g. std::vector<T>(0xFFFFFFFF)).
 

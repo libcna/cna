@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P3-17: the defaults of the virtuals that replaced the XNA layer's
+// plans/plan_runtimerenderer.md RTR-P3-17: the defaults of the virtuals that replaced the XNA layer's
 // #ifdef CNA_RENDERER_* blocks.
 //
 // What matters here is precisely the DEFAULT behaviour, because that is what 45 of the 46 renderers
@@ -31,7 +31,7 @@ namespace
         void GetViewportSize(int& width, int& height) override { width = 0; height = 0; }
         void SetVirtualResolution(int, int) override {}
         void SetPresentationMode(int) override {}
-        // MERGE (plan_platform.md PLAT-8): IGraphicsRenderer no longer exposes the toolkit-native
+        // MERGE (plans/plan_platform.md PLAT-8): IGraphicsRenderer no longer exposes the toolkit-native
         // window/renderer accessors this mock used to override -- the platform contract owns them
         // now -- so the overrides are gone rather than retyped.
         std::unique_ptr<CNA::Internal::Renderers::ITextureRenderer> CreateTexture(

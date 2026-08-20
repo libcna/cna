@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-405, MOD-407, MOD-409: the bloom pyramid's shape, its filter fallback, and
+// plans/plan_modern.md MOD-405, MOD-407, MOD-409: the bloom pyramid's shape, its filter fallback, and
 // the quality mapping.
 //
 // The pyramid's failures are all "still looks like bloom": a single composite of the smallest level

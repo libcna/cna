@@ -22,7 +22,7 @@ namespace CNA::Graphics {
     /**
      * @brief Compiles a named pass shader once per device and hands the same effect back after.
      *
-     * plan_modern.md `MOD-210`. Two `BloomPass` objects on one device — a game with a split screen,
+     * plans/plan_modern.md `MOD-210`. Two `BloomPass` objects on one device — a game with a split screen,
      * a chain rebuilt after a resize, an editor preview beside the scene — otherwise compile the
      * same three programs twice. Compilation is a load-time cost rather than a frame-time one, so
      * this is not about frame rate: it is about a second pass costing what a second pass should.

@@ -5,7 +5,7 @@
 deliberately throws on every 3D call even though its `../free-direct` sibling's underlying
 DirectDraw generation technically has an execute-buffer Direct3D counterpart it doesn't use). Its
 2D layer is a verbatim port of `DIRECTX1`'s own real `IDirectDraw`/`IDirectDrawSurface` **v1**-only
-code (`plan_dxold.md`'s roadmap: "DirectDraw v1 unchanged" between DIRECTX1 and DIRECTX2). Its 3D layer is
+code (`plans/plan_dxold.md`'s roadmap: "DirectDraw v1 unchanged" between DIRECTX1 and DIRECTX2). Its 3D layer is
 built on `IDirect3D2`/`IDirect3DDevice2`/`IDirect3DViewport2`/`IDirect3DTexture2`'s
 `DrawPrimitive`/`DrawIndexedPrimitive` immediate-mode API — **not** the literal DirectX-2-SDK
 `IDirect3D`/`IDirect3DDevice` execute-buffer surface, which was spiked exhaustively (14 variants)
@@ -13,9 +13,9 @@ and found non-functional in this environment's Wine (see `dx2-spike/README.md`).
 via MinGW-w64 and run under Wine, the same Route B delivery mechanism `D3D9`/`D3D11`/`D3D12`/`DIRECTX1`
 already use.
 
-This document is the completeness status after `plan_dx2.md`'s full Phase O1–O9 implementation
+This document is the completeness status after `plans/plan_dx2.md`'s full Phase O1–O9 implementation
 (Phase O9 added real CPU-side lighting and a `WireFrame`/`AnisotropicFiltering` re-verification —
-§6a and §7). Every row cites the task(s) that verified it — see `plan_dx2.md`'s own task tables for
+§6a and §7). Every row cites the task(s) that verified it — see `plans/plan_dx2.md`'s own task tables for
 full design rationale and code detail, and `dx2-spike/README.md` for the existence-gate spike
 record.
 
@@ -261,9 +261,9 @@ affect: `GraphicsDeviceCapabilityTest.DoesNotSupportWireFrame` (fixed to branch 
 
 ## See also
 
-- `plan_dx2.md` — the full implementation plan (design decisions, phase task tables, the
+- `plans/plan_dx2.md` — the full implementation plan (design decisions, phase task tables, the
   execute-buffer-detour status note).
-- `plan_dxold.md` — the roadmap this renderer is row 2 of (DIRECTX1/2/3/5/6/7/8/10).
+- `plans/plan_dxold.md` — the roadmap this renderer is row 2 of (DIRECTX1/2/3/5/6/7/8/10).
 - `docs/directx1-renderer.md` — the 2D architecture this renderer ports verbatim wherever the 3D layer
   doesn't change anything.
 - `dx2-spike/README.md` — the full `DX2-0` existence-gate spike record, including all 14

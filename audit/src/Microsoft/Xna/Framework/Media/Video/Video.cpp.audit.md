@@ -18,7 +18,7 @@ property getters, `SetAudioTrackEXT`/`SetVideoTrackEXT` (which correctly propaga
 Correct, and confirms a genuine, previously-fixed defect. The raw-file constructor's comment
 explicitly states: "CNA's equivalent previously just probed via `VideoDecoder::Open` and silently
 left `width_`/`height_`/`duration_` at 0 on failure, with no exception at all -- a real fidelity gap
-(`plan_media.md MEDIA-44`)" -- now fixed to check `std::filesystem::exists()` and throw
+(`plans/plan_media.md MEDIA-44`)" -- now fixed to check `std::filesystem::exists()` and throw
 `FileNotFoundException` before probing, matching FNA's real `Video.cs` exactly.
 
 ## Checklist Results

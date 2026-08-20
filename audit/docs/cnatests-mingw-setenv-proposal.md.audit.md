@@ -49,7 +49,7 @@ deleting the stale bullet from `d3d9-backend.md`).
 Directly contradicts one specific bullet in `docs/d3d9-backend.md`'s "Known limitations" section —
 see `docs/d3d9-backend.md.audit.md` for the paired finding. No other cross-file inconsistency found;
 this document's claim about `D3D11`/`D3D12` independently having hit and deferred the identical
-`::setenv()` wall (`plan_dx.md` `DX-15`/`DX-115`) is consistent with `docs/d3d11-backend.md`'s own
+`::setenv()` wall (`plans/plan_dx.md` `DX-15`/`DX-115`) is consistent with `docs/d3d11-backend.md`'s own
 "Known limitations" section, which does not claim `CnaTests` builds for D3D11 and does not contradict
 this document.
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-31: end-to-end M3 milestone test -- content.Load<SpriteFont>("fixture")
+// plans/plan_xnb.md XNB-31: end-to-end M3 milestone test -- content.Load<SpriteFont>("fixture")
 // against real, externally-produced .xnb fixtures, going through ContentManager (not a
 // standalone parser call). Covers both the uncompressed case (Default.xnb) and, re-using the
 // Phase D fixture, the LZX-compressed case (FontCalibri14.xnb) -- M3 requires both a real
@@ -67,7 +67,7 @@ TEST_F(ContentManagerSpriteFontXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
 {
     // Real, externally-produced LZX-compressed fixture (MonoGame's own
     // Tests/Interactive/MacOS/TextureScaleColorTest/Content/FontCalibri14.xnb), already vendored
-    // for Phase D (plan_xnb.md XNB-30B). Ties Phase D (decompression) and Phase E (SpriteFontReader)
+    // for Phase D (plans/plan_xnb.md XNB-30B). Ties Phase D (decompression) and Phase E (SpriteFontReader)
     // together for the first time through the full ContentManager path, not just a standalone
     // decompress-then-parse-the-table check.
     ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/lzx");

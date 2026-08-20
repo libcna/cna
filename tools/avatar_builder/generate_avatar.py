@@ -36,14 +36,14 @@ except ImportError:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_skeleton  # noqa: E402  (bpy path setup must happen first)
-import generate_body_meshcraft as generate_body  # noqa: E402  (Task 7.4/7.5, plan_net.md Phase 7:
+import generate_body_meshcraft as generate_body  # noqa: E402  (Task 7.4/7.5, plans/plan_net.md Phase 7:
 # decision 4b - "Body/head ... geometry should be generated as glTF via the sibling ../mesh-craft
 # tool going forward" - aliased under the old module's own name so build_avatar() below needs no
 # further changes; generate_body.py itself is untouched and still importable/runnable standalone
 # for anyone comparing the two approaches, it's just no longer what this orchestrator calls.
 import generate_materials  # noqa: E402
 import generate_morphs  # noqa: E402
-import generate_clothes_meshcraft as generate_clothes  # noqa: E402  (Task 7.6, plan_net.md
+import generate_clothes_meshcraft as generate_clothes  # noqa: E402  (Task 7.6, plans/plan_net.md
 # Phase 7: same CSG-union fix as generate_body_meshcraft, for the same root cause - see that
 # module's own docstring. generate_clothes.py itself is untouched/still runnable standalone.)
 import generate_hair  # noqa: E402

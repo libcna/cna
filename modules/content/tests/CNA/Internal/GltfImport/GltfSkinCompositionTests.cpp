@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-246 / GLTF-250 / GLTF-253 / GLTF-259 / GLTF-269 / GLTF-273 / GLTF-286: the
+// plans/plan_gltf.md GLTF-246 / GLTF-250 / GLTF-253 / GLTF-259 / GLTF-269 / GLTF-273 / GLTF-286: the
 // matrices a skin composes, when it composes them at all, what the import reports about the
 // approximations it made, and how skinning and morphing share one vertex buffer.
 //

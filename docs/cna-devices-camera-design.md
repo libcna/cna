@@ -7,7 +7,7 @@ polling, format negotiation and capture through `IPlatformCameraProvider` and
 `IPlatformCamera`; SDL3 details live only in `modules/platform/src/Sdl3/Sdl3Camera.*`.
 
 **Why `Camera` is last, not first:** every other `CNA::Devices` capability (Phases
-1-3, all closed — see `plan_cna_devices.md`) was a thin, mostly-synchronous wrapper
+1-3, all closed — see `plans/plan_cna_devices.md`) was a thin, mostly-synchronous wrapper
 around 1-15 SDL3 functions. `Camera` is different in three ways simultaneously:
 asynchronous permission state, poll-based (not push-based) frame delivery, and a
 mandatory bridge into this engine's own graphics-texture system. Any one of these
@@ -72,7 +72,7 @@ Lost           — device disconnected/failed after being Ready (SDL3 sends a
 ```
 
 This mirrors `SensorState`'s own honesty principle (`Microsoft::Devices::Sensors`,
-closed in `plan_devices.md`): a consumer must always be able to cheaply ask "can I use
+closed in `plans/plan_devices.md`): a consumer must always be able to cheaply ask "can I use
 this right now" rather than finding out by a confusing runtime failure.
 
 ## 3. The texture-upload bridge — simpler than `noxna_devices.md` originally assumed

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-35: unit tests for the minimal JSON parser backing .cnj envelope parsing.
+// plans/plan_cnj.md CNB-35: unit tests for the minimal JSON parser backing .cnj envelope parsing.
 
 #include <gtest/gtest.h>
 

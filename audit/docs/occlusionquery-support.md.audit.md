@@ -4,7 +4,7 @@
 - Source file: `docs/occlusionquery-support.md` (159 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 50, `plan_graphics.md` Tasks 441-450, plus the
+- File type: Markdown documentation (closes Phase 50, `plans/plan_graphics.md` Tasks 441-450, plus the
   later Task 447/854 Vulkan resolution)
 - Cross-references: `xna-graphics` shard audit (no `OcclusionQuery`-specific HIGH finding)
 

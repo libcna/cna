@@ -61,7 +61,7 @@ SHADERS = [
     ("Skinned3dColorVert", "skinned3d_color.vert.glsl", "skinned3d_color.gl.vert.glsl", "vert"),
     ("Skinned3dColorFrag", "skinned3d_color.frag.glsl", "skinned3d_color.gl.frag.glsl", "frag"),
     ("Pbr3dVert", "pbr3d.vert.glsl", "pbr3d.gl.vert.glsl", "vert"),
-    # plan_gltf.md GLTF-462/GLTF-465: the rigid dual-UV variant is only ever selected for stride 60,
+    # plans/plan_gltf.md GLTF-462/GLTF-465: the rigid dual-UV variant is only ever selected for stride 60,
     # and every stride-60 record carries a packed COLOR_0 slot -- so it always takes the vertex-colour
     # define too, and specularState.z decides whether the colour multiplies.
     ("Pbr3dDualUvVert", "pbr3d.vert.glsl", "pbr3d.gl.vert.glsl", "vert",
@@ -70,7 +70,7 @@ SHADERS = [
     ("Pbr3dSkinnedVert", "pbr3d_skinned.vert.glsl", "pbr3d_skinned.gl.vert.glsl", "vert"),
     ("Pbr3dSkinnedDualUvVert", "pbr3d_skinned.vert.glsl", "pbr3d_skinned.gl.vert.glsl",
      "vert", "CNA_PBR_DUAL_UV"),
-    # plan_gltf.md GLTF-463: stride 80 -- the stride-76 skinned record with a packed COLOR_0. Stride 76
+    # plans/plan_gltf.md GLTF-463: stride 80 -- the stride-76 skinned record with a packed COLOR_0. Stride 76
     # has no colour attribute to bind, so this needs its own variant rather than a runtime flag.
     ("Pbr3dSkinnedDualUvColorVert", "pbr3d_skinned.vert.glsl", "pbr3d_skinned.gl.vert.glsl",
      "vert", "CNA_PBR_DUAL_UV", "CNA_PBR_VERTEX_COLOR"),

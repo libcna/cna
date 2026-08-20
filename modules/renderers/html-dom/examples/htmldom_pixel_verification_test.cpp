@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md Phase D9: pixel-exact browser verification for everything Phase D1-D8 left
+// plans/plan_html_dom.md Phase D9: pixel-exact browser verification for everything Phase D1-D8 left
 // checked only structurally ("did something draw", "did the CSS property appear") rather than
 // against an actual hand-derived expected value. Distinct from htmldom_smoke_test.cpp, which
 // covers the DOM-surface/pool/RenderTarget2D-readback/backbuffer-refusal contract.
@@ -161,7 +161,7 @@ protected:
         rtB_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 20, 20);
         tileRt_ = std::make_unique<RenderTarget2D>(getGraphicsDeviceProperty(), 4, 4);
 
-        // plan_html_dom.md HTMLDOM-97: 2x2 source, same colour layout the smoke test's own Wrap-tile
+        // plans/plan_html_dom.md HTMLDOM-97: 2x2 source, same colour layout the smoke test's own Wrap-tile
         // check (frame 6) uses -- (0,0)=red (1,0)=green (0,1)=blue (1,1)=yellow -- so Mirror's
         // pixel-exact expectation can be derived and cross-checked against Wrap's already-verified
         // one by hand, rather than invented fresh.
@@ -171,7 +171,7 @@ protected:
                 0, 0, 255, 255,   255, 255, 0, 255,
             }));
 
-        // plan_html_dom.md HTMLDOM-88: an 8x4 atlas holding two 4x4 glyphs. 'A' is split
+        // plans/plan_html_dom.md HTMLDOM-88: an 8x4 atlas holding two 4x4 glyphs. 'A' is split
         // left-half-red/right-half-blue so a horizontal flip is visually unambiguous (the two
         // halves swap); 'B' is solid green so it's trivially distinguishable from 'A' at a
         // glance. Distinct, nonzero kerning on 'A' (rightBearing=2) makes same-line advance a
@@ -195,7 +195,7 @@ protected:
         fontAtlas_ = std::make_unique<Texture2D>(
             Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 8, 4, atlas));
 
-        // plan_html_dom.md HTMLDOM-119: a 4x4 "atlas" with a hard, unpadded edge between two
+        // plans/plan_html_dom.md HTMLDOM-119: a 4x4 "atlas" with a hard, unpadded edge between two
         // regions -- left half (columns 0-1) solid red, right half (columns 2-3) solid blue -- the
         // same shape a real, unpadded sprite atlas has between two adjacent packed sprites. Drawing
         // ONLY the red half (an IN-BOUNDS source rect, distinct from HTMLDOM-104's already-fixed
@@ -230,7 +230,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.Clear(Color::Black);
 
-        // plan_html_dom.md HTMLDOM-84: tint is RGB * colour / 255, alpha untouched. An opaque
+        // plans/plan_html_dom.md HTMLDOM-84: tint is RGB * colour / 255, alpha untouched. An opaque
         // (255-2, 150, 100, 255) texel over a transparent-black target under AlphaBlend, tinted
         // (255, 128, 64, 255): since the destination starts fully transparent, source-over
         // compositing reduces to exactly the tinted colour, so this isolates the tint maths from
@@ -256,7 +256,7 @@ protected:
                   "HTMLDOM-84: tint multiplies RGB by the draw colour exactly, alpha untouched");
         }
 
-        // plan_html_dom.md HTMLDOM-85 (highest-risk item): AlphaBlend's contract assumes ALREADY
+        // plans/plan_html_dom.md HTMLDOM-85 (highest-risk item): AlphaBlend's contract assumes ALREADY
         // premultiplied source data (srcBlend=One). Upload a texel that is deliberately
         // premultiplied by hand -- straight colour (255,100,50) at alpha=128 becomes
         // (255*128/255, 100*128/255, 50*128/255, 128) = (128, 50, 25, 128), mirroring
@@ -300,7 +300,7 @@ protected:
                   "HTMLDOM-124: AlphaBlend alpha-only tint changes opacity without double-darkening RGB");
         }
 
-        // plan_html_dom.md HTMLDOM-86/HTMLDOM-100: Opaque replaces the destination with the source
+        // plans/plan_html_dom.md HTMLDOM-86/HTMLDOM-100: Opaque replaces the destination with the source
         // pixel exactly, alpha included -- confirmed via this project's own BlendState.cpp, which
         // defines BlendState::Opaque with symmetric One/Zero factors for BOTH colour and alpha, not
         // just colour. This test binds a RenderTarget2D, so it exercises the Canvas2D path, which
@@ -328,7 +328,7 @@ protected:
                   "own alpha, not forced to 255, on the Canvas2D render-target path");
         }
 
-        // plan_html_dom.md HTMLDOM-87: Additive must actually ADD channel values (clamped), not
+        // plans/plan_html_dom.md HTMLDOM-87: Additive must actually ADD channel values (clamped), not
         // just apply SOME blend. Two fully opaque, non-overlapping-in-colour-space draws
         // (pure red then pure blue) at the exact same destination pixel: a correct 'lighter'
         // composite must read back as pure magenta at full alpha (255+0, 0, 0+255 clamped); a
@@ -351,11 +351,11 @@ protected:
                   "a plain overwrite");
         }
 
-        // plan_html_dom.md HTMLDOM-88: DrawString's newline handling -- never tested before. 'A'
+        // plans/plan_html_dom.md HTMLDOM-88: DrawString's newline handling -- never tested before. 'A'
         // (left-half red, right-half blue) then '\n' then 'B' (green), lineSpacing=8, at
         // position (4,4). Both glyphs have cropping (0,0) and 'A' is first-in-line on both lines
         // (kern.X's abs() applies the same way), so hand-derived from SpriteBatch::DrawString's
-        // own formula (see plan_html_dom.md's task note): A lands at exactly (4,4), B lands at
+        // own formula (see plans/plan_html_dom.md's task note): A lands at exactly (4,4), B lands at
         // exactly (4, 4+8)=(4,12) -- proving \n resets X back to the left margin and advances Y
         // by lineSpacing, not smearing B onto the same line as A.
         if (frame_ == 5)
@@ -379,7 +379,7 @@ protected:
                   "lineSpacing, rather than smearing the next glyph onto the same line");
         }
 
-        // plan_html_dom.md HTMLDOM-88: same-line multi-glyph kerning advance -- "AB" with 'A's
+        // plans/plan_html_dom.md HTMLDOM-88: same-line multi-glyph kerning advance -- "AB" with 'A's
         // kerning triple (0, width=4, rightBearing=2). Hand-derived: B's left edge lands at
         // exactly position.X + glyphWidth(4) + rightBearing(2) = position.X + 6, proving the
         // kerning-driven advance between two DIFFERENT glyphs in one DrawString call reaches this
@@ -407,7 +407,7 @@ protected:
                   "in between");
         }
 
-        // plan_html_dom.md HTMLDOM-88: DrawString's rotation/scale/flip overload -- distinct code
+        // plans/plan_html_dom.md HTMLDOM-88: DrawString's rotation/scale/flip overload -- distinct code
         // from the 4-arg overload used everywhere else in this project's HTML_DOM tests. scale=2
         // on the 4x4 'B' glyph must produce an 8x8 rendered glyph, not a 4x4 one: (10,10) is
         // inside the scaled box but outside the unscaled one, so it alone distinguishes "scale
@@ -433,7 +433,7 @@ protected:
                   "correctly (4x4 glyph renders as 8x8, not silently ignored)");
         }
 
-        // plan_html_dom.md HTMLDOM-88: SpriteEffects::FlipHorizontally via the same overload.
+        // plans/plan_html_dom.md HTMLDOM-88: SpriteEffects::FlipHorizontally via the same overload.
         // DrawString's own flip handling shifts the WHOLE string's anchor by MeasureString(text).X
         // in addition to the per-glyph mirror Draw() already applies (SpriteBatch::DrawString:
         // "effects != None" branch) -- so, unlike Draw()'s flip (already unit-tested to keep the
@@ -485,7 +485,7 @@ protected:
                   "SpriteEffects::FlipHorizontally correctly (red/blue relative order reverses)");
         }
 
-        // plan_html_dom.md HTMLDOM-82: Begin(transformMatrix=...) has real code (design decision
+        // plans/plan_html_dom.md HTMLDOM-82: Begin(transformMatrix=...) has real code (design decision
         // 5's matrix -> CSS matrix()/ctx.transform() mapping) but zero numeric verification --
         // the existing GTest only checks it doesn't throw, and the smoke test only checks the CSS
         // matrix(...) string is present, never that a NON-identity matrix actually moves a sprite.
@@ -521,7 +521,7 @@ protected:
                   "sprite to the matrix-predicted position, not left at its untransformed one");
         }
 
-        // plan_html_dom.md HTMLDOM-82: a scale transformMatrix, the same "unambiguous, no sign
+        // plans/plan_html_dom.md HTMLDOM-82: a scale transformMatrix, the same "unambiguous, no sign
         // convention risk" reasoning as the translation check above. A 1x1 sprite under a
         // uniform 2x scale matrix must render as a 2x2 block, not a 1x1 one -- (1,1) falls
         // inside the scaled extent but outside the unscaled one, so it alone distinguishes
@@ -548,7 +548,7 @@ protected:
                   "rendered footprint, not just its reported destinationRectangle");
         }
 
-        // plan_html_dom.md HTMLDOM-83: render-target-as-Draw()-source, demonstrated visually in
+        // plans/plan_html_dom.md HTMLDOM-83: render-target-as-Draw()-source, demonstrated visually in
         // htmldom_visual_demo.cpp but never asserted pixel-exact. Draw a distinct colour into
         // rtA_, unbind it, then Draw() rtA_ itself -- an ordinary RenderTarget2D : Texture2D --
         // as the source texture for a sprite rendered into rtB_. Proves the data-URL
@@ -581,7 +581,7 @@ protected:
 
         if (frame_ == 12)
         {
-            // plan_html_dom.md HTMLDOM-96a: Texture2D::GetData on a PLAIN (non-render-target)
+            // plans/plan_html_dom.md HTMLDOM-96a: Texture2D::GetData on a PLAIN (non-render-target)
             // texture. Unlike RenderTarget2D::GetData (HTMLDOM-83/HtmlDomRenderTargetRenderer's own
             // Canvas2D getImageData), this path is entirely shared/renderer-agnostic code
             // (Texture2D::GetData reads from its own cpuPixels_ CPU-side shadow copy, never
@@ -609,7 +609,7 @@ protected:
                   "HTMLDOM-96a: Texture2D::GetData on a plain (non-render-target) texture returns "
                   "the exact uploaded pixels, byte-for-byte, under the HTML_DOM renderer");
 
-            // plan_html_dom.md HTMLDOM-96b: Texture2D::FromStream decode, closing the loop for this
+            // plans/plan_html_dom.md HTMLDOM-96b: Texture2D::FromStream decode, closing the loop for this
             // renderer specifically. The decode itself (stb_image, via SaveAsPng/FromStream) is
             // fully renderer-agnostic shared code -- what had never been proven under HTML_DOM is
             // the two renderer-touching ends of that pipeline: the SOURCE texture's own upload
@@ -650,7 +650,7 @@ protected:
                   "round-trip through the real HTML_DOM upload/readback path");
         }
 
-        // plan_html_dom.md HTMLDOM-107: GraphicsDevice.Viewport applied on the Canvas2D
+        // plans/plan_html_dom.md HTMLDOM-107: GraphicsDevice.Viewport applied on the Canvas2D
         // render-target-bound path -- previously ignored there entirely. A sub-rectangle Viewport
         // (4,4,10,10) set while rtB_ is bound must offset the sprite's own drawn position by
         // (4,4) within the target's absolute pixel space, matching the DOM path's own per-sprite
@@ -682,7 +682,7 @@ protected:
                   "ignored viewport offset entirely");
         }
 
-        // plan_html_dom.md HTMLDOM-102: real ctx.save()/rect()/clip() scissoring on the Canvas2D
+        // plans/plan_html_dom.md HTMLDOM-102: real ctx.save()/rect()/clip() scissoring on the Canvas2D
         // render-target path, gated on RasterizerState.ScissorTestEnable -- previously this path
         // did not consult the scissor rect at all, regardless of the enable bit (htmldom_smoke_test
         // .cpp's own HTMLDOM-102a/b already cover the enable bit's effect on the DOM path/region
@@ -733,7 +733,7 @@ protected:
                   "the sprite's own colour");
         }
 
-        // plan_html_dom.md HTMLDOM-113: Viewport AND ScissorRectangle active AT THE SAME TIME --
+        // plans/plan_html_dom.md HTMLDOM-113: Viewport AND ScissorRectangle active AT THE SAME TIME --
         // frames 13/14 above proved each independently, but never together, and HTMLDOM-107's own
         // design explicitly claims they are "independent absolute-render-target-space concepts"
         // (scissor is never relative to the viewport's own offset). Viewport(4,4,10,10) offsets the
@@ -795,7 +795,7 @@ protected:
                   "independent absolute-space concepts, not one relative to the other");
         }
 
-        // plan_html_dom.md HTMLDOM-97: symmetric TextureAddressMode::Mirror with an out-of-bounds
+        // plans/plan_html_dom.md HTMLDOM-97: symmetric TextureAddressMode::Mirror with an out-of-bounds
         // sourceRectangle, drawn pixel-exact for the first time (previously this threw). A 2x2
         // source Rectangle(0,0,4,4) sourceRect tiles it twice in each axis; under real mirror-repeat
         // the SECOND tile along each axis is the reflection of the first, unlike Wrap where it is an
@@ -848,7 +848,7 @@ protected:
                   "not a throw");
         }
 
-        // plan_html_dom.md HTMLDOM-97/HTMLDOM-104: mixed non-Mirror per-axis modes (U=Wrap,
+        // plans/plan_html_dom.md HTMLDOM-97/HTMLDOM-104: mixed non-Mirror per-axis modes (U=Wrap,
         // V=Clamp). Same 2x2 source, same Rectangle(0,0,4,4) sourceRect (exceeds bounds on both
         // axes) -- U tiles (Wrap) while V clamps independently. HTMLDOM-104 correction: real Clamp
         // samples the nearest EDGE TEXEL for the out-of-bounds portion, it does not crop -- so rows
@@ -896,7 +896,7 @@ protected:
                   "the nearest edge row (still U-tiled), not left transparent");
         }
 
-        // plan_html_dom.md HTMLDOM-104: the rest of this task's own pixel-verification bar -- a
+        // plans/plan_html_dom.md HTMLDOM-104: the rest of this task's own pixel-verification bar -- a
         // sourceRectangle entirely outside the texture (checked under BOTH point and linear
         // filtering, confirming the edge-extension is exact regardless -- this specific pairing is
         // what caught a real bug while building this task: with smoothing left on, the browser's own
@@ -961,7 +961,7 @@ protected:
                   "compose correctly with the edge extension, not just an untinted 1:1 draw");
         }
 
-        // plan_html_dom.md HTMLDOM-105: re-derived each preset's RAW factor-based RGBA equation
+        // plans/plan_html_dom.md HTMLDOM-105: re-derived each preset's RAW factor-based RGBA equation
         // (colour AND alpha, independent of any browser) -- see HtmlDomState.hpp's own doc comment
         // for the full derivation. AlphaBlend's alpha factor is `One`, matching CSS's own Porter-Duff
         // "over" alpha exactly, so it needs no new check here (already pixel-verified translucent,
@@ -1084,7 +1084,7 @@ protected:
                   "handled by some separate, inconsistent code path");
         }
 
-        // plan_html_dom.md HTMLDOM-106 (reopens HTMLDOM-52/53/83/85): a render target's own backing
+        // plans/plan_html_dom.md HTMLDOM-106 (reopens HTMLDOM-52/53/83/85): a render target's own backing
         // canvas is ALWAYS straight (non-premultiplied) alpha on readback -- Canvas2D's getImageData
         // contract, confirmed by leg 1 below -- regardless of which BlendState drew the content.
         // cnaDomGetVariant's mode 1 ("un-premultiplied") exists to correct an UPLOADED texture's
@@ -1194,7 +1194,7 @@ protected:
 
         if (frame_ == 21)
         {
-            // plan_html_dom.md HTMLDOM-119: Wrap/Mirror phase alignment for a NEGATIVE source
+            // plans/plan_html_dom.md HTMLDOM-119: Wrap/Mirror phase alignment for a NEGATIVE source
             // rectangle origin -- every existing Wrap/Mirror test in this suite starts its source
             // rect at (0,0); neither cnaDomResolveClampVariant's tiled branch nor
             // cnaDomGetMirrorVariant normalizes sx/sy at all (both hand the browser a raw,
@@ -1276,7 +1276,7 @@ protected:
                       "checkerboard every other Mirror test in this suite uses");
             }
 
-            // plan_html_dom.md HTMLDOM-119: the Canvas2D-path half of the atlas-edge-bleed /
+            // plans/plan_html_dom.md HTMLDOM-119: the Canvas2D-path half of the atlas-edge-bleed /
             // fractional-scale scenario -- see the DOM-path half in
             // scripts/htmldom-browser-test.mjs's own verifyPixelVerificationScreenshot, which reads
             // back the SAME scenario drawn to the real backbuffer below via a real screenshot
@@ -1303,7 +1303,7 @@ protected:
                   CloseEnough(atlasInterior.getBProperty(), 0, 20),
                   "HTMLDOM-119: Canvas2D path -- a large fractional scale (19.5x/9.75x) with linear "
                   "filtering, sampled well inside the drawn red region, stays pure red");
-            // plan_html_dom.md HTMLDOM-119: measured first, NOT assumed clean -- this sample DOES
+            // plans/plan_html_dom.md HTMLDOM-119: measured first, NOT assumed clean -- this sample DOES
             // pick up real bilinear bleed from the atlas's adjacent (undrawn) blue region, and that
             // is the CORRECT, hardware-matching result, not a bug: real D3D/XNA hardware sampling
             // an unpadded atlas sub-rectangle under LinearWrap/LinearClamp exhibits the identical

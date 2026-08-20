@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math tests for the DIRECTX3
+// plans/plan_freedirect.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math tests for the DIRECTX3
 // (DirectDraw, via the ../free-direct sibling) graphics renderer.
 //
 // All 4 checks draw the SAME source pixel (200, 0, 0, 100) over the SAME background

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1808/MOD-1811: every subsystem in the layer, in one frame.
+// plans/plan_modern.md MOD-1808/MOD-1811: every subsystem in the layer, in one frame.
 //
 // Every other example here isolates one thing so a failure names itself. This one does the
 // opposite deliberately, because "each subsystem works" and "they work together" are different

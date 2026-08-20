@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-177 / GLTF-275 / GLTF-276 / GLTF-277 / GLTF-283 / GLTF-284 / GLTF-287 /
+// plans/plan_gltf.md GLTF-177 / GLTF-275 / GLTF-276 / GLTF-277 / GLTF-283 / GLTF-284 / GLTF-287 /
 // GLTF-290 / GLTF-291: how morph deltas are applied, and what is reported about them.
 //
 // A morph target is a per-vertex delta array, and `BlendMorphTargetsEXT` adds a weighted sum of
@@ -212,7 +212,7 @@ TEST(GltfMorphBlending, ABlendedNormalIsRenormalisedBecauseASumOfUnitVectorsIsNo
 
 TEST(GltfMorphBlending, ABlendedTangentKeepsItsHandednessUntouched)
 {
-    // plan_gltf.md GLTF-279. The tangent's `w` is a sign, not a value: it says which way the
+    // plans/plan_gltf.md GLTF-279. The tangent's `w` is a sign, not a value: it says which way the
     // bitangent runs, and it is a property of the UV winding rather than of the pose. Blending it
     // would take it through 0, which is not a handedness at all -- so only xyz is morphed.
     MorphTargetDataEXT morph;
@@ -370,7 +370,7 @@ namespace
 
 TEST(GltfMorphBlending, AMorphTargetAttributeCnaDoesNotCarryIsNamedRatherThanIgnoredInSilence)
 {
-    // plan_gltf.md GLTF-466. §3.7.2.2 asks a client to support POSITION, NORMAL and TANGENT and makes
+    // plans/plan_gltf.md GLTF-466. §3.7.2.2 asks a client to support POSITION, NORMAL and TANGENT and makes
     // morphed TEXCOORD_n and COLOR_n a MAY -- so not carrying them is permitted. Importing as though
     // the file had asked for nothing is not: a mesh that animates its UVs through morph targets
     // arrived visually static with nothing anywhere to point at, which is the exact class of silent
@@ -487,7 +487,7 @@ namespace
 
 TEST(GltfMorphBlending, AFlatNormalFollowsTheMorphedGeometryRatherThanTheRestPose)
 {
-    // plan_gltf.md GLTF-461. §3.7.2.2: "When the base mesh primitive does not specify normals,
+    // plans/plan_gltf.md GLTF-461. §3.7.2.2: "When the base mesh primitive does not specify normals,
     // client implementations MUST calculate flat normals for each morph target."
     //
     // The defect this replaces: CNA computed the flat normal once, at import, from the REST
@@ -717,7 +717,7 @@ TEST(GltfMorphBlending, ARecomputedFlatNormalReachesTheNormalSlotOfASkinnedLayou
 
 TEST(GltfMorphBlending, AMorphedStride80RecordKeepsItsPackedVertexColourByteForByte)
 {
-    // plan_gltf.md GLTF-463/GLTF-465. Stride 80 is the skinned PBR record with a packed COLOR_0 at
+    // plans/plan_gltf.md GLTF-463/GLTF-465. Stride 80 is the skinned PBR record with a packed COLOR_0 at
     // offset 76, and a morphed skinned vertex-coloured metallic-roughness primitive is an ordinary
     // combination now rather than a corner case. The blend rewrites position, normal and tangent in
     // place, so the risk is not that the colour is blended wrongly -- it is that a writer built for a
@@ -952,7 +952,7 @@ TEST(GltfMorphBlending, AnImpossibleTargetCountIsRefusedOnTheGltfPathToo)
                                        nullptr, 1.0f));
 }
 
-// --- plan_gltf.md GLTF-292: the whole morph family, blended against its own stated expectation ----
+// --- plans/plan_gltf.md GLTF-292: the whole morph family, blended against its own stated expectation ----
 
 TEST(GltfMorphBlending, EveryMorphFixtureBlendsToTheWeightsAndPoseItsManifestStates)
 {

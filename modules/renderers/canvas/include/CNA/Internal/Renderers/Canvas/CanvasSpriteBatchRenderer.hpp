@@ -15,13 +15,13 @@ namespace CNA::Internal::Renderers::Canvas
     /// are covered by host tests without a browser CanvasRenderingContext2D.
     Color NormalizeCanvasSpriteTint(const Color& color, bool alphaBlend);
 
-    /// plan_canvas.md CANVAS-44: throws std::runtime_error for the narrow, honestly-documented gaps
+    /// plans/plan_canvas.md CANVAS-44: throws std::runtime_error for the narrow, honestly-documented gaps
     /// around Wrap/Mirror addressing combined with an out-of-bounds sourceRectangle (mixed U/V
     /// modes; a tinted draw; an AlphaBlend draw needing per-pixel un-premultiply of the tiled
     /// pattern source) -- called from CanvasSpriteBatchRenderer's Draw() path before it ever reaches
     /// the JS draw function, so these are real C++ exceptions, not a silently-skipped draw. A no-op
     /// for Clamp or an in-bounds sourceRectangle (the common case, where Wrap/Mirror vs. Clamp can
-    /// never visibly differ). Contains no EM_JS/JS calls -- exposed standalone so plan_canvas.md
+    /// never visibly differ). Contains no EM_JS/JS calls -- exposed standalone so plans/plan_canvas.md
     /// CANVAS-80's structural GTest coverage can unit test this validation directly.
     void ValidateAddressModeCombination(int addressU, int addressV, bool exceedsBounds,
                                         bool tinted, bool needsUnpremultiply);

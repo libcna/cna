@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact proof for OcclusionQuery on the native OpenGL 2.1 graphics
+// plans/plan_opengl2.md: pixel-exact proof for OcclusionQuery on the native OpenGL 2.1 graphics
 // renderer (GL_SAMPLES_PASSED / ARB_occlusion_query, core since GL 1.5).
 //
 // Check A -- a query wrapping a fully visible full-screen quad reports PixelCount() > 0 (close

@@ -33,7 +33,7 @@ be stated rather than converted into a pass.
 The immutable historical evidence is narrower:
 
 - latest production-changing commit: **`e0f42426836ce9f2d4823d50732850877020aef1`**;
-- final historical head: `48928d113` (four later commits changed only `NEXT.md`/`plan_metal.md`
+- final historical head: `48928d113` (four later commits changed only `NEXT.md`/`plans/plan_metal.md`
   handoff prose);
 - GitHub Actions run **`29814126178`**, `macos-14`, Xcode 15.4, Metal API/GPU validation enabled;
 - native build passed; CTest **143 total / 136 passed / 7 failed**;
@@ -86,7 +86,7 @@ across 11 unique paths**, with per-stop counts **5, 1, 1, 2, 1, 1, 1, 1, 1, 1**:
   `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp`, and
   `src/CNA/Internal/Backends/Metal/MetalGraphicsBackend.mm`;
 - `tests/Microsoft/Xna/Framework/GraphicsBackendCompileDefinitionTests.cpp`, `README.md`, and
-  `plan_metal.md`.
+  `plans/plan_metal.md`.
 
 The twelve `!` pairs must not be called twelve conflicts: two (`85701cdba -> 53010bcfa` and
 `5be69beb2 -> 9a0c0378e`) applied cleanly but differ in current context. Range-diff also
@@ -239,7 +239,7 @@ Metal lane. Backend escape is nevertheless real through `Texture2D::GetBackendWe
 
 ## 7. Post-audit findings
 
-`plan_metal.md` preserves the full evidence and disposition. Every new ID is explicit here:
+`plans/plan_metal.md` preserves the full evidence and disposition. Every new ID is explicit here:
 
 | Finding | Severity | Final disposition |
 |---|---:|---|

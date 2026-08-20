@@ -12,7 +12,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_html_dom.md design decision 5 (HTMLDOM-30/31/32): the whole batch crosses the wasm/JS
+// plans/plan_html_dom.md design decision 5 (HTMLDOM-30/31/32): the whole batch crosses the wasm/JS
 // boundary exactly once. Everything geometric has already been resolved on the C++ side
 // (BuildDrawCommandEXT), so this walks a flat array of 20-field commands and does nothing but
 // select each sprite's pooled element and write the CSS properties whose values actually changed.
@@ -23,7 +23,7 @@
 // rebuilding the elements, would give up exactly that. Nothing here ever READS layout (no
 // getBoundingClientRect, no offsetWidth), so no forced synchronous reflow is possible either.
 //
-// plan_html_dom.md HTMLDOM-110: this diffing is what makes "an unchanged sprite costs zero CSS
+// plans/plan_html_dom.md HTMLDOM-110: this diffing is what makes "an unchanged sprite costs zero CSS
 // writes" TRUE -- it does NOT make an unchanged FRAME free of JS work. A real XNA game resubmits
 // its static sprites every frame regardless, and this function still runs (cnaDomFlushCallCount)
 // and still walks every command in the batch to reach that diffing in the first place; only the
@@ -56,7 +56,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
                                        double m0, double m1, double m2, double m3, double m4, double m5,
                                        int hasMatrix, int scissorEnabled), {
     if (count <= 0) return;
-    // plan_html_dom.md HTMLDOM-110: CNAEXT instrumentation -- every real (non-empty) flush crosses
+    // plans/plan_html_dom.md HTMLDOM-110: CNAEXT instrumentation -- every real (non-empty) flush crosses
     // the wasm/JS boundary and runs this function's own body once per SpriteBatch Begin/End batch,
     // REGARDLESS of whether any of it turns into an actual CSS write below (cnaDomStyleWriteCount
     // is the separate counter for that). A real XNA game resubmits its static sprites every frame,
@@ -66,7 +66,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     const base = cmds >> 2;
     const targetCtx = Module['cnaDomBoundCtx'];
 
-    // plan_html_dom.md HTMLDOM-107: this flush's viewport offset, captured ONCE per batch (the same
+    // plans/plan_html_dom.md HTMLDOM-107: this flush's viewport offset, captured ONCE per batch (the same
     // per-batch granularity the scissor rect already uses). Real XNA/FNA applies Viewport.X/Y at the
     // RASTERIZER stage, strictly AFTER the projection matrix (built from Viewport.Width/Height
     // alone) and therefore after SpriteBatch's own Begin(transformMatrix) too -- so it is the
@@ -75,14 +75,14 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     // this per-flush offset is the only place that translation is realized now.
     const vp = Module['cnaDomViewport'];
     const vpOffX = vp ? vp.x : 0, vpOffY = vp ? vp.y : 0;
-    // plan_html_dom.md HTMLDOM-102: this flush's effective scissor rect -- null (no clip) unless
+    // plans/plan_html_dom.md HTMLDOM-102: this flush's effective scissor rect -- null (no clip) unless
     // RasterizerState.ScissorTestEnable was actually true when this batch's End() ran, captured at
     // the same per-batch granularity as everything else scissor-related. An earlier version applied
     // SetScissorRect's recorded rect unconditionally, ignoring the enable bit entirely.
     const effectiveScissorRect = scissorEnabled ? Module['cnaDomScissorRect'] : null;
 
     if (targetCtx) {
-        // plan_html_dom.md HTMLDOM-102: real ctx.save()/rect()/clip() scissoring for the Canvas2D
+        // plans/plan_html_dom.md HTMLDOM-102: real ctx.save()/rect()/clip() scissoring for the Canvas2D
         // render-target path -- previously this path did not consult the scissor rect at all.
         // Established ONCE for the whole batch (not per sprite) in absolute target-pixel space
         // (setTransform reset first, since targetCtx's transform otherwise still holds whatever the
@@ -108,7 +108,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             // fetches the STRAIGHT variant instead and lets 'copy' reproduce Opaque's real XNA
             // semantics exactly: BlendState.cpp confirms Opaque uses symmetric One/Zero factors for
             // BOTH colour and alpha, meaning the destination is replaced by the source pixel
-            // INCLUDING its own alpha, never forced to 255 (matches plan_canvas.md CANVAS-44's own
+            // INCLUDING its own alpha, never forced to 255 (matches plans/plan_canvas.md CANVAS-44's own
             // 'copy' mapping, already pixel-verified).
             const isOpaque = rawMode === 2;
             const fetchMode = isOpaque ? 0 : rawMode;
@@ -117,7 +117,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             const rSrc = packed & 255, gSrc = (packed >>> 8) & 255, bSrc = (packed >>> 16) & 255;
             const sxRaw = HEAPF32[o + 1], syRaw = HEAPF32[o + 2];
             const sw = HEAPF32[o + 3], sh = HEAPF32[o + 4];
-            // plan_html_dom.md HTMLDOM-104: a padded (edge-extended) variant when Clamp overflows the
+            // plans/plan_html_dom.md HTMLDOM-104: a padded (edge-extended) variant when Clamp overflows the
             // texture on a non-tiled axis -- see cnaDomResolveClampVariant's own comment.
             let variant, sx = sxRaw, sy = syRaw;
             if (isMirror) {
@@ -150,7 +150,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             }
             const lx = HEAPF32[o + 10], ly = HEAPF32[o + 11];
             if (isOpaque) {
-                // plan_canvas.md CANVAS-44: Porter-Duff 'copy' is evaluated over the WHOLE
+                // plans/plan_canvas.md CANVAS-44: Porter-Duff 'copy' is evaluated over the WHOLE
                 // compositing area, not just the drawn shape -- clip to exactly the sprite's own
                 // footprint (the same already-transformed local space drawImage/fillRect use below)
                 // first, or it wipes every other sprite already drawn into this target to
@@ -190,14 +190,14 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
 
     const root = Module['cnaDomRoot'];
     if (!root) { console.error('[CNA] HTML_DOM: flush before the DOM surface existed'); return; }
-    // plan_html_dom.md HTMLDOM-94: this flush is one whole SpriteBatch Begin/End batch, so the
+    // plans/plan_html_dom.md HTMLDOM-94: this flush is one whole SpriteBatch Begin/End batch, so the
     // scissor rect current RIGHT NOW (whatever the game's last SetScissorRect call recorded) is the
     // one that applies to every sprite in it -- matching real XNA/FNA SpriteBatch Deferred-mode
     // semantics, where ScissorRectangle is read by the GPU once the batch's draw calls are actually
     // issued at End(), not captured per original Draw() call. cnaDomGetRegion resolves that rect to
     // the DOM container (and its own independent sprite pool) this whole batch's sprites belong in,
     // so a LATER batch's different scissor rect can never reach back and reclip these sprites.
-    // plan_html_dom.md HTMLDOM-102: passes effectiveScissorRect (null when ScissorTestEnable was
+    // plans/plan_html_dom.md HTMLDOM-102: passes effectiveScissorRect (null when ScissorTestEnable was
     // false at this batch's End()), not the raw recorded rect -- a disabled scissor test now
     // genuinely collapses to the same zero-cost 'full' region as no rect at all, matching real
     // XNA/FNA. An earlier version resolved the recorded rect unconditionally.
@@ -206,7 +206,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
     const pool = region.pool;
     let used = region.used;
 
-    // plan_html_dom.md HTMLDOM-103: true per-flush paint order across regions, via z-index instead
+    // plans/plan_html_dom.md HTMLDOM-103: true per-flush paint order across regions, via z-index instead
     // of relying on DOM position -- DOM position only ever reflected each region's own FIRST-
     // creation order, not the sequence its flushes actually happened in this frame (interleaving a
     // 'full'-region draw between two different-region draws could never be reproduced by document
@@ -220,7 +220,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         const z = String(paintOrder);
         if (container.style.zIndex !== z) { container.style.zIndex = z; ++Module['cnaDomStyleWriteCount']; }
     }
-    // plan_html_dom.md HTMLDOM-110: per-sprite z-index on 'full'-region sprites exists ONLY to
+    // plans/plan_html_dom.md HTMLDOM-110: per-sprite z-index on 'full'-region sprites exists ONLY to
     // interleave their paint order against sprites in OTHER regions within the same frame -- with
     // no named region ever created this session, there is nothing to interleave against (every
     // 'full' sprite already paints in correct relative order via DOM/pool position alone), so the
@@ -244,7 +244,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
         const rSrc = packed & 255, gSrc = (packed >>> 8) & 255, bSrc = (packed >>> 16) & 255;
         const sxRaw = HEAPF32[o + 1], syRaw = HEAPF32[o + 2];
         const sw0 = HEAPF32[o + 3], sh0 = HEAPF32[o + 4];
-        // plan_html_dom.md HTMLDOM-104: a padded (edge-extended) variant when Clamp overflows the
+        // plans/plan_html_dom.md HTMLDOM-104: a padded (edge-extended) variant when Clamp overflows the
         // texture on a non-tiled axis -- see cnaDomResolveClampVariant's own comment. background-
         // position below uses the RESOLVED (possibly shifted) sx/sy, not the raw command values, so
         // it aligns against the padded image's own coordinate space when one was used.
@@ -285,7 +285,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             ++Module['cnaDomStyleWriteCount'];
         }
 
-        // plan_html_dom.md HTMLDOM-104: (-sx,-sy) uses the RESOLVED source coordinates -- shifted
+        // plans/plan_html_dom.md HTMLDOM-104: (-sx,-sy) uses the RESOLVED source coordinates -- shifted
         // into the padded image's own coordinate space when Clamp overflow required one -- not the
         // raw command values, so the requested source rect still aligns correctly.
         const bp = (-sx) + 'px ' + (-sy) + 'px';
@@ -403,7 +403,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         const bool tiledV = exceedsBounds && (addressV == 0 || addressV == 2);
         const bool mirror = exceedsBounds && addressU == 2 && addressV == 2;
 
-        // plan_html_dom.md HTMLDOM-104: Clamp (a non-tiled axis whose source rect still exceeds the
+        // plans/plan_html_dom.md HTMLDOM-104: Clamp (a non-tiled axis whose source rect still exceeds the
         // texture) samples the nearest EDGE TEXEL for the out-of-bounds portion -- it does not crop
         // destination geometry. An earlier version narrowed the source rect into the texture and
         // shifted the destination box to match, which cropped the sprite's own footprint (leaving
@@ -569,7 +569,7 @@ namespace CNA::Internal::Renderers::HtmlDom
             color, rotation, origin, effects, smoothingEnabled_, addressU_, addressV_,
             GetCurrentCompositeOpEXT());
 
-        // plan_html_dom.md HTMLDOM-118: SpriteSortMode::Immediate means THIS sprite's own draw call
+        // plans/plan_html_dom.md HTMLDOM-118: SpriteSortMode::Immediate means THIS sprite's own draw call
         // reaches the DOM/Canvas2D right now, under whatever device state is current AT THIS
         // INSTANT -- not deferred until End(), which could see a LATER state some subsequent
         // SetScissorRect()/SetViewport() call already overwrote. Flushing this one command as its

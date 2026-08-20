@@ -86,7 +86,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
@@ -130,7 +130,7 @@ using Microsoft::Xna::Framework::Graphics::Viewport;
 // WebGPU (REMED-GFX-211/213). D3D9 runs the index-range contract above and nothing here; whether
 // it honours the binding offsets is a separate question that belongs to its own measurement, not
 // to this file's compiled expectations, and no D3D display has been reachable to take it.
-/// plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
+/// plans/plan_runtimerenderer.md RTR-P9-5: the binding-offset oracle set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedBindingOffsetOracle()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
@@ -741,7 +741,7 @@ namespace
             return PerInstanceTransformIsApplied() ? requested : 1;
         }
 
-        // plan_runtimerenderer.md RTR-P9-5: this member is now always defined -- it used to sit
+        // plans/plan_runtimerenderer.md RTR-P9-5: this member is now always defined -- it used to sit
         // behind CNA_INSTANCED_BINDING_OFFSET_ORACLE, but a declaration cannot be guarded by a
         // runtime predicate. The two tests that call it carry the renderer gate instead.
         /// REMED-GFX-122's binding oracle, shared verbatim with REMED-GFX-123's D3D11/D3D12 route.
@@ -1982,7 +1982,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 // boundary explicit and makes the follow-up fix an obvious, deliberate change.
 TEST_F(InstancedDrawRangeTest, BgfxPerInstanceWorldMatrixIsAppliedOnGlslRenderersOnly)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
@@ -2012,7 +2012,7 @@ TEST_F(InstancedDrawRangeTest, BgfxPerInstanceWorldMatrixIsAppliedOnGlslRenderer
 // this replaced carried none of the public range at all.
 TEST_F(InstancedDrawRangeTest, BgfxInstancedBindingsAreTheExactPublicRanges)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
@@ -2112,7 +2112,7 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedBindingsAreTheExactPublicRanges)
 // zero -- while still drawing only the requested triangles' edges, for every instance.
 TEST_F(InstancedDrawRangeTest, BgfxInstancedWireframeKeepsItsRangeWithAZeroBasedVertexBinding)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
@@ -2184,7 +2184,7 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedWireframeKeepsItsRangeWithAZeroBased
 // many different ranges and instance counts, and returns to the process baseline after disposal.
 TEST_F(InstancedDrawRangeTest, BgfxInstancedRangesAllocateNoPerDrawNativeResources)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
@@ -2272,7 +2272,7 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedRangesAllocateNoPerDrawNativeResourc
 // instance buffer would move one of these counters.
 TEST_F(InstancedDrawRangeTest, BgfxInstanceFrequencyCostsNoExtraSubmissionOrTransientMemory)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
@@ -2376,7 +2376,7 @@ TEST_F(InstancedDrawRangeTest, BgfxInstanceFrequencyCostsNoExtraSubmissionOrTran
 // now the fixture's shared oracle so REMED-GFX-123's D3D route asserts exactly the same contract.
 TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 {
-    // plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.
+    // plans/plan_runtimerenderer.md RTR-P9-5: this pin belongs to the EasyGL family specifically.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
     RunBindingOffsetAndFrequencyOracle();
 }
@@ -2388,7 +2388,7 @@ TEST_F(InstancedDrawRangeTest, EasyGLHonorsBindingOffsetsAndInstanceFrequency)
 // the A->B->A leg fails on a cache that still holds the previous frequency.
 TEST_F(InstancedDrawRangeTest, D3DHonorsBindingOffsetsAndInstanceFrequency)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the same contract, pinned on the two D3D renderers.
+    // plans/plan_runtimerenderer.md RTR-P9-5: the same contract, pinned on the two D3D renderers.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(DirectX11, DirectX12);
     RunBindingOffsetAndFrequencyOracle();
 }

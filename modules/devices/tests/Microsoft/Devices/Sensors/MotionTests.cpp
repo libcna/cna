@@ -682,7 +682,7 @@ TEST(MotionTests, CurrentValueAndIsDataValidRetainLastReadingAfterStop)
 // deadlock via the fake-backend seam; does NOT prove the deeper question of
 // tearing down the real Detail::AndroidMotionBackend/AndroidSensorBridge
 // chain mid-callback, which is Android-only and unverified here (see
-// plan_devices.md's SENSORBASE-003 closing note).
+// plans/plan_devices.md's SENSORBASE-003 closing note).
 TEST(MotionTests, DisposeFromWithinOwnCallbackDoesNotDeadlock)
 {
     Motion m;

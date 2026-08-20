@@ -1,7 +1,7 @@
-# Audit: docs/fx-bytecode-support-plan.md
+# Audit: docs/fx-bytecode-support-plans/plan.md
 
 ## Metadata
-- Source file: `docs/fx-bytecode-support-plan.md` (124 lines)
+- Source file: `docs/fx-bytecode-support-plans/plan.md` (124 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
 - File type: Markdown documentation (planning document, explicitly not a status report)

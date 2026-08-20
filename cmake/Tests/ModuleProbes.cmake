@@ -1,5 +1,5 @@
 # Minimal-link module probes and mechanical modularization gates
-# (MODULARIZATION_PLAN.md §2.3/§4). Each probe is a tiny standalone consumer of exactly one
+# (plans/MODULARIZATION_PLAN.md §2.3/§4). Each probe is a tiny standalone consumer of exactly one
 # CNA module alias; the paired ModuleLinkClosure_* test inspects the probe's generated link
 # line and fails when a forbidden archive/library appears, turning every module's real
 # dependency closure into a permanent contract. RendererIdentityRegistry mechanically pins
@@ -118,7 +118,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # renderer SDK: the whole probe closure must stay free of every native graphics library.
     # The same must hold for the content pipeline (no renderer/native SDK through the type
     # readers) and for both extension modules.
-    # plan_runtimerenderer.md RTR-P9-21: deliberately ALSO requires single-renderer mode. This
+    # plans/plan_runtimerenderer.md RTR-P9-21: deliberately ALSO requires single-renderer mode. This
     # asserts the probe closure links no native graphics SDK at all, which is a true statement about
     # a HEADLESS-only build and a FALSE one about a multi-renderer build that happens to default to
     # HEADLESS -- such a binary legitimately links Vulkan, Skia or whatever else it was built with.
@@ -163,7 +163,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
 
-        # plan_binding.md CBIND-043: the C API coverage matrix is a GATE, not a report.
+        # plans/plan_binding.md CBIND-043: the C API coverage matrix is a GATE, not a report.
         #
         # docs/c-api/COVERAGE.md is generated from every public Microsoft/** and CNA/** header, so
         # a new public C++ symbol that arrives without its C API row makes the checked-in inventory
@@ -178,7 +178,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_coverage_inventory.py" --check)
 
-        # plan_binding.md CBIND-038: the pure-C compatibility matrix, also a gate.
+        # plans/plan_binding.md CBIND-038: the pure-C compatibility matrix, also a gate.
         #
         # The declaration and the published matrix must not drift apart, for the same reason the
         # coverage matrix must not: a matrix is read as evidence, so one that lags its declaration
@@ -199,7 +199,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_compatibility_matrix.py" --run)
 
-        # plan_binding.md CBIND-042A: the known-limitations matrix, generated from the same
+        # plans/plan_binding.md CBIND-042A: the known-limitations matrix, generated from the same
         # inventory the coverage gate checks.
         #
         # A limitations document is the one document a consumer reads to decide whether to adopt an
@@ -214,7 +214,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
 
-        # plan_binding.md CBIND-064: the export count that appears in PROSE, which no gate read.
+        # plans/plan_binding.md CBIND-064: the export count that appears in PROSE, which no gate read.
         #
         # `abi_baseline.json` measures how many `cna_*` symbols the library exports, and
         # CApiAbiBaseline fails when that changes without review. Four sentences repeat the number
@@ -230,7 +230,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_doc_export_counts.py" --check)
 
-        # plan_binding.md CBIND-065: does anything actually CALL each route?
+        # plans/plan_binding.md CBIND-065: does anything actually CALL each route?
         #
         # The coverage matrix answers a different question -- it maps every public C++ symbol to a
         # C route and to a *rule's* test description, so a rule covering twenty symbols credits its
@@ -247,7 +247,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_route_test_coverage.py" --check)
 
-        # plan_binding.md CBIND-067: the generated CNA_Bool contract test must not go stale.
+        # plans/plan_binding.md CBIND-067: the generated CNA_Bool contract test must not go stale.
         #
         # The test itself compiles and runs beside the other smoke tests; this checks that the
         # checked-in file still matches what the headers say, so a route declared with a new flag
@@ -256,7 +256,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_bool_contract_test.py" --check)
 
-        # plan_binding.md CBIND-042B: the experimental release gate.
+        # plans/plan_binding.md CBIND-042B: the experimental release gate.
         #
         # A release gate written as prose is a list of things somebody once believed. This one is a
         # declaration plus a measurement, and the check fails when they disagree **in either
@@ -271,7 +271,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_release_gate.py" --check)
 
-        # plan_binding.md CBIND-039: the ABI layout and export baseline.
+        # plans/plan_binding.md CBIND-039: the ABI layout and export baseline.
         #
         # A generated probe reports what the compiler *actually* laid out -- every struct size,
         # alignment and field offset, every scalar typedef's width, every constant's value -- and it
@@ -318,20 +318,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                     --library $<TARGET_FILE:cna_c_api>)
         endif()
 
-        # plan_runtimerenderer.md RTR-P1-6/P3-17/P12-15: renderer-specific production
+        # plans/plan_runtimerenderer.md RTR-P1-6/P3-17/P12-15: renderer-specific production
         # decisions stay behind descriptors or virtuals, and every renderer family keeps exactly
         # one descriptor translation unit.
         add_test(NAME RuntimeRendererDiscipline
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_renderer_discipline.py")
 
-        # plan_runtimerenderer.md RTR-P6-19/P12-15: keep the configure-time combination
+        # plans/plan_runtimerenderer.md RTR-P6-19/P12-15: keep the configure-time combination
         # restrictions synchronized with their public documentation.
         add_test(NAME RendererCombinationRegistry
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_combinations.py")
 
-        # plan_runtimerenderer.md RTR-P6-3: keeps RENDERER_TARGET from going back to being a
+        # plans/plan_runtimerenderer.md RTR-P6-3: keeps RENDERER_TARGET from going back to being a
         # scalar that families read out of a global. The rule it enforces cannot be checked by
         # building: in a single-renderer build a wrong read gives the right answer, because the
         # default is the only renderer there is. Only a multi-renderer build would notice, and
@@ -341,7 +341,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_target_discipline.py")
     endif()
 
-    # plan_runtimerenderer.md RTR-P6-1: CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen
+    # plans/plan_runtimerenderer.md RTR-P6-1: CNA_GRAPHICS_RENDERER names the DEFAULT renderer chosen
     # from CNA_GRAPHICS_RENDERERS, so it must be a member of that list.
     #
     # Each case runs cmake/RendererDefaultSelection.cmake for real in `cmake -P` script mode, which

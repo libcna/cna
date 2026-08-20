@@ -3,13 +3,13 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this renderer is
+# plans/plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this renderer is
 # Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND
 # wraps the real .exe with scripts/run-wine-dxvk.sh (DX-3). A native MSVC configure on a real
 # Windows machine (CMAKE_CROSSCOMPILING is false there) needs no Wine wrapper at all -- runs the
 # .exe directly (see .github/workflows/d3d-windows-ci.yml, added specifically to exercise this
 # path for real; it only covers MSVC-compile/unit-test/shader-generation-check, not a substitute
-# for plan_dx.md DX-90's real swap-chain/tearing/device-lost/driver-parity items).
+# for plans/plan_dx.md DX-90's real swap-chain/tearing/device-lost/driver-parity items).
 
 # Example/test executables historically live at the build root (scripts, docs and
 # the golden-image working-directory conventions rely on it); keep them there.
@@ -101,7 +101,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
     cna_register_renderer_test(NAME DirectX11_RasterizerState_CullMode COMMAND ${_directx11_rast_cullmode_cmd}
         TIMEOUT 60 LABELS "DIRECTX11")
 
-    # plan_cnj.md CNB-58/CNB-67 follow-up: real-GPU pixel proof for PbrEffect (stride 48)/
+    # plans/plan_cnj.md CNB-58/CNB-67 follow-up: real-GPU pixel proof for PbrEffect (stride 48)/
     # SkinnedPbrEffect (stride 68)/SkinnedEffect vertex-color-on-skinned-mesh (stride 56,
     # Skinned3dColored/Skinned3dVertexLitColored) -- each new shader variant is actually selected
     # and executes correctly, not just linked.

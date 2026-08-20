@@ -203,7 +203,7 @@ namespace CNA::Internal::Renderers::Igl
         uniforms.envMapSpecular[3] = 0.0f;
         uniforms.pbrFactors[0] = params.pbrMetallicFactor;
         uniforms.pbrFactors[1] = params.pbrRoughnessFactor;
-        // plan_gltf.md GLTF-476. Everything from here to the transform rows used to be dropped on
+        // plans/plan_gltf.md GLTF-476. Everything from here to the transform rows used to be dropped on
         // the floor: this renderer transported metallic and roughness and nothing else, so a glTF
         // material's normal scale, occlusion strength, sRGB encoding, texture transforms, IOR and
         // KHR_materials_specular were all silently replaced by the shader's own defaults.
@@ -664,7 +664,7 @@ namespace CNA::Internal::Renderers::Igl
     {
         if (IsVulkanBackend())
         {
-            // plan_igl.md IGL-43. Loose (non-block) uniforms do not exist in Vulkan GLSL and IGL's
+            // plans/plan_igl.md IGL-43. Loose (non-block) uniforms do not exist in Vulkan GLSL and IGL's
             // Vulkan encoder leaves bindUniform unimplemented, so a parameter has to travel in a
             // std140 block -- and reaching a member of one means knowing its byte offset.
             //

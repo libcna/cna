@@ -43,7 +43,7 @@ namespace
         return TextEditingEvent{0, text, start, length};
     }
 
-    // Exercises the platform-independent text-input state machine (plan_input.md Tasks 704-706).
+    // Exercises the platform-independent text-input state machine (plans/plan_input.md Tasks 704-706).
     class PlatformInputBridgeTextInputTest : public ::testing::Test
     {
     protected:

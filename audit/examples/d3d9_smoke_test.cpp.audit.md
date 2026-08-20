@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_smoke_test.cpp` (1141 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note)
 - Subsystem: `examples-tests-d3d9` shard — the backend's foundational device-lifecycle smoke test
-  (`plan_dx9.md` Phase D9-3 through D9-64, checks A-Z plus `RunNoDepthBufferCheck()`/
+  (`plans/plan_dx9.md` Phase D9-3 through D9-64, checks A-Z plus `RunNoDepthBufferCheck()`/
   `RunHiDefProfileCheck()`), by far the largest single file in this batch.
 - File type: standalone `Game`-subclass executable + two free-standing non-`Game` helper functions,
   CTest-registered, real window/device path.

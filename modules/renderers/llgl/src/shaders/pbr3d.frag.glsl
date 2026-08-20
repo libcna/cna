@@ -126,7 +126,7 @@ void main()
     // albedo and alpha are separate quantities per glTF's own baseColorFactor convention, unlike
     // most other CNA stock effects' DiffuseColor.
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), ambientColorPad.w);
-    // plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
+    // plans/plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the alpha
     // half is where a BLEND-mode vertex-coloured primitive's transparency comes from. specularState.z
     // is the effect's own VertexColorEnabledEXT, and the variants without a colour attribute pass
     // opaque white anyway, so this is inert for them either way.

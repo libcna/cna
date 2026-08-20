@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_headless.md HEADLESS-60: confirm each HEADLESS-20/22/23/24 validation rule actually throws
+// plans/plan_headless.md HEADLESS-60: confirm each HEADLESS-20/22/23/24 validation rule actually throws
 // under HeadlessValidation and does *not* throw under HeadlessFast, in one dedicated place --
 // proving the mode dial genuinely gates every rule, not just the one representative case
 // (HEADLESS-21's draw-call index-count check, already covered in Headless_Smoke).

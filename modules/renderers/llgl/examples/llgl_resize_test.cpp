@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-29: a real window resize, driven the way a game actually does it
+// plans/plan_llgl.md LLGL-29: a real window resize, driven the way a game actually does it
 // (GraphicsDeviceManager.PreferredBackBufferWidth/Height + ApplyChanges()), followed by real GPU
 // pixel reads at the new resolution -- not just a check that the bookkeeping numbers changed.
 //

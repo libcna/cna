@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-34: the .cnj "sourceFile" capability matrix. Texture2D's support (sourceFile +
+// plans/plan_cnj.md CNB-34: the .cnj "sourceFile" capability matrix. Texture2D's support (sourceFile +
 // colorKey) is already covered by CnjSourceFileTests.cpp/CnjCacheIsolationTests.cpp -- this file
 // covers the other branches: SoundEffect and TextureCube delegate via sourceFile (no
 // metadata fields yet); SpriteFont, Effect, Model, and AnimationClip (CNB-40) explicitly reject a
@@ -180,7 +180,7 @@ protected:
     GraphicsDevice gd;
 };
 
-// plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
+// plans/plan_platform.md PLAT-SDL2-8: needs the decoder/mixer engine, which is the SDL3_mixer
 // implementation and is absent from the archive for every other CNA_AUDIO_PLATFORM value.
 // Without it a SoundEffect reports a zero duration and VideoPlayer opens no audio stream,
 // so this case is unobservable there rather than merely untested.
@@ -207,12 +207,12 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 // TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
 // deterministically instead of accepting the data and discarding it. Same constant and same
 // reviewed renderer set as tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp.
-// plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
+// plans/plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores real cube pixels (see
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
 // PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
 // either (docs/portablegl-renderer.md).
-// plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
-// renderer rather than the build default. PIXIJS (plan_pixijs.md PIXIJS-71) is in the "no cube
+// plans/plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
+// renderer rather than the build default. PIXIJS (plans/plan_pixijs.md PIXIJS-71) is in the "no cube
 // resource exists" set: no cube override written, v1 scope being 2D-only.
 [[nodiscard]] inline bool CubeStorageSupported()
 {

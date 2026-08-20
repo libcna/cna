@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent renderer's 2D path. Every
+// plans/plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent renderer's 2D path. Every
 // check goes through the public XNA API (GraphicsDevice::Clear, SpriteBatch, Texture2D,
 // GetBackBufferData) and asserts on pixels actually read back from the device, not on "the call
 // didn't throw".

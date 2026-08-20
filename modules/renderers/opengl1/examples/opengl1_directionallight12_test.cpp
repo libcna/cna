@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: BasicEffect.DirectionalLight1/DirectionalLight2 (plan_opengl1.md item 14,
+// OPENGL1 renderer: BasicEffect.DirectionalLight1/DirectionalLight2 (plans/plan_opengl1.md item 14,
 // EasyGL parity).
 //
 // Before this, DrawInternal only ever configured GL_LIGHT0 -- GpuDrawParams already carried

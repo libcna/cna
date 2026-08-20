@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <stdexcept>
 
-// plan_metal.md METAL-34-style extraction: this is the real shader-variant dispatch logic --
+// plans/plan_metal.md METAL-34-style extraction: this is the real shader-variant dispatch logic --
 // arguably the single most safety-critical function in the whole renderer, since it decides which
 // concrete MSL shader pair every 3D draw call actually uses. It only reads GpuDrawParams (plain
 // C++, zero Objective-C dependency) and a stride, so unlike drawMetal3D() itself (which also issues
@@ -16,13 +16,13 @@
 // in one portable source of truth.
 namespace CNA::Internal::Renderers::Metal
 {
-    // plan_metal.md Phase 2 (simplified for a first, hardware-unverified pass -- a fully generic
+    // plans/plan_metal.md Phase 2 (simplified for a first, hardware-unverified pass -- a fully generic
     // VertexDeclaration-driven descriptor builder, METAL-27, stays open; this is a fixed-variant
     // enum, one entry per concrete shader+vertex-layout combination this renderer actually emits,
     // exactly mirroring the "one Prog3D per Ensure*Program()" shape EasyGLRenderer already
     // uses -- lower risk to get right without a compiler than inventing a hashed-VertexElement-list
     // key blind).
-    // plan_metal.md METAL-38: `LitTex32` replaces the earlier plain-unlit `NormalTex32` entry --
+    // plans/plan_metal.md METAL-38: `LitTex32` replaces the earlier plain-unlit `NormalTex32` entry --
     // confirmed by reading EasyGLRenderer::SelectProgram()'s real `switch(stride)` that
     // stride 32 (VertexPositionNormalTexture) *always* selects a lit shader, never an unlit one,
     // even when `lightingEnabled=false` (BindDrawParams() sets ambient=(1,1,1) and zeroes every
@@ -56,7 +56,7 @@ namespace CNA::Internal::Renderers::Metal
             return PipelineKind::Pbr48;
         }
         if (skinned) {
-            // plan_metal.md METAL-76: same real XNA precedence as METAL-39's BasicEffect case
+            // plans/plan_metal.md METAL-76: same real XNA precedence as METAL-39's BasicEffect case
             // (matching EasyGLRenderer::SelectProgram()'s own identical skinned branch) --
             // per-vertex-lit only when lighting is actually on and per-pixel wasn't explicitly
             // requested; with lighting disabled both shaders degenerate identically, so the existing
@@ -84,7 +84,7 @@ namespace CNA::Internal::Renderers::Metal
                 case 20: return PipelineKind::Textured20;
                 case 24: return PipelineKind::ColorTex24;
                 case 32:
-                    // plan_metal.md METAL-39: real XNA BasicEffect precedence (matches
+                    // plans/plan_metal.md METAL-39: real XNA BasicEffect precedence (matches
                     // EasyGLRenderer::SelectProgram()'s own stride-32 case exactly) -- with
                     // lighting disabled, both shaders degenerate to the identical trivial
                     // ambient=(1,1,1) case, so the per-pixel-lit pipeline stays selected there rather

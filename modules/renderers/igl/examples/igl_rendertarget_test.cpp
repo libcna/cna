@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-24: off-screen rendering end to end -- a real RenderTarget2D with a real
+// plans/plan_igl.md IGL-24: off-screen rendering end to end -- a real RenderTarget2D with a real
 // depth/stencil attachment, drawn into with SpriteBatch, read back with GetData(), and then sampled
 // as an ordinary texture while drawing to the back buffer.
 //

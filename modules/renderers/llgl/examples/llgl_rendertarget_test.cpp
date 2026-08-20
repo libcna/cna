@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-26: RenderTarget2D proof for the LLGL graphics renderer, asserted against real
+// plans/plan_llgl.md LLGL-26: RenderTarget2D proof for the LLGL graphics renderer, asserted against real
 // pixels read back from the GPU.
 //
 // The same 4x4 quadrant texture used by llgl_2d_test.cpp (red / green / blue / white) is drawn

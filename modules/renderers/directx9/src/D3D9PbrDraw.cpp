@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // D3D9 PBR porting task: real DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch for CNA's own
-// CNAEXT "Pbr3D"/"PbrSkinned3D" shaders (PbrEffect/SkinnedPbrEffect, plan_cnj.md CNB-56..79
+// CNAEXT "Pbr3D"/"PbrSkinned3D" shaders (PbrEffect/SkinnedPbrEffect, plans/plan_cnj.md CNB-56..79
 // equivalent), porting EasyGLRenderer.cpp's EnsurePbrProgram()/EnsurePbrSkinnedProgram() +
 // SelectProgram()'s own pbr-highest-priority dispatch to real vs_3_0/ps_3_0 bytecode
 // (shaders/cna/Pbr3D.hlsl, shaders/cna/PbrSkinned3D.hlsl -- see those files' own header comments
@@ -162,7 +162,7 @@ namespace CNA::Internal::Renderers::DirectX9
     {
         using namespace Shaders;
 
-        // plan_gltf.md GLTF-465: this renderer applies the COLOR_0 product now, so the shared
+        // plans/plan_gltf.md GLTF-465: this renderer applies the COLOR_0 product now, so the shared
         // RequireVertexColourPbrSupportEXT refusal is gone. Stride 60 is the rigid PBR record with a
         // packed COLOR_0 at offset 56 and stride 80 the skinned one with its own at 76; each selects
         // the vertex program whose input struct that declaration satisfies, because a vs_3_0 input
@@ -288,7 +288,7 @@ namespace CNA::Internal::Renderers::DirectX9
         const float fogColor[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2],
                                    params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", fogColor);
-        // plan_gltf.md GLTF-465: the effect's own VertexColorEnabledEXT, and the layout must
+        // plans/plan_gltf.md GLTF-465: the effect's own VertexColorEnabledEXT, and the layout must
         // supply the attribute as well -- the stride-48/68 programs write opaque white to the
         // interpolant, so raising the flag for them would multiply by an identity rather than by
         // a colour, but stating both keeps the uniform meaning one thing.

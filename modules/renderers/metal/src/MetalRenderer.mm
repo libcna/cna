@@ -26,7 +26,7 @@
 #include "CNA/Internal/Renderers/Metal/MetalCullMode.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalDepthPolicy.hpp"
 #include "CNA/Internal/Renderers/Metal/MetalPolicy.hpp"
-// plan_metal.md Phase 14 (METAL-142-152): needs Effect's complete type (not just
+// plans/plan_metal.md Phase 14 (METAL-142-152): needs Effect's complete type (not just
 // IGraphicsRenderer.hpp's own forward declaration) to call Apply()/GetEffectRendererPtr() from
 // MetalSpriteBatch's custom-effect wiring below.
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -100,7 +100,7 @@
 
 namespace CNA::Internal::Renderers::Metal
 {
-// plan_metal.md METAL-131/122/125: forward-declared at this (non-anonymous-namespace) scope so
+// plans/plan_metal.md METAL-131/122/125: forward-declared at this (non-anonymous-namespace) scope so
 // MetalTextureCube/MetalTexture3D's own GetData() overrides, defined inside the anonymous
 // namespace below, can call it -- its real definition lives later in this file, also at this same
 // scope (outside the anonymous namespace), not inside it, so the forward declaration must live out
@@ -134,7 +134,7 @@ namespace
 using namespace metal;
 
 struct U3D { float4x4 wvp; };
-// plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest/DualTexture
+// plans/plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest/DualTexture
 // material uniforms, shared by every unlit-textured fragment variant below. alphaTest defaults
 // to {0,0,1,1} (CNA's documented "always pass" convention -- tolerance=0 forces the `a<refVal`
 // branch, which is always false since alpha is never negative, so failWeight is selected but
@@ -175,7 +175,7 @@ fragment float4 cna_f3d_texture(V3Out in [[stage_in]], texture2d<float> tex [[te
     if (cna_alpha_test_fails(c.a, m.alphaTest)) discard_fragment();
     return c;
 }
-// DualTextureEffect (plan_metal.md METAL-58/59): ported from FNA's real DualTextureEffect.fx
+// DualTextureEffect (plans/plan_metal.md METAL-58/59): ported from FNA's real DualTextureEffect.fx
 // PSDualTexture -- `color.rgb *= 2; color *= overlay * diffuse;` (a lightmap-style RGB-doubling
 // factor on the FIRST texture only, alpha untouched) -- already found, fixed, and pixel-verified
 // on EasyGL/Vulkan/Bgfx (docs/dualtextureeffect-support.md Task 383). CNA's cross-renderer
@@ -192,7 +192,7 @@ fragment float4 cna_f3d_dualtex(V3Out in [[stage_in]], texture2d<float> tex0 [[t
     return c;
 }
 
-// BasicEffect per-pixel lighting (plan_metal.md METAL-38/40-47), ported line-for-line from
+// BasicEffect per-pixel lighting (plans/plan_metal.md METAL-38/40-47), ported line-for-line from
 // EasyGLRenderer::EnsureLit3DProgram()'s real GLSL (both vertex and fragment stage), the
 // same reference every other renderer's own lit-textured shader already matches. Every `vec3`
 // uniform is carried as a `float4` here (xyz + unused pad) to sidestep MSL `constant`-address-space
@@ -254,7 +254,7 @@ fragment float4 cna_f3d_lit(VLitOut in [[stage_in]], texture2d<float> tex [[text
     return c;
 }
 
-// plan_metal.md METAL-39: real XNA BasicEffect defaults PreferPerPixelLighting=false, which selects
+// plans/plan_metal.md METAL-39: real XNA BasicEffect defaults PreferPerPixelLighting=false, which selects
 // a per-vertex (Gouraud) lit shader family -- lighting is computed ONCE per vertex and interpolated
 // across the triangle, not re-evaluated per fragment. cna_v3d_lit/cna_f3d_lit above are the
 // PreferPerPixelLighting=true family; this is its per-vertex-lit sibling, ported line-for-line from
@@ -291,7 +291,7 @@ fragment float4 cna_f3d_lit_vertexlit(VLitVertexLitOut in [[stage_in]], texture2
     return c;
 }
 
-// EnvironmentMapEffect (plan_metal.md METAL-64/66-68), ported line-for-line from
+// EnvironmentMapEffect (plans/plan_metal.md METAL-64/66-68), ported line-for-line from
 // EasyGLRenderer::EnsureEnvMapped3DProgram()'s real GLSL. Real XNA `EnvironmentMapEffect`
 // has no separate AmbientLightColor uniform in its own shader at all -- `GpuDrawParams::
 // emissiveColor`'s own doc comment already documents this: for EnvironmentMapEffect it carries
@@ -355,7 +355,7 @@ fragment float4 cna_f3d_envmap(VEnvOut in [[stage_in]], texture2d<float> tex [[t
     return c;
 }
 
-// SkinnedEffect (plan_metal.md METAL-72-80), ported line-for-line from
+// SkinnedEffect (plans/plan_metal.md METAL-72-80), ported line-for-line from
 // EasyGLRenderer::EnsureSkinnedProgram()'s real GLSL. Vertex layout: position(12)+
 // normal(12)+uv(8)+boneWeights(16, real float4, not packed/normalized)+boneIndices(4, packed
 // UChar4, unnormalized -- read as an integer type in-shader, not auto-converted to float like a
@@ -440,7 +440,7 @@ fragment float4 cna_f3d_skinned(VSkinnedOut in [[stage_in]], texture2d<float> te
     return c;
 }
 
-// plan_metal.md METAL-76: real XNA SkinnedEffect defaults PreferPerPixelLighting=false too, same as
+// plans/plan_metal.md METAL-76: real XNA SkinnedEffect defaults PreferPerPixelLighting=false too, same as
 // BasicEffect (METAL-39) -- this is its per-vertex-lit sibling, ported line-for-line from
 // EasyGLRenderer::EnsureSkinnedVertexLitProgram()'s real GLSL (same technique as METAL-39:
 // move the Blinn-Phong math from the fragment stage into the vertex stage, Gouraud-interpolate the
@@ -495,7 +495,7 @@ fragment float4 cna_f3d_skinned_vertexlit(VSkinnedVertexLitOut in [[stage_in]], 
     return c;
 }
 
-// CNAEXT PBR (plan_metal.md METAL-81/83-86, plan_cnj.md CNB-58), ported line-for-line from
+// CNAEXT PBR (plans/plan_metal.md METAL-81/83-86, plans/plan_cnj.md CNB-58), ported line-for-line from
 // EasyGLRenderer::EnsurePbrProgram()'s real GLSL -- the glTF 2.0 spec's own reference
 // metallic-roughness BRDF (Appendix B.3.2-B.3.4: GGX/Trowbridge-Reitz D, Smith-Schlick-GGX
 // visibility with direct-lighting k=(roughness+1)^2/8, Schlick Fresnel). Tangent transforms as a
@@ -613,7 +613,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     return c;
 }
 
-// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82, GLTF-264): GPU skinning plus the same PBR
+// CNAEXT SkinnedPbrEffect (plans/plan_metal.md METAL-82, GLTF-264): GPU skinning plus the same PBR
 // interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
 // tangents remain ordinary directions.
 struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
@@ -653,7 +653,7 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
 }
 
 struct V2In { float2 position; float2 uv; float4 color; };
-// plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
+// plans/plan_metal.md METAL-157/158: was `float2 viewport` (raw physical drawable pixels), completely
 // bypassing virtual-resolution/letterbox scaling -- a real, currently-shipping bug. `scale`/
 // `offset` fold the logical-to-physical-to-NDC chain into one multiply-add; see
 // MetalRenderer::Impl::computeSpriteTransform() for the derivation, hand-verified to
@@ -670,7 +670,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
 }
 )MSL";
 
-    // plan_metal.md METAL-34-style extraction: this formula's real logic now lives in the plain-C++
+    // plans/plan_metal.md METAL-34-style extraction: this formula's real logic now lives in the plain-C++
     // MetalPrimitiveVertexCount.hpp (no Objective-C, buildable and unit-tested on any platform
     // without an Apple toolchain) -- kept as a thin same-signature wrapper here so the existing call
     // site is unaffected.
@@ -686,12 +686,12 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             case PT::TriangleStrip: return MTLPrimitiveTypeTriangleStrip;
             case PT::LineList: return MTLPrimitiveTypeLine;
             case PT::LineStrip: return MTLPrimitiveTypeLineStrip;
-            case PT::PointListEXT: return MTLPrimitiveTypePoint; // plan_metal.md METAL-12: was falling to Triangle
+            case PT::PointListEXT: return MTLPrimitiveTypePoint; // plans/plan_metal.md METAL-12: was falling to Triangle
             default: return MTLPrimitiveTypeTriangle;
         }
     }
 
-    // plan_metal.md METAL-19: the enum-reordering-sensitive XNA-ordinal logic now lives in the
+    // plans/plan_metal.md METAL-19: the enum-reordering-sensitive XNA-ordinal logic now lives in the
     // plain-C++ MetalCompareFunction.hpp (no Objective-C, buildable and unit-tested on any platform
     // without an Apple toolchain) -- kept as a thin same-signature wrapper here, a trivial 1:1
     // name-matching switch onto the real Apple SDK enum, since only that final step genuinely needs
@@ -712,7 +712,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
-    // plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
+    // plans/plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
     // plain-C++ MetalStencilOperation.hpp.
     static MTLStencilOperation metalStencilOp(int op)
     {
@@ -730,7 +730,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
-    // plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
+    // plans/plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
     // plain-C++ MetalBlend.hpp.
     static MTLBlendFactor metalBlendFactor(int xnaBlend)
     {
@@ -753,7 +753,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
-    // plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
+    // plans/plan_metal.md METAL-19: same extraction as metalCompareFunction() above, now backed by the
     // plain-C++ MetalBlendFunction.hpp.
     static MTLBlendOperation metalBlendOp(int xnaBlendFunc)
     {
@@ -768,7 +768,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
-    // plan_metal.md: real bug found and fixed 2026-07-20 -- the previous implementation here used
+    // plans/plan_metal.md: real bug found and fixed 2026-07-20 -- the previous implementation here used
     // three independently-maintained case-set memberships (one per min/mag/mip axis), which had 3
     // of the 9 real XNA TextureFilter values (3/6/7) wrong (min/mag component swapped or dropped
     // relative to what each filter's own name specifies). The real per-filter logic now lives in
@@ -797,7 +797,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         }
     }
 
-    // plan_metal.md METAL-34: the pipeline-cache key/hash types now live in the plain-C++
+    // plans/plan_metal.md METAL-34: the pipeline-cache key/hash types now live in the plain-C++
     // MetalPipelineKey.hpp (no Objective-C, buildable and unit-tested on any platform without an
     // Apple toolchain) -- these aliases let every existing call site in this file keep using the
     // short, unprefixed names unchanged.
@@ -837,7 +837,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 vd.attributes[2].format=MTLVertexFormatFloat2; vd.attributes[2].offset=24; vd.attributes[2].bufferIndex=0;
                 vd.layouts[0].stride=32;
                 return vd;
-            // plan_metal.md METAL-81: PbrEffect layout -- position(12)+normal(12)+tangent(16, real
+            // plans/plan_metal.md METAL-81: PbrEffect layout -- position(12)+normal(12)+tangent(16, real
             // float4: xyz direction + w bitangent-handedness sign, NOT packed/normalized)+uv(8) = 48.
             case 48:
                 vd.attributes[0].format=MTLVertexFormatFloat3; vd.attributes[0].offset=0;  vd.attributes[0].bufferIndex=0;
@@ -846,7 +846,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 vd.attributes[3].format=MTLVertexFormatFloat2; vd.attributes[3].offset=40; vd.attributes[3].bufferIndex=0;
                 vd.layouts[0].stride=48;
                 return vd;
-            // plan_metal.md METAL-72: SkinnedEffect layout -- position(12)+normal(12)+uv(8)+
+            // plans/plan_metal.md METAL-72: SkinnedEffect layout -- position(12)+normal(12)+uv(8)+
             // boneWeights(16, real float4)+boneIndices(4, packed UChar4, UNNORMALIZED -- read as
             // an integer type in-shader, not MTLVertexFormatUChar4Normalized's auto-float-convert)
             // = 52; +color(4, packed UChar4Normalized) = 56.
@@ -867,7 +867,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 vd.attributes[5].format=MTLVertexFormatUChar4Normalized; vd.attributes[5].offset=52; vd.attributes[5].bufferIndex=0;
                 vd.layouts[0].stride=56;
                 return vd;
-            // plan_metal.md METAL-82: SkinnedPbrEffect layout -- position(12)+normal(12)+
+            // plans/plan_metal.md METAL-82: SkinnedPbrEffect layout -- position(12)+normal(12)+
             // tangent(16, real float4 as in the unskinned PBR case)+uv(8)+boneWeights(16)+
             // boneIndices(4, UNNORMALIZED UChar4 as in the stride-52/56 skinned case) = 68.
             case 68:
@@ -880,11 +880,11 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
                 vd.layouts[0].stride=68;
                 return vd;
             default:
-                throw std::runtime_error("Metal: unsupported vertex stride until generic VertexDeclaration pipeline cache is implemented (plan_metal.md METAL-27)");
+                throw std::runtime_error("Metal: unsupported vertex stride until generic VertexDeclaration pipeline cache is implemented (plans/plan_metal.md METAL-27)");
         }
     }
 
-    // plan_metal.md METAL-27: translates one MetalVertexAttribKind (plain C++, see
+    // plans/plan_metal.md METAL-27: translates one MetalVertexAttribKind (plain C++, see
     // MetalVertexAttribFormat.hpp) to the real Apple MTLVertexFormat it stands in for -- the one
     // piece of this table that must live here rather than in the plain-C++ header, since
     // MTLVertexFormat is declared only in <Metal/Metal.h>. Deliberately a trivial 1:1 rename (each
@@ -909,7 +909,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         return MTLVertexFormatFloat3;
     }
 
-    // plan_metal.md METAL-26/27: builds a real MTLVertexDescriptor from an arbitrary
+    // plans/plan_metal.md METAL-26/27: builds a real MTLVertexDescriptor from an arbitrary
     // VertexElement list -- the generic counterpart to vertexDescriptorForStride()'s 8 hand-written
     // fixed layouts above. The actual attribute-shape decisions (which MetalVertexAttribKind, which
     // offset, which location) are made by the already-tested, plain-C++
@@ -932,11 +932,11 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         return vd;
     }
 
-    // plan_metal.md METAL-6/24: real per-BlendState blend factors/operation, replacing the
+    // plans/plan_metal.md METAL-6/24: real per-BlendState blend factors/operation, replacing the
     // previous hardcoded-into-every-pipeline straight-alpha blend. When !blend.enabled, blending
     // is left off entirely (matches BlendState.Opaque's real observable behavior).
     //
-    // plan_metal.md METAL-112/113: `colorCount` (default 1, every pre-MRT call site unaffected)
+    // plans/plan_metal.md METAL-112/113: `colorCount` (default 1, every pre-MRT call site unaffected)
     // declares the SAME format/blend for `colorCount` simultaneous attachments, matching
     // VulkanRenderer's own identical "one VkPipelineColorBlendAttachmentState replicated
     // colorAttachmentCount times" precedent (confirmed by reading it directly) -- XNA's own
@@ -944,7 +944,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // blend to vary here even during real MRT. Every attachment always shares
     // MTLPixelFormatBGRA8Unorm (MetalRenderTargetRenderer's own hardcoded choice, see narrative item
     // 77), so only the loop bound needs to change, not a per-slot format lookup.
-    // plan_metal.md METAL-104: `sampleCount` (default 1, every pre-MSAA call site unaffected) must
+    // plans/plan_metal.md METAL-104: `sampleCount` (default 1, every pre-MSAA call site unaffected) must
     // match the active render pass's own sample count exactly, or pipeline creation is the same
     // class of genuine Metal API validation error `colorCount` above already documents for
     // attachment count -- an independent, orthogonal axis from MRT (a pipeline can be
@@ -987,7 +987,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     // to match MSL's `constant` address-space layout rules).
     struct UMaterialParams { float diffuseColor[4]; float alphaTest[4]; float flags[4]; };
 
-    // plan_metal.md METAL-34-style extraction: this row-major 4x4 matrix helper set's real logic
+    // plans/plan_metal.md METAL-34-style extraction: this row-major 4x4 matrix helper set's real logic
     // now lives in the plain-C++ MetalMat4.hpp (no Objective-C, buildable and unit-tested on any
     // platform without an Apple toolchain) -- kept as thin same-name aliases/wrappers here so every
     // existing call site in this file is unaffected.
@@ -996,7 +996,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     static Mat4 fromXna(const Matrix& x) { return MetalMat4FromXna(x); }
     static Mat4 transpose(const Mat4& x) { return MetalMat4Transpose(x); }
 
-    // plan_metal.md METAL-34-style extraction: these struct mirrors and their fill functions now
+    // plans/plan_metal.md METAL-34-style extraction: these struct mirrors and their fill functions now
     // live in the plain-C++ MetalUniformFill.hpp (no Objective-C, buildable and unit-tested on any
     // platform without an Apple toolchain) -- kept as thin same-name aliases here so every existing
     // call site in this file is unaffected.
@@ -1010,7 +1010,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     using PbrUniforms = MetalPbrUniforms;
     using SkinnedPbrTransform = MetalSkinnedPbrTransform;
 
-    // plan_metal.md METAL-34-style extraction: this formula's real logic now lives in the plain-C++
+    // plans/plan_metal.md METAL-34-style extraction: this formula's real logic now lives in the plain-C++
     // MetalNormalMatrix.hpp (no Objective-C, buildable and unit-tested on any platform without an
     // Apple toolchain) -- kept as a thin same-signature wrapper here so all 3 existing call sites
     // in this file are unaffected.
@@ -1055,7 +1055,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         int GetWidth() const override { return w_; }
         int GetHeight() const override { return h_; }
 
-        // plan_metal.md METAL-256: real bug found (Phase 18's own resource-lifetime audit, METAL-175)
+        // plans/plan_metal.md METAL-256: real bug found (Phase 18's own resource-lifetime audit, METAL-175)
         // and fixed here -- the original implementation mutated `texture_` in place via
         // `replaceRegion:`, which Apple's own Metal synchronization guidance is explicit is NOT
         // automatically protected the way reference-counted object lifetime is (unlike
@@ -1158,7 +1158,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     class MetalTextureCube final : public ITextureCubeRenderer
     {
     public:
-        // plan_metal.md METAL-122: `queue` is stored (retained) purely so GetData() below can blit
+        // plans/plan_metal.md METAL-122: `queue` is stored (retained) purely so GetData() below can blit
         // -- found while implementing RenderTargetCube's own GetData() that TextureCube.cpp's real
         // code (not just this interface's own doc comment) *always* calls renderer_->GetData()
         // unconditionally, with no CPU-side pixel-shadow shortcut the way Texture2D has; unlike the
@@ -1275,7 +1275,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     class MetalTexture3D final : public ITexture3DRenderer
     {
     public:
-        // plan_metal.md METAL-122 (3D analog): same finding as MetalTextureCube above --
+        // plans/plan_metal.md METAL-122 (3D analog): same finding as MetalTextureCube above --
         // Texture3D.cpp's real code always calls renderer_->GetData() unconditionally, no CPU-side
         // shadow shortcut, so this was a real, previously-shipping gap for any Texture3D, not just
         // a render-target-only concern.
@@ -1317,7 +1317,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
             ownerHealthCheck_();
             return true;
         }
-        // plan_metal.md METAL-125: real per-level readback via the shared blit helper -- slice is
+        // plans/plan_metal.md METAL-125: real per-level readback via the shared blit helper -- slice is
         // always 0 for a 3D texture (there is no per-slice concept the way a cube's 6 faces have;
         // `z`/`depth` address the volume directly within slice 0).
         bool GetData(int level,int x,int y,int z,int w,int h,int depth,void* data,int dataLength) const override
@@ -1407,7 +1407,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
         int GetVertexCount() const override { return count_; }
         id<MTLBuffer> native() const { return buffer_; }
         std::size_t stride() const { return stride_; }
-        // plan_metal.md METAL-26: generic-layout hook (IVertexBufferRenderer's own doc comment,
+        // plans/plan_metal.md METAL-26: generic-layout hook (IVertexBufferRenderer's own doc comment,
         // Task 1080) -- just stores the declaration, mirroring
         // EasyGLVertexBufferRenderer::SetVertexDeclaration()'s own identical trivial-storage
         // pattern exactly. Every native draw route now validates this captured declaration against
@@ -1445,7 +1445,7 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
     };
 }
 
-// plan_metal.md Phase 10: forward-declared so Impl can hold a non-owning pointer to whichever
+// plans/plan_metal.md Phase 10: forward-declared so Impl can hold a non-owning pointer to whichever
 // MetalRenderTargetRenderer is currently bound (ownership lives in the RenderTarget2D C++ object
 // via its own unique_ptr<IRenderTargetRenderer>, matching every other renderer's convention) --
 // MetalRenderTargetRenderer itself is defined later, after Impl, since it needs Impl to be a
@@ -1454,12 +1454,12 @@ fragment float4 cna_f2d(V2Out in [[stage_in]], texture2d<float> tex [[texture(0)
 // same reason -- C++ allows this: a member function's body has complete-class access to sibling
 // members regardless of textual declaration/definition order.
 class MetalRenderTargetRenderer;
-// plan_metal.md METAL-109: same forward-declaration reasoning as MetalRenderTargetRenderer above,
+// plans/plan_metal.md METAL-109: same forward-declaration reasoning as MetalRenderTargetRenderer above,
 // for the cube-map analog -- Impl needs a non-owning pointer to whichever RenderTargetCube face is
 // currently bound.
 class MetalRenderTargetCubeRenderer;
 
-// plan_metal.md Phase 10: a previously-rendered-to RenderTarget2D used as an ordinary texture in a
+// plans/plan_metal.md Phase 10: a previously-rendered-to RenderTarget2D used as an ordinary texture in a
 // later draw (post-processing, portals, mirrors, etc.) is a real, common XNA pattern --
 // MetalRenderTargetRenderer does NOT inherit from MetalTexture (they are separate sibling
 // hierarchies that both implement ITextureRenderer directly, matching the real interface shape:
@@ -1472,7 +1472,7 @@ class MetalRenderTargetCubeRenderer;
 // out-of-line after MetalRenderTargetRenderer for the same reason as resolveActiveAttachments above.
 static id<MTLTexture> nativeTextureFor(const ITextureRenderer* t);
 
-// plan_metal.md METAL-109/METAL-64ff: same reasoning as nativeTextureFor() above, for the cube
+// plans/plan_metal.md METAL-109/METAL-64ff: same reasoning as nativeTextureFor() above, for the cube
 // case -- EnvironmentMapEffect's envMap slot is an ITextureCubeRenderer*, and a RenderTargetCube
 // rendered into and then sampled as a reflection source (a very common real-time-reflection XNA
 // pattern -- arguably RenderTargetCube's single most common real use) must resolve through here
@@ -1491,7 +1491,7 @@ static void releaseMetalDrawable(id<CAMetalDrawable> value)
     [value release];
 }
 
-// plan_metal.md METAL-104/105: real MSAA. `texture2DDescriptorWithPixelFormat:...mipmapped:`
+// plans/plan_metal.md METAL-104/105: real MSAA. `texture2DDescriptorWithPixelFormat:...mipmapped:`
 // (used everywhere else in this file) always produces an `MTLTextureType2D` descriptor with no way
 // to request multisampling -- a genuinely multisampled texture needs an explicit
 // `MTLTextureType2DMultisample` descriptor with `sampleCount` set, built by hand instead of via
@@ -1523,7 +1523,7 @@ struct MetalRenderer::Impl
     id<MTLDevice> device=nil;
     id<MTLCommandQueue> queue=nil;
     id<MTLLibrary> library=nil;
-    // plan_metal.md METAL-33: no eviction by design, not an oversight -- see
+    // plans/plan_metal.md METAL-33: no eviction by design, not an oversight -- see
     // MetalPipelineKey.hpp's own MetalPipelineCacheKey comment for the real bounded-size reasoning.
     std::unordered_map<PipelineCacheKey, id<MTLRenderPipelineState>, PipelineCacheKeyHash> pipelineCache;
     id<MTLDepthStencilState> depthState=nil;
@@ -1539,7 +1539,7 @@ struct MetalRenderer::Impl
         std::make_shared<MetalResourceHealth>(commandFailureLatch);
     MetalFrameAvailabilityState frameAvailability{};
     id<MTLTexture> depthTexture=nil;
-    // plan_metal.md METAL-104/105: real backbuffer MSAA. `deviceSampleCount` is the real,
+    // plans/plan_metal.md METAL-104/105: real backbuffer MSAA. `deviceSampleCount` is the real,
     // device-clamped sample count (1 = no MSAA) -- set at construction from
     // GraphicsRendererCreateArgs::multiSampleCount, and reconfigurable at runtime via
     // ApplyMultiSampleCount() (GraphicsDevice::Reset() forwarding a changed
@@ -1565,7 +1565,7 @@ struct MetalRenderer::Impl
     MTLTriangleFillMode fill=MTLTriangleFillModeFill;
     float depthBias=0,slopeBias=0;
     BlendKey currentBlend; // real per-BlendState pipeline selection key, see ApplyBlendState() below
-    // plan_metal.md METAL-7/9/10: real DepthStencilState fields, defaults matching
+    // plans/plan_metal.md METAL-7/9/10: real DepthStencilState fields, defaults matching
     // DepthStencilState::DepthStencilState()'s own real values exactly (DepthStencilState.cpp).
     int depthFunc=3;               // CompareFunction::LessEqual -- DepthStencilState.Default's own value
     bool stencilEnabled=false;
@@ -1614,7 +1614,7 @@ struct MetalRenderer::Impl
         refStencil=state.refStencil;
     }
 
-    // plan_metal.md METAL-136/137: real occlusion queries via MTLVisibilityResultBuffer. This
+    // plans/plan_metal.md METAL-136/137: real occlusion queries via MTLVisibilityResultBuffer. This
     // buffer must be attached to the MTLRenderPassDescriptor at render-pass-creation time (Metal
     // has no way to attach it mid-encoder the way setVisibilityResultMode:offset: can be called
     // mid-encoder) -- so it is allocated once here and referenced by every render pass
@@ -1625,14 +1625,14 @@ struct MetalRenderer::Impl
     id<MTLBuffer> visibilityBuffer=nil;
     int nextQuerySlot=0;
 
-    // plan_metal.md Phase 10 (METAL-98/107): non-owning pointer to whichever RenderTarget2D is
+    // plans/plan_metal.md Phase 10 (METAL-98/107): non-owning pointer to whichever RenderTarget2D is
     // currently bound; nullptr means "drawing to the backbuffer" (the default). Ownership lives in
     // the RenderTarget2D C++ object's own unique_ptr<IRenderTargetRenderer>, matching every other
     // renderer's convention -- MetalRenderTargetRenderer's own destructor clears this pointer if it
     // is destroyed while still bound, so it never dangles.
     MetalRenderTargetRenderer* currentRenderTarget=nullptr;
 
-    // plan_metal.md METAL-109/110: same non-owning-pointer convention as currentRenderTarget above,
+    // plans/plan_metal.md METAL-109/110: same non-owning-pointer convention as currentRenderTarget above,
     // for whichever face of whichever RenderTargetCube is currently bound (mutually exclusive with
     // currentRenderTarget -- SetRenderTarget2D()/SetRenderTargetCubeFace() each cross-unbind the
     // other before binding, matching EasyGLRenderer::SetRenderTarget2D/SetRenderTargetCubeFace's
@@ -1640,7 +1640,7 @@ struct MetalRenderer::Impl
     MetalRenderTargetCubeRenderer* currentRenderTargetCube=nullptr;
     NSUInteger currentRenderTargetCubeFace=0;
 
-    // plan_metal.md METAL-112/113: real MRT. `currentMRT.size()>=2` means true simultaneous
+    // plans/plan_metal.md METAL-112/113: real MRT. `currentMRT.size()>=2` means true simultaneous
     // multi-attachment rendering is active; `currentMRT[0]` is always mirrored into
     // currentRenderTarget above too (so computeSpriteTransform()/the single-target destructor
     // safety net/etc. keep working unmodified against target 0), but ensureFrame()/clear() check
@@ -1656,7 +1656,7 @@ struct MetalRenderer::Impl
     int activeColorAttachmentCount=1;
     void unbindCurrentMRT();
 
-    // plan_metal.md METAL-87: fallback textures for PbrEffect's 4 optional maps (normalMap/
+    // plans/plan_metal.md METAL-87: fallback textures for PbrEffect's 4 optional maps (normalMap/
     // metallicRoughnessMap/emissiveMap/occlusionMap) when left unbound, mirroring
     // EasyGLRenderer::EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture() exactly
     // -- a null map must not sample garbage or crash. White (255,255,255,255) is the correct
@@ -1677,7 +1677,7 @@ struct MetalRenderer::Impl
     // inconsistency between the two encoder-creation paths, fixed here by sharing one function.
     void applyTrackedEncoderState()
     {
-        // plan_metal.md METAL-5: explicit, not relied-on-by-accident. XNA CullMode's
+        // plans/plan_metal.md METAL-5: explicit, not relied-on-by-accident. XNA CullMode's
         // CullClockwiseFace(1)/CullCounterClockwiseFace(2) map to MTLCullModeFront/Back exactly like
         // VulkanRenderer's own VK_CULL_MODE_FRONT_BIT/BACK_BIT mapping (see its own comment:
         // "Pipeline uses VK_FRONT_FACE_CLOCKWISE, so CW faces are front faces") ONLY if Metal's front
@@ -1701,7 +1701,7 @@ struct MetalRenderer::Impl
         [encoder setBlendColorRed:blendColor[0] green:blendColor[1] blue:blendColor[2] alpha:blendColor[3]];
     }
 
-    // plan_metal.md Phase 10 (METAL-98/100/107): resolves the color+depth textures for whatever's
+    // plans/plan_metal.md Phase 10 (METAL-98/100/107): resolves the color+depth textures for whatever's
     // currently active -- either the bound MetalRenderTargetRenderer, or (if none) the backbuffer
     // drawable (acquiring a fresh one via nextDrawable if not already held). Declared here,
     // defined out-of-line after MetalRenderTargetRenderer's own definition (see the forward-decl's
@@ -1717,11 +1717,11 @@ struct MetalRenderer::Impl
     // a minimized/background window). That failed acquisition is latched for the rest of the
     // logical frame: Clear, draws, markers, and Present skip without throwing or retrying, while
     // offscreen render-target work remains available. Present resets the latch for the next frame.
-    // plan_metal.md METAL-109/110: sliceOut is always 0 except when a RenderTargetCube face is the
+    // plans/plan_metal.md METAL-109/110: sliceOut is always 0 except when a RenderTargetCube face is the
     // active target (MTLRenderPassColorAttachmentDescriptor.slice selects which cube face/array
     // layer of colorOut a render pass actually writes to; 0 is simply ignored/inert for a plain 2D
     // texture, so callers can set it unconditionally with no branching of their own).
-    // plan_metal.md METAL-104: `resolveOut` (nil unless MSAA is engaged for whatever's currently
+    // plans/plan_metal.md METAL-104: `resolveOut` (nil unless MSAA is engaged for whatever's currently
     // active) and `sampleCountOut` (always 1 unless `resolveOut` is non-nil) were added alongside
     // the pre-existing 3 out-params for real backbuffer/RenderTarget2D MSAA -- a non-nil
     // `resolveOut` means `colorOut` is a multisampled texture that must be resolved into
@@ -1731,14 +1731,14 @@ struct MetalRenderer::Impl
     // MRT+MSAA scope decision below) -- its own branch below never sets resolveOut.
     bool resolveActiveAttachments(id<MTLTexture>& colorOut, id<MTLTexture>& resolveOut, id<MTLTexture>& depthOut, NSUInteger& sliceOut, int& sampleCountOut);
 
-    // plan_metal.md METAL-112: the MRT-aware sibling of resolveActiveAttachments() above, used only
+    // plans/plan_metal.md METAL-112: the MRT-aware sibling of resolveActiveAttachments() above, used only
     // by ensureFrame()/clear() (every other caller -- computeSpriteTransform(), etc. -- only ever
     // needs target 0, already available via currentRenderTarget directly). Declared here, defined
     // out-of-line after MetalRenderTargetRenderer for the same incomplete-type reason as
     // resolveActiveAttachments()/computeSpriteTransform() above -- its body calls
     // currentMRT[i]->colorTexture()/depthTextureNative(), which need the complete type.
     //
-    // plan_metal.md METAL-104: true MRT (currentMRT.size()>=2) and MSAA are deliberately never
+    // plans/plan_metal.md METAL-104: true MRT (currentMRT.size()>=2) and MSAA are deliberately never
     // combined in this pass -- every MRT draw always runs at sample count 1 regardless of
     // deviceSampleCount, matching real-world XNA usage (MSAA is a single-target scene-
     // anti-aliasing feature; deferred/G-buffer-style MRT rendering practically never also wants
@@ -1751,7 +1751,7 @@ struct MetalRenderer::Impl
     // fixed-attachment for their whole encoder lifetime, unlike GL's dynamic FBO rebinding, so
     // switching what's being rendered to always means ending the current pass first).
     //
-    // plan_metal.md METAL-180 (Phase 18 audit): `presentBackbuffer` MUST be false for every call
+    // plans/plan_metal.md METAL-180 (Phase 18 audit): `presentBackbuffer` MUST be false for every call
     // site except endFrame()/Present() itself. This was a real, previously-shipped bug: the
     // original version always called `presentDrawable:` here whenever `drawable` was non-nil,
     // which fires on *every* mid-frame encoder boundary, not just real end-of-frame -- clear()
@@ -1856,11 +1856,11 @@ struct MetalRenderer::Impl
             [command retain];
             MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
             if(!rp) throw std::runtime_error("Metal: failed to allocate render-pass descriptor");
-            // plan_metal.md METAL-112: loop bound is 1 outside MRT (colors.size()==1, identical to the
+            // plans/plan_metal.md METAL-112: loop bound is 1 outside MRT (colors.size()==1, identical to the
             // original single-attachment code this replaced), up to Metal's own 8-attachment hardware
             // limit during real SetRenderTargets() MRT.
             //
-            // plan_metal.md METAL-104: a non-nil resolves[i] means colors[i] is this frame's
+            // plans/plan_metal.md METAL-104: a non-nil resolves[i] means colors[i] is this frame's
             // multisampled render target -- StoreAndMultisampleResolve both keeps colors[i]'s own
             // content (needed across this file's own mid-frame encoder boundaries, see
             // msaaColorTexture's field comment) and resolves it into resolves[i] (the real drawable/
@@ -1918,11 +1918,11 @@ struct MetalRenderer::Impl
             [command retain];
             MTLRenderPassDescriptor* rp=[MTLRenderPassDescriptor renderPassDescriptor];
             if(!rp) throw std::runtime_error("Metal: failed to allocate clear render-pass descriptor");
-            // plan_metal.md METAL-112: Clear()'s own real XNA contract clears every currently-bound
+            // plans/plan_metal.md METAL-112: Clear()'s own real XNA contract clears every currently-bound
             // render target to the same color -- matches GraphicsDevice.Clear(color)'s documented
             // behavior regardless of how many targets SetRenderTargets() bound.
             //
-            // plan_metal.md METAL-104: same StoreAndMultisampleResolve reasoning as ensureFrame() above.
+            // plans/plan_metal.md METAL-104: same StoreAndMultisampleResolve reasoning as ensureFrame() above.
             for (NSUInteger i=0;i<colors.size();++i) {
                 rp.colorAttachments[i].texture=colors[i]; rp.colorAttachments[i].slice=slice; rp.colorAttachments[i].loadAction=color?MTLLoadActionClear:MTLLoadActionLoad; rp.colorAttachments[i].clearColor=MTLClearColorMake(r,g,b,a);
                 if (resolves[i]) { rp.colorAttachments[i].resolveTexture=resolves[i]; rp.colorAttachments[i].storeAction=MTLStoreActionStoreAndMultisampleResolve; }
@@ -1954,7 +1954,7 @@ struct MetalRenderer::Impl
         MTLDepthStencilDescriptor* d=(MTLDepthStencilDescriptor*)descriptorOwner.Get();
         d.depthCompareFunction = depthEnabled ? metalCompareFunction(depthFunc) : MTLCompareFunctionAlways;
         d.depthWriteEnabled=MetalEffectiveDepthWriteEnabled(depthEnabled,depthWrite);
-        // plan_metal.md METAL-9/10: real front/back stencil test, replacing the previous
+        // plans/plan_metal.md METAL-9/10: real front/back stencil test, replacing the previous
         // reference-value-only plumbing. Front face carries XNA's "normal" stencil fields; back
         // face carries the CounterClockwise fields when TwoSidedStencilMode is set, else mirrors
         // front exactly -- matches FNA's own real behavior (CCW fields are simply ignored when
@@ -1964,7 +1964,7 @@ struct MetalRenderer::Impl
         // Vulkan-style NDC Y-flip in this codebase's vertex shaders (Vulkan's own swap was an
         // empirically-found compensation for that Y-flip's winding interaction, root-caused to
         // Vulkan specifically, not a general rule) -- but this has NOT been empirically verified
-        // on real Metal hardware and must be treated as unproven until it is (plan_metal.md
+        // on real Metal hardware and must be treated as unproven until it is (plans/plan_metal.md
         // Testing strategy tier 2/3).
         if (stencilEnabled) {
             MetalObjectOwner frontOwner(retainMetalObject,releaseMetalObject);
@@ -2006,16 +2006,16 @@ struct MetalRenderer::Impl
         if(encoder) [encoder setDepthStencilState:depthState];
     }
 
-    // plan_metal.md METAL-23/29: replaces the 5 eagerly-built named pipeline fields with a
+    // plans/plan_metal.md METAL-23/29: replaces the 5 eagerly-built named pipeline fields with a
     // lazily-populated cache keyed by (shader/vertex-layout variant, current blend state).
     id<MTLRenderPipelineState> getOrCreatePipeline(PipelineKind kind)
     {
-        // plan_metal.md METAL-112/113: clamped the same way SetRenderTargets() itself clamps
+        // plans/plan_metal.md METAL-112/113: clamped the same way SetRenderTargets() itself clamps
         // count, and again here as a defensive bound on whatever activeColorAttachmentCount
         // currently holds -- MTLPipelineCacheKey's own field is a uint8_t, and 8 is Metal's own
         // hardware attachment limit either way.
         const uint8_t colorCount = (uint8_t)std::clamp(activeColorAttachmentCount, 1, 8);
-        // plan_metal.md METAL-104: same defensive-clamp reasoning as colorCount above, for the
+        // plans/plan_metal.md METAL-104: same defensive-clamp reasoning as colorCount above, for the
         // orthogonal MSAA axis -- activeSampleCount is always one of {1,2,4,8} in practice
         // Historical code only ever produced {1,2,4,8}; the supported contract currently keeps 1.
         const uint8_t sampleCountKey = (uint8_t)std::clamp(activeSampleCount, 1, 8);
@@ -2040,7 +2040,7 @@ struct MetalRenderer::Impl
             case PipelineKind::SkinnedPbr68:      vs=@"cna_v3d_skinned_pbr";  fs=@"cna_f3d_pbr";      stride=68; break;
             case PipelineKind::Sprite2D:         vs=@"cna_v2d";          fs=@"cna_f2d";          stride=0;  break;
         }
-        // plan_metal.md: real bug found and fixed 2026-07-20 -- MTLVertexDescriptor is a concrete
+        // plans/plan_metal.md: real bug found and fixed 2026-07-20 -- MTLVertexDescriptor is a concrete
         // Objective-C class (unlike MTLTexture/MTLBuffer/MTLRenderPipelineState etc., which are
         // protocols), so it needs a plain `MTLVertexDescriptor*` pointer, not the `id<Protocol>`
         // syntax used everywhere else in this file -- vertexDescriptorForStride() itself already
@@ -2076,14 +2076,14 @@ struct MetalRenderer::Impl
         return inserted->second;
     }
 
-    // plan_metal.md Phase 15 (METAL-153/155/156/158/159): the shared letterbox/overscan/stretch/
+    // plans/plan_metal.md Phase 15 (METAL-153/155/156/158/159): the shared letterbox/overscan/stretch/
     // native/fixed-height-dynamic-width viewport math, ported near-verbatim from the already-
     // shipped GPU presentation implementation rather than re-derived from scratch.
     // `width`/`height`/`x`/`y` are the logical canvas's rectangle in
     // physical window pixels; `logicalWidth`/`logicalHeight` are the virtual-resolution size that
     // rectangle represents (equal to the physical size whenever no virtual resolution is set,
     // which is also this struct's all-zero-input-safe degenerate case).
-    // plan_metal.md METAL-34-style extraction: the real arithmetic now lives in the plain-C++
+    // plans/plan_metal.md METAL-34-style extraction: the real arithmetic now lives in the plain-C++
     // MetalLogicalViewport.hpp (no Objective-C, buildable and unit-tested on any platform without
     // an Apple toolchain) -- kept as a thin same-name alias plus a wrapper here so all existing call
     // sites in this file are unaffected; physical sizing comes from the latest platform snapshot.
@@ -2097,7 +2097,7 @@ struct MetalRenderer::Impl
         return vp;
     }
 
-    // plan_metal.md METAL-157/158: previously `cna_v2d` mapped sprite coordinates directly from
+    // plans/plan_metal.md METAL-157/158: previously `cna_v2d` mapped sprite coordinates directly from
     // raw physical drawable pixels, completely bypassing virtual resolution/letterboxing -- a
     // real, currently-shipping bug whenever the physical window size differs from the requested
     // virtual resolution. Algebraically folding computeLogicalViewport()'s rect + the physical
@@ -2106,7 +2106,7 @@ struct MetalRenderer::Impl
     // inspection) to the original `px/dw*2-1, 1-py/dh*2` formula -- zero behavior change for every
     // draw that isn't using virtual resolution today.
     struct Sprite2DTransform { float scaleX=1, scaleY=1, offsetX=0, offsetY=0; };
-    // plan_metal.md Phase 10: real bug found and fixed while adding RenderTarget2D support -- this
+    // plans/plan_metal.md Phase 10: real bug found and fixed while adding RenderTarget2D support -- this
     // used to read `drawable.texture.width/height` unconditionally, but `drawable` is nil whenever
     // a RenderTarget2D is currently bound (see resolveActiveAttachments()'s render-target branch,
     // which never touches `drawable` at all), so a message-to-nil would silently degrade to
@@ -2117,7 +2117,7 @@ struct MetalRenderer::Impl
     // its body now calls currentRenderTarget->colorTexture(), which needs the complete type).
     Sprite2DTransform computeSpriteTransform() const;
 
-    // plan_metal.md METAL-153/154: real window<->logical coordinate transforms, previously
+    // plans/plan_metal.md METAL-153/154: real window<->logical coordinate transforms, previously
     // entirely unimplemented (base `IGraphicsRenderer` default returns false) -- the input bridge
     // depends on this for correct mouse coordinates on any letterboxed/scaled window, per this
     // method's own doc comment on IGraphicsRenderer.hpp. Ported from the established GPU
@@ -2172,7 +2172,7 @@ MetalRenderer::Impl::~Impl()
     [device release]; device=nil;
 }
 
-// plan_metal.md Phase 14 (METAL-142-152): Custom ShaderEffect / MSL contract.
+// plans/plan_metal.md Phase 14 (METAL-142-152): Custom ShaderEffect / MSL contract.
 //
 // Scope decision (METAL-142/143), based on reading VulkanEffectRenderer/D3D11EffectRenderer/
 // D3D12EffectRenderer directly rather than assuming: each of those three carries an explicit
@@ -2272,7 +2272,7 @@ public:
     // re-reading this effect's current uniform bytes on every draw call is both simpler and more
     // correct: a SetUniformXxx() call between two Draw()s in the same Begin/End genuinely takes
     // effect on the next sprite, not just the next batch).
-    // plan_metal.md METAL-104: also rebuilds when owner_.activeSampleCount changes, the same
+    // plans/plan_metal.md METAL-104: also rebuilds when owner_.activeSampleCount changes, the same
     // "genuine Metal API validation error otherwise" reasoning makePipeline()'s own sampleCount
     // parameter documents -- a custom SpriteBatch effect drawn while the backbuffer/RenderTarget2D
     // happens to be MSAA-enabled needs a pipeline whose own sampleCount matches, exactly like every
@@ -2350,7 +2350,7 @@ private:
     id<MTLFunction> fragFn_ = nil;
     id<MTLRenderPipelineState> pipeline_ = nil;
     BlendKey lastBlend_{};
-    int lastSampleCount_=1; // plan_metal.md METAL-104
+    int lastSampleCount_=1; // plans/plan_metal.md METAL-104
     bool valid_ = false;
     std::string compileError_;
     // Defaults match the identity matrix / transparent-black color / zero scalar a fresh custom
@@ -2369,14 +2369,14 @@ public:
     void End() override { begun_=false; }
     void SetSamplerFilter(int f) override { filter_=f; }
     void SetSamplerAddressMode(int addressU,int addressV) override { addressU_=addressU; addressV_=addressV; }
-    // plan_metal.md METAL-182/183: previously entirely unimplemented (base no-op) -- `cna_v2d` had
+    // plans/plan_metal.md METAL-182/183: previously entirely unimplemented (base no-op) -- `cna_v2d` had
     // no matrix uniform at all, so `SpriteBatch.Begin(transformMatrix)` had zero effect on Metal.
     // Applied as a 2D point transform (z=0) on the already-screen-space quad corners, matching the
     // same convention this plan's own research found `SOFTWARE`'s `SetTransformMatrix` already
     // uses -- CPU-side, not threaded through the vertex shader, so identity (the default) costs
     // nothing extra and is provably a no-op.
     void SetTransformMatrix(const Matrix& m) override { transform_=m; }
-    // plan_metal.md Phase 14 (METAL-145/148/149): mirrors D3D11SpriteBatchRenderer's own
+    // plans/plan_metal.md Phase 14 (METAL-145/148/149): mirrors D3D11SpriteBatchRenderer's own
     // `customEffect_ = effect;` (just stores the raw Effect* -- the actual IEffectRenderer is
     // resolved fresh in Draw() via GetEffectRendererPtr(), never cached here, so a mid-batch
     // Effect::Clone()/reassignment can't leave this pointing at a stale renderer).
@@ -2393,13 +2393,13 @@ public:
     void Draw(const ITextureRenderer& t,const Rectangle& d,const Rectangle& s,const Color& c,float rotation,const Vector2& origin,SpriteEffects effects,float) override
     {
         if(!begun_) throw std::runtime_error("Metal SpriteBatch.Draw called outside Begin/End");
-        // plan_metal.md Phase 10: nativeTextureFor() (not a bare MetalTexture dynamic_cast) so
+        // plans/plan_metal.md Phase 10: nativeTextureFor() (not a bare MetalTexture dynamic_cast) so
         // drawing a previously-rendered-to RenderTarget2D as a sprite works, not just a plain Texture2D.
         id<MTLTexture> nativeTex=nativeTextureFor(&t); if(!nativeTex) throw std::runtime_error("Metal: foreign texture renderer");
         auto& p=b_.impl();
         if(!p.ensureFrame()||p.rasterState.ShouldSkipDraw()) return;
         struct V{float x,y,u,v,r,g,b,a;}; V q[6];
-        // plan_metal.md: real bug found and fixed 2026-07-20 -- Rectangle/Vector2 in this codebase
+        // plans/plan_metal.md: real bug found and fixed 2026-07-20 -- Rectangle/Vector2 in this codebase
         // use plain public fields (X/Y/Width/Height), matching real XNA's own struct convention,
         // not the getXProperty()-style getter this line originally guessed at (that convention is
         // real for Color, which this same function correctly uses just below, but Rectangle/
@@ -2415,11 +2415,11 @@ public:
         auto tf=[&](std::array<float,2> q){ float x=q[0],y=q[1]; return std::array<float,2>{x*transform_.M11+y*transform_.M21+transform_.M41, x*transform_.M12+y*transform_.M22+transform_.M42}; };
         auto a=tf(xf(x0,y0)),bb=tf(xf(x1,y0)),cc=tf(xf(x1,y1)),dd=tf(xf(x0,y1));
         V vs[6]={{a[0],a[1],u0,v0,cr,cg,cb,ca},{bb[0],bb[1],u1,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{a[0],a[1],u0,v0,cr,cg,cb,ca},{cc[0],cc[1],u1,v1,cr,cg,cb,ca},{dd[0],dd[1],u0,v1,cr,cg,cb,ca}};
-        // plan_metal.md METAL-157/158: was raw physical-drawable-pixel NDC mapping (`{w,h}`),
+        // plans/plan_metal.md METAL-157/158: was raw physical-drawable-pixel NDC mapping (`{w,h}`),
         // ignoring virtual resolution/letterboxing entirely -- now the real scale+offset transform.
         auto st=p.computeSpriteTransform();
         struct U{float sx,sy,ox,oy;} u{st.scaleX,st.scaleY,st.offsetX,st.offsetY};
-        // plan_metal.md Phase 14 (METAL-145/148): resolved fresh every Draw() call, not cached
+        // plans/plan_metal.md Phase 14 (METAL-145/148): resolved fresh every Draw() call, not cached
         // across the Begin/End block -- see MetalEffectRenderer::pipelineFor()'s own comment for why
         // this (deliberately) makes a SetUniformXxx() call between two Draw()s take effect on the
         // very next sprite, unlike the D3D11/Vulkan once-per-flush precedent.
@@ -2447,7 +2447,7 @@ public:
 private: MetalRenderer& b_; bool begun_=false; int filter_=0; int addressU_=1; int addressV_=1; Matrix transform_=Matrix::getIdentityProperty(); Effect* customEffect_=nullptr;
 };
 
-// plan_metal.md METAL-136-139: real occlusion queries via a shared MTLVisibilityResultBuffer slot
+// plans/plan_metal.md METAL-136-139: real occlusion queries via a shared MTLVisibilityResultBuffer slot
 // per instance. `completed_` is a heap-allocated flag (not a plain bool member) because Objective-C
 // completion-handler blocks capture it by reference into GPU-driven, asynchronously-invoked code
 // that must outlive this object's own Begin()/End() call stack -- a std::shared_ptr keeps it alive
@@ -2493,7 +2493,7 @@ private:
     std::shared_ptr<std::atomic<bool>> completed_;
 };
 
-// plan_metal.md METAL-131/122/125: shared blit-to-staging-buffer readback helper, used by
+// plans/plan_metal.md METAL-131/122/125: shared blit-to-staging-buffer readback helper, used by
 // MetalRenderTargetRenderer/MetalRenderTargetCubeRenderer/MetalTextureCube/MetalTexture3D's
 // GetData() overrides instead of four near-duplicate implementations (matching the task's own
 // "sharing one helper" framing). Uses an independent, freshly-created command buffer rather than
@@ -2537,7 +2537,7 @@ static void blitTextureToClientBuffer(id<MTLDevice> device, id<MTLCommandQueue> 
   destinationBytesPerImage:(depth>1?(NSUInteger)layout.alignedImageBytes:0)];
     [blit endEncoding];
     [cmd commit];
-    [cmd waitUntilCompleted]; // plan_metal.md METAL-133: same intentional correctness-over-throughput stall as ReadBackbuffer().
+    [cmd waitUntilCompleted]; // plans/plan_metal.md METAL-133: same intentional correctness-over-throughput stall as ReadBackbuffer().
     if(cmd.status!=MTLCommandBufferStatusCompleted) throw std::runtime_error("Metal: GetData blit command failed");
     commandHealthCheck();
     const auto* stagingBytes=static_cast<const std::uint8_t*>([staging contents]);
@@ -2572,7 +2572,7 @@ public:
         MetalObjectOwner colorOwner(retainMetalObject,releaseMetalObject);
         MetalObjectOwner msaaOwner(retainMetalObject,releaseMetalObject);
         MetalObjectOwner depthOwner(retainMetalObject,releaseMetalObject);
-        // plan_metal.md METAL-101: MUST be BGRA8Unorm, matching every pipeline's own hardcoded
+        // plans/plan_metal.md METAL-101: MUST be BGRA8Unorm, matching every pipeline's own hardcoded
         // colorAttachments[0].pixelFormat (makePipeline(), keyed to the backbuffer's own format) --
         // Metal requires a render pipeline's declared color-attachment pixel format to exactly
         // match the render pass's real attachment texture, or drawing into this target with any
@@ -2583,7 +2583,7 @@ public:
         // matching MetalTexture's own separate RGBA8Unorm choice for plain (non-render-target)
         // textures, which never needs to match a pipeline's color-attachment format at all.
         //
-        // plan_metal.md METAL-103: `mipmapped:mipMap` makes this convenience initializer allocate
+        // plans/plan_metal.md METAL-103: `mipmapped:mipMap` makes this convenience initializer allocate
         // the full mip chain (mipmapLevelCount = floor(log2(max(w,h)))+1) when requested, matching
         // MTLTextureDescriptor's own documented behavior for this factory method.
         MTLTextureDescriptor* cd=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm width:(NSUInteger)w height:(NSUInteger)h mipmapped:mipMap];
@@ -2591,7 +2591,7 @@ public:
         cd.usage=MTLTextureUsageRenderTarget|MTLTextureUsageShaderRead;
         colorOwner.Adopt([owner->device newTextureWithDescriptor:cd]);
         if(!colorOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTarget2D color texture");
-        // plan_metal.md METAL-104: engaging MSAA needs a SECOND color texture -- colorTexture_
+        // plans/plan_metal.md METAL-104: engaging MSAA needs a SECOND color texture -- colorTexture_
         // above stays the single-sample, sampleable, GetData()-readable texture every existing
         // caller already expects (unaffected either way); msaaColorTexture_ is the real multisampled
         // render target this instance's own render passes actually write into when appliedSampleCount_
@@ -2601,7 +2601,7 @@ public:
             msaaOwner.Adopt(makeMultisampleTexture(owner->device, MTLPixelFormatBGRA8Unorm, (NSUInteger)w, (NSUInteger)h, (NSUInteger)appliedSampleCount_, MTLTextureUsageRenderTarget));
             if(!msaaOwner.HasValue()) throw std::runtime_error("Metal: failed to create RenderTarget2D MSAA color texture");
         }
-        // plan_metal.md METAL-104: the depth attachment's own sample count must match the color
+        // plans/plan_metal.md METAL-104: the depth attachment's own sample count must match the color
         // attachment it's paired with in the same render pass -- a real Metal API constraint, not a
         // style choice -- so this target's depth texture is multisampled too whenever it engages
         // MSAA. Never sampled externally by anything in this codebase (matches
@@ -2632,7 +2632,7 @@ public:
                 owner->endActiveEncoding(false);
                 owner->currentRenderTarget=nullptr;
             }
-        // plan_metal.md METAL-112: same safety net, extended to a real MRT set -- only currentMRT[0]
+        // plans/plan_metal.md METAL-112: same safety net, extended to a real MRT set -- only currentMRT[0]
         // is ever mirrored into currentRenderTarget above, so the check above alone would miss
         // target 1..N-1 being destroyed while still part of the active binding. Invalidates the
         // whole set rather than leave the other targets' own destructors with no way to detect a
@@ -2665,20 +2665,20 @@ public:
     {
         auto owner=lockOwner();
         owner->endActiveEncoding(false); // mid-frame switch, never presents -- see METAL-180 note.
-        // plan_metal.md METAL-112: a single-target bind always means "not MRT" -- clears any stale
+        // plans/plan_metal.md METAL-112: a single-target bind always means "not MRT" -- clears any stale
         // MRT state a previous SetRenderTargets() call left behind, whether this was reached via
         // SetRenderTarget2D() directly or via SetRenderTargets()'s own count==1 delegation.
         owner->currentMRT.clear(); owner->activeColorAttachmentCount=1;
         owner->currentRenderTarget=this;
     }
-    // plan_metal.md METAL-103/112: factored out of UnbindAsRenderTarget() so SetRenderTargets()'s
+    // plans/plan_metal.md METAL-103/112: factored out of UnbindAsRenderTarget() so SetRenderTargets()'s
     // own MRT teardown (Impl::unbindCurrentMRT()) can regenerate mips for every target in an
     // outgoing MRT set, not just whichever one BindAsRenderTarget() itself last tracked.
     void regenerateMipsIfNeeded()
     {
         if (!mipMap_) return;
         auto owner=lockOwner();
-        // plan_metal.md METAL-103: regenerate the full mip chain from level 0's just-rendered
+        // plans/plan_metal.md METAL-103: regenerate the full mip chain from level 0's just-rendered
         // content on every unbind when mipMap was requested, unconditionally -- matches
         // EasyGLRenderTargetRenderer::UnbindAsRenderTarget()'s own established precedent exactly
         // (itself citing FNA3D's OPENGL_ResolveTarget: "if (target->levelCount > 1) { ...
@@ -2743,7 +2743,7 @@ public:
     {
         return definedMipLevels_.IsDefined(level);
     }
-    // plan_metal.md METAL-131: real readback via the shared blit helper, replacing ITextureRenderer's
+    // plans/plan_metal.md METAL-131: real readback via the shared blit helper, replacing ITextureRenderer's
     // inherited no-op default. If this target is still the currently active render target, its
     // pending source-render command is committed, awaited, and checked exactly before the later
     // independent blit. Otherwise the blit could run before a still-uncommitted render pass, or a
@@ -2766,7 +2766,7 @@ public:
         owner->throwPendingCommandFailure();
         return true;
     }
-    // plan_metal.md METAL-104: colorTexture() is UNCHANGED -- still always the single-sample,
+    // plans/plan_metal.md METAL-104: colorTexture() is UNCHANGED -- still always the single-sample,
     // sampleable, GetData()-readable texture, whether or not this target engages MSAA (every
     // existing caller -- shader sampling, GetData() above, blit sources -- keeps working
     // unmodified). colorTextureForRenderPass()/resolveTargetForRenderPass() are the two new,
@@ -2841,7 +2841,7 @@ private:
     id<MTLTexture> depthTexture_=nil;
 };
 
-// plan_metal.md METAL-109/110/111: RenderTargetCube renderer. A single MTLTextureTypeCube color
+// plans/plan_metal.md METAL-109/110/111: RenderTargetCube renderer. A single MTLTextureTypeCube color
 // texture (6 slices) plus ONE shared 2D depth texture reused across every face -- matches
 // EasyGLRenderTargetCubeRenderer's own already-tested precedent exactly (its own comment: "single
 // depth renderbuffer regardless of face (since only one face is ever rendered into at a time) --
@@ -2906,7 +2906,7 @@ public:
     {
         auto owner=lockOwner();
         if (owner->currentRenderTargetCube==this) {
-            // plan_metal.md METAL-103 (cube analog): same unconditional mip-regeneration-on-unbind
+            // plans/plan_metal.md METAL-103 (cube analog): same unconditional mip-regeneration-on-unbind
             // policy as MetalRenderTargetRenderer's own, applied to the whole cube map at once (all
             // 6 faces' mip chains regenerate together in one generateMipmapsForTexture: call --
             // Metal's own documented behavior for a cube texture, matching
@@ -2942,7 +2942,7 @@ public:
         (void)data; (void)dataLength;
         return MetalRenderTargetCubeUploadSupported();
     }
-    // plan_metal.md METAL-131 (cube analog): same shared-helper readback and exact source-command
+    // plans/plan_metal.md METAL-131 (cube analog): same shared-helper readback and exact source-command
     // verification as MetalRenderTargetRenderer::GetData() -- checked against
     // currentRenderTargetCube==this regardless of which face, since every face shares the same
     // underlying MTLTexture object and command-buffer ordering concern.
@@ -2988,7 +2988,7 @@ bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<
 {
     sliceOut = 0; resolveOut = nil; sampleCountOut = 1;
     if (currentRenderTarget) {
-        // plan_metal.md METAL-104: colorTextureForRenderPass()/resolveTargetForRenderPass() collapse
+        // plans/plan_metal.md METAL-104: colorTextureForRenderPass()/resolveTargetForRenderPass() collapse
         // to plain colorTexture()/nil whenever this target doesn't engage MSAA -- this branch's own
         // behavior is byte-identical to before MSAA existed in that (the overwhelmingly common) case.
         colorOut = currentRenderTarget->colorTextureForRenderPass();
@@ -2998,7 +2998,7 @@ bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<
         return true;
     }
     if (currentRenderTargetCube) {
-        // plan_metal.md METAL-104: RenderTargetCube deliberately stays out of MSAA scope for this
+        // plans/plan_metal.md METAL-104: RenderTargetCube deliberately stays out of MSAA scope for this
         // pass (see resolveActiveColorAttachments()'s own MRT+MSAA scope-decision comment for the
         // same reasoning applied to a different axis) -- always single-sampled.
         colorOut = currentRenderTargetCube->colorTexture();
@@ -3014,7 +3014,7 @@ bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<
     if (!drawable.HasValue()) return false;
     const id<CAMetalDrawable> activeDrawable=drawable.Get();
     const NSUInteger w=activeDrawable.texture.width, h=activeDrawable.texture.height;
-    // plan_metal.md METAL-104: real backbuffer MSAA -- msaaColorTexture is lazily (re)allocated on
+    // plans/plan_metal.md METAL-104: real backbuffer MSAA -- msaaColorTexture is lazily (re)allocated on
     // a width/height change exactly like depthTexture below already was, just for a second texture.
     if (deviceSampleCount > 1) {
         if (!msaaColorTexture || msaaColorTexture.width!=w || msaaColorTexture.height!=h) {
@@ -3032,7 +3032,7 @@ bool MetalRenderer::Impl::resolveActiveAttachments(id<MTLTexture>& colorOut, id<
     }
     if(!depthTexture || depthTexture.width!=w || depthTexture.height!=h){
         id<MTLTexture> replacement=nil;
-        // plan_metal.md METAL-104: same "depth sample count must match its paired color attachment"
+        // plans/plan_metal.md METAL-104: same "depth sample count must match its paired color attachment"
         // constraint MetalRenderTargetRenderer's own constructor comment documents, applied to the
         // backbuffer's own depth texture.
         if (deviceSampleCount > 1) {
@@ -3055,12 +3055,12 @@ bool MetalRenderer::Impl::resolveActiveColorAttachments(std::vector<id<MTLTextur
 {
     if (currentMRT.size() >= 2) {
         colorsOut.clear(); resolvesOut.clear();
-        // plan_metal.md METAL-104: true MRT and MSAA are deliberately never combined in this pass
+        // plans/plan_metal.md METAL-104: true MRT and MSAA are deliberately never combined in this pass
         // (see this method's own declaration comment for the full reasoning) -- every MRT target
         // contributes its plain, always-single-sampled colorTexture(), never
         // colorTextureForRenderPass(), and every resolvesOut entry stays nil.
         for (auto* rt : currentMRT) { colorsOut.push_back(rt->colorTexture()); resolvesOut.push_back(nil); }
-        // plan_metal.md METAL-112: reuses currentMRT[0]'s own depthTextureNative() for the whole
+        // plans/plan_metal.md METAL-112: reuses currentMRT[0]'s own depthTextureNative() for the whole
         // MRT render pass rather than allocating a dedicated shared one (unlike VulkanMRTProxy,
         // which must -- Vulkan's explicit VkFramebuffer object needs one concrete depth
         // VkImageView chosen up front; Metal's MTLRenderPassDescriptor has no such constraint, and
@@ -3078,7 +3078,7 @@ bool MetalRenderer::Impl::resolveActiveColorAttachments(std::vector<id<MTLTextur
     return true;
 }
 
-// plan_metal.md METAL-112: the single chokepoint that tears down a real MRT set correctly --
+// plans/plan_metal.md METAL-112: the single chokepoint that tears down a real MRT set correctly --
 // regenerates mips for every target in the outgoing set (matching MetalRenderTargetRenderer::
 // UnbindAsRenderTarget()'s own per-target precedent, extended from one target to N) and resets
 // currentMRT/activeColorAttachmentCount, before any caller goes on to bind whatever comes next.
@@ -3210,7 +3210,7 @@ static std::function<void()> makeMetalResourceOwnerHealthCheck(
 MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::make_shared<Impl>(args.surface))
 {
     auto& p=*impl_; p.virtualW=args.virtualWidth; p.virtualH=args.virtualHeight; p.swapInterval=args.swapInterval;
-    // plan_metal.md Phase 15: real, previously-invisible bug -- args.presentationMode was never
+    // plans/plan_metal.md Phase 15: real, previously-invisible bug -- args.presentationMode was never
     // read at all (Impl::presentationMode's own field default, Letterbox=0, silently won this
     // instead), even though GraphicsRendererCreateArgs::presentationMode's own doc comment states
     // its default is FixedHeightDynamicWidth (XNA/Windows-Phone-matching) and the GPU/EasyGL
@@ -3241,7 +3241,7 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     p.layer=(CAMetalLayer*)p.view.layer;
     if(!p.layer) throw std::runtime_error("Metal: Cocoa view did not create a CAMetalLayer");
     [p.layer retain]; p.layer.device=p.device; p.layer.pixelFormat=MTLPixelFormatBGRA8Unorm; p.layer.framebufferOnly=NO;
-    // plan_metal.md METAL-168: swapInterval was previously stored but never applied -- CAMetalLayer
+    // plans/plan_metal.md METAL-168: swapInterval was previously stored but never applied -- CAMetalLayer
     // has no direct integer-interval knob (unlike OpenGL's 0/1/-1 swap interval or Vulkan's
     // present-mode choice, both real per-value behavior elsewhere in this codebase), only the
     // boolean displaySyncEnabled. XNA PresentInterval::Immediate(0) -> NO (uncapped); One(1, the
@@ -3253,7 +3253,7 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     if(!p.queue) throw std::runtime_error("Metal: failed to create MTLCommandQueue");
     NSError* err=nil; NSString* src=[NSString stringWithUTF8String:kMetalShaderSource]; p.library=[p.device newLibraryWithSource:src options:nil error:&err];
     if(!p.library) throw std::runtime_error(std::string("Metal shader compile failed: ")+([[err localizedDescription] UTF8String]?:"unknown"));
-    // plan_metal.md METAL-23: pipelines are no longer built eagerly here -- getOrCreatePipeline()
+    // plans/plan_metal.md METAL-23: pipelines are no longer built eagerly here -- getOrCreatePipeline()
     // lazily builds+caches each (PipelineKind, BlendKey) combination on first use instead.
     MTLSamplerDescriptor* sd=[[MTLSamplerDescriptor alloc]init];
     if(!sd) throw std::runtime_error("Metal: failed to allocate default sampler descriptor");
@@ -3264,7 +3264,7 @@ MetalRenderer::MetalRenderer(const GraphicsRendererCreateArgs& args):impl_(std::
     // METAL-266: occlusion queries remain dormant and capability-false, so no visibility buffer
     // is allocated or attached as supported state.
     p.visibilityBuffer=nil;
-    // plan_metal.md METAL-87: PbrEffect's 4 optional-map fallback textures (see Impl's own field
+    // plans/plan_metal.md METAL-87: PbrEffect's 4 optional-map fallback textures (see Impl's own field
     // comment for why these exact 2 colors).
     {
         MTLTextureDescriptor* td=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:1 height:1 mipmapped:NO];
@@ -3293,7 +3293,7 @@ MetalRenderer::~MetalRenderer()=default;
 MetalRenderer::Impl& MetalRenderer::impl(){return *impl_;} const MetalRenderer::Impl& MetalRenderer::impl()const{return *impl_;}
 void MetalRenderer::Clear(float r,float g,float b,float a){impl_->clear(true,r,g,b,a,false,1,false,0);} void MetalRenderer::Present(){impl_->endFrame();}
 void MetalRenderer::GetViewportSize(int&w,int&h){
-    // plan_metal.md METAL-156: now routed through the same computeLogicalViewport() the real
+    // plans/plan_metal.md METAL-156: now routed through the same computeLogicalViewport() the real
     // window<->logical transforms use, instead of a separate, simpler ad hoc formula. Verified by
     // hand to produce byte-identical results to the old `virtualW>0?virtualW:pw` formula for every
     // mode except FixedHeightDynamicWidth (Letterbox/Overscan/Stretch/NativeBackBuffer all set
@@ -3317,7 +3317,7 @@ void MetalRenderer::GetDefaultViewportRect(int&x,int&y,int&w,int&h)
     w=(int)std::lround(vp.width); h=(int)std::lround(vp.height);
 }
 void MetalRenderer::SetVirtualResolution(int w,int h){impl_->virtualW=w;impl_->virtualH=h;} void MetalRenderer::SetPresentationMode(int m){impl_->presentationMode=m;}
-void MetalRenderer::SetSwapInterval(int i){impl_->swapInterval=i;impl_->layer.displaySyncEnabled=(i!=0);} // plan_metal.md METAL-168, same mapping as the constructor.
+void MetalRenderer::SetSwapInterval(int i){impl_->swapInterval=i;impl_->layer.displaySyncEnabled=(i!=0);} // plans/plan_metal.md METAL-168, same mapping as the constructor.
 // The historical MSAA implementation engaged real sample-count-four attachments but did not
 // produce correct coverage. Keep the public and internal values at their single-sample identity.
 int MetalRenderer::ApplyMultiSampleCount(int requestedMultiSampleCount)
@@ -3423,7 +3423,7 @@ std::unique_ptr<IRenderTargetCubeRenderer> MetalRenderer::CreateRenderTargetCube
     if(size<=0) throw std::invalid_argument("Metal RenderTargetCube size must be positive.");
     return std::make_unique<MetalRenderTargetCubeRenderer>(impl_, size, mipMap);
 }
-// plan_metal.md METAL-109/110/111 (real bug fixed alongside RenderTargetCube's own addition): both
+// plans/plan_metal.md METAL-109/110/111 (real bug fixed alongside RenderTargetCube's own addition): both
 // SetRenderTarget2D() and the new SetRenderTargetCubeFace() below must cross-unbind whichever OTHER
 // kind of render target (2D vs. cube) is currently active before binding a new one -- mirroring
 // EasyGLRenderer::SetRenderTarget2D/SetRenderTargetCubeFace's own real, already-tested
@@ -3439,7 +3439,7 @@ void MetalRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     auto* metalRt=dynamic_cast<MetalRenderTargetRenderer*>(rt);
     if (rt && !metalRt) throw std::runtime_error("Metal: foreign RenderTarget2D renderer");
     auto& p=*impl_;
-    p.unbindCurrentMRT(); // plan_metal.md METAL-112: tear down any active MRT set first, always.
+    p.unbindCurrentMRT(); // plans/plan_metal.md METAL-112: tear down any active MRT set first, always.
     if (p.currentRenderTarget && p.currentRenderTarget != rt) p.currentRenderTarget->UnbindAsRenderTarget();
     if (p.currentRenderTargetCube) p.currentRenderTargetCube->UnbindAsRenderTarget();
     if (metalRt) metalRt->BindAsRenderTarget();
@@ -3451,7 +3451,7 @@ void MetalRenderer::SetRenderTargetCubeFace(IRenderTargetCubeRenderer* rt,int fa
     auto* metalRt=dynamic_cast<MetalRenderTargetCubeRenderer*>(rt);
     if (!metalRt) throw std::runtime_error("Metal: foreign RenderTargetCube renderer");
     auto& p=*impl_;
-    p.unbindCurrentMRT(); // plan_metal.md METAL-112: same as SetRenderTarget2D() above.
+    p.unbindCurrentMRT(); // plans/plan_metal.md METAL-112: same as SetRenderTarget2D() above.
     if (p.currentRenderTarget) p.currentRenderTarget->UnbindAsRenderTarget();
     if (p.currentRenderTargetCube && p.currentRenderTargetCube != rt) p.currentRenderTargetCube->UnbindAsRenderTarget();
     metalRt->BindAsRenderTargetFace(face);
@@ -3506,7 +3506,7 @@ void MetalRenderer::ApplyBlendState(int colorSrcBlend,int alphaSrcBlend,int colo
     if (!MetalSupportsBlendWriteState(writeState))
         throw System::NotSupportedException(
             "Metal currently supports only all-channel color writes and the default multisample mask.");
-    // plan_metal.md METAL-6/24: real per-BlendState pipeline selection, replacing the previous
+    // plans/plan_metal.md METAL-6/24: real per-BlendState pipeline selection, replacing the previous
     // complete no-op (every pipeline was hardcoded to a fixed straight-alpha blend regardless of
     // the actual requested BlendState). `enabled` derivation mirrors
     // EasyGLRenderer::ApplyBlendState's identical Blend::One/Blend::Zero Opaque-preset
@@ -3522,7 +3522,7 @@ void MetalRenderer::ApplyDepthStencilState(bool depthEnable,bool depthWriteEnabl
                                                    int stencilMask,int stencilWriteMask,int referenceStencil,
                                                    bool twoSidedStencilMode,int ccwStencilFunc,int ccwStencilPass,int ccwStencilFail,int ccwStencilDepthFail)
 {
-    // plan_metal.md METAL-7/9/10: real depthFunc + full front/back stencil-op wiring, replacing
+    // plans/plan_metal.md METAL-7/9/10: real depthFunc + full front/back stencil-op wiring, replacing
     // the previous depthEnable/depthWrite/referenceStencil-only plumbing (depthFunc and all 8
     // stencil-op/mask/twoSided fields were silently ignored before this).
     auto& p=*impl_;
@@ -3538,7 +3538,7 @@ void MetalRenderer::ApplyDepthStencilState(bool depthEnable,bool depthWriteEnabl
     catch (...) { p.restoreDepthState(previous); throw; }
     if(p.encoder)[p.encoder setStencilReferenceValue:referenceStencil];
 }
-// plan_metal.md METAL-19: the `c==1?...:(c==2?...:...)` ternary chain this replaced switched on raw
+// plans/plan_metal.md METAL-19: the `c==1?...:(c==2?...:...)` ternary chain this replaced switched on raw
 // XNA CullMode ordinals with no enum-reordering guard; now backed by the plain-C++, unit-tested
 // MetalCullMode.hpp (METAL-5's own Front/Back mapping preserved exactly).
 static MTLCullMode metalCullMode(int c)
@@ -3605,7 +3605,7 @@ void MetalRenderer::SetViewport(int x,int y,int w,int h,float mn,float mx)
 }
 std::unique_ptr<IVertexBufferRenderer> MetalRenderer::CreateVertexBuffer(int c){return std::make_unique<MetalVertexBuffer>(impl_->device,c);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer16(int){return std::make_unique<MetalIndexBuffer>(impl_->device,false);} std::unique_ptr<IIndexBufferRenderer> MetalRenderer::CreateIndexBuffer32(int){return std::make_unique<MetalIndexBuffer>(impl_->device,true);}
 
-// plan_metal.md METAL-34-style extraction: this dispatch logic's real body now lives in the
+// plans/plan_metal.md METAL-34-style extraction: this dispatch logic's real body now lives in the
 // plain-C++ MetalSelectPipelineKind.hpp (no Objective-C, buildable and unit-tested on any platform
 // without an Apple toolchain) -- kept as a thin same-signature wrapper here so the existing call
 // site in drawMetal3D() is unaffected.
@@ -3614,7 +3614,7 @@ static PipelineKind selectPipelineKind(std::size_t stride, const GpuDrawParams* 
     return SelectMetalPipelineKind(stride, params);
 }
 
-// plan_metal.md METAL-34-style extraction: fillLitUniforms/fillEnvUniforms/fillSkinnedUniforms/
+// plans/plan_metal.md METAL-34-style extraction: fillLitUniforms/fillEnvUniforms/fillSkinnedUniforms/
 // fillPbrUniforms/fillSkinnedPbrUniforms' real logic now lives in the plain-C++
 // MetalUniformFill.hpp (no Objective-C, buildable and unit-tested on any platform without an Apple
 // toolchain) -- kept as thin same-signature wrappers here so every existing call site in this file
@@ -3712,7 +3712,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
     [p.encoder setDepthStencilState:p.depthState]; [p.encoder setFrontFacingWinding:MTLWindingClockwise]; [p.encoder setCullMode:p.cull]; [p.encoder setTriangleFillMode:p.fill];
 
     if (kind == PipelineKind::LitTex32 || kind == PipelineKind::LitTex32VertexLit) {
-        // plan_metal.md METAL-38-47/39: real per-pixel (LitTex32) or per-vertex/Gouraud
+        // plans/plan_metal.md METAL-38-47/39: real per-pixel (LitTex32) or per-vertex/Gouraud
         // (LitTex32VertexLit, XNA's real PreferPerPixelLighting=false default) lighting/fog/
         // specular/emissive path -- both share the identical LitTransform/LitUniforms uniform
         // layout and texture binding, only the vertex/fragment shader pair (selected via `kind` by
@@ -3725,7 +3725,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
     } else if (kind == PipelineKind::EnvMap32) {
-        // plan_metal.md METAL-64/66-68: real cube-map reflection/Fresnel path.
+        // plans/plan_metal.md METAL-64/66-68: real cube-map reflection/Fresnel path.
         EnvTransform t{}; EnvUniforms eu{};
         fillEnvUniforms(t, eu, wvp, *params);
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
@@ -3737,7 +3737,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setFragmentSamplerState:(p.samplerSlots[1]?p.samplerSlots[1]:p.sampler) atIndex:1];
     } else if (kind == PipelineKind::Skinned52 || kind == PipelineKind::Skinned56
             || kind == PipelineKind::Skinned52VertexLit || kind == PipelineKind::Skinned56VertexLit) {
-        // plan_metal.md METAL-72-80/76: real skinned lit/fog/specular/emissive path, either
+        // plans/plan_metal.md METAL-72-80/76: real skinned lit/fog/specular/emissive path, either
         // per-pixel (Skinned52/56) or per-vertex/Gouraud (Skinned52/56VertexLit, XNA's real
         // PreferPerPixelLighting=false default) -- both share the identical SkinnedTransform/
         // SkinnedUniforms uniform layout, bone buffer, and texture binding, only the vertex/
@@ -3747,12 +3747,12 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
         [p.encoder setVertexBytes:&su length:sizeof(su) atIndex:2];
         [p.encoder setFragmentBytes:&su length:sizeof(su) atIndex:2];
-        // plan_metal.md METAL-73: 72 bones x 4x4 = 4608 floats (18KB) exceeds setVertexBytes:'s
+        // plans/plan_metal.md METAL-73: 72 bones x 4x4 = 4608 floats (18KB) exceeds setVertexBytes:'s
         // 4KB inline limit -- must be a real MTLBuffer, unlike every other uniform in this file.
         // Reallocated fresh each draw (newBufferWithBytes:), matching MetalVertexBuffer::SetData's
         // own established "always reallocate, never mutate in place" pattern (same
         // command-buffer-resource-lifetime assumption already relied on throughout this file, not
-        // a new risk category -- see plan_metal.md Phase 18's own still-open resource-lifetime
+        // a new risk category -- see plans/plan_metal.md Phase 18's own still-open resource-lifetime
         // audit). GpuDrawParams::boneTransforms is already column-major (its own doc comment),
         // matching worldColMajor's convention, so no per-bone transpose is needed before upload.
         id<MTLBuffer> bonesBuf = [p.device newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16 options:MTLResourceStorageModeShared];
@@ -3762,13 +3762,13 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
     } else if (kind == PipelineKind::Pbr48) {
-        // plan_metal.md METAL-81/83-86: real metallic-roughness PBR path.
+        // plans/plan_metal.md METAL-81/83-86: real metallic-roughness PBR path.
         PbrTransform t{}; PbrUniforms pu{};
         fillPbrUniforms(t, pu, wvp, *params);
         [p.encoder setVertexBytes:&t length:sizeof(t) atIndex:1];
         [p.encoder setVertexBytes:&pu length:sizeof(pu) atIndex:2];
         [p.encoder setFragmentBytes:&pu length:sizeof(pu) atIndex:2];
-        // plan_metal.md METAL-3: each of the 5 PBR texture units gets its own SamplerState slot
+        // plans/plan_metal.md METAL-3: each of the 5 PBR texture units gets its own SamplerState slot
         // (samplerSlots[0..4]), matching EasyGLRenderer's own real PBR binding exactly
         // (each map bound to its own GL texture unit, each unit sampled through its own
         // independently-configured GL sampler object, samplers_[0..4]) -- NOT one shared sampler
@@ -3786,7 +3786,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setFragmentTexture:occlusionMap atIndex:4];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
     } else if (kind == PipelineKind::SkinnedPbr68) {
-        // plan_metal.md METAL-82: real SkinnedPbrEffect path -- same bone-buffer handling as
+        // plans/plan_metal.md METAL-82: real SkinnedPbrEffect path -- same bone-buffer handling as
         // Skinned52/56, same 5-texture PBR-map binding as Pbr48.
         SkinnedPbrTransform t{}; PbrUniforms pu{};
         fillSkinnedPbrUniforms(t, pu, wvp, *params);
@@ -3797,7 +3797,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         if(!bonesBuf) throw std::runtime_error("Metal: failed to create skinned PBR bone buffer");
         [p.encoder setVertexBuffer:bonesBuf offset:0 atIndex:3];
         [bonesBuf release];
-        // plan_metal.md METAL-3: same per-slot sampler fix as Pbr48 above, see its own comment.
+        // plans/plan_metal.md METAL-3: same per-slot sampler fix as Pbr48 above, see its own comment.
         [p.encoder setFragmentTexture:texture0 atIndex:0];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[0]?p.samplerSlots[0]:p.sampler) atIndex:0];
         [p.encoder setFragmentTexture:normalMap atIndex:1];
@@ -3809,7 +3809,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         [p.encoder setFragmentTexture:occlusionMap atIndex:4];
         [p.encoder setFragmentSamplerState:(p.samplerSlots[4]?p.samplerSlots[4]:p.sampler) atIndex:4];
     } else {
-        // plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
+        // plans/plan_metal.md METAL-35/36/37/51-63: DiffuseColor/VertexColorEnabled/AlphaTest now
         // actually reach the shader (previously silently ignored for every draw). Defaults below
         // exactly reproduce this function's own prior hardcoded behavior for the non-Ex
         // (params==nullptr) path: diffuseColor=white, alphaTest=always-pass, vertexColorEnabled=true.
@@ -3837,7 +3837,7 @@ static void drawMetal3D(MetalRenderer::Impl& p,const MetalVertexBuffer& vb,const
         }
     }
     int n=primitiveVertexCount(pt,pc);
-    // plan_metal.md: real bug found and fixed 2026-07-20 -- every other renderer (EasyGL/Vulkan/
+    // plans/plan_metal.md: real bug found and fixed 2026-07-20 -- every other renderer (EasyGL/Vulkan/
     // Bgfx/native GPU/WebGPU) reads GpuDrawParams::vertexStart/startIndex/baseVertex and applies them;
     // this function silently hardcoded 0/0 for all three, so any draw with a nonzero offset into a
     // shared vertex/index buffer rendered the wrong vertex range. Never caught until
@@ -3908,7 +3908,7 @@ void MetalRenderer::DrawPrimitivesEx(const IVertexBufferRenderer& v,const Matrix
     ValidateMetalDrawParams(gp,*vb);
     RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
                                   "ordinary-nonindexed");
-    // plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
+    // plans/plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
     // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
     // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
     RequireVertexColourPbrSupportEXT(gp,vb->stride(),"METAL");
@@ -3927,7 +3927,7 @@ void MetalRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& v,
     ValidateMetalDrawParams(gp,*vb);
     RequireFaithfulDeclarationEXT(vb->declaration(),static_cast<int>(vb->stride()),
                                   "ordinary-indexed");
-    // plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
+    // plans/plan_gltf.md GLTF-465: Metal has no stride-60/80 pipeline, so such a draw already fails in
     // pipeline selection -- but as "unsupported vertex stride", which does not say that the missing
     // piece is glTF's COLOR_0 base-colour product. Refuse it here with that reason instead.
     RequireVertexColourPbrSupportEXT(gp,vb->stride(),"METAL");
@@ -3949,7 +3949,7 @@ bool MetalRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_METAL
-// plan_runtimerenderer.md design decision 4: declared in this family's own
+// plans/plan_runtimerenderer.md design decision 4: declared in this family's own
 // namespace so several renderer archives can link into one binary, then defined
 // below with a qualified name -- the body keeps its place unchanged.
 namespace Metal { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

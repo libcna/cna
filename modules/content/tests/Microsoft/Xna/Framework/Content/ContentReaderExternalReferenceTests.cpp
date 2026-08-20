@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-35: unit tests for ContentReader::ReadExternalReference<T>() -- relative-path
+// plans/plan_xnb.md XNB-35: unit tests for ContentReader::ReadExternalReference<T>() -- relative-path
 // resolution against a real ContentManager/.xnb round trip, the empty-reference default(T) case,
 // and the content-root-escape hardening this task adds beyond FNA's own behavior.
 

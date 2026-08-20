@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-522, MOD-523: SSAO's quality mapping and its half-resolution option.
+// plans/plan_modern.md MOD-522, MOD-523: SSAO's quality mapping and its half-resolution option.
 
 #ifdef CNA_CNAEXT
 

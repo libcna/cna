@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_wicked.md WICKED-70: device-independent coverage of the WICKED renderer's pipeline cache key.
+// plans/plan_wicked.md WICKED-70: device-independent coverage of the WICKED renderer's pipeline cache key.
 //
 // Everything else in this renderer needs a real Vulkan device, a window and a GPU, so it is covered
 // by the smoke test registered in cmake/Tests/WickedTests.cmake instead. The cache key is the one

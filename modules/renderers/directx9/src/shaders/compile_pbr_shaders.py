@@ -26,7 +26,7 @@ NATIVE_D3DCOMPILER_SHA256 = "4432bbd1a390874f3f0a503d45cc48d346abc3a8c0213c289f4
 
 SHADERS = (
     ("cna/Pbr3D.hlsl", "VSPbr3D", "vs_3_0", "kPbr3DVSBytecode", "Pbr3D vertex shader"),
-    # plan_gltf.md GLTF-465: the stride-60 and stride-80 twins. A separate entry point rather than a
+    # plans/plan_gltf.md GLTF-465: the stride-60 and stride-80 twins. A separate entry point rather than a
     # preprocessor define, because a vs_3_0 input with no stream behind it reads undefined -- so each
     # vertex declaration gets the program whose input struct it actually satisfies. The pixel stages
     # are shared: both vertex variants write the COLOR0 interpolant, authored or opaque white.

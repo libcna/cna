@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-32: unit tests for the 5 stock-effect readers' own behavior (registration,
+// plans/plan_xnb.md XNB-32: unit tests for the 5 stock-effect readers' own behavior (registration,
 // field-by-field byte layout). BasicEffectReader is verified against a real, externally-produced
 // fixture slice (MonoGame's own BlenderDefaultCube.xnb); ModelReader (Phase F) isn't implemented
 // yet, so a full ContentManager.Load<Model> round trip isn't possible, but the exact byte range of

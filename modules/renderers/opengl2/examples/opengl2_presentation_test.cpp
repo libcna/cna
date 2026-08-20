@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: proof that the default FixedHeightDynamicWidth presentation mode actually
+// plans/plan_opengl2.md: proof that the default FixedHeightDynamicWidth presentation mode actually
 // adapts to a resized window on the native OpenGL 2.1 graphics renderer, mirroring
 // EasyGLRenderer::getLogicalSize's identical behavior.
 //

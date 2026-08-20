@@ -6,7 +6,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include <cstring>
 
-// plan_metal.md METAL-34-style extraction: this is the connective tissue between GpuDrawParams (the
+// plans/plan_metal.md METAL-34-style extraction: this is the connective tissue between GpuDrawParams (the
 // renderer-agnostic per-draw state EasyGLRenderer::BindDrawParams() also reads) and the actual
 // float arrays memcpy'd into a real MTLBuffer for each shader family -- field-for-field matching
 // EasyGLRenderer::BindDrawParams()'s own real mapping (ground truth, ported not redesigned).
@@ -99,7 +99,7 @@ namespace CNA::Internal::Renderers::Metal
         float skinParams[4];
     };
 
-    // plan_metal.md METAL-38-47: fills LitTransform/LitUniforms from GpuDrawParams, field-for-field
+    // plans/plan_metal.md METAL-38-47: fills LitTransform/LitUniforms from GpuDrawParams, field-for-field
     // matching EasyGLRenderer::BindDrawParams()'s own real mapping (ground truth, ported not
     // redesigned).
     /**
@@ -152,7 +152,7 @@ namespace CNA::Internal::Renderers::Metal
         std::memcpy(lu.fogVector, params.fogVector, sizeof(lu.fogVector));
     }
 
-    // plan_metal.md METAL-66-68: fills EnvTransform/EnvUniforms, field-for-field matching
+    // plans/plan_metal.md METAL-66-68: fills EnvTransform/EnvUniforms, field-for-field matching
     // EasyGLRenderer::BindDrawParams()'s real EnvironmentMapEffect-specific mapping (the
     // `p.loc_ambient < 0` gated block -- ground truth, ported not redesigned).
     /**
@@ -190,7 +190,7 @@ namespace CNA::Internal::Renderers::Metal
         std::memcpy(eu.fogVector, params.fogVector, sizeof(eu.fogVector));
     }
 
-    // plan_metal.md METAL-73/74/76-78: fills SkinnedTransform/SkinnedUniforms, field-for-field
+    // plans/plan_metal.md METAL-73/74/76-78: fills SkinnedTransform/SkinnedUniforms, field-for-field
     // matching EasyGLRenderer::BindDrawParams()'s real SkinnedEffect-specific mapping. Note:
     // unlike FillMetalLitUniforms/FillMetalEnvUniforms, this deliberately does NOT call
     // ComputeMetalNormalMatrixCols -- the skinned shader has no world-normal-matrix step at all (see
@@ -233,7 +233,7 @@ namespace CNA::Internal::Renderers::Metal
         su.vertexColorEnabled[0]=params.vertexColorEnabled?1.0f:0.0f; su.vertexColorEnabled[1]=su.vertexColorEnabled[2]=su.vertexColorEnabled[3]=0;
     }
 
-    // plan_metal.md METAL-81/83-86: fills PbrTransform/PbrUniforms from GpuDrawParams, field-for-field
+    // plans/plan_metal.md METAL-81/83-86: fills PbrTransform/PbrUniforms from GpuDrawParams, field-for-field
     // matching EasyGLRenderer::BindDrawParams()'s real PBR-specific mapping (ground truth).
     /**
      * @brief Fills the PBR shader's CPU-side constants from normalized draw state.
@@ -290,7 +290,7 @@ namespace CNA::Internal::Renderers::Metal
                     sizeof(pu.textureTransformRows));
     }
 
-    // plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform
+    // plans/plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform
     // (fragment-side) fields are identical to FillMetalPbrUniforms' -- only the transform struct
     // differs (adds skinParams, matching FillMetalSkinnedUniforms' own t.skinParams handling), so
     // this delegates the uniform fill to FillMetalPbrUniforms via a throwaway MetalPbrTransform and

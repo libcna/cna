@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: envmap_fresnel_quad
+# plans/plan_dx9.md D9-A5 scene corpus: envmap_fresnel_quad
 # The first scene to genuinely exercise EnvironmentMapEffect's FRESNEL bucket with a real,
 # non-degenerate per-vertex gradient (see envmap_quad.scene's own comment for why that scene,
 # despite defaulting FresnelFactor=1, produces a spatially CONSTANT result -- its z=0-coplanar-

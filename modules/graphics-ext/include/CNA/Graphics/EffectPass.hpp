@@ -23,7 +23,7 @@ namespace CNA::Graphics {
     /**
      * @brief Runs any `Effect` as a fullscreen post-process pass.
      *
-     * plan_modern.md `MOD-232`. The adapter that makes the CNAEXT effects that existed before this
+     * plans/plan_modern.md `MOD-232`. The adapter that makes the CNAEXT effects that existed before this
      * plan — `DepthEffect`, `CRTEffect`, and any `ShaderEffect` a game writes — usable inside a
      * `PostProcessChain` or a `RenderPipeline` without changing them at all. They are `Effect`
      * subclasses, and a fullscreen pass is exactly "draw the source through an effect", so the

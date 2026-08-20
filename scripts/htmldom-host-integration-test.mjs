@@ -1,4 +1,4 @@
-// plan_html_dom.md HTMLDOM-115: Playwright driver exercising the two host-page-integration
+// plans/plan_html_dom.md HTMLDOM-115: Playwright driver exercising the two host-page-integration
 // behaviours that can ONLY be observed by manipulating the DOM BEFORE the Emscripten module ever
 // loads -- CNA_HtmlDom_EnsureRoot's own "capture the canvas's pre-existing visibility" and "detect
 // an existing conflicting #cna-dom-root" logic both run once, synchronously, inside the very first

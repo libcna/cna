@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-36/IGL-55: SkinnedEffect pixel conformance -- the first bone-uniform exercise
+// plans/plan_igl.md IGL-36/IGL-55: SkinnedEffect pixel conformance -- the first bone-uniform exercise
 // for this renderer family (72-bone std140 block, IglRenderer::BoneUniforms).
 //
 // Identity bone palette: every vertex has weight 1.0 on bone 0, and SkinnedEffect's own default

@@ -12,7 +12,7 @@
 #include <memory>
 #include <vector>
 
-// Task (post-plan_net.md remediation, 2026-07-18): shared, real bitmap-font F1 help overlay
+// Task (post-plans/plan_net.md remediation, 2026-07-18): shared, real bitmap-font F1 help overlay
 // helper. Replaces the old per-demo MakeSimpleFont(), which drew every printable character as a
 // single uniform rectangle (a synthetic "block font" - no letterform differentiation at all, so
 // nothing was actually readable, confirmed by an independent post-completion audit). This builds

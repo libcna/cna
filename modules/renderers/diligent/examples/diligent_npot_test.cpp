@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-56: real-device NPOT (non-power-of-two) Texture2D round-trip test,
+// plans/plan_diligent.md DILIGENT-56: real-device NPOT (non-power-of-two) Texture2D round-trip test,
 // mirroring D3D11's own DX-140 (a genuinely non-power-of-two 5x3 texture, never exercised anywhere
 // in that suite before) and going further in the same direction DILIGENT-55 already established for
 // mip levels: a real GPU SetData/GetData round-trip, not just "does sampling look plausible".

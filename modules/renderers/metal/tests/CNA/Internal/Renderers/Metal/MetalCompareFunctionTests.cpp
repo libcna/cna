@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-19: DescribeMetalCompareFunction() only reads a plain XNA CompareFunction
+// plans/plan_metal.md METAL-19: DescribeMetalCompareFunction() only reads a plain XNA CompareFunction
 // ordinal and returns a plain C++ enum -- zero Objective-C dependency, genuinely unit-tested on
 // this Linux machine. No #if defined(CNA_RENDERER_METAL) gate, deliberately.
 #include <gtest/gtest.h>

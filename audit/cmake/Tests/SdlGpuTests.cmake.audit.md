@@ -16,7 +16,7 @@ PbrEffect/SkinnedPbrEffect, render-target/MRT/MSAA, Texture3D/TextureCube, custo
 swapchain-recovery/render-target-lifetime regression proofs.
 
 ## Executive Verdict
-Well-organized with clear per-task-ID plan citations (`plan_sdlgpu.md SDLGPU-NN`). The draw-order
+Well-organized with clear per-task-ID plan citations (`plans/plan_sdlgpu.md SDLGPU-NN`). The draw-order
 and swapchain-recovery/RT-lifetime tests are explicitly flagged as originating from an
 "adversarial-review finding" and a "use-after-free regression proof" respectively — a good sign
 that this backend's test suite includes real regression coverage discovered through active

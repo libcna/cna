@@ -18,7 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 
-// Task 15.10 (re-scoped by plan_net.md Task 4.3/4.4, 2026-07-16): cna_demo_leaderboard_viewer.
+// Task 15.10 (re-scoped by plans/plan_net.md Task 4.3/4.4, 2026-07-16): cna_demo_leaderboard_viewer.
 // LeaderboardWriter::GetLeaderboard/LeaderboardEntry::setRatingProperty and
 // LeaderboardReader::Read/PageUp/PageDown are now real, local-disk-backed implementations (no
 // longer the always-NotSupportedException stubs this demo originally had to work around) -
@@ -40,7 +40,7 @@ public:
 
 private:
     Microsoft::Xna::Framework::GamerServices::LeaderboardIdentity identity_;
-    // Task 4.3 (plan_net.md Phase 4) post-fix: heap-allocated, not a std::vector<SignedInGamer> by
+    // Task 4.3 (plans/plan_net.md Phase 4) post-fix: heap-allocated, not a std::vector<SignedInGamer> by
     // value - Gamer::leaderboardWriter_ captures `this` at construction time (see Gamer.hpp's own
     // doc comment on that member for why), so relocating an already-constructed Gamer via any
     // copy/move - which is exactly what push_back(prvalue) into a growing-by-value vector does,

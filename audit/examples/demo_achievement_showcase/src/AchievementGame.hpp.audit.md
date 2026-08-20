@@ -20,7 +20,7 @@ contradicted by its own paired `.cpp` file's runtime behavior and comments.** Th
 `GetAchievements()` always returns an empty `AchievementCollection`... (matching FNA's own stub
 too)." This was evidently accurate when Task 15.9 originally authored this demo, but
 `AchievementGame.cpp`'s own comments explicitly state both methods were later upgraded to real,
-disk-backed implementations ("Task 4.5 (plan_net.md Phase 4): real API call - persists to the
+disk-backed implementations ("Task 4.5 (plans/plan_net.md Phase 4): real API call - persists to the
 local GamerServices store"; "now real disk-backed persistence - survives across process runs"). The
 header was never updated to match, so a reader consulting only this header would be told the
 opposite of the demo's actual, current, self-demonstrated behavior.

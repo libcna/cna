@@ -337,7 +337,7 @@ namespace
                                  true, true, true, true, true,
                                  true, true, true, true, true, true, false, false};
 #elif defined(CNA_RENDERER_SOKOL)
-    // plan_sokol.md SOKOL-25/26/38: RenderTarget2D AND RenderTargetCube can both be created and
+    // plans/plan_sokol.md SOKOL-25/26/38: RenderTarget2D AND RenderTargetCube can both be created and
     // bound, and both now have a working single-sample GetData (SokolRenderTargetRenderer/
     // SokolRenderTargetCubeRenderer read back their real colour content via a throwaway GL FBO
     // around the raw GL texture sg_gl_query_image_info() exposes), so `readback`/`cubeReadback`
@@ -347,7 +347,7 @@ namespace
     // resolve-then-discard design, matching sokol_gfx.h's documented MSAA workflow), so whether its
     // content survives an unbind/rebind PreserveContents cycle the way D8 requires is genuinely
     // unverified here, not just untested -- D8 stays skipped rather than asserting an unmeasured
-    // claim either way. `stencilInRT` and `stencilPreserves` true (plan_sokol.md SOKOL-23): ApplyDepthStencilState now wires the
+    // claim either way. `stencilInRT` and `stencilPreserves` true (plans/plan_sokol.md SOKOL-23): ApplyDepthStencilState now wires the
     // real stencil state into Pipeline3DKey/Get3DPipeline (front/back ops, compare, masks and
     // reference are baked into the sokol_gfx pipeline itself, since sg_stencil_state.ref is
     // pipeline state there, not dynamic). Depth and stencil share the one real depth-stencil image

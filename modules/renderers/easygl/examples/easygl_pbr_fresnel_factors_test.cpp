@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-343/344: real EasyGL pixel witness for KHR_materials_ior/specular factors.
+// plans/plan_gltf.md GLTF-343/344: real EasyGL pixel witness for KHR_materials_ior/specular factors.
 //
 // The scene deliberately makes the expected BRDF trivial. Every quad is black, fully rough,
 // non-metallic, viewed and lit straight along +Z, with no ambient or emissive term. At its centre

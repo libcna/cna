@@ -35,7 +35,7 @@ released assertion for each, via a table-driven design with per-case failure lab
   to the wrong backing field (a real risk for a class with this many same-typed boolean flags).
 - The file's own header comment candidly documents what is genuinely NOT unit-testable headless
   (SDL raw-axis-to-float conversion and Y-axis negation in the real hardware event handler) and
-  where that gap is otherwise covered (manual/demo verification, `plan_input.md` tasks) — an honest
+  where that gap is otherwise covered (manual/demo verification, `plans/plan_input.md` tasks) — an honest
   scope statement rather than a silent gap.
 
 ## Detailed Findings

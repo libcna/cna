@@ -87,7 +87,7 @@ namespace Microsoft::Devices::Sensors
          * returns) touches the shared token, never `this` again — closing a
          * real use-after-free if a callback destroys (not just Dispose()s)
          * this same instance during its own dispatch. See
-         * plan_devices_phase8.md Task P8-1 for the full analysis, including
+         * plans/plan_devices_phase8.md Task P8-1 for the full analysis, including
          * the remaining, deliberately-undefended boundary: destroying this
          * instance from within its own `CurrentValueChanged` handler is
          * still unsupported, because `DispatchSensorReading()` itself

@@ -116,7 +116,7 @@ function(cna_configure_llgl)
     # Mirrors the module set into compile definitions so the renderer's runtime renderer selection
     # can refuse a module that was never built instead of failing deep inside LLGL::RenderSystem.
     #
-    # plan_runtimerenderer.md RTR-P6-8: published as a LIST for the llgl module to put on its own
+    # plans/plan_runtimerenderer.md RTR-P6-8: published as a LIST for the llgl module to put on its own
     # target, not applied with add_compile_definitions() here. add_compile_definitions() is
     # DIRECTORY-scoped, and a function does not create a directory scope -- called from
     # RendererSelection.cmake, which the top-level CMakeLists includes, it defined these three

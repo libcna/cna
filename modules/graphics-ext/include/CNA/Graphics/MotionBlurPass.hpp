@@ -29,7 +29,7 @@ namespace CNA::Graphics {
      * **This is camera motion only.** A turning or advancing camera blurs correctly; a car crossing
      * a static shot does not, because nothing in the depth image says the car moved rather than the
      * world. Per-object velocity needs a third prepass output and a previous world matrix per draw,
-     * which is a contract change on the application -- `plan_modern.md` `MOD-2033` -- rather than
+     * which is a contract change on the application -- `plans/plan_modern.md` `MOD-2033` -- rather than
      * something this pass can infer.
      *
      * The first frame after a start or a resize has no history, and the pass leaves it alone rather

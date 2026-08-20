@@ -10,7 +10,7 @@
 // other 5 shader variants already have to `EnsureEnvMapped3DProgram()`'s shader (previously zero
 // fog code there at all).
 //
-// Formula corrected under Task 1111 (see plan_graphics.md): the previous (FogEnd-Z)/
+// Formula corrected under Task 1111 (see plans/plan_graphics.md): the previous (FogEnd-Z)/
 // (FogEnd-FogStart) falloff was never actually equivalent to FNA's real fog dot product, only
 // coincidentally right at this test's own Z=0 midpoint. Real formula (World=View=Identity):
 //   vFogFactor = clamp((Z+FogEnd)/(FogEnd-FogStart), 0, 1)   (raw object-space Z)

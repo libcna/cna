@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md session 13: real depth + MSAA support for MRT (SetRenderTargets(count>1)).
+// plans/plan_opengl2.md session 13: real depth + MSAA support for MRT (SetRenderTargets(count>1)).
 //
 // Before this fix, SetRenderTargets() never attached ANY depth/stencil buffer to its shared
 // mrtFbo_, and always attached each target's single-sample colorTex directly even when the

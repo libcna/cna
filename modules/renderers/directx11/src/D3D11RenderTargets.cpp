@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX6 (DX-43/DX-45).
+// plans/plan_dx.md Phase DIRECTX6 (DX-43/DX-45).
 #include "CNA/Internal/Renderers/DirectX11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"

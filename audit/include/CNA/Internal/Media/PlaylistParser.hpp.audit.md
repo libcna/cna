@@ -5,7 +5,7 @@
 - Audit status: AUDITED (full read, 36 lines)
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header
-- XNA/FNA relevance: N/A -- NOXNA M3U/M3U8 reader backing `PlaylistCollection` (plan_media.md MEDIA-57/58/D5)
+- XNA/FNA relevance: N/A -- NOXNA M3U/M3U8 reader backing `PlaylistCollection` (plans/plan_media.md MEDIA-57/58/D5)
 - Main related tests: not independently located in this pass
 
 ## Purpose

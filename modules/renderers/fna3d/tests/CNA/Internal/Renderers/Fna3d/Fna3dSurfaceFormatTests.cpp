@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fna3d.md FNA3D-19: GTest coverage for the FNA3D renderer's transfer byte arithmetic.
+// plans/plan_fna3d.md FNA3D-19: GTest coverage for the FNA3D renderer's transfer byte arithmetic.
 //
 // This is the arithmetic that decides how many bytes reach FNA3D_SetTextureData2D and come back
 // from FNA3D_GetTextureData2D. Before it existed the renderer assumed `width * height * 4` for
@@ -18,7 +18,7 @@
 // the under-read that corrupts the last block row.
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_FNA3D is defined project-wide.

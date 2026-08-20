@@ -1,11 +1,11 @@
-// plan_dx9.md Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
+// plans/plan_dx9.md Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
 #include "CNA/Internal/Renderers/DirectX9/D3D9VertexDeclarations.hpp"
 
 namespace CNA::Internal::Renderers::DirectX9
 {
     namespace
     {
-        // D9-82 real finding (plan_dx9.md's DirectX9Renderer's own first real draw, empirically
+        // D9-82 real finding (plans/plan_dx9.md's DirectX9Renderer's own first real draw, empirically
         // verified with cna_test_directx9_draw before AND after this fix -- not assumed): COLOR0 was
         // originally declared D3DDECLTYPE_D3DCOLOR (D9-22, "same semantic meaning" as D3D11's
         // DXGI_FORMAT_R8G8B8A8_UNORM). That is wrong -- MSDN's own D3DDECLTYPE reference says
@@ -73,7 +73,7 @@ namespace CNA::Internal::Renderers::DirectX9
             D3DDECL_END()
         };
 
-        // plan_cnj.md CNB-58/CNB-67-equivalent D3D9 porting task: VertexPositionNormalTangentTexture
+        // plans/plan_cnj.md CNB-58/CNB-67-equivalent D3D9 porting task: VertexPositionNormalTangentTexture
         // (stride 48), used by the CNA CNAEXT "Pbr3D" custom shader (PbrEffect, unskinned). Byte
         // offsets match EasyGLRenderer.cpp's own ApplyLayout() `case 48:` exactly: POSITION0
         // (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TANGENT0 (FLOAT4, 24 -- xyz=tangent, w=bitangent sign,
@@ -103,11 +103,11 @@ namespace CNA::Internal::Renderers::DirectX9
             D3DDECL_END()
         };
 
-        // plan_cnj.md CNB-75..79-equivalent D3D9 porting task: VertexPositionNormalTangentTextureSkinned
+        // plans/plan_cnj.md CNB-75..79-equivalent D3D9 porting task: VertexPositionNormalTangentTextureSkinned
         // (stride 68), used by the CNA CNAEXT "PbrSkinned3D" custom shader (SkinnedPbrEffect). The
         // stride-48 PBR layout above with the stride-52/56 skinning suffix (BlendWeight, BlendIndices)
         // appended, matching EasyGLRenderer.cpp's own ApplyLayout() `case 68:` exactly.
-        // plan_gltf.md GLTF-465: the two colour-carrying PBR records. Stride 60 is the stride-48
+        // plans/plan_gltf.md GLTF-465: the two colour-carrying PBR records. Stride 60 is the stride-48
         // rigid record with TEXCOORD_1 at 48 and a packed COLOR_0 at 56; stride 80 is the skinned
         // record with TEXCOORD_1 at 68 and its own COLOR_0 at 76. D3DDECLTYPE_D3DCOLOR is the
         // right type for both -- it is the BGRA-ordered, normalized four-byte element D3D9 reads
@@ -155,7 +155,7 @@ namespace CNA::Internal::Renderers::DirectX9
             case 28: count = 3; return kStride28;
             case 32: count = 3; return kStride32;
             case 48: count = 4; return kStride48;
-            // plan_gltf.md GLTF-462: stride 60's first four fields are byte-identical to stride 48,
+            // plans/plan_gltf.md GLTF-462: stride 60's first four fields are byte-identical to stride 48,
             // and a D3D9 declaration carries element OFFSETS while the stride travels with
             // SetStreamSource -- so the stride-48 element list describes a stride-60 record exactly,
             // minus the second UV set and the packed colour this renderer's PBR shader does not

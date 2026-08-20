@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# plan_dx7.md design decision 16: a real, automated proof that the DIRECTX7 renderer never quietly
+# plans/plan_dx7.md design decision 16: a real, automated proof that the DIRECTX7 renderer never quietly
 # reaches for the proven-broken execute-buffer Direct3D path (IDirect3D/IDirect3DDevice::Execute/
 # D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/D3DINSTRUCTION/D3DOP_*), the old D3DVERTEXTYPE-enum
 # vertex-type submission (D3DVT_*), any pre-v7 DirectDraw/Direct3D interface, the removed viewport
 # object (CreateViewport/AddViewport/SetCurrentViewport/DeleteViewport/Clear2), or the old
 # texture-handle binding mechanism (D3DRENDERSTATE_TEXTUREHANDLE/IDirect3DTexture2::GetHandle) --
-# see plan_dx7.md's status note (the DX7-0 spike) for why all of these are permanently off-limits
+# see plans/plan_dx7.md's status note (the DX7-0 spike) for why all of these are permanently off-limits
 # here. Registered as the DirectX7_ExecuteBufferDiscipline CTest (cmake/Tests/DirectX7Tests.cmake) -- pure
 # text check, no compiled binary, no Wine needed, runs identically whether cross-compiling or not.
 #
@@ -63,7 +63,7 @@ if [ "$violations" -ne 0 ]; then
     echo "for its 3D layer, ONLY v7 DirectDraw for its 2D layer (IDirectDraw7/IDirectDrawSurface7 are" >&2
     echo "fine; never IDirectDraw2-6/IDirectDrawSurface1-6), NO viewport object at all (SetViewport/" >&2
     echo "Clear are direct IDirect3DDevice7 methods), and ONLY direct SetTexture(stage, surface) for" >&2
-    echo "texture binding (never D3DRENDERSTATE_TEXTUREHANDLE/IDirect3DTexture2), per plan_dx7.md" >&2
+    echo "texture binding (never D3DRENDERSTATE_TEXTUREHANDLE/IDirect3DTexture2), per plans/plan_dx7.md" >&2
     echo "design decision 16." >&2
     exit 1
 fi

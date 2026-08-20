@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_d3d10.md: a real, automated proof that the D3D10 renderer never quietly reaches for any of
+# plans/plan_d3d10.md: a real, automated proof that the D3D10 renderer never quietly reaches for any of
 # the fixed-function-era symbols this whole DIRECTX1..DIRECTX8 family used but D3D10 genuinely removed --
 # D3DFVF_* (the generic FVF bitmask model itself is gone, replaced by D3D10_INPUT_ELEMENT_DESC),
 # D3DTLVERTEX/D3DVT_*/D3DRENDERSTATE_*/D3DRS_* (D3D10 has no per-call render-state setter at all --

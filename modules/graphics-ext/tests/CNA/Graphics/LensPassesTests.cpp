@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2022..MOD-2024: chromatic aberration, film grain, lens flare.
+// plans/plan_modern.md MOD-2022..MOD-2024: chromatic aberration, film grain, lens flare.
 //
 // Each of the three is off by default, so the first thing every one of them is asked is whether it
 // leaves an untouched frame untouched. That is not a formality: three passes added to a chain that

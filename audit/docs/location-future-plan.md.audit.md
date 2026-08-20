@@ -1,7 +1,7 @@
-# Audit: docs/location-future-plan.md
+# Audit: docs/location-future-plans/plan.md
 
 ## Metadata
-- Source file: `docs/location-future-plan.md` (118 lines)
+- Source file: `docs/location-future-plans/plan.md` (118 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
 - File type: Markdown documentation (a deliberate not-implemented placeholder/guard-rail doc)

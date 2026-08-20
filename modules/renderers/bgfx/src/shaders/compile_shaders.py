@@ -77,7 +77,7 @@ SHADER_PAIRS = [
         ("vs_env_map3d",          "vertex",   "vs_env_map3d.sc"),
         ("fs_env_map3d",          "fragment", "fs_env_map3d.sc"),
     ]),
-    # plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect (stride 48) and SkinnedPbrEffect
+    # plans/plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect (stride 48) and SkinnedPbrEffect
     # (stride 68) share one fragment shader (fs_pbr3d) -- the BRDF math is identical, only the
     # vertex stage differs (plain transform vs. bone-palette skin), mirroring the
     # kAlphaTest3dShaders / vs_alpha_test_colored3d precedent of two vertex shaders sharing one

@@ -1,4 +1,4 @@
-// plan_html_dom.md HTMLDOM-72: Playwright driver for the HTML_DOM renderer's smoke test.
+// plans/plan_html_dom.md HTMLDOM-72: Playwright driver for the HTML_DOM renderer's smoke test.
 //
 // Loads the Emscripten-generated page in headless Chromium, mirrors everything the wasm module
 // prints, and waits for the test to publish its verdict on window.__cnaSmokeResult. Exits 0 only
@@ -20,7 +20,7 @@ if (!url) {
 
 const TIMEOUT_MS = Number(process.env.CNA_HTMLDOM_TEST_TIMEOUT_MS ?? 60000);
 
-// plan_html_dom.md HTMLDOM-101: the smoke page's own EM_JS checks can only ever read DOM STATE
+// plans/plan_html_dom.md HTMLDOM-101: the smoke page's own EM_JS checks can only ever read DOM STATE
 // (clip-path style strings, element counts) -- they cannot prove anything about actual COMPOSITED
 // pixels, because design decision 11 means no in-page JS API can rasterize a live DOM subtree. A
 // real screenshot, taken from OUT HERE by Playwright (which drives the browser's own compositor via
@@ -78,7 +78,7 @@ async function verifySmokeScreenshotPixels(page) {
     return insideOk && outsideOk;
 }
 
-// plan_html_dom.md HTMLDOM-119: the DOM-path half of the atlas-edge-bleed / fractional-scale
+// plans/plan_html_dom.md HTMLDOM-119: the DOM-path half of the atlas-edge-bleed / fractional-scale
 // scenario -- htmldom_pixel_verification_test.cpp's own frame 21 already checks the Canvas2D-path
 // half in-process (RenderTarget2D::GetData); design decision 11 means the DOM backbuffer can only
 // be read back via a real screenshot, the same mechanism verifySmokeScreenshotPixels above already

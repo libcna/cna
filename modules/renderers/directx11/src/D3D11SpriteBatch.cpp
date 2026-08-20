@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX9 (DX-70/DX-71/DX-72).
+// plans/plan_dx.md Phase DX9 (DX-70/DX-71/DX-72).
 #include "CNA/Internal/Renderers/DirectX11/D3D11SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"

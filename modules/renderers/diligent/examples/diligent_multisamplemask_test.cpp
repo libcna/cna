@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-60: real-device proof that BlendState.MultiSampleMask reaches
+// plans/plan_diligent.md DILIGENT-60: real-device proof that BlendState.MultiSampleMask reaches
 // Dg::GraphicsPipelineDesc::SampleMask instead of being silently discarded.
 //
 // Methodology: SampleMask bit i gates whether multisample coverage sample i of a covered pixel is

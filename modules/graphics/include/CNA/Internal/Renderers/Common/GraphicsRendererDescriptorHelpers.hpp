@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_runtimerenderer.md RTR-P1: the hooks most renderer families have nothing to say about.
+// plans/plan_runtimerenderer.md RTR-P1: the hooks most renderer families have nothing to say about.
 //
 // GraphicsRendererDescriptor requires every function pointer to be non-null, so that no call site
 // needs a null check (see that header's own note). These are the shared implementations a family

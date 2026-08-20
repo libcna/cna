@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx9.md Phase D9-7 (D9-70): mechanically enforce "not one line edited" for the vendored
+# plans/plan_dx9.md Phase D9-7 (D9-70): mechanically enforce "not one line edited" for the vendored
 # Microsoft XNA 4.0 Stock Effects HLSL sources -- design decision 3 says these files must stay
 # byte-identical to the FNA reference tree; this script is that enforcement, not just a comment.
 #

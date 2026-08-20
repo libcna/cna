@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-8: the engine layer's revision number.
+// plans/plan_modern.md MOD-8: the engine layer's revision number.
 //
 // Two things are worth pinning and neither is obvious. The header's macro and the library's
 // function must agree in a tree that was built in one piece -- that is the whole point of having
@@ -25,7 +25,7 @@ TEST(EngineLayerVersionTest, TheHeaderAndTheLibraryAgree)
 
 TEST(EngineLayerVersionTest, TheCurrentRevisionIsTwoAndNeverGoesBackwards)
 {
-    // plan_modern.md MOD-1904 moved this from 1 to 2, and the literal is deliberate: bumping the
+    // plans/plan_modern.md MOD-1904 moved this from 1 to 2, and the literal is deliberate: bumping the
     // macro without touching this line is not possible, so a bump is always a decision. What
     // changed between the two is in docs/cnaext-engine-changelog.md.
     EXPECT_EQ(CNA_CNAEXT_ENGINE_VERSION, 2);

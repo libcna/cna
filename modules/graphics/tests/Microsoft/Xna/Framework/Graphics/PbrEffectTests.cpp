@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md CNB-56/60 (Phase 13A): default-value and getter/setter coverage for PbrEffect, the
+// plans/plan_cnj.md CNB-56/60 (Phase 13A): default-value and getter/setter coverage for PbrEffect, the
 // new CNAEXT metallic-roughness PBR effect (no FNA/XNA equivalent to audit against -- real XNA
 // predates the PBR content pipeline entirely). See PbrEffect.hpp's own doc comment for the design
 // rationale (glTF 2.0's own reference BRDF, CNA's established 3-light + ambient convention).
@@ -436,7 +436,7 @@ TEST_F(PbrEffectDefaultsTest, FillGpuDrawParamsCarriesFactorsAndFogState)
 
 TEST_F(PbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTheDrawParamDefault)
 {
-    // plan_gltf.md GLTF-465. §3.7.2.1: a COLOR_0 attribute "acts as an additional linear multiplier
+    // plans/plan_gltf.md GLTF-465. §3.7.2.1: a COLOR_0 attribute "acts as an additional linear multiplier
     // to base color", so a renderer needs to know whether the colour slot in the vertex record means
     // anything. Since GLTF-462 the rigid PBR record (stride 60) and since GLTF-463 the skinned one
     // (stride 80) ALWAYS carry that slot -- filled with the authored colour, or with opaque white --
@@ -468,7 +468,7 @@ TEST_F(PbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTheDrawPa
 }
 
 // -----------------------------------------------------------------------
-// Image-based lighting (plan_modern.md MOD-1220/MOD-1221/MOD-1224/MOD-1226)
+// Image-based lighting (plans/plan_modern.md MOD-1220/MOD-1221/MOD-1224/MOD-1226)
 
 TEST_F(PbrEffectDefaultsTest, ImageBasedLightIsAbsentAndInertByDefault)
 {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2130: reading the `.cube` grading exchange format.
+// plans/plan_modern.md MOD-2130: reading the `.cube` grading exchange format.
 //
 // `ColorGradePass` has always taken a table. What the layer had no way to accept was the file a
 // colourist delivers, so a grade produced in a grading tool needed a conversion step outside CNA to

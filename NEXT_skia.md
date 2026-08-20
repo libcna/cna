@@ -8,7 +8,7 @@
   opt-in Ganesh mode. Do not claim 3D drawing, GPU presentation,
   depth, MSAA, renderable mipmaps, MRT,
   cube/volume sampling, or arbitrary effects until
-  their individual `plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is
+  their individual `plans/plan_skia.md` evidence exists. Plain cube/volume CPU transfer storage is
   separately proven by SKIA-80–84, and six-face 2D RenderTargetCube emulation by SKIA-85/86 does
   not widen the sampling/depth/MSAA claims.
 - Repository policy for this work: leave the unrelated historical `NEXT.md` unchanged.  Record
@@ -206,7 +206,7 @@
   destruction is a no-op rather than an invalid callback.
 - Added `Skia_RenderTargetBinding_Raster` (seven direct checks, including 128 snapshot lifetimes)
   and `Skia_RenderTarget2D_Lifetime` (public Clear/SpriteBatch recovery and a fresh target cycle).
-- Updated `plan_skia.md` (SKIA-69 complete) and `docs/skia-backend.md` (61 Skia CTests).
+- Updated `plans/plan_skia.md` (SKIA-69 complete) and `docs/skia-backend.md` (61 Skia CTests).
 
 ## Completed in this session: SKIA-51
 
@@ -1105,7 +1105,7 @@ level-boundary contract.
   stale common 30-second limit, then passed deterministically in 61.03 seconds after receiving a
   test-specific 120-second limit. The two new policy tests pass 2/2 in Release (1.76 seconds) and
   ASan+UBSan (2.28 seconds, `detect_leaks=0`, `halt_on_error=1`).
-- `plan_skia.md` now has a final COMPLETE banner and 114/114 completed rows. All persistent Debug,
+- `plans/plan_skia.md` now has a final COMPLETE banner and 114/114 completed rows. All persistent Debug,
   Release, and sanitizer caches retain `CNA_TEST_DISPLAY=:0`; `NEXT.md` was not read or changed.
 - A final Skia-only TODO/stub-marker audit found no unfinished implementation. It did find one
   provisional RenderTarget2D MSAA diagnostic ending in “not implemented yet”; the message and its
@@ -1114,7 +1114,7 @@ level-boundary contract.
 
 ## Completed in this session: SKIA-115 and SKIA-116
 
-- Reopened `plan_skia.md` with 56 contiguous successor rows, SKIA-115–170, while preserving the
+- Reopened `plans/plan_skia.md` with 56 contiguous successor rows, SKIA-115–170, while preserving the
   signed SKIA-1–114 raster release as a regression baseline. The phases cover arbitrary blends,
   2D/target mip chains, every SurfaceFormat family, bounded cube/volume sampling, wider explicit
   SkSL/SkMesh effects, opt-in Ganesh/OpenGL with MSAA/anisotropy, MRT re-evaluation, integration,
@@ -2301,7 +2301,7 @@ level-boundary contract.
 - Deliberately left `docs/skia-backend.md` and `docs/skia-release-gate.md` untouched: both
   explicitly scope their capability claims to the signed SKIA-1–114 baseline, changing "only after
   the successor release gate passes" -- the same deferral SKIA-143 (closing Phase S14) respected,
-  so promoting their tables is SKIA-170's job. `plan_skia.md`'s own top banner is unaffected for the
+  so promoting their tables is SKIA-170's job. `plans/plan_skia.md`'s own top banner is unaffected for the
   same reason: SKIA-151 closes Phase S15 within the still-active SKIA-115–170 expansion, not the
   expansion itself. Also left `docs/skia-generated-blender.md` line 75 alone (a research-agent
   finding graded "optional, low priority" -- its actual claim, that blend-tuple promotion doesn't
@@ -2368,7 +2368,7 @@ level-boundary contract.
   *current* ABI, unlike the dated historical log entries elsewhere in the same file that SKIA-151
   correctly left untouched) still had a bullet reading "Cube/volume children remain unsupported"
   after SKIA-149 implemented them -- SKIA-151's own sweep missed this one sentence. Corrected.
-- No validator script exists for the new inventory doc's table (unlike `plan_skia.md`/
+- No validator script exists for the new inventory doc's table (unlike `plans/plan_skia.md`/
   `skia-easygl-parity-ledger.md`/`skia-successor-contract-matrix.md`, which all have one); manually
   verified every row has the same column count via a small Python pipe-count check before
   publishing, after catching -- for the second time this session -- a literal `|` character
@@ -2420,7 +2420,7 @@ level-boundary contract.
   vertex colour blending onto an opaque background as ordinary straight-alpha src-over compositing;
   and painter's-order preservation when `drawVertices` is interleaved with ordinary `drawRect` calls
   on one canvas.
-- Updated `plan_skia.md`'s SKIA-153/154 task text in place to describe the redesign (SKIA-154's own
+- Updated `plans/plan_skia.md`'s SKIA-153/154 task text in place to describe the redesign (SKIA-154's own
   scope note: "mesh" now means the fixed `SkVertices` channel set, not a `SkMeshSpecification`
   custom-attribute declaration).
 - Full Skia suite (up from 165 to 166 -- one net new Raster test) passes in Debug, Release, and
@@ -2870,10 +2870,10 @@ Scoping this task surfaced a real gap in Phase S17's own task sequencing, not an
 shortfall: SKIA-163's row text ("run complete raster-versus-Ganesh 2D parity... performance...
 suites") assumes Ganesh already has a working `IGraphicsBackend` capable of drawing real 2D scenes
 through `SpriteBatch`/`Texture2D`. **No such backend exists.** SKIA-159-162 all deliberately stayed
-below the public API; nothing in the current `plan_skia.md` task list under any number actually
+below the public API; nothing in the current `plans/plan_skia.md` task list under any number actually
 builds one. There is no task between SKIA-162 and SKIA-163 that was supposed to close this gap.
 
-Given that, `plan_skia.md`'s SKIA-163 row is deliberately left `⬜`, not flipped to `✅` -- see
+Given that, `plans/plan_skia.md`'s SKIA-163 row is deliberately left `⬜`, not flipped to `✅` -- see
 `docs/skia-ganesh-artifact.md`'s own "SKIA-163" section for the full reasoning. What was actually
 delivered this session, addressing the parts of SKIA-163's acceptance text that genuinely can be
 satisfied at the level that exists today:
@@ -2902,9 +2902,9 @@ own precedent) rather than being assumed to fit inside the next available task n
 **Owner decision (2026-08-04): stop the Ganesh arc here.** Given the choice between (a) stopping
 after SKIA-159-163's solid, well-tested below-the-API foundation, (b) scoping a new large task to
 build a minimal Ganesh `IGraphicsBackend`, or (c) something else, the owner chose (a). SKIA-163's
-row in `plan_skia.md` was changed from `⬜` to the honest `🟨` partial marker (this project's
+row in `plans/plan_skia.md` was changed from `⬜` to the honest `🟨` partial marker (this project's
 existing convention for "real, verified partial progress, specific obligation still owed," already
-used extensively in `plan_dx9.md`/`NEXT.md`), with a header note added to Phase S17 explaining the
+used extensively in `plans/plan_dx9.md`/`NEXT.md`), with a header note added to Phase S17 explaining the
 pause and its reasoning. SKIA-164-170 remain `⬜` with zero attempted work -- explicitly not
 started, not silently skipped. Resuming this arc later requires deciding how to sequence the
 missing `IGraphicsBackend` work first, not simply picking SKIA-164 up next; SKIA-164-170's own
@@ -2912,13 +2912,13 @@ acceptance text likely has the same implicit-backend-exists assumption that made
 unclosable as literally written, so re-check each one against reality before attempting it, rather
 than discovering the same gap piecemeal.
 
-**Consequence: `plan_skia.md` currently has no other open task outside the paused Ganesh arc.**
+**Consequence: `plans/plan_skia.md` currently has no other open task outside the paused Ganesh arc.**
 Every remaining `⬜`/`🟨` row is SKIA-163-170, all Ganesh-arc, all now paused. The next work should
-come from outside `plan_skia.md`'s own task list -- see "Next candidates" below.
+come from outside `plans/plan_skia.md`'s own task list -- see "Next candidates" below.
 
 ## Next candidates
 
-Since `plan_skia.md` itself has no other open row (every remaining one is paused Ganesh-arc scope,
+Since `plans/plan_skia.md` itself has no other open row (every remaining one is paused Ganesh-arc scope,
 see above), the next work should come from outside its task list -- these are the standalone
 follow-ups already flagged in earlier sessions, plus adjacent areas of the broader project:
 
@@ -2945,7 +2945,7 @@ follow-ups already flagged in earlier sessions, plus adjacent areas of the broad
   and recover from a simulated context loss on a real default-framebuffer `SkSurface`
   (`SkiaGaneshSurface`), pixel-proven below the API and stress-tested at 64+64 cycles -- but no
   `IGraphicsBackend` wraps it, so there is still no `SpriteBatch`/`GraphicsDevice` integration, no
-  2D-scene rendering, and no MSAA/anisotropy capability probing. No task in `plan_skia.md` currently
+  2D-scene rendering, and no MSAA/anisotropy capability probing. No task in `plans/plan_skia.md` currently
   builds that integration -- see the "Attempted this session: SKIA-163" section above.
 - `TextureFilter::Anisotropic` deliberately falls back byte-exactly to complete Linear, including
   mip interpolation, while the real anisotropy capability remains false.

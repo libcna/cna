@@ -10,12 +10,12 @@ existing automated test either:
 - exercises the no-hardware-found silent-no-op / `SensorState::NotSupported` path, or
 - exercises the real `CurrentValueChanged`/`ReadingChanged` dispatch logic via the
   `CNAEXT` synthetic-injection test hooks (`InjectSyntheticSensorUpdate()`,
-  `SetStartedForTesting()` — see `plan_devices_phase4.md` Task P4-2), which prove the
+  `SetStartedForTesting()` — see `plans/plan_devices_phase4.md` Task P4-2), which prove the
   C++ dispatch plumbing works but say nothing about whether the *numbers* flowing
   through it are physically correct.
 
 This checklist is for whoever eventually runs CNA on real hardware — a physical Android
-device/emulator, an iOS device (once `plan_devices_phase4.md` Task P4-12's toolchain
+device/emulator, an iOS device (once `plans/plan_devices_phase4.md` Task P4-12's toolchain
 blocker is lifted), or a desktop machine with an actual accelerometer/gyroscope/haptic
 controller attached — to close the gap between "compiles and dispatches correctly" and
 "is physically correct."
@@ -33,7 +33,7 @@ testers, devices, and sessions instead of each tester inventing their own format
 
 ## Phase 9 (2026-07-04) execution results — honest status per case
 
-`plan_devices_phase9.md` Task P9-5 actually attempted every hardware case its brief
+`plans/plan_devices_phase9.md` Task P9-5 actually attempted every hardware case its brief
 listed, in this exact container, this session — not a re-statement of the assumption
 above. Nothing below is marked verified unless it was physically run.
 
@@ -78,7 +78,7 @@ above. Nothing below is marked verified unless it was physically run.
 6. **iOS device/toolchain**: **NOT RUN — unavailable, confirmed explicitly.** No
    `xcodebuild`/`xcrun`/`osxcross`, nothing matching `*ios*toolchain*` anywhere on this
    filesystem (re-checked fresh this session, same result as every prior phase since
-   `plan_devices_phase4.md` Task P4-12). iOS cross-compilation fundamentally requires
+   `plans/plan_devices_phase4.md` Task P4-12). iOS cross-compilation fundamentally requires
    macOS/Xcode — not fixable by installing a package in this Linux container.
 
 **Net result: 1 of 6 cases verified (case 4, live, this session); 5 of 6 remain
@@ -87,7 +87,7 @@ emulator, no APK packaging, no toolchain) — not vague unavailability. This che
 stays the authoritative source for whoever eventually has the missing hardware/toolchain
 available.
 
-**Update (2026-07-05, `plan_devices.md` Phase 9, Tasks DEVICES-0122-0126): the "no working
+**Update (2026-07-05, `plans/plan_devices.md` Phase 9, Tasks DEVICES-0122-0126): the "no working
 emulator"/"no APK packaging" blockers above are resolved** — `/dev/kvm` now exists in this
 container (absent every session above), and a real Gradle/CMake Android app integration
 now exists (`modules/devices/examples/demo_devices/android/`, see `docs/devices-build.md` Section 4.1).
@@ -105,14 +105,14 @@ no Apple toolchain exists in this Linux container (re-confirmed this session).
 
 **Code under test:** `Accelerometer.cpp`'s `ConvertAndroidAccelerometerToXnaLandscape()`
 (Android only — desktop/iOS have no equivalent remap and report raw SDL axes directly),
-which since `plan_devices_phase5.md` Task P5-7 delegates its actual sign/axis math to
+which since `plans/plan_devices_phase5.md` Task P5-7 delegates its actual sign/axis math to
 `Detail::ConvertAndroidPortraitToXnaLandscape()`
 (`include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp`) — a pure
 function taking an explicit `AndroidSensorLandscapeOrientation` instead of querying SDL
 directly, so it's unit-testable on any platform.
 `tests/Microsoft/Devices/Sensors/AndroidSensorOrientationTests.cpp` now covers both
 rotations for both sensor classes' representative magnitudes, plus semantic tilt-right/
-tilt-left/face-up/face-down examples added in `plan_devices_phase6.md` Task P6-7 (9
+tilt-left/face-up/face-down examples added in `plans/plan_devices_phase6.md` Task P6-7 (9
 tests total, all passing in this headless container).
 
 **Why this still needs real hardware despite the new unit tests:** the unit tests only
@@ -128,7 +128,7 @@ show up as the game tilting the wrong direction on a real device. **Task P6-7
 (2026-07-04) deliberately did not add a test asserting an absolute sign for the
 forward/backward (X) axis** (step 3 below) after an attempt to independently re-derive
 one from rotation geometry alone produced a contradiction with the already-trusted Y-axis
-convention on the first pass — see that task's Resolution in `plan_devices_phase6.md` for
+convention on the first pass — see that task's Resolution in `plans/plan_devices_phase6.md` for
 the full account. This is exactly the kind of mistake this checklist exists to catch
 before it reaches a real device, not after.
 
@@ -179,7 +179,7 @@ If step 2 above is ever re-verified on real hardware and found to disagree with 
 documented convention, that is now a bug in the *opt-in* remap specifically, not evidence
 that the remap should be removed outright — removal was considered and explicitly
 declined. **Not yet applied to `Motion`'s Gravity/DeviceAcceleration/RotationRate**
-(see Section 8, `plan_devices.md` Task `MOTION-012`) — tracked separately since it needs
+(see Section 8, `plans/plan_devices.md` Task `MOTION-012`) — tracked separately since it needs
 its own careful math derivation, not a rushed addition alongside this decision.
 
 ## 2. Gyroscope axis correctness
@@ -229,7 +229,7 @@ proves the underlying `SDL_GetSensors()` query itself works and correctly report
 found," but a genuine remove/re-add/default-device-change scenario — this task's own
 acceptance criteria's literal ask — would need either real hardware or a native
 fault-injection layer capable of safely mocking `SDL_GetSensors()`/`SDL_OpenSensor()`/
-`SDL_CloseSensor()` (`plan_devices.md` Task `TEST2-005`'s own separate scope; building
+`SDL_CloseSensor()` (`plans/plan_devices.md` Task `TEST2-005`'s own separate scope; building
 one ad hoc here to fake-inject a full device lifecycle was judged out of scope for this
 task, the same call made for `ANDR2-002`'s identical gap). **Status: NOT RUN — hardware
 or TEST2-005 validation open.**
@@ -272,7 +272,7 @@ of this one.
 **Code under test:** `VibrateController.cpp`'s `OpenFirstHapticDevice()`/
 `IsConnectedGamepadHapticDevice()` (Task P4-10's ID-based gamepad-exclusion fix) and the
 plain `Start(TimeSpan)`/`Start(TimeSpan, intensity)` rumble path. As of
-`plan_devices_phase5.md` Task P5-11, `g_haptic` is now closed and `SDL_INIT_HAPTIC`
+`plans/plan_devices_phase5.md` Task P5-11, `g_haptic` is now closed and `SDL_INIT_HAPTIC`
 released via `~VibrateController()` at process exit (previously left open forever, on
 an unverified assumption about `SDL_Quit()` ordering that turned out to be wrong — see
 that task's Resolution) — this is a resource-lifetime fix, **not** a hardware
@@ -431,7 +431,7 @@ recording one specific session's results.
 | Desktop with a connected non-gamepad haptic device (e.g. a USB force-feedback wheel) | same, real device opened | `Start(TimeSpan)`/`Start(TimeSpan, intensity)` | Device actuates for the given duration; `getIsSupportedProperty()` true | Intensity scales strength; `StartLeftRight()` may achieve genuine independent magnitudes if the device/driver supports `SDL_HAPTIC_LEFTRIGHT` natively (unlike the Android single-actuator blend above) | **NOT RUN** — no such hardware available in this session |
 | Desktop with a connected rumble-capable gamepad, no other haptic device | same | `getIsSupportedProperty()`, `Start()`, `GamePad::SetVibration()` | `VibrateController` excludes the gamepad's own haptic ID (`IsConnectedGamepadHapticDevice()`) — behaves as if unsupported; `GamePad::SetVibration()` drives the gamepad normally; neither API fights the other for the same motor | Same | **NOT RUN** — no gamepad connected in this session (full steps: Section 5 above) |
 
-## 6. `Detail::AndroidSensorBridge` lifecycle safety (`plan_devices.md` Task DEVICES-0085)
+## 6. `Detail::AndroidSensorBridge` lifecycle safety (`plans/plan_devices.md` Task DEVICES-0085)
 
 **Code under test:** `AndroidSensorBridge::Stop()`'s self-join-detects-and-detaches
 logic (`src/Devices/Microsoft/Sensors/Detail/AndroidSensorBridge.cpp`) — confirmed by
@@ -478,7 +478,7 @@ be run in this environment:**
   all in the non-Android stub `Impl`, so it cannot even compile into a desktop TSan build,
   let alone run under one. Running an actual TSan-instrumented stress test requires either
   real Android hardware/an emulator with TSan support, or a future native fault-injection
-  seam (`plan_devices.md` Task `TEST2-005`) that can host this logic off-device.
+  seam (`plans/plan_devices.md` Task `TEST2-005`) that can host this logic off-device.
 - "A fake service restart re-probes successfully" — there is no seam in this codebase today
   to make `ASensorManager_createEventQueue()`/`ASensorEventQueue_enableSensor()`/
   `ASensorEventQueue_getEvents()` fail on demand to simulate a service restart; that also
@@ -580,7 +580,7 @@ RUN — hardware validation open.**
    decide whether "keep software throttling if required" should actually be implemented —
    record the finding either way.
 
-## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
+## 7. `Compass` real Android backend (`plans/plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
 
 **Code under test:** `Detail::AndroidCompassBackend` (`src/Devices/Microsoft/Sensors/Detail/AndroidCompassBackend.cpp`)
 and `Detail::ConvertRotationVectorToMagneticHeadingDegrees()`
@@ -677,7 +677,7 @@ observed. **Status: NOT RUN — hardware validation open** (matching this pass's
    automatically, with no special recovery action needed (per `PublishReading()`'s own
    "self-heals once the stalled stream delivers again" design).
 
-## 8. `Motion` real Android backend (`plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
+## 8. `Motion` real Android backend (`plans/plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
 
 **Code under test:** `Detail::AndroidMotionBackend` (`src/Devices/Microsoft/Sensors/Detail/AndroidMotionBackend.cpp`)
 and `Detail::ConvertRotationVectorToXnaQuaternion()`/`ExtractYawPitchRollFromQuaternion()`
@@ -838,7 +838,7 @@ behavior.
 
 ---
 
-## 9. Emulator limitations for Devices testing (`plan_devices.md` Task DEVICES-0129)
+## 9. Emulator limitations for Devices testing (`plans/plan_devices.md` Task DEVICES-0129)
 
 An Android emulator (confirmed working this session, `docs/devices-build.md` Section 4.1)
 closes the "does the software pipeline work at all" question, but is **not a substitute**

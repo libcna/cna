@@ -7,7 +7,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_html_dom.md HTMLDOM-50/51/52: points the draw path at a render target's own Canvas2D
+// plans/plan_html_dom.md HTMLDOM-50/51/52: points the draw path at a render target's own Canvas2D
 // context, or back at the DOM backbuffer for id 0. While Module['cnaDomBoundCtx'] is set,
 // CNA_HtmlDom_FlushSprites replays commands into it instead of writing DOM elements, and Clear
 // targets it too.
@@ -18,7 +18,7 @@
 // Conservative but correct -- every bind is treated as "this target's content may be about to
 // change", even when the caller only reads it back.
 //
-// plan_html_dom.md HTMLDOM-109: clears both the free shared base variant (its cached `.url`, if any,
+// plans/plan_html_dom.md HTMLDOM-109: clears both the free shared base variant (its cached `.url`, if any,
 // would otherwise be a stale PNG of the pre-bind pixels) and this entry's own records in the capped
 // global variant cache -- previously just `entry.variants = {}`, which reset the lookup map but left
 // the corresponding global LRU array records behind as orphaned, unreachable-by-owner stale entries.
@@ -84,7 +84,7 @@ namespace CNA::Internal::Renderers::HtmlDom
             return id;
         }
 
-        // plan_html_dom.md HTMLDOM-102: defaults to false, matching RasterizerState's own
+        // plans/plan_html_dom.md HTMLDOM-102: defaults to false, matching RasterizerState's own
         // constructor default (RasterizerState.cpp: scissorTestEnable_(false)) -- the state before
         // any ApplyRasterizerState call has ever run.
         bool& CurrentScissorEnable()

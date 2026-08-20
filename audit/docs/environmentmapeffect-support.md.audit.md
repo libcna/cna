@@ -9,7 +9,7 @@
 - Related audit: `xna-graphics` shard (this session)
 
 ## Purpose
-Closes Phase 45 (`plan_graphics.md` Tasks 391-400): property/default audit, cube-map blend-formula
+Closes Phase 45 (`plans/plan_graphics.md` Tasks 391-400): property/default audit, cube-map blend-formula
 fix (additive → `mix()`/lerp), `EnvironmentMapSpecular` alpha scaling, Fresnel edge-weighting,
 `EyePosition`/reflection-vector correctness, `World`/normal-matrix correctness, and cross-backend
 consistency.

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-8 (D9-82): the actual SetVertexShaderConstantF/SetPixelShaderConstantF
+// plans/plan_dx9.md Phase D9-8 (D9-82): the actual SetVertexShaderConstantF/SetPixelShaderConstantF
 // upload step, register-table-driven via D9-72's D3D9ShaderRegisters.hpp -- looks a named HLSL
 // constant (e.g. "WorldViewProj") up in a specific compiled shader's own real register table and
 // uploads the matching float data to that exact register.

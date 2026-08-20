@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-132 and MOD-138: what a float render target buys, and what it costs.
+// plans/plan_modern.md MOD-132 and MOD-138: what a float render target buys, and what it costs.
 //
 // Phase 1 is one claim -- a float render target keeps values above 1.0 and an 8-bit one does not --
 // and the whole HDR pipeline is built on it. `HdrRenderTargetRoundTripTests` checks that claim from

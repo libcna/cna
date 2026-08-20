@@ -167,7 +167,7 @@ which is just a position counter). `FormatTraceLogDiff()` renders either a one-l
 summary or the first diverging entry from each log side-by-side, plus an entry-count note if the
 logs are different lengths.
 
-See `plan_headless.md` for the full task-by-task status and design rationale.
+See `plans/plan_headless.md` for the full task-by-task status and design rationale.
 
 ## Real-world validation
 

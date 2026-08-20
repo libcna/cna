@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_headless.md HEADLESS-51/64: exercises AlphaTestEffect, DualTextureEffect,
+// plans/plan_headless.md HEADLESS-51/64: exercises AlphaTestEffect, DualTextureEffect,
 // EnvironmentMapEffect, SkinnedEffect, and Model.Draw() end-to-end against the HEADLESS renderer
 // (through real GraphicsDevice::DrawPrimitives/DrawIndexedPrimitives calls, not just constructing
 // the effect and calling Apply() in isolation). Previously these were only an inference from

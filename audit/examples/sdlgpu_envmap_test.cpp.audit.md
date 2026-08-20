@@ -185,7 +185,7 @@ Tests.
   `SDL_GPUCullMode` dispatch, not a hardcoded `SDL_GPU_CULLMODE_NONE`) confirms the comment's claim
   that culling is genuinely wired up (not the old "SDLGPU-18/19/20 not yet done" state it
   contrasts itself against) — an accurate, current claim, not stale.
-- `plan_sdlgpu.md`'s own `SDLGPU-33` row documents this file's 3 checks as "3/3 checks" verified,
+- `plans/plan_sdlgpu.md`'s own `SDLGPU-33` row documents this file's 3 checks as "3/3 checks" verified,
   and describes the correct FNA lerp semantics for the *blend* (`mix(baseColor, envSample*
   combinedAlpha, blendFactor) + envMapSpecular*envSample.a*combinedAlpha`) accurately — but does
   not mention the emissive/diffuse formula at all, confirming F1 is a genuine, currently
@@ -201,7 +201,7 @@ Tests.
   file at all, unlike Vulkan's own `vulkan_environmentmapeffect_amount_one_test.cpp` family which
   this file is explicitly modeled on and which does have a dedicated specular-variant test.
 - `EnvironmentMapEffect::FresnelEnabled` has no public setter in this codebase (confirmed
-  permanently `true` per `plan_sdlgpu.md`'s own `SDLGPU-33` note) — this file's 3 checks therefore
+  permanently `true` per `plans/plan_sdlgpu.md`'s own `SDLGPU-33` note) — this file's 3 checks therefore
   all exercise the Fresnel-enabled code path by construction; this is a pre-existing, documented,
   cross-backend API-completeness gap (not introduced or worsened by this file) rather than a new
   finding.

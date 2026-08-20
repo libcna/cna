@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_media.md MEDIA-73: end-to-end test -- content.Load<Video>("fixture") through the real,
+// plans/plan_media.md MEDIA-73: end-to-end test -- content.Load<Video>("fixture") through the real,
 // full ContentManager::Load<Video>() path (container header + type-reader table + object
 // dispatch), against a real companion video file. Unlike ContentManagerSongXnbTests.cpp's
 // fixture (a real MonoGame-produced .xnb, vendored as a binary), no MonoGame/dotnet content-
 // pipeline tooling is available in this environment to produce a real Video .xnb the same way --
-// documented as an honest gap in plan_media.md/NEXTmedia.md. Instead, this hand-constructs a full,
+// documented as an honest gap in plans/plan_media.md/NEXTmedia.md. Instead, this hand-constructs a full,
 // valid .xnb byte container (header + type-reader table + VideoReader's exact real field layout),
 // the same technique ContentManagerXnbTests.cpp's own BuildTestXnbFile() and
 // ContentManagerSongXnbTests.cpp's own broken-fixture builder already use elsewhere in this

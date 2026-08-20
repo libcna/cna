@@ -394,7 +394,7 @@ namespace CNA::Internal::Renderers::Headless
 
     bool HeadlessEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
-        // Never actually compiled -- accepts any source string (plan_headless.md HEADLESS-16). A genuinely
+        // Never actually compiled -- accepts any source string (plans/plan_headless.md HEADLESS-16). A genuinely
         // empty source on both stages is still flagged in Validation/Trace mode since that is
         // never a legitimate custom-effect call from anywhere in this codebase.
         Require(state_, !vertSrc.empty() || !fragSrc.empty(),
@@ -1049,7 +1049,7 @@ namespace CNA::Internal::Renderers::Headless
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Headless { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DIRECTX5's real Direct3D v3 device bring-up (a port of DIRECTX3's own, itself a port of DIRECTX2's) --
+// plans/plan_dx2.md Phase O3 (DX2-20..DX2-26): smoke test for DIRECTX5's real Direct3D v3 device bring-up (a port of DIRECTX3's own, itself a port of DIRECTX2's) --
 // IDirect3D2/IDirect3DDevice2/IDirect3DViewport2 creation against the shadow-backbuffer surface,
 // a real attached 16-bit Z-buffer, and the newly-real ClearColorAndDepth/ClearDepth/etc entry
 // points. VertexBuffer/IndexBuffer storage (Phase O5), the 3D draw path itself

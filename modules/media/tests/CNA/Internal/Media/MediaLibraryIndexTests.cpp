@@ -27,7 +27,7 @@ TEST(MediaLibraryIndexTest, ScansEveryFixtureSong)
 {
     // Counted from the filesystem rather than hardcoded, so adding a fixture for a new feature
     // cannot break this test while still proving the scan finds EVERY supported file present
-    // (plan_media.md MEDIA-199/206 both grew the corpus and broke the old magic number).
+    // (plans/plan_media.md MEDIA-199/206 both grew the corpus and broke the old magic number).
     std::size_t expected = 0;
     for (const auto& e : std::filesystem::recursive_directory_iterator(kMusicRoot))
     {
@@ -64,7 +64,7 @@ TEST(MediaLibraryIndexTest, EachSongHasCorrectTagsFromItsSource)
     EXPECT_TRUE(nocturne->genre.empty());
 }
 
-// plan_media.md MEDIA-54/D10: "Artist One" and "ARTIST ONE" (Twilight.mp3's deliberate
+// plans/plan_media.md MEDIA-54/D10: "Artist One" and "ARTIST ONE" (Twilight.mp3's deliberate
 // case-variant tag) must normalize to a single canonical artist, not two distinct ones.
 TEST(MediaLibraryIndexTest, NormalizesCaseVariantArtistNamesToOneCanonicalValue)
 {
@@ -97,7 +97,7 @@ TEST(MediaLibraryIndexTest, EmptyOrMissingRootProducesNoSongsWithoutCrashing)
     EXPECT_TRUE(missing.GetSongs().empty());
 }
 
-// plan_media.md MEDIA-53: a self-referential symlink must not cause infinite recursion.
+// plans/plan_media.md MEDIA-53: a self-referential symlink must not cause infinite recursion.
 TEST(MediaLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
 {
     std::filesystem::path root = "tests/assets/media/.symlink_cycle_test_fixture";
@@ -124,7 +124,7 @@ TEST(MediaLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
     std::filesystem::remove_all(root, ec);
 }
 
-// plan_media.md MEDIA-53/MEDIA-113: an unreadable subdirectory (real file-permission denial, not
+// plans/plan_media.md MEDIA-53/MEDIA-113: an unreadable subdirectory (real file-permission denial, not
 // just a missing/empty root) must be silently skipped via
 // std::filesystem::directory_options::skip_permission_denied, not crash or throw. Skips itself
 // (rather than fail) if this test happens to run as root, since root bypasses Unix permission

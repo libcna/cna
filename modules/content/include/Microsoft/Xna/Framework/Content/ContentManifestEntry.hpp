@@ -10,7 +10,7 @@ namespace Microsoft::Xna::Framework::Content
 {
     /**
      * @brief CNAEXT introspection record for one logical asset found by a `ContentManager`
-     *        content-root scan (plan_xnb.md Phase B3, XNB-65/XNB-66).
+     *        content-root scan (plans/plan_xnb.md Phase B3, XNB-65/XNB-66).
      *
      * Not part of the XNA 4.0 API -- a CNA-specific tooling/diagnostic surface (asset
      * validators, an editor's "what's in Content" view). One entry per logical asset name
@@ -33,7 +33,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief Canonical `.xnb` type-reader names referenced by `<relativePath>.xnb`'s
-         *        type-reader table (plan_xnb.md XNB-61a), if @ref hasXnb and the file is
+         *        type-reader table (plans/plan_xnb.md XNB-61a), if @ref hasXnb and the file is
          *        uncompressed and well-formed enough to read its header/table. Empty otherwise --
          *        a malformed or LZX-compressed file (XNB-61b, Phase D) is not a scan failure,
          *        just an empty inventory for that one entry.
@@ -43,7 +43,7 @@ namespace Microsoft::Xna::Framework::Content
 
     /**
      * @brief CNAEXT aggregate view of every `.xnb` reader name referenced across an entire
-     *        content-manifest scan (plan_xnb.md XNB-67).
+     *        content-manifest scan (plans/plan_xnb.md XNB-67).
      */
     struct CNAEXT ContentManifestReaderUsage
     {

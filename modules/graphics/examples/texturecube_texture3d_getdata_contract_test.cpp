@@ -156,7 +156,7 @@ namespace
     constexpr Contract kContract{"FREEDIRECT", false, Support::Unsupported, Support::Unsupported,
                                  false, Support::Unsupported, Support::Unsupported, false};
 #elif defined(CNA_RENDERER_DIRECTX9)
-    // plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
+    // plans/plan_dx9.md D9-100: GraphicsProfile.Reach does not support volume textures at all, so the
     // Texture3D half of this file needs a HiDef device to have anything to measure.
     constexpr Contract kContract{"DIRECTX9", true, Support::Exact, Support::Exact,
                                  true, Support::Exact, Support::Exact, true};

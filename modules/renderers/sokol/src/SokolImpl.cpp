@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-3: the single translation unit that instantiates sokol_gfx's STB-style
+// plans/plan_sokol.md SOKOL-3: the single translation unit that instantiates sokol_gfx's STB-style
 // implementation, plus the implementation half of the code-generated shader header. Everything
 // else in this renderer includes the same two headers for their declarations only.
 //

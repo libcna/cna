@@ -491,12 +491,12 @@ advertised." Taken literally, this assumes Ganesh already has a working `IGraphi
 of drawing real 2D scenes through `SpriteBatch`/`Texture2D` -- otherwise there is no "2D parity"
 corpus to run, and no "performance" to compare. **No such renderer exists.** SKIA-159-162, entirely
 deliberately, all stayed below the public API (`SkiaGaneshContext`/`SkiaGaneshSurface` are not
-`IGraphicsRenderer` implementations); nothing in the current `plan_skia.md` task list under any
+`IGraphicsRenderer` implementations); nothing in the current `plans/plan_skia.md` task list under any
 number actually builds one. This is a genuine gap in Phase S17's own sequencing, discovered while
 scoping this task, not a shortfall in how it was executed -- there is no task between SKIA-162 and
 SKIA-163 that was supposed to close it.
 
-Given that, this task is **not marked complete** in `plan_skia.md`. What follows is the honest
+Given that, this task is **not marked complete** in `plans/plan_skia.md`. What follows is the honest
 subset of SKIA-163's acceptance text that genuinely can be satisfied at the level that exists
 today, delivered as real, verified work -- not a substitute for the missing renderer integration,
 and not claimed as one.
@@ -536,7 +536,7 @@ and not claimed as one.
 
 - A real 2D-scene "parity" oracle (rendering the same `SpriteBatch` scene through raster and
   through Ganesh and comparing pixels) cannot exist until some task gives Ganesh an
-  `IGraphicsRenderer`. No such task currently has a number in `plan_skia.md`.
+  `IGraphicsRenderer`. No such task currently has a number in `plans/plan_skia.md`.
   `docs/skia-3d-emulation-adr.md`-style architecture-decision framing might be the right vehicle
   for scoping that work properly (a full `IGraphicsRenderer` is a materially larger undertaking than
   any single SKIA-159-163 task, closer in scope to the entire raster `SkiaRenderer`

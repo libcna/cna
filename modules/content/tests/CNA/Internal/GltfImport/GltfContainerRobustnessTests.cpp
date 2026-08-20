@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-026 / GLTF-027 / GLTF-031 / GLTF-048: the container's own rules, and what
+// plans/plan_gltf.md GLTF-026 / GLTF-027 / GLTF-031 / GLTF-048: the container's own rules, and what
 // happens when a file breaks them.
 //
 // Everything above this layer assumes the bytes are where the header says they are. §4.4's GLB
@@ -293,7 +293,7 @@ TEST(GltfContainerRobustness, ABufferViewStartingPastTheEndOfItsBufferIsRefused)
         << "a bufferView starting past the end of its buffer was accepted";
 }
 
-// plan_gltf.md GLTF-039. The offset test above is the reachable half of the same class; this is
+// plans/plan_gltf.md GLTF-039. The offset test above is the reachable half of the same class; this is
 // the half no .gltf file can express, and it is asserted directly rather than left unexercised.
 //
 // cgltf parses every JSON integer through `atoll`, so a value above `LLONG_MAX` saturates and two
@@ -471,7 +471,7 @@ TEST(GltfContainerRobustness, AnOrdinaryBufferViewIsNotMistakenForACompressedOne
     EXPECT_GT(validated, 0u) << "no fixture validated at all -- the control proved nothing";
 }
 
-// --- plan_gltf.md GLTF-040: the container/buffer layer under mutation ------------------------------
+// --- plans/plan_gltf.md GLTF-040: the container/buffer layer under mutation ------------------------------
 
 namespace
 {

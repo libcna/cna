@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengles1.md OPENGLES1-1..OPENGLES1-20-ish baseline smoke test: Clear()/Present() and
+// plans/plan_opengles1.md OPENGLES1-1..OPENGLES1-20-ish baseline smoke test: Clear()/Present() and
 // SpriteBatch through the real OpenGL ES 1.1 fixed-function renderer.
 //
 // Check A -- Clear(Red) is visible via GetBackBufferData().

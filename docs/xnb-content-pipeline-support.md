@@ -2,9 +2,9 @@
 
 Covers CNA's real, binary-`.xnb`-compatible content loader (`Microsoft::Xna::Framework::Content::
 ContentManager`/`ContentReader`/`ContentTypeReaderManager`, plus the individual readers under
-`CNA::Internal::Xnb`) — the closing documentation task for `plan_xnb.md`'s Phase G (XNB-45),
+`CNA::Internal::Xnb`) — the closing documentation task for `plans/plan_xnb.md`'s Phase G (XNB-45),
 written once Phase A through Phase G's other tasks (XNB-42/42A/43/44/46) had landed. See
-`xnb.md` for the original design rationale and `plan_xnb.md` for the full, numbered task history.
+`xnb.md` for the original design rationale and `plans/plan_xnb.md` for the full, numbered task history.
 
 This is **CNA's second, independent content format** alongside `.cnj` (see `cnj.md`) and the older,
 CNA-original `.model.json` loose-file format (see `docs/model-content-pipeline-support.md`, which
@@ -138,7 +138,7 @@ pattern above. This is a real, explicit, documented limitation — not a silent 
 |---|---|
 | None (uncompressed) | ✅ Full |
 | LZX (real XNA/MonoGame's primary compressed format) | ✅ Full — a faithful, line-by-line port of FNA's own `LzxDecoder.cs`, verified byte-for-byte against FNA's own decoder run under Mono, plus a 2000-iteration deterministic mutation fuzzer (found and fixed a real heap-buffer-overflow in `MakeDecodeTable()`'s long-code table-growth path) |
-| LZ4 (MonoGame's own alternate compressed format, `ContentCompressedLz4`) | ❌ Recognized (the header's flag bit is decoded into a real `XnbCompression::Lz4` enum value), explicitly unsupported — throws a precise `ContentLoadException` rather than mis-decoding. No CNA decoder exists yet; deferred to a future broad-compatibility pass (`plan_xnb.md` XNB-30C) |
+| LZ4 (MonoGame's own alternate compressed format, `ContentCompressedLz4`) | ❌ Recognized (the header's flag bit is decoded into a real `XnbCompression::Lz4` enum value), explicitly unsupported — throws a precise `ContentLoadException` rather than mis-decoding. No CNA decoder exists yet; deferred to a future broad-compatibility pass (`plans/plan_xnb.md` XNB-30C) |
 | Both compression bits set simultaneously | ❌ `XnbCompression::Unknown` — throws a precise `ContentLoadException` |
 
 ## Platform support
@@ -207,7 +207,7 @@ without changing either method's observable behavior for any valid input.
 |---|---|
 | `ReflectiveReader<T>` (implicit custom readers) | ❌ Not supported, by design — see above |
 | General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. True for every identity except FNA3D, and SDL_GPU / the EasyGL family with their own build option on |
-| LZ4 compression | ❌ Not supported yet — deferred (`plan_xnb.md` XNB-30C) |
+| LZ4 compression | ❌ Not supported yet — deferred (`plans/plan_xnb.md` XNB-30C) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
 | `Texture2D`/`Texture3D`/`TextureCube` formats beyond `Color`/`Dxt1`/`Dxt3`/`Dxt5` | ❌ Not supported yet |
 | `SoundEffect` formats beyond 16-bit PCM | ❌ Not supported yet — see the audio support matrix above |

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-25: the textured, tinted, fogged and alpha-tested parts of the stock effect
+// plans/plan_llgl.md LLGL-25: the textured, tinted, fogged and alpha-tested parts of the stock effect
 // family, asserted against real pixels through the public BasicEffect/AlphaTestEffect API.
 //
 // Geometry is a screen-filling quad drawn with an orthographic projection over the logical canvas,

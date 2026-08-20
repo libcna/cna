@@ -49,7 +49,7 @@ namespace Microsoft::Xna::Framework::Media
     {
         // Must agree EXACTLY with what GetAlbumArt() can actually produce -- a HasArt==true that
         // yields nothing is precisely the "claims coverage it doesn't have" defect this plan has
-        // been burned by repeatedly (plan_media.md MEDIA-208).
+        // been burned by repeatedly (plans/plan_media.md MEDIA-208).
         return !artPath_.empty() || !embeddedArtSourcePath_.empty();
     }
 
@@ -109,7 +109,7 @@ namespace Microsoft::Xna::Framework::Media
         }
 
         // This used to just call GetAlbumArt(), making GetThumbnail a synonym that returned the
-        // full-size image -- not a thumbnail at all (plan_media.md MEDIA-209). Now genuinely
+        // full-size image -- not a thumbnail at all (plans/plan_media.md MEDIA-209). Now genuinely
         // downscaled and re-encoded as PNG in memory.
         std::vector<uint8_t> png;
         if (CNA::Internal::Media::ThumbnailGenerator::CreatePngThumbnail(artPath_, png))

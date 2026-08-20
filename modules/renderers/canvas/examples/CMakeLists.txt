@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) renderer.
+# plans/plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) renderer.
 # Deliberately NOT registered as a CTest (mirrors cna_diag_software's/directx12_swapchain_diag's own
 # "real executable, not a ctest" precedent above): SDL_Init(SDL_INIT_VIDEO) itself throws under
 # `node CnaTests.js` (no real browser DOM -- confirmed empirically, "window is not defined"),

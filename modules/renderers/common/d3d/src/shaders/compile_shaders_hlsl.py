@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile HLSL shaders to DXBC and emit a C++ header with embedded byte arrays.
 
-plan_dx.md DX-14-compile. Mirrors src/CNA/Internal/Renderers/Vulkan/shaders/compile_shaders.py's
+plans/plan_dx.md DX-14-compile. Mirrors src/CNA/Internal/Renderers/Vulkan/shaders/compile_shaders.py's
 role (read + compile + emit a checked-in header), but D3DCompile() only exists at runtime inside
 d3dcompiler.dll (design decision 5) -- there is no native-Linux D3D shader compiler to call
 in-process the way libshaderc is called for SPIR-V. So this script:
@@ -60,11 +60,11 @@ SHADERS = [
     ("instanced3d.frag.hlsl",        "main", "ps_5_0", "kInstanced3dFragDxbc"),
     ("alpha_test_colored3d.vert.hlsl", "main", "vs_5_0", "kAlphaTestColored3dVertDxbc"),
     ("alpha_test_colored3d.frag.hlsl", "main", "ps_5_0", "kAlphaTestColored3dFragDxbc"),
-    # plan_cnj.md CNB-58/CNB-67 follow-up: PbrEffect/SkinnedPbrEffect + SkinnedEffect vertex-color
+    # plans/plan_cnj.md CNB-58/CNB-67 follow-up: PbrEffect/SkinnedPbrEffect + SkinnedEffect vertex-color
     # (stride 56) D3D11 shader variants.
     ("pbr3d.vert.hlsl",                       "main", "vs_5_0", "kPbr3dVertDxbc"),
     ("pbr3d.frag.hlsl",                       "main", "ps_5_0", "kPbr3dFragDxbc"),
-    # plan_gltf.md GLTF-462/GLTF-465: the rigid dual-UV variant is only ever selected for stride
+    # plans/plan_gltf.md GLTF-462/GLTF-465: the rigid dual-UV variant is only ever selected for stride
     # 60, and InferredLayoutForStride(60) always has a Color element at offset 56 -- so it always
     # carries the vertex-colour define too, and VertexColorFlags.x decides whether it multiplies.
     ("pbr3d.vert.hlsl",                       "main", "vs_5_0", "kPbr3dDualUvVertDxbc", "CNA_PBR_DUAL_UV", "CNA_PBR_VERTEX_COLOR"),
@@ -73,7 +73,7 @@ SHADERS = [
     ("pbr_skinned3d.frag.hlsl",                "main", "ps_5_0", "kPbrSkinned3dFragDxbc"),
     ("pbr_skinned3d.vert.hlsl",                "main", "vs_5_0", "kPbrSkinned3dDualUvVertDxbc", "CNA_PBR_DUAL_UV"),
     ("pbr_skinned3d.frag.hlsl",                "main", "ps_5_0", "kPbrSkinned3dDualUvFragDxbc", "CNA_PBR_DUAL_UV"),
-    # plan_gltf.md GLTF-463: stride 80 -- the stride-76 skinned PBR record with a packed COLOR_0
+    # plans/plan_gltf.md GLTF-463: stride 80 -- the stride-76 skinned PBR record with a packed COLOR_0
     # appended. Stride 76 has no colour slot, so this needs its own DXBC rather than a flag.
     ("pbr_skinned3d.vert.hlsl",                "main", "vs_5_0", "kPbrSkinned3dDualUvColorVertDxbc", "CNA_PBR_DUAL_UV", "CNA_PBR_VERTEX_COLOR"),
     ("pbr_skinned3d.frag.hlsl",                "main", "ps_5_0", "kPbrSkinned3dDualUvColorFragDxbc", "CNA_PBR_DUAL_UV", "CNA_PBR_VERTEX_COLOR"),
@@ -103,7 +103,7 @@ def compile_one(tool_exe: Path, hlsl_path: Path, entry: str, profile: str, out_d
     # which this one never does: hlsl_compiler_tool.exe calls D3DCompile() out of d3dcompiler.dll
     # and never creates a D3D11 device at all. That is exactly the case the wrapper documents
     # CNA_D3D11_SKIP_DXVK_GATE=1 for -- without it the first shader compiles fine and the gate
-    # still fails the script (plan_gltf.md GLTF-465).
+    # still fails the script (plans/plan_gltf.md GLTF-465).
     env = dict(os.environ, CNA_D3D11_SKIP_DXVK_GATE="1")
     result = subprocess.run(
         [str(RUN_WINE), str(tool_exe), str(hlsl_path), entry, profile, str(out_dxbc)],

@@ -1,12 +1,12 @@
 #pragma once
 
-// plan_dx2.md: real DirectX 2 graphics renderer. Its 2D layer (this phase, O1/O2) is a verbatim
-// port of DIRECTX1 (plan_dx1.md) -- same real Windows ddraw.h, same v1-only COM interfaces
+// plans/plan_dx2.md: real DirectX 2 graphics renderer. Its 2D layer (this phase, O1/O2) is a verbatim
+// port of DIRECTX1 (plans/plan_dx1.md) -- same real Windows ddraw.h, same v1-only COM interfaces
 // (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC -- never IDirectDraw2+/Surface2+/DDSURFACEDESC2),
 // cross-compiled via MinGW-w64 and run under Wine/Proton, the same Route B delivery mechanism
 // D3D9/D3D11/D3D12/DIRECTX1 already use. Unlike DIRECTX1 (which has no Direct3D to call at all -- Direct3D
 // did not exist until DIRECTX2), this renderer's 3D layer is real, built on IDirect3D2/IDirect3DDevice2
-// DrawPrimitive (not execute buffers, see plan_dx2.md's status note) -- landing in a later phase
+// DrawPrimitive (not execute buffers, see plans/plan_dx2.md's status note) -- landing in a later phase
 // (O3/O4). Every 3D entry point currently still throws/degrades exactly as DIRECTX1's do (Phase O1/O2
 // scope); this is a temporary, pre-O3 state, not a permanent boundary the way it is for DIRECTX1.
 //
@@ -22,8 +22,8 @@
 namespace CNA::Internal::Renderers::DirectX3
 {
     /**
-     * DIRECTX2 graphics renderer (plan_dx2.md): its 2D layer is a verbatim port of DIRECTX1's own
-     * (plan_dx1.md) CPU 2D compositor that uses a REAL IDirectDraw/IDirectDrawSurface (v1 only) as
+     * DIRECTX2 graphics renderer (plans/plan_dx2.md): its 2D layer is a verbatim port of DIRECTX1's own
+     * (plans/plan_dx1.md) CPU 2D compositor that uses a REAL IDirectDraw/IDirectDrawSurface (v1 only) as
      * its pixel storage/present mechanism. Real device/window bring-up (Phase O2, ported from
      * DIRECTX1's Phase O2): DirectDrawCreate -> SetCooperativeLevel(DDSCL_NORMAL, against a real Win32
      * HWND supplied in RendererSurfaceInfo) -> primary CreateSurface. No SetDisplayMode call is ever
@@ -32,13 +32,13 @@ namespace CNA::Internal::Renderers::DirectX3
      * found that, with no SetDisplayMode call, the primary surface real Wine ddraw.dll hands back
      * is desktop-sized (the real historical DirectDraw model: the primary IS the display, not
      * "this window") -- so this renderer never composites directly onto it. Instead it owns a
-     * second, Lockable offscreen "shadow backbuffer" surface (plan_dx2.md design decision 4: given
+     * second, Lockable offscreen "shadow backbuffer" surface (plans/plan_dx2.md design decision 4: given
      * DDSCAPS_OFFSCREENPLAIN | DDSCAPS_3DDEVICE, not DIRECTX1's plain DDSCAPS_OFFSCREENPLAIN, so a later
      * phase can attach a Z-buffer and create a Direct3D device against this same surface), sized to
      * the logical/virtual resolution, that Clear()/SpriteBatch draws always target; Present()
      * letterbox-scales that shadow buffer onto the primary via a single Blt(), with the destination
      * rect recomputed every frame from the window's real client area (GetClientRect +
-     * ClientToScreen) -- unlike DIRECTX3's own documented stale-scale limitation (plan_freedirect.md DX3-16), a
+     * ClientToScreen) -- unlike DIRECTX3's own documented stale-scale limitation (plans/plan_freedirect.md DX3-16), a
      * virtual-resolution or window-resize change is correct on the very next Present(), since
      * nothing here is cached.
      *
@@ -138,14 +138,14 @@ namespace CNA::Internal::Renderers::DirectX3
                                int maxAnisotropy) override;
 
         // ---- 3D pipeline: real, built on IDirect3D2/IDirect3DDevice2::DrawPrimitive (not execute
-        // buffers -- proven non-functional in this environment, see plan_dx2.md's status note).
+        // buffers -- proven non-functional in this environment, see plans/plan_dx2.md's status note).
         // Device/viewport/Z-buffer bring-up (Phase O3), VertexBuffer/IndexBuffer storage (Phase
         // O5), the CPU transform/clip -> D3DTLVERTEX draw path (Phase O4), and per-draw state
         // application (Phase O6) are all real and pixel-verified. Unlike DIRECTX1 (which throws
         // PERMANENTLY -- DirectX 1 shipped no Direct3D at all, so there is genuinely no COM
         // interface reachable from a real DirectX-1-era header pairing to even call), this is a
         // working 3D pipeline, not a stub. What remains out of scope is documented per-method
-        // below and in plan_dx2.md's own Boundaries section (lighting/fog/multitexture/envMap/
+        // below and in plans/plan_dx2.md's own Boundaries section (lighting/fog/multitexture/envMap/
         // skinning accepted-and-ignored; stencil/MRT/instancing/occlusion-query/volume-and-cube
         // textures/custom-effects either accepted-and-ignored or genuinely unavailable at this
         // DirectX era, not "not yet implemented"). ----
@@ -158,10 +158,10 @@ namespace CNA::Internal::Renderers::DirectX3
             // -- all real as of this phase, so ThreeD now reports true. DepthStencilBuffer also
             // reports true (a real, if depth-only, buffer exists -- SupportsDepthStencil() already
             // says so). MultiSampleAntiAliasing/MultipleRenderTargets/OcclusionQuery/CustomEffects
-            // report false -- genuinely unavailable at this DirectX era (plan_dx2.md's Boundaries
+            // report false -- genuinely unavailable at this DirectX era (plans/plan_dx2.md's Boundaries
             // section).
             //
-            // WireFrame (Phase O9, plan_dx2.md design decision 13): reports true. A follow-up
+            // WireFrame (Phase O9, plans/plan_dx2.md design decision 13): reports true. A follow-up
             // spike (dx2_spike10_specular_wireframe_aniso.cpp, Test D) empirically confirmed
             // D3DRENDERSTATE_FILLMODE=D3DFILL_WIREFRAME genuinely renders edge-only output on this
             // environment's software RGB device (a point inside a filled triangle reads back the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-29: PreferPerPixelLighting vertex-lit shader variant for the OpenGL4
+// plans/plan_opengl4.md GL4-29: PreferPerPixelLighting vertex-lit shader variant for the OpenGL4
 // graphics renderer -- GpuDrawParams::preferPerPixelLighting was previously read by no shader on
 // this renderer; lit_textured3d/skinned3d always rendered per-pixel regardless of its value, the
 // opposite of real XNA's own default (BasicEffect/SkinnedEffect both default

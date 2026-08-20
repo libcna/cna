@@ -75,7 +75,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # Task 1105 (plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
+    # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)
     cna_register_renderer_test(NAME WebGPU_BasicEffect_PreferPerPixelLighting COMMAND cna_test_webgpu_basiceffect_preferperpixellighting
@@ -147,7 +147,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_webgpu_instanced_vertex_color_cardinality
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_cnj.md CNB-58 WebGPU counterpart: pbr3d.wgsl / GetOrCreatePipelinePbr3D / PbrEffect
+    # plans/plan_cnj.md CNB-58 WebGPU counterpart: pbr3d.wgsl / GetOrCreatePipelinePbr3D / PbrEffect
     # (unskinned only, stride 48), the WebGPU renderer's real glTF 2.0 metallic-roughness BRDF.
     cna_webgpu_test(cna_test_webgpu_pbr3d webgpu_pbr3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
@@ -169,14 +169,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Pbr_FresnelFactors COMMAND cna_test_webgpu_pbr_fresnel_factors
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_cnj.md Phase 14J WebGPU counterpart: skinned3d.wgsl family / GetOrCreatePipelineSkinned3D
+    # plans/plan_cnj.md Phase 14J WebGPU counterpart: skinned3d.wgsl family / GetOrCreatePipelineSkinned3D
     # / SkinnedEffect (strides 52/56, both PreferPerPixelLighting variants, VertexColorEnabled) --
     # closes this renderer's pre-existing "no skinning shader at all" gap.
     cna_webgpu_test(cna_test_webgpu_skinned3d webgpu_skinned3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Skinned3D COMMAND cna_test_webgpu_skinned3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_cnj.md Phase 14J WebGPU counterpart: skinned_pbr3d.wgsl / GetOrCreatePipelineSkinnedPbr3D
+    # plans/plan_cnj.md Phase 14J WebGPU counterpart: skinned_pbr3d.wgsl / GetOrCreatePipelineSkinnedPbr3D
     # / SkinnedPbrEffect (stride 68, PBR + skinning combo).
     cna_webgpu_test(cna_test_webgpu_skinnedpbr3d webgpu_skinnedpbr3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_SkinnedPbr3D COMMAND cna_test_webgpu_skinnedpbr3d
@@ -224,7 +224,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # registered and failing rather than hidden: 3 of 6 checks in this test currently FAIL because
     # genuine multisample-resolved rendering does not yet work end-to-end through the real
     # GraphicsDevice/BasicEffect draw path, despite the infrastructure above being real and
-    # individually verified -- see this test's own top-of-file comment and plan_webgpu.md's
+    # individually verified -- see this test's own top-of-file comment and plans/plan_webgpu.md's
     # WEBGPU-58 row for the full investigation.
     cna_webgpu_test(cna_test_webgpu_msaa webgpu_msaa_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Msaa COMMAND cna_test_webgpu_msaa

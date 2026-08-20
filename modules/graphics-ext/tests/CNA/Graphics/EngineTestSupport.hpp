@@ -25,7 +25,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief One texel of a depth image, in whatever encoding the prepass currently uses.
      *
-     * plan_modern.md `MOD-2035`. Every screen-space test used to write `Color(v, v, v, 255)` and
+     * plans/plan_modern.md `MOD-2035`. Every screen-space test used to write `Color(v, v, v, 255)` and
      * call it depth, which was the right bytes only while the prepass stored depth unpacked. It
      * does not any more, and a test that hand-builds a depth image has to build the one the passes
      * actually decode -- so the encoding is asked for here rather than assumed in eight files.
@@ -67,7 +67,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief Whether this renderer really runs the shader source an effect is built from.
      *
-     * plan_modern.md `MOD-1699`, restated for tests. `GraphicsCapability::CustomEffects` means the
+     * plans/plan_modern.md `MOD-1699`, restated for tests. `GraphicsCapability::CustomEffects` means the
      * renderer *accepts* an effect; SOFTWARE and HEADLESS accept any source and keep rendering with
      * their own fixed path. Both questions together are what "this shader will run" means.
      *
@@ -84,7 +84,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief Whether this renderer can make a `RenderTarget2D` the current render target.
      *
-     * plan_modern.md `MOD-1697`. Weaker than @ref CanReadRenderTargets and asked separately: Stub
+     * plans/plan_modern.md `MOD-1697`. Weaker than @ref CanReadRenderTargets and asked separately: Stub
      * refuses the bind outright, so a pipeline that only ever *writes* offscreen still cannot run
      * there, while Headless binds happily and only refuses the read back.
      *
@@ -120,7 +120,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief Whether this renderer can read a render target's pixels back to the CPU.
      *
-     * plan_modern.md `MOD-1690`/`MOD-1696`. Not a `GraphicsCapability`, because the answer is not
+     * plans/plan_modern.md `MOD-1690`/`MOD-1696`. Not a `GraphicsCapability`, because the answer is not
      * a promise a renderer publishes -- it is what `Texture2D::GetData` does when handed a render
      * target, and the Headless renderer refuses it. Every engine-layer test that inspects a pass's
      * *output* needs this, and asking by probing is the only way that cannot drift from the truth.
@@ -152,7 +152,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief Whether this renderer really stores and returns cube-map face data.
      *
-     * plan_modern.md `MOD-1696`. The image-based-lighting precompute is pure CPU arithmetic, but
+     * plans/plan_modern.md `MOD-1696`. The image-based-lighting precompute is pure CPU arithmetic, but
      * it still has to *put* its results somewhere: a `TextureCube`. Headless accepts the object and
      * refuses the data, so the precompute cannot run there -- a limitation worth probing rather
      * than assuming in either direction.
@@ -183,7 +183,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief Whether this renderer stores cube-map face data into a mip level other than zero.
      *
-     * plan_modern.md `MOD-1625`. A third question, narrower than @ref CanStoreCubeFaces and found
+     * plans/plan_modern.md `MOD-1625`. A third question, narrower than @ref CanStoreCubeFaces and found
      * by the renderer that answers the two differently: D3D12 round-trips an unmipped face and
      * then refuses `SetData` into mip 1 of a mipped cube. The specular prefilter writes one
      * roughness per mip, so it needs this one and not the other.
@@ -214,7 +214,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief Whether this renderer really renders into one face of a cube render target.
      *
-     * plan_modern.md `MOD-1696`. A separate question from @ref CanStoreCubeFaces: storing texel
+     * plans/plan_modern.md `MOD-1696`. A separate question from @ref CanStoreCubeFaces: storing texel
      * data into a sampled cube and *rendering into* one face of a cube target are different code
      * paths, and Headless has neither -- but its cube-face bind is a no-op that records the face
      * and leaves the back buffer current, so a small probe cube would be accepted and drawn
@@ -265,7 +265,7 @@ namespace CnaTest::EngineLayer {
     /**
      * @brief Whether this renderer allows a **second** `GraphicsDevice` in the same process.
      *
-     * plan_modern.md `MOD-1695`. Most renderers do; TinyGL keeps its context in one process-wide
+     * plans/plan_modern.md `MOD-1695`. Most renderers do; TinyGL keeps its context in one process-wide
      * global (`glInit`/`glClose`) with no make-current entry point, so a second one is refused by
      * name rather than quietly sharing state. That is a documented boundary, not a defect, and a
      * multi-device test on such a renderer should skip rather than fail.

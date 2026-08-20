@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2123: what contact shadows cost, and what they are worth.
+// plans/plan_modern.md MOD-2123: what contact shadows cost, and what they are worth.
 //
 // The unit tests assert the march is correct. What they cannot say is whether it is worth adding to
 // a frame, and that is a cost question with a shape: the pass is one full-screen ray march, so its

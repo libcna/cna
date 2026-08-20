@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 
-// plan_metal.md METAL-19: same reasoning as MetalCompareFunction.hpp -- switches on the real
+// plans/plan_metal.md METAL-19: same reasoning as MetalCompareFunction.hpp -- switches on the real
 // `StencilOperation` enumerator names instead of raw int literals, so a future reordering of the
 // enum cannot silently desync this table. XNA's Increment/Decrement wrap
 // (D3DSTENCILOP_INCR/DECR); the *Saturation variants clamp (D3DSTENCILOP_INCRSAT/DECRSAT) --

@@ -5,7 +5,7 @@
 > unsupported and reject/clamp deterministically; backbuffer readback throws. See
 > `docs/metal-renderer.md` for the evidence boundary.
 
-Phase 39 (`plan_graphics.md` Tasks 331–340) audited and pixel-verified `RenderTarget2D` and
+Phase 39 (`plans/plan_graphics.md` Tasks 331–340) audited and pixel-verified `RenderTarget2D` and
 `RenderTargetCube` conformance against FNA across all three graphics renderers (EasyGL, Vulkan,
 Bgfx). This document summarizes the findings and closes the phase.
 
@@ -188,10 +188,10 @@ zero CNA-level cross-target validation — matching FNA's own delegate-to-native
 |---|---|---|---|---|
 | `RenderTarget2D`/`RenderTargetCube` constructors, properties, `IsContentLost`/`ContentLost` | ✅ | ✅ | ✅ | ✅ (shared `GraphicsDevice`-level code, renderer-independent) |
 | `RenderTarget2D` sampling after unbind (`SpriteBatch`) | ✅ | ✅ | ❌ wrong-handle-cast bug (Task 873) | 🔍¹ adapted source has a real `MetalRenderTargetRenderer::colorTexture()` path to the resolved single-sample texture. Only the historical predecessor compiled/ran on macOS; the adapted Objective-C++ has no Apple compile/runtime or pixel proof. |
-| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ | ❌ renders black (Task 876) | ❌ wrong-handle-cast bug (Task 874) | 🔍 source-complete (`plan_metal.md` Phase 6/11, `METAL-64`–`71`/`120`ff), never pixel-tested on real hardware — no dedicated `CTest` exists yet |
+| `RenderTargetCube` sampling after unbind (`EnvironmentMapEffect`) | ✅ | ❌ renders black (Task 876) | ❌ wrong-handle-cast bug (Task 874) | 🔍 source-complete (`plans/plan_metal.md` Phase 6/11, `METAL-64`–`71`/`120`ff), never pixel-tested on real hardware — no dedicated `CTest` exists yet |
 | Depth buffer functionality (does depth testing work inside an RT) | ✅ | ✅ | 🔍 not pixel-verified (no GPU readback) | 🔶 a real single-sample depth32+stencil8 texture is allocated and bound as the render pass's depth attachment — GPU-level depth-test *gating* itself is not independently pixel-verified after adaptation |
-| Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) | ❌ `hasDepth` ignored, always allocates (Task 877) | ❌ always `D24S8` (Task 877) | ❌ always `Depth32Float_Stencil8` regardless of requested `DepthFormat` — deliberate, documented simplification (`plan_metal.md METAL-101`), matching Vulkan's own precedent exactly |
-| Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) | 🔶 `LevelCount` correct, no real GPU mips (Task 878) | 🔶 same as Vulkan (Task 878) | 🔍 adapted source encodes `generateMipmapsForTexture:` on every unbind (`plan_metal.md METAL-103`) and tracks defined levels only after successful completion. Only the historical predecessor compiled on Apple; the adapted path has no Apple compile/runtime or pixel proof (`METAL-117` remains open). |
+| Depth/stencil format fidelity (exact `DepthFormat` honored) | ❌ always `DepthComponent24`, no stencil (Task 877) | ❌ `hasDepth` ignored, always allocates (Task 877) | ❌ always `D24S8` (Task 877) | ❌ always `Depth32Float_Stencil8` regardless of requested `DepthFormat` — deliberate, documented simplification (`plans/plan_metal.md METAL-101`), matching Vulkan's own precedent exactly |
+| Mipmap generation (`LevelCount`, real GPU mips) | ✅ (fixed, Task 336) | 🔶 `LevelCount` correct, no real GPU mips (Task 878) | 🔶 same as Vulkan (Task 878) | 🔍 adapted source encodes `generateMipmapsForTexture:` on every unbind (`plans/plan_metal.md METAL-103`) and tracks defined levels only after successful completion. Only the historical predecessor compiled on Apple; the adapted path has no Apple compile/runtime or pixel proof (`METAL-117` remains open). |
 | MSAA (`MultiSampleCount`, real resolve) | ✅ (fixed, Task 337) | 🔶 honestly reports `0`, not implemented (Task 879) | 🔶 same as Vulkan (Task 879) | ❌ deliberately unsupported: requested counts clamp to `0`, capability is false, and native attachments remain single-sample; the historical sample-count-four path produced a binary edge |
 | `SetRenderTarget`/`SetRenderTargets` Viewport/ScissorRectangle reset | ✅ (fixed, Task 338) | ✅ (fixed, Task 338) | ✅ (fixed, Task 338; shared code, not independently pixel-tested) | ✅ shared `GraphicsDevice`-level code, renderer-independent |
 | `Viewport`'s actual GPU effect (any sub-region viewport) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | ❌ zero wiring (Task 880) | 🔍 adapted source preserves and submits the requested `GraphicsDevice.Viewport` unchanged on every encoder (`METAL-265`); portable state tests pass, but adapted Apple compile/runtime evidence is absent. |
@@ -231,9 +231,9 @@ Pre-existing, not opened this phase, still blocking deeper MRT work: `EasyGL_MRT
 its own dedicated root-cause investigation before Task 881 or any other MRT-adjacent work can be
 meaningfully extended.
 
-Metal joined this matrix later (`plan_metal.md METAL-119`) and tracks its own open work in that
-plan directly rather than duplicating a second tracking system here — see `plan_metal.md` Phase 10
+Metal joined this matrix later (`plans/plan_metal.md METAL-119`) and tracks its own open work in that
+plan directly rather than duplicating a second tracking system here — see `plans/plan_metal.md` Phase 10
 (`METAL-98`–`119`) for the full task list and narrative items 77/86/87/89/90 for the specific,
 already-investigated findings the footnotes above reference.
 
-This closes Phase 39 (`plan_graphics.md` Tasks 331–340) in full.
+This closes Phase 39 (`plans/plan_graphics.md` Tasks 331–340) in full.

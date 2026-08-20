@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_modern.md MOD-134: every renderer identity still *configures* after the engine layer's
+# plans/plan_modern.md MOD-134: every renderer identity still *configures* after the engine layer's
 # renderer-interface additions.
 #
 # Usage:
@@ -12,7 +12,7 @@
 # reported as SKIPPED, not FAILED: "this machine has no D3D12" is not a defect in CNA. A configure
 # that fails for any other reason is a real failure and is printed with its last lines.
 #
-# The virtuals this exists to protect are the ones plan_modern.md added to IGraphicsRenderer
+# The virtuals this exists to protect are the ones plans/plan_modern.md added to IGraphicsRenderer
 # (CreateComputeShader, SupportsShadowSamplingEXT, ExecutesShaderEffectSourceEXT and friends). They
 # all have defaults, so a renderer that ignores them compiles -- and configure-time is where a
 # missing CMake dependency of a new source file would show up.

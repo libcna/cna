@@ -81,7 +81,7 @@ namespace CNA::Graphics {
     /**
      * @brief An emitter, a simulation and a draw -- the subsystem `MOD-1550` left as a demo.
      *
-     * plan_modern.md `MOD-2095`. Particles are simulated **on the GPU where the device has compute
+     * plans/plan_modern.md `MOD-2095`. Particles are simulated **on the GPU where the device has compute
      * and on the CPU where it does not**, and the two are written to the same specification rather
      * than to the same intent: the spawn values come from an integer hash that is bit-identical in
      * GLSL and C++, and the integration is the same four lines in the same order. A test steps both
@@ -176,7 +176,7 @@ namespace CNA::Graphics {
         /**
          * @brief Supplies the depth image particles fade against, and the camera it was drawn with.
          *
-         * plan_modern.md `MOD-2109`. A billboard that intersects geometry shows a hard cut line
+         * plans/plan_modern.md `MOD-2109`. A billboard that intersects geometry shows a hard cut line
          * where the two meet, and nothing else in a frame has a straight edge like it — it is the
          * clearest tell that a smoke plume is a set of quads. With a depth image the shader fades
          * each pixel out as it approaches whatever is behind it.

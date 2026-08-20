@@ -1,12 +1,12 @@
 # NEXT.md — CNA Input Handoff
 
-> Closing handoff, written 2026-07-18. `plan_input.md`'s own 500+-task audit is **done and
+> Closing handoff, written 2026-07-18. `plans/plan_input.md`'s own 500+-task audit is **done and
 > merged** — this revision replaces the 2026-07-07 "Phase 0 just finished" version, which had
 > gone stale (Phases 1–13 all completed and closed on 2026-07-16/17 without this file ever being
 > updated to match — the live progress notes were instead written into the repo's shared
 > `NEXT.md`, which has since moved on to other tracks; see §3). Nothing in this revision was
 > built or re-tested by the session that wrote it — this is a documentation-reconciliation pass
-> only, based on `plan_input.md`'s own recorded Results and `git log`. No invented claims.
+> only, based on `plans/plan_input.md`'s own recorded Results and `git log`. No invented claims.
 
 **Branch:** `feature/input`. **As of this writing, `feature/input`, `develop`, and
 `origin/develop` all point at the exact same commit** (`aaa956df`, `Merge branch 'feature/input'
@@ -16,16 +16,16 @@ outstanding Input-track diff to merge.
 
 ## 0. TL;DR for a clean context
 
-- **The Input audit (`plan_input.md`, Phases 0–13, 505 tasks) is closed.** 490 done, 15 blocked
+- **The Input audit (`plans/plan_input.md`, Phases 0–13, 505 tasks) is closed.** 490 done, 15 blocked
   by design (real-hardware checks, see §5), 0 left open. Closed 2026-07-17, merged to `develop`
   shortly after (exact merge-commit date not independently re-verified in this pass — the merge
   commit itself, `aaa956df`, is what's confirmed).
 - **There is currently no active Input work item.** Unless the user gives a fresh, explicit
   request (new NOXNA feature, a newly-found bug, the Phase-11 hardware pass), there is nothing
-  queued in `plan_input.md` to pick up next — see §8.
+  queued in `plans/plan_input.md` to pick up next — see §8.
 - **The only two genuinely open Input-adjacent items** are (a) the 15 Phase-11 manual-hardware
   checks (need real keyboards/mice/gamepads/touchscreen/IME/high-DPI hardware — inherently
-  un-automatable, tracked `[!]` in `plan_input.md`), and (b) a flagged-but-out-of-scope
+  un-automatable, tracked `[!]` in `plans/plan_input.md`), and (b) a flagged-but-out-of-scope
   intermittent crash (`P9-031`/`P12-013` item 2) in the *full, non-Input-filtered* test suite —
   confirmed unrelated to Input, not fixed here, needs a separate cross-subsystem owner.
 - **This repo is a shared mainline across many concurrent tracks** (Input, Devices, Net, Media,
@@ -40,7 +40,7 @@ outstanding Input-track diff to merge.
 - **What:** CNA is a C++23 reimplementation of the **XNA 4.0** programming model
   (`Microsoft::Xna::Framework`) on **SDL3**, with a pluggable 3D graphics-backend layer
   (EasyGL/OpenGL ES, Vulkan, bgfx, SDL_Renderer, WebGPU). It is a framework/runtime, not a game.
-- **What `plan_input.md` covered:** a from-scratch, 13-phase deep audit/hardening/documentation
+- **What `plans/plan_input.md` covered:** a from-scratch, 13-phase deep audit/hardening/documentation
   pass over the entire **Input** subsystem — strict XNA-4.0-compatible types under
   `Microsoft::Xna::Framework::Input` (26 headers) plus the NOXNA `CNA::Input` extension layer
   (24 headers: clipboard, haptics, joysticks, power, sensors, extra gamepad/mouse/keyboard/touch
@@ -60,9 +60,9 @@ outstanding Input-track diff to merge.
   - Public XNA member **names/signatures are frozen** — pinned in
     `PublicApiInputSignatureFreezeTests.cpp` + `docs/input-public-api-frozen.md`.
 
-## 2. Final status (from `plan_input.md`'s own closing tasks)
+## 2. Final status (from `plans/plan_input.md`'s own closing tasks)
 
-- **Task tally (`P12-015`, 2026-07-17):** 505 real tasks (see `plan_input.md`'s top-of-file
+- **Task tally (`P12-015`, 2026-07-17):** 505 real tasks (see `plans/plan_input.md`'s top-of-file
   status banner for the 506-vs-505 arithmetic note — a harmless, documented pre-existing table
   artifact). **490 `[x]` complete, 15 `[!]` blocked (all Phase 11, by design), 0 `[ ]`/`[~]`/`[?]`
   remaining.**
@@ -73,7 +73,7 @@ outstanding Input-track diff to merge.
   `INP-0199`) until the Phase-11 hardware pass actually happens. This has since been merged
   (`aaa956df`) — the "do not merge yet" caveat was about the *label*, not the branch, and the
   recommendation was to merge regardless.
-- **What the audit actually found and fixed** (see `plan_input.md`'s per-phase Result fields for
+- **What the audit actually found and fixed** (see `plans/plan_input.md`'s per-phase Result fields for
   exact detail): 3 behavioral bugs in Phase 1's strict-XNA parity sweep, 2 real gaps in Phase 3's
   Mouse motion-event/DPI-transform audit, a documented (not fixed — judged correct as-is)
   gesture-timestamp unit-mismatch finding in Phase 6 (`P6-012`), a gamepad-subsystem
@@ -94,7 +94,7 @@ outstanding Input-track diff to merge.
   canonical Input-filtered CTest gate (`-L input`, `--gtest_shuffle --gtest_repeat=5`) passed
   repeatedly with 0 failures at **524 tests** (grew from 314 at the 2026-07-07 baseline through
   Phases 1–13's new coverage). None of this has been *re-verified* by the session writing this
-  particular revision — it is what `plan_input.md` itself recorded as of 2026-07-17.
+  particular revision — it is what `plans/plan_input.md` itself recorded as of 2026-07-17.
 
 ## 3. Where the "recent work" record actually lives
 
@@ -109,17 +109,17 @@ notes for several *other* concurrent tracks (Devices, Net, Media, Audio, Avatar,
 WebGPU) — nobody wrote a dedicated Input-closing entry there, and nobody renamed it back to
 `NEXTinput.md` at that point. **Do not go looking in the current `NEXT.md` for Input detail** —
 as of this writing it is headed "`feature/graphics` session handoff" and is unrelated. The
-authoritative record of what happened, phase by phase, is `plan_input.md`'s own per-task Result
-fields (grep `git log --oneline -- plan_input.md` for the phase-closing commits, e.g.
+authoritative record of what happened, phase by phase, is `plans/plan_input.md`'s own per-task Result
+fields (grep `git log --oneline -- plans/plan_input.md` for the phase-closing commits, e.g.
 `b2a26493`..`1746df1e` for Phases 1–12, `d4b2e662`/`ed0a4c6a`/`4639b060`/`8561a1e9` for Phase 13).
 
-This revision's own "recent changes": only this file and `plan_input.md`'s top-of-file status
+This revision's own "recent changes": only this file and `plans/plan_input.md`'s top-of-file status
 banner were touched (2026-07-18), to reconcile them with reality. No source, test, or other doc
 file was changed in this pass.
 
 ## 4. Current blocker / main problem
 
-**None.** There is no known failing build, no failing test, and no open task in `plan_input.md`.
+**None.** There is no known failing build, no failing test, and no open task in `plans/plan_input.md`.
 The two items worth tracking are not blockers on any next action, just standing, documented facts:
 
 - **15 Phase-11 hardware-validation checks remain `[!]` Blocked** — by design; they require
@@ -128,7 +128,7 @@ The two items worth tracking are not blockers on any next action, just standing,
 - **`P9-031`/`P12-013` item 2: a real, reproducible, non-deterministic `double free or
   corruption` crash exists in the *full* (non-Input-filtered) test suite.** Confirmed by the
   audit to be unrelated to Input, but it remains unresolved and needs dedicated cross-subsystem
-  bisection by whoever owns that area — it is explicitly out of `plan_input.md`'s own scope.
+  bisection by whoever owns that area — it is explicitly out of `plans/plan_input.md`'s own scope.
 
 ## 5. Known bugs and limitations
 
@@ -194,7 +194,7 @@ ninja -C cmake-build-input-easygl CnaTests
 # THE gate — canonical Input test subset (baked --gtest_shuffle --gtest_repeat=5), was 100% (524 tests) at closure:
 xvfb-run -a env SDL_VIDEODRIVER=x11 ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 
-# Run one suite directly by filter, e.g. while working a single plan_input.md task:
+# Run one suite directly by filter, e.g. while working a single plans/plan_input.md task:
 xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-easygl/CnaTests --gtest_filter='KeyboardInputTest.*'
 
 # ASan/UBSan builds + rerun after any src/ change (both were clean at closure):
@@ -212,7 +212,7 @@ python3 tools/input_parity/gen_input_parity_matrix.py
 
 ## 8. Next smallest tasks
 
-**There is no queued task.** `plan_input.md` has no open (`[ ]`/`[~]`/`[?]`) items — the next
+**There is no queued task.** `plans/plan_input.md` has no open (`[ ]`/`[~]`/`[?]`) items — the next
 task depends entirely on what the user actually wants next. Reasonable options, in likely order
 of usefulness, if/when this track is picked back up:
 
@@ -221,10 +221,10 @@ of usefulness, if/when this track is picked back up:
 2. **If the user wants to close the "Input stable" release-gate label for real:** perform the 15
    Phase-11 manual-hardware checks on real hardware (a keyboard, a mouse, at least one real
    gamepad, a touchscreen, an IME-capable input method, a high-DPI display) and record results in
-   `plan_input.md`'s Phase 11 tasks. This is the only thing standing between "code-complete,
+   `plans/plan_input.md`'s Phase 11 tasks. This is the only thing standing between "code-complete,
    headless-verified" (current state) and the project's own defined "Input stable" bar.
 3. **If a new Input bug is reported or a new NOXNA feature is explicitly requested:** treat it as
-   a fresh, small, separately-scoped task — append it to `plan_input.md` (don't reopen closed
+   a fresh, small, separately-scoped task — append it to `plans/plan_input.md` (don't reopen closed
    phases) or start a new plan file, per this repo's usual convention for post-closure work.
 4. **If someone wants the cross-subsystem `P9-031` crash fixed:** that is not an Input task; it
    needs its own investigation, likely coordinated with whichever track currently owns the full
@@ -249,17 +249,17 @@ of usefulness, if/when this track is picked back up:
 - **No fixing `P9-031`** under an Input-scoped task/commit — it's confirmed unrelated to Input;
   fold it into whichever track legitimately owns full-suite stability.
 - **No treating the current shared `NEXT.md` as Input-relevant** — it is currently about
-  `feature/graphics`; Input's own record lives in `plan_input.md` and this file.
+  `feature/graphics`; Input's own record lives in `plans/plan_input.md` and this file.
 
 ## 10. Resume prompt
 
 ```
-Read NEXTinput.md first (this file) — it is the closing handoff for plan_input.md, which is
+Read NEXTinput.md first (this file) — it is the closing handoff for plans/plan_input.md, which is
 fully closed (505 tasks: 490 done, 15 blocked on real hardware, 0 open) and already merged into
 develop. There is no queued Input task. Before doing anything, confirm with the user what they
 actually want: (a) nothing — just confirming status, (b) the Phase-11 manual-hardware validation
 pass (needs real devices), (c) a brand-new bug/feature request, to be scoped as its own small task
-appended to plan_input.md, or (d) something unrelated to Input entirely (check which track's
+appended to plans/plan_input.md, or (d) something unrelated to Input entirely (check which track's
 plan/NEXT file is currently active in the shared NEXT.md before assuming Input is what's meant).
 Do not restart or reopen any of Phases 0-13 speculatively.
 ```

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-52: end-to-end regression test for the offline glTF -> .cnj converter
+// plans/plan_cnj.md CNB-52: end-to-end regression test for the offline glTF -> .cnj converter
 // (tools/gltf_to_cnj/gltf_to_cnj.cpp), spawned as a real subprocess (CNA_GLTF_TO_CNJ_TOOL_PATH,
 // baked in by cmake/UnitTests.cmake) -- same "needs a real separate executable, not a library
 // call" reasoning as TwoProcessLoopbackTest.cpp/AudioMixerTests.cpp.
@@ -744,7 +744,7 @@ namespace
   ]
 })GLTF";
 
-    // CNB-56/59 + plan_gltf.md GLTF-236/237/343/344: an unskinned triangle with all five material
+    // CNB-56/59 + plans/plan_gltf.md GLTF-236/237/343/344: an unskinned triangle with all five material
     // slots, an explicit TANGENT accessor, and deliberately non-default core/Fresnel/alpha/sampler
     // state -- proves the offline CLI tool's complete factor-only .cnj material serialization.
     const char* kPbrGltf = R"GLTF({
@@ -1237,7 +1237,7 @@ TEST(GltfToCnjToolTest, OracleDumpIsDeterministicSafeAndMatchesTheFixtureManifes
 // bufferView -- proves cgltf_accessor_unpack_floats (sparse-safe) is used, not
 // cgltf_accessor_read_float (rejects sparse accessors outright, which would fail this conversion).
 //
-// plan_gltf.md GLTF-036: the sparse values bufferView sits at byteOffset 64, not 62 as originally
+// plans/plan_gltf.md GLTF-036: the sparse values bufferView sits at byteOffset 64, not 62 as originally
 // authored. 62 is not a multiple of a float's 4 bytes, and cgltf reads a component with a raw
 // `*(const float*)` cast, so the old fixture made the parser perform a misaligned load -- the
 // undefined behaviour UBSan flagged as REMED-NA-016. The fixture was the defect, not the parser;
@@ -1305,7 +1305,7 @@ TEST(GltfToCnjToolTest, ExtractsEmbeddedBaseColorTextureAndLoadsIt)
     // metallic-roughness, and GLTF-215 made the effect follow the material MODEL the file declares
     // rather than which texture maps happen to be present. This assertion said `SkinnedEffect`
     // until the first run on a renderer that reports ThreeD -- STUB does not, so the whole block
-    // below the skip had never executed since GLTF-215 landed (plan_gltf.md GLTF-383).
+    // below the skip had never executed since GLTF-215 landed (plans/plan_gltf.md GLTF-383).
     auto* skinnedFx =
         dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
     ASSERT_NE(skinnedFx, nullptr)
@@ -1598,7 +1598,7 @@ TEST(GltfToCnjToolTest, EvaluatesCubicSplineWithRealHermiteBasis)
     EXPECT_TRUE(foundForeignTime);
 }
 
-// plan_gltf.md GLTF-462: this document has no material, so glTF's own default metallic-roughness
+// plans/plan_gltf.md GLTF-462: this document has no material, so glTF's own default metallic-roughness
 // applies and its COLOR_0 no longer costs it the material model. It therefore round-trips through
 // the offline path as a stride-60 PbrEffect part with the colour in stride 60's own colour slot --
 // the case that used to become a stride-24 BasicEffect with no Normal slot at all.
@@ -1662,7 +1662,7 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnThePbrEffect)
         << "the colour reached the GPU record but the effect was not told to read it";
 }
 
-// plan_gltf.md GLTF-139/GLTF-130: the offline path has to produce the SAME Model shape as the
+// plans/plan_gltf.md GLTF-139/GLTF-130: the offline path has to produce the SAME Model shape as the
 // runtime one, or the two loaders disagree about what a mesh is. The .cnj "meshes" array is per
 // primitive, so a multi-primitive mesh carries a "partOfMesh" grouping key and the reader folds
 // those entries back into one ModelMesh with one part each.
@@ -1741,7 +1741,7 @@ TEST(GltfToCnjToolTest, AMultiPrimitiveMeshRoundTripsAsOneModelMeshWithTwoParts)
     }
 }
 
-// plan_gltf.md GLTF-272: the two loaders must produce the SAME SkinningData.
+// plans/plan_gltf.md GLTF-272: the two loaders must produce the SAME SkinningData.
 //
 // The runtime path builds a skeleton from the glTF directly; the offline path builds the same one,
 // writes it to a .skeleton.bin sidecar, and the .cnj reader reads it back. Those are two
@@ -1893,7 +1893,7 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalSkinningDataFor
     EXPECT_GT(compared, 0u) << "every skin fixture was skipped -- the sweep proved nothing";
 }
 
-// plan_gltf.md GLTF-121: the node-hierarchy half of the same conversion.
+// plans/plan_gltf.md GLTF-121: the node-hierarchy half of the same conversion.
 //
 // Before GLTF-114 the node translations were discarded outright, so there was nothing for
 // unitScale to reach; now they are emitted as the .cnj "bones" array and the two must convert
@@ -2002,7 +2002,7 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     EXPECT_NEAR(skinningData->BindPose[0].getTranslationProperty().X, 0.5f, 1e-4f);
 }
 
-// CNB-72/73 + plan_gltf.md GLTF-215: a material with both a base-color and an occlusion texture.
+// CNB-72/73 + plans/plan_gltf.md GLTF-215: a material with both a base-color and an occlusion texture.
 //
 // This case used to import through DualTextureEffect (Texture=base colour, Texture2=an occlusion
 // image halved by RemapOcclusionImageForDualTextureEXT so its own always-multiply blend
@@ -2077,7 +2077,7 @@ TEST(GltfToCnjToolTest, BaseColorAndOcclusionTexturesImportThroughPbrEffectWithA
     EXPECT_EQ(255, occlusionPixel.getAProperty());
 }
 
-// plan_gltf.md GLTF-463. This document is a skinned primitive with COLOR_0 and no material, so
+// plans/plan_gltf.md GLTF-463. This document is a skinned primitive with COLOR_0 and no material, so
 // glTF's own default metallic-roughness applies -- and that used to cost it the material model
 // entirely: CNB-66/67/68 imported it through SkinnedEffect on the stride-56 layout, which has no
 // tangent slot, and `MeshOut::unsupportedMaterialModelEXT` named the loss.
@@ -2186,7 +2186,7 @@ TEST(GltfToCnjToolTest, ASkinnedVertexColouredPrimitiveKeepsItsPbrMaterialThroug
     EXPECT_TRUE(directSkinnedPbr->VertexColorEnabledEXT);
 }
 
-// plan_gltf.md GLTF-236/GLTF-237: every core material field must survive the offline .cnj path,
+// plans/plan_gltf.md GLTF-236/GLTF-237: every core material field must survive the offline .cnj path,
 // including the four values that used to be dropped there (base colour/alpha, normal scale and
 // occlusion strength). The direct and offline effects are compared at L6, not just against another
 // JSON parser, and deliberately non-default sampler/alpha state makes a missing field observable.
@@ -2436,7 +2436,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_THROW((void)cm.Load<Model>("long-transform"), ContentLoadException);
 }
 
-// plan_gltf.md GLTF-237 and the L6 half of GLTF-244: one rich probe can prove that every schema
+// plans/plan_gltf.md GLTF-237 and the L6 half of GLTF-244: one rich probe can prove that every schema
 // field exists, but not that each effect-selection/material shape reaches it. Sweep the complete
 // generated `mat-*` group and compare the draw parameter record, including map presence, factors,
 // alpha state and all five sampler slots. The floor stops a renamed/shrunk group from passing.
@@ -2511,7 +2511,7 @@ TEST(GltfToCnjToolTest, OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForThe
     EXPECT_GE(comparedParts, ids.size()) << "the sweep compared fewer parts than fixtures";
 }
 
-// plan_gltf.md GLTF-341/GLTF-342: material variants are complete mesh-part states, not merely
+// plans/plan_gltf.md GLTF-341/GLTF-342: material variants are complete mesh-part states, not merely
 // alternate colours. Prove the offline schema keeps the source-order name table, the sparse
 // primitive mapping and the PBR-to-unlit vertex-layout/effect transition, then compare every
 // selectable state against the direct runtime path at the draw-parameter boundary.
@@ -2756,7 +2756,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
 
 TEST(GltfToCnjToolTest, MorphedFlatNormalsAreRecomputedIdenticallyOnBothLoadPaths)
 {
-    // plan_gltf.md GLTF-461, end to end on both loaders. What has to survive the .cnj is not the
+    // plans/plan_gltf.md GLTF-461, end to end on both loaders. What has to survive the .cnj is not the
     // normals themselves -- they are a function of the weights, so no buffer can hold them -- but
     // the DECISION to recompute them, plus the connectivity the recomputation needs. The offline
     // path carries the decision as a mesh-entry field and rebuilds the connectivity from the index
@@ -2766,7 +2766,7 @@ TEST(GltfToCnjToolTest, MorphedFlatNormalsAreRecomputedIdenticallyOnBothLoadPath
     // The assertion is derived from the blended POSITIONS rather than stated, so it cannot be
     // satisfied by writing back a hardcoded expectation: each of the two morphed faces must carry
     // exactly its own geometric normal, and the two must differ.
-    // plan_gltf.md GLTF-464: this was an inline document until the corpus could grow. It is a
+    // plans/plan_gltf.md GLTF-464: this was an inline document until the corpus could grow. It is a
     // conformance statement about the format -- §3.7.2.2's "MUST calculate flat normals for each
     // morph target" -- so it lives in `tools/gltf_fixtures/` now, where `flatnormals.py` derives the
     // per-corner split independently and all four L7 policies render it.
@@ -3220,7 +3220,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCn
     EXPECT_NEAR(color.Z, 0.75f, 1e-5f);
 }
 
-// plan_gltf.md GLTF-314: the two loaders must agree, clip for clip, on every animation fixture.
+// plans/plan_gltf.md GLTF-314: the two loaders must agree, clip for clip, on every animation fixture.
 //
 // The runtime path builds a ModelAnimationsEXT straight from ExtractSceneNodeClips; the offline
 // path writes each clip to its own .cnj and reads it back through a JSON parser. Those are two
@@ -3342,7 +3342,7 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalAnimationClipsF
     EXPECT_GT(compared, 0u) << "every anim fixture was skipped -- the sweep proved nothing";
 }
 
-// plan_gltf.md GLTF-034/GLTF-035: diagnostics are part of the loaded Model, not merely stdout.
+// plans/plan_gltf.md GLTF-034/GLTF-035: diagnostics are part of the loaded Model, not merely stdout.
 // Exercise one loss from each major source (animation, light budget and extension validation)
 // through both real entry points and prove the converter's JSON reader preserves the same count.
 TEST(GltfToCnjToolTest, StructuredImportDiagnosticsSurviveBothLoadPaths)
@@ -3402,7 +3402,7 @@ TEST(GltfToCnjToolTest, StructuredImportDiagnosticsSurviveBothLoadPaths)
     }
 }
 
-// --- plan_gltf.md GLTF-459 (§27.2 row 9): the large-asset budget ---------------------------------
+// --- plans/plan_gltf.md GLTF-459 (§27.2 row 9): the large-asset budget ---------------------------------
 //
 // The row wants "large real-world assets load within a stated time and memory budget", and
 // GLTF-019 already decided such an asset is fetched, never committed -- it is a benchmark input,

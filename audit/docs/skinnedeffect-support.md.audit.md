@@ -4,7 +4,7 @@
 - Source file: `docs/skinnedeffect-support.md` (174 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 46, `plan_graphics.md` Tasks 401-410)
+- File type: Markdown documentation (closes Phase 46, `plans/plan_graphics.md` Tasks 401-410)
 - Cross-references: `xna-graphics` shard audit (`SkinnedEffect` not among that shard's 6 HIGH
   findings — a disjoint area); the "infinite slab" bone-weight-blending investigation from
   persistent memory (avatar/skinning-adjacent, but a different subsystem —

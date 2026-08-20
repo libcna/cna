@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2000: screen-space reflections.
+// plans/plan_modern.md MOD-2000: screen-space reflections.
 //
 // Tested against synthetic depth, normal and colour images rather than a rendered scene, for the
 // reason SsaoPassTests gives: it is the only way to state what the march must do without also
@@ -467,7 +467,7 @@ TEST(SsrPassTest, AZeroDepthIsAlsoNotReflective)
 
 TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
 {
-    // plan_modern.md MOD-2001. What the bisection buys, stated as the thing a viewer would notice:
+    // plans/plan_modern.md MOD-2001. What the bisection buys, stated as the thing a viewer would notice:
     // without it the reflection stops wherever the step happened to fall, so a coarse march
     // overshoots the edge it crossed and halving the step *moves* the whole reflection instead of
     // sharpening it -- reflected edges stair-step, and the pattern changes with the step count. With
@@ -508,7 +508,7 @@ TEST(SsrPassTest, TheRefinementMakesTheAnswerIndependentOfTheStepCount)
 
 TEST(SsrPassTest, RoughnessSpreadsTheReflectionAndSmoothnessDoesNot)
 {
-    // plan_modern.md MOD-2003. The same scene twice, with nothing changed but the roughness the
+    // plans/plan_modern.md MOD-2003. The same scene twice, with nothing changed but the roughness the
     // prepass wrote into the normal target's alpha. The reflection lands on the band's leading
     // edge, so a spread reflection gathers the black outside the band and comes back darker, while
     // a mirror takes the band's colour exactly. Measured as brightness because that is what mixing
@@ -783,7 +783,7 @@ TEST(SsrPassTest, TheNameIsStable)
 
 TEST(SsrPassTest, SupportAnswersAboutTheRendererAndNotAboutTheFrame)
 {
-    // plan_modern.md MOD-2006. `isSupported` takes a device and nothing else, so it cannot see a
+    // plans/plan_modern.md MOD-2006. `isSupported` takes a device and nothing else, so it cannot see a
     // frame's inputs -- a pass with no depth image, no normals and no camera is still *supported*,
     // and it is `apply` that copies the input through. The engine-layer document claimed the
     // opposite for SSAO until this task, which matters: a game that gates its prepass on

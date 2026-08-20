@@ -1,4 +1,4 @@
-# Terminal capability spike (plan_platform.md PLAT-129)
+# Terminal capability spike (plans/plan_platform.md PLAT-129)
 
 Proves, before any `TerminalPlatform` code exists, that a process can determine at runtime what
 the terminal it is attached to can actually do.

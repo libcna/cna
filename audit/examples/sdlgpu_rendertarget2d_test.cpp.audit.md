@@ -32,7 +32,7 @@ same three targets Checks A-C populate.
 **Healthy.** All 7 checks map onto real, independently-traced backend behavior; the file's own
 claim that `GetData()` "IS real ... reads its own self-owned colorTexture_, not the swapchain"
 (header lines 8-10) was independently confirmed by tracing `SdlGpuRenderTargetBackend::GetData`
-and cross-checked against `plan_sdlgpu.md`'s SDLGPU-39 row, which documents this specific
+and cross-checked against `plans/plan_sdlgpu.md`'s SDLGPU-39 row, which documents this specific
 capability (and the reason the swapchain-equivalent remains unimplemented) in detail. No defect
 found.
 
@@ -94,14 +94,14 @@ freed handle and is unaffected by the deferred-release mechanism entirely.
 
 Comprehensive layering: no-throw smoke coverage (A-D via the `try`/`catch` at lines 208-223), a
 dedicated MultiSampleCount property check (D), and real pixel-content assertions (E/F/G) — this
-file was the one that closed out SDLGPU-39's `RenderTarget2D::GetData()` leg per `plan_sdlgpu.md`,
+file was the one that closed out SDLGPU-39's `RenderTarget2D::GetData()` leg per `plans/plan_sdlgpu.md`,
 and its own row there confirms these three checks were added specifically to replace "the
 screenshot-only verification this row previously depended on," which this audit's own reading of
 the current file confirms is exactly what E/F/G do.
 
 ## Cross-File Observations
 
-- `plan_sdlgpu.md`'s SDLGPU-39 row (secondary context per D-3) confirms this file's own claim
+- `plans/plan_sdlgpu.md`'s SDLGPU-39 row (secondary context per D-3) confirms this file's own claim
   about `GetData()` being "real" is accurate and not stale: `RenderTarget2D::GetData()` downloads
   from `colorTexture_` (the always-single-sample, already-resolved-if-MSAA sampleable texture)
   using the same transfer-buffer+fence pattern as `RenderTargetCube`/`TextureCube`/`Texture3D`'s

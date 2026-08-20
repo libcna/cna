@@ -12,7 +12,7 @@
   `DualTextureEffect` — real XNA 4.0 API.
 - Related production code: `EasyGLGraphicsBackend::ApplySamplerState`
   (`src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp:2072-2109`, filter-to-GL-mapping
-  switch); `plan_graphics.md` rows 298/925/926 (Vulkan/Bgfx-specific mip-aware `Point` behavior).
+  switch); `plans/plan_graphics.md` rows 298/925/926 (Vulkan/Bgfx-specific mip-aware `Point` behavior).
 
 ## Purpose
 
@@ -29,7 +29,7 @@ is trying to catch fresh).
 and found accurate; the file's own claim that `Point` "never mip-selects" on this backend today is
 current (not stale, unlike the sibling `easygl_texture_anisotropic_effect_test.cpp`'s comment — this
 audit specifically cross-checked whether the same kind of staleness applied here and found it does
-not, per `plan_graphics.md` rows 925/926 explicitly stating EasyGL's flat `Point` mapping "is
+not, per `plans/plan_graphics.md` rows 925/926 explicitly stating EasyGL's flat `Point` mapping "is
 EasyGL-specific ... a separate still-open limitation").
 
 ## Checklist Results
@@ -89,14 +89,14 @@ No CRITICAL/HIGH/MEDIUM findings.
   computed LOD (point filtering on all three axes, including mip selection) — CNA's EasyGL mapping
   (`Nearest`/`Nearest`, no `_MIPMAP_` suffix) deviates from this by design, for the stated reason
   (avoiding GL-incomplete-texture black screens on the common non-mipmapped case, prior to Task 924's
-  `GL_TEXTURE_MAX_LEVEL` fix). `plan_graphics.md` row 925 independently confirms Vulkan's `Point` has
+  `GL_TEXTURE_MAX_LEVEL` fix). `plans/plan_graphics.md` row 925 independently confirms Vulkan's `Point` has
   "ALWAYS" been mip-aware (`VK_SAMPLER_MIPMAP_MODE_NEAREST`) — i.e. it's specifically EasyGL/Bgfx that
   diverge from real XNA semantics here, and this test correctly targets and documents the EasyGL case
   only, without overclaiming universality.
 - Why it matters: flagged here so the cross-cutting FNA-parity finding is anchored to a concrete,
   currently-accurate test rather than lost — this is exactly the kind of "documented, not yet fixed"
   deviation the checklist's Behavioral-correctness section asks to distinguish from a silent bug.
-- Related files: `plan_graphics.md` rows 298/925/926.
+- Related files: `plans/plan_graphics.md` rows 298/925/926.
 - Suggested future action: none from this audit — already correctly tracked as open in the project's
   own planning docs (consulted here only as secondary context per `AUDIT_SCOPE.md`).
 
@@ -107,7 +107,7 @@ No CRITICAL/HIGH/MEDIUM findings.
 - Correctly avoids the anisotropic test's stale-documentation problem (see
   `easygl_texture_anisotropic_effect_test.cpp.audit.md` in this same batch) by describing a
   limitation that is still genuinely open, cross-checked against both the live switch statement and
-  `plan_graphics.md`'s own tracking rows.
+  `plans/plan_graphics.md`'s own tracking rows.
 
 ## Missing or Weak Tests
 

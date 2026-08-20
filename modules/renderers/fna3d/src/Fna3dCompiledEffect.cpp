@@ -224,7 +224,7 @@ namespace CNA::Internal::Renderers::Fna3d
         if (texture != nullptr && GetSampledTexture(texture) == nullptr)
             throw std::invalid_argument(
                 "FNA3D compiled effect: texture was not created by the active FNA3D renderer.");
-        // plan_fx.md FX-110: the assigned texture's dimension must match the one the effect
+        // plans/plan_fx.md FX-110: the assigned texture's dimension must match the one the effect
         // declared. FNA3D binds a texture to a slot by its own target, so a Texture2D assigned to a
         // samplerCUBE leaves the cube target unbound and the shader samples black -- silently, and
         // indistinguishably from a genuinely black texture. Refused at assignment, which is where
@@ -262,7 +262,7 @@ namespace CNA::Internal::Renderers::Fna3d
         if (passIndex >= technique.pass_count)
             throw std::out_of_range("FNA3D compiled effect: pass index is out of range.");
 
-        // plan_fx.md FX-101: `stateChanges_` is NOT cleared before each application, and that is
+        // plans/plan_fx.md FX-101: `stateChanges_` is NOT cleared before each application, and that is
         // load-bearing rather than an oversight.
         //
         // MojoShader writes this struct only in `MOJOSHADER_effectBeginPass`. FNA3D reaches that

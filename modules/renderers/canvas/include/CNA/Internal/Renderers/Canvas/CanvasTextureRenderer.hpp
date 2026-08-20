@@ -23,7 +23,7 @@ namespace CNA::Internal::Renderers::Canvas
         [[nodiscard]] int GetHeight() const override { return height_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
-        /// plan_canvas.md CANVAS-21: Canvas2D has no native mip chain either (same conclusion
+        /// plans/plan_canvas.md CANVAS-21: Canvas2D has no native mip chain either (same conclusion
         /// the native 2D renderer reached, Task 681) -- level>0 throws, level=0 behaves like UpdatePixels.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 

@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: multilight_textured_quad
+# plans/plan_dx9.md D9-A5 scene corpus: multilight_textured_quad
 # The first scene to genuinely exercise BasicEffect's MULTI-LIGHT summation formula (D9-82b's own
 # "2-light-sum" ShaderIndex bucket, a structurally DIFFERENT dispatch path from the "OneLight"
 # bucket lit_textured_quad.scene/skinned_quad.scene already exercise). Two active lights

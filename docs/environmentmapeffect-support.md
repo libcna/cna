@@ -1,6 +1,6 @@
 # EnvironmentMapEffect Exactness Support Matrix
 
-Phase 45 (`plan_graphics.md` Tasks 391–400) audited and pixel-verified `EnvironmentMapEffect`
+Phase 45 (`plans/plan_graphics.md` Tasks 391–400) audited and pixel-verified `EnvironmentMapEffect`
 conformance against FNA across all three graphics renderers (EasyGL, Vulkan, Bgfx). This document
 summarizes the findings and closes the phase.
 
@@ -173,4 +173,4 @@ Phase 45 opened 3 new tracked tasks:
   while auditing `EnvironmentMapEffect`'s own normal-matrix bug, invisible in every existing
   `BasicEffect` Bgfx test since they all use `Identity` `View`/`Projection`.
 
-This closes Phase 45 (`plan_graphics.md` Tasks 391–400) in full.
+This closes Phase 45 (`plans/plan_graphics.md` Tasks 391–400) in full.

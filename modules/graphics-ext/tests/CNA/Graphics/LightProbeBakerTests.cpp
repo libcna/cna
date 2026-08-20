@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2084: capturing probes by rendering the scene from where they stand.
+// plans/plan_modern.md MOD-2084: capturing probes by rendering the scene from where they stand.
 //
 // The interesting risk in a cube capture is that the six view matrices and whatever reads them back
 // disagree about which way is which -- and a probe baked with a mirrored or rotated face still

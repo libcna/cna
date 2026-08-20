@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX6 (DX-43/DX-45): real D3D11 offscreen render-target renderers.
+// plans/plan_dx.md Phase DIRECTX6 (DX-43/DX-45): real D3D11 offscreen render-target renderers.
 //
 // Both classes hold a non-owning DirectX11Renderer* (owner_) -- unlike D3D11Buffers/Textures,
 // which are fully self-contained via their own ComPtr<ID3D11Device/DeviceContext>, a render

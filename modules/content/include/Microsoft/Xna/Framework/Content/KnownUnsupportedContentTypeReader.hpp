@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Content
     /**
      * @brief CNAEXT placeholder reader for a `.xnb` type-reader name CNA recognizes but does not
      *        (yet, or ever) support reading, so a fixture referencing it fails with a precise,
-     *        documented error instead of a generic "unknown content reader" (plan_xnb.md XNB-14B).
+     *        documented error instead of a generic "unknown content reader" (plans/plan_xnb.md XNB-14B).
      */
     class CNAEXT KnownUnsupportedContentTypeReader : public ContentTypeReaderBase
     {

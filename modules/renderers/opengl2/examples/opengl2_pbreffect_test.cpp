@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact PbrEffect/SkinnedPbrEffect proof for the native OpenGL 2.1
+// plans/plan_opengl2.md: pixel-exact PbrEffect/SkinnedPbrEffect proof for the native OpenGL 2.1
 // graphics renderer -- metallic-roughness BRDF, tangent-space normal mapping, and (for
 // SkinnedPbrEffect) bone-palette vertex skinning combined with the PBR shader. All non-skinned
 // checks use World=View=Projection=Identity (this project's own established convention -- see

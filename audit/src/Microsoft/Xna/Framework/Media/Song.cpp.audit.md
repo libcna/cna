@@ -21,7 +21,7 @@ own `name_`], NOT a behavior verified against a decompiled XNA binary" -- correc
 a reasoned inference from a verified fact, given FNA itself has no `ToString()` to check against.
 `FromUri()`'s URI-scheme-detection logic (colon-position heuristic) correctly handles the Windows
 drive-letter-vs-URI-scheme ambiguity (`"C:/x"` is a path, not a scheme, since a single-character
-"scheme" is never real), citing the specific prior bug this fixes (`plan_media.md MEDIA-217/219`:
+"scheme" is never real), citing the specific prior bug this fixes (`plans/plan_media.md MEDIA-217/219`:
 the raw string used to go straight to the constructor, which then failed against a literal
 `"file:///..."` string every time).
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx5.md design decision 11: run a Windows cross-compiled .exe (DIRECTX5 renderer, CNA's real
+# plans/plan_dx5.md design decision 11: run a Windows cross-compiled .exe (DIRECTX5 renderer, CNA's real
 # DirectX 5 -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive) under Wine against real DirectDraw
 # v4, using this project's own dedicated Wine prefix.
 #
@@ -12,7 +12,7 @@
 #
 # Set CNA_DX5_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DIRECTX5
 # deliberately REUSES DIRECTX1/DIRECTX2/DIRECTX3's own already-initialized prefix rather than creating a fresh
-# one (plan_dx5.md's own DX5-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works
+# one (plans/plan_dx5.md's own DX5-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works
 # for DIRECTX5's IDirectDraw4 + Direct3D v3 needs, so there is nothing DX5-specific a separate prefix
 # would buy).
 #

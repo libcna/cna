@@ -11,7 +11,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_pixijs.md PIXIJS-32/Design decision 8: a real PIXI.RenderTexture, registered in the same
+// plans/plan_pixijs.md PIXIJS-32/Design decision 8: a real PIXI.RenderTexture, registered in the same
 // Module['cnaPixi'].textures id space plain buffer-backed textures use (PixiJsTextureRenderer.cpp)
 // so the SpriteBatch sampling path can treat either uniformly by id, but created via
 // PIXI.RenderTexture.create() rather than a PIXI.BufferResource -- a render texture is a real GPU
@@ -57,7 +57,7 @@ EM_JS(int, CNA_PixiJs_DestroyRenderTexture, (int id), {
     return wasBound;
 });
 
-// plan_pixijs.md PIXIJS-32: switches which target subsequent Clear()/Draw() calls render into.
+// plans/plan_pixijs.md PIXIJS-32: switches which target subsequent Clear()/Draw() calls render into.
 // PIXIJS-87: a render target no longer owns a retained PIXI.Container of pending sprites -- every
 // submitted batch is rasterized into the target's RenderTexture before the submitting call
 // returns. Binding therefore only has to redirect the next render, which is what makes
@@ -72,7 +72,7 @@ EM_JS(int, CNA_PixiJs_BindRenderTarget, (int id), {
     return 1;
 });
 
-// plan_pixijs.md Design decision 9: app.renderer.extract.pixels() reads back synchronously from
+// plans/plan_pixijs.md Design decision 9: app.renderer.extract.pixels() reads back synchronously from
 // the passed target. PIXIJS-87: no re-render first -- everything drawn into this target was already
 // rasterized at its own submission point, so a read is just a read. (The previous implementation
 // re-rendered the target's pending container before reading, which is what forced the `clear:false`
@@ -96,7 +96,7 @@ EM_JS(int, CNA_PixiJs_ReadTexturePixels, (int id, int x, int y, int w, int h, ui
     }
 });
 
-// plan_pixijs.md PIXIJS-32: direct CPU pixel upload (Texture2D::SetData) into a PIXI.RenderTexture.
+// plans/plan_pixijs.md PIXIJS-32: direct CPU pixel upload (Texture2D::SetData) into a PIXI.RenderTexture.
 // A render texture has no synchronous CPU-buffer upload path the way a plain buffer-backed texture
 // does, so this builds a throwaway buffer-backed texture from the given pixels, paints it over the
 // whole target with BLEND_MODES.NONE (a real unconditional overwrite), then discards it.

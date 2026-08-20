@@ -22,7 +22,7 @@ in any repository.** Full lane record: `integration/lanes/gl.md`.
 C1 (ORDER §1): *"CNA `feature/gl` builds against `../easy-glrvc` by path. It cannot be integrated
 before EasyGL `rvc` and MetaGL `feature/followup-audit` reach their `develop` branches."* The nine
 §7.4 steps ran in order under the project owner's direct 2026-08-07 instruction (the
-`plan_glbackends.md` owner-only constraint was discharged by that instruction; the no-push half
+`plans/plan_glbackends.md` owner-only constraint was discharged by that instruction; the no-push half
 stands — nothing was pushed anywhere).
 
 | Step | Result |

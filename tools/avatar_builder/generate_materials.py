@@ -2,7 +2,7 @@
 """Builds CNA's minimal placeholder avatar materials — one simple base-color Principled
 BSDF material per body part (skin, hair, shirt, pants, shoes). No texture painting at
 this stage; each material is a flat, project-chosen base color, meant to be replaced or
-texture-painted in a later iteration (see plan_net.md Phase 11c, Task 11.13+).
+texture-painted in a later iteration (see plans/plan_net.md Phase 11c, Task 11.13+).
 
 Only the `Skin` material is assigned anywhere right now — `CNAAvatarBody` (the only mesh
 that exists so far, Task 11.2). `Hair`/`Shirt`/`Pants`/`Shoes` are created and returned

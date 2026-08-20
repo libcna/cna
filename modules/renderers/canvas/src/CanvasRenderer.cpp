@@ -10,7 +10,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_canvas.md CANVAS-10/Design decision 2: shared JS-side helper that locates the existing DOM
+// plans/plan_canvas.md CANVAS-10/Design decision 2: shared JS-side helper that locates the existing DOM
 // <canvas> element (Module['canvas'] || document.querySelector('canvas'), the same lookup
 // EasyGLRenderer.cpp already uses for its own GL context) and caches its '2d' context on
 // Module['cnaMainCtx']. Module['cnaCurrentCtx'] is "whichever context Clear()/Draw() currently
@@ -30,7 +30,7 @@ EM_JS(void, CNA_Canvas2D_EnsureMainContext, (), {
     if (!Module['cnaCurrentCtx']) Module['cnaCurrentCtx'] = ctx;
 });
 
-// plan_canvas.md CANVAS-11: real Clear() against whichever context is currently bound (main canvas
+// plans/plan_canvas.md CANVAS-11: real Clear() against whichever context is currently bound (main canvas
 // or a bound render target -- see CANVAS-22). alpha<=0 uses clearRect (transparent, and clearRect
 // always ignores globalCompositeOperation by spec, so no explicit reset is needed for that path).
 // alpha>0 uses an explicit globalCompositeOperation='copy' fillRect: real XNA/FNA's Clear(color) is
@@ -60,7 +60,7 @@ EM_JS(void, CNA_Canvas2D_Clear, (double r, double g, double b, double a), {
     ctx.restore();
 });
 
-// plan_canvas.md CANVAS-25: real, synchronous ctx.getImageData() readback against whichever
+// plans/plan_canvas.md CANVAS-25: real, synchronous ctx.getImageData() readback against whichever
 // context is currently bound -- Canvas2D's getImageData is genuinely synchronous (Design
 // decision 3), no faking/async round-trip needed. Writes w*h*4 RGBA8 bytes to outPixels.
 EM_JS(void, CNA_Canvas2D_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t* outPixels), {
@@ -71,7 +71,7 @@ EM_JS(void, CNA_Canvas2D_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t
     HEAPU8.set(imageData.data, outPixels);
 });
 
-// plan_canvas.md CANVAS-40/41/Design decision 5: caches the globalCompositeOperation string
+// plans/plan_canvas.md CANVAS-40/41/Design decision 5: caches the globalCompositeOperation string
 // CanvasSpriteBatchRenderer's own DrawSprite EM_JS function applies to its final blit, plus a
 // separate needsUnpremultiply flag (Module['cnaNeedsUnpremultiply']) -- the composite-op STRING is
 // the same 'source-over' for both AlphaBlend and NonPremultiplied (Canvas2D has only one alpha-blend
@@ -85,7 +85,7 @@ EM_JS(void, CNA_Canvas2D_SetCompositeOp, (int opCode), {
     Module['cnaNeedsUnpremultiply'] = (opCode === 2);
 });
 
-// plan_canvas.md CANVAS-22: restores the main canvas as the current draw/clear/read target --
+// plans/plan_canvas.md CANVAS-22: restores the main canvas as the current draw/clear/read target --
 // the counterpart of CanvasRenderTargetRenderer.cpp's CNA_Canvas2D_BindRenderTarget(id).
 EM_JS(void, CNA_Canvas2D_UnbindRenderTarget, (), {
     CNA_Canvas2D_EnsureMainContext();
@@ -124,7 +124,7 @@ namespace CNA::Internal::Renderers::Canvas
 
     void CanvasRenderer::Present()
     {
-        // plan_canvas.md CANVAS-12: no-op. The browser compositor presents the canvas
+        // plans/plan_canvas.md CANVAS-12: no-op. The browser compositor presents the canvas
         // automatically on the next paint tick; there is nothing for CNA to flush or swap.
     }
 
@@ -395,7 +395,7 @@ namespace CNA::Internal::Renderers::Canvas
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Canvas { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

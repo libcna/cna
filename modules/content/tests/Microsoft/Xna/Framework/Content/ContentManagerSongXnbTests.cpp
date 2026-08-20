@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-34: end-to-end test -- content.Load<Song>("fixture") against a real,
+// plans/plan_xnb.md XNB-34: end-to-end test -- content.Load<Song>("fixture") against a real,
 // externally-produced .xnb fixture, going through ContentManager (not a standalone parser call).
 
 #include <cstdint>
@@ -112,7 +112,7 @@ TEST_F(ContentManagerSongXnbTest, LoadRealMonoGameFixtureEndToEnd)
               System::TimeSpan::FromMilliseconds(769282).getTicksProperty());
 }
 
-// plan_media.md MEDIA-75: re-verify that Song's corrected exception type (System::IO::
+// plans/plan_media.md MEDIA-75: re-verify that Song's corrected exception type (System::IO::
 // FileNotFoundException, not a bare std::runtime_error -- see MEDIA-10) actually propagates all
 // the way out of ContentManager::Load<Song>() through the full, real .xnb container-parsing path
 // (header + type-reader table + object dispatch), not just out of SongReader::Read() called

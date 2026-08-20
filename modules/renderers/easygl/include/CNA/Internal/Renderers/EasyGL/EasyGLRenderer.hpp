@@ -186,7 +186,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *                         from nothing instead of touching freed storage.
          * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
          * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
-         * @param surfaceFormat    plan_modern.md MOD-115: raw
+         * @param surfaceFormat    plans/plan_modern.md MOD-115: raw
          *                         `Microsoft::Xna::Framework::Graphics::SurfaceFormat` ordinal for
          *                         the colour attachment. `Color` (the default) keeps the historical
          *                         8-bit RGBA storage exactly as it was; the float formats allocate
@@ -214,7 +214,7 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
-        /// plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
+        /// plans/plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
         /// actually created with. Equal to what was requested -- an unsupported format is refused at
         /// creation rather than substituted, so this can never disagree with the caller's request.
         [[nodiscard]] int GetSurfaceFormatEXT() const { return surfaceFormat_; }
@@ -479,7 +479,7 @@ namespace CNA::Internal::Renderers::EasyGL
     };
 
     /**
-     * @brief plan_modern.md MOD-1512: a shader storage buffer.
+     * @brief plans/plan_modern.md MOD-1512: a shader storage buffer.
      *
      * Read-back goes through `glMapBufferRange` rather than `glGetBufferSubData`, which is desktop
      * GL only -- the same code then works on the GL ES 3.1 contexts this renderer mostly runs on.
@@ -498,7 +498,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Binds this buffer to a shader storage binding point.
         void BindBase(int binding) const;
 
-        /// plan_modern.md MOD-2090: binds this buffer as the source of an indirect draw's
+        /// plans/plan_modern.md MOD-2090: binds this buffer as the source of an indirect draw's
         /// arguments. The same buffer object in a second role -- which is exactly what makes an
         /// indirect draw worth having, since a compute shader can write the arguments through the
         /// storage binding and the draw fetches them here without a readback in between.
@@ -510,7 +510,7 @@ namespace CNA::Internal::Renderers::EasyGL
     };
 
     /**
-     * @brief plan_modern.md MOD-1511: one compiled compute program.
+     * @brief plans/plan_modern.md MOD-1511: one compiled compute program.
      */
     class EasyGLComputeShaderRenderer : public IComputeShaderRenderer
     {
@@ -553,7 +553,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
-    /// plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
+    /// plans/plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
     /// because that enum is written to the ES 3.0 core set and the timer query is an extension
     /// there. The target is therefore cast in one place, here, rather than the whole query object
     /// being written against raw GL.
@@ -647,7 +647,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void InitializeResources();
         void FlushBatch();
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        /// plan_fx.md FX-080: the compiled-Effect half of FlushBatch(). Separate because it shares
+        /// plans/plan_fx.md FX-080: the compiled-Effect half of FlushBatch(). Separate because it shares
         /// nothing with the stock/ShaderEffect route -- different program, different vertex array,
         /// no projection uniform of this renderer's own -- and because keeping it out of the
         /// common path leaves that path byte-for-byte unchanged when no compiled effect is set.
@@ -748,23 +748,23 @@ namespace CNA::Internal::Renderers::EasyGL
         // platform context is still current and alive.
         std::unique_ptr<EasyGLPlatformContext> platformContext_;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
-        // plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
+        // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
         // EasyGLCompiledEffect.cpp).
         MOJOSHADER_glContext* mojoShaderContext_ = nullptr;
-        /// plan_fx.md FX-108: the meta-gl context generation `mojoShaderContext_` (and every
+        /// plans/plan_fx.md FX-108: the meta-gl context generation `mojoShaderContext_` (and every
         /// program MojoShader linked inside it) belongs to. A recreated context bumps the counter,
         /// and every one of those programs is then a dead GL name -- see
         /// RequireCompiledEffectContextEXT().
         std::uint64_t mojoShaderContextGeneration_ = 0;
-        // plan_fx.md FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
+        // plans/plan_fx.md FX-082: see EnsureCompiledEffectVaoEXT(). One array object, shared by every
         // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
         ::easygl::VertexArray compiledEffectVao_;
         bool compiledEffectVaoCreated_ = false;
         /**
          * @brief One slot's row-order-corrected copy of a render target being sampled. CNAEXT.
          *
-         * plan_fx.md FX-099. See AcquireCompiledEffectFlippedSourceEXT() for why a copy is what a
+         * plans/plan_fx.md FX-099. See AcquireCompiledEffectFlippedSourceEXT() for why a copy is what a
          * compiled Effect needs where a stock shader needs only a uniform.
          */
         struct CompiledEffectFlippedSourceEXT
@@ -805,7 +805,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
-        /// plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
+        /// plans/plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
         GlProfile profile_ = kCompileTimeGlProfile;
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
@@ -847,7 +847,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_specularpower = -1;  ///< BasicEffect.SpecularPower (Blinn-Phong exponent)
             int loc_texture       = -1;
             int loc_texture2      = -1;  ///< second sampler (DualTextureEffect only)
-            /// plan_modern.md MOD-835: shadow reception. Present only on the lit variants; every
+            /// plans/plan_modern.md MOD-835: shadow reception. Present only on the lit variants; every
             /// other program leaves them at -1 and BindDrawParams skips them, exactly like the
             /// other optional locations here.
             int loc_shadowmap      = -1;  ///< sampler2D holding light-space distance
@@ -856,7 +856,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_shadow_bias    = -1;  ///< float
             int loc_shadow_texel   = -1;  ///< vec2 1/size (textureSize() is ES 3.00 only)
             int loc_shadow_pcf     = -1;  ///< float PCF radius in texels, 0..2
-            /// plan_modern.md MOD-908: cascades. uCascadeCount 0 means a single map and the rest
+            /// plans/plan_modern.md MOD-908: cascades. uCascadeCount 0 means a single map and the rest
             /// are left alone, which is why an existing draw is byte-for-byte unchanged.
             int loc_cascade_count  = -1;  ///< float, 0 = single map
             int loc_cascade_mats   = -1;  ///< mat4[4], world -> atlas, sub-rectangle baked in
@@ -864,7 +864,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_cascade_viewz  = -1;  ///< vec4, the view matrix's third column
             int loc_cascade_blend  = -1;  ///< float cross-fade width in view-depth units
             int loc_cascade_debug  = -1;  ///< float 0/1
-            /// plan_modern.md MOD-1005: one punctual light. uPunctualKind 0 means none and the
+            /// plans/plan_modern.md MOD-1005: one punctual light. uPunctualKind 0 means none and the
             /// rest are left alone, which is why an existing draw is unchanged.
             int loc_punctual_kind   = -1;  ///< float 0 none, 1 point, 2 spot
             int loc_punctual_pos    = -1;
@@ -879,7 +879,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_punctual_map    = -1;  ///< sampler2D, unit 9
             int loc_punctual_vp     = -1;
             int loc_punctual_texel  = -1;  ///< vec2 1/size of the spot map
-            /// plan_modern.md MOD-1225: image-based lighting. uIblEnabled 0 means the flat
+            /// plans/plan_modern.md MOD-1225: image-based lighting. uIblEnabled 0 means the flat
             /// uAmbientColor term is in charge and every other field here is untouched -- which
             /// is why a draw that has never heard of IBL renders exactly as it did.
             int loc_ibl_enabled    = -1;  ///< float 0/1
@@ -909,26 +909,26 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_specularcolormap = -1; ///< KHR_materials_specular colour map (RGB)
             int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
-            /// plan_gltf.md GLTF-343/344: xyz = dielectric F0, w = dielectric F90.
+            /// plans/plan_gltf.md GLTF-343/344: xyz = dielectric F0, w = dielectric F90.
             int loc_pbr_dielectric_fresnel = -1;
             /// GLTF-344: xyz = unclamped IOR F0 * specularColorFactor, w = specularFactor.
             int loc_pbr_specular_fresnel_inputs = -1;
-            /// plan_gltf.md GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
+            /// plans/plan_gltf.md GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
             /// x = decode the base-colour sample from sRGB, y = decode the emissive sample,
             /// z = encode the fragment's RGB back to sRGB. Each is 0 or 1 and multiplies a
             /// `mix()` rather than driving a branch, so every fragment costs the same.
             int loc_pbr_srgb        = -1;
-            /// plan_gltf.md GLTF-224: float normalTexture.scale (PbrEffect only).
+            /// plans/plan_gltf.md GLTF-224: float normalTexture.scale (PbrEffect only).
             int loc_pbr_normalscale = -1;
-            /// plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
+            /// plans/plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
             int loc_pbr_occlstrength = -1;
-            /// plan_gltf.md GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.
+            /// plans/plan_gltf.md GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.
             int loc_pbr_texcoordsets = -1;
-            /// plan_gltf.md GLTF-182/183: UV1 selector for PBR occlusion slot 4.
+            /// plans/plan_gltf.md GLTF-182/183: UV1 selector for PBR occlusion slot 4.
             int loc_pbr_occlusiontexcoordset = -1;
             /// GLTF-344: UV1 selectors for specular strength/colour slots 5 and 6.
             int loc_pbr_specular_texcoordsets = -1;
-            /// plan_gltf.md GLTF-184: ten vec4 affine rows, two for each PBR texture slot.
+            /// plans/plan_gltf.md GLTF-184: ten vec4 affine rows, two for each PBR texture slot.
             std::array<int, 10> loc_pbr_texture_transform_rows{
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
             /// GLTF-344: two affine rows for each specular texture, kept ABI-separate from slots 0-4.
@@ -982,7 +982,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// which is precisely what the trace exists to record.
         [[nodiscard]] std::string TraceBindingDetailEXT() const;
 
-        /// plan_modern.md MOD-117: asks GL, once per kind, whether a colour attachment of the
+        /// plans/plan_modern.md MOD-117: asks GL, once per kind, whether a colour attachment of the
         /// 32-bit (@p fullFloat) or 16-bit float format is framebuffer-complete on this context.
         /// Restores the previously bound framebuffer and drains the error queue before returning.
         [[nodiscard]] bool ProbeFloatRenderTargetSupportEXT(bool fullFloat) const;
@@ -1045,11 +1045,11 @@ namespace CNA::Internal::Renderers::EasyGL
                             const Matrix& projection, const GpuDrawParams& params);
         /// REMED-GFX-147: resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
-        /// plan_modern.md MOD-836..MOD-839: resolves CNA_GL_SHADOW_DECL's uniforms for a freshly
+        /// plans/plan_modern.md MOD-836..MOD-839: resolves CNA_GL_SHADOW_DECL's uniforms for a freshly
         /// linked lit program. Every other program leaves them at -1, and BindDrawParams skips
         /// them exactly as it skips the other optional locations.
         static void ResolveShadowUniforms(Prog3D& p);
-        /// plan_modern.md MOD-1225: resolves the image-based-lighting uniforms, which exist only
+        /// plans/plan_modern.md MOD-1225: resolves the image-based-lighting uniforms, which exist only
         /// on the two PBR programs; every other program leaves them at -1.
         static void ResolveIblUniforms(Prog3D& p);
 
@@ -1057,7 +1057,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Constructs the renderer for one of EasyGL's five GL profiles.
          *
-         * plan_runtimerenderer.md phase P11: the profile is a constructor argument rather than a
+         * plans/plan_runtimerenderer.md phase P11: the profile is a constructor argument rather than a
          * compile definition, which is what lets two GL identities coexist in one binary. It
          * defaults to the profile this build was configured for, so a single-renderer build is
          * unaffected.
@@ -1089,7 +1089,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         /**
-         * @brief Parses a compiled XNA effect for this device (plan_fx.md FX-062).
+         * @brief Parses a compiled XNA effect for this device (plans/plan_fx.md FX-062).
          * @param effectCode Compiled effect bytes.
          * @param effectCodeBytes Number of bytes at @p effectCode.
          * @return The runtime, or null if MojoShader has no context for this device.
@@ -1099,7 +1099,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         /**
          * @brief True: this renderer executes compiled XNA Effect Framework bytecode
-         * (plan_fx.md FX-062, FX-080/FX-082/FX-083).
+         * (plans/plan_fx.md FX-062, FX-080/FX-082/FX-083).
          *
          * Every draw route recognises a compiled effect: ordinary, indexed, instanced,
          * multi-stream and SpriteBatch, each verified by the FX-060 shared conformance suite's own
@@ -1108,7 +1108,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *
          * Still refused explicitly rather than silently mishandled: a compiled effect's vertex
          * shader sampling a texture, and a 3D/cube (not 2D) sampler binding. `AddressW` now reaches
-         * `GL_TEXTURE_WRAP_R` (plan_fx.md FX-092), though the compiled route's own 2D-only sampling
+         * `GL_TEXTURE_WRAP_R` (plans/plan_fx.md FX-092), though the compiled route's own 2D-only sampling
          * never observes it; `MipMapLevelOfDetailBias` remains unrepresentable on the OpenGL ES
          * profiles, which have no such GL state -- see docs/sampler-state-support.md.
          * @return true.
@@ -1138,7 +1138,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. One vertex stream a compiled-effect draw may read attributes from.
          *
-         * plan_fx.md FX-082: a compiled effect's vertex shader declares arbitrary semantics, and
+         * plans/plan_fx.md FX-082: a compiled effect's vertex shader declares arbitrary semantics, and
          * XNA lets any of them come from any bound `VertexBufferBinding`. Each stream therefore
          * carries its own buffer, its own stride, its own `VertexOffset` in bytes and its own
          * instance frequency -- never the combined-layout stride the stock programs dispatch on.
@@ -1160,7 +1160,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * attributes, pixel-stage sampler textures and sampler state, and pushes its uniforms --
          * everything a compiled-effect draw needs immediately before issuing the GL draw call.
          *
-         * plan_fx.md FX-062/FX-071: EasyGL draws immediately (no `Present()`-deferred queue), so
+         * plans/plan_fx.md FX-062/FX-071: EasyGL draws immediately (no `Present()`-deferred queue), so
          * this is called directly from the `Draw*PrimitivesEx` compiled-effect branches rather
          * than captured for later replay the way SDL_GPU's draw route has to. Every shader input
          * is resolved against the whole bound stream set, so a shader consuming attributes from
@@ -1191,7 +1191,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.
          *
-         * plan_fx.md FX-082: MojoShader's OpenGL adapter remembers which attribute arrays it has
+         * plans/plan_fx.md FX-082: MojoShader's OpenGL adapter remembers which attribute arrays it has
          * enabled in its own context state, not per VAO, so routing compiled draws through each
          * vertex buffer's own VAO both desynchronised that belief and overwrote the stock
          * attribute pointers `ApplyLayout()` had installed there. A dedicated array object keeps
@@ -1204,7 +1204,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. Forgets every compiled-effect GL object across a context recreation.
          *
-         * plan_fx.md FX-108. These objects are deliberately not `easygl::RecoverableResource`s --
+         * plans/plan_fx.md FX-108. These objects are deliberately not `easygl::RecoverableResource`s --
          * an empty array object and a scratch copy have no content worth restoring -- so the
          * registry's own release/recreate pass does not reach them, and their creation flags would
          * otherwise stay true while their names became dead. Called from the context-loss
@@ -1215,7 +1215,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. Refuses a compiled-effect operation whose GL context no longer exists.
          *
-         * plan_fx.md FX-108. This renderer supports context loss and recreation, and its own
+         * plans/plan_fx.md FX-108. This renderer supports context loss and recreation, and its own
          * resources recover through easy-gl's registry. MojoShader's context does not: it owns the
          * linked GL programs for every live compiled Effect, and recreating it would mean rebuilding
          * every one of those effects from the bytecode the game no longer holds. Until that exists,
@@ -1232,7 +1232,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief CNAEXT. Returns a row-order-corrected copy of @p source for a compiled sampler.
          *
-         * plan_fx.md FX-099. This renderer never flips geometry for a framebuffer object, so a
+         * plans/plan_fx.md FX-099. This renderer never flips geometry for a framebuffer object, so a
          * render target's colour texture stores its rows bottom-up relative to an uploaded
          * `Texture2D`. Every shader this renderer authors corrects for that at sample time through
          * the `uRtFlipV` uniform and the `cnaSampleUV` helper (REMED-GFX-147), and `GetData` mirrors
@@ -1298,29 +1298,29 @@ namespace CNA::Internal::Renderers::EasyGL
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
-        /// plan_modern.md MOD-115: creates the colour attachment in the requested SurfaceFormat --
+        /// plans/plan_modern.md MOD-115: creates the colour attachment in the requested SurfaceFormat --
         /// real R/RG/RGBA 16F/32F storage for the float formats, unchanged 8-bit RGBA for Color.
         /// Throws for a format this GL context cannot render to, rather than substituting Color the
         /// way the shared default does; ask SupportsRenderTargetFormat() first.
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
             int w, int h, int depthFormat, bool preserveContents, bool mipMap,
             int multiSampleCount, int surfaceFormat) override;
-        /// plan_modern.md MOD-104/MOD-117: this renderer's own verdict on a render-target
+        /// plans/plan_modern.md MOD-104/MOD-117: this renderer's own verdict on a render-target
         /// SurfaceFormat. Color is Supported unconditionally; the float formats are answered by a
         /// cached runtime framebuffer-completeness probe, because their availability is a property
         /// of the driver and its extensions rather than of the compile-time GL profile. Every other
         /// format defers to the framework rule, unchanged.
         [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
-        /// plan_modern.md MOD-123: half-float texture filtering. Core from OpenGL ES 3.0 and
+        /// plans/plan_modern.md MOD-123: half-float texture filtering. Core from OpenGL ES 3.0 and
         /// desktop GL 3.0 onward; on the ES 2.0 API generation it needs an extension that this
         /// renderer does not rely on, so it is reported false there.
         [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
 
-        /// plan_modern.md MOD-1510: compute shaders, which need GL ES 3.1 or desktop GL 4.3. The
+        /// plans/plan_modern.md MOD-1510: compute shaders, which need GL ES 3.1 or desktop GL 4.3. The
         /// answer is the *runtime* context's version, not the compile-time profile: this renderer
         /// asks for ES 3.0 and routinely receives 3.2, and refusing compute on a context that has
         /// it would be as wrong as claiming it on one that does not.
-        /// plan_modern.md MOD-1699: this renderer's four lit programs really do sample the shadow
+        /// plans/plan_modern.md MOD-1699: this renderer's four lit programs really do sample the shadow
         /// state, and its two PBR programs really do shade from an image-based light -- Phases 8-12
         /// implemented both here first.
         /// This renderer compiles the GLSL it is given and runs it; that is the whole EasyGL
@@ -1329,7 +1329,7 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
-        /// plan_modern.md MOD-2090: glDrawArraysIndirect/glDrawElementsIndirect, which arrive in
+        /// plans/plan_modern.md MOD-2090: glDrawArraysIndirect/glDrawElementsIndirect, which arrive in
         /// the same API generation as compute (GL ES 3.1, desktop GL 4.0) -- so the probe is the
         /// same runtime version question, asked separately because the two are separate promises.
         [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
@@ -1349,7 +1349,7 @@ namespace CNA::Internal::Renderers::EasyGL
                              int groupsZ) override;
         void MemoryBarrierEXT(int barrierBits) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
-        /// plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
+        /// plans/plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
         /// storage for the formats this context can render to, and a refusal for the rest.
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
             int size, int depthFormat, bool preserveContents, bool mipMap,
@@ -1389,7 +1389,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Applies XNA's `SamplerState.MaxMipLevel`/`MipMapLevelOfDetailBias` to a slot.
          *
-         * plan_fx.md FX-083. `MaxMipLevel` becomes the sampler object's `GL_TEXTURE_MIN_LOD`, the
+         * plans/plan_fx.md FX-083. `MaxMipLevel` becomes the sampler object's `GL_TEXTURE_MIN_LOD`, the
          * sampler-object expression of "never sample a level more detailed than this" -- the same
          * mapping FNA3D's SDL_GPU driver makes (`min_lod = maxMipLevel`). FNA3D's own OpenGL
          * driver instead writes `GL_TEXTURE_BASE_LEVEL` on the texture object, which is not
@@ -1408,7 +1408,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /**
          * @brief Applies XNA's `SamplerState.AddressW` to a slot.
          *
-         * plan_fx.md FX-092. `GL_TEXTURE_WRAP_R` is the third addressing axis, observable wherever
+         * plans/plan_fx.md FX-092. `GL_TEXTURE_WRAP_R` is the third addressing axis, observable wherever
          * this renderer samples a volume texture; before this the axis was accepted and dropped, so
          * a game or a compiled Effect that asked for a W mode got GL's own default instead.
          *
@@ -1493,7 +1493,7 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Creates an EasyGL renderer for the build's default GL profile.
      *
-     * plan_runtimerenderer.md design decision 4: declared in the FAMILY's namespace so several
+     * plans/plan_runtimerenderer.md design decision 4: declared in the FAMILY's namespace so several
      * renderer archives can link into one binary. Declared here, alongside the class, for the same
      * reason the GDI family declares its own (GdiRenderer.hpp): this family's device-free suites
      * and contract programs construct a renderer directly, without going through GraphicsDevice,
@@ -1508,7 +1508,7 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Creates an EasyGL renderer for an explicit GL profile.
      *
-     * plan_runtimerenderer.md P11: each of the five public GL identities this family serves reaches
+     * plans/plan_runtimerenderer.md P11: each of the five public GL identities this family serves reaches
      * this with its own profile, which is what lets all five be compiled into one binary.
      *
      * @param args Construction arguments.

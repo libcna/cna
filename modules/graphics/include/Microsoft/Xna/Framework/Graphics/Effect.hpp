@@ -174,7 +174,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Returns this effect's compiled XNA Effect Framework runtime, or nullptr if this is
          * not a compiled effect.
          *
-         * plan_fx.md FX-071: lets a renderer's SpriteBatch integration recognize and bind a
+         * plans/plan_fx.md FX-071: lets a renderer's SpriteBatch integration recognize and bind a
          * compiled effect the same way GpuDrawParams::compiledEffectRuntime already does for
          * ordinary 3D draws, without every SpriteBatch renderer needing its own friend access to
          * the private compiledRuntime_ member. Not virtual: every compiled effect shares this exact

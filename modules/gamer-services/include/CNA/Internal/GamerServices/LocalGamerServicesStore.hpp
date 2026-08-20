@@ -14,9 +14,9 @@ namespace CNA::Internal::GamerServices
     /**
      * @brief A single locally-persisted "this achievement is earned" record.
      *
-     * Task 4.2 (plan_net.md): local, no-catalog persistence - only the fact-of-earning is real
+     * Task 4.2 (plans/plan_net.md): local, no-catalog persistence - only the fact-of-earning is real
      * local data (name/description/gamerScore have no local source of truth; see the achievement
-     * catalog note in plan_net.md Phase 4 for why).
+     * catalog note in plans/plan_net.md Phase 4 for why).
      */
     struct PersistedAchievement
     {
@@ -78,7 +78,7 @@ namespace CNA::Internal::GamerServices
      * @param gamertag The gamertag to load records for.
      * @return The persisted records, or empty if the gamertag has no store file yet, or if the
      *         store file is missing/corrupt (never throws for a missing/corrupt file - starts
-     *         empty, matching plan_net.md Task 4.7's requirement).
+     *         empty, matching plans/plan_net.md Task 4.7's requirement).
      */
     std::vector<PersistedAchievement> LoadEarnedAchievementsEXT(const std::string& gamertag);
 

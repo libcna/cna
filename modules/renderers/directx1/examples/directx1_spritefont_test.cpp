@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx1.md Phase O6 (DX1-50..DX1-54): SpriteFont / DrawString tests for the DIRECTX1 (real
+// plans/plan_dx1.md Phase O6 (DX1-50..DX1-54): SpriteFont / DrawString tests for the DIRECTX1 (real
 // DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
 // SpriteBatch::DrawString (shared, renderer-agnostic SpriteBatch.cpp) lays out each glyph as a

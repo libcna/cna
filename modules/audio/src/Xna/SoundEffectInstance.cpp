@@ -57,7 +57,7 @@ namespace Microsoft::Xna::Framework::Audio
         float pan         = 0.0f;
     };
 
-    // plan_platform.md PLAT-SDL2-8: these three are pure XNA math -- 2^pitch, the FAudio
+    // plans/plan_platform.md PLAT-SDL2-8: these three are pure XNA math -- 2^pitch, the FAudio
     // crossfeed matrix and the F3DAudio Doppler ratio -- and reference no mixer type at all. They
     // sit OUTSIDE the SOUND_ENABLED block on purpose: the public INTERNAL_calculate* shims that
     // forward to them are compiled in every profile, so leaving them behind the guard made
@@ -296,7 +296,7 @@ namespace Microsoft::Xna::Framework::Audio
         // Runs this track's entire shared cooked-callback DSP chain: the filter first (if any),
         // then the crossfeed pan matrix (P11-PAN-001, RFC-1) -- both are just float-PCM
         // transforms on the same buffer, run in sequence, matching the RFC-1 design sketch
-        // (plan_audio.md P10-PAN-003). Unlike the old ProcessFilterState this replaces, this must
+        // (plans/plan_audio.md P10-PAN-003). Unlike the old ProcessFilterState this replaces, this must
         // NOT bail out early when there's no filter -- pan crossfeed still needs to run for every
         // track, filtered or not.
         void ProcessFilterState(FilterState& state, float* pcm, int channels, int samples)
@@ -580,7 +580,7 @@ namespace Microsoft::Xna::Framework::Audio
                 // (P10-LOOP-003/004, SoundEffectInstanceTests.cpp's
                 // BoundedLoopRegionPlaysIntroOnceThenRepeatsOnlyTheLoopRegion), correcting an
                 // earlier, never-actually-decoded-audio-verified assumption that this truncated
-                // the pre-loop intro too (see plan_audio.md's P10-LOOP-003/004 note).
+                // the pre-loop intro too (see plans/plan_audio.md's P10-LOOP-003/004 note).
                 playOptions.hasMaxFrame = true;
                 playOptions.maxFrame = static_cast<std::uint64_t>(loopStart_)
                                      + static_cast<std::uint64_t>(loopLength_);

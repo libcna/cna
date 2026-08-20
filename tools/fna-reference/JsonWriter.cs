@@ -59,7 +59,7 @@ namespace CNA.FnaReference
 
         /// <summary>
         /// Adds an already-serialized JSON fragment (an array, typically) under a name.
-        /// plan_fx.md FX-005 needs arrays of objects, which the value overloads above cannot
+        /// plans/plan_fx.md FX-005 needs arrays of objects, which the value overloads above cannot
         /// express; the caller is responsible for the fragment being valid JSON.
         /// </summary>
         public JsonWriter AddRaw(string name, string json)

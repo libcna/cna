@@ -13,7 +13,7 @@
 > (`Texture3DReader`/`TextureCubeReader`) fully complete; Phase G (top-quality hardening + custom
 > reader ergonomics) fully complete; only Phase H (cancelled) and Phase I (still deferred) remain.**
 > CNA's owner decided `.xnb` becomes a real, additional runtime format
-> again, ranked **above** `.cnj` in `ContentManager`'s resolution order (see [`cnj.md`](cnj.md)'s
+> again, ranked **above** `.cnj` in `ContentManager`'s resolution order (see [`cnj.md`](../cnj.md)'s
 > "Core rule": `.xnb` → literal caller-given path → `.cnj` → native-by-extension). The MVP scope
 > through the end of Phase C (container parsing, binary primitives, uncompressed-only, a first real
 > `Texture2D` reader — this plan's own M1/M2 milestones) is fully done. CNA's owner explicitly
@@ -40,7 +40,7 @@
 > Phase B3 has also grown new scope: a `ContentManager` startup content-manifest scan (internal perf
 > cache + a public introspection API + the `.xnb` reader-name inventory), see that phase below.
 
-> Companion task list to [`xnb.md`](xnb.md) (the narrative research/design document — read that
+> Companion task list to [`xnb.md`](../xnb.md) (the narrative research/design document — read that
 > first for *why* each phase is shaped this way). This file turns that plan into concrete,
 > numbered tasks (`XNB-1`, `XNB-2`, ...) the same way `plan_graphics.md` tracks graphics work.
 > **Nothing here is implemented yet — every row starts `⬜`.** "Top quality" (broad real-world
@@ -655,13 +655,13 @@ entirely the second one.
 
 ## Relationship to other plan files
 
-- [`xnb.md`](xnb.md) — the narrative design document this task list is derived from; read it for
+- [`xnb.md`](../xnb.md) — the narrative design document this task list is derived from; read it for
   *why*, not just *what*.
 - [`plan_graphics.md`](plan_graphics.md) Phase 74 — compiled `.fx` shader bytecode via MojoShader;
   related but independent (see `xnb.md`'s own "Effect/compiled shader bytecode" section). Phase E's
   stock-effect readers (XNB-32) deliberately avoid needing Phase 74 at all; the general `EffectReader`
   (XNB-32A) is the one place this plan and Phase 74 actually connect.
-- [`docs/model-content-pipeline-support.md`](docs/model-content-pipeline-support.md) — the existing,
+- [`docs/model-content-pipeline-support.md`](../docs/model-content-pipeline-support.md) — the existing,
   already-documented gaps in CNA's current (non-`.xnb`) `ModelTypeReader` that Phase F (XNB-37 to
   XNB-40) closes as part of building the real `.xnb` `ModelReader`.
 - Phase H (Lua custom readers) is cancelled (see that phase's own section) — it is no longer part

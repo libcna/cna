@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Cross-contract regressions found by the post-implementation audit of plan_tinygl.md.
+// Cross-contract regressions found by the post-implementation audit of plans/plan_tinygl.md.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"

@@ -38,7 +38,7 @@ namespace CNA::Graphics {
     /**
      * @brief Frustum culling whose answer stays on the GPU and becomes the draw itself.
      *
-     * plan_modern.md `MOD-2091`. `MOD-1551` proved a compute shader could cull *correctly* -- it
+     * plans/plan_modern.md `MOD-2091`. `MOD-1551` proved a compute shader could cull *correctly* -- it
      * agrees with `FrustumCullerEXT` box for box -- but its verdict came back to the CPU to be
      * turned into draw calls, and that readback is a pipeline stall: the CPU waits for the GPU to
      * finish work it has only just submitted. This closes that gap. The compute shader compacts the

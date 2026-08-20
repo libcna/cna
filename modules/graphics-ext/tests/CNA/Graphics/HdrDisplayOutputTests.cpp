@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2092: HDR display output.
+// plans/plan_modern.md MOD-2092: HDR display output.
 //
 // Two halves, and they fail differently. The first is the promise that costs nothing to keep and is
 // easy to break: in sRGB the pass copies through pixel for pixel, so SDR output is exactly the frame

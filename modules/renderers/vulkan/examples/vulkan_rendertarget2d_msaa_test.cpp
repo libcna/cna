@@ -10,7 +10,7 @@
 // along the diagonal edge — a signature that can only appear if the multisampled resolve actually
 // averaged sub-pixel coverage.
 //
-// Vulkan-specific scaffolding requirement (see plan_graphics.md Task 878/879's Vulkan scope
+// Vulkan-specific scaffolding requirement (see plans/plan_graphics.md Task 878/879's Vulkan scope
 // decision): per-RT MSAA on this renderer piggybacks on the Vulkan renderer's own already-picked
 // sampleCount_ (VulkanRenderer::sampleCount_, picked once at renderer-construction time
 // from PresentationParameters.MultiSampleCount). That only becomes > 1 when the game requested

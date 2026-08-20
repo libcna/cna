@@ -120,7 +120,7 @@ TEST(PlatformVibrateMigrationTests, ShutdownReleasesPlatformBeforeMakingControll
 
 // A backend must not call through a platform that is no longer installed.
 //
-// Found while measuring the engine layer on a second renderer (plan_modern.md Phase 16):
+// Found while measuring the engine layer on a second renderer (plans/plan_modern.md Phase 16):
 // `CnaTests --gtest_filter=*Instanc*` segfaulted at process *exit*, after every test had reported,
 // on every renderer and with CNA_CNAEXT off. The backtrace was __run_exit_handlers ->
 // ~VibrateController -> ~PlatformVibrateBackend -> ReleaseService -> a call through address 0:

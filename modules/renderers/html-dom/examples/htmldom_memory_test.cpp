@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md HTMLDOM-116: measures and bounds the compositor-layer/DOM memory this renderer's
+// plans/plan_html_dom.md HTMLDOM-116: measures and bounds the compositor-layer/DOM memory this renderer's
 // sprite pool retains, rather than trusting the "will-change:transform keeps every sprite on its own
 // compositor layer" design decision to be harmless at scale on claims alone. Every pooled sprite
 // element gets its own permanent compositor layer (HtmlDomSpriteBatchRenderer.cpp's own comment on
@@ -40,7 +40,7 @@ namespace
 {
     constexpr int kExpectedChecks = 6;
 
-    // plan_html_dom.md HTMLDOM-116: the ticket's own named stress tiers -- well past this renderer's
+    // plans/plan_html_dom.md HTMLDOM-116: the ticket's own named stress tiers -- well past this renderer's
     // documented "normal 2D game" sweet spot (HTMLDOM-89's own 500-sprite benchmark).
     constexpr int kMidBurstSpriteCount = 5000;
     constexpr int kBigBurstSpriteCount = 10000;
@@ -55,7 +55,7 @@ namespace
     // not merely that it would have on some later frame this test never reaches.
     constexpr int kIdleHoldFrames = kIdleShrinkFrames + 10;
 
-    // plan_html_dom.md HTMLDOM-90: a real game's own sprite count never sits perfectly flat --
+    // plans/plan_html_dom.md HTMLDOM-90: a real game's own sprite count never sits perfectly flat --
     // oscillating between two values (matching htmldom_stress_test.cpp's own HTMLDOM-90 pattern),
     // held for LONGER than kIdleShrinkFrames, proves the age-out genuinely requires a settled scene,
     // not merely "some frames below peak".

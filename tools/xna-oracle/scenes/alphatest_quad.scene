@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: alphatest_quad
+# plans/plan_dx9.md D9-A5 scene corpus: alphatest_quad
 # The first scene to use a real, non-BasicEffect Stock Effect: AlphaTestEffect
 # (VertexColorEnabled=false, AlphaFunction=Greater, ReferenceAlpha=128), on the existing stride-20
 # VertexPositionTexture vertex shape (VSInputTx, D9-82c's own "no vertex-layout gap" finding).

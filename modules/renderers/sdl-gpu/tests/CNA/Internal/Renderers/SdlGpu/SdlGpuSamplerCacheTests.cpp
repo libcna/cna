@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-091: the SDL_GPU sampler cache's key identity.
+// plans/plan_fx.md FX-091: the SDL_GPU sampler cache's key identity.
 //
 // The renderer keeps ONE native sampler object per distinct sampler description and looks it up by
 // key on every draw. A key that cannot tell two descriptions apart therefore does not merely lose a

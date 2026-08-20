@@ -288,7 +288,7 @@ TEST(ModelTest, FiveArgConstructorEmptyBonesLeavesRootNullEvenWithDefaultIndex)
     EXPECT_EQ(model.getRootProperty(), nullptr);
 }
 
-// --- plan_gltf.md GLTF-128: one live whole-model bounding sphere -----------------------------
+// --- plans/plan_gltf.md GLTF-128: one live whole-model bounding sphere -----------------------------
 
 TEST(ModelTest, BoundingSphereEXTIsEmptyOnlyWhenTheModelHasNoMeshes)
 {
@@ -406,7 +406,7 @@ TEST(ModelTest, BoundingSphereEXTIncludesTheCurrentSkinPaletteBeforeMeshPlacemen
     EXPECT_FLOAT_EQ(1.0f, posed->Radius);
 }
 
-// --- plan_gltf.md GLTF-444: Model::Draw's shared bone scratch buffer ----------------------------
+// --- plans/plan_gltf.md GLTF-444: Model::Draw's shared bone scratch buffer ----------------------------
 //
 // FNA's Model.Draw shares one static Matrix[] across every Model in the process. Two threads
 // drawing different models both resize and rewrite it, and a resize while another thread holds a
@@ -516,5 +516,5 @@ TEST(ModelTest, ConcurrentDrawsOnDifferentModelsDoNotShareTheBoneScratchBuffer)
     for (std::thread& thread : threads) { thread.join(); }
     EXPECT_FALSE(mismatch.load())
         << "an effect was bound with another thread's bone transform -- Model::Draw's scratch "
-           "buffer is shared across threads again (plan_gltf.md GLTF-444)";
+           "buffer is shared across threads again (plans/plan_gltf.md GLTF-444)";
 }

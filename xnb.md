@@ -4,9 +4,9 @@
 > Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`, `ReadExternalReference<T>()`) fully
 > complete; broad coverage past that still deferred.** CNA's owner decided `.xnb` should become a
 > real, additional runtime format again, alongside the already-implemented
-> [`cnj.md`](cnj.md)/[`plan_cnj.md`](plan_cnj.md) `.cnj` strategy — not a replacement for it.
+> [`cnj.md`](cnj.md)/[`plans/plan_cnj.md`](plans/plan_cnj.md) `.cnj` strategy — not a replacement for it.
 > `ContentManager`'s resolution order now ranks `.xnb` **above** both the literal caller-given path
-> and `.cnj` (see `cnj.md`'s "Core rule"). [`plan_xnb.md`](plan_xnb.md)'s Phase 0/A/B/B2/B3/C
+> and `.cnj` (see `cnj.md`'s "Core rule"). [`plans/plan_xnb.md`](plans/plan_xnb.md)'s Phase 0/A/B/B2/B3/C
 > (container parsing, binary primitives, the uncompressed-only case, and a first real `Texture2D`
 > reader — this plan's own M1/M2 milestones) is fully complete. CNA's owner then explicitly
 > requested Phase D (LZX decompression) next: it is now implemented and verified against real
@@ -14,23 +14,23 @@
 > `XnbCompression` enum, both bit values confirmed against MonoGame's own source rather than
 > guessed) and XNB-30A (fuzz + differential testing against FNA's own reference `LzxDecoder.cs` run
 > under Mono, which found and fixed a real heap-buffer-overflow) are both done -- Phase D now has no
-> open tasks besides XNB-30C, still correctly deferred to Phase G; see `plan_xnb.md`'s Phase D
+> open tasks besides XNB-30C, still correctly deferred to Phase G; see `plans/plan_xnb.md`'s Phase D
 > section for exact scope. CNA's owner then explicitly requested M3 next: `SpriteFontReader` and a
 > `SoundEffectReader`
 > covering at least one real wave-format variant, reaching M3's own Definition of Done; asked to
 > continue the same day, the rest of Phase E followed too -- `ReadExternalReference<T>()`, the 5
 > stock-effect readers, the general `EffectReader`'s diagnostic path, and `SongReader` -- so Phase E
-> now has no open tasks left; see `plan_xnb.md`'s Phase E section for exactly what each task
+> now has no open tasks left; see `plans/plan_xnb.md`'s Phase E section for exactly what each task
 > required. Phase D3/F onward — `Model` and the top-quality hardening pass — remain frozen/deferred
 > pending a future decision to resume them; nothing there is started. **Phase H (Lua-scripted custom
-> `ContentTypeReader` support) is rejected outright, not merely deferred** — see `plan_xnb.md`'s own
+> `ContentTypeReader` support) is rejected outright, not merely deferred** — see `plans/plan_xnb.md`'s own
 > note; custom readers stay a plain C++ registration API (this document's own Phase G), the same
 > shape `.cnj`'s `RegisterCnjLoader<T>` already uses. A new content-manifest feature (`ContentManager`
 > scans the `Content` root once — internal perf cache + a public introspection API + the `.xnb`
-> reader-name inventory) is now part of the active scope too, folded into `plan_xnb.md`'s Phase B3.
-> See `plan_xnb.md`'s own top-of-file note for the complete list of what changed in this revision.
+> reader-name inventory) is now part of the active scope too, folded into `plans/plan_xnb.md`'s Phase B3.
+> See `plans/plan_xnb.md`'s own top-of-file note for the complete list of what changed in this revision.
 > Writing/producing `.xnb` files remains permanently out of scope either way — see "Scope" in
-> `plan_xnb.md`; CNA only ever needs to consume `.xnb` files produced by real XNA/MonoGame/FNA
+> `plans/plan_xnb.md`; CNA only ever needs to consume `.xnb` files produced by real XNA/MonoGame/FNA
 > tooling.
 
 **Status: planning document only. Nothing described here is implemented yet.** This document
@@ -38,22 +38,22 @@ replaces the previous "analysis only, low priority" version of `xnb.md` with an 
 plan for adding real `.xnb` loading to CNA. It is a plan to be executed later, task by task — no
 code changes are part of this document itself.
 
-**Numbered task breakdown: [`plan_xnb.md`](plan_xnb.md)** — turns the phases below into concrete
-`XNB-1`, `XNB-2`, ... tasks (mirroring `plan_graphics.md`'s convention), including a Phase 0 gap
+**Numbered task breakdown: [`plans/plan_xnb.md`](plans/plan_xnb.md)** — turns the phases below into concrete
+`XNB-1`, `XNB-2`, ... tasks (mirroring `plans/plan_graphics.md`'s convention), including a Phase 0 gap
 audit of what CNA was missing when this plan was first written (no binary stream/reader layer, no
 `Curve` classes, etc.) — **since revalidated 2026-07-16 (`XNB-1`): `sharp-runtime` now has a full
 `System::IO::Stream`/`MemoryStream`/`BinaryReader` layer, and `Curve`/`CurveKey`/etc. now exist as a
-runtime API; see `plan_xnb.md`'s Phase 0 for the corrected findings.** Read this file first for the
-*why*; read `plan_xnb.md` for the *what, in order*.
+runtime API; see `plans/plan_xnb.md`'s Phase 0 for the corrected findings.** Read this file first for the
+*why*; read `plans/plan_xnb.md` for the *what, in order*.
 
-**Changelog:** `plan_xnb.md` was revised after an independent review that flagged several XNB
+**Changelog:** `plans/plan_xnb.md` was revised after an independent review that flagged several XNB
 protocol inaccuracies and one implementation-strategy gap in its first draft — most importantly
 that the root object is dispatched via a 1-based type-reader index (not "the first reader"),
 that assembly-qualified generic reader names need a real parser (commas nest inside `[[...]]`),
 and that `ContentManager` integration should happen early (a new Phase B2) rather than only in the
-very last task. See `plan_xnb.md`'s own top-of-file note for the full list of fixes.
+very last task. See `plans/plan_xnb.md`'s own top-of-file note for the full list of fixes.
 
-**Changelog (follow-up review):** `plan_xnb.md` was revised a second time to add explicit
+**Changelog (follow-up review):** `plans/plan_xnb.md` was revised a second time to add explicit
 `XnbReadLimits` from the start, a global-factory-vs-per-file-reader-instance split, an early
 known-unsupported placeholder for the general `EffectReader`, faithful `Decimal`/`DateTime`/
 `TimeSpan` handling, a physical (not just noted) move of `Texture3DReader`/`TextureCubeReader`
@@ -62,18 +62,18 @@ check, a continuously-enforced per-reader Definition of Done instead of a retroa
 a trimmed single-task Phase 0, and two new later phases: **Phase H** (Lua-scripted custom
 `ContentTypeReader` support, for game/sample-specific data readers only, strictly after the native
 reader framework is solid) and **Phase I** (an official XNA 4.0 sample `.xnb` compatibility
-inventory). See `plan_xnb.md`'s own top-of-file note for the full list.
+inventory). See `plans/plan_xnb.md`'s own top-of-file note for the full list.
 
-**Changelog (second follow-up review):** `plan_xnb.md` was revised a third time (rated 9.5/10
+**Changelog (second follow-up review):** `plans/plan_xnb.md` was revised a third time (rated 9.5/10
 architecture, 9/10 protocol accuracy at that point) to: loosen the shared-resource fixup wording so
 it guarantees the observable result rather than one specific callback strategy, prefer a stable
 CNA-owned `RuntimeTypeId` over a bare `std::type_index`, add five explicit phase milestones plus an
 "execution-order mandate" telling an autonomous agent to work strictly phase-by-phase, split out an
 early payload-agnostic reader-name inventory scanner into a new **Phase B3** that doesn't block on
-Phase G, and add a Lua error-context task. See `plan_xnb.md`'s own top-of-file note for the full
+Phase G, and add a Lua error-context task. See `plans/plan_xnb.md`'s own top-of-file note for the full
 list.
 
-**Changelog (final review):** `plan_xnb.md` was revised a fourth time (rated 9.7/10 architecture,
+**Changelog (final review):** `plans/plan_xnb.md` was revised a fourth time (rated 9.7/10 architecture,
 9.7/10 test strategy at that point) to fix one real protocol-sequencing bug: Phase B3's scanner
 cannot actually cover LZX-compressed `.xnb` files before Phase D's decompressor exists, since a
 compressed file's type-reader table lives inside the LZX payload with no addressable offset to
@@ -81,7 +81,7 @@ compressed file's type-reader table lives inside the LZX payload with no address
 (LZX-compressed files, after Phase D). Also split the `⛔` legend symbol into `⏸` (deferred/
 optional, not milestone-blocking) vs. `⛔` (blocked by an external dependency) and re-marked
 `XNB-30C` (optional MonoGame compression variants) as `⏸` accordingly. This is expected to be the
-last plan-document revision before implementation begins — see `plan_xnb.md`'s own top-of-file
+last plan-document revision before implementation begins — see `plans/plan_xnb.md`'s own top-of-file
 note for the full list.
 
 Grounded in FNA's real, current source (`/rv/data/library/github.com/FNA-XNA/FNA/src/Content/`),
@@ -282,7 +282,7 @@ model loader with the exact same limitations as the first.
 
 An XNA `.xnb`-embedded effect is not source `.fx` text — it is a platform-dependent *compiled*
 shader bytecode blob (D3D9-oriented on a real Windows-built XNB), which none of CNA's backends
-(EasyGL/GLSL, Vulkan/SPIR-V, Bgfx) can consume directly. `plan_graphics.md` Phase 74 already tracks
+(EasyGL/GLSL, Vulkan/SPIR-V, Bgfx) can consume directly. `plans/plan_graphics.md` Phase 74 already tracks
 interpreting compiled `.fx` bytecode via MojoShader for `Effect`'s bytecode constructor (currently
 `System::NotImplementedException` in `Effect.cpp`). The two efforts are related but independently
 scoped: a general XNB loader is the superset container format everything (including compiled
@@ -313,7 +313,7 @@ reimplement" — never "100% automatically, no matter the source game."
 
 ## Phased plan
 
-Each phase below should become a normal task block in `plan_graphics.md` once this plan is
+Each phase below should become a normal task block in `plans/plan_graphics.md` once this plan is
 approved for scheduling — this document only defines the shape and ordering, not task numbers.
 
 ### Phase A — `ContentReader` binary primitives
@@ -377,14 +377,14 @@ approved for scheduling — this document only defines the shape and ordering, n
 - Public API for a CNA game to register its own `ContentTypeReader` (see snippet above).
 - Documentation for porting a real third-party XNA game's custom readers to C++.
 - No fixed scope — success is measured per adopting game, not as a CNA-internal completion state.
-- This stays plain C++ permanently. `plan_xnb.md` briefly explored a sandboxed-Lua alternative
+- This stays plain C++ permanently. `plans/plan_xnb.md` briefly explored a sandboxed-Lua alternative
   (its former Phase H) for game-specific custom readers; that idea was rejected outright on
-  2026-07-16 as disproportionate complexity for a niche need — see `plan_xnb.md`'s own note.
+  2026-07-16 as disproportionate complexity for a niche need — see `plans/plan_xnb.md`'s own note.
 
 ## Content manifest: startup `Content`-root scan (new, 2026-07-16)
 
 Alongside un-freezing the MVP scope above, `ContentManager` gains a startup manifest feature,
-folded into `plan_xnb.md`'s Phase B3 (`XNB-65`–`XNB-67`): it scans its `Content` root once (at
+folded into `plans/plan_xnb.md`'s Phase B3 (`XNB-65`–`XNB-67`): it scans its `Content` root once (at
 construction, or lazily before the first `Load<T>()` if `RootDirectory` is set afterward) and keeps
 an in-memory index of every file found. This single scan serves three purposes:
 
@@ -394,7 +394,7 @@ an in-memory index of every file found. This single scan serves three purposes:
 2. **A public `NOXNA` introspection API** (`ContentManager::GetContentManifest()`) so game/tooling
    code can enumerate what assets actually exist under `Content`, without its own filesystem code.
 3. **The `.xnb` reader-name inventory** originally proposed as a standalone offline scanner
-   (`plan_xnb.md`'s former "Phase B3" scanner): for every `.xnb` file the manifest scan finds, read
+   (`plans/plan_xnb.md`'s former "Phase B3" scanner): for every `.xnb` file the manifest scan finds, read
    just its header and type-reader table (never the object payload) and record which reader names
    are referenced. Surfaced through the same public API, this turns "which standard readers does
    CNA still need to implement for this game's content" from a manual audit into something the
@@ -402,7 +402,7 @@ an in-memory index of every file found. This single scan serves three purposes:
 
 The manifest is a point-in-time snapshot — a file added to `Content` after the scan is not found
 until an explicit `RefreshContentManifest()` rescan. No filesystem-watch/hot-reload mechanism is
-part of this feature. See `plan_xnb.md`'s Phase B3 for the concrete task breakdown.
+part of this feature. See `plans/plan_xnb.md`'s Phase B3 for the concrete task breakdown.
 
 ## Relationship to CNA's existing content approach
 
@@ -425,13 +425,13 @@ like FNA's own loose-extension fallbacks, coexisting with `Texture2D::FromStream
 
 - **A general reader registry covering all ~40 FNA reader types is a real, standalone engineering
   effort**, not a quick addition to an existing file — see its own section above. (Phase D itself
-  is no longer an example of this — it's done; see `plan_xnb.md`'s Phase D section.)
+  is no longer an example of this — it's done; see `plans/plan_xnb.md`'s Phase D section.)
 - **The practical benefit beyond the MVP slice is real but narrow**: broad `.xnb` coverage lets CNA
   load asset files originally compiled for a real XNA/FNA game — valuable for reusing an existing
   game's *compiled* content without re-exporting it, but `docs/migration-guide.md` already tells a
   migrating developer to expect to re-export/rewrite their content pipeline rather than assume full
   `.xnb` compatibility.
 
-`plan_xnb.md` schedules this work as ordered, independently-completable phases (A through I) rather
+`plans/plan_xnb.md` schedules this work as ordered, independently-completable phases (A through I) rather
 than as one large, unscoped "implement XNB" task, specifically so a future decision to resume
 Phase D onward doesn't have to re-derive that breakdown from scratch.

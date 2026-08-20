@@ -61,7 +61,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the pyramid level count a quality preset asks for.
          *
-         * plan_modern.md `MOD-409`. The mapping is a **function, not a side effect**: setting
+         * plans/plan_modern.md `MOD-409`. The mapping is a **function, not a side effect**: setting
          * `RenderQuality` does not silently rewrite a game's `bloomIterations`. An app that wants
          * the preset applied calls `RenderPipelineSettings::applyRenderQualityPresetEXT()`, and an
          * app that has tuned bloom by hand keeps its own number.
@@ -148,7 +148,7 @@ namespace CNA::Graphics {
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> upsampleEffect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> combineEffect_;
 
-        /// plan_modern.md MOD-407: true where the renderer cannot linearly filter the float
+        /// plans/plan_modern.md MOD-407: true where the renderer cannot linearly filter the float
         /// textures this chain is built from, so the upsample averages four taps by hand instead.
         bool manualFilter_ = false;
         RenderTargetPool pool_;

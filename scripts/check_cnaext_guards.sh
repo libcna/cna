@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_modern.md MOD-3: a real, automated proof that the CNA::Graphics engine layer stays fully
+# plans/plan_modern.md MOD-3: a real, automated proof that the CNA::Graphics engine layer stays fully
 # opt-in. Every production file of modules/graphics-ext (and every engine-layer header the plan adds
 # on top) must be wrapped in `#ifdef CNA_CNAEXT` ... `#endif // CNA_CNAEXT`, because that guard --
 # not the CMake option alone -- is what makes a default build (CNA_CNAEXT=OFF) compile the layer to

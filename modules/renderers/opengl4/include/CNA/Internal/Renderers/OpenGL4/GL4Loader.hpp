@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_opengl4.md GL4-2: a small, hand-rolled loader for the subset of desktop OpenGL 4.x core
+// plans/plan_opengl4.md GL4-2: a small, hand-rolled loader for the subset of desktop OpenGL 4.x core
 // profile functions this renderer actually calls. Deliberately NOT a vendored third-party loader
 // (no glad/GLEW dependency added to the tree) -- mirrors this project's existing "zero new
-// third-party dependency" preference for a from-scratch native renderer (see plan_sdlgpu.md's own
+// third-party dependency" preference for a from-scratch native renderer (see plans/plan_sdlgpu.md's own
 // "Why a GPU renderer" rationale). The handful of pre-1.2 entry points (glClear, glViewport,
 // glGenTextures, glTexImage2D, glReadPixels, ...) are declared by the platform's own <GL/gl.h> (or
 // macOS/<OpenGL/gl.h>) and are linked directly against libGL/OpenGL.framework -- only functions
@@ -72,7 +72,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
 #ifndef GL_TEXTURE0
 #define GL_TEXTURE0 0x84C0
 #endif
-// plan_opengl4.md GL4-33: needed by the generic VertexElement-to-GL-attribute mapper's
+// plans/plan_opengl4.md GL4-33: needed by the generic VertexElement-to-GL-attribute mapper's
 // HalfVector2/HalfVector4 case (GL 3.0 core / ARB_half_float_vertex).
 #ifndef GL_HALF_FLOAT
 #define GL_HALF_FLOAT 0x140B
@@ -184,7 +184,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4VERTEXATTRIBPOINTERPROC     = void (*)(GLuint, GLint, GLenum, GLboolean, GLsizei, const void*);
     using PFNGL4ENABLEVERTEXATTRIBARRAYPROC = void (*)(GLuint);
     using PFNGL4DISABLEVERTEXATTRIBARRAYPROC= void (*)(GLuint);
-    // plan_opengl4.md GL4-22: SkinnedEffect's BlendIndices attribute is a real integer vertex
+    // plans/plan_opengl4.md GL4-22: SkinnedEffect's BlendIndices attribute is a real integer vertex
     // attribute (bone indices, read as uvec4/ivec4 in GLSL) -- glVertexAttribPointer's implicit
     // int-to-float conversion is wrong for this case, so the true GL 3.0 core
     // glVertexAttribIPointer entry point is needed instead.
@@ -228,7 +228,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4SAMPLERPARAMETERIPROC       = void (*)(GLuint, GLenum, GLint);
     using PFNGL4SAMPLERPARAMETERFPROC       = void (*)(GLuint, GLenum, GLfloat);
 
-    // plan_opengl4.md GL4-14: RenderTarget2D FBO support.
+    // plans/plan_opengl4.md GL4-14: RenderTarget2D FBO support.
     using PFNGL4GENFRAMEBUFFERSPROC             = void (*)(GLsizei, GLuint*);
     using PFNGL4BINDFRAMEBUFFERPROC             = void (*)(GLenum, GLuint);
     using PFNGL4DELETEFRAMEBUFFERSPROC          = void (*)(GLsizei, const GLuint*);
@@ -243,14 +243,14 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4BLITFRAMEBUFFERPROC             = void (*)(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum);
     using PFNGL4DRAWBUFFERSPROC                 = void (*)(GLsizei, const GLenum*);
 
-    // plan_opengl4.md GL4-16: two-sided (front/back) stencil state -- GL 2.0 core, not
+    // plans/plan_opengl4.md GL4-16: two-sided (front/back) stencil state -- GL 2.0 core, not
     // guaranteed to be declared by a GL-1.1-vintage <GL/gl.h>.
     using PFNGL4STENCILFUNCSEPARATEPROC         = void (*)(GLenum, GLenum, GLint, GLuint);
     using PFNGL4STENCILOPSEPARATEPROC           = void (*)(GLenum, GLenum, GLenum, GLenum);
     using PFNGL4STENCILMASKSEPARATEPROC         = void (*)(GLenum, GLuint);
     using PFNGL4COLORMASKIPROC                  = void (*)(GLuint, GLboolean, GLboolean, GLboolean, GLboolean);
 
-    // plan_opengl4.md GL4-20: plain Texture3D -- GL 1.2 core, not guaranteed to be declared by a
+    // plans/plan_opengl4.md GL4-20: plain Texture3D -- GL 1.2 core, not guaranteed to be declared by a
     // GL-1.1-vintage <GL/gl.h> (same rationale as the other GL4-prefixed entries above).
     using PFNGL4TEXIMAGE3DPROC                  = void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*);
     using PFNGL4TEXSUBIMAGE3DPROC               = void (*)(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, const void*);
@@ -259,7 +259,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     // than this FBO-per-slice approach).
     using PFNGL4FRAMEBUFFERTEXTURELAYERPROC     = void (*)(GLenum, GLenum, GLuint, GLint, GLint);
 
-    // plan_opengl4.md GL4-24: real occlusion queries -- GL 1.5 core, not guaranteed to be
+    // plans/plan_opengl4.md GL4-24: real occlusion queries -- GL 1.5 core, not guaranteed to be
     // declared by a GL-1.1-vintage <GL/gl.h>.
     using PFNGL4GENQUERIESPROC                  = void (*)(GLsizei, GLuint*);
     using PFNGL4DELETEQUERIESPROC               = void (*)(GLsizei, const GLuint*);
@@ -267,12 +267,12 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     using PFNGL4ENDQUERYPROC                    = void (*)(GLenum);
     using PFNGL4GETQUERYOBJECTUIVPROC           = void (*)(GLuint, GLenum, GLuint*);
 
-    // plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- GL 3.2 core
+    // plans/plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- GL 3.2 core
     // (ARB_draw_elements_base_vertex, core since GL 3.2), not guaranteed to be declared by a
     // GL-1.1-vintage <GL/gl.h>.
     using PFNGL4DRAWELEMENTSBASEVERTEXPROC      = void (*)(GLenum, GLsizei, GLenum, const void*, GLint);
 
-    // plan_opengl4.md GL4-33: real GpuDrawParams-driven hardware instancing -- GL 3.1 core
+    // plans/plan_opengl4.md GL4-33: real GpuDrawParams-driven hardware instancing -- GL 3.1 core
     // (glDrawElementsInstanced) and GL 3.3 core / ARB_instanced_arrays (glVertexAttribDivisor),
     // neither guaranteed to be declared by a GL-1.1-vintage <GL/gl.h>.
     using PFNGL4DRAWELEMENTSINSTANCEDPROC       = void (*)(GLenum, GLsizei, GLenum, const void*, GLsizei);

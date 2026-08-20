@@ -164,7 +164,7 @@ TEST_P(PlatformConformance, UnpairedReleaseIsANoOp)
 
 TEST_P(PlatformConformance, PollEventsClearsStaleCallerContent)
 {
-    // MERGE (plan_platform.md x plan_runtimerenderer.md): PollEvents clears the caller's batch and
+    // MERGE (plans/plan_platform.md x plans/plan_runtimerenderer.md): PollEvents clears the caller's batch and
     // then fills it with whatever is genuinely pending, so "fewer than four came back" measures the
     // clearing only while the queue is near-empty. It is not near-empty once renderer tests earlier
     // in the suite have created and destroyed windows: this read 18 real events and failed while

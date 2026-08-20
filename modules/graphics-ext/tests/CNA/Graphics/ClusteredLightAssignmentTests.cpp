@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2042: lights sorted into clusters on the CPU, checked against brute force.
+// plans/plan_modern.md MOD-2042: lights sorted into clusters on the CPU, checked against brute force.
 //
 // The implementation narrows the search by depth before it starts -- a sphere spans a known range
 // of view distances, so most of the twenty-four slices are never visited. That narrowing is exactly

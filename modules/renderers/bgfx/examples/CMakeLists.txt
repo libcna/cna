@@ -81,7 +81,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # Task 744 (Phase 72 Bgfx gap closure): TextureAddressMode::Clamp -- already covered by
     # Task 750's own Bgfx_TextureAddressMode test (PointWrap-vs-PointClamp comparison, both
-    # asserted); no new test needed, see plan_graphics.md Task 744 for the closure note.
+    # asserted); no new test needed, see plans/plan_graphics.md Task 744 for the closure note.
 
     # Task 746 (Phase 72 Bgfx gap closure): TextureAddressMode::Mirror on Bgfx -- a Bgfx-specific
     # adaptation of the EasyGL source (Task 737; that file uses SetDepthTestEnabled(false), which
@@ -704,7 +704,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # SAME (wrong) result whether or not the fix is applied -- this sandbox's bgfx GL2.1/Mesa-
     # llvmpipe software renderer does not appear to honor separately-requested alpha blend factors
     # when they differ from the colour channel's own (confirmed via 3 independent probes; not
-    # investigated further, out of this task's scope -- see plan_graphics.md Task 923 for detail).
+    # investigated further, out of this task's scope -- see plans/plan_graphics.md Task 923 for detail).
     # Matches this project's established precedent for a sandbox limitation, not a CNA defect
     # (e.g. Task 448's occlusion query, Task 879's Bgfx_RenderTarget2D_MsaaResolve).
 
@@ -1043,7 +1043,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME Bgfx_OcclusionQuery_DisposeActive COMMAND cna_test_bgfx_occlusionquery_dispose_active
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect real glTF metallic-roughness BRDF
+    # plans/plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect real glTF metallic-roughness BRDF
     # (vs_pbr3d.sc/fs_pbr3d.sc, stride-48 VertexPositionNormalTangentTexture) -- closes the
     # EasyGL-only PBR gap for the Bgfx renderer (see bgfx_pbreffect_test.cpp's own
     # file-header comment for the fully analytic camera/light derivation).
@@ -1052,7 +1052,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME Bgfx_PbrEffect COMMAND cna_test_bgfx_pbreffect
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: SkinnedPbrEffect (PBR + skinning combo,
+    # plans/plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: SkinnedPbrEffect (PBR + skinning combo,
     # vs_pbr_skinned3d.sc sharing fs_pbr3d.sc, stride-68
     # VertexPositionNormalTangentTextureSkinned) -- reuses bgfx_pbreffect_test.cpp's own
     # expected values via an identity bind pose (see the test's own file-header comment).

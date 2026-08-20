@@ -13,7 +13,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 
-// plan_xnb.md XNB-21/XNB-22: generic collection .xnb readers.
+// plans/plan_xnb.md XNB-21/XNB-22: generic collection .xnb readers.
 //
 // FNA resolves ArrayReader<T>/ListReader<T>/DictionaryReader<TKey,TValue>/NullableReader<T>'s
 // element reader(s) via *reflection*: Initialize(ContentTypeReaderManager manager) calls

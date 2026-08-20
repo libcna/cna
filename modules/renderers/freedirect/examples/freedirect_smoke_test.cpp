@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X1/X2 (DX3-1..DX3-18): smoke test for the DIRECTX3 (DirectDraw, via the
+// plans/plan_freedirect.md Phase X1/X2 (DX3-1..DX3-18): smoke test for the DIRECTX3 (DirectDraw, via the
 // ../free-direct sibling) graphics renderer's foundation -- real DirectDrawCreate/
 // SetCooperativeLevel/SetDisplayMode/CreateSurface device bring-up, real Clear()/Present(), real
 // pixel readback. SpriteBatch/Texture2D draws are not yet implemented (Phase X3/X4).

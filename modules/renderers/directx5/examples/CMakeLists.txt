@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx5.md: real DirectX 5 renderer -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, a further
+# plans/plan_dx5.md: real DirectX 5 renderer -- DirectDraw v4 + Direct3D v3 FVF DrawPrimitive, a further
 # port of DIRECTX3's own 2D+3D layers, same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -30,7 +30,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
         endif()
     endmacro()
 
-    # plan_dx5.md design decision 11: when cross-compiled from Linux (DIRECTX5 is Windows-only, design
+    # plans/plan_dx5.md design decision 11: when cross-compiled from Linux (DIRECTX5 is Windows-only, design
     # decision 1), CTest itself still runs on the Linux host, so the test COMMAND wraps the real
     # .exe with scripts/run-wine-directx5.sh -- a real, native Windows/MSVC configure needs no Wine
     # wrapper at all and runs the .exe directly, mirroring DirectX1Tests.cmake's own
@@ -43,7 +43,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX5")
         endif()
     endmacro()
 
-    # plan_dx5.md design decision 12: a real, automated proof this renderer never quietly reaches
+    # plans/plan_dx5.md design decision 12: a real, automated proof this renderer never quietly reaches
     # for the proven-broken execute-buffer Direct3D path (or the old D3DVT_*-enum vertex-type
     # submission) instead of the working IDirect3DDevice3::DrawPrimitive + D3DFVF_TLVERTEX one --
     # pure text check via scripts/check-directx5-execute-buffer-discipline.sh, no compiled binary, no

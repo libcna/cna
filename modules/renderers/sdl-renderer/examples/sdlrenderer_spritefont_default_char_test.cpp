@@ -2,7 +2,7 @@
 // Task 693: Pixel test — default character fallback renders the expected glyph on SDL_Renderer.
 //
 // Task 427 (this row's own "mirrors" reference, the EasyGL original) is itself not yet
-// implemented (still ⬜ in plan_graphics.md's Phase 48) -- there is no existing test to port
+// implemented (still ⬜ in plans/plan_graphics.md's Phase 48) -- there is no existing test to port
 // here, same situation as Tasks 690-692. This is a NEW SpriteFont pixel test, building on
 // Task 690's fixture pattern to exercise the shared, renderer-agnostic SpriteBatch::DrawString's
 // unknown-character fallback branch:

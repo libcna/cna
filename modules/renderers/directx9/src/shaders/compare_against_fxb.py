@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan_dx9.md D9-73: compare our compiled D3D9 shader bytecode against the bytecode
+"""plans/plan_dx9.md D9-73: compare our compiled D3D9 shader bytecode against the bytecode
 Microsoft actually shipped inside FNA's original XNA Stock Effects .fxb files.
 
 Why the comparison strips comment tokens: D3D9 shader bytecode carries the constant
@@ -105,7 +105,7 @@ def main():
     print(f"\nTOTAL: {total_hit}/{total} exact instruction-stream matches")
     if mismatches:
         print("\nDivergent (must be proven equivalent against the D9-A oracle, "
-              "per plan_dx9.md design decision 4):")
+              "per plans/plan_dx9.md design decision 4):")
         for m in mismatches:
             print(f"  - {m}")
 

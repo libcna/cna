@@ -46,7 +46,7 @@ TEST(GraphicsDeviceDefaultStateTest, DefaultBlendStateMatchesOpaqueValues)
 // BlendState by VALUE ("blendState_ = value;" copies), a deliberate, project-wide pattern shared by
 // DepthStencilState/RasterizerState/SamplerStateCollection - so mutating the original object after
 // assignment does NOT affect the device's already-applied copy in CNA, unlike real XNA/FNA. This
-// is a real, confirmed, intentional architectural deviation (documented in plan_graphics.md
+// is a real, confirmed, intentional architectural deviation (documented in plans/plan_graphics.md
 // Task 869), not a bug: no game code observed in this codebase relies on post-assignment mutation,
 // and matching FNA's reference-aliasing exactly would require every state property to become a
 // reference/pointer type project-wide.

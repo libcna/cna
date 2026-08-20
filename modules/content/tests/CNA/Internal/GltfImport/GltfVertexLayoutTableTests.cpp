@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-099 / GLTF-100: the vertex-stride decision table, and what each row loses.
+// plans/plan_gltf.md GLTF-099 / GLTF-100: the vertex-stride decision table, and what each row loses.
 //
 // §2.3's table was a nested ternary chain, which has three problems a table does not. It cannot be
 // enumerated, so no test can walk its rows and every assertion had to pick a combination by hand.

@@ -6,7 +6,7 @@
 
 using CNA::Internal::Media::MediaCollectionBase;
 
-// plan_media.md MEDIA-55: generic storage/indexer/enumerator/dispose correctness for 2 distinct
+// plans/plan_media.md MEDIA-55: generic storage/indexer/enumerator/dispose correctness for 2 distinct
 // element types, independent of any one concrete public XNA collection type (those get their own
 // tests in Phase 4/6, once they wrap this template).
 TEST(MediaCollectionBaseTest, WorksForIntPointers)

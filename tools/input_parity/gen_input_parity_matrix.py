@@ -413,7 +413,7 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list,
     out = []
     out.append("# Input member-level parity matrix (INPUT-API-027)")
     out.append("")
-    out.append("> **Related input docs (INP-0003):** [plan](../plan_input.md) · "
+    out.append("> **Related input docs (INP-0003):** [plan](../plans/plan_input.md) · "
                "[backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · "
                "[member-parity matrix](input-member-parity-matrix.md) · "
                "[frozen API + tier glossary](input-public-api-frozen.md) · "

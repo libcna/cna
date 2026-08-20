@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-37/IGL-55: PbrEffect's NormalMap, EmissiveFactor, OcclusionMap, and null-map
+// plans/plan_igl.md IGL-37/IGL-55: PbrEffect's NormalMap, EmissiveFactor, OcclusionMap, and null-map
 // fallback -- the maps `igl_pbreffect_test.cpp`'s analytic single-point BRDF derivation left
 // untested (that test only proves the core GGX/Fresnel/Smith math at one exact angle; it never
 // binds a NormalMap/OcclusionMap or exercises EmissiveFactor). Ports the differential-comparison
@@ -98,7 +98,7 @@ class IglPbrEffectMapsTest : public CNA::Examples::PixelTestGame
         indexBuffer_->SetData(indices, 0, 6);
     }
 
-    /// plan_gltf.md GLTF-476: `encodeOutput` selects whether the shaded result is written in sRGB.
+    /// plans/plan_gltf.md GLTF-476: `encodeOutput` selects whether the shaded result is written in sRGB.
     /// Every check below that measures a MAP passes false, so it reads a linear value and states an
     /// expectation in the same space the scene is derived in; check F passes true precisely to
     /// measure the transfer function itself. Before this renderer had colour management the
@@ -222,7 +222,7 @@ protected:
         // come back as sRGB's own encoding of it -- 1.055 * 0.5^(1/2.4) - 0.055 = 0.7148, or 182 --
         // rather than the 128 above. This renderer used to answer 128 either way, because it had no
         // colour management at all: it shaded in linear and wrote the linear value straight out
-        // (plan_gltf.md GLTF-476). The two checks together are what make the transfer function
+        // (plans/plan_gltf.md GLTF-476). The two checks together are what make the transfer function
         // observable rather than merely present in the source.
         const Color encodedResult = DrawAndRead(device, false, Vector3(0.0f, 0.0f, -1.0f),
                                                 Vector3::Zero, Vector3(0.5f, 0.5f, 0.5f), nullptr,

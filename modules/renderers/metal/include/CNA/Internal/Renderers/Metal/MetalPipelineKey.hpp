@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <functional>
 
-// plan_metal.md METAL-34: MetalRenderPipelineState cache key + hash, extracted from
+// plans/plan_metal.md METAL-34: MetalRenderPipelineState cache key + hash, extracted from
 // MetalRenderer.mm into its own plain-C++ header (no Objective-C, no Apple framework
 // dependency) so its hash/equality logic can be exercised by a normal GoogleTest binary on any
 // platform -- the one piece of the Metal renderer's pipeline cache genuinely build-verifiable
@@ -14,13 +14,13 @@
 // unchanged from that original inline definition.
 namespace CNA::Internal::Renderers::Metal
 {
-    // plan_metal.md Phase 2 (simplified for a first, hardware-unverified pass -- a fully generic
+    // plans/plan_metal.md Phase 2 (simplified for a first, hardware-unverified pass -- a fully generic
     // VertexDeclaration-driven descriptor builder, METAL-27, stays open; this is a fixed-variant
     // enum, one entry per concrete shader+vertex-layout combination this renderer actually emits,
     // exactly mirroring the "one Prog3D per Ensure*Program()" shape EasyGLRenderer already
     // uses -- lower risk to get right without a compiler than inventing a hashed-VertexElement-list
     // key blind).
-    // plan_metal.md METAL-38: `LitTex32` replaces the earlier plain-unlit `NormalTex32` entry --
+    // plans/plan_metal.md METAL-38: `LitTex32` replaces the earlier plain-unlit `NormalTex32` entry --
     // confirmed by reading EasyGLRenderer::SelectProgram()'s real `switch(stride)` that
     // stride 32 (VertexPositionNormalTexture) *always* selects a lit shader, never an unlit one,
     // even when `lightingEnabled=false` (BindDrawParams() sets ambient=(1,1,1) and zeroes every
@@ -101,7 +101,7 @@ namespace CNA::Internal::Renderers::Metal
     {
         return enabled ? MetalBlendKey{4, 5, 4, 5, 0, 0, true} : MetalBlendKey{};
     }
-    // plan_metal.md METAL-33: no eviction is implemented, and none is needed for a v1 renderer --
+    // plans/plan_metal.md METAL-33: no eviction is implemented, and none is needed for a v1 renderer --
     // the key space is small and effectively bounded, the same reasoning EasyGLRenderer's
     // own Prog3D relies on implicitly (a fixed struct field per shader variant instead of a hashed
     // cache at all), just made explicit here since MetalPipelineCacheKey genuinely is a dynamic
@@ -118,20 +118,20 @@ namespace CNA::Internal::Renderers::Metal
     // procedurally constructs thousands of distinct one-off `BlendState`s) is ever observed in
     // practice, an LRU eviction policy would be the right CNAEXT follow-up then, not something to
     // design speculatively now.
-    // plan_metal.md METAL-113: `colorAttachmentCount` joins `kind`/`blend` in the key once MRT
+    // plans/plan_metal.md METAL-113: `colorAttachmentCount` joins `kind`/`blend` in the key once MRT
     // (METAL-112) lands -- a render pipeline's `MTLRenderPipelineDescriptor.colorAttachments[i]`
     // array must be declared for exactly as many simultaneous attachments as the active render
     // pass actually binds (1 for the ordinary backbuffer/single-RT/cube-face case, up to Metal's
     // own 8-attachment hardware limit for real `SetRenderTargets()` MRT), or `newRenderPipeline
     // StateWithDescriptor:` raises a genuine validation error, not just a style mismatch. Every
     // attachment always shares the same `MTLPixelFormatBGRA8Unorm` format (confirmed by
-    // `MetalRenderTargetRenderer`'s own hardcoded choice, see `plan_metal.md` narrative item 77),
+    // `MetalRenderTargetRenderer`'s own hardcoded choice, see `plans/plan_metal.md` narrative item 77),
     // so only the *count* needs to vary, not a per-slot format list -- matching
     // `VulkanRenderer`'s own identical `colorAttachmentCount`-folded-into-the-pipeline-key
     // precedent (its `PickRTPipelineRenderPass`/pipeline-key helpers), confirmed by reading it
     // directly. Defaults to `1` so every pre-MRT call site (an aggregate-initializing
     // `PipelineCacheKey key{kind, currentBlend};` with only 2 explicit fields) is unaffected.
-    // plan_metal.md METAL-104/105: `sampleCount` (1/2/4/8) joins `colorAttachmentCount` once MSAA
+    // plans/plan_metal.md METAL-104/105: `sampleCount` (1/2/4/8) joins `colorAttachmentCount` once MSAA
     // lands -- a render pipeline's `MTLRenderPipelineDescriptor.sampleCount` must match the active
     // render pass's own sample count, or pipeline creation is a genuine Metal API validation
     // error, exactly the same class of constraint `colorAttachmentCount` above already documents,
@@ -174,7 +174,7 @@ namespace CNA::Internal::Renderers::Metal
                 | ((uint64_t)key.blend.alphaFunc << 48)
                 | ((uint64_t)(key.blend.enabled ? 1 : 0) << 56)
                 | ((uint64_t)key.colorAttachmentCount << 57);
-            // plan_metal.md METAL-104: sampleCount combined via a second, independent hash (the
+            // plans/plan_metal.md METAL-104: sampleCount combined via a second, independent hash (the
             // standard hash_combine formula) rather than packed into the same 64-bit word as
             // everything above -- colorAttachmentCount already occupies bits 57-60 (4 bits, enough
             // for its own 1-8 range), leaving only 3 bits free, one short of sampleCount's own 1-8

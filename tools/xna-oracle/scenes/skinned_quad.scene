@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: skinned_quad
+# plans/plan_dx9.md D9-A5 scene corpus: skinned_quad
 # The fourth non-BasicEffect Stock Effect, and the fifth (last) of the 5 XNA Stock Effects
 # represented in the corpus: SkinnedEffect, on a brand-new vertex shape neither side had a
 # built-in type for (PositionNormalTextureWeights: Position+Normal+TexCoord+BlendWeight+

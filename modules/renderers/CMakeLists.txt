@@ -16,7 +16,7 @@
 add_library(cna_renderer_common INTERFACE)
 target_link_libraries(cna_renderer_common INTERFACE cna_build_flags)
 
-# plan_runtimerenderer.md RTR-P6-6: this family's target name, derived from its own directory.
+# plans/plan_runtimerenderer.md RTR-P6-6: this family's target name, derived from its own directory.
 #
 # modules/renderers/<family> builds cna_renderer_<family>, '-' becoming '_'
 # (sdl-renderer -> cna_renderer_sdl_renderer). Checked against RendererSelection.cmake's 42
@@ -34,7 +34,7 @@ endfunction()
 # sharp-runtime closure, the module's own public include root, and the reverse edges into the
 # framework modules.
 #
-# plan_runtimerenderer.md RTR-P6-6: takes the target as an ARGUMENT. It used to read the global
+# plans/plan_runtimerenderer.md RTR-P6-6: takes the target as an ARGUMENT. It used to read the global
 # ${RENDERER_TARGET} scalar, which names the DEFAULT renderer -- correct only because
 # add_subdirectory() below is wrapped in a loop that overwrites that scalar before entering each
 # family and restores it afterwards. That made every family's correctness depend on an unwritten
@@ -45,7 +45,7 @@ endfunction()
 function(cna_renderer_common_setup target)
     set(RENDERER_TARGET "${target}")
     target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_common)
-    # plan_runtimerenderer.md RTR-P6-4: this family's own identity macro, on this family's target.
+    # plans/plan_runtimerenderer.md RTR-P6-4: this family's own identity macro, on this family's target.
     # Its sources guard on it (#ifdef CNA_RENDERER_SOFTWARE inside SoftwareRenderer.cpp, and so on),
     # and in a multi-renderer build it must NOT be visible project-wide -- only the default's is.
     if(CNA_RENDERER_TARGET_DEFINE)
@@ -61,7 +61,7 @@ function(cna_renderer_common_setup target)
     # becomes part of the renderer or framework include contract; every other family is SDL-free.
     target_include_directories(${RENDERER_TARGET} PRIVATE
         "${CNA_SOURCE_DIR}/modules/platform/src")
-    # D3D11's/D3D12's SpriteBatch renderer (plan_dx.md DX-70/DX-71) calls back into
+    # D3D11's/D3D12's SpriteBatch renderer (plans/plan_dx.md DX-70/DX-71) calls back into
     # Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s
     # custom-Effect path -- a genuine, honest circular dependency between the renderer static
     # library and the CNA graphics core (the renderer needs a CNA-defined symbol, while CNA needs
@@ -85,7 +85,7 @@ endfunction()
 # and are included includer-relative). Extra arguments append additional sources
 # (Objective-C++ units, shared cross-family units).
 #
-# plan_runtimerenderer.md RTR-P6-6: the target name is DERIVED from the directory this is called
+# plans/plan_runtimerenderer.md RTR-P6-6: the target name is DERIVED from the directory this is called
 # from -- modules/renderers/<family> builds cna_renderer_<family>, with '-' replaced by '_'.
 # Verified to hold for all 42 families against RendererSelection.cmake's own dir/target pairs.
 # Deriving it locally removes the last reason for a family to read a global scalar that was set
@@ -106,7 +106,7 @@ endfunction()
 
 get_filename_component(CNA_SELECTED_RENDERER "${RENDERER_DIR}" NAME)
 
-# plan_runtimerenderer.md phase P6: every selected family, not only the default one. In
+# plans/plan_runtimerenderer.md phase P6: every selected family, not only the default one. In
 # single-renderer mode this list has exactly one entry and equals CNA_SELECTED_RENDERER.
 set(CNA_SELECTED_RENDERER_FAMILIES)
 foreach(_cna_renderer_dir IN LISTS CNA_RENDERER_DIRS)
@@ -121,14 +121,14 @@ endforeach()
 add_subdirectory(metal)
 add_subdirectory(glide)
 
-# plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 and directx12
+# plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by the directx11 and directx12
 # families only -- DIRECTX9 and DIRECTX10 are confirmed independent (design decisions 12 and the
-# plan_d3d10.md link audit).
+# plans/plan_d3d10.md link audit).
 if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     add_subdirectory(common/d3d)
 endif()
 
-# plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
+# plans/plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
 # compiled XNA effects. Entered only where cna_mojoshader was configured, which today means the
 # FNA3D renderer or an SDL_GPU build with -DCNA_SDL_GPU_COMPILED_EFFECTS=ON.
 if(TARGET cna_mojoshader)
@@ -143,7 +143,7 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "GDI")
     add_subdirectory(software)
 endif()
 
-# plan_runtimerenderer.md phase P6: each family's own CMakeLists.txt guards on
+# plans/plan_runtimerenderer.md phase P6: each family's own CMakeLists.txt guards on
 # `CNA_GRAPHICS_RENDERER STREQUAL "<ITS IDENTITY>"` and defines `${RENDERER_TARGET}`. Both of those
 # are scalars naming the DEFAULT renderer, so entering a non-default family's directory without
 # re-establishing them would either skip its block entirely or make it redefine the default's
@@ -163,7 +163,7 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     set(CNA_GRAPHICS_RENDERER "${_cna_renderer_identity}")
     set(CNA_RENDERER_TARGET_DEFINE "${_cna_renderer_target_define}")
 
-    # plan_runtimerenderer.md RTR-P6-3: RENDERER_TARGET is deliberately NOT re-pointed here any
+    # plans/plan_runtimerenderer.md RTR-P6-3: RENDERER_TARGET is deliberately NOT re-pointed here any
     # more. It used to be, and that overwrite was the whole reason a family could read a global
     # scalar and get the right answer -- correctness resting on an unwritten rule that no read may
     # happen outside this loop, invisible in single-renderer mode where the default is the only
@@ -176,7 +176,7 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     # CMakeLists.txt files guard on `CNA_GRAPHICS_RENDERER STREQUAL "<IDENTITY>"`, and the define
     # names the identity being entered.
 
-    # plan_runtimerenderer.md phase P11: several IDENTITIES may share one implementation family --
+    # plans/plan_runtimerenderer.md phase P11: several IDENTITIES may share one implementation family --
     # EasyGL serves up to five. The family directory defines one target and must be entered once;
     # entering it again is a CMake error. The extra identities need no directory of their own,
     # only their own registry entry, which cmake/RendererRegistry.cmake already emits.
@@ -263,7 +263,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_SVG_DOM_HOST_TESTS AND NOT EMSCRIPTEN)
     set_tests_properties(SvgDomHostContracts PROPERTIES LABELS "SVG_DOM;host-only")
 endif()
 
-# plan_platform.md PLAT-58/PLAT-61: PIXIJS gained the same opt-in host target as its three
+# plans/plan_platform.md PLAT-58/PLAT-61: PIXIJS gained the same opt-in host target as its three
 # browser-only siblings when it was migrated off its raw SDL_Window* creation contract. Without
 # it the family's surface-contract tests would only ever compile under an Emscripten toolchain,
 # which is exactly how the regression stayed invisible on a native host.

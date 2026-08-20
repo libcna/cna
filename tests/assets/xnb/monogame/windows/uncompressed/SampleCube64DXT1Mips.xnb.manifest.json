@@ -16,5 +16,5 @@
     "size": 64,
     "levelCount": 7
   },
-  "notes": "plan_xnb.md XNB-25 (Phase D3): real, externally-produced TextureCubeReader fixture exercising every face (6) and the full mip chain (64->32->16->8->4->2->1, including the sub-4x4 DXT1 block-rounding edge cases at 2x2 and 1x1, both still exactly 8 bytes -- one minimum-size DXT1 block). Field-by-field byte layout independently verified with a standalone Python parser before the reader was written. No Texture3DReader fixture was found anywhere in the available library (Texture3D/volume textures are rare in real XNA content); that reader is instead tested with a hand-constructed stream verified against FNA's own Texture3DReader.cs byte order."
+  "notes": "plans/plan_xnb.md XNB-25 (Phase D3): real, externally-produced TextureCubeReader fixture exercising every face (6) and the full mip chain (64->32->16->8->4->2->1, including the sub-4x4 DXT1 block-rounding edge cases at 2x2 and 1x1, both still exactly 8 bytes -- one minimum-size DXT1 block). Field-by-field byte layout independently verified with a standalone Python parser before the reader was written. No Texture3DReader fixture was found anywhere in the available library (Texture3D/volume textures are rare in real XNA content); that reader is instead tested with a hand-constructed stream verified against FNA's own Texture3DReader.cs byte order."
 }

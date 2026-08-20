@@ -6,7 +6,7 @@
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header
 - XNA/FNA relevance: N/A -- NOXNA implementation detail behind
-  `Microsoft::Xna::Framework::Media::VisualizationData` (plan_media.md MEDIA-187)
+  `Microsoft::Xna::Framework::Media::VisualizationData` (plans/plan_media.md MEDIA-187)
 - Main related tests: not independently located in this pass
 
 ## Purpose

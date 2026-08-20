@@ -104,7 +104,7 @@ Findings severity since neither affects correctness):
 
 - This file and `sdlgpu_envmap_test.cpp` are the only two files in this batch that actually
   perform a real pixel-level readback via `RenderTarget2D::GetData()` — both confirm this
-  mechanism genuinely works on this backend (matches `plan_sdlgpu.md SDLGPU-39`'s claim that
+  mechanism genuinely works on this backend (matches `plans/plan_sdlgpu.md SDLGPU-39`'s claim that
   `RenderTarget2D::GetData()`, unlike swapchain readback, is fully implemented and verified).
   `sdlgpu_2d_test.cpp`/`sdlgpu_3d_test.cpp`/`sdlgpu_effects_test.cpp` in this same batch do *not*
   use this mechanism despite it being available and proven — see those files' own reports

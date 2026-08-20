@@ -17,7 +17,7 @@
 // glAlphaFunc(GL_GEQUAL, reference) test regardless of the real requested CompareFunction
 // (see OpenGL1Renderer::DrawInternal's alphaTest[3]<0 check) -- an exact match only for
 // CompareFunction::Equal/GreaterEqual-ish cases away from the reference boundary, approximate
-// or inverted for others (documented "coarse alpha testing" limitation, see plan_opengl1.md).
+// or inverted for others (documented "coarse alpha testing" limitation, see plans/plan_opengl1.md).
 // This test exercises only what OpenGL1 can honestly claim: Always (never discards) and Equal
 // with alpha values clearly separated from the reference (not the exact boundary, which is
 // where the coarse approximation and real XNA semantics would disagree).

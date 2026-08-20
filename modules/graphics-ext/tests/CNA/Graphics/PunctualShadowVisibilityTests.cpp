@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1005..MOD-1007: point and spot lights that are actually lit and shadowed.
+// plans/plan_modern.md MOD-1005..MOD-1007: point and spot lights that are actually lit and shadowed.
 //
 // PointSpotShadowMapTests pins the generation matrices. This pins what no matrix assertion can:
 // that the light reaches the surface at all, that its shadow darkens the right part of it, and

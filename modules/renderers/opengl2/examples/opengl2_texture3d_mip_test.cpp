@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: real Texture3D mip-level SetData/GetData round-trip proof -- reuses
+// plans/plan_opengl2.md: real Texture3D mip-level SetData/GetData round-trip proof -- reuses
 // examples/easygl_texture3d_mip_test.cpp's own scene, mip-level colouring, and expected values
 // verbatim. Unlike Texture2D's own mip test (opengl2_texture_mip_filter_test.cpp's sibling,
 // easygl_texture2d_mip_test.cpp, which is pure CPU-shadow readback), Texture3D::GetData() calls

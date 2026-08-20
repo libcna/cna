@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 
-// plan_metal.md METAL-19: same reasoning as MetalCompareFunction.hpp -- switches on the real
+// plans/plan_metal.md METAL-19: same reasoning as MetalCompareFunction.hpp -- switches on the real
 // `BlendFunction` enumerator names instead of raw int literals. Mirrors EasyGL's
 // ToEasyGLBlendEquation / Vulkan's ToVkBlendOp exactly.
 namespace CNA::Internal::Renderers::Metal

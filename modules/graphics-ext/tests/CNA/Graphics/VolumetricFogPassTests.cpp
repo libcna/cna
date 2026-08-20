@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2052: participating media that receives shadow.
+// plans/plan_modern.md MOD-2052: participating media that receives shadow.
 //
 // The claim that separates this from `HeightFogPass` is not "there is more fog" -- it is that the
 // fog knows where the light is *blocked*. So the test that matters puts a shadow map in and takes

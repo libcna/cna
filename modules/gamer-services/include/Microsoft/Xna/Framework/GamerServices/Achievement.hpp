@@ -79,7 +79,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Returns a stream containing the achievement picture.
          *
-         * Task 4.6 (plan_net.md Phase 4): deliberately left throwing, matching FNA's own
+         * Task 4.6 (plans/plan_net.md Phase 4): deliberately left throwing, matching FNA's own
          * unimplemented stub - real Xbox 360 achievement artwork was streamed from Xbox LIVE at
          * request time and has no local equivalent, the same genuine-platform-unavailability
          * reasoning already applied elsewhere in this codebase (e.g. Guide's Xbox-Live-only

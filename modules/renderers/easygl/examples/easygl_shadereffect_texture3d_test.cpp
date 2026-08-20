@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_graphics.md Task 863: proves `ShaderEffect::SetTexture(int, Texture3D&)` -- binding a
+// plans/plan_graphics.md Task 863: proves `ShaderEffect::SetTexture(int, Texture3D&)` -- binding a
 // genuine volume (3D) texture to a custom shader's own `sampler3D` uniform. Mirrors
 // `easygl_shadereffect_texturecube_test.cpp` (Task 1081)'s own structure and false-positive-
 // avoidance technique exactly, adapted from a `samplerCube`/direction-vector proof to a

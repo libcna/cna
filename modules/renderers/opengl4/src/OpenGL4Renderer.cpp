@@ -93,7 +93,7 @@ void main()
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec4 aColor;
 uniform mat4 uWorldViewProj;
-// plan_gltf.md GLTF-475: the same two uniforms kColoredTextured3DVertSrc already has, and for the
+// plans/plan_gltf.md GLTF-475: the same two uniforms kColoredTextured3DVertSrc already has, and for the
 // same reason -- `vColor = aColor` unconditionally made this program paint whatever attribute
 // location 1 happens to hold. That is a colour only on the stride-16 and stride-24 records; on the
 // PBR and skinned ones location 1 is the NORMAL, so a BasicEffect draw on a stride-48 buffer
@@ -123,7 +123,7 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-25: coloredParams3d (VertexPositionColor, stride 16) -- a SEPARATE
+        // plans/plan_opengl4.md GL4-25: coloredParams3d (VertexPositionColor, stride 16) -- a SEPARATE
         // program from kColored3DProgram_ above (which stays exactly as-is, used only by the
         // GpuDrawParams-free DrawColoredPrimitives/DrawIndexedColoredPrimitives fast path that
         // GraphicsDevice::DrawUserPrimitives(VertexPositionColor*, ...) and the generic
@@ -196,9 +196,9 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-13: textured3d (VertexPositionTexture, stride 20). Algorithmic
+        // plans/plan_opengl4.md GL4-13: textured3d (VertexPositionTexture, stride 20). Algorithmic
         // reference: VulkanRenderer's textured3d.vert/frag.glsl (no Y-flip -- OpenGL's own
-        // NDC convention needs none, unlike Vulkan's flipped clip space). plan_opengl4.md GL4-25
+        // NDC convention needs none, unlike Vulkan's flipped clip space). plans/plan_opengl4.md GL4-25
         // added real fog (REMED-GFX-010 fog-vector form, matching EasyGLRenderer's own
         // EnsureTextured3DProgram -- see kColoredParams3DVertSrc's own comment for the full
         // derivation, not re-explained per shader).
@@ -218,7 +218,7 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-19: AlphaTestEffect's discard test and DualTextureEffect's second
+        // plans/plan_opengl4.md GL4-19: AlphaTestEffect's discard test and DualTextureEffect's second
         // sampler are both folded into the SAME textured3d/colored_textured3d programs (not new
         // stride cases) -- both effects reuse VertexPositionTexture/VertexPositionColorTexture
         // unchanged (DualTextureEffect samples both textures with the SAME UV set in real XNA,
@@ -260,7 +260,7 @@ void main()
 }
 )GLSL";
 
-        // colored_textured3d (VertexPositionColorTexture, stride 24). plan_opengl4.md GL4-25
+        // colored_textured3d (VertexPositionColorTexture, stride 24). plans/plan_opengl4.md GL4-25
         // added real fog (see kColoredParams3DVertSrc's own comment for the formula derivation).
         const char* kColoredTextured3DVertSrc = R"GLSL(
 #version 410 core
@@ -320,7 +320,7 @@ void main()
         // 3-directional-light rig. Ported from VulkanRenderer's lit_textured3d.vert/
         // frag.glsl: FNA's Lighting.fxh ComputeLights() (ambient + per-light Lambertian diffuse +
         // Blinn-Phong specular, EmissiveColor added post-multiply, specular added post-texture
-        // scaled by alpha). plan_opengl4.md GL4-25 added real fog (see kColoredParams3DVertSrc's
+        // scaled by alpha). plans/plan_opengl4.md GL4-25 added real fog (see kColoredParams3DVertSrc's
         // own comment for the formula derivation). World's inverse-transpose upper-left 3x3 is
         // used for the normal matrix (not MVP's), matching EnvironmentMapEffect's own
         // already-correct pattern -- an MVP-based transform would bake View/Projection into the
@@ -376,7 +376,7 @@ uniform vec3 uFogColor;
 out vec4 fragColor;
 
 // Guards against normalize(0,0,0) on a disabled/unconfigured DirectionalLight -- a real bug
-// found while porting WebGPU's own lit3d shader (plan_webgpu.md): normalize() on a true zero
+// found while porting WebGPU's own lit3d shader (plans/plan_webgpu.md): normalize() on a true zero
 // vector is undefined and can poison the whole light sum with NaN.
 vec3 safeNormalize(vec3 v)
 {
@@ -421,7 +421,7 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-29: lit_textured3d's own per-vertex-lit sibling -- real XNA's
+        // plans/plan_opengl4.md GL4-29: lit_textured3d's own per-vertex-lit sibling -- real XNA's
         // BasicEffect defaults PreferPerPixelLighting=false (per-vertex/Gouraud-shaded lighting),
         // the opposite of what kLitTextured3DVertSrc/FragSrc above render unconditionally.
         // Identical Blinn-Phong math to kLitTextured3DFragSrc (same formula, same inputs), just
@@ -512,7 +512,7 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-21: env_map3d (VertexPositionNormalTexture, stride 32) --
+        // plans/plan_opengl4.md GL4-21: env_map3d (VertexPositionNormalTexture, stride 32) --
         // EnvironmentMapEffect's own dedicated program, selected instead of lit_textured3d when
         // GpuDrawParams::envMapping is set (BindProgramForStride branches on it before the stride
         // switch, matching EasyGLRenderer::SelectProgram's own envMapping-overrides-stride
@@ -611,7 +611,7 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-22: skinned3d (VertexPositionNormalTextureSkinned, stride 52/56) --
+        // plans/plan_opengl4.md GL4-22: skinned3d (VertexPositionNormalTextureSkinned, stride 52/56) --
         // SkinnedEffect's own dedicated program, selected instead of lit_textured3d/env_map3d/
         // textured3d/colored_textured3d for stride 52/56 draws. Ported near-verbatim from
         // EasyGLRenderer::EnsureSkinnedProgram's GLSL ES 300 source (desktop GLSL 410 core
@@ -734,7 +734,7 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-29: skinned3d's own per-vertex-lit sibling, mirroring
+        // plans/plan_opengl4.md GL4-29: skinned3d's own per-vertex-lit sibling, mirroring
         // kLitTextured3DVertexLitVertSrc/FragSrc's technique exactly -- real XNA's SkinnedEffect
         // also defaults PreferPerPixelLighting=false, same as BasicEffect. The skinning itself is
         // unchanged from kSkinned3DVertSrc above; only WHERE lighting is evaluated moves (once per
@@ -841,7 +841,7 @@ void main()
 }
 )GLSL";
 
-        // plan_opengl4.md GL4-23: pbr3d (VertexPositionNormalTangentTexture, stride 48) and
+        // plans/plan_opengl4.md GL4-23: pbr3d (VertexPositionNormalTangentTexture, stride 48) and
         // pbr_skinned3d (stride 68, PBR + bone skinning combined) -- PbrEffect/SkinnedPbrEffect's
         // own dedicated programs. Ported near-verbatim from EasyGLRenderer's
         // EnsurePbrProgram()/EnsurePbrSkinnedProgram() GLSL ES 300 source, which is itself the
@@ -869,7 +869,7 @@ out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
-// plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+// plans/plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
 layout(location = 6) in vec4 aColor;
 out vec4 vColor;
 out float vFogFactor;
@@ -914,7 +914,7 @@ out vec3 vTangent;
 out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
-// plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
+// plans/plan_gltf.md GLTF-462/GLTF-463: COLOR_0, carried by the stride-60 and stride-80 records.
 layout(location = 6) in vec4 aColor;
 out vec4 vColor;
 out float vFogFactor;
@@ -1052,7 +1052,7 @@ void main()
 {
     vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(vUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), uSrgb.x);
-    // plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base
+    // plans/plan_gltf.md GLTF-465. §3.7.2.1: COLOR_0 "acts as an additional linear multiplier to base
     // color". LINEAR is why there is no transfer function here -- the attribute is a normalized
     // integer already in linear space, unlike the base-colour TEXTURE -- and both RGB and alpha are
     // multiplied because §3.9.2's base colour is an RGBA product.
@@ -1107,7 +1107,7 @@ void main()
 }
 )GLSL";
 
-        // XNA TextureFilter ordinal -> (GL min filter, GL mag filter). plan_opengl4.md GL4-18:
+        // XNA TextureFilter ordinal -> (GL min filter, GL mag filter). plans/plan_opengl4.md GL4-18:
         // real mip-aware GL min-filter tokens for every "Mip*" variant now that
         // OpenGL4TextureRenderer::UpdatePixelsLevel() lets a texture genuinely have mip levels
         // beyond 0 -- a mip-mapped texture sampled with a non-mip min filter would only ever
@@ -1154,7 +1154,7 @@ void main()
             }
         }
 
-        // plan_opengl4.md GL4-14: maps a Microsoft::Xna::Framework::Graphics::DepthFormat
+        // plans/plan_opengl4.md GL4-14: maps a Microsoft::Xna::Framework::Graphics::DepthFormat
         // ordinal to the GL renderbuffer internal format and framebuffer attachment point a
         // render target's depth/stencil buffer should use. Returns false for DepthFormat::None,
         // meaning no depth/stencil attachment should be created at all -- mirrors
@@ -1187,7 +1187,7 @@ void main()
             return levels;
         }
 
-        // plan_opengl4.md GL4-16: XNA Blend enum -> GL blend factor token.
+        // plans/plan_opengl4.md GL4-16: XNA Blend enum -> GL blend factor token.
         // Blend: One=0, Zero=1, SourceColor=2, InverseSourceColor=3, SourceAlpha=4,
         //        InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
         //        DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
@@ -1378,7 +1378,7 @@ void main()
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                      data.pixels.empty() ? nullptr : data.pixels.data());
-        // plan_opengl4.md GL4-18: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise
+        // plans/plan_opengl4.md GL4-18: clamp GL_TEXTURE_MAX_LEVEL to the real level count -- otherwise
         // a mipmap-requiring TextureFilter (e.g. Anisotropic) treats this as an incomplete
         // mipmap chain (GL's own default max level is 1000) and renders solid black, even for an
         // ordinary single-level (levelCount_==1) texture that never uploads anything beyond
@@ -1456,7 +1456,7 @@ void main()
             levelH = std::max(1, levelH / 2);
             levelD = std::max(1, levelD / 2);
         }
-        // plan_opengl4.md GL4-18/GL4-20: clamp GL_TEXTURE_MAX_LEVEL to the real level count --
+        // plans/plan_opengl4.md GL4-18/GL4-20: clamp GL_TEXTURE_MAX_LEVEL to the real level count --
         // same "incomplete mipmap chain renders black" reason OpenGL4TextureRenderer already
         // fixed for Texture2D; EasyGLTexture3DRenderer does not set this at all, so this is
         // deliberately stricter than the EasyGL reference.
@@ -2051,7 +2051,7 @@ void main()
             bool isInteger;
         };
 
-        // plan_opengl4.md GL4-33: maps XNA's VertexElementFormat to the GL attribute shape needed
+        // plans/plan_opengl4.md GL4-33: maps XNA's VertexElementFormat to the GL attribute shape needed
         // to bind it -- component count, GL scalar type, whether values are normalized to
         // [0,1]/[-1,1], and whether the attribute must be read as a true integer
         // (glVertexAttribIPointer) rather than converted to float (glVertexAttribPointer). Ported
@@ -2091,7 +2091,7 @@ void main()
         const std::vector<VertexElement>& declarationElements = declaration_.GetElements();
         if (!declarationElements.empty())
         {
-            // plan_opengl4.md GL4-33: generic layout binding driven by the caller's own
+            // plans/plan_opengl4.md GL4-33: generic layout binding driven by the caller's own
             // VertexDeclaration -- attribute location = the element's own index within the
             // declaration's element list, matching EasyGLVertexBufferRenderer::ApplyLayout's own
             // Task 1080 convention. Covers layouts that don't match any of the fixed strides the
@@ -2151,7 +2151,7 @@ void main()
             break;
         case 52:
         case 56:
-            // plan_opengl4.md GL4-22: VertexPositionNormalTextureSkinned (packed): float3 position
+            // plans/plan_opengl4.md GL4-22: VertexPositionNormalTextureSkinned (packed): float3 position
             // + float3 normal + float2 texcoord + float4 blend weight + ubyte4 blend indices
             // (+ ubyte4 normalized color for stride 56, matching EasyGLRenderer's own
             // stride-52/56 cases). BlendIndices (location 4) uses the true integer attribute path
@@ -2174,20 +2174,20 @@ void main()
             }
             break;
         case 48:
-        // plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48 and a
+        // plans/plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48 and a
         // packed COLOR_0 at 56. Its first four fields are byte-identical to stride 48, and without
         // this case it reached the position-only default below -- a dual-UV or vertex-coloured PBR
         // mesh drew with no normal, no tangent and no UV at all. The two trailing slots stay unbound
         // because this renderer's PBR shader samples one UV set and reads no colour attribute;
         // GLTF-465 owns consuming them.
         case 60:
-        // plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and, for 80,
+        // plans/plan_gltf.md GLTF-463: strides 76 and 80 are the skinned PBR record with UV1 and, for 80,
         // a packed COLOR_0 appended; their first six fields are byte-identical to stride 68, and the
         // colour is bound below so the shader can multiply it.
         case 76:
         case 80:
         case 68:
-            // plan_opengl4.md GL4-23: VertexPositionNormalTangentTexture (packed): float3
+            // plans/plan_opengl4.md GL4-23: VertexPositionNormalTangentTexture (packed): float3
             // position + float3 normal + float4 tangent (xyz + bitangent-handedness sign in w)
             // + float2 texcoord (+ float4 blend weight + ubyte4 blend indices for the stride-68
             // PBR+skinned combo -- locations 0-3 stay byte-identical to stride 48, matching
@@ -2208,7 +2208,7 @@ void main()
                 gl4_glEnableVertexAttribArray(5);
                 gl4_glVertexAttribIPointer(5, 4, GL_UNSIGNED_BYTE, s, (void*)64);
             }
-            // plan_gltf.md GLTF-465: the two colour-carrying PBR records bind COLOR_0 at location 6,
+            // plans/plan_gltf.md GLTF-465: the two colour-carrying PBR records bind COLOR_0 at location 6,
             // which the PBR shaders declare and gate on uVertexColorEnabled. An uncoloured
             // stride-60/80 buffer has opaque white there -- the multiplier's identity -- so the gate
             // is the intent and the fill is the safety net.
@@ -2220,7 +2220,7 @@ void main()
             }
             break;
         default:
-            // Unknown layout (not yet ported to this renderer, plan_opengl4.md remaining work):
+            // Unknown layout (not yet ported to this renderer, plans/plan_opengl4.md remaining work):
             // bind position-only as a safe fallback, matching EasyGL's own precedent.
             gl4_glEnableVertexAttribArray(0);
             gl4_glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, s, (void*)0);
@@ -2337,7 +2337,7 @@ void main()
 
     void OpenGL4SpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
-        // plan_opengl4.md GL4-32: flush any already-batched sprites under the PREVIOUS effect
+        // plans/plan_opengl4.md GL4-32: flush any already-batched sprites under the PREVIOUS effect
         // (built-in or a different custom one) before switching, mirroring
         // EasyGLSpriteBatchRenderer::SetCustomEffect's own identical guard.
         if (customEffect_ != effect)
@@ -2449,7 +2449,7 @@ void main()
     {
         if (pendingVertices_.empty()) return;
 
-        // plan_opengl4.md GL4-14: size the viewport/ortho projection off the currently-bound
+        // plans/plan_opengl4.md GL4-14: size the viewport/ortho projection off the currently-bound
         // RenderTarget2D when one is bound, not unconditionally off the window's physical size
         // -- a SpriteBatch::Draw() into a bound RT smaller than the window would otherwise get a
         // window-sized viewport, offsetting/clipping its own draws (same fix
@@ -2475,7 +2475,7 @@ void main()
         float ortho[16];
         combined.ToColumnMajor(ortho);
 
-        // plan_opengl4.md GL4-32: bind the SAME compiled program the custom ShaderEffect itself
+        // plans/plan_opengl4.md GL4-32: bind the SAME compiled program the custom ShaderEffect itself
         // owns (Effect::GetEffectRendererPtr(), overridden by ShaderEffect) instead of the
         // built-in sprite program -- mirrors EasyGLSpriteBatchRenderer::FlushBatch's own
         // customEffect_ dispatch (Task 1077's "bind the same program" fix, applied here from the
@@ -2795,7 +2795,7 @@ void main()
                                                                                 bool mipMap, int /*surfaceFormat*/)
     {
         // surfaceFormat is currently unused -- matches EasyGLRenderer::CreateTexture3D's
-        // own identical "always RGBA8" behavior (see plan_opengl4.md GL4-20 and
+        // own identical "always RGBA8" behavior (see plans/plan_opengl4.md GL4-20 and
         // docs/texture3d-texturecube-support.md's documented cross-renderer gap).
         return std::make_unique<OpenGL4Texture3DRenderer>(w, h, depth, mipMap);
     }
@@ -2819,7 +2819,7 @@ void main()
         return renderer;
     }
 
-    // --- OpenGL4EffectRenderer (plan_opengl4.md GL4-30) ---
+    // --- OpenGL4EffectRenderer (plans/plan_opengl4.md GL4-30) ---
 
     bool OpenGL4EffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
     {
@@ -3067,7 +3067,7 @@ void main()
         GetPhysicalSize(fbW, fbH);
 
         // glReadPixels cannot sample a multisample attachment directly -- resolve into FBO 0
-        // first (plan_opengl4.md GL4-17), matching EasyGLRenderer::ReadBackbuffer's own
+        // first (plans/plan_opengl4.md GL4-17), matching EasyGLRenderer::ReadBackbuffer's own
         // sampleCount_>1 handling. Guarded by currentRtHeight_==0 (no RT bound) since this method
         // is only ever meant to read the real backbuffer, never an active render target's FBO.
         const bool resolvingBackbufferMsaa = msaaSampleCount_ > 0 && currentRtHeight_ == 0;
@@ -3188,7 +3188,7 @@ void main()
         return std::make_unique<OpenGL4IndexBufferRenderer>(index_capacity, /*thirtyTwoBit=*/true);
     }
 
-    /// plan_gltf.md GLTF-475: uploads the colored3d program's tint pair.
+    /// plans/plan_gltf.md GLTF-475: uploads the colored3d program's tint pair.
     ///
     /// @param params The draw's effect state, or null for the legacy colour route, which has none
     ///        and therefore states the identity (white, attribute enabled).
@@ -3314,7 +3314,7 @@ void main()
         float wvpCol[16];
         wvp.ToColumnMajor(wvpCol);
 
-        // plan_opengl4.md GL4-25: uploads the 4 fog uniforms (a no-op via the `loc>=0` guard on
+        // plans/plan_opengl4.md GL4-25: uploads the 4 fog uniforms (a no-op via the `loc>=0` guard on
         // any program whose shader source doesn't declare them, so this is safe to call
         // unconditionally for every stride case below).
         const auto setFog = [&](OpenGL4RawProgram& prog) {
@@ -3326,7 +3326,7 @@ void main()
             if (fogColorLoc >= 0) gl4_glUniform3f(fogColorLoc, params.fogColor[0], params.fogColor[1], params.fogColor[2]);
         };
 
-        // plan_opengl4.md GL4-23: lazily create PbrEffect's fallback textures BEFORE any real
+        // plans/plan_opengl4.md GL4-23: lazily create PbrEffect's fallback textures BEFORE any real
         // per-draw texture gets bound below -- EnsureDefaultWhiteTexture()/
         // EnsureDefaultFlatNormalTexture() do their own glBindTexture(GL_TEXTURE_2D, ...) on
         // whatever unit is currently active, then unbind (GL_TEXTURE_2D -> 0) when done. Calling
@@ -3340,7 +3340,7 @@ void main()
             EnsureDefaultFlatNormalTexture();
         }
 
-        // plan_opengl4.md GL4-26: no ApplySamplerState() call is needed here for any texture
+        // plans/plan_opengl4.md GL4-26: no ApplySamplerState() call is needed here for any texture
         // unit -- GraphicsDevice::applySamplerStatesToRenderer() already calls
         // renderer_->ApplySamplerState(slot, ...) for ALL 16 sampler slots, reading each slot's
         // REAL GraphicsDevice.SamplerStates[slot] value, immediately before every
@@ -3360,14 +3360,14 @@ void main()
             gl4_glActiveTexture(GL_TEXTURE0);
             params.texture0->BindGL();
         }
-        // plan_opengl4.md GL4-19: DualTextureEffect's second sampler.
+        // plans/plan_opengl4.md GL4-19: DualTextureEffect's second sampler.
         const bool hasTexture1 = params.texture1 != nullptr;
         if (hasTexture1)
         {
             gl4_glActiveTexture(GL_TEXTURE1);
             params.texture1->BindGL();
         }
-        // plan_opengl4.md GL4-21: EnvironmentMapEffect's cube map -- unit 1, same slot
+        // plans/plan_opengl4.md GL4-21: EnvironmentMapEffect's cube map -- unit 1, same slot
         // DualTextureEffect's texture1 uses (the two effects are mutually exclusive per draw, so
         // there's no conflict), matching EasyGLRenderer::BindDrawParams's own unit choice.
         const bool hasEnvMap = params.envMapping && params.envMap != nullptr;
@@ -3377,7 +3377,7 @@ void main()
             params.envMap->BindGL();
         }
 
-        // plan_opengl4.md GL4-23: PbrEffect's 4 extra texture units (1=normal, 2=metallic-
+        // plans/plan_opengl4.md GL4-23: PbrEffect's 4 extra texture units (1=normal, 2=metallic-
         // roughness, 3=emissive, 4=occlusion). Unlike texture1/envMap above, the PBR fragment
         // shader samples all 5 units unconditionally (no uniform-gated branch), so every unit
         // always gets a real bound texture -- defaultFlatNormalTexture_/defaultWhiteTexture_ when
@@ -3413,7 +3413,7 @@ void main()
         if (params.pbr && (strideInBytes == 48 || strideInBytes == 60 ||
                            strideInBytes == 68 || strideInBytes == 76 || strideInBytes == 80))
         {
-            // plan_gltf.md GLTF-463/GLTF-465: the skinned strides are 68, 76 and 80, and the program
+            // plans/plan_gltf.md GLTF-463/GLTF-465: the skinned strides are 68, 76 and 80, and the program
             // must be chosen by the same predicate that compiles it -- picking pbr3DProgram_ for 76
             // or 80 would run the rigid shader over a skinned record.
             const bool skinnedPbr = strideInBytes == 68 || strideInBytes == 76 ||
@@ -3446,7 +3446,7 @@ void main()
                                                  params.diffuseColor[2], params.diffuseColor[3]);
             setV3("uAmbientColor", params.ambientColor);
             setV3("uEmissiveColor", params.emissiveColor);
-            // plan_gltf.md GLTF-465: the stride-60 and stride-80 records always carry a colour
+            // plans/plan_gltf.md GLTF-465: the stride-60 and stride-80 records always carry a colour
             // slot, so the PBR shaders must be told whether it means anything. A negative location
             // is a silent no-op, exactly like every other optional uniform here.
             const int vertexColorLoc = prog.UniformLocation("uVertexColorEnabled");
@@ -3573,7 +3573,7 @@ void main()
 
         switch (strideInBytes)
         {
-        case 16: // VertexPositionColor -- plan_opengl4.md GL4-25: real GpuDrawParams-aware case
+        case 16: // VertexPositionColor -- plans/plan_opengl4.md GL4-25: real GpuDrawParams-aware case
         {
             EnsureColoredParams3DProgram();
             coloredParams3DProgram_.Use();
@@ -3640,7 +3640,7 @@ void main()
         }
         case 32: // VertexPositionNormalTexture
         {
-            // plan_opengl4.md GL4-29: real XNA's BasicEffect defaults PreferPerPixelLighting=false
+            // plans/plan_opengl4.md GL4-29: real XNA's BasicEffect defaults PreferPerPixelLighting=false
             // (per-vertex/Gouraud-shaded lighting) -- only meaningfully distinct while lighting is
             // actually on, matching EasyGLRenderer::SelectProgram's own identical gate.
             const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
@@ -3691,7 +3691,7 @@ void main()
         case 52: // VertexPositionNormalTextureSkinned
         case 56: // VertexPositionNormalTextureSkinned + Color
         {
-            // plan_opengl4.md GL4-29: real XNA's SkinnedEffect also defaults
+            // plans/plan_opengl4.md GL4-29: real XNA's SkinnedEffect also defaults
             // PreferPerPixelLighting=false, same gate as the stride-32 case above.
             const bool vertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
             if (vertexLit) EnsureSkinned3DVertexLitProgram(); else EnsureSkinned3DProgram();
@@ -3749,7 +3749,7 @@ void main()
 
     namespace
     {
-        // plan_opengl4.md GL4-30: binds a ShaderEffect's own compiled program (bypassing the
+        // plans/plan_opengl4.md GL4-30: binds a ShaderEffect's own compiled program (bypassing the
         // built-in stride-dispatched shaders) and its World/View/Projection uniforms, matching
         // the exact uniform names every original XNA sample's own .fx source already declares.
         // Mirrors EasyGLRenderer's own BindCustomEffectMatrices helper exactly.
@@ -3797,7 +3797,7 @@ void main()
 
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
-            // plan_gltf.md GLTF-475: this fallback used to call the params-free colour route, which
+            // plans/plan_gltf.md GLTF-475: this fallback used to call the params-free colour route, which
             // discarded the effect entirely and made the program paint attribute location 1 -- the
             // NORMAL on every PBR/skinned record -- as the surface colour. The route name stays
             // "ordinary-nonindexed" because that is the guard this draw already passed above.
@@ -3829,7 +3829,7 @@ void main()
         const auto& vb = static_cast<const OpenGL4VertexBufferRenderer&>(vb_in);
         const auto& ib = static_cast<const OpenGL4IndexBufferRenderer&>(ib_in);
 
-        // plan_opengl4.md GL4-31: real 32-bit index buffer support -- honors
+        // plans/plan_opengl4.md GL4-31: real 32-bit index buffer support -- honors
         // IIndexBufferRenderer::IsThirtyTwoBit() instead of hardcoding GL_UNSIGNED_SHORT, matching
         // every other established renderer's own idxType-selection convention.
         const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
@@ -3851,7 +3851,7 @@ void main()
 
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
-            // plan_gltf.md GLTF-475: see DrawPrimitivesEx's fallback.
+            // plans/plan_gltf.md GLTF-475: see DrawPrimitivesEx's fallback.
             DrawIndexedColoredPrimitivesInternalEXT(vb_in, ib_in, world, view, projection, primitive,
                                                     primitiveCount, "ordinary-indexed", &params);
             return;
@@ -3862,7 +3862,7 @@ void main()
             static_cast<std::uintptr_t>(params.startIndex) * idxSize);
         gl4_glBindVertexArray(vb.VaoHandle());
         gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-        // plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- glDrawElementsBaseVertex
+        // plans/plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support -- glDrawElementsBaseVertex
         // adds params.baseVertex to every fetched index before it indexes into the currently bound
         // vertex buffer (maps directly to FNA's own D3D9/OpenGL baseVertex parameter), letting
         // multiple sub-meshes share one large vertex buffer with per-draw index-space-relative
@@ -3900,7 +3900,7 @@ void main()
 
         if (params.customEffectRenderer)
         {
-            // plan_opengl4.md GL4-33: hardware instancing with a custom ShaderEffect. The
+            // plans/plan_opengl4.md GL4-33: hardware instancing with a custom ShaderEffect. The
             // per-vertex mesh buffer's own attributes are already bound (via ApplyLayout, at
             // SetData time) into vb's own VAO; bind the *second*, per-instance buffer's own
             // attributes into that same VAO here, continuing at locations right after the mesh
@@ -3971,10 +3971,10 @@ void main()
 
         if (!BindProgramForStride(vb.GetStrideInBytes(), world, view, projection, params))
         {
-            // plan_opengl4.md GL4-33: unrecognized stride, no custom effect -- fall back to the
+            // plans/plan_opengl4.md GL4-33: unrecognized stride, no custom effect -- fall back to the
             // colored3d program, mirroring DrawIndexedColoredPrimitives's own fallback shape
             // (matches EasyGLRenderer::SelectProgram's own `default:` colored-program case, which
-            // always succeeds for any stride rather than failing). plan_gltf.md GLTF-475: the
+            // always succeeds for any stride rather than failing). plans/plan_gltf.md GLTF-475: the
             // fallback does read `params` now -- see SetColored3DTintEXT for why it must.
             EnsureColored3DProgram();
             const Matrix wvp = world * view * projection;
@@ -4006,7 +4006,7 @@ void main()
         return spriteProgram_;
     }
 
-    /// plan_gltf.md GLTF-475: the colour route's body, with the draw's effect state when there is
+    /// plans/plan_gltf.md GLTF-475: the colour route's body, with the draw's effect state when there is
     /// one. The public override below has none and passes null, which reproduces its old formula
     /// exactly; the two `*PrimitivesEx` fallbacks now pass theirs instead of dropping it.
     void OpenGL4Renderer::DrawColoredPrimitivesInternalEXT(const IVertexBufferRenderer& vb_in,
@@ -4044,7 +4044,7 @@ void main()
                                          "colored-nonindexed", nullptr);
     }
 
-    /// plan_gltf.md GLTF-475: see DrawColoredPrimitivesInternalEXT -- the indexed twin.
+    /// plans/plan_gltf.md GLTF-475: see DrawColoredPrimitivesInternalEXT -- the indexed twin.
     void OpenGL4Renderer::DrawIndexedColoredPrimitivesInternalEXT(
         const IVertexBufferRenderer& vb_in, const IIndexBufferRenderer& ib_in,
         const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -4069,7 +4069,7 @@ void main()
         const int indexCount = VertexCountForPrimitives(primitive, primitiveCount);
         gl4_glBindVertexArray(vb.VaoHandle());
         gl4_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.IboHandle());
-        // plan_opengl4.md GL4-31: real 32-bit index buffer support.
+        // plans/plan_opengl4.md GL4-31: real 32-bit index buffer support.
         const GLenum idxType = ib.IsThirtyTwoBit() ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
         glDrawElements(ToGLPrimitive(primitive), indexCount, idxType, nullptr);
         gl4_glBindVertexArray(0);
@@ -4093,7 +4093,7 @@ void main()
         // (unlike SpriteBatch's own FlushBatch, which sets glViewport() itself every flush).
         // OpenGL's viewport origin is bottom-left; convert from top-left XNA coordinates. Use
         // the bound render target's own height for the flip when one is bound (currentRtHeight_,
-        // plan_opengl4.md GL4-14); fall back to the window's physical height for the default
+        // plans/plan_opengl4.md GL4-14); fall back to the window's physical height for the default
         // framebuffer -- matches EasyGLRenderer::SetViewport's own currentRtHeight_-or-
         // window-height pattern. Using the window's height unconditionally while an RT is bound
         // would produce a viewport y-offset entirely outside the RT's pixel range whenever the
@@ -4250,7 +4250,7 @@ void main()
         if (w <= 0 || h <= 0) return; // invalid rect -- leave scissor state unchanged
 
         // OpenGL's scissor origin is bottom-left; convert from top-left XNA coordinates using
-        // the same currentRtHeight_-or-window-height pattern as SetViewport (plan_opengl4.md
+        // the same currentRtHeight_-or-window-height pattern as SetViewport (plans/plan_opengl4.md
         // GL4-14/GL4-16).
         int fbH = currentRtHeight_;
         if (fbH == 0)
@@ -4268,7 +4268,7 @@ void main()
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_OPENGL4
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace OpenGL4 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

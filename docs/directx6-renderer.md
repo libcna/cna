@@ -98,7 +98,7 @@ with only the stencil-related deltas described above.
 
 ## See also
 
-- `plan_dx6.md` — this renderer's own implementation plan.
-- `plan_dx5.md`, `docs/directx5-renderer.md` — the renderer this one ports.
+- `plans/plan_dx6.md` — this renderer's own implementation plan.
+- `plans/plan_dx5.md`, `docs/directx5-renderer.md` — the renderer this one ports.
 - `dx6-spike/README.md` — the full `DX6-0` spike record.
-- `plan_dxold.md` — the roadmap this renderer is row 6 of.
+- `plans/plan_dxold.md` — the roadmap this renderer is row 6 of.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2051: light shafts.
+// plans/plan_modern.md MOD-2051: light shafts.
 //
 // A shaft is the *shape of an occluder*, not a glow: what makes it read as light through a gap is
 // that the pixels behind the occluder got nothing to gather. So the tests put an occluder in the

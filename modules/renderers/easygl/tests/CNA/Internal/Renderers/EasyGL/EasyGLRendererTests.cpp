@@ -8,7 +8,7 @@
     || defined(CNA_RENDERER_PRESENT_OPENGLES2) || defined(CNA_RENDERER_PRESENT_OPENGLES3) \
     || defined(CNA_RENDERER_PRESENT_OPENGL33) \
     || defined(CNA_RENDERER_PRESENT_WEBGL1) || defined(CNA_RENDERER_PRESENT_WEBGL2)
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_EASYGL is defined project-wide.
@@ -161,7 +161,7 @@ TEST(EasyGLRendererFactory, MissingGlServiceIsAPlatformCapabilityRefusal)
 
     try
     {
-        // plan_runtimerenderer.md design decision 4: the factory lives in the FAMILY's namespace
+        // plans/plan_runtimerenderer.md design decision 4: the factory lives in the FAMILY's namespace
         // so several renderer archives can link into one binary. Called qualified, exactly as the
         // GDI family's own programs do. (IGraphicsRenderer.hpp used to also declare a bare
         // CNA::Internal::Renderers::CreateGraphicsRenderer, which made an unqualified call

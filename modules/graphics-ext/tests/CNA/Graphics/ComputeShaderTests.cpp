@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1510..MOD-1525: compute shaders and storage buffers, end to end.
+// plans/plan_modern.md MOD-1510..MOD-1525: compute shaders and storage buffers, end to end.
 //
 // Every test here starts by asking the device whether it can do this at all, because the answer
 // genuinely varies -- GL ES 3.1 and desktop GL 4.3 can, and the ES 2.0/3.0 profiles several CNA

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_wicked.md WICKED-78: GraphicsDevice teardown must leave no live GPU/VMA allocation.
+// plans/plan_wicked.md WICKED-78: GraphicsDevice teardown must leave no live GPU/VMA allocation.
 //
 // At the pinned Wicked Engine revision the Vulkan device destructor left its three null images
 // alive, so VMA's "Some allocations were not freed" assertion aborted the whole process on any

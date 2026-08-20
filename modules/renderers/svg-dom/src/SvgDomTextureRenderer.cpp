@@ -14,7 +14,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 2 / SVGDOM-7: registers (or updates) a texture variant in the
+// plans/plan_svg_dom.md design decision 2 / SVGDOM-7: registers (or updates) a texture variant in the
 // JS-side registry the SVG backbuffer flush path (SvgDomSpriteBatchRenderer.cpp) resolves
 // <image href> from. C++ still exposes/caches a data URI for its native-testable contract, but JS
 // converts that one source string to a shared Blob URL. Every sprite then retains only the short

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-9 (D9-90/D9-91/D9-92/D9-93): real D3D9 SpriteBatch renderer, driving
+// plans/plan_dx9.md Phase D9-9 (D9-90/D9-91/D9-92/D9-93): real D3D9 SpriteBatch renderer, driving
 // Microsoft's own SpriteEffect (SpriteVertexShader/SpritePixelShader, vendored verbatim in
 // shaders/xna/SpriteEffect.fx per design decision 3, compiled and register-mapped by the same
 // D9-71/D9-72 pipeline every other Stock Effect already goes through -- SpriteEffect's own two
@@ -41,7 +41,7 @@ namespace CNA::Internal::Renderers::DirectX9
 
     class DirectX9Renderer;
 
-    /// Real D3D9 SpriteBatch renderer (plan_dx9.md Phase D9-9).
+    /// Real D3D9 SpriteBatch renderer (plans/plan_dx9.md Phase D9-9).
     class D3D9SpriteBatchRenderer final : public ISpriteBatchRenderer
     {
     public:

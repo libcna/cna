@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX7 (DX-50/DX-51/DX-52).
+// plans/plan_dx.md Phase DIRECTX7 (DX-50/DX-51/DX-52).
 #include "CNA/Internal/Renderers/DirectX11/D3D11StateObjectCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 

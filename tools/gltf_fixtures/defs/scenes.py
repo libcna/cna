@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Scene fixtures -- owning group ``scenes`` (plan_gltf.md §24.2).
+"""Scene fixtures -- owning group ``scenes`` (plans/plan_gltf.md §24.2).
 
 Locks behaviour the forensic audit **verified correct**: when ``scene`` names a scene other than
 zero, only that scene's nodes are imported.

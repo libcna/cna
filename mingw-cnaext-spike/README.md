@@ -1,6 +1,6 @@
 # `mingw-cnaext-spike` — the engine layer as a Windows compiler sees it
 
-`plan_modern.md` **MOD-1719**. Everything here has been run on this machine (2026-08-18) with
+`plans/plan_modern.md` **MOD-1719**. Everything here has been run on this machine (2026-08-18) with
 `g++-mingw-w64-x86-64` 13.2.0; none of it is a sketch.
 
 ```bash

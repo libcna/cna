@@ -58,7 +58,7 @@ N/A for this document itself — it describes, rather than needs, its own tests;
 
 ## Positive Findings
 The "task-number scheme" disambiguation note at the top (three generations of task numbering
-across `plan_input.md`'s revisions, explicitly warning readers not to infer current-plan status
+across `plans/plan_input.md`'s revisions, explicitly warning readers not to infer current-plan status
 from a legacy citation) is an unusually disciplined piece of documentation hygiene — proactively
 heading off a real class of confusion (stale task-ID citations misread as current status) that this
 audit found actually happening in several *other* documents this session (e.g. task numbers cited

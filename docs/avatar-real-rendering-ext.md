@@ -170,7 +170,7 @@ The confirmed elbow/sleeve tear and zero-weight vertices (`tools/avatar_builder/
 unrelated content-quality gaps, not rendering bugs — see "Phase 7" below for the mesh-craft-based
 pipeline that has since superseded the body/clothing generation approach these gaps were found in.
 
-## Phase 7: mesh-craft CSG-based body/clothing generation (`plan_net.md`, decision 4b/4c)
+## Phase 7: mesh-craft CSG-based body/clothing generation (`plans/plan_net.md`, decision 4b/4c)
 
 **Problem:** the original `tools/avatar_builder/generate_body.py`/`generate_clothes.py` built body
 geometry from separate capsule/sphere primitives joined only via Blender's

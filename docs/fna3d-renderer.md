@@ -9,7 +9,7 @@ through **FNA3D**, the C graphics library FNA itself renders through.
 DualTexture, EnvironmentMap, Skinned — and those binaries contain no metallic-roughness shader.
 A draw from `PbrEffect` or `SkinnedPbrEffect` is therefore **refused by name**.
 
-**Until 2026-08-18 it was shaded by the nearest stock effect instead** (`plan_gltf.md GLTF-477`):
+**Until 2026-08-18 it was shaded by the nearest stock effect instead** (`plans/plan_gltf.md GLTF-477`):
 `SelectStockEffect` had no PBR case, so a `PbrEffect` draw fell through to `Basic` and a
 `SkinnedPbrEffect` draw to `Skinned`. An authored glTF material was presented as a different
 material, with no refusal and nothing in this document saying so. This renderer reads none of the
@@ -100,12 +100,12 @@ effect. The two capabilities describe different formats.
 needs -- it is also **where FNA3D selects that driver**, and `FNA3D_CreateDevice` refuses to run
 before it has, with `"Call FNA3D_PrepareWindowAttributes first!"`.
 
-This is worth stating because CNA already lost the call once. `plan_runtimerenderer.md` RTR-P1-D41
+This is worth stating because CNA already lost the call once. `plans/plan_runtimerenderer.md` RTR-P1-D41
 replaced the renderer descriptor's `prepareWindowFlags` hook with static data
 (`windowKind = OpenGL`, `glFramebuffer = 24/8/double`), which is the right shape for the window's
 visual -- CNA states those requirements through `WindowDescription` and the platform applies them.
 What went with the hook, unnoticed, was the only production call to
-`FNA3D_PrepareWindowAttributes()`, and from then until `plan_fx.md` FX-090 **no FNA3D device could
+`FNA3D_PrepareWindowAttributes()`, and from then until `plans/plan_fx.md` FX-090 **no FNA3D device could
 be created at all**: every test failed at `GraphicsDevice device;`.
 
 `Fna3dRenderer`'s constructor now calls it before `FNA3D_CreateDevice`. The GL attributes it also
@@ -186,7 +186,7 @@ fixed from the descriptor's own request.
 | Unknown vertex stride with no `VertexDeclaration` | Throws, naming the stride. FNA3D binds real per-stream declarations and this renderer will not guess a layout. |
 | Out-of-contract state ordinals | Throw, naming the state and the ordinal, instead of casting into an undefined FNA3D enumerator. |
 | Instanced stock-effect drawing | `DrawInstancedPrimitivesEx` throws because stock shaders declare no instance input. A compatible compiled effect uses native instancing when the driver reports it. |
-| Compiled FX on non-FNA3D renderers | Outside this renderer. SDL_GPU and the EasyGL/OpenGL family have since passed the same shared contract and report true behind their own build options (`plan_fx.md` FX-061/FX-062/FX-080-FX-090); every other backend reports `CompiledEffects == false` until it does. |
+| Compiled FX on non-FNA3D renderers | Outside this renderer. SDL_GPU and the EasyGL/OpenGL family have since passed the same shared contract and report true behind their own build options (`plans/plan_fx.md` FX-061/FX-062/FX-080-FX-090); every other backend reports `CompiledEffects == false` until it does. |
 | Multiple simultaneous devices on one thread | Not claimed. FNA3D's OpenGL driver does not make each device's context current around commands/teardown; the plan tracks the required contract decision or upstream fix as FNA3D-51. Sequential replacement devices are covered. |
 | Context-loss simulation | Not implemented; FNA3D exposes no device-loss surface, and the shared `DebugSimulateContextLoss` default is a no-op. |
 | Block-compressed readback on OpenGL / D3D11 | `GetData` returns false — "this renderer read nothing" — rather than reporting an untouched buffer as a successful read. Both drivers refuse compressed `GetTextureData2D` upstream; SDL_GPU forwards it. Which one applies is measured once per device by a 4×4 DXT1 probe, not guessed from the driver name. |
@@ -230,11 +230,11 @@ Readback is already a full CPU/GPU sync point FNA3D documents as screenshot-only
 | Unit tests (`CnaTests`, `Fna3d*` plus the generic disposed-`Texture2D` regression) | **Performed** — format-region and shared transfer-contract coverage pass |
 | Compiled-effect unit/pixel tests (`Fna3dCompiledEffectTest`) | **Performed** — 17 focused tests cover fixture hashes, parse/apply, reflection, padded matrix arrays, clone/disposal, malformed cleanup, general draws, SpriteBatch pixels, and a legally reproducible synthetic multi-technique/pass/default/annotation/render-state conformance binary |
 | Sanitizers (ASan + UBSan), renderer suite | **Performed** — the enlarged 13-test suite passes, including post-device lifetime and the >16-bit SpriteBatch path. Leak detection is disabled for the external graphics stack; UBSan still reports the pre-existing MojoShader decimal-parser signed overflow, but found no CNA-originating defect (FNA3D-47). |
-| Sanitizers for the new arbitrary compiled-effect path | **Partial** — all 31 targeted FX/XNB/capability tests pass in the ASan/UBSan build with no ASan finding. LeakSanitizer is unavailable under the managed ptrace environment; pinned upstream MojoShader still reports known UBSan findings in float formatting and zero-length clone copies, so the full `plan_fx.md` production gate remains open. |
+| Sanitizers for the new arbitrary compiled-effect path | **Partial** — all 31 targeted FX/XNB/capability tests pass in the ASan/UBSan build with no ASan finding. LeakSanitizer is unavailable under the managed ptrace environment; pinned upstream MojoShader still reports known UBSan findings in float formatting and zero-length clone copies, so the full `plans/plan_fx.md` production gate remains open. |
 | Existence-gate spikes | **Performed** — `fna3d-spike/` |
 | SDL_GPU driver | **Not exercised here**: this container has no Vulkan ICD, so FNA3D declines SDL_GPU and falls through to OpenGL. The code path is driver-agnostic; the gate is external. This is also the only driver on which compressed readback is expected to succeed, so that arm of `Fna3d_Compressed` is unexercised here. |
 | Direct3D 11 driver | **Not exercised here**: Windows-only (or DXVK-native). External gate. |
-| Driver matrix (`plan_fna3d.md` FNA3D-34) | **Open.** This renderer is validated on FNA3D's **OpenGL driver**, not across the matrix. This lane has already found three driver-dependent behaviours (sub-rectangle readback origin, volume readback, compressed readback), so an OpenGL pass must not be read as validating SDL_GPU or Direct3D 11. |
+| Driver matrix (`plans/plan_fna3d.md` FNA3D-34) | **Open.** This renderer is validated on FNA3D's **OpenGL driver**, not across the matrix. This lane has already found three driver-dependent behaviours (sub-rectangle readback origin, volume readback, compressed readback), so an OpenGL pass must not be read as validating SDL_GPU or Direct3D 11. |
 | macOS / iOS | Not exercised. External gate. |
 
 ## Tests

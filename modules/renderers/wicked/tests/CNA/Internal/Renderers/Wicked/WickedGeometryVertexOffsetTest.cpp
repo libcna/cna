@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_wicked.md WICKED-77: instanced draws must honour the geometry stream's VertexOffset.
+// plans/plan_wicked.md WICKED-77: instanced draws must honour the geometry stream's VertexOffset.
 //
 // The instanced route does not fold VertexOffset into baseVertex the way the ordinary routes do:
 // GraphicsDevice::DrawInstancedPrimitives fills the stream table with foldedOffset = 0, so every

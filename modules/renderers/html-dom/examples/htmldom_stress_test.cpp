@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md Phase D9: HTMLDOM-89 (performance) and HTMLDOM-90 (long-running stability),
+// plans/plan_html_dom.md Phase D9: HTMLDOM-89 (performance) and HTMLDOM-90 (long-running stability),
 // the two remaining unverified claims about this renderer -- its whole performance premise had
 // never been measured, and the longest run to date was 6 frames.
 //
@@ -35,19 +35,19 @@ namespace
 {
     constexpr int kExpectedChecks = 10;
 
-    // plan_html_dom.md HTMLDOM-89: 500 sprites is a reasonable "real 2D game" upper-middle
+    // plans/plan_html_dom.md HTMLDOM-89: 500 sprites is a reasonable "real 2D game" upper-middle
     // sprite count (well past typical tile/UI/particle counts for the kind of game this renderer
     // targets, per its own documented "static sprite sheets, moving sprites" sweet spot).
     constexpr int kBenchmarkSpriteCount = 500;
     constexpr int kBenchmarkFrames = 60;
 
-    // plan_html_dom.md HTMLDOM-90: long enough to cycle through more than the 256-entry variant
+    // plans/plan_html_dom.md HTMLDOM-90: long enough to cycle through more than the 256-entry variant
     // LRU cap multiple times over (each frame's sprites use a distinct tint derived from the
     // frame number), and to exercise the sprite pool growing and shrinking repeatedly rather than
     // monotonically in one direction.
     constexpr int kStabilityFrames = 300;
 
-    // plan_html_dom.md HTMLDOM-110: a real XNA game resubmits its static sprites every frame --
+    // plans/plan_html_dom.md HTMLDOM-110: a real XNA game resubmits its static sprites every frame --
     // this measures exactly that (byte-identical position/tint/texture, every frame, no per-frame
     // variation at all), the scenario the "zero cost" performance claim is actually about.
     constexpr int kStaticSpriteCount = 200;
@@ -69,7 +69,7 @@ namespace
         return cache ? cache.size : 0;
     });
 
-    // plan_html_dom.md HTMLDOM-109: whether the global variant cache currently holds a live record
+    // plans/plan_html_dom.md HTMLDOM-109: whether the global variant cache currently holds a live record
     // for this exact (id, mode, r, g, b) key -- the same combined-key format cnaDomVariantCacheGet/
     // Put use, restated here rather than exposed as its own JS function, so this test observes the
     // cache the same way any other reader of Module['cnaDomVariantCache'] would.
@@ -80,7 +80,7 @@ namespace
         return cache.has(combined) ? 1 : 0;
     });
 
-    // plan_html_dom.md HTMLDOM-110: CNAEXT instrumentation reads -- see
+    // plans/plan_html_dom.md HTMLDOM-110: CNAEXT instrumentation reads -- see
     // HtmlDomSpriteBatchRenderer.cpp's own cnaDomStyleWriteCount/cnaDomFlushCallCount comments for
     // what each counts. Reset variants zero the counter for a clean measurement window.
     EM_JS(int, JsStyleWriteCount, (), { return Module['cnaDomStyleWriteCount'] || 0; });
@@ -123,7 +123,7 @@ class HtmlDomStressTest : public Game
     double staticTotalMs_ = 0.0;
     int staticFramesTimed_ = 0;
 
-    // plan_html_dom.md HTMLDOM-111: see benchmarkEndToEndTotalMs_'s own comment at its use site.
+    // plans/plan_html_dom.md HTMLDOM-111: see benchmarkEndToEndTotalMs_'s own comment at its use site.
     double lastFrameStart_ = -1.0;
     double benchmarkEndToEndTotalMs_ = 0.0;
     int benchmarkEndToEndFramesTimed_ = 0;
@@ -172,11 +172,11 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.Clear(Color(10, 10, 20, 255));
 
-        // plan_html_dom.md HTMLDOM-89: frame 1 pays the one-time pool-creation cost (every sprite
+        // plans/plan_html_dom.md HTMLDOM-89: frame 1 pays the one-time pool-creation cost (every sprite
         // element gets created and appended for the first time) -- deliberately excluded from the
         // measured average.
         //
-        // plan_html_dom.md HTMLDOM-111: this workload's own position formula ((i*37)%400, fixed per
+        // plans/plan_html_dom.md HTMLDOM-111: this workload's own position formula ((i*37)%400, fixed per
         // sprite index `i`) never depends on `frame_` at all -- only the TINT (via `tintSeed`) does.
         // So despite this row's own older text, this measures HEAVY TINT CHURN with STATIC
         // position, not "moving sprites" -- the opposite of what "moving sprites costs nothing" is
@@ -186,7 +186,7 @@ protected:
         // regression under sustained load, which the churn case (this renderer's own documented
         // worst case, not its best) is if anything the MORE conservative choice for that purpose.
         //
-        // plan_html_dom.md HTMLDOM-111: submission time (t0/t1 bracketing just Begin/Draw/End,
+        // plans/plan_html_dom.md HTMLDOM-111: submission time (t0/t1 bracketing just Begin/Draw/End,
         // below) is NOT a frame rate -- it excludes Present() and every deferred browser layout/
         // paint/composite cost. benchmarkEndToEndTotalMs_ (the wall-clock gap between successive
         // Draw() calls) is the real one: Game::Run() drives Emscripten's main loop with fps=0
@@ -240,7 +240,7 @@ protected:
         }
         lastFrameStart_ = frameStart;
 
-        // plan_html_dom.md HTMLDOM-90: sprite count oscillates between a low and high value every
+        // plans/plan_html_dom.md HTMLDOM-90: sprite count oscillates between a low and high value every
         // frame (exercising the pool growing AND shrinking repeatedly, not just monotonically),
         // and the tint continues cycling from the benchmark phase's own seed, so across the whole
         // run (benchmark + stability) far more than 256 distinct tint values are drawn.
@@ -259,7 +259,7 @@ protected:
                         "(peak sprites/frame=%d), variant cache size=%d\n",
                         kStabilityFrames, pooled, peakSpritesInOneFrame_, cacheSize);
             std::fflush(stdout);
-            // plan_html_dom.md HTMLDOM-113: exact identity, not a `<=2*peak` headroom check -- the
+            // plans/plan_html_dom.md HTMLDOM-113: exact identity, not a `<=2*peak` headroom check -- the
             // pool never shrinks (elements are hidden via display:none, never removed), and exactly
             // one new element is ever created per newly-reached pool index (cnaDomGetRegion's own
             // `if (el === undefined) { ...create...; }` guard), so its final size must equal EXACTLY
@@ -282,7 +282,7 @@ protected:
                   "through far more than 256 distinct tint values over the run");
         }
 
-        // plan_html_dom.md HTMLDOM-109: real LRU hit-promotion, proven with a deterministic
+        // plans/plan_html_dom.md HTMLDOM-109: real LRU hit-promotion, proven with a deterministic
         // eviction-identity scenario rather than the soak run's own loose "<=256" bound above. Fills
         // the cache to exactly its 256-entry cap with distinct (mode=1 i.e. AlphaBlend, r=0..255,
         // g=200, b=150) keys -- g/b fixed means r alone spans the entire possible key space for this
@@ -332,7 +332,7 @@ protected:
                   "in the cache afterwards");
         }
 
-        // plan_html_dom.md HTMLDOM-109: SetData/UpdatePixels must drop this texture's own live cache
+        // plans/plan_html_dom.md HTMLDOM-109: SetData/UpdatePixels must drop this texture's own live cache
         // records, not merely reset the (now-removed) per-entry lookup map and leave the global
         // records to rot as stale (id,key) pairs that could later delete a freshly regenerated
         // variant sharing the same key.
@@ -373,7 +373,7 @@ protected:
                   "poisoned by the earlier stale-entry bug");
         }
 
-        // plan_html_dom.md HTMLDOM-110: warm-up for the static-resubmit measurement below -- pays
+        // plans/plan_html_dom.md HTMLDOM-110: warm-up for the static-resubmit measurement below -- pays
         // the one-time pool-creation cost (every sprite element created and appended for the first
         // time), excluded from what gets measured, the same "frame 1 is excluded" shape HTMLDOM-89's
         // own benchmark above already uses. Resets both instrumentation counters right after, so the
@@ -385,7 +385,7 @@ protected:
             JsResetFlushCallCount();
         }
 
-        // plan_html_dom.md HTMLDOM-110: the actual claim under test -- byte-identical content
+        // plans/plan_html_dom.md HTMLDOM-110: the actual claim under test -- byte-identical content
         // (SAME tintSeed=0.0f every single frame, unlike DrawSprites' other callers above, which
         // deliberately vary it) resubmitted kStaticMeasureFrames times in a row. A real XNA game
         // does exactly this for anything that is not currently animating.

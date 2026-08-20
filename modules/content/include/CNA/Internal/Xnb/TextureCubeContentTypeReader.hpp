@@ -5,7 +5,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
-// plan_xnb.md XNB-25 (Phase D3): TextureCubeReader -- see Texture2DContentTypeReader.hpp's own
+// plans/plan_xnb.md XNB-25 (Phase D3): TextureCubeReader -- see Texture2DContentTypeReader.hpp's own
 // note on why this lives in CNA::Internal::Xnb (FNA's TextureCubeReader is `internal class`,
 // never subclassed by game code). Same shape as Texture2DReader (XNB-23/24), extra per-face
 // handling (6 faces, each with its own mip chain).

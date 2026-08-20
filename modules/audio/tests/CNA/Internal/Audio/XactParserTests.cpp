@@ -796,7 +796,7 @@ namespace
     // a leading 2-byte field FAudio marks unused (FACT_internal.c) but this parser used to
     // (incorrectly) treat as a self-inclusive skip length. Sound 1 has a distinctive wave
     // reference; if sound 0's DSP block is mis-skipped, the cursor desyncs and sound 1's fields
-    // come out wrong. Regression fixture for IN-1 (plan_audio.md Fáze 7).
+    // come out wrong. Regression fixture for IN-1 (plans/plan_audio.md Fáze 7).
     std::vector<uint8_t> BuildXsbWithDspThenSecondSound()
     {
         constexpr uint32_t headerSize   = 74;
@@ -1596,7 +1596,7 @@ TEST(XactParserTest, ComplexTrackStopsScanningAtUnrecognizedEventType)
 
 // P9-XACT-010/011: a complex track's filterData/frequency used to be read-and-discarded. This
 // covers the has-filter bit (bit0), FAudio's own filter-type bit-decode ((filterData>>1)&0x02,
-// which structurally only ever yields 0/low-pass or 2/high-pass -- see plan_audio.md's
+// which structurally only ever yields 0/low-pass or 2/high-pass -- see plans/plan_audio.md's
 // P9-XACT-010 note), the qfactor byte (upper byte of filterData), and the separate frequency u16.
 // filterData = 0x0605: qfactor=0x06, bit0=1 (has filter), bits (>>1)&0x02 == 2 (high-pass).
 TEST(XactParserTest, ComplexTrackFilterDataIsRetained)
@@ -2001,7 +2001,7 @@ TEST(XactParserTest, ParseXwbTruncatedFileThrows)
 // bytes first, mirroring cstr()'s own established AUDIO-PARSER-001 pattern); this test only
 // checks the resulting exception, since ASan itself (not a plain gtest assertion) is what proves
 // the absence of the OOB read -- see this session's ASan-verified investigation notes in
-// plan_audio.md's AUD-11-017 entry.
+// plans/plan_audio.md's AUD-11-017 entry.
 TEST(XactParserTest, ParseXwbTruncatedExactlyAtBankNameFieldThrowsNotOob)
 {
     constexpr uint32_t headerSize = 48;

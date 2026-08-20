@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task 7.6 (plan_net.md Phase 7): builds CNA's placeholder clothes (Shirt/Pants/Shoes) via
+"""Task 7.6 (plans/plan_net.md Phase 7): builds CNA's placeholder clothes (Shirt/Pants/Shoes) via
 mesh-craft CSG union, exactly mirroring generate_body_meshcraft.py's own fix for the body -
 same root cause (generate_clothes.py's `_build_garment` only `bpy.ops.object.join()`s separate
 cylinder+joint-sphere primitives per bone, never a real weld), same fix (one real, watertight
@@ -115,7 +115,7 @@ def _build_garment_meshcraft(garment_name, bone_names, padding, bones_by_name, h
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
-    # Post-plan_net.md remediation (2026-07-18): same flat-CSG-normal fix as
+    # Post-plans/plan_net.md remediation (2026-07-18): same flat-CSG-normal fix as
     # generate_body_meshcraft.py's own build_body() - see
     # generate_body_meshcraft._recalculate_smooth_normals's docstring for the root cause.
     generate_body_meshcraft._recalculate_smooth_normals(obj)

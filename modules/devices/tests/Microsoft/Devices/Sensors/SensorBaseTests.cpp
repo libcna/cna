@@ -540,7 +540,7 @@ TEST(SensorBaseTests, ShouldAcceptUpdateAtWithZeroTimeBetweenUpdatesAlwaysAccept
 }
 
 // Task (2026-07-06 stabilization pass): setTimeBetweenUpdatesProperty() does
-// not validate or reject a negative TimeSpan (no dedicated plan_devices.md
+// not validate or reject a negative TimeSpan (no dedicated plans/plan_devices.md
 // task exists yet for that minimum/maximum-value validation gap). This test
 // locks in that ShouldAcceptUpdateAt() itself still behaves safely, rather
 // than leaving the case as an untested assumption: a negative interval, once

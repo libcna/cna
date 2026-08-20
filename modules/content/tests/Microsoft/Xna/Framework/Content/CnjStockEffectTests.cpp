@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-45/CNB-46: .cnj JSON support for the 5 stock effects (BasicEffect/
+// plans/plan_cnj.md CNB-45/CNB-46: .cnj JSON support for the 5 stock effects (BasicEffect/
 // AlphaTestEffect/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect), dispatched from inside
 // the pre-existing EffectTypeReader (RegisterTypeReader<T>() allows only one reader per
 // std::shared_ptr<Effect>, so these cannot get their own registrations). Field lists are a direct

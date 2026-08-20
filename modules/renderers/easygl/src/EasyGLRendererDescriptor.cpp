@@ -1,11 +1,11 @@
-// plan_runtimerenderer.md RTR-P1-D02: the EasyGL family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D02: the EasyGL family's pre-construction contract.
 //
 // EasyGL is the one family serving MORE than one public identity: OPENGLES2, OPENGLES3, OPENGL33
 // (desktop/mobile) and WEBGL1, WEBGL2 (Emscripten) all compile into this same archive, told apart
-// by the CNA_GL_PROFILE_* compile definition (plan_glbackends.md). getCurrentGraphicsRendererType()
+// by the CNA_GL_PROFILE_* compile definition (plans/plan_glbackends.md). getCurrentGraphicsRendererType()
 // already resolves that to the right one of the five, so the descriptor's identity follows it
 // rather than being hardcoded here. Making the profile itself a RUNTIME choice -- which is what
-// would let two GL profiles coexist in one binary -- is plan_runtimerenderer.md phase P11, not
+// would let two GL profiles coexist in one binary -- is plans/plan_runtimerenderer.md phase P11, not
 // this task.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -23,7 +23,7 @@ namespace CNA::Internal::Renderers::EasyGL
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *
@@ -35,7 +35,7 @@ namespace CNA::Internal::Renderers::EasyGL
     /**
      * @brief Creates an EasyGL renderer for a specific GL profile.
      *
-     * plan_runtimerenderer.md P11. Defined in the family's renderer translation unit alongside
+     * plans/plan_runtimerenderer.md P11. Defined in the family's renderer translation unit alongside
      * CreateGraphicsRenderer, which is this with the build's default profile.
      *
      * @param args Construction arguments.
@@ -47,7 +47,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        /// plan_runtimerenderer.md P11: one descriptor per public GL identity, all served by the
+        /// plans/plan_runtimerenderer.md P11: one descriptor per public GL identity, all served by the
         /// same EasyGL archive. Each pins its own GlProfile, which the renderer publishes as the
         /// thread's active profile on construction -- that is what lets several of the five be
         /// compiled in at once, where before the choice was a compile definition.

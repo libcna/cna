@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_depthstencilstate_write_enable_golden_test.cpp's own DepthStencilState
 // write-enable scene verbatim: draw far quad A (Red, z=0.8, DepthStencilState::Default), then
 // near quad B (Green, z=0.2, DepthBufferWriteEnable=false), then quad C (Blue, z=0.5, Default

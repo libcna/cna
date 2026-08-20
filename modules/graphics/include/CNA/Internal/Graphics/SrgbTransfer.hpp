@@ -5,7 +5,7 @@
 
 /**
  * @file
- * @brief The sRGB transfer function, stated once (plan_gltf.md `GLTF-209`/`GLTF-210`).
+ * @brief The sRGB transfer function, stated once (plans/plan_gltf.md `GLTF-209`/`GLTF-210`).
  *
  * glTF §3.9.2 assigns each material texture a colour space: `baseColorTexture` and
  * `emissiveTexture` are **sRGB-encoded**, while `normalTexture`, `occlusionTexture` and

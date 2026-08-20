@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-70/71 (Phase 13D): end-to-end regression test for runtime (non-CLI) glTF
+// plans/plan_cnj.md CNB-70/71 (Phase 13D): end-to-end regression test for runtime (non-CLI) glTF
 // loading -- ContentManager::Load<Model>("name") finding and parsing a "name.gltf" file directly
 // via ModelTypeReader::ReadGltfModel(), with no intermediate .cnj/binary sidecar files at all.
 // Complements GltfToCnjToolTests.cpp (which tests the offline CLI tool, a separate process) --
@@ -472,7 +472,7 @@ TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
     // selection follow the material MODEL the file declares rather than which maps are present.
     // This assertion said BasicEffect until the first run on a renderer that reports ThreeD --
     // STUB does not, so nothing below the skip above had executed since GLTF-215 landed
-    // (plan_gltf.md GLTF-383).
+    // (plans/plan_gltf.md GLTF-383).
     auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
     ASSERT_NE(pbrFx, nullptr) << "a metallic-roughness material must select PbrEffect";
     Texture2D* tex = pbrFx->getTextureProperty();

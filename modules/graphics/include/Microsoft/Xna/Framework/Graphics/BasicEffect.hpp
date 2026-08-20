@@ -274,7 +274,7 @@ namespace Microsoft::Xna::Framework::Graphics
          *
          * `setTextureProperty(Texture2D*)` stores a non-owning pointer (used by, e.g., a `Model`
          * that owns a shared texture pool across multiple mesh parts); a standalone content-loaded
-         * effect (`content.Load<BasicEffect>()`, plan_xnb.md XNB-32) has no such external owner,
+         * effect (`content.Load<BasicEffect>()`, plans/plan_xnb.md XNB-32) has no such external owner,
          * so it must keep its own texture reference alive instead.
          *
          * @param texture The texture to take shared ownership of; also becomes the effect's
@@ -358,7 +358,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
 
     public:
-        // ---- CNAEXT: shadow reception (plan_modern.md MOD-820) ----------------------------
+        // ---- CNAEXT: shadow reception (plans/plan_modern.md MOD-820) ----------------------------
 
         /** @brief Sets the shadow map this effect samples. @param shadowMap The map, or null. */
         CNAEXT void setShadowMapEXT(Texture2D* shadowMap) override;

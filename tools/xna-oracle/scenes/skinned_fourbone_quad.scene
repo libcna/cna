@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: skinned_fourbone_quad
+# plans/plan_dx9.md D9-A5 scene corpus: skinned_fourbone_quad
 # The first scene to exercise a REAL, non-degenerate 4-bone skinning blend (`WeightsPerVertex=4`,
 # all four bones bound with distinct nonzero weights), completing coverage of all 3 real
 # WeightsPerVertex values (1: skinned_quad.scene, 2: skinned_twobone_quad.scene, 4: this scene).

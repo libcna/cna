@@ -29,7 +29,7 @@ namespace
         return nullptr;
     }
 
-    // plan_media.md MEDIA-102: a real, dedicated scratch music tree with two DIFFERENT artists
+    // plans/plan_media.md MEDIA-102: a real, dedicated scratch music tree with two DIFFERENT artists
     // that both happen to have an album literally named "Collision" -- the main shared fixture
     // tree (tests/assets/media/music/) has no such name collision by design, so
     // AlbumEqualitySetForEqualAndUnequalAlbums could only prove equality-by-(Name,Artist)
@@ -86,11 +86,11 @@ TEST_F(AlbumNameCollisionTest, SameNameDifferentArtistAlbumsCompareUnequal)
     EXPECT_TRUE(*first == *first);
 }
 
-// plan_media.md MEDIA-65: real implementation, incl. HasArt reflecting the real cover.jpg fixture.
+// plans/plan_media.md MEDIA-65: real implementation, incl. HasArt reflecting the real cover.jpg fixture.
 TEST_F(MediaLibraryTestFixture, AlbumsContainsEveryFixtureAlbum)
 {
     // Presence of the known fixture albums is the real contract; the exact total is incidental and
-    // grows with the corpus, so it is not hardcoded (plan_media.md MEDIA-199/206).
+    // grows with the corpus, so it is not hardcoded (plans/plan_media.md MEDIA-199/206).
     EXPECT_GE(library->getAlbumsProperty()->getCountProperty(), 6);
 }
 
@@ -131,7 +131,7 @@ TEST_F(MediaLibraryTestFixture, AlbumSongsMatchesExpectedCount)
     EXPECT_EQ(delta->getSongsProperty()->getCountProperty(), 2); // Daybreak + Étoile
 }
 
-// plan_media.md MEDIA-65: equality is by (Name, Artist) since album names can collide across
+// plans/plan_media.md MEDIA-65: equality is by (Name, Artist) since album names can collide across
 // artists -- there is no actual name collision in this fixture, so this test constructs the
 // scenario indirectly by confirming two DIFFERENT albums (different name, different artist) are
 // correctly unequal, and an album equals itself.
@@ -155,10 +155,10 @@ TEST_F(MediaLibraryTestFixture, AlbumGetTypeNameIsFullyQualified)
     EXPECT_EQ(alpha->GetTypeName(), "Microsoft.Xna.Framework.Media.Album");
 }
 
-// plan_media.md MEDIA-102: Duration -- library-scanned songs stay TimeSpan.Zero until actually
+// plans/plan_media.md MEDIA-102: Duration -- library-scanned songs stay TimeSpan.Zero until actually
 // played (§4 D9, deliberate design choice recorded in NEXTmedia.md), so a freshly-scanned Album's
 // Duration is zero too; this asserts that documented behavior rather than leaving it untested.
-// plan_media.md MEDIA-65 (corrected -- found by external code review): Duration is now a real,
+// plans/plan_media.md MEDIA-65 (corrected -- found by external code review): Duration is now a real,
 // eagerly-probed sum of member Song.Duration (CNA::Internal::Media::AudioDurationProbe, decode-
 // free container-metadata parsing at library-scan time), not a placeholder that stays zero
 // forever. Album Alpha has exactly one member song (Sunrise.ogg, ~2.0s per its own fixture
@@ -174,7 +174,7 @@ TEST_F(MediaLibraryTestFixture, AlbumDurationIsARealNonZeroSumOfMemberSongDurati
     EXPECT_LT(ms, 3000.0);
 }
 
-// plan_media.md MEDIA-102: GetThumbnail() -- both the has-art and no-art branches, not just
+// plans/plan_media.md MEDIA-102: GetThumbnail() -- both the has-art and no-art branches, not just
 // GetAlbumArt()'s own coverage above.
 TEST_F(MediaLibraryTestFixture, AlbumGetThumbnailReturnsArtWhenAvailable)
 {
@@ -194,7 +194,7 @@ TEST_F(MediaLibraryTestFixture, AlbumGetThumbnailThrowsWhenNoArt)
     EXPECT_THROW(beta->GetThumbnail(), System::InvalidOperationException);
 }
 
-// plan_media.md MEDIA-102: IsDisposed, not exercised anywhere else in this file.
+// plans/plan_media.md MEDIA-102: IsDisposed, not exercised anywhere else in this file.
 TEST_F(MediaLibraryTestFixture, AlbumDisposeFlipsIsDisposed)
 {
     Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
@@ -206,12 +206,12 @@ TEST_F(MediaLibraryTestFixture, AlbumDisposeFlipsIsDisposed)
     EXPECT_TRUE(alpha->getIsDisposedProperty());
 }
 
-// plan_media.md MEDIA-103: AlbumCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
+// plans/plan_media.md MEDIA-103: AlbumCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
 // not exercised anywhere else in this file (only Count was previously checked).
 TEST_F(MediaLibraryTestFixture, AlbumCollectionIndexerReturnsAlbumsInBounds)
 {
     // Derived from the live Count rather than hardcoded: the shared fixture corpus grows as
-    // new formats/features get coverage (plan_media.md MEDIA-199/206), and an unrelated
+    // new formats/features get coverage (plans/plan_media.md MEDIA-199/206), and an unrelated
     // indexer test should not break every time it does.
     auto* albums = library->getAlbumsProperty();
     const auto count = albums->getCountProperty();
@@ -233,13 +233,13 @@ TEST_F(MediaLibraryTestFixture, AlbumCollectionDisposeFlipsIsDisposed)
     EXPECT_TRUE(albums->getIsDisposedProperty());
 }
 
-// plan_media.md MEDIA-121 (found by external code review): AlbumCollection's own GetTypeName().
+// plans/plan_media.md MEDIA-121 (found by external code review): AlbumCollection's own GetTypeName().
 TEST_F(MediaLibraryTestFixture, AlbumCollectionGetTypeNameIsFullyQualified)
 {
     EXPECT_EQ(library->getAlbumsProperty()->GetTypeName(), "Microsoft.Xna.Framework.Media.AlbumCollection");
 }
 
-// plan_media.md MEDIA-209: Album::GetThumbnail() used to be a synonym for GetAlbumArt(), returning
+// plans/plan_media.md MEDIA-209: Album::GetThumbnail() used to be a synonym for GetAlbumArt(), returning
 // the FULL-SIZE image. The Album Alpha fixture's cover.jpg is 200x200 -- genuinely above
 // ThumbnailGenerator::MaxEdge (128) -- so a pass-through implementation cannot satisfy this.
 namespace
@@ -279,7 +279,7 @@ TEST_F(MediaLibraryTestFixture, GetThumbnailReturnsAGenuinelySmallerImageThanGet
               CNA::Internal::Media::ThumbnailGenerator::MaxEdge);
 }
 
-// plan_media.md MEDIA-206/208: an album with NO folder cover file falls back to embedded art from
+// plans/plan_media.md MEDIA-206/208: an album with NO folder cover file falls back to embedded art from
 // a member song. "Album Embedded"'s directory deliberately contains only the .mp3 -- no cover.jpg
 // -- so this can only pass if the APIC payload is genuinely extracted.
 TEST_F(MediaLibraryTestFixture, AlbumWithoutAFolderCoverFallsBackToEmbeddedArt)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-604: FXAA's quality mapping.
+// plans/plan_modern.md MOD-604: FXAA's quality mapping.
 
 #ifdef CNA_CNAEXT
 

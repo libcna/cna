@@ -251,7 +251,7 @@ void main() {
 
         allocateTargets();
 
-        // plan_modern.md MOD-1623, and the MOD-1699 lesson in a fourth guise: the
+        // plans/plan_modern.md MOD-1623, and the MOD-1699 lesson in a fourth guise: the
         // MultipleRenderTargets *capability* is a promise, and WebGPU is a renderer that makes it
         // and does not keep it -- SetRenderTargets throws "multiple simultaneous render targets are
         // not implemented on this renderer yet". Trusting the capability meant begin() threw where

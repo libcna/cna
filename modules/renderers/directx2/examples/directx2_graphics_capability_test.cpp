@@ -2,7 +2,7 @@
 // CNA::GraphicsCapability: verifies GraphicsDevice::SupportsCapability() correctly reports DIRECTX2's
 // capability set. Unlike an earlier version of this test (mirroring a 2D-only renderer's
 // capability test, matching DIRECTX1/SDL_RENDERER/CANVAS), DIRECTX2's 3D pipeline is now genuinely real
-// end-to-end (Phase O3-O6, plan_dx2.md) -- ThreeD and DepthStencilBuffer both report true. What
+// end-to-end (Phase O3-O6, plans/plan_dx2.md) -- ThreeD and DepthStencilBuffer both report true. What
 // remains false is genuinely unavailable at this DirectX era (MSAA/MRT/occlusion query/custom
 // effects), or empirically confirmed absent on this software RGB device (AnisotropicFiltering,
 // Phase O9's dx2_spike10 Test E). WireFrame reports true as of Phase O9 -- the same spike's Test D

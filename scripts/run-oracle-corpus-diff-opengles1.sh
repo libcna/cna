@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
-# plan_opengles1.md OPENGLES1-78: cross-renderer pixel-parity measurement for the OpenGL ES 1.1
+# plans/plan_opengles1.md OPENGLES1-78: cross-renderer pixel-parity measurement for the OpenGL ES 1.1
 # renderer -- the OPENGLES1 twin of scripts/run-oracle-corpus-diff-easygl.sh.
 #
 # Renders every checked-in scene (tools/xna-oracle/scenes/*.scene) through
@@ -14,7 +14,7 @@
 # IMPORTANT -- this is a measurement, not a pass/fail gate. OpenGL ES 1.1 is a fixed-function
 # pipeline with no shader stage at all, so exact parity with XNA's programmable-pipeline output is
 # NOT expected for every scene, and several documented deviations (see the deviation table in
-# plan_opengles1.md) guarantee specific scenes will differ: EnvironmentMapEffect ignores Fresnel
+# plans/plan_opengles1.md) guarantee specific scenes will differ: EnvironmentMapEffect ignores Fresnel
 # edge-weighting, the alpha test collapses a tolerance band to a single comparison, per-vertex
 # lighting is interpolated across the primitive rather than evaluated per pixel, and so on. The
 # script therefore reports a per-scene delta table and always exits 0 unless the renderer itself

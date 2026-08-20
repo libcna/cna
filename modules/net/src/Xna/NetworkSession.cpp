@@ -178,7 +178,7 @@ namespace Microsoft::Xna::Framework::Net
         }
 
         // Deviation from FNA (see DEFERRED.md item #21 in the sibling cna-samples repo, and
-        // plan_net.md's Task 12.3 for the full investigation): FNA's constructor queues a
+        // plans/plan_net.md's Task 12.3 for the full investigation): FNA's constructor queues a
         // GamerJoin NetworkEvent per initial gamer here instead, only drained by the *next*
         // Update() call. Real XNA's GamerJoined replays itself immediately for every gamer
         // already in the session the instant a handler subscribes via += - impossible for any

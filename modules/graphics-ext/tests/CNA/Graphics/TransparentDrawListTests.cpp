@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2101..MOD-2103: ordering transparent draws.
+// plans/plan_modern.md MOD-2101..MOD-2103: ordering transparent draws.
 //
 // Three claims, and each is asserted against the thing that would break it rather than against a
 // screenshot. The order is back-to-front (a frame drawn in the wrong order looks almost right, which

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-4: the vertical-slice proof for the FNA3D graphics renderer -- selection,
+// plans/plan_fna3d.md FNA3D-4: the vertical-slice proof for the FNA3D graphics renderer -- selection,
 // device creation, resource creation, real rendering, readback oracle and teardown, all in one
 // process running entirely under CNA_GRAPHICS_RENDERER=FNA3D.
 //
@@ -71,7 +71,7 @@ public:
         auto& device = getGraphicsDeviceProperty();
 
         // Check A -- identity.
-        // plan_runtimerenderer.md RTR-P7-7: the compile-time identity names the build DEFAULT, so
+        // plans/plan_runtimerenderer.md RTR-P7-7: the compile-time identity names the build DEFAULT, so
         // this assertion only holds when FNA3D is that default. In a multi-renderer build where
         // FNA3D is merely one of several, it is not -- and this program is still meaningful,
         // because it selects FNA3D at runtime.

@@ -13,10 +13,10 @@ AUDIT-eligible files then tracked. This full resync was originally deferred to P
 #8/#9's completion made it natural to do it now rather than let staleness accumulate further; Pass 7
 (completeness verification) will still perform an independent final rescan.
 
-**Note (`plan_modern.md` `MOD-12`):** the statement above no longer describes the whole tree, and is
+**Note (`plans/plan_modern.md` `MOD-12`):** the statement above no longer describes the whole tree, and is
 kept as the record of where Task #8/#9 left it rather than quietly amended. The `cna-graphics` shard
 has grown from 7 files to 75: the `CNA::Graphics` engine layer was five enums and a settings bag when
-it was audited, and `plan_modern.md` has since made it the largest body of new work in the
+it was audited, and `plans/plan_modern.md` has since made it the largest body of new work in the
 repository. Its 68 new rows are `PENDING` — work-queue entries, not audits — so the tree-wide claim
 is now "104 shards complete, `cna-graphics` at 7/75". Every one of those 68 files landed with its own
 tests and a verified build under its plan row; what is outstanding is the independent audit pass, not
@@ -53,7 +53,7 @@ layout (`include/…`, `src/…`, `tests/…`). The repository has since moved t
 | Shard | Files | Status rollup |
 |---|---|---|
 | [`cna-devices`](manifest/cna-devices.md) | 39 | PENDING: 0 / AUDITED: 39 (complete) |
-| [`cna-graphics`](manifest/cna-graphics.md) | 75 | PENDING: 68 / AUDITED: 7 (grown by `plan_modern.md` MOD-12) |
+| [`cna-graphics`](manifest/cna-graphics.md) | 75 | PENDING: 68 / AUDITED: 7 (grown by `plans/plan_modern.md` MOD-12) |
 | [`cna-input`](manifest/cna-input.md) | 31 | PENDING: 0 / AUDITED: 31 (complete) |
 | [`cna-internal-core`](manifest/cna-internal-core.md) | 113 | PENDING: 0 / AUDITED: 113 (complete) |
 | [`cna-root-utilities`](manifest/cna-root-utilities.md) | 15 | PENDING: 0 / AUDITED: 15 (complete) |

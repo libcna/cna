@@ -14,7 +14,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_pixijs.md Design decisions 5/7: one EM_JS call per SpriteBatch::End() flush, walking a
+// plans/plan_pixijs.md Design decisions 5/7: one EM_JS call per SpriteBatch::End() flush, walking a
 // packed DrawCommand array (14 int32-words/command, matching CanvasSpriteBatchRenderer's own
 // word-indexed HEAP32/HEAPF32 walk) and driving a pooled array of PIXI.Sprite objects through
 // their native anchor/position/scale/rotation/tint/alpha properties -- no manual transform math.
@@ -35,7 +35,7 @@
 //   9 rotation (float32)         10 originX (float32)      11 originY (float32)
 //   12 flags (int32, bit0=flipH bit1=flipV)  13 packedColor (uint32, R|G<<8|B<<16|A<<24)
 //
-// plan_pixijs.md PIXIJS-45: transformA/B/C/D/tx/ty are the batch's Begin(transformMatrix), applied
+// plans/plan_pixijs.md PIXIJS-45: transformA/B/C/D/tx/ty are the batch's Begin(transformMatrix), applied
 // AFTER each sprite's own local placement matrix (position/rotation/scale) -- matching FNA's own
 // SpriteEffect vertex shader, which multiplies the per-sprite local quad by this matrix as a
 // separate world/view step.
@@ -134,7 +134,7 @@ EM_JS(int, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride
             }
             ++used;
 
-            // plan_pixijs.md PIXIJS-44 / REMED-PIXIJS-2: flip via the texture's own GroupD8
+            // plans/plan_pixijs.md PIXIJS-44 / REMED-PIXIJS-2: flip via the texture's own GroupD8
             // `rotate` (which texel samples which corner), never via negative sprite.scale.
             // Empirically verified: negative scale composed with an off-center anchor visibly
             // SHIFTS the sprite's on-screen footprint instead of mirroring content in place.
@@ -161,7 +161,7 @@ EM_JS(int, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride
             }
             sprite.texture = view;
 
-            // plan_pixijs.md PIXIJS-43: anchor is PixiJS's own normalized (0..1 of the frame) pivot
+            // plans/plan_pixijs.md PIXIJS-43: anchor is PixiJS's own normalized (0..1 of the frame) pivot
             // -- XNA's origin is source-pixel space, so divide through by the source rectangle.
             sprite.anchor.set(sourceWidth ? originX / sourceWidth : 0, sourceHeight ? originY / sourceHeight : 0);
 
@@ -173,7 +173,7 @@ EM_JS(int, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride
                 sprite.rotation = rotation;
                 sprite.skew.set(0, 0);
             } else {
-                // plan_pixijs.md PIXIJS-45: compose the batch's transform with this sprite's own
+                // plans/plan_pixijs.md PIXIJS-45: compose the batch's transform with this sprite's own
                 // local placement matrix (translate*rotate*scale, the same matrix PixiJS's own
                 // updateLocalTransform would build), then let PIXI.Transform decompose the result
                 // rather than re-deriving rotation/scale/skew by hand.
@@ -190,7 +190,7 @@ EM_JS(int, CNA_PixiJs_FlushSprites, (const void* commands, int count, int stride
                 sprite.transform.setFromMatrix(new PIXI.Matrix(ca, cb, cc, cd, ctx, cty));
             }
 
-            // plan_pixijs.md PIXIJS-42: sprite.tint is RGB-only; alpha is sprite.alpha. Because
+            // plans/plan_pixijs.md PIXIJS-42: sprite.tint is RGB-only; alpha is sprite.alpha. Because
             // every texture uploads with ALPHA_MODES.NPM, PixiJS packs a STRAIGHT vertex colour
             // (tint untouched, alpha in the high byte) rather than premultiplying it -- which is
             // exactly XNA's own straight tint semantics.
@@ -312,7 +312,7 @@ namespace CNA::Internal::Renderers::PixiJs
 
     void PixiJsSpriteBatchRenderer::SetTransformMatrix(const Matrix& m)
     {
-        // plan_pixijs.md PIXIJS-45: SpriteBatch's transformMatrix is always a 2D affine map in this
+        // plans/plan_pixijs.md PIXIJS-45: SpriteBatch's transformMatrix is always a 2D affine map in this
         // v1 scope (matching FNA's own SpriteEffect vertex shader, which only ever receives a 2D
         // camera/view matrix here) -- only the upper-left 2x2 and the XY translation row matter.
         transformA_ = m.M11;
@@ -325,17 +325,17 @@ namespace CNA::Internal::Renderers::PixiJs
 
     void PixiJsSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
-        // plan_pixijs.md PIXIJS-47/Design decision 10.
+        // plans/plan_pixijs.md PIXIJS-47/Design decision 10.
         if (effect != nullptr)
             throw std::runtime_error(
                 "PixiJS (v1 scope) does not support a custom Effect passed to SpriteBatch::Begin() "
-                "yet -- plan_pixijs.md Design decision 10 (PixiJS has a real shader stage, unlike "
+                "yet -- plans/plan_pixijs.md Design decision 10 (PixiJS has a real shader stage, unlike "
                 "Canvas2D/DOM, but mapping CNA's Effect model onto it is out of v1 scope).");
     }
 
     void PixiJsSpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
-        // plan_pixijs.md PIXIJS-53. Throws for a value outside the enumeration rather than
+        // plans/plan_pixijs.md PIXIJS-53. Throws for a value outside the enumeration rather than
         // defaulting, so an unrecognized filter is never silently rendered as Point.
         linearFilter_ = TextureFilterIsLinear(textureFilter);
     }

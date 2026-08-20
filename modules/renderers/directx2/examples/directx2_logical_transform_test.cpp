@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O2 (DX2-14, 2D layer ported from DX1-68): TransformWindowToLogical/TransformLogicalToWindow (real
+// plans/plan_dx2.md Phase O2 (DX2-14, 2D layer ported from DX1-68): TransformWindowToLogical/TransformLogicalToWindow (real
 // letterbox scale+offset) tests for the DIRECTX2 (real DirectDraw v1, run under Wine -- no
 // ../free-direct anywhere in this renderer) graphics renderer.
 //

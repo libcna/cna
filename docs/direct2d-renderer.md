@@ -204,7 +204,7 @@ scale, the mip rounding, a dropped validation -- and requires the named test to 
 only checks that each anchor still matches exactly once (the part that goes stale after a refactor)
 and needs no build; `--run <build-dir>` performs the full apply, rebuild, and expect-failure pass.
 
-`scripts/validate_direct2d_plan.py` keeps [`plan_direct2d.md`](../plan_direct2d.md) honest about
+`scripts/validate_direct2d_plan.py` keeps [`plans/plan_direct2d.md`](../plans/plan_direct2d.md) honest about
 its own state. It fails on a status outside the documented set, a duplicated task, a `✅` row citing
 no evidence at all, a cited path/CTest name/`CNA_DIRECT2D_*` variable that does not exist, a
 reference to a task without a row, an incomplete row missing from the plan's closing classification
@@ -231,5 +231,5 @@ The manual Windows graphics workflow is prepared to run MSVC with the Direct2D/D
 hardware and WARP lifetime passes, diagnostics, and live-object output. Native built-in-effect and
 composite pixels, physical display/DPI/presentation capture, adapter-specific behavior, and
 debug-layer/live-object acceptance remain external evidence limits until a real x64 Windows run is
-recorded. See [`plan_direct2d.md`](../plan_direct2d.md) for that evidence backlog and nonblocking
+recorded. See [`plans/plan_direct2d.md`](../plans/plan_direct2d.md) for that evidence backlog and nonblocking
 performance/process work.

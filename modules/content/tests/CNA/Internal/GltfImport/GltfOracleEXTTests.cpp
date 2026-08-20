@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-005 / GLTF-006: the oracle helpers' own acceptance tests.
+// plans/plan_gltf.md GLTF-005 / GLTF-006: the oracle helpers' own acceptance tests.
 //
 // These prove the harness before the harness is used to judge anything: that the dumps are
 // deterministic and round-trip, that they expose enough structure to localise an addressing
@@ -77,7 +77,7 @@ TEST(GltfOracleEXT, DumpAccessorEXTSerialisationIsStableAndRoundTrips)
 
 TEST(GltfOracleEXT, DumpAccessorEXTExposesTheStructureNeededToLocaliseAnAddressingError)
 {
-    // plan_gltf.md GLTF-005: the L2 dump must distinguish an offset error from a stride error from
+    // plans/plan_gltf.md GLTF-005: the L2 dump must distinguish an offset error from a stride error from
     // a component-type error from a normalization error from a sparse-resolution error. Each of
     // those is a distinct field here, on fixtures that actually exercise it.
     const LoadedFixture interleaved("interleaved-position-normal");
@@ -204,7 +204,7 @@ TEST(GltfOracleEXT, DumpMeshOutEXTExposesBothPackedUvStreams)
 
 TEST(GltfOracleEXT, EvaluateWorldPositionsEXTReturnsTheManifestValuesForXfIdentity)
 {
-    // plan_gltf.md GLTF-006's stated acceptance criterion.
+    // plans/plan_gltf.md GLTF-006's stated acceptance criterion.
     const LoadedFixture fixture("xf-identity");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 

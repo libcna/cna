@@ -374,7 +374,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
 
     public:
-        // ---- CNAEXT: shadow reception (plan_modern.md MOD-820) ----------------------------
+        // ---- CNAEXT: shadow reception (plans/plan_modern.md MOD-820) ----------------------------
 
         /** @brief Sets the shadow map this effect samples. @param shadowMap The map, or null. */
         CNAEXT void setShadowMapEXT(Texture2D* shadowMap) override;

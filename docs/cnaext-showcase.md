@@ -1,6 +1,6 @@
 # The engine layer, all of it, in one frame
 
-`plan_modern.md` **MOD-1808** / **MOD-1811**. Every other example in `modules/graphics-ext/examples/`
+`plans/plan_modern.md` **MOD-1808** / **MOD-1811**. Every other example in `modules/graphics-ext/examples/`
 isolates one subsystem so a failure names itself. This one does the opposite, because "each
 subsystem works" and "they work together" are different claims and a game only cares about the
 second.

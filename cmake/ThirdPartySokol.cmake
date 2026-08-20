@@ -1,6 +1,6 @@
 # --- sokol (single-header GPU abstraction, https://github.com/floooh/sokol) ---
 #
-# plan_sokol.md SOKOL-2 / design decision 3: sokol_gfx.h is fetched at configure time from the
+# plans/plan_sokol.md SOKOL-2 / design decision 3: sokol_gfx.h is fetched at configure time from the
 # upstream repository at a pinned commit, in the same spirit as the BGFX renderer's own
 # FetchContent block in RendererSelection.cmake. Unlike bgfx there is nothing to build -- sokol is
 # a set of STB-style single-file headers, so this only needs to put a directory on the include

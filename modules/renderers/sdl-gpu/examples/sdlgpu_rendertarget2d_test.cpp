@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-35: RenderTarget2D proof for the SDL_GPU graphics renderer -- a
+// plans/plan_sdlgpu.md SDLGPU-35: RenderTarget2D proof for the SDL_GPU graphics renderer -- a
 // COLOR_TARGET|SAMPLER texture rendered into during its own render pass and sampled during a
 // later pass within the same frame (Phase SDLGPU-8's per-target multi-pass EnsureFrameRendered).
 //
 // This renderer does not implement ReadBackbuffer() (SDLGPU-39's swapchain leg is a documented,
-// unresolved segfault -- see plan_sdlgpu.md), but RenderTarget2D::GetData() itself IS real
+// unresolved segfault -- see plans/plan_sdlgpu.md), but RenderTarget2D::GetData() itself IS real
 // (SDLGPU-39's RenderTarget2D leg, closed via a real ITextureRenderer::GetData virtual +
 // SdlGpuRenderTargetRenderer::GetData(), which reads its own self-owned colorTexture_, not the
 // swapchain) -- so Checks E/F/G below assert exact pixel values, not just "didn't throw".
@@ -105,7 +105,7 @@ class SdlGpuRenderTarget2DTest : public Game
         if (ok) ++passCount_;
     }
 
-    // Renders into all 3 render targets, mirroring plan_sdlgpu.md's own "bound in one pass,
+    // Renders into all 3 render targets, mirroring plans/plan_sdlgpu.md's own "bound in one pass,
     // sampled in a later pass" contract for SDLGPU-35: Clear-only, a real colored3d draw, and a
     // depth-tested pair of overlapping quads.
     void RenderIntoTargets(GraphicsDevice& dev)

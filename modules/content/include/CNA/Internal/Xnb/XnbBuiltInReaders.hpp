@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_xnb.md XNB-46: before this file existed, a real CNA game had no single call site to get
+// plans/plan_xnb.md XNB-46: before this file existed, a real CNA game had no single call site to get
 // every built-in .xnb ContentTypeReader registered -- ContentTypeReaderManager's registry
 // (XNB-14/14A) starts empty by design (CNA has no reflection fallback, unlike FNA), and each
 // Phase A-F reader family exposes its own individual Register*XnbReader()/RegisterXXXReaders()

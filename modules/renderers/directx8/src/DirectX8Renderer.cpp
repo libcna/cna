@@ -3,7 +3,7 @@
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
-// plan_dx8.md: real DirectX 8 graphics renderer, delivered via DXVK (Direct3DCreate8 resolved from
+// plans/plan_dx8.md: real DirectX 8 graphics renderer, delivered via DXVK (Direct3DCreate8 resolved from
 // DXVK's own d3d8.dll.a -- mingw-w64 ships no real d3d8 import library for x86_64, design decision
 // 2). "DirectDraw+Direct3D merged": a single IDirect3D8::CreateDevice call creates both the device
 // and its own swap chain -- no separate DirectDraw object, no manual "shadow backbuffer + Blt to
@@ -232,7 +232,7 @@ namespace CNA::Internal::Renderers::DirectX8
         // Design decision: the swap chain is created ONCE, matching the real window's pixel size
         // at construction, and never resized -- CTests always use a fixed-size window, and
         // avoiding Reset() sidesteps D3DPOOL_DEFAULT resource invalidation entirely for this v1
-        // scope (a real, deliberate boundary, not an oversight -- see plan_dx8.md's own Boundaries
+        // scope (a real, deliberate boundary, not an oversight -- see plans/plan_dx8.md's own Boundaries
         // section).
         int width = 0;
         int height = 0;
@@ -240,7 +240,7 @@ namespace CNA::Internal::Renderers::DirectX8
         int virtualHeight = 0;
         CnaPresentationMode presentationMode = CnaPresentationMode::Overscan;
 
-        // plan_dx8.md design: D3D8 has no scaled-blit primitive at all (StretchRect is a D3D9-only
+        // plans/plan_dx8.md design: D3D8 has no scaled-blit primitive at all (StretchRect is a D3D9-only
         // addition, and CopyRects is a same-size copy only) -- so, unlike D3D9's own simpler
         // "swap chain always matches the real window, no letterboxing at this layer" choice, this
         // renderer renders everything into a logical-resolution offscreen render target (real
@@ -301,7 +301,7 @@ namespace CNA::Internal::Renderers::DirectX8
         impl_->virtualWidth = args.virtualWidth > 0 ? args.virtualWidth : impl_->width;
         impl_->virtualHeight = args.virtualHeight > 0 ? args.virtualHeight : impl_->height;
 
-        // plan_dx8.md design decision 2, spike-confirmed (DX8-0a): Direct3DCreate8 resolved from
+        // plans/plan_dx8.md design decision 2, spike-confirmed (DX8-0a): Direct3DCreate8 resolved from
         // DXVK's own d3d8.dll.a (mingw-w64 ships no real d3d8 import library for x86_64).
         impl_->d3d8 = Direct3DCreate8(D3D_SDK_VERSION);
         if (!impl_->d3d8) throw std::runtime_error("Direct3DCreate8 failed");
@@ -316,7 +316,7 @@ namespace CNA::Internal::Renderers::DirectX8
         pp.Windowed = TRUE;
         pp.EnableAutoDepthStencil = TRUE;
         pp.AutoDepthStencilFormat = D3DFMT_D24S8;
-        // plan_dx8.md design decision 4, the one real bug the DX8-0 spike found and fixed:
+        // plans/plan_dx8.md design decision 4, the one real bug the DX8-0 spike found and fixed:
         // FullScreen_PresentationInterval is documented as meaningful only when Windowed=FALSE --
         // D3DPRESENT_INTERVAL_IMMEDIATE there caused CreateDevice to fail with D3DERR_INVALIDCALL
         // (real DXVK/D3D8-compat validation, not a Wine bug). D3DPRESENT_INTERVAL_DEFAULT (0) is
@@ -384,7 +384,7 @@ namespace CNA::Internal::Renderers::DirectX8
         int surfW = 0, surfH = 0;
         impl_->ActiveSurfaceSize(surfW, surfH);
 
-        // plan_dx8.md design decision 12: D3D8 has no GetRenderTargetData (a D3D9-only addition) --
+        // plans/plan_dx8.md design decision 12: D3D8 has no GetRenderTargetData (a D3D9-only addition) --
         // readback uses CreateImageSurface (a lockable system-memory surface) + CopyRects from the
         // real active surface instead, spike-confirmed (DX8-0 throughout).
         IDirect3DSurface8* sysmem = nullptr;
@@ -705,7 +705,7 @@ namespace CNA::Internal::Renderers::DirectX8
         return true;
     }
 
-    // plan_dx8.md design: D3D8 has no scaled-blit primitive at all (no StretchRect -- a D3D9-only
+    // plans/plan_dx8.md design: D3D8 has no scaled-blit primitive at all (no StretchRect -- a D3D9-only
     // addition -- and CopyRects is same-size-only), so Present() draws the logical render target's
     // texture as a single full-screen quad through the SAME fixed-function pipeline 3D geometry and
     // SpriteBatch quads use, onto the real swap chain, letterbox-scaled -- then presents for real.
@@ -1644,7 +1644,7 @@ namespace CNA::Internal::Renderers::DirectX8
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX8 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

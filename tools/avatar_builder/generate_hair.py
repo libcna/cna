@@ -11,7 +11,7 @@ Both are a single mesh object parented to the skeleton with automatic weights (w
 being close only to the `Head` bone, ends up rigidly following it in practice).
 
 Explicitly expected to still look crude, not like real hair strands — a known, accepted
-limitation of this iteration (see plan_net.md Phase 11's own framing of this exact
+limitation of this iteration (see plans/plan_net.md Phase 11's own framing of this exact
 caveat), not a bug to chase down yet. A later iteration can replace either style with
 actual hair-strand geometry or hair cards.
 

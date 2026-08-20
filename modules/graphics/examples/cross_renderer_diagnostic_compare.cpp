@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_software.md SOFTWARE-61/84: standalone comparator for cross_renderer_diagnostic_scene's
+// plans/plan_software.md SOFTWARE-61/84: standalone comparator for cross_renderer_diagnostic_scene's
 // dumps. Deliberately has no CNA/SHARP_RUNTIME dependency -- just reads two raw 64x64 RGBA8 files
 // and reports the per-channel max/mean absolute difference, exiting 1 if the max exceeds the
 // given tolerance.

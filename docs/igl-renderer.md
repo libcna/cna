@@ -7,7 +7,7 @@
 > **Status: experimental, and built.** This banner used to read "not yet compiled"; that stopped
 > being true on 2026-08-16, when the renderer first configured, compiled, rendered a frame and
 > passed its pixel-conformance tests against Mesa llvmpipe, and it has been built and run in every
-> session since. What is *verified* is narrower than what is *implemented*, and `plan_igl.md` §1
+> session since. What is *verified* is narrower than what is *implemented*, and `plans/plan_igl.md` §1
 > is the per-phase record of which is which. The short version: the OpenGL/GLX backend is verified
 > across the whole example suite; the Vulkan backend brings up a device, renders 3D, depth and
 > render targets, `SpriteBatch`, MSAA and custom `ShaderEffect`s — parameters included — correctly.
@@ -129,11 +129,11 @@ row pitch is shorter than one packed row is refused rather than read past.
 | Back-buffer MSAA on Vulkan | IGL's swap-chain images are single-sample and this renderer adds no resolve pass of its own | `GetMultiSampleCount()` returns 0 — the count that is genuinely in effect |
 | Swap interval on Vulkan | Present mode is fixed when the swap chain is created | `SetSwapInterval` returns false |
 | Sampler LOD bias | `igl::SamplerStateDesc` has no such field | recorded for diagnostics, not applied |
-| `Texture3D.GetData` (volume readback) | IGL `v1.1.1` cannot attach a 3D texture to a framebuffer, which is its only readback route. `opengl::TextureBufferBase::attach` falls through to `glFramebufferTexture2D` for a volume — `getNumLayers()` counts array layers, of which a volume has one — and the driver answers `GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`; the Vulkan copy is 2D-only in the same way | `GetData` returns false and the shared layer raises `NotSupportedException` rather than fabricating voxels. Upload and sampling are unaffected (`plan_igl.md` IGL-17) |
+| `Texture3D.GetData` (volume readback) | IGL `v1.1.1` cannot attach a 3D texture to a framebuffer, which is its only readback route. `opengl::TextureBufferBase::attach` falls through to `glFramebufferTexture2D` for a volume — `getNumLayers()` counts array layers, of which a volume has one — and the driver answers `GL_INVALID_OPERATION … invalid textarget GL_TEXTURE_3D`; the Vulkan copy is 2D-only in the same way | `GetData` returns false and the shared layer raises `NotSupportedException` rather than fabricating voxels. Upload and sampling are unaffected (`plans/plan_igl.md` IGL-17) |
 | Cube render-target MSAA | `igl::FramebufferDesc` cannot express a multisampled cube attachment with a per-face resolve | applied count reported as 1 |
 | Non-`Color` surface formats in the public API, beyond `Rg32` and `Single` | Promotion promises a whole path — the typed `SetData`/`GetData` overloads, sampling, render-target use, and the framework's four-byte colour-transfer rule — so each format needs that verified end to end on both backends. `Rg32` and `Single` now have it (`Igl_PublicSurfaceFormat`); the rest do not. `ByteEXT`, `UShortEXT` and `HalfSingle` additionally have texels that are not a multiple of four bytes, so they would be admitted by the renderer gate and then mishandled by the layer above it | the renderer refuses what IGL cannot store, accepts the two verified formats, and defers the rest to the framework's `Color`-only rule (see *Surface formats* above) |
-| A custom `ShaderEffect`'s sampler-unit uniform on Vulkan | An int uniform naming a texture UNIT is an OpenGL idea; on a SPIR-V target the sampler is bound by its own `layout(set, binding)` qualifier | `SetUniformInt("SomeSampler", 0)` is OpenGL-only. Setting it on Vulkan is a parameter with no member in the declared block, and is refused by name (`plan_igl.md` IGL-43) |
-| A custom `ShaderEffect`'s GLSL is not portable between the two backends | SPIR-V requires an explicit `layout(location = N)` on every user input and output — the varyings between stages included — and `layout(set = N, binding = N)` on samplers; desktop GLSL 4.10 requires neither, and the two backends do not accept the same `#version` | Ask `GraphicsDevice::GetShaderDialectEXT()` and supply two sources. A shader that violates this is refused with glslang's own line-and-reason text plus the requirement in words (`plan_igl.md` IGL-70); `igl_custom_effect_backend_test.cpp` is the worked example of both variants |
+| A custom `ShaderEffect`'s sampler-unit uniform on Vulkan | An int uniform naming a texture UNIT is an OpenGL idea; on a SPIR-V target the sampler is bound by its own `layout(set, binding)` qualifier | `SetUniformInt("SomeSampler", 0)` is OpenGL-only. Setting it on Vulkan is a parameter with no member in the declared block, and is refused by name (`plans/plan_igl.md` IGL-43) |
+| A custom `ShaderEffect`'s GLSL is not portable between the two backends | SPIR-V requires an explicit `layout(location = N)` on every user input and output — the varyings between stages included — and `layout(set = N, binding = N)` on samplers; desktop GLSL 4.10 requires neither, and the two backends do not accept the same `#version` | Ask `GraphicsDevice::GetShaderDialectEXT()` and supply two sources. A shader that violates this is refused with glslang's own line-and-reason text plus the requirement in words (`plans/plan_igl.md` IGL-70); `igl_custom_effect_backend_test.cpp` is the worked example of both variants |
 
 ## Writing a custom `ShaderEffect` for this renderer
 
@@ -212,7 +212,7 @@ with its own `TEXCOORD_0`/`TEXCOORD_1` selection and its own `KHR_texture_transf
 specular colour, and the sRGB encode of the shaded result; and both Fresnel endpoints, so
 `KHR_materials_ior` and `KHR_materials_specular` reach the BRDF instead of a hard-coded 0.04.
 
-**It did not until 2026-08-18** (`plan_gltf.md GLTF-476`). It transported 6 of those 20 parameters
+**It did not until 2026-08-18** (`plans/plan_gltf.md GLTF-476`). It transported 6 of those 20 parameters
 and drew the other 14 with the shader's own constants substituted — including four core glTF 2.0
 material inputs — without refusing anything, which is the outcome CNA's renderer partition exists to
 forbid. It was also adding `emissiveFactor` to the emissive sample where glTF §3.9.2 multiplies
@@ -250,12 +250,12 @@ viewport specifically so its coordinate system matches OpenGL's. Two consequence
    culls the same triangles either way. The Vulkan backend needs neither, because "up the screen"
    is a different direction through image memory in each: a GL texture's row 0 sits at `t=0`, the
    bottom, while a Vulkan image's row 0 is the top. Applying it on both stored rendered content
-   upside down relative to uploaded content (`plan_igl.md` IGL-67).
+   upside down relative to uploaded content (`plans/plan_igl.md` IGL-67).
 3. **Vulkan readbacks undo one row flip.** `igl::vulkan::Framebuffer::copyBytesColorAttachment`
    reverses the rows of every rectangle it copies and its OpenGL counterpart reverses none, so
    exactly one has to be undone for both backends to owe a caller the same bytes. The back buffer's
    readback additionally converts the requested rectangle's Y origin, for the same reason the
-   scissor rectangle already did (`plan_igl.md` IGL-60).
+   scissor rectangle already did (`plans/plan_igl.md` IGL-60).
 
 Clip depth is corrected with `z' = 2z − w` only when `IDevice::getNormalizedZRange()` reports
 `NegOneToOne` (the OpenGL backend); XNA's projections target Direct3D's `[0, w]`.
@@ -300,7 +300,7 @@ custom shader must use them, not only the locations.
 
 ## Building
 
-See `plan_igl.md` §6. `cmake/ThirdPartyIGL.cmake` deliberately fetches only the dependencies the
+See `plans/plan_igl.md` §6. `cmake/ThirdPartyIGL.cmake` deliberately fetches only the dependencies the
 four IGL library targets actually include (`glm`, `fmt`, `glslang`, `SPIRV-Headers`, plus `volk` and
 `vma` for Vulkan) rather than running IGL's own `deploy_deps.py`, which downloads over a gigabyte of
 sample/shell/test dependencies CNA never links.

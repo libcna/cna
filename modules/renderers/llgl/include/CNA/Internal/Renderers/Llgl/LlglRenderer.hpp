@@ -1820,7 +1820,7 @@ namespace CNA::Internal::Renderers::Llgl
          *  built against -- the bound target's own render pass if one is bound (a plain
          *  `RenderTarget2D`, a `RenderTargetCube` face, or an MRT bind), the swap chain's own
          *  otherwise. A single-colour-attachment target's render pass and the swap chain's are
-         *  compatible (see `plan_llgl.md` LLGL-26), so either was interchangeable here before
+         *  compatible (see `plans/plan_llgl.md` LLGL-26), so either was interchangeable here before
          *  MRT existed; a multi-attachment bind's render pass genuinely differs (a different
          *  attachment COUNT, not just a different concrete object) and needs its own. Null before
          *  the swap chain exists. */

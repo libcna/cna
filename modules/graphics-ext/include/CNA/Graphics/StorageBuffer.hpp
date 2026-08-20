@@ -20,7 +20,7 @@ namespace CNA::Graphics {
     /**
      * @brief A GPU buffer a compute shader reads and writes.
      *
-     * plan_modern.md `MOD-1520`. Byte-oriented and non-template on purpose: a storage buffer holds
+     * plans/plan_modern.md `MOD-1520`. Byte-oriented and non-template on purpose: a storage buffer holds
      * whatever its shader says it holds, and the whole implementation lives in one `.cpp` rather
      * than being instantiated into every translation unit that names an element type.
      * @ref StorageBufferT is the typed view over this, and is the only part that has to be a
@@ -84,7 +84,7 @@ namespace CNA::Graphics {
     /**
      * @brief A typed view over a @ref StorageBuffer.
      *
-     * plan_modern.md `MOD-1520`/`C7`. Header-only because it is a template and nothing else; every
+     * plans/plan_modern.md `MOD-1520`/`C7`. Header-only because it is a template and nothing else; every
      * byte of behaviour it has is the non-template buffer's.
      *
      * @tparam T The element type; must be trivially copyable, since the GPU sees only its bytes.

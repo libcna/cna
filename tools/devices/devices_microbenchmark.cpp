@@ -18,7 +18,7 @@
 //   or per-call manual instrumentation of already-hardened, already-tested locking code this
 //   task has no mandate to modify just to add a counter. Only wall-clock latency percentiles are
 //   reported. Flagged as a real, named gap, not silently dropped -- see this task's own
-//   plan_devices.md resolution note for the follow-up scope.
+//   plans/plan_devices.md resolution note for the follow-up scope.
 // - Every benchmark here runs against synthetic/fake renderers (this host has no real
 //   accelerometer/gyroscope/haptic/compass/motion hardware) -- "distinguish host fake paths from
 //   real devices" (this task's own acceptance criterion) is satisfied by every result implicitly

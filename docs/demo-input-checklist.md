@@ -1,10 +1,10 @@
 # `demo_input` — Manual Input Verification Checklist
 
-> **Related input docs (INP-0003):** [plan](../plan_input.md) · [renderer](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [plan](../plans/plan_input.md) · [renderer](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
 
 `modules/input/examples/demo_input` (`cna_demo_input`) is the interactive input demo. The unit suite
 (`CnaTests`) exercises the input pipeline headlessly, but some behavior can only be confirmed with
-real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 / the manual-verification tasks in plan_input.md). Work through it on
+real hardware and a real window — that's what this checklist is for (INPUT-TEST-018 / the manual-verification tasks in plans/plan_input.md). Work through it on
 each platform you care about; pair it with the platform-specific caveats in
 [`docs/platform-input-notes.md`](platform-input-notes.md).
 
@@ -98,7 +98,7 @@ hardware is still human/hardware-gated** — see `input-manual-verification-resu
   currently surface the standalone raw-joystick API (distinct from `GamePad`'s mapped view of the same
   hardware), device-level `Sensors` (distinct from gamepad-attached gyro/accel, already in the checklist
   above), or `Power` (battery query for any input device). There is therefore no manual-checklist item to
-  physically exercise for these three, and no Phase 11 task names them (`plan_input.md`'s P11-001..015
+  physically exercise for these three, and no Phase 11 task names them (`plans/plan_input.md`'s P11-001..015
   cover Keyboard/Mouse/GamePad/Touch/high-DPI only). Their current verification tier is unit tests against
   canned platform services (`JoystickTests.cpp`, `SensorsTests.cpp`, `PowerTests.cpp` — real,
   substantial coverage, just not hardware-gated). Extending the demo UI to surface them is a legitimate

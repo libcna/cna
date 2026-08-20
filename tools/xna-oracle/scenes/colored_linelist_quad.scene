@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: colored_linelist_quad
+# plans/plan_dx9.md D9-A5 scene corpus: colored_linelist_quad
 # The second never-before-exercised PrimitiveType in the corpus (after colored_trianglestrip_quad,
 # which closed TriangleStrip): every scene before that one used TriangleList exclusively.
 # PrimitiveType.LineList draws N/2 independent 2-vertex line segments -- genuinely different from

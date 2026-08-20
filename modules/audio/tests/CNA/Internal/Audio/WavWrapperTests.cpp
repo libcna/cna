@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_audio.md AUD-11-027: direct, field-by-field validation of BuildWavFromWaveFormatEx's own
+// plans/plan_audio.md AUD-11-027: direct, field-by-field validation of BuildWavFromWaveFormatEx's own
 // output bytes -- every other test in this codebase that exercises this shared WAV-wrapper
 // (WaveBank's PCM8/ADPCM entries, the XNB SoundEffectReader's non-PCM16 paths) only checks it
 // indirectly, via "did SDL3 successfully decode it." That proves the output is *decodable*, not

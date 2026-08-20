@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_audio.md AUD-06-025: standalone tool that inspects a .xnb SoundEffect asset's metadata
+// plans/plan_audio.md AUD-06-025: standalone tool that inspects a .xnb SoundEffect asset's metadata
 // (name, decoded duration) without playing it -- loads through the real, unmodified production
 // path (ContentManager::Load<SoundEffect>(), the exact same entry point a real game uses, going
 // through actual decode so the reported duration reflects the real decoded audio, not just a

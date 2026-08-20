@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_d3d10.md: SpriteBatch tests for the D3D10 renderer's real GPU-quad 2D compositor
+// plans/plan_d3d10.md: SpriteBatch tests for the D3D10 renderer's real GPU-quad 2D compositor
 // (D3D10SpriteBatchRenderer -- a real vs_4_0/ps_4_0 shader, orthographic screen-to-clip transform,
 // real ID3D10BlendState).
 //

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 1102b (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): SkinnedEffect pixel test --
+// Task 1102b (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): SkinnedEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (EasyGL
 // renderer), mirroring Task 1102's BasicEffect test exactly.
 //
@@ -14,7 +14,7 @@
 // the two triangles, at the shared TL=(-1,1,0)/BR=(1,-1,0) vertices' own midpoint). A single
 // Identity bone at 100% weight (bone index 0, default Identity, weight=1) keeps skinning a
 // mathematical no-op, isolating the lighting-mode difference under test -- same convention
-// examples/easygl_skinnedeffect_specular_test.cpp and plan_dx9.md's own D9-A5 corpus already use.
+// examples/easygl_skinnedeffect_specular_test.cpp and plans/plan_dx9.md's own D9-A5 corpus already use.
 //
 // Because this scene is byte-for-byte identical (geometry, materials, light, eye position) to
 // easygl_basiceffect_preferperpixellighting_test.cpp's own scene -- SkinnedEffect uses the exact

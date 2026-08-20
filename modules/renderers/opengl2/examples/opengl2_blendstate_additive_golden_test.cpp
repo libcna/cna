@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_blendstate_additive_golden_test.cpp's own BlendState::Additive scene verbatim
 // (clear to Color(200,50,0,255), draw a full-screen opaque quad Color(255,100,0,255) under
 // BlendState::Additive) and its own golden PNG.

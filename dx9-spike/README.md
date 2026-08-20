@@ -1,4 +1,4 @@
-# `dx9-spike` — proven artifacts from `plan_dx9.md` Phase D9-0
+# `dx9-spike` — proven artifacts from `plans/plan_dx9.md` Phase D9-0
 
 Everything here **has actually been run and has actually worked** on this machine
 (2026-07-14). None of it is a sketch. It exists because the Phase D9-0 spikes were executed
@@ -74,7 +74,7 @@ file's own header comment and `tools/xna-oracle/README.md` for current build/run
 DXVK-into-this-prefix fix this section used to flag as still-needed is **done**: `dxvk-setup
 install` was run against `~/.wine-cna-xna40` as part of `D9-A3`'s own verification (adapter string
 now correctly reports the real `AMD Radeon 780M (RADV PHOENIX)`, not WineD3D's spoofed `ATI
-Radeon HD 5600 Series`) — see `plan_dx9.md` `D9-A4`'s own closure note.
+Radeon HD 5600 Series`) — see `plans/plan_dx9.md` `D9-A4`'s own closure note.
 
 ---
 

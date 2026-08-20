@@ -7,7 +7,7 @@ layout(location = 1) in vec4 fragTint;
 layout(location = 2) in vec4 fragFog;    // REMED-GFX-009
 layout(location = 0) out vec4 outColor;
 
-// plan_sdlgpu.md: fragment-stage sampled textures live in set 2, fragment-stage uniform buffers
+// plans/plan_sdlgpu.md: fragment-stage sampled textures live in set 2, fragment-stage uniform buffers
 // in set 3 (SDL_gpu's SPIR-V graphics-pipeline convention).
 layout(set = 2, binding = 0) uniform sampler2D uTexture;
 

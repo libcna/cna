@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-010: `ctest -L gltf-conformance` runs the whole ladder and names the failing
+// plans/plan_gltf.md GLTF-010: `ctest -L gltf-conformance` runs the whole ladder and names the failing
 // layer.
 //
 // The label is assembled in cmake/UnitTests.cmake, one CTest entry per rung, so CTest's own
@@ -167,7 +167,7 @@ namespace
         excluded.push_back("GltfDracoParity");
 #endif
 #ifndef CNA_CNAEXT
-        // plan_modern.md MOD-1309/MOD-1310: the glTF-to-PbrMaterial bridge belongs to the engine
+        // plans/plan_modern.md MOD-1309/MOD-1310: the glTF-to-PbrMaterial bridge belongs to the engine
         // layer, which is compiled out by default, so these two suites do not exist in the default
         // build. Same treatment as the Draco pair: excluded from the "must be registered" side,
         // and their source presence checked instead, so a rung cannot come to name a suite nobody
@@ -223,7 +223,7 @@ TEST(GltfConformanceLadder, TheRungListIsReadableFromTheBuildFile)
     // being layers. Naming them here means a rung that silently disappears from the build file is
     // caught, not just one that gains an unmatched suite.
     //
-    // `Perf` is Phase 22's measurements (plan_gltf.md GLTF-433 … GLTF-443). It is on the label
+    // `Perf` is Phase 22's measurements (plans/plan_gltf.md GLTF-433 … GLTF-443). It is on the label
     // rather than beside it because its assertions are conformance assertions in the campaign's
     // sense -- "a cached load still costs less than a parse", "a copied Model still shares its
     // buffers" -- and because a measurement nobody runs stops being a measurement.
@@ -357,7 +357,7 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererForEveryCommitAnd
     EXPECT_EQ(std::string::npos, source.find("|| true"));
 }
 
-// --- plan_gltf.md GLTF-403 / GLTF-413: §27.1's evidence must exist ------------------------------
+// --- plans/plan_gltf.md GLTF-403 / GLTF-413: §27.1's evidence must exist ------------------------------
 
 TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatExist)
 {
@@ -373,8 +373,8 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
     // What it deliberately does NOT check is the State column. Whether a row is green is the
     // judgement `GLTF-458` has to make from the tests themselves; a test asserting its own
     // milestone would be circular.
-    std::ifstream plan(RepositoryRoot() / "plan_gltf.md");
-    ASSERT_TRUE(plan.is_open()) << "cannot open plan_gltf.md";
+    std::ifstream plan(RepositoryRoot() / "plans/plan_gltf.md");
+    ASSERT_TRUE(plan.is_open()) << "cannot open plans/plan_gltf.md";
 
     std::set<std::string> registeredEvidenceNames;
     const ::testing::UnitTest& unitTest = *::testing::UnitTest::GetInstance();

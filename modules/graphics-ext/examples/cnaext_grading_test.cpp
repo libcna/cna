@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2133: grading and output end to end, and what each part costs.
+// plans/plan_modern.md MOD-2133: grading and output end to end, and what each part costs.
 //
 // The unit tests take a table apart. This drives the whole delivery path the way a game does: write
 // a .cube file, load it from disk, grade a frame through it, and dither the result on the way to an

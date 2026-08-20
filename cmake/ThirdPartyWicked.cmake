@@ -1,9 +1,9 @@
-# Wicked Engine integration for the CNA WICKED graphics renderer (plan_wicked.md).
+# Wicked Engine integration for the CNA WICKED graphics renderer (plans/plan_wicked.md).
 #
 # CNA consumes exactly one layer of Wicked Engine: its render hardware interface,
 # `wi::graphics::GraphicsDevice` (plus `wi::shadercompiler`). None of the engine layers above it
 # (wi::renderer, wi::scene, wi::Application, wi::input, physics, Lua) are used -- CNA owns the XNA
-# runtime and only needs a device abstraction underneath it (plan_wicked.md design decision 1).
+# runtime and only needs a device abstraction underneath it (plans/plan_wicked.md design decision 1).
 #
 # The preferred input is a local Wicked Engine checkout:
 #   cmake -DCNA_GRAPHICS_RENDERER=WICKED -DCNA_WICKED_ROOT=/path/to/WickedEngine ...
@@ -89,7 +89,7 @@ function(cna_wicked_check_platform_support _root)
 endfunction()
 
 # Wicked Engine's GraphicsDevice_Vulkan destructor at the pinned revision leaks at teardown
-# (plan_wicked.md WICKED-78): the three null images created beside nullBuffer are never destroyed,
+# (plans/plan_wicked.md WICKED-78): the three null images created beside nullBuffer are never destroyed,
 # so VMA's "Some allocations were not freed" assertion aborts the process whenever the allocator is
 # actually torn down; and the pooled CommandList_Vulkan objects are never freed, so once any
 # command list has touched its per-frame linear allocator, the retained GPUBuffer keeps the whole
@@ -132,7 +132,7 @@ endfunction()
 # At the pinned revision, GraphicsDevice_Vulkan::CreateTexture allocates UPLOAD/READBACK staging
 # buffers with ComputeTextureMemorySizeInBytes -- the TIGHT texel size -- while the mapped layout
 # it hands out (CreateTextureSubresourceDatas with optimalBufferCopyRowPitchAlignment) and the
-# CopyTexture buffer addressing consume row pitches aligned to that limit (plan_wicked.md
+# CopyTexture buffer addressing consume row pitches aligned to that limit (plans/plan_wicked.md
 # WICKED-80). Any subresource whose row bytes are not a multiple of the alignment makes the copy
 # address past the end of the buffer (VUID-vkCmdCopyBufferToImage-pRegions-00171 /
 # VUID-vkCmdCopyImageToBuffer-pRegions-00183), and whether the round trip corrupts depends only on
@@ -228,7 +228,7 @@ function(cna_configure_wicked)
     set(WICKED_IMGUI_EXAMPLE OFF CACHE BOOL "" FORCE)
     set(WICKED_LINUX_TEMPLATE OFF CACHE BOOL "" FORCE)
     set(WICKED_WINDOWS_TEMPLATE OFF CACHE BOOL "" FORCE)
-    # CNA compiles its own shaders through wi::shadercompiler at runtime (plan_wicked.md design
+    # CNA compiles its own shaders through wi::shadercompiler at runtime (plans/plan_wicked.md design
     # decision 4) and never reads Wicked's own shader dump, so the embedded-shader variant -- which
     # additionally requires running offlineshadercompiler over the whole engine shader set at build
     # time -- is deliberately not used.

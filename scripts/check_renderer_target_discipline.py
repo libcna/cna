@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RENDERER_TARGET discipline gate (plan_runtimerenderer.md RTR-P6-3).
+"""RENDERER_TARGET discipline gate (plans/plan_runtimerenderer.md RTR-P6-3).
 
 `RENDERER_TARGET` is a SCALAR naming one renderer target. In a single-renderer build that is the
 only renderer there is, so any misuse of it is invisible; in a multi-renderer build it names the

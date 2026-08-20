@@ -8,7 +8,7 @@
 namespace CNA::Internal::Media
 {
     /// Lightweight audio-file duration probing for MediaLibrary's real Song/Album/Playlist
-    /// Duration (plan_media.md MEDIA-65/68 -- "Duration (sum of member Song.Duration)"). Uses
+    /// Duration (plans/plan_media.md MEDIA-65/68 -- "Duration (sum of member Song.Duration)"). Uses
     /// FFmpeg's container/stream metadata parsing only (avformat_find_stream_info) -- no full
     /// audio decode -- so it stays fast enough to run once per song during MediaLibrary's
     /// synchronous constructor-time scan.

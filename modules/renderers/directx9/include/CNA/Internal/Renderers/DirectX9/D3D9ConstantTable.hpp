@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-11 (D9-110): parses the CTAB (constant table) comment Microsoft's real
+// plans/plan_dx9.md Phase D9-11 (D9-110): parses the CTAB (constant table) comment Microsoft's real
 // compiler embeds in compiled D3D9 shader bytecode, returning the name -> register mapping for
 // every named constant. Design decision 9: this project does not link D3DX (ID3DXConstantTable's
 // own home -- a deprecated d3dx9_43.dll redistributable this project will not ship), so this reads

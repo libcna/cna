@@ -12,11 +12,11 @@
 `ASCII` is CNA's SDL-windowed retro glyph-grid graphics renderer: **not a real terminal/TTY
 renderer** — it renders inside a normal SDL window, exactly like `SDL_RENDERER`, and is in fact
 architecturally a thin decorator around `SDL_RENDERER`'s own `SdlRenderer`
-(`plan_ascii.md` design decision 2). The game draws normally into a private offscreen target
+(`plans/plan_ascii.md` design decision 2). The game draws normally into a private offscreen target
 (`gameTarget_`); `Present()` reads that frame back, quantizes it into a grid of glyph+color cells,
 and draws the grid onto the real window instead of the game's actual pixels.
 
-This document is the completeness snapshot after `plan_ascii.md` Phases G1–G8 (`ASCII-1`–`ASCII-82`).
+This document is the completeness snapshot after `plans/plan_ascii.md` Phases G1–G8 (`ASCII-1`–`ASCII-82`).
 See that file's own task table for full task-by-task verification detail.
 
 **Status legend** (matches `docs/sdl-renderer-2d-completeness.md`'s own convention):
@@ -29,7 +29,7 @@ See that file's own task table for full task-by-task verification detail.
 
 Unlike `docs/sdl-renderer-2d-completeness.md`, this renderer has **no `⛔ BLOCKED` section and no
 `needs_human` gate anywhere** — every row below is automated and pixel-verified in this dev
-environment (`plan_ascii.md` design decision 9), including real-window `Present()` output. The
+environment (`plans/plan_ascii.md` design decision 9), including real-window `Present()` output. The
 only genuinely subjective thing left is font/grid aesthetic choice, not functional correctness.
 
 ---
@@ -40,7 +40,7 @@ only genuinely subjective thing left is font/grid aesthetic choice, not function
 `Texture2D` (`SetData`/`GetData`, `FromStream`, NPOT, `SaveAsPng`/`SaveAsJpeg`), `SpriteFont`
 (single/multi-glyph, kerning, newlines, default-character fallback, flip/rotation), `BlendState`,
 `SamplerState`, `RenderTarget2D`, and `Viewport`/`PresentationParameters`/`GraphicsDeviceManager`
-all forward directly to the wrapped `SdlRenderer` (`plan_ascii.md` design decision 2) —
+all forward directly to the wrapped `SdlRenderer` (`plans/plan_ascii.md` design decision 2) —
 **`docs/sdl-renderer-2d-completeness.md`'s own completeness table applies here unchanged**, row
 for row, since the game's actual draws land on `gameTarget_` via that exact same, already-audited
 implementation. This document does not repeat that table; it only covers what's genuinely new or
@@ -59,7 +59,7 @@ creates itself is bound exactly as `SDL_RENDERER` already does, unaffected.
 | `ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` | ❌-throws-by-design | Forwards directly to `SdlRenderer`'s own `ThrowNo3D`-driven implementations — not re-declared. Verified by direct call (`Ascii_ThrowNo3D` ctest, `ASCII-60`). |
 | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` | ❌-throws-by-design | Same. |
 | `CreateVertexBuffer`/`CreateIndexBuffer16`/`CreateOcclusionQuery` | ❌-throws-by-design | Same. |
-| `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawInstancedPrimitivesEx` | ❌-throws-by-design (unreachable, not just untested) | Forward with the identical one-line pattern as every other method here; confirmed correct by code review since no real `IVertexBufferRenderer`/`IIndexBufferRenderer` can ever exist to call them with (`CreateVertexBuffer`/`CreateIndexBuffer16` already throw first). See `plan_ascii.md` `ASCII-60`'s own honest scope note. |
+| `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawInstancedPrimitivesEx` | ❌-throws-by-design (unreachable, not just untested) | Forward with the identical one-line pattern as every other method here; confirmed correct by code review since no real `IVertexBufferRenderer`/`IIndexBufferRenderer` can ever exist to call them with (`CreateVertexBuffer`/`CreateIndexBuffer16` already throw first). See `plans/plan_ascii.md` `ASCII-60`'s own honest scope note. |
 | `SupportsDepthStencil()` | `false` | Same 2D-only reality as `SDL_RENDERER`. |
 | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube`/`CreateEffectRenderer` | `nullptr` | Never overridden by `SdlRenderer` either — `AsciiRenderer` correctly leaves them un-overridden too (same net behavior, less code). |
 
@@ -79,7 +79,7 @@ creates itself is bound exactly as `SDL_RENDERER` already does, unaffected.
 
 | Feature | Status | Rationale |
 |---|---|---|
-| Glyph coverage | ✅ (10 characters, by design) | Hand-authored 8×8 pixel data for exactly the 10 characters in `kAsciiGlyphRamp` — not a vendored CP437/font file, avoiding a new asset/license dependency entirely (`plan_ascii.md` design decision 4). The quantizer only ever indexes by ramp position, never by arbitrary character, so a fuller font would be unused scope. Extending to more glyphs (or 8×16) later is a data-only change, no architecture change. |
+| Glyph coverage | ✅ (10 characters, by design) | Hand-authored 8×8 pixel data for exactly the 10 characters in `kAsciiGlyphRamp` — not a vendored CP437/font file, avoiding a new asset/license dependency entirely (`plans/plan_ascii.md` design decision 4). The quantizer only ever indexes by ramp position, never by arbitrary character, so a fuller font would be unused scope. Extending to more glyphs (or 8×16) later is a data-only change, no architecture change. |
 | `BuildAsciiFontAtlas(GraphicsDevice&)` | ✅ | Real `SpriteFont` wrapper for application/diagnostic code that already has a `GraphicsDevice` (e.g. `DrawString` demos) — uses the same "app builds the atlas itself" constructor path every CNA `SpriteFont` test already uses; no XNB pipeline needed. **Not used by `Present()` itself** — see below. |
 | `BuildAsciiFontAtlasImageData()` | ✅ | The lower-level, `GraphicsDevice`-free raw pixel version `Present()` itself uses internally (no XNA-level object available inside the renderer). Includes one extra solid-white slot (`kAsciiSolidGlyphIndex`) used only for background fills, never exposed as a `SpriteFont` character. |
 
@@ -105,7 +105,7 @@ which is the layer a renderer is actually supposed to operate in.
 
 | Feature | Status | Rationale |
 |---|---|---|
-| Works completely unmodified | ✅ | Confirmed exactly as expected (`plan_ascii.md` §0.2) — zero new code needed. A real window (unlike `HEADLESS`/`SOFTWARE`) means SDL's own input event pump and logical-presentation coordinate mapping (`SdlInputBridge`) just work, unaffected by the `gameTarget_` redirect (that redirect only changes which render target draws land on, never the renderer's own configured logical size, which is what mouse coordinate mapping actually keys off). |
+| Works completely unmodified | ✅ | Confirmed exactly as expected (`plans/plan_ascii.md` §0.2) — zero new code needed. A real window (unlike `HEADLESS`/`SOFTWARE`) means SDL's own input event pump and logical-presentation coordinate mapping (`SdlInputBridge`) just work, unaffected by the `gameTarget_` redirect (that redirect only changes which render target draws land on, never the renderer's own configured logical size, which is what mouse coordinate mapping actually keys off). |
 | Verification | ✅ | Two independent proofs: the pre-existing, renderer-agnostic `MouseTest.SetPositionConvertsLogicalToWindowForLetterboxedRenderer`/`SetPositionHandlesLetterboxOffsetNotJustScale` both run and pass unmodified under `CNA_GRAPHICS_RENDERER=ASCII` (checked directly, not just inferred from the full suite); new dedicated `Ascii_Input` ctest (3/3): real window exists, `Mouse`/`Keyboard`/`GamePad.GetState()` don't throw, `Mouse.SetPosition()`/`GetState()` round-trips within 1px through the real coordinate-transform path. |
 | Exposing the glyph-cell the mouse is over | ⬜ not implemented | Considered (`ASCII-51`'s own task text) but not added — no concrete need for it surfaced, and this project avoids speculative API surface added without one. |
 

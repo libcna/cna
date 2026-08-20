@@ -1,6 +1,6 @@
 # --- Magnum / Corrade acquisition for the MAGNUM graphics renderer ---
 #
-# plan_magnum.md MAGNUM-1/MAGNUM-2. Magnum is a real multi-repository C++ graphics middleware
+# plans/plan_magnum.md MAGNUM-1/MAGNUM-2. Magnum is a real multi-repository C++ graphics middleware
 # (mosra/corrade + mosra/magnum), not a single vendorable header like cgltf.h/stb_image.h, so it is
 # acquired the same way BGFX already is: a pinned upstream revision, fetched on demand and built as
 # part of this project's own build tree. Unlike BGFX it needs TWO repositories -- Magnum does not

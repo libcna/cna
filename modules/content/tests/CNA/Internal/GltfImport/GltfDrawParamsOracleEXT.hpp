@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_gltf.md GLTF-008: the L6 rung of the numerical oracle ladder (plan_gltf.md §7.1) -- the
+// plans/plan_gltf.md GLTF-008: the L6 rung of the numerical oracle ladder (plans/plan_gltf.md §7.1) -- the
 // effect parameters a draw actually binds.
 //
 // TEST SCOPE ONLY. Nothing here is CNA public API, CNAEXT surface, or part of
@@ -21,7 +21,7 @@
 // instance, after `Model::Draw` has bound the matrices. What it deliberately does not exercise is
 // `GraphicsDevice`'s own additions to the block after that call (vertex stream bindings,
 // `vertexStart`, `startIndex`): those describe the buffers, not the material, and none of them is
-// a plan_gltf.md §21.1 quantity. Everything §21.1 lists as "Assert at L6" is here.
+// a plans/plan_gltf.md §21.1 quantity. Everything §21.1 lists as "Assert at L6" is here.
 //
 // A few §21.1 rows are effect state that has no `GpuDrawParams` field yet -- the alpha mode,
 // cutoff and double-sidedness `GLTF-228`/`GLTF-229`/`GLTF-231` added, which
@@ -55,7 +55,7 @@ namespace CnaTest::GltfOracle
      * @brief The effect parameters one `ModelMeshPart` would bind for a draw (oracle layer L6).
      *
      * One record per part actually drawn, in `Model::Draw`'s own mesh-then-part order. Fields are
-     * grouped by plan_gltf.md §21.1 row so a failure can name the contract line it broke.
+     * grouped by plans/plan_gltf.md §21.1 row so a failure can name the contract line it broke.
      */
     struct DrawParamsDump
     {
@@ -72,7 +72,7 @@ namespace CnaTest::GltfOracle
         /** @brief The bound effect's fully-qualified .NET type name, e.g. "…Graphics.PbrEffect". */
         std::string effectTypeName;
 
-        // --- plan_gltf.md GLTF-208: the sampler state each texture slot carries -----------------
+        // --- plans/plan_gltf.md GLTF-208: the sampler state each texture slot carries -----------------
 
         /**
          * @brief One entry per texture slot, as the part carries it (`GLTF-202`/`GLTF-203`).
@@ -141,7 +141,7 @@ namespace CnaTest::GltfOracle
         /** @brief `GpuDrawParams::pbrDielectricF90`. */
         float dielectricF90 = 1.0f;
 
-        // --- §21.1 colour space (plan_gltf.md GLTF-210/GLTF-212) ---------------------------------
+        // --- §21.1 colour space (plans/plan_gltf.md GLTF-210/GLTF-212) ---------------------------------
 
         /** @brief `GpuDrawParams::pbrNormalScale` (glTF `normalTexture.scale`). */
         float normalScale = 0.0f;
@@ -223,7 +223,7 @@ namespace CnaTest::GltfOracle
         /**
          * @brief The three directional lights the lit shaders read, direction then diffuse colour.
          *
-         * plan_gltf.md `GLTF-376`. XNA's stock effects light with exactly three directional lights,
+         * plans/plan_gltf.md `GLTF-376`. XNA's stock effects light with exactly three directional lights,
          * and a **disabled** one is expressed as a zero diffuse colour rather than by a flag — the
          * shader adds all three unconditionally, so zero is what makes the addition a no-op.
          * Capturing them is what lets `GLTF-325`'s import-side approximation be checked against
@@ -235,7 +235,7 @@ namespace CnaTest::GltfOracle
         // --- §21.1 "Fog": state a glTF file cannot ask for and must not receive -------------------
 
         /**
-         * @brief `GpuDrawParams::fogEnabled`. plan_gltf.md `GLTF-377`.
+         * @brief `GpuDrawParams::fogEnabled`. plans/plan_gltf.md `GLTF-377`.
          *
          * glTF has no fog. The PBR shaders carry one anyway — `vFogFactor` and `uFogColor` are in
          * the fragment program — because CNA's effects are XNA's, and an XNA application may turn
@@ -297,7 +297,7 @@ namespace CnaTest::GltfOracle
      * first, then asserts the captured palette equals the transforms it pushed.
      *
      * @param model The model whose parts carry `SkinnedPbrEffect`s.
-     * @param skinTransforms The palette, in `paletteIndex` order (plan_gltf.md §15.1.2).
+     * @param skinTransforms The palette, in `paletteIndex` order (plans/plan_gltf.md §15.1.2).
      * @return The number of effects the palette was pushed onto.
      */
     std::size_t ApplyBonePaletteEXT(Microsoft::Xna::Framework::Graphics::Model& model,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_html_dom.md HTMLDOM-72/HTMLDOM-112: runs one of the HTML_DOM renderer's browser test pages in
+# plans/plan_html_dom.md HTMLDOM-72/HTMLDOM-112: runs one of the HTML_DOM renderer's browser test pages in
 # a real browser.
 #
 # The HTML_DOM renderer renders through actual DOM elements and CSS, so a wasm module loaded under
@@ -20,7 +20,7 @@ set -euo pipefail
 BUILD_DIR="${1:-cmake-build-htmldom}"
 PAGE_NAME="${2:-smoke}"
 
-# plan_html_dom.md HTMLDOM-115: host-integration reuses the smoke page's own built .html (no
+# plans/plan_html_dom.md HTMLDOM-115: host-integration reuses the smoke page's own built .html (no
 # separate C++ binary -- both host-page-integration behaviours it exercises are part of the
 # EXISTING constructor flow every htmldom page already goes through), but is driven by a different
 # harness script (htmldom-host-integration-test.mjs, not htmldom-browser-test.mjs below), since it

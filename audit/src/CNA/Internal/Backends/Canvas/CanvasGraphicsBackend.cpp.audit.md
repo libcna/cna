@@ -77,7 +77,7 @@ audited so far.
 
 ### Architecture
 `BlendStateToCompositeOp` being deliberately extracted as a pure, `EM_JS`-free function specifically for
-structural GTest coverage (per its own doc comment, `plan_canvas.md` CANVAS-80) is a good, explicit test-ability
+structural GTest coverage (per its own doc comment, `plans/plan_canvas.md` CANVAS-80) is a good, explicit test-ability
 design choice — the kind of thing that should make this function's own correctness easy to verify without a real
 browser.
 

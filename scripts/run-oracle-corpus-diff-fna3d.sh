@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
-# plan_fna3d.md FNA3D-26: XNA 4.0 conformance measurement for the FNA3D renderer -- the FNA3D twin
+# plans/plan_fna3d.md FNA3D-26: XNA 4.0 conformance measurement for the FNA3D renderer -- the FNA3D twin
 # of scripts/run-oracle-corpus-diff-opengles1.sh.
 #
 # Renders every checked-in scene (tools/xna-oracle/scenes/*.scene) through

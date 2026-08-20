@@ -175,7 +175,7 @@ capability, closes no ticket, and must not be read as evidence that glTF import 
 
 ## Relationship to checkpoint documentation — complementary, not contradictory
 
-The integration head's `NEXT.md` carries a 2026-07-18 handoff recording that `plan_cnj.md` Phase 14
+The integration head's `NEXT.md` carries a 2026-07-18 handoff recording that `plans/plan_cnj.md` Phase 14
 closed a set of glTF import gaps. That set and this document's set are **disjoint or explicitly
 complementary**, so no contradiction is imported:
 

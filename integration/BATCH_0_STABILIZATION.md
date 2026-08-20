@@ -133,7 +133,7 @@ A broader sweep for single-digit and `task N…` forms returned only test-leg la
 | `noxna_devices.md:93` | `N11` | *quotes the header verbatim* | **`N52`** | Tracks the header so the quotation stays faithful |
 | `docs/surface-format-support.md:184` | `N20` | RGBA16F support for HDR | **`N11`** | New `N11` = "Thread `RenderTarget2D`'s `SurfaceFormat` into `CreateRenderTarget2DEx`; EasyGL RGBA16F/32F FBOs". New `N20` is `RenderPipeline`/`HdrSceneTarget` — the orchestrator, not the format |
 | `docs/surface-format-support.md:220` | `N20` | RGBA16F **and** `VK_FORMAT_R16G16B16A16_SFLOAT` render targets | **`N11` EasyGL, `N12` other backends** | The row spans GL *and* Vulkan; the float-RT work is now split `N11` (EasyGL) / `N12` (Vulkan, SdlGpu, Bgfx, WebGPU, D3D11, D3D12) |
-| `plan_postaudit.md:1572-74` | `N50`/`N51`/`N52` + "§4.4 *Geometry & Instancing*" | three adjacent geometry tasks | **`N50`**, **`N51`**, §8 *Geometry helpers* | Old `N51` (instance-VB helper) → new **`N50`** `InstancedRendererEXT`; old `N52` (LOD helper) → new **`N51`** `LodGroupEXT`; old `N50` (`DrawInstancedPrimitives` overload) **has shipped** and is no longer a backlog item, which the repaired sentence now states instead of silently dropping it |
+| `plans/plan_postaudit.md:1572-74` | `N50`/`N51`/`N52` + "§4.4 *Geometry & Instancing*" | three adjacent geometry tasks | **`N50`**, **`N51`**, §8 *Geometry helpers* | Old `N51` (instance-VB helper) → new **`N50`** `InstancedRendererEXT`; old `N52` (LOD helper) → new **`N51`** `LodGroupEXT`; old `N50` (`DrawInstancedPrimitives` overload) **has shipped** and is no longer a backlog item, which the repaired sentence now states instead of silently dropping it |
 
 `PbrMaterial.hpp` is a **public header**, so it was checked explicitly: the citation sits inside the
 class's Doxygen `@brief` block (`/** … */`), not in a macro, symbol, enumerator or any compiled
@@ -153,7 +153,7 @@ audit record. No audit exception was created and `audit/` was not modified.
 
 ### 3.3 The planning branch must **not** receive this repair
 
-`plan_postaudit.md`, `noxna_devices.md`, `docs/surface-format-support.md` and `PbrMaterial.hpp` all
+`plans/plan_postaudit.md`, `noxna_devices.md`, `docs/surface-format-support.md` and `PbrMaterial.hpp` all
 exist on `feature/audit` carrying the **same** old IDs — but `feature/audit`'s `NOXNA.md` is still
 the **pre-`ext`** document, where `N11` *is* `PbrEffect`, `N20` *is* EasyGL RGBA16F, and `N50`/`N51`/
 `N52` *are* the old geometry tasks under §4.4.

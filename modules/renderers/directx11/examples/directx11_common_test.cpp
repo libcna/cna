@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx.md Phase DIRECTX3: unit checks for D3DCommon's format/state/vertex-layout mapping tables
+// plans/plan_dx.md Phase DIRECTX3: unit checks for D3DCommon's format/state/vertex-layout mapping tables
 // (DX-11-fmt/DX-12-state/DX-16-vtx). No device/window/GPU needed -- these are pure functions.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.

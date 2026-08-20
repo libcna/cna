@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-24: real-device proof that binding several render targets at once on
+// plans/plan_diligent.md DILIGENT-24: real-device proof that binding several render targets at once on
 // the Diligent renderer genuinely reaches all of them, through the public XNA API only.
 //
 // Check A -- with two targets bound, Clear() reaches slot 0...

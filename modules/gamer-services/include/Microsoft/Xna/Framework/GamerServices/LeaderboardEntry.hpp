@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Sets the rating value for this entry.
          *
-         * Task 4.3 (plan_net.md Phase 4): real XNA's LeaderboardWriter has no explicit "submit"/
+         * Task 4.3 (plans/plan_net.md Phase 4): real XNA's LeaderboardWriter has no explicit "submit"/
          * "commit" method anywhere in its API surface (real Xbox 360 submission happened via
          * out-of-scope Xbox LIVE session infrastructure) - setting Rating is the closest honest
          * analog to "I'm done configuring this entry, persist it" for a writer-returned entry, so

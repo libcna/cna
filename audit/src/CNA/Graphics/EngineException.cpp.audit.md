@@ -19,7 +19,7 @@ The exception the engine layer throws when a renderer cannot do what was asked.
 
 ## Executive Verdict
 
-Not yet audited. This entry is a work-queue placeholder created by `plan_modern.md` `MOD-12` so the
+Not yet audited. This entry is a work-queue placeholder created by `plans/plan_modern.md` `MOD-12` so the
 engine layer's files are tracked rather than invisible to the audit inventory; the file itself
 landed with its own tests and build verification under the plan row(s) named above.
 

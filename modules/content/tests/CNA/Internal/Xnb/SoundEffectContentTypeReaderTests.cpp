@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-33/XNB-33A + plan_audio.md AUD-06 (2026-07-17 deep audit): SoundEffectReader
+// plans/plan_xnb.md XNB-33/XNB-33A + plans/plan_audio.md AUD-06 (2026-07-17 deep audit): SoundEffectReader
 // support-matrix survey + reader unit tests. Real, externally-produced fixtures (MonoGame's own
 // Tests/Assets/Audio/tone_*.xnb, vendored at tests/assets/xnb/monogame/windows/uncompressed/audio/)
 // cover every WaveFormatEx variant this matrix cares about -- never hand-crafted, since a
 // hand-authored PCM buffer would trivially "pass" without proving the real WAVEFORMATEX byte
 // layout was parsed correctly.
 //
-// Support matrix (plan_audio.md AUD-06, widened 2026-07-17 from the original PCM16-only baseline):
+// Support matrix (plans/plan_audio.md AUD-06, widened 2026-07-17 from the original PCM16-only baseline):
 //   | Format                          | Status                                                |
 //   |---------------------------------|--------------------------------------------------------|
 //   | PCM 16-bit (mono or stereo)      | Supported (direct SoundEffect raw-buffer constructor)  |
@@ -22,7 +22,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 
-// plan_platform.md PLAT-SDL2-8: fourteen cases below are wrapped in `#ifdef SOUND_ENABLED`.
+// plans/plan_platform.md PLAT-SDL2-8: fourteen cases below are wrapped in `#ifdef SOUND_ENABLED`.
 //
 // They assert on what the reader DECODED -- a positive duration, exact consumed byte counts, loop
 // points expressed in decoded frames, and the two diagnostics that only fire once a decode has

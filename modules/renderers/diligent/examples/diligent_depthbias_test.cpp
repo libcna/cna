@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-49: real-device proof that RasterizerState.DepthBias and
+// plans/plan_diligent.md DILIGENT-49: real-device proof that RasterizerState.DepthBias and
 // SlopeScaleDepthBias visibly change a depth-test outcome through the Diligent renderer, not just
 // "the fields are decoded into Dg::RasterizerStateDesc and never crash".
 //
@@ -12,7 +12,7 @@
 // RasterizerState. Under LESS, a second draw at equal depth fails (centre stays red) -- unless a
 // negative bias pulls B's depth toward the camera so it passes (centre turns green).
 //
-// plan_diligent.md DILIGENT-64 note: DiligentRenderer::ApplyRasterizerState() used to pack
+// plans/plan_diligent.md DILIGENT-64 note: DiligentRenderer::ApplyRasterizerState() used to pack
 // DepthBias/SlopeScaleDepthBias into a single signed byte each inside PipelineKey::raster, which
 // silently wrapped sign once a scaled value left [-128, 127] (see
 // DiligentDeviceSelectionTests.cpp's DepthBiasRawUnits* tests for that boundary/sign case, provable

@@ -1,6 +1,6 @@
 #version 450
 
-// Task 1103 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): per-vertex-lit sibling of
+// Task 1103 (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): per-vertex-lit sibling of
 // skinned3d.vert/frag.glsl, mirroring lit_textured3d_vertexlit.vert.glsl's own approach for
 // BasicEffect. Skinning math is unchanged; only WHERE lighting is evaluated moves, from the
 // fragment stage into this vertex stage (after skinning), Gouraud-interpolated across the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-1..LLGL-9: first end-to-end proof for the LLGL graphics renderer. A real SDL
+// plans/plan_llgl.md LLGL-1..LLGL-9: first end-to-end proof for the LLGL graphics renderer. A real SDL
 // window, a real LLGL render system (whichever module the runtime selection picked), a real swap
 // chain, and a real 60-frame Clear()+Present() loop.
 //

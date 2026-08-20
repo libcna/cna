@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_software.md Phase S5/S6 (SOFTWARE-40..43, 50/51): pixel shading and effect/SpriteBatch
+// plans/plan_software.md Phase S5/S6 (SOFTWARE-40..43, 50/51): pixel shading and effect/SpriteBatch
 // integration -- texture sampling, diffuseColor modulation, Opaque/AlphaBlend, and a real,
 // pixel-correct SpriteBatch path, all going through the normal GraphicsDevice public API.
 //

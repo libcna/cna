@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof #4 -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof #4 -- reuses
 // examples/easygl_skinnedeffect_golden_test.cpp's own SkinnedEffect scene verbatim ("quad A":
 // w0=1, i0=0 -> Bones[0]=Identity -> stays at authored NDC x: -1.0..-0.5, EnableDefaultLighting())
 // and its own golden PNG (examples/golden/easygl_skinnedeffect_golden_test.png).

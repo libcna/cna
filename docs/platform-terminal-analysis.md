@@ -8,7 +8,7 @@
 > XNA's input model faithfully on every terminal emulator, and it drives the whole design. Nothing
 > here requires a new renderer, a new graphics API, or any change to the XNA-facing API.
 >
-> This analysis is written against the platform contract in `plan_platform.md`. A terminal
+> This analysis is written against the platform contract in `plans/plan_platform.md`. A terminal
 > platform is only possible *because* of that separation: today every path to the screen goes
 > through SDL3, so there is nowhere for a TTY implementation to attach.
 
@@ -19,7 +19,7 @@
 A `TerminalPlatform` is not a novelty mode. It is the **strongest available proof that the
 platform contract is not SDL-shaped**.
 
-`plan_platform.md` Phase 8 introduces `HeadlessPlatform` as a second implementation, precisely
+`plans/plan_platform.md` Phase 8 introduces `HeadlessPlatform` as a second implementation, precisely
 because "a contract with one implementation is just indirection". But `HeadlessPlatform` proves
 less than it appears to: it implements every method by doing nothing, so a contract shaped
 entirely around SDL3's assumptions would still pass. A terminal implementation cannot cheat. It
@@ -267,4 +267,4 @@ The cost is genuinely low, because the hard part — turning a rendered frame in
 — is already written, tested, and in the tree. What is new is a presenter, a termios/ANSI I/O
 layer, and an honest keyboard story.
 
-Task breakdown: `plan_platform.md` Phase 10 (PLAT-129 … PLAT-140).
+Task breakdown: `plans/plan_platform.md` Phase 10 (PLAT-129 … PLAT-140).

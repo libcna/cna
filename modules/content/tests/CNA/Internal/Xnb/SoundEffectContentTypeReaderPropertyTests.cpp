@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_audio.md AUD-06-022: property-based XNB WAVEFORMATEX mutation tests. Unlike
+// plans/plan_audio.md AUD-06-022: property-based XNB WAVEFORMATEX mutation tests. Unlike
 // SoundEffectContentTypeReaderTests.cpp's individual unit tests (each hand-picks one meaningful
 // value per field) or XnbContainerFuzzTests.cpp's whole-file random byte-flip fuzzing (which can
 // miss a narrow single-field edge case by chance -- see AUD-06-024's follow-up fix, found by a

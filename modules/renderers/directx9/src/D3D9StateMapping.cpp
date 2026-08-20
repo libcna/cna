@@ -1,4 +1,4 @@
-// plan_dx9.md Phase D9-2 (D9-21).
+// plans/plan_dx9.md Phase D9-2 (D9-21).
 #include "CNA/Internal/Renderers/DirectX9/D3D9StateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"

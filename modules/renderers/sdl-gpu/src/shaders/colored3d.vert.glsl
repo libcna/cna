@@ -7,7 +7,7 @@ layout(location = 1) in vec4 inColor;
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec4 fragFog;    // REMED-GFX-009 xyz=FogColor, w=keep-factor
 
-// plan_sdlgpu.md: vertex-stage uniform buffers live in set 1 (SDL_gpu's SPIR-V graphics-pipeline
+// plans/plan_sdlgpu.md: vertex-stage uniform buffers live in set 1 (SDL_gpu's SPIR-V graphics-pipeline
 // convention). This 128-byte layout mirrors VulkanRenderer::FillExtPushConst() byte-for-
 // byte (pushed via SDL_PushGPUVertexUniformData, not a raw Vulkan push constant) so every 3D
 // shader in this family shares one fill function and one uniform shape. Fog (REMED-GFX-009) is

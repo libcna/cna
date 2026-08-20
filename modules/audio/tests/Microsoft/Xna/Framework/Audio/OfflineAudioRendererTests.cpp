@@ -9,7 +9,7 @@ using namespace CNA::Test::Audio;
 
 namespace
 {
-    // ~0.1% tolerance, matching plan_audio.md's "Global numerical gates" initial calibration
+    // ~0.1% tolerance, matching plans/plan_audio.md's "Global numerical gates" initial calibration
     // tone frequency gate.
     constexpr double kFrequencyTolerance = 0.001;
 
@@ -47,7 +47,7 @@ TEST(OfflineAudioRendererTest, SineWaveProducesExpectedFrameCountAndNoNaNs)
     EXPECT_GT(MeasureRms(result.samples, 1), 0.1);
 }
 
-// 440 Hz at neutral settings must remain approximately 440 Hz (plan_audio.md's own required
+// 440 Hz at neutral settings must remain approximately 440 Hz (plans/plan_audio.md's own required
 // example: "A 440 Hz source played with neutral settings should remain approximately 440 Hz and
 // retain the correct duration").
 TEST(OfflineAudioRendererTest, Calibration440HzMonoAtNativeRateMeasuresCorrectFrequency)

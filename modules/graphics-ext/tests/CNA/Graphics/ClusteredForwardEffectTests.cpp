@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2045: shading a surface with every light its cluster holds.
+// plans/plan_modern.md MOD-2045: shading a surface with every light its cluster holds.
 //
 // The claim is that a fragment finds its own cluster and walks the list -- so the tests that matter
 // are the ones a wrong cluster would fail: a light placed where the geometry is has to light it, a

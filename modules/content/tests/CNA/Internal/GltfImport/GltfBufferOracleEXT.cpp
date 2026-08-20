@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-007. See GltfBufferOracleEXT.hpp for what this layer is for and why it is test
+// plans/plan_gltf.md GLTF-007. See GltfBufferOracleEXT.hpp for what this layer is for and why it is test
 // scope only.
 
 #include "GltfBufferOracleEXT.hpp"
@@ -85,7 +85,7 @@ namespace CnaTest::GltfOracle
         VertexLayout layout;
         layout.stride = stride;
         layout.known = true;
-        // plan_gltf.md §2.3. Written out per stride rather than composed from rules, because that
+        // plans/plan_gltf.md §2.3. Written out per stride rather than composed from rules, because that
         // is how every renderer's own ApplyLayout switch is written and a divergence between the
         // two is precisely what this oracle has to be able to see.
         switch (stride)
@@ -112,7 +112,7 @@ namespace CnaTest::GltfOracle
                                  {"BlendWeight", 32, 16}, {"BlendIndices", 48, 4}, {"Color", 52, 4}};
                 break;
             case 60:
-                // plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved as a stride discriminator
+                // plans/plan_gltf.md GLTF-462: the four bytes GLTF-182 reserved as a stride discriminator
                 // are the packed COLOR_0 slot; an uncoloured primitive fills them with opaque white.
                 layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"Tangent", 24, 16},
                                  {"TextureCoordinate", 40, 8}, {"TextureCoordinate1", 48, 8},

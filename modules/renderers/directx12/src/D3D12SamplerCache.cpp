@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX13 (DX-119).
+// plans/plan_dx.md Phase DX13 (DX-119).
 #include "CNA/Internal/Renderers/DirectX12/D3D12SamplerCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 

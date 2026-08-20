@@ -1306,7 +1306,7 @@ TEST_F(SoundEffectInstanceTest, PanCrossfeedIgnoresNonStereoChannelCounts)
     EXPECT_FLOAT_EQ(pcm[0], 5.0f);
 }
 
-// Proves the RFC-1 design claim that motivated this whole feature (plan_audio.md P10-PAN-003):
+// Proves the RFC-1 design claim that motivated this whole feature (plans/plan_audio.md P10-PAN-003):
 // filter and pan crossfeed can share the single SDL3_mixer cooked-callback slot without one
 // clobbering the other, since both are independent, sequential float-PCM transforms on the same
 // buffer (filter first, then crossfeed -- ProcessFilterState's ordering).
@@ -1330,7 +1330,7 @@ TEST_F(SoundEffectInstanceTest, PanCrossfeedComposesWithFilterInTheSharedCallbac
     EXPECT_NEAR(pcm[1], 0.0f, 1e-6f);
 }
 
-// "Needs verification" (CHECKLIST.md/plan_audio.md T-4C): filter coefficient locking follows
+// "Needs verification" (CHECKLIST.md/plans/plan_audio.md T-4C): filter coefficient locking follows
 // SDL3_mixer's documented practice (MIX_LockMixer/UnlockMixer around FilterState's kind/
 // frequency/oneOverQ, matching "the SDL audio device thread holds this same lock while actual
 // mixing is in progress") but had never been stress-tested under real concurrency. Unlike the
@@ -1341,7 +1341,7 @@ TEST_F(SoundEffectInstanceTest, PanCrossfeedComposesWithFilterInTheSharedCallbac
 // INTERNAL_apply{Low,High,Band}PassFilter setters from a second thread while a real background
 // mixing thread (spun up by Play(), even under the SDL dummy driver -- see P9-BUILD-007's
 // comment) is concurrently invoking the real SDL3_mixer cooked callback against the very same
-// FilterState. Intended to be run under ThreadSanitizer (see plan_audio.md's P9-CATEGORY-011
+// FilterState. Intended to be run under ThreadSanitizer (see plans/plan_audio.md's P9-CATEGORY-011
 // follow-up note for the exact TSan build/run commands and result) -- under a normal ASan/UBSan
 // or unsanitized build this only checks for crashes/hangs, not data races.
 TEST_F(SoundEffectInstanceTest, ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread)
@@ -1679,7 +1679,7 @@ TEST(SoundEffectInstanceFilterMathTest, ComposedPanIsCenteredWhenEmitterDirectly
     EXPECT_NEAR(ComposedPan(Vector3(0.0f, 0.0f, 10.0f)), 0.0f, 1e-6f);
 }
 
-// P10-3D-003: emitter directly above the listener. Previously entirely untested (plan_audio.md's
+// P10-3D-003: emitter directly above the listener. Previously entirely untested (plans/plan_audio.md's
 // gap note) -- vertical displacement is orthogonal to the listener's right axis by construction,
 // so it must produce zero rightward projection and pan dead center, never a divide-by-zero or
 // stray nonzero value.
@@ -1998,7 +1998,7 @@ TEST_F(SoundEffectInstanceTest, LowPassFilterSurvivesMoveConstruction)
 // observe the real decoded PCM in playback order directly, and doing so here shows the intro
 // plays exactly once, then only the loop region repeats -- matching XNA/XAudio2's
 // LoopBegin/LoopLength semantics exactly, via nothing more than the LOOP_START_FRAME_NUMBER +
-// MAX_FRAME_NUMBER combination already in place. See plan_audio.md's P10-LOOP-003/004 note for
+// MAX_FRAME_NUMBER combination already in place. See plans/plan_audio.md's P10-LOOP-003/004 note for
 // the corrected finding and the now-stale CHECKLIST.md/docs rows this invalidates.
 namespace
 {

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MS-PL
 #
-# plan_binding.md CBIND-041: build and run the C example the way a consumer would.
+# plans/plan_binding.md CBIND-041: build and run the C example the way a consumer would.
 #
 # Every other test in this suite builds inside the CNA source tree, where the headers, the target
 # and the library are all right there. That proves nothing about the thing a newcomer actually

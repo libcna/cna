@@ -4,7 +4,7 @@
 cna_add_renderer(${CNA_GDI_SOFTWARE_SOURCES})
 target_link_libraries(${RENDERER_TARGET} PRIVATE gdi32 cna_renderer_software_headers)
 
-# GDI-078: report the actual GDI archive boundary at configure time, so plan_gdi.md/NEXT_gdi.md
+# GDI-078: report the actual GDI archive boundary at configure time, so plans/plan_gdi.md/NEXT_gdi.md
 # source/object counts can be checked against generated evidence instead of a copied number.
 list(LENGTH CNA_GDI_SOFTWARE_SOURCES CNA_GDI_SHARED_SOURCE_COUNT)
 math(EXPR CNA_GDI_ARCHIVE_TOTAL "${CNA_GDI_SHARED_SOURCE_COUNT} + 3")

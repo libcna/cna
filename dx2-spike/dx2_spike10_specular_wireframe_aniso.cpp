@@ -1,4 +1,4 @@
-// DX2-0-followup spike (plan_dx2.md Phase O9): validate three pieces of IDirect3DDevice2 surface
+// DX2-0-followup spike (plans/plan_dx2.md Phase O9): validate three pieces of IDirect3DDevice2 surface
 // this backend has NOT yet exercised, needed to decide Phase O9's scope honestly rather than
 // assume:
 //   Test C: D3DRENDERSTATE_SPECULARENABLE + D3DTLVERTEX::specular -- the real fixed-function

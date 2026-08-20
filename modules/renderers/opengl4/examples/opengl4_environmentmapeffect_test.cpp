@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-21: EnvironmentMapEffect for the OpenGL4 graphics renderer -- adds a
+// plans/plan_opengl4.md GL4-21: EnvironmentMapEffect for the OpenGL4 graphics renderer -- adds a
 // dedicated env_map3d GLSL 410 core program (stride 32, VertexPositionNormalTexture), selected
 // by BindProgramForStride instead of lit_textured3d when GpuDrawParams::envMapping is set. Ported
 // from EasyGLRenderer::EnsureEnvMapped3DProgram (near-verbatim GLSL ES 300 -> 410 core

@@ -13,7 +13,7 @@
 // auto-generates mip content from level 0 in FNA/XNA itself), this WebGPU-only behaviour DOES
 // generate real mip content for a plain Texture2D/TextureCube automatically whenever mipMap=true
 // AND content is written to level 0 (at construction, or any later level-0 SetData()/
-// UpdatePixels() call). See plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full
+// UpdatePixels() call). See plans/plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full
 // investigation.
 //
 // Uses IGraphicsRenderer/ImageData directly (bypassing the XNA Texture2D/TextureCube layer),

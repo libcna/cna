@@ -1,4 +1,4 @@
-// plan_pixijs.md PIXIJS-80/PIXIJS-85: the PIXIJS renderer's real-browser pixel suite.
+// plans/plan_pixijs.md PIXIJS-80/PIXIJS-85: the PIXIJS renderer's real-browser pixel suite.
 //
 // This is not a "did it crash" smoke test. Every check below reads real pixels back from a real
 // WebGL context and compares them against a value derived from XNA's own documented arithmetic, so
@@ -153,7 +153,7 @@ protected:
         premultipliedTexture_ = std::make_unique<Texture2D>(makeTexture(1, 1, {128, 50, 25, 128}));
         straightTexture_ = std::make_unique<Texture2D>(makeTexture(1, 1, {255, 100, 50, 128}));
 
-        // plan_pixijs.md PIXIJS-60: a one-glyph SpriteFont ('A', a 4x4 fully-opaque atlas cell) --
+        // plans/plan_pixijs.md PIXIJS-60: a one-glyph SpriteFont ('A', a 4x4 fully-opaque atlas cell) --
         // same fixture htmldom_smoke_test.cpp's own HTMLDOM-38 uses.
         std::vector<std::uint8_t> glyphPixels(4 * 4 * 4, 0);
         for (std::size_t i = 0; i < glyphPixels.size(); i += 4)

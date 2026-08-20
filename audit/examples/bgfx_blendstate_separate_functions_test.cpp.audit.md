@@ -62,7 +62,7 @@ shared `MakeState()` helper (lines 53-63) and the fixed `Background/Source` colo
 Confirmed via direct read of `BgfxGraphicsBackend.cpp:1572-1596` that, prior to Task 923,
 `ApplyBlendState` ignored its `colorBlendFunc`/`alphaBlendFunc` parameters entirely (ADD was always
 implicit); the current code correctly threads both through `BGFX_STATE_BLEND_EQUATION_SEPARATE`
-(line 1592-1594). This is independently corroborated by `plan_graphics.md` row 923's own
+(line 1592-1594). This is independently corroborated by `plans/plan_graphics.md` row 923's own
 `git stash`-revert verification note (*"Check A failed exactly as predicted (`(250,250,0)` instead
 of `(150,0,0)`) … Check B coincidentally still passed"*), which this audit treats as strong,
 concrete evidence the fix and this test's Check A genuinely correspond — not just a plausible-sounding
@@ -105,7 +105,7 @@ independently") is asymmetrically verified.
 - Why it matters: a reader of this file's header comment (or the CTest name
   `Bgfx_BlendState_SeparateFunctions`) would reasonably conclude both halves of "separate functions"
   are pixel-verified; only the color half is. This project's own commit history for the closely
-  related Task 923 (`plan_graphics.md` row 923) explicitly acknowledges this exact limitation for the
+  related Task 923 (`plans/plan_graphics.md` row 923) explicitly acknowledges this exact limitation for the
   blend-*factor* analogue of this same problem (*"this project has no established, verified way to
   read the alpha channel back from the backbuffer directly"*) and, notably, chose to **delete** an
   attempted alpha-observing test there rather than ship one that reported the same result whether the
@@ -117,7 +117,7 @@ independently") is asymmetrically verified.
   exercises for the color channel were independently confirmed correct.
 - Related files: `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp:1592-1594` (the
   `alphaBlendFunc`-half of the fix, confirmed present but not independently pixel-verified by any test
-  found in this shard); `plan_graphics.md` row 923 (documents the closely analogous, already-known
+  found in this shard); `plans/plan_graphics.md` row 923 (documents the closely analogous, already-known
   alpha-channel-readback limitation for the *factor* case).
 - Suggested future action (not implemented by this audit): either soften the header comment to
   precisely state what is actually verified (`ColorBlendFunction` is genuinely independent of

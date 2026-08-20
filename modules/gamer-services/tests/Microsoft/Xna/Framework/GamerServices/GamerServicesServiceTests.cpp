@@ -104,7 +104,7 @@ TEST(GuideTest, SimulateTrialModeGetSet) {
     EXPECT_FALSE(Guide::getSimulateTrialModeProperty());
 }
 
-// Post-plan_net.md remediation (2026-07-18): IsVisible now reflects real pending
+// Post-plans/plan_net.md remediation (2026-07-18): IsVisible now reflects real pending
 // message-box/keyboard-input state (decision 1a - real observable behavior over a PC no-op stub,
 // now that both overlays are genuinely real). With nothing pending, it still reads false, and the
 // setter is still a no-op - only the "always" part of the old test name/assumption was wrong.
@@ -379,7 +379,7 @@ TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorre
     delete result;
 }
 
-// --- Guide keyboard input remediation (post-plan_net.md independent audit, 2026-07-18) ---
+// --- Guide keyboard input remediation (post-plans/plan_net.md independent audit, 2026-07-18) ---
 //
 // An independent post-completion audit found BeginShowKeyboardInput's title/description
 // parameters were silently discarded, UsePasswordMode was stored but never used, IsVisible never

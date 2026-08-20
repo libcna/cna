@@ -23,7 +23,7 @@ namespace Microsoft::Xna::Framework::Media
     std::vector<MediaSource*> MediaSource::GetAvailableMediaSources()
     {
         // No real "device enumeration" concept on desktop -- there is exactly one real source,
-        // the local device itself (plan_media.md MEDIA-61; no FNA logic to port, see plan §0).
+        // the local device itself (plans/plan_media.md MEDIA-61; no FNA logic to port, see plan §0).
         return { new MediaSource(MediaSourceType::LocalDevice, "Local Device") };
     }
 

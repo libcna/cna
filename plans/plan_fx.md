@@ -1366,9 +1366,9 @@ to them before FX-010 because they determine public ABI and backend ownership:
 ## 13. Source references used by this analysis
 
 - CNA implementation and tests at the planning baseline named at the top of this file, especially
-  [`Effect.cpp`](modules/graphics/src/Xna/Effect.cpp),
-  [`ThirdPartyFNA3D.cmake`](cmake/ThirdPartyFNA3D.cmake), and the
-  [FNA3D effect fixture provenance](modules/renderers/fna3d/effects/README.md).
+  [`Effect.cpp`](../modules/graphics/src/Xna/Effect.cpp),
+  [`ThirdPartyFNA3D.cmake`](../cmake/ThirdPartyFNA3D.cmake), and the
+  [FNA3D effect fixture provenance](../modules/renderers/fna3d/effects/README.md).
 - FNA's [`Effect`](https://github.com/FNA-XNA/FNA/blob/master/src/Graphics/Effect/Effect.cs) and
   [`EffectReader`](https://github.com/FNA-XNA/FNA/blob/master/src/Content/ContentReaders/EffectReader.cs)
   implementations as the compatibility oracle.

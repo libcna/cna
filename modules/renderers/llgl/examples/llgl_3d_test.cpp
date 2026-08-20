@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-24: the colour-only 3D path, asserted against real pixels.
+// plans/plan_llgl.md LLGL-24: the colour-only 3D path, asserted against real pixels.
 //
 // Every draw goes through the public API -- BasicEffect with VertexColorEnabled, a real
 // VertexBuffer, GraphicsDevice::DrawPrimitives / DrawIndexedPrimitives -- so this exercises the

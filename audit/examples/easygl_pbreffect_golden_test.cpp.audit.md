@@ -15,7 +15,7 @@
   XNA 4.0 API — real XNA predates the PBR content pipeline") — a CNA-specific glTF-era extension, correctly not
   judged against FNA. Checked instead against the glTF 2.0 spec's own reference BRDF (Appendix B.3.2-B.3.4), which
   the production shader's own comment (`EasyGLGraphicsBackend.cpp` line 3663-3664) explicitly claims to implement.
-- Main related tests: this file itself (plan_cnj.md CNB-58/60, Phase 13A); shares its golden-image pattern with
+- Main related tests: this file itself (plans/plan_cnj.md CNB-58/60, Phase 13A); shares its golden-image pattern with
   `easygl_skinnedpbreffect_golden_test.cpp` (same shard, not in this batch) and `easygl_basiceffect_golden_test.cpp`.
 
 ## Purpose

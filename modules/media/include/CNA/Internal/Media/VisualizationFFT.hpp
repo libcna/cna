@@ -7,7 +7,7 @@
 namespace CNA::Internal::Media
 {
     /// Minimal from-scratch radix-2 FFT used to turn captured PCM into the frequency-domain half
-    /// of Microsoft::Xna::Framework::Media::VisualizationData (plan_media.md MEDIA-187).
+    /// of Microsoft::Xna::Framework::Media::VisualizationData (plans/plan_media.md MEDIA-187).
     ///
     /// Deliberately dependency-free: XNA exposes only 256 frequency bins for visualization, so a
     /// textbook 512-point radix-2 transform is entirely sufficient and pulling in a third-party

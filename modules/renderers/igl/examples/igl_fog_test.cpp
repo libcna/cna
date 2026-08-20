@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-38/IGL-55: BasicEffect fog pixel conformance -- FNA's fogVector view-space
+// plans/plan_igl.md IGL-38/IGL-55: BasicEffect fog pixel conformance -- FNA's fogVector view-space
 // formulation (see modules/graphics/src/Xna/BasicEffect.cpp's REMED-GFX-010 comment).
 //
 // With World=View=identity, fogVector reduces so that dot(objectPosition, fogVector) equals

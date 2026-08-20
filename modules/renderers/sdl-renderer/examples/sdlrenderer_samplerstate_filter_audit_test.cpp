@@ -5,7 +5,7 @@
 // Point-vs-Linear mapping to SDL_ScaleMode was already verified correct for the exact 0/1 case
 // (Task 688), and TextureAddressMode's Clamp/Wrap/Mirror situation was already thoroughly audited
 // (Task 685/686/687 -- Clamp is correct by accident of SDL_RenderTexture's fixed edge behavior,
-// Wrap/Mirror are BLOCKED pending a project-owner decision, see plan_graphics.md rows 686/687).
+// Wrap/Mirror are BLOCKED pending a project-owner decision, see plans/plan_graphics.md rows 686/687).
 //
 // REAL BUG FOUND AND FIXED here: TextureFilter has 9 values encoding separate min/mag/mip filter
 // components (see TextureFilter.hpp's doc comments: "shrink" = minification, "expand" =

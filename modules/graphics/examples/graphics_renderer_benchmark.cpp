@@ -6,7 +6,7 @@
 // CANVAS/EasyGL/HTML_DOM reporting contract. On native hosts it is also the PLAT-7/PLAT-120 fixed
 // scene: build the target once per selected renderer and compare its raw per-frame JSON samples.
 //
-// plan_html_dom.md HTMLDOM-111 (reopens HTMLDOM-89/92/99's own conclusions): an earlier version of
+// plans/plan_html_dom.md HTMLDOM-111 (reopens HTMLDOM-89/92/99's own conclusions): an earlier version of
 // this file (and htmldom_stress_test.cpp's own HTMLDOM-89 benchmark) stopped its timer immediately
 // after SpriteBatch::End(), before Present() and before Chromium's own deferred style/layout/
 // paint/compositor work -- structurally favouring DOM style submission (cheap, deferred) over
@@ -105,7 +105,7 @@ namespace
 #if defined(__EMSCRIPTEN__)
     EM_JS(double, JsNow, (), { return performance.now(); });
 
-    // plan_html_dom.md HTMLDOM-111: raw per-frame end-to-end samples for the phase currently
+    // plans/plan_html_dom.md HTMLDOM-111: raw per-frame end-to-end samples for the phase currently
     // measuring, so the published average is independently re-derivable, not just asserted.
     EM_JS(void, JsPushSample, (const char* phase, double ms), {
         if (!window.__cnaBenchSamples) window.__cnaBenchSamples = [];
@@ -125,7 +125,7 @@ namespace
         // analogue of what the old single "avgMs" used to mean.
         window.__cnaBenchAvgMs = churnEndToEndMs;
         window.__cnaBenchUserAgent = (typeof navigator !== 'undefined') ? navigator.userAgent : "";
-        // plan_html_dom.md HTMLDOM-111: never let a hardware-GPU WebGL result and a software
+        // plans/plan_html_dom.md HTMLDOM-111: never let a hardware-GPU WebGL result and a software
         // (SwiftShader) one be compared without saying so. A real query, via a throwaway canvas
         // unrelated to whichever CNA renderer actually built this binary -- any WebGL context in
         // the same browser session reports the same renderer string, so this works identically
@@ -207,7 +207,7 @@ class GraphicsRendererBenchmark : public Game
     std::vector<double> churnSubmissionSamples_;
     std::vector<double> churnEndToEndSamples_;
 
-    // plan_html_dom.md HTMLDOM-111: draws kSpriteCount sprites, all moving every frame (this
+    // plans/plan_html_dom.md HTMLDOM-111: draws kSpriteCount sprites, all moving every frame (this
     // renderer's own documented sweet spot on the position side regardless of workload). `churnTint`
     // selects which of the two workloads this call belongs to: false = "stable tint" (per-sprite
     // colour is a pure function of `i` alone -- fixed across every frame, the OTHER half of the

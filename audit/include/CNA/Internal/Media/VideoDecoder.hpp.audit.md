@@ -14,7 +14,7 @@ contexts, resampler, pending-packet retry state, and stream-metadata accessors.
 
 ## Executive Verdict
 Healthy -- this header (and its paired .cpp) show an unusually mature audit history: numerous in-line
-comments cite specific prior external-code-review findings (plan_media.md MEDIA-38/39/40/94/128/130/131/
+comments cite specific prior external-code-review findings (plans/plan_media.md MEDIA-38/39/40/94/128/130/131/
 146/147/154/155/158/159/160/162/163/164/167/169) with the exact reasoning for each fix, not just a task ID.
 One new MEDIUM-severity finding from this pass -- see the paired `.cpp`'s report.
 

@@ -184,7 +184,7 @@ unmodified public surface. Drawing reuses `ISpriteBatchRenderer`'s established a
 with-safe-default pattern: a new `DrawMeshEXT` method, implemented only by `SkiaSpriteBatchRenderer`,
 reached from a new public `SpriteBatch::DrawMeshEXT` (CNAEXT) restricted to `SpriteSortMode::
 Immediate`, since a mesh draw does not participate in the shared deferred sort/batch queue that
-every ordinary `Draw()` overload's quad-shaped `SpriteInfo` does. See `plan_skia.md`'s own SKIA-157
+every ordinary `Draw()` overload's quad-shaped `SpriteInfo` does. See `plans/plan_skia.md`'s own SKIA-157
 row for the full acceptance evidence, including a real integration bug the new public test caught:
 the GLSL translator (SKIA-155) preserved each `sampler2D` uniform's original GLSL name, but the mesh
 ABI requires the reserved `cnaTexture0`-`7` child-naming convention -- fixed in the translator, not

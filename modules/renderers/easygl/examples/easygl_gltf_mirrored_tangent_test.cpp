@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-176: negative-determinant placement must correct tangent handedness per draw.
+// plans/plan_gltf.md GLTF-176: negative-determinant placement must correct tangent handedness per draw.
 //
 // The fixture shares one local (+X,+1) tangent buffer between an ordinary node and
 // T(3,0,0)*S(-1,1,1). The mirrored draw transforms T to -X and must also multiply tangent.w by

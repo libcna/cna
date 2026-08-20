@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Transform each **root** bone's own local transform composes against; identity for
          * a bone with a parent, and identity throughout for a skeleton that has no such context.
          *
-         * @note CNAEXT — plan_gltf.md GLTF-245/GLTF-247 (Phase 5). A skeleton imported from glTF
+         * @note CNAEXT — plans/plan_gltf.md GLTF-245/GLTF-247 (Phase 5). A skeleton imported from glTF
          * hangs somewhere in a larger scene: its root joints may have scene ancestors that are not
          * themselves joints, and the skinned mesh's own node transform has to be cancelled rather
          * than applied. Both are properties of the space *above* the skeleton, so they cannot be
@@ -75,13 +75,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief The scene-node index of the rig root the file declares, or -1 when it declares none.
          *
-         * @note CNAEXT — plan_gltf.md GLTF-249. glTF's `skin.skeleton` names the rig's semantic
+         * @note CNAEXT — plans/plan_gltf.md GLTF-249. glTF's `skin.skeleton` names the rig's semantic
          * root: the node an editor would show as "the armature", and the one to attach a prop or a
          * whole character to. It is carried here purely so an application can *find* that node,
          * indexed into `Model::Bones` like every other scene node (§15.1.2's `sceneNodeIndex`).
          *
          * It has **no** effect on any transform CNA computes, and must never acquire one:
-         * plan_gltf.md §15.1.1 records that truncating a joint's ancestry walk at this node
+         * plans/plan_gltf.md §15.1.1 records that truncating a joint's ancestry walk at this node
          * reproduces defect D8 — one dropped ancestor translation displaced every skinned vertex
          * by 100 units. Joint global transforms come from the complete scene ancestry regardless
          * of where this points.
@@ -184,7 +184,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief Animation clips whose tracks drive a `Model`'s own bones rather than a joint palette.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-294`). Attached to
+     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-294`). Attached to
      * `Model::Tag`, the same place `SkinningData` and `MorphTargetDataEXT` already live. This is
      * rigid (non-joint) animation: a door, a turntable, a clock hand — motion glTF expresses by
      * animating an ordinary scene node, which CNA silently dropped before `GLTF-293` because
@@ -209,7 +209,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief Poses a model's bones from a scene-node clip at a point in time.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-294`). Writes each track's
+     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-294`). Writes each track's
      * interpolated local transform onto the `ModelBone` its index names, leaving every untracked
      * bone at whatever transform it already has — so a clip animating one node of a large model
      * does not disturb the rest. `Model::CopyAbsoluteBoneTransformsTo` then composes the hierarchy
@@ -230,7 +230,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief Poses a skinned model in its bind pose, so it is drawable before any clip plays.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-262`). A skinned effect's
+     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-262`). A skinned effect's
      * bone palette defaults to `MaxBones` identity matrices, which is not a neutral value: it
      * means "every joint matrix is the identity", so a mesh drawn that way is rendered in joint
      * space rather than in its bind pose, and glTF's own `inverse(globalTransform(meshNode))`

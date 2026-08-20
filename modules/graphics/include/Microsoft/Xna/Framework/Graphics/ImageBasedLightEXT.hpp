@@ -21,7 +21,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      * failure this struct exists to prevent -- it does not look like a mismatch, it looks like the
      * material's roughness is wrong.
      *
-     * **In the XNA namespace, deliberately** (plan_modern.md `MOD-1222`). The alternative was
+     * **In the XNA namespace, deliberately** (plans/plan_modern.md `MOD-1222`). The alternative was
      * `CNA::Graphics`, which would have made an always-compiled XNA header include a header that
      * exists only under `CNA_CNAEXT` -- a layering inversion that also makes an effect's public
      * surface depend on a build flag. Two neighbours here, `ShadowCascadeStateEXT` and

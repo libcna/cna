@@ -1,4 +1,4 @@
-# LZX differential-test reference outputs (plan_xnb.md XNB-30A)
+# LZX differential-test reference outputs (plans/plan_xnb.md XNB-30A)
 
 These two files are the exact decompressed bytes produced by **FNA's own, unmodified
 `src/Content/LzxDecoder.cs`**, run via Mono against the compressed payloads inside the sibling

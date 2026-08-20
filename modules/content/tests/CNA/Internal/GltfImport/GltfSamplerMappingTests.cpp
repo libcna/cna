@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-202/GLTF-203: glTF sampler state, and the §14.2 mapping table.
+// plans/plan_gltf.md GLTF-202/GLTF-203: glTF sampler state, and the §14.2 mapping table.
 //
 // `cgltf_sampler`, `mag_filter` and `wrap_s` had ZERO occurrences in CNA. Every imported texture
 // was drawn with whatever `SamplerState` the device happened to have, which defaults to
@@ -307,7 +307,7 @@ TEST(GltfSamplerMapping, ConvertedSpecularGlossinessDiffuseKeepsItsTextureState)
     EXPECT_EQ("baseColorTexture", converted.mipmappedSamplerMapsWithoutMipChainEXT.front());
 }
 
-// --- plan_gltf.md GLTF-060 / GLTF-097: attribute count agreement, as a shared assertion ------------
+// --- plans/plan_gltf.md GLTF-060 / GLTF-097: attribute count agreement, as a shared assertion ------------
 //
 // GLTF-097 asks for the same check GLTF-060 landed, stated once and applied to every stream rather
 // than to the pair someone happened to think of. It is one assertion in ExtractMesh, driven by the
@@ -392,7 +392,7 @@ TEST(GltfSamplerMapping, AttributeCountAgreementCoversEveryDeclaredStreamNotJust
            "nothing";
 }
 
-// --- plan_gltf.md GLTF-214: vertex colours are linear, and stay that way ---------------------------
+// --- plans/plan_gltf.md GLTF-214: vertex colours are linear, and stay that way ---------------------------
 //
 // glTF §3.7.2.1 declares COLOR_0 a LINEAR value -- unlike baseColorTexture and emissiveTexture,
 // which §3.9.2 declares sRGB-encoded. So the colour-space work GLTF-210 landed must NOT touch it:

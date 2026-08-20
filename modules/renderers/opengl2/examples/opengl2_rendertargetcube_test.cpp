@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact RenderTargetCube/FBO proof for the native OpenGL 2.1 graphics
+// plans/plan_opengl2.md: pixel-exact RenderTargetCube/FBO proof for the native OpenGL 2.1 graphics
 // renderer -- render a distinct color into each of the 6 faces, read each back directly, and
 // prove a real depth-test occlusion + mipmap generation inside the shared cube FBO.
 //

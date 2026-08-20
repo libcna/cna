@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_runtimerenderer.md phase P4 (design decisions 1, 5, 6, 7): the public API for choosing which
+// plans/plan_runtimerenderer.md phase P4 (design decisions 1, 5, 6, 7): the public API for choosing which
 // compiled-in graphics renderer CNA will use.
 //
 // Compile-time selection (-DCNA_GRAPHICS_RENDERER=<X>) remains the default and recommended mode.

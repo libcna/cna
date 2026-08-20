@@ -1891,7 +1891,7 @@ namespace CNA::Internal::Renderers::TinyGL
 
 }
 
-// MERGE (plan_runtimerenderer.md design decision 4): every family's factory lives in its own
+// MERGE (plans/plan_runtimerenderer.md design decision 4): every family's factory lives in its own
 // namespace, so several can be linked into one binary. next defined this one directly in
 // CNA::Internal::Renderers, which is unique per link and would collide with any other family.
 namespace CNA::Internal::Renderers::TinyGL

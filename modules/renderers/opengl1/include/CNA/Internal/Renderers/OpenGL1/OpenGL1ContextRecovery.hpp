@@ -9,7 +9,7 @@ namespace CNA::Internal::Renderers::OpenGL1
      *
      * Mirrors the concept easy-gl's own RecoverableResource/ResourceRegistry establish, but
      * implemented independently and with no dependency on that library or its `metagl` context-
-     * event plumbing -- plan_opengl1.md's own scope rule is that OPENGL1 MUST NOT depend on
+     * event plumbing -- plans/plan_opengl1.md's own scope rule is that OPENGL1 MUST NOT depend on
      * EasyGL. Every method here is called synchronously by OpenGL1ResourceRegistry from
      * OpenGL1Renderer::DebugSimulateContextLoss()/DebugRestoreContext() (desktop GL has no
      * genuine asynchronous context-lost/restored event the way WebGL does -- both those methods

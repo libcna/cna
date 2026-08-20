@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Per-vertex-lit sibling of lit_textured3d.vert.hlsl/.frag.hlsl --
-// plan_graphics.md Phase 80 (Task 1106/1107): real XNA renders BasicEffect's lit path per-vertex
+// plans/plan_graphics.md Phase 80 (Task 1106/1107): real XNA renders BasicEffect's lit path per-vertex
 // by default (PreferPerPixelLighting == false), not per-pixel. Identical Blinn-Phong math to the
 // per-pixel sibling (FNA's Lighting.fxh ComputeLights()), moved into this vertex stage instead of
 // the pixel shader -- the interpolated result (not the interpolated inputs) is what reaches the

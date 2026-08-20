@@ -10,8 +10,8 @@ already use. DirectX 1 (1995) shipped no Direct3D at all (added in DIRECTX2, 199
 `IGraphicsRenderer` entry point throws `ThrowNo3D` because there genuinely is no Direct3D COM
 interface to call — not merely by policy, as with `DIRECTX3`.
 
-This document is the completeness status after `plan_dx1.md`'s full Phase O1–O8 implementation.
-Every row cites the task(s) that verified it — see `plan_dx1.md`'s own task tables for full design
+This document is the completeness status after `plans/plan_dx1.md`'s full Phase O1–O8 implementation.
+Every row cites the task(s) that verified it — see `plans/plan_dx1.md`'s own task tables for full design
 rationale and code detail.
 
 **Status legend** (matches `docs/freedirect-renderer.md`'s own convention)
@@ -29,8 +29,8 @@ rationale and code detail.
 
 ## 0. Existence-gate spike (`DX1-0`)
 
-Run and recorded before any renderer code was written (`plan_dx1.md` section 2), mirroring
-`plan_dx9.md`'s `D9-0` discipline:
+Run and recorded before any renderer code was written (`plans/plan_dx1.md` section 2), mirroring
+`plans/plan_dx9.md`'s `D9-0` discipline:
 
 - MinGW-w64's `ddraw.h` genuinely defines the v1 `IDirectDraw`/`IDirectDrawSurface` vtables,
   `DDSURFACEDESC` (not `DDSURFACEDESC2`), and `DirectDrawCreate` — confirmed both by reading the
@@ -50,7 +50,7 @@ Run and recorded before any renderer code was written (`plan_dx1.md` section 2),
 |---|---|---|
 | `CNA_GRAPHICS_RENDERER=DIRECTX1` CMake selection, Windows-only gate, MinGW cross-compile | ✅ | Same `FATAL_ERROR` gate `D3D9`/`D3D11`/`D3D12` already share (design decision 1) — unlike `DIRECTX3`, this renderer cannot build natively on Linux. |
 | `DirectDrawCreate` → `SetCooperativeLevel(DDSCL_NORMAL)` → primary `CreateSurface` | ✅ | Real device/window bring-up against a **real Win32 `HWND`**, obtained via `SDL_GetPointerProperty(..., SDL_PROP_WINDOW_WIN32_HWND_POINTER, ...)` on CNA's own already-existing `SDL_Window*` — the same mechanism `DirectX9Renderer.cpp` uses, never `DIRECTX3`'s `reinterpret_cast<HWND>(sdlWindow)` hack (design decision 3). No `SetDisplayMode` call: windowed mode never needs one (`DX1-0c`). |
-| `Clear()` / `Present()` | ✅ | Owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target (design decision 4) — the same shadow-buffer *shape* `DIRECTX3` uses, but for a different reason here (the primary is desktop-sized, not because `Lock()` fails). `Present()` letterbox-scales the shadow buffer onto the primary via a single `Blt()`, with the destination rect recomputed **every frame** from the window's real client area (`GetClientRect`+`ClientToScreen`) — a genuine correctness improvement over `DIRECTX3`'s own documented stale-scale bug (`plan_freedirect.md` DX3-16): a `SetVirtualResolution()`/window-resize change is correct on the very next `Present()`, since nothing here is cached. `Clear()` writes all 4 channels directly via `Lock()`/`Unlock()` (`FillSurfaceColor`), not `DDBLT_COLORFILL`, proactively avoiding the class of bug `DIRECTX3` found and fixed for its own alpha handling. |
+| `Clear()` / `Present()` | ✅ | Owns an internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/`SpriteBatch` draws always target (design decision 4) — the same shadow-buffer *shape* `DIRECTX3` uses, but for a different reason here (the primary is desktop-sized, not because `Lock()` fails). `Present()` letterbox-scales the shadow buffer onto the primary via a single `Blt()`, with the destination rect recomputed **every frame** from the window's real client area (`GetClientRect`+`ClientToScreen`) — a genuine correctness improvement over `DIRECTX3`'s own documented stale-scale bug (`plans/plan_freedirect.md` DX3-16): a `SetVirtualResolution()`/window-resize change is correct on the very next `Present()`, since nothing here is cached. `Clear()` writes all 4 channels directly via `Lock()`/`Unlock()` (`FillSurfaceColor`), not `DDBLT_COLORFILL`, proactively avoiding the class of bug `DIRECTX3` found and fixed for its own alpha handling. |
 | Pixel-exact readback (`DirectX1_Smoke` CTest) | ✅ | Real window, `Clear()`+readback round-trip (RGB and alpha) via the shadow backbuffer, `Present()` doesn't throw. 4/4 checks. |
 | `SetPresentationMode()` | 🟨 | `Present()` always applies a letterbox-equivalent uniform scale (`ComputeLetterbox`) regardless of the requested mode — `Stretch`/`Overscan`/`NativeBackBuffer` are not yet distinguished, the same honest scope `DX3-16` recorded. Unlike `DIRECTX3`, this is a real, first-class implementation choice (not an inherited third-party limitation), and the stale-after-resize sub-bug does **not** reproduce here. |
 | `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ | Real letterbox scale+offset transform (`ComputeLetterbox`), shared with `Present()` itself so the two are always mutually consistent (`DX1-68`). Verified via `DirectX1_LogicalTransform` CTest (5 checks). |
@@ -171,12 +171,12 @@ virtual display: **5336 passed, 11 skipped, 48 failed.** Every one of the 48 is 
 pre-existing and unrelated to DIRECTX1 itself — 34 are 3D-content-loading tests (`SkinnedModelEXTPartTest`,
 `RuntimeGltfModelTest`, `CnjModelTest`/`CnjEffectTest`, `ModelContentTypeReaderTest`, …) hitting
 DIRECTX1's correct `ThrowNo3D` via a plain `GraphicsDevice gd;` fixture with no 2D-renderer gate — the
-identical structural gap `plan_freedirect.md`'s own regression already documented; 5 are
+identical structural gap `plans/plan_freedirect.md`'s own regression already documented; 5 are
 `GraphicsDeviceCapabilityTest`'s `SupportsThreeD`/etc. checks, which have **no renderer gate at
 all** and would fail identically under `DIRECTX3`/`SDL_RENDERER`/`ASCII`/`CANVAS`; 6 are
 `MediaLibraryTestFixture` duration/metadata tests, a real consequence of `CNA_FFMPEG_AVAILABLE=OFF`
 on every Windows target (predates this session); the remaining 4 are Windows/Wine filesystem or
-non-ASCII-encoding quirks unrelated to graphics. See `plan_dx1.md` `DX1-88`'s own row for the full
+non-ASCII-encoding quirks unrelated to graphics. See `plans/plan_dx1.md` `DX1-88`'s own row for the full
 per-category breakdown and the list of pre-existing CMake/test gaps found and fixed along the way
 (none specific to DIRECTX1's own logic).
 
@@ -192,7 +192,7 @@ per-category breakdown and the list of pre-existing CMake/test gaps found and fi
 - **`Stretch`/`Overscan`/`NativeBackBuffer` presentation modes** — `Present()` always applies a
   letterbox-equivalent uniform scale regardless of the requested mode.
 - **`IDirectDraw2+` features of any kind** — permanently out of scope for the `DIRECTX1` name
-  specifically; belongs to a later entry in `plan_dxold.md`'s roadmap.
+  specifically; belongs to a later entry in `plans/plan_dxold.md`'s roadmap.
 - **Real Windows/macOS hardware verification** — this renderer is proven via MinGW cross-compile +
   Wine on Linux in this dev environment, same caveat every Route-B CNA renderer already carries.
 - **Not held to the `D3D9` oracle bar** — a retro/alternative renderer (peer to `DIRECTX3`/`ASCII`/
@@ -200,8 +200,8 @@ per-category breakdown and the list of pre-existing CMake/test gaps found and fi
 
 ## See also
 
-- `plan_dx1.md` — the full implementation plan (design decisions, phase task tables).
-- `plan_dxold.md` — the roadmap this renderer is row 1 of (DIRECTX1/2/3/5/6/7/8/10).
+- `plans/plan_dx1.md` — the full implementation plan (design decisions, phase task tables).
+- `plans/plan_dxold.md` — the roadmap this renderer is row 1 of (DIRECTX1/2/3/5/6/7/8/10).
 - `docs/freedirect-renderer.md` — the shipping `../free-direct`-backed DIRECTX3, the architecture and math this
   renderer ports verbatim wherever the surface-layer difference doesn't matter.
 - `docs/directx-legacy-renderers-analysis.md` — the feasibility analysis that authorized this whole

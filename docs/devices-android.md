@@ -1,6 +1,6 @@
 # `Microsoft::Devices` on Android — Consolidated Reference
 
-Every Android-specific decision made across `plan_devices.md`'s Phases 2, 3, 6, 7, 8, 9,
+Every Android-specific decision made across `plans/plan_devices.md`'s Phases 2, 3, 6, 7, 8, 9,
 in one place. This doc links to, rather than duplicates, the deeper detail already in
 `docs/devices-native-backend-design.md` (architecture/field mappings),
 `docs/devices-build.md` (build commands actually run), and
@@ -16,17 +16,17 @@ custom bridge. Confirmed by reading SDL3's actual Android haptic source
 implements amplitude control end to end (`VibrationEffect.createOneShot()` on API 26+,
 `VibratorManager` on API 31+), including the exact `intensity==0→stop()`/`intensity*255`
 clamped-`[1,255]` mapping a custom bridge would have had to reinvent. Building one
-anyway was explicitly decided against (`plan_devices.md` Task DEVICES-0031) — see
+anyway was explicitly decided against (`plans/plan_devices.md` Task DEVICES-0031) — see
 `docs/devices-build.md` Section 7 for the full evidence trail before reconsidering this.
 
-**Re-verified 2026-07-06 (`plan_devices.md` Task VIB-003)**, re-reading the same source
+**Re-verified 2026-07-06 (`plans/plan_devices.md` Task VIB-003)**, re-reading the same source
 files with fresh eyes rather than trusting the prior pass's conclusion unchecked: the
 conclusion above still holds — `Android_JNI_HapticRun`/`Android_JNI_HapticStop`
 (`SDL_syshaptic.c`'s `SDL_SYS_HapticRunEffect`/`SDL_SYS_HapticStopEffect`) reach
 `Context.VIBRATOR_SERVICE` via `SDLHapticHandler`/`SDLHapticHandler_API26`/
 `SDLHapticHandler_API31`'s `run()`/`stop()` methods, exactly as before. **One new,
 previously-undocumented finding surfaced by this re-read, relevant to `StartLeftRight()`
-specifically (`plan_devices.md` Task VIB-008):** on Android, `StartLeftRight(largeMotor,
+specifically (`plans/plan_devices.md` Task VIB-008):** on Android, `StartLeftRight(largeMotor,
 smallMotor, duration)` does **not** produce genuine independent dual-motor vibration on
 the phone's own vibrator. The call path is `SDL_HAPTIC_LEFTRIGHT` effect →
 `SDL_SYS_HapticRunEffect()` (`SDL_syshaptic.c`), which **blends both magnitudes into a
@@ -81,7 +81,7 @@ deprecation warning is locally suppressed in `AndroidSensorBridge.cpp`.
   runtime permission prompt is needed for `SensorManager`/NDK sensor registration on
   current Android (re-verify at the exact target API level before relying on this).
 - `android.permission.HIGH_SAMPLING_RATE_SENSORS` — added to `cna_demo_devices`'s
-  manifest (`plan_devices.md` Task ANDROID-BRIDGE-004, 2026-07-06). Android 12+ (API 31+)
+  manifest (`plans/plan_devices.md` Task ANDROID-BRIDGE-004, 2026-07-06). Android 12+ (API 31+)
   caps sensor sampling at ~200Hz for apps that don't declare this permission; this
   project's own default `TimeBetweenUpdates` (2ms, ~500Hz — see `SensorBase<T>`'s default)
   exceeds that cap, so without the permission a device on API 31+ would silently deliver
@@ -138,7 +138,7 @@ container's resource constraints.
 ## What is still not implemented on Android
 
 - Real declination-based `Compass.TrueHeading` (needs `System.Device.Location`, a
-  separate, unstarted plan — see `docs/location-future-plan.md`).
+  separate, unstarted plan — see `docs/location-future-plans/plan.md`).
 - **Corrected 2026-07-18 (independent re-verification of `audit_devices.md` finding
   `DEV-AUD-003`) — this line previously claimed no remap existed at all for any of
   `Motion`'s vector fields, which was stale/false:** `Task MOTION-012` (2026-07-16)
@@ -151,7 +151,7 @@ container's resource constraints.
   specifically — a quaternion isn't a plain vector, so the same remap logic doesn't
   apply, and any correction there needs its own change-of-basis derivation (`MOTION-002`
   — the stale `DEVICES-0111` task ID this line previously cited no longer exists in
-  `plan_devices.md`; `MOTION-002` is the current, correct reference).
+  `plans/plan_devices.md`; `MOTION-002` is the current, correct reference).
 - CI for any of this — **corrected 2026-07-18 (same re-verification, same finding):**
   a GitHub Actions workflow (`.github/workflows/devices-tests.yml`, `Task DEVPERF-001`,
   2026-07-17) now exists and runs the Devices/Sensors filtered suite plus the strict-XNA

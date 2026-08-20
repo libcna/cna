@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-31: real 32-bit index buffer support for the OpenGL4 graphics renderer --
+// plans/plan_opengl4.md GL4-31: real 32-bit index buffer support for the OpenGL4 graphics renderer --
 // discovered as a separate, newly-found gap while scoping GL4-27 (`baseVertex`), not attempted
 // there since it needed real new work: `OpenGL4IndexBufferRenderer::IsThirtyTwoBit()` was
 // unconditionally `false`, `CreateIndexBuffer32` wasn't overridden (silently fell back to a

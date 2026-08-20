@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-// Task 7.1 (plan_net.md Phase 7): shared, minimal backbuffer-to-PNG capture, reused by the
+// Task 7.1 (plans/plan_net.md Phase 7): shared, minimal backbuffer-to-PNG capture, reused by the
 // avatar demos' own --screenshot flags for baseline/after documentation. Mirrors the same
 // GetBackBufferData + Texture2D::SaveAsPng pattern examples/common/PixelTestGame.hpp already
 // established for golden-image comparisons - no new image-encoding code.

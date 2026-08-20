@@ -323,7 +323,7 @@ namespace CNA::Internal::Renderers::Fna3d
         // half-pixel term stays visible next to the sprite geometry it compensates for.
         int viewportWidth = 0;
         int viewportHeight = 0;
-        // plan_fx.md FX-100: a bound RenderTarget2D is what sprites rasterize into, so it -- not
+        // plans/plan_fx.md FX-100: a bound RenderTarget2D is what sprites rasterize into, so it -- not
         // the back buffer -- is what their pixel-space projection must be built from.
         // GetViewportSize() is the renderer-wide LOGICAL extent (input coordinate transforms read
         // the same method), and it always reported the back buffer. A batch drawn into a target
@@ -361,7 +361,7 @@ namespace CNA::Internal::Renderers::Fna3d
         effect.SetMatrix("MatrixTransform", Matrix::Multiply(transform, projection));
         effect.Apply(device_);
 
-        // plan_fx.md FX-092: built from the batch's own state and XNA's SamplerState defaults, NOT
+        // plans/plan_fx.md FX-092: built from the batch's own state and XNA's SamplerState defaults, NOT
         // copied from samplerStates_[0]. It used to start as that slot's current contents and
         // override only the filter and addressing, so `maxAnisotropy`, `maxMipLevel` and
         // `mipMapLevelOfDetailBias` were inherited from whatever wrote the slot last -- a compiled

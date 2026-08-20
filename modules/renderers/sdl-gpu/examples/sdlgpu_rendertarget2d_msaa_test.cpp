@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA proof for the SDL_GPU graphics renderer --
+// plans/plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA proof for the SDL_GPU graphics renderer --
 // SDL_GPUSampleCount texture creation + SDL_GPUColorTargetInfo.resolve_texture automatic
 // resolve-on-render-pass-end (the exact mechanism SdlGpuRenderTargetCubeRenderer's own MSAA
 // support, SDLGPU-36, already proved out; this closes the matching RenderTarget2D leg).
@@ -9,7 +9,7 @@
 // exception, MultiSampleCount property fidelity, plus sampling the MSAA target via SpriteBatch for
 // a real screenshot (not just "didn't throw"). All render targets are members (created once in
 // LoadContent(), not Draw()-local) per the real use-after-free finding documented in
-// plan_sdlgpu.md's SDLGPU-37 row -- this renderer defers rendering to Present() time, so a target
+// plans/plan_sdlgpu.md's SDLGPU-37 row -- this renderer defers rendering to Present() time, so a target
 // destroyed before that pass runs would release its GPU texture while queued commands still
 // reference it.
 //

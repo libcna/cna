@@ -1,7 +1,7 @@
 # WEBGL1 (Emscripten, GLSL ES 1.00 → WebGL 1.0) Renderer — Status
 
 `WEBGL1` is one of the public GL-family `CNA_GRAPHICS_RENDERER` values (the original 4 were
-introduced by `plan_glbackends.md`; the Phase-2 expansion later added `OPENGLES2`, this
+introduced by `plans/plan_glbackends.md`; the Phase-2 expansion later added `OPENGLES2`, this
 profile's native twin — see `docs/opengles2-renderer.md`) — it shares its entire implementation
 with `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL2`
 (`modules/renderers/easygl/`, on top of the sibling `easy-gl` library), distinguished at
@@ -15,10 +15,10 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
 ## What's real today
 
 - ✅ **Context creation** — `EasyGLRenderer`'s constructor requests GLES 2.0
-  (`SDL_GL_CONTEXT_MAJOR_VERSION=2`) for this profile (`plan_glbackends.md` GLB-8). Confirmed via
+  (`SDL_GL_CONTEXT_MAJOR_VERSION=2`) for this profile (`plans/plan_glbackends.md` GLB-8). Confirmed via
   the vendored SDL3 Emscripten renderer that this correctly produces a real WebGL 1 context (not
   WebGL 2) — see `docs/webgl2-renderer.md`'s GLB-9 note for the mechanism.
-- ✅ **Shader body rewrite** (`plan_glbackends.md` GLB-10/11/12/36) — every embedded shader in
+- ✅ **Shader body rewrite** (`plans/plan_glbackends.md` GLB-10/11/12/36) — every embedded shader in
   `EasyGLRenderer.cpp` is authored once against GLSL ES 3.00; `AdaptGlslEs300ForActiveProfile()`'s
   `WEBGL1` branch (`TransformGlslEs300BodyToEs100()`) rewrites:
   - `layout(location=N) in TYPE NAME;` → `attribute TYPE NAME;` (GLSL ES 1.00 has no `layout`
@@ -92,12 +92,12 @@ and needs a real GLSL ES 1.00 shader rewrite, not just a header swap.
   was built under this profile. The `cna_test_easygl_*` GTest-based pixel-comparison suite cannot
   run under Emscripten at all regardless of GL profile (`cmake/Tests/EasyGLTests.cmake` gates it to
   `NOT EMSCRIPTEN`) — a pre-existing scope limit, not new to `WEBGL1`.
-- ⬜ **CI/CTest identity** (`plan_glbackends.md` GLB-25, shared with `WEBGL2`) — no dedicated
+- ⬜ **CI/CTest identity** (`plans/plan_glbackends.md` GLB-25, shared with `WEBGL2`) — no dedicated
   `WEBGL1`-only CTest registration.
 
 ## Relationship to the other 3 GL-family renderers
 
-See `plan_glbackends.md` §2's table and `docs/opengl33-renderer.md`/`docs/webgl2-renderer.md`'s own
+See `plans/plan_glbackends.md` §2's table and `docs/opengl33-renderer.md`/`docs/webgl2-renderer.md`'s own
 versions of this section. In short: `OPENGLES3` is today's original `EasyGL` public renderer renamed
 (GLES 3.0, native); `WEBGL2` is the same GLES 3.0 path under Emscripten; `OPENGL33` is a new
 desktop GL 3.3 core-profile variant. `WEBGL1` is the only profile needing a real shader-body

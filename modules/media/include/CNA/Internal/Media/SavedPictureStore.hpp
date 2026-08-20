@@ -8,7 +8,7 @@
 namespace CNA::Internal::Media
 {
     /// Backs MediaLibrary::SavePicture with a real "Saved Pictures" subfolder under the Pictures
-    /// root (plan_media.md MEDIA-59/D7) -- writes are real files, immediately visible to a
+    /// root (plans/plan_media.md MEDIA-59/D7) -- writes are real files, immediately visible to a
     /// PictureLibraryIndex rescan.
     class SavedPictureStore
     {

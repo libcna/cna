@@ -1,6 +1,6 @@
-// plan_runtimerenderer.md RTR-P1-D06: the Magnum family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D06: the Magnum family's pre-construction contract.
 //
-// Magnum renders through an OpenGL context CNA creates on this same platform window (plan_magnum.md
+// Magnum renders through an OpenGL context CNA creates on this same platform window (plans/plan_magnum.md
 // MAGNUM-3), so the window needs the identical flag every other GL renderer asks for.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::Magnum
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

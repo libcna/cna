@@ -8,7 +8,7 @@ namespace CNA::Internal::Renderers::SvgDom
     /**
      * @brief How a draw's source pixels must be prepared, and how the result composites.
      *
-     * plan_svg_dom.md design decisions 3 and 4. Neither CSS Compositing (which `mix-blend-mode`
+     * plans/plan_svg_dom.md design decisions 3 and 4. Neither CSS Compositing (which `mix-blend-mode`
      * on an SVG element also participates in, since it applies to any element with a box, not only
      * HTML ones) nor SVG's own filter/compositing primitives expose a per-channel blend-factor
      * model, so the four standard XNA `BlendState` presets are reproduced by preparing the SOURCE
@@ -113,7 +113,7 @@ namespace CNA::Internal::Renderers::SvgDom
     /**
      * @brief CNAEXT. Records the active GraphicsDevice.Viewport rectangle (SVGDOM-F).
      *
-     * plan_svg_dom.md design decision 6: real XNA/FNA applies Viewport.X/Y strictly after
+     * plans/plan_svg_dom.md design decision 6: real XNA/FNA applies Viewport.X/Y strictly after
      * SpriteBatch's own Begin(transformMatrix), so (X,Y) is composed as the OUTERMOST translation on
      * top of each sprite's own placement (see SvgDomSpriteBatchRenderer::QueueDraw) -- the same
      * ordering HtmlDom's own per-batch viewport offset uses, independently re-derived here.
@@ -152,7 +152,7 @@ namespace CNA::Internal::Renderers::SvgDom
     /**
      * @brief CNAEXT. Returns the JS-side canvas id of the currently bound render target.
      *
-     * plan_svg_dom.md design decision 5: while a render target is bound, draws cannot become real
+     * plans/plan_svg_dom.md design decision 5: while a render target is bound, draws cannot become real
      * `<svg>`/`<image>` elements (an SVG element cannot render into an off-screen surface a
      * `Texture2D::GetData` readback could later sample), so they route through the target's own
      * private Canvas2D context instead -- the same "render targets fall back to raster" boundary
@@ -181,7 +181,7 @@ namespace CNA::Internal::Renderers::SvgDom
      * @brief Rejects an addressing-mode combination this renderer cannot reproduce for an
      * out-of-bounds source rectangle, and reports whether tiling/mirroring applies.
      *
-     * plan_svg_dom.md SVGDOM-1: `Wrap` (both axes) and symmetric `Mirror` (the same mode on both
+     * plans/plan_svg_dom.md SVGDOM-1: `Wrap` (both axes) and symmetric `Mirror` (the same mode on both
      * axes -- `SamplerState` has no built-in Mirror preset, so a game always constructs a custom
      * one, and using the same mode on both axes is simply the natural way to do that) are
      * implemented via a real SVG `<pattern>` fill (backbuffer path) / `ctx.createPattern(...,

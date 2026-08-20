@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-40: GraphicsDevice.BlendFactor must not be cached away by a Sokol pipeline
+// plans/plan_sokol.md SOKOL-40: GraphicsDevice.BlendFactor must not be cached away by a Sokol pipeline
 // created under a stale constant.
 //
 // Unlike Vulkan (VK_DYNAMIC_STATE_BLEND_CONSTANTS, set per-draw with vkCmdSetBlendConstants -- see

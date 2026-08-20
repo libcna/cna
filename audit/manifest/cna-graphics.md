@@ -4,7 +4,7 @@
 
 Files in this shard: **75**
 
-Grown by `plan_modern.md` `MOD-12`. The five files audited before that plan began were
+Grown by `plans/plan_modern.md` `MOD-12`. The five files audited before that plan began were
 the whole of `CNA::Graphics` at the time; the engine layer has since become the plan's
 main body of work, and the rows below are its work-queue entries. Paths are given in the
 logical `include/`+`src/` form this manifest has always used; each report names the

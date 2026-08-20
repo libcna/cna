@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2095: particles as a subsystem.
+// plans/plan_modern.md MOD-2095: particles as a subsystem.
 //
 // The simulation is written twice -- once in GLSL and once in C++ -- so the question that decides
 // whether this is one subsystem or two is whether the two agree. They are compared here directly:

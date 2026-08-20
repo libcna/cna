@@ -208,7 +208,7 @@ def produces_triangles(mode: int) -> bool:
 
 
 def primitive_count_for_mode(mode: int, index_count: int) -> int:
-    """How many primitives an index run of ``mode`` describes (plan_gltf.md §12.3, `GLTF-078`).
+    """How many primitives an index run of ``mode`` describes (plans/plan_gltf.md §12.3, `GLTF-078`).
 
     Mirrors ``PrimitiveCountForTopology`` on the C++ side. Both are stated independently on purpose:
     a count that agreed with itself but not with the specification would pass either alone.
@@ -669,7 +669,7 @@ class GltfBuilder:
         self._root_extensions[name] = dict(payload)
 
     def add_image(self, png_bytes: bytes, *, name: str | None = None) -> int:
-        """Adds an image, carried as a base64 ``data:`` URI (plan_gltf.md ``GLTF-190``).
+        """Adds an image, carried as a base64 ``data:`` URI (plans/plan_gltf.md ``GLTF-190``).
 
         A `data:` URI rather than a bufferView so the *same* image object works unchanged in both
         containers, and so a reader of an ordinary committed `.gltf` can see that the fixture has a

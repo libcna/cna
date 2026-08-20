@@ -5,7 +5,7 @@
 - Audit status: AUDITED (full read, 334 lines)
 - Subsystem: `tests-xna-media` shard
 - File type: C++ test file (Google Test)
-- XNA/FNA relevance: Tests for `Album`, `AlbumCollection` (both confirmed FNA `NotImplementedException` stubs; CNA implements real behavior for both, an intentional beyond-FNA extension per `plan_media.md`)
+- XNA/FNA relevance: Tests for `Album`, `AlbumCollection` (both confirmed FNA `NotImplementedException` stubs; CNA implements real behavior for both, an intentional beyond-FNA extension per `plans/plan_media.md`)
 - Main related tests: N/A (this IS a test file)
 
 ## Purpose
@@ -35,7 +35,7 @@ None at MEDIUM or higher.
 ## Positive Findings
 - `AlbumDurationIsARealNonZeroSumOfMemberSongDurations` asserts a real, ballpark (not exact-millisecond) duration range, correctly acknowledging encoder/container rounding rather than asserting a brittle exact value.
 - `GetThumbnailReturnsAGenuinelySmallerImageThanGetAlbumArt` and `AlbumWithoutAFolderCoverFallsBackToEmbeddedArt` both decode real image bytes via `ImageLoader` rather than trusting stream length alone — a meaningfully strong proof standard.
-- Extensive, honest inline comments citing specific `plan_media.md` task IDs and explaining exactly what defect each test guards against.
+- Extensive, honest inline comments citing specific `plans/plan_media.md` task IDs and explaining exactly what defect each test guards against.
 
 ## Final Assessment
 No changes needed. This file meets or exceeds the project's test-quality bar for the `Album`/`AlbumCollection` surface.

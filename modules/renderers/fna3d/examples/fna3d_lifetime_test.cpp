@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-35: negative, error and lifetime behaviour.
+// plans/plan_fna3d.md FNA3D-35: negative, error and lifetime behaviour.
 //
 // Every other FNA3D test asks "does the right thing happen?". This one asks "does the WRONG thing
 // get refused, by name, instead of being accepted into undefined behaviour?" -- which is the half

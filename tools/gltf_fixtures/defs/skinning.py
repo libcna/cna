@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Skinning fixtures -- owning group ``skinning`` (plan_gltf.md §15.4, §24.2).
+"""Skinning fixtures -- owning group ``skinning`` (plans/plan_gltf.md §15.4, §24.2).
 
 Proves **D8**, the second independent collapse mechanism. ``BuildSkeleton`` walks parent links only
 *within the skin's own joint set*, so any transform on an armature node above the joints is dropped
@@ -886,7 +886,7 @@ def _single_joint_skin(builder: GltfBuilder) -> tuple[int, int]:
 def skin_unlit() -> Fixture:
     """A skinned primitive with a non-PBR material -- the fixture that reaches vertex stride 52.
 
-    plan_gltf.md `GLTF-149`. A skinned primitive lands on stride 68 (the skinned PBR layout)
+    plans/plan_gltf.md `GLTF-149`. A skinned primitive lands on stride 68 (the skinned PBR layout)
     whenever its material uses the metallic-roughness model, which is glTF's default in two
     separate ways -- so stride 52, the skinned layout with no tangent slot, was unreachable by
     every fixture in the corpus and had no golden bytes at all.
@@ -958,7 +958,7 @@ def skin_unlit() -> Fixture:
 def skin_vertex_color() -> Fixture:
     """A skinned, vertex-coloured, **unlit** primitive -- the fixture that reaches vertex stride 56.
 
-    plan_gltf.md `GLTF-149`/`GLTF-463`. Stride 56 is the skinned layout with a packed Color appended,
+    plans/plan_gltf.md `GLTF-149`/`GLTF-463`. Stride 56 is the skinned layout with a packed Color appended,
     and it is the one stride with no C++ stream struct behind it (`GLTF-156`): the importer writes
     those bytes itself. That makes a golden more valuable here than anywhere else, not less -- there
     is no ``offsetof`` to catch a mistake in it.

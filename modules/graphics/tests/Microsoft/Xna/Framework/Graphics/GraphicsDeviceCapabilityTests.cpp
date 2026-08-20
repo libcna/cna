@@ -56,19 +56,19 @@ using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespac
 // This test target is built for multiple renderer families. Per-renderer arms below preserve each
 // accepted capability boundary rather than assuming one principal renderer's answers are universal.
 //
-// plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable renderer this file's
+// plans/plan_opengl1.md phase 12 finding: OPENGL1 is a SECOND genuinely-3D-capable renderer this file's
 // original "only ever builds against EasyGL" assumption did not anticipate -- and its real,
-// honest capability profile (modules/renderers/opengl1/examples/opengl1_graphics_capability_test.cpp, plan_opengl1.md
+// honest capability profile (modules/renderers/opengl1/examples/opengl1_graphics_capability_test.cpp, plans/plan_opengl1.md
 // phase 11) legitimately differs from EasyGL's on 3 of these checks: OPENGL1 has no
 // ARB_multitexture-based MRT or custom-shader Effect pipeline (this renderer's own design rule:
 // "No GLSL/custom ShaderEffect pipeline in the strict OPENGL1 renderer"), but DOES support
 // wireframe via real glPolygonMode(GL_LINE); EasyGL instead uses measured triangle-edge
 // re-expansion because GLES3 has no polygon mode. Both report working wireframe through different
-// implementations. OcclusionQuery (plan_opengl1.md item 23, EasyGL parity, added
+// implementations. OcclusionQuery (plans/plan_opengl1.md item 23, EasyGL parity, added
 // 2026-07-20) is no longer one of the differing checks -- both renderers now genuinely support it
 // (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
-/// plan_runtimerenderer.md RTR-P9-4: the per-renderer capability expectations. This was an
+/// plans/plan_runtimerenderer.md RTR-P9-4: the per-renderer capability expectations. This was an
 /// `#if`/`#elif` chain of `constexpr bool`s, which in a multi-renderer build can only ever describe
 /// the DEFAULT renderer -- every other renderer in the same binary was asserted against the
 /// default's profile. It is a lookup keyed on the ACTIVE renderer now. Each arm keeps its own
@@ -102,7 +102,7 @@ struct CapabilityExpectation
         case GraphicsRendererType::WebGL1:
             return {false, false, true};
 
-        // plan_opengl1.md phase 12: a second, legitimately-different, equally-honest 3D-capable
+        // plans/plan_opengl1.md phase 12: a second, legitimately-different, equally-honest 3D-capable
         // renderer -- no MRT and no custom-shader support in its fixed-function pipeline, reported
         // truthfully rather than inherited. Occlusion queries became real in item 23
         // (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer differs
@@ -110,7 +110,7 @@ struct CapabilityExpectation
         case GraphicsRendererType::OpenGL1:
             return {false, true, false};
 
-        // plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
+        // plans/plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
         // IEffectRenderer addresses shader constants by name, which needs the SPIR-V reflection
         // this renderer does not do, so custom effects are refused at the call site rather than
         // approximated. MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with
@@ -169,7 +169,7 @@ struct CapabilityExpectation
         case GraphicsRendererType::TinyGL:
             return {false, false, false};
 
-        // plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own honest,
+        // plans/plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own honest,
         // narrower profile at this point in its implementation -- no custom ShaderEffect
         // compilation. MRT (DILIGENT-24, up to four attachments) and occlusion queries (DILIGENT-41,
         // a real IQuery, exact or binary depending on the device feature) are both real. Each answer
@@ -178,7 +178,7 @@ struct CapabilityExpectation
         case GraphicsRendererType::Diligent:
             return {true, true, false};
 
-        // plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
+        // plans/plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
         // *compiled* Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in
         // the library compiles a GLSL/HLSL source string, which is what
         // IEffectRenderer/CreateEffectRenderer is handed. The false is therefore structural, not
@@ -197,7 +197,7 @@ struct CapabilityExpectation
         case GraphicsRendererType::Software:
             return {false, true, true};
 
-        // plan_igl.md IGL-61: IGL v1.1.1 exposes no occlusion-query object on any of its backends
+        // plans/plan_igl.md IGL-61: IGL v1.1.1 exposes no occlusion-query object on any of its backends
         // -- there is no IDevice factory for one and no encoder call to begin or end one, verified
         // against the pinned source rather than assumed. IglRenderer reports the capability false
         // and its IOcclusionQueryRenderer completes immediately with 0 samples, which is what keeps
@@ -235,7 +235,7 @@ constexpr bool kExpectCompiledEffects = false;
 // answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
 // a standing red. Only the arm for the renderer being added is written here; the other 2D-only
 // identities in this repository are untouched by this file and keep whatever they answer today.
-/// plan_runtimerenderer.md RTR-P9-4: the deliberately 2D-only renderers. Each answers false, and
+/// plans/plan_runtimerenderer.md RTR-P9-4: the deliberately 2D-only renderers. Each answers false, and
 /// that is the correct answer rather than a gap. The other 2D-only identities in this repository
 /// are untouched by this file and keep whatever they answer today -- exactly as the `#else` arm
 /// this replaces did.
@@ -395,7 +395,7 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 //     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::WireFrame));
 //
 // in a file that is compiled once per renderer and gated on nothing. It encoded ONE renderer's
-// documented gap -- EasyGL's "GLES3 has no polygon mode" entry in plan_graphics.md's XNA 4.0
+// documented gap -- EasyGL's "GLES3 has no polygon mode" entry in plans/plan_graphics.md's XNA 4.0
 // coverage table -- as though every renderer shared it, and therefore failed on Software, Headless,
 // bgfx, WebGPU, Vulkan and SDL_GPU. It could never pass falsely, so it hid nothing; it was simply
 // a standing red in six principal suites.
@@ -548,7 +548,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorUnfilled)
 {
-    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
@@ -609,7 +609,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasterizerState)
 {
-    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
@@ -647,7 +647,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 {
-    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";
@@ -681,7 +681,7 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRenderer)
 {
-    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    // plans/plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
     if (!HasPixelOracle())
         GTEST_SKIP() << RendererName()
                      << " does not rasterize and read pixels back, so there is nothing to measure";

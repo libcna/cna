@@ -11,5 +11,5 @@
   "decompressedSize": 44032,
   "rootReader": "Microsoft.Xna.Framework.Content.SpriteFontReader",
   "expectedType": "SpriteFont",
-  "notes": "Deliberately picked because its decompressed size (44032 bytes) spans more than one 32KB LZX block (32768 + 11264), genuinely exercising the block-framing loop's multi-block state persistence (the same LzxDecoder instance's sliding window and repeated-offset LRU queue must carry over correctly from the first Decompress() call into the second). Used by plan_xnb.md XNB-28/29/30B."
+  "notes": "Deliberately picked because its decompressed size (44032 bytes) spans more than one 32KB LZX block (32768 + 11264), genuinely exercising the block-framing loop's multi-block state persistence (the same LzxDecoder instance's sliding window and repeated-offset LRU queue must carry over correctly from the first Decompress() call into the second). Used by plans/plan_xnb.md XNB-28/29/30B."
 }

@@ -151,7 +151,7 @@ def _write_placeholder_texture(out_dir, part_name, size=4):
     that ever reached the GPU. This texture is intentionally neutral (white), not a
     painted per-material color: AvatarAppearanceEXT remains the sole color-customization
     authority (texture * tint == tint, no double-application of color). Painted surface
-    detail is future work (see plan_net.md Task 11.25), not this task — this task makes
+    detail is future work (see plans/plan_net.md Task 11.25), not this task — this task makes
     the texture *pipeline* itself real, end-to-end.
     """
     tex_path = out_dir / f"{part_name}.png"

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-800..MOD-811, MOD-850: directional shadow-map generation.
+// plans/plan_modern.md MOD-800..MOD-811, MOD-850: directional shadow-map generation.
 //
 // The matrices are asserted directly rather than through a rendered image, because a shadow map
 // that is subtly mis-fitted still produces a picture -- one with half the resolution it should

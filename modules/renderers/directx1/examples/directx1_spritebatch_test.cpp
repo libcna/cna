@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx1.md Phase O4 (DX1-30..DX1-39): CPU compositor / SpriteBatch draw path tests for the DIRECTX1
+// plans/plan_dx1.md Phase O4 (DX1-30..DX1-39): CPU compositor / SpriteBatch draw path tests for the DIRECTX1
 // (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
 // Check A -- Draw() before Begin()/End() without Begin() throw (DX1-30 Begin/End contract).

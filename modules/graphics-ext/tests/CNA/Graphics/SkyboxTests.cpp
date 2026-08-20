@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1100..MOD-1111: the skybox.
+// plans/plan_modern.md MOD-1100..MOD-1111: the skybox.
 //
 // The interesting failures here are all orientations, and an orientation failure renders a sky --
 // just one facing the wrong way, or turning at the wrong rate as the camera moves. So the ray

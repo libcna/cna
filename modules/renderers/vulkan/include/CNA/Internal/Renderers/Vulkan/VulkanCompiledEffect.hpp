@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-065: compiled XNA Effect Framework bytecode on the Vulkan renderer.
+// plans/plan_fx.md FX-065: compiled XNA Effect Framework bytecode on the Vulkan renderer.
 //
 // This backend differs from the SDL_GPU and OpenGL ones in the way that matters most to read the
 // code: **MojoShader ships no Vulkan adapter.** There is no `mojoshader_vulkan.c` beside
@@ -47,7 +47,7 @@ namespace CNA::Internal::Renderers::Vulkan
     /**
      * @brief One shader compiled by CNA's own MojoShader SPIR-V backend. CNAEXT.
      *
-     * plan_fx.md FX-065. MojoShader's other adapters own a type like this; the Vulkan one does not
+     * plans/plan_fx.md FX-065. MojoShader's other adapters own a type like this; the Vulkan one does not
      * exist, so the reference counting the effect parser expects (`shaderAddRef`/`deleteShader`)
      * lives here. There is deliberately no `VkShaderModule` on this type: linking patches the
      * SPIR-V in place, so a module belongs to the patched BYTES rather than to the shader, and the
@@ -64,7 +64,7 @@ namespace CNA::Internal::Renderers::Vulkan
     /**
      * @brief The MojoShader effect backend's per-renderer state. CNAEXT.
      *
-     * plan_fx.md FX-065. One instance per `VulkanRenderer`, shared by every compiled effect that
+     * plans/plan_fx.md FX-065. One instance per `VulkanRenderer`, shared by every compiled effect that
      * renderer owns -- the same arrangement `MOJOSHADER_glContext` and `MOJOSHADER_sdlContext` give
      * the other two backends. The constant register files are therefore SHARED, which is exactly
      * why a deferred draw must snapshot its uniforms at apply time (see
@@ -104,7 +104,7 @@ namespace CNA::Internal::Renderers::Vulkan
     /**
      * @brief One compiled XNA effect owned by the Vulkan renderer.
      *
-     * plan_fx.md FX-065. Mirrors `SdlGpuCompiledEffect`'s shape deliberately: both renderers defer
+     * plans/plan_fx.md FX-065. Mirrors `SdlGpuCompiledEffect`'s shape deliberately: both renderers defer
      * GPU submission, so both must snapshot a pass's uniforms and sampler bindings at apply time
      * rather than reading them back when the draw is finally recorded.
      */
@@ -189,7 +189,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief CNAEXT. Packs the applied pass's constant registers into their uniform-buffer bytes.
          *
-         * plan_fx.md FX-065. This renderer records a draw's commands at `Present()`, long after
+         * plans/plan_fx.md FX-065. This renderer records a draw's commands at `Present()`, long after
          * `ApplyPass()` ran, and the constant register files are shared by every effect this
          * renderer owns -- so a later apply would otherwise decide what an earlier draw renders
          * with. Packing here, while the registers still hold exactly what this apply wrote, is what
@@ -226,7 +226,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief CNAEXT. One vertex stream a compiled draw reads its attributes from.
          *
-         * plan_fx.md FX-112. A compiled effect derives its vertex input from the DECLARATIONS the
+         * plans/plan_fx.md FX-112. A compiled effect derives its vertex input from the DECLARATIONS the
          * draw supplies rather than from a byte stride, so it can bind a per-instance stream
          * alongside the per-vertex one without the renderer's stock stride-to-layout table having
          * anything to say about it.
@@ -245,7 +245,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief CNAEXT. What one compiled-effect draw needs from the applied pass.
          *
-         * plan_fx.md FX-065. Produced by @ref LinkAndGetShadersEXT and stored by value on the
+         * plans/plan_fx.md FX-065. Produced by @ref LinkAndGetShadersEXT and stored by value on the
          * deferred draw command, because the draw is recorded at `Present()` long after the pass
          * was applied.
          */
@@ -276,7 +276,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief CNAEXT. Links the applied pass's shader pair and returns everything a draw needs.
          *
-         * plan_fx.md FX-065. `MOJOSHADER_linkSPIRVShaders` is a separate, explicit step from
+         * plans/plan_fx.md FX-065. `MOJOSHADER_linkSPIRVShaders` is a separate, explicit step from
          * parsing: it patches the vertex shader's input types to the actual vertex format, links
          * vertex outputs to pixel inputs, and returns the size of the internal patch table that
          * must be subtracted from `output_len` before the SPIR-V is handed to Vulkan. Only after it

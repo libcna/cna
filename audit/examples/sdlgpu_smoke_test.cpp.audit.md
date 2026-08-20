@@ -5,7 +5,7 @@
 - Source file: `examples/sdlgpu_smoke_test.cpp`
 - Audit status: AUDITED
 - Subsystem: `examples-tests-sdlgpu` shard — end-to-end backend lifecycle/device/window/swapchain
-  smoke test, this backend's first proof gate (plan_sdlgpu.md SDLGPU-6..12)
+  smoke test, this backend's first proof gate (plans/plan_sdlgpu.md SDLGPU-6..12)
 - File type: standalone `Game`-subclass executable, CTest-registered
   (`cna_sdlgpu_test(cna_test_sdlgpu_smoke …)` / `cna_register_backend_test(NAME SdlGpu_Smoke …)`,
   `cmake/Tests/SdlGpuTests.cmake:18-20`, `TIMEOUT 60`).
@@ -210,7 +210,7 @@ default, code paths). Weak on Check F/G specifically — see F1.
   true)"* — this is factually incorrect for the current tree: `env_map3d.vert.glsl`/`.frag.glsl`,
   `SdlGpuGraphicsBackend::QueueEnvMapDraw()`/`CreateEnvMapResources()`, and a fully CTest-registered
   `examples/sdlgpu_envmap_test.cpp` (`SdlGpu_EnvMap`, `cmake/Tests/SdlGpuTests.cmake:70-73`) all
-  exist and are wired up (confirmed via `git log`: `feat(plan_sdlgpu.md): close SDLGPU-33 -- SDL_GPU
+  exist and are wired up (confirmed via `git log`: `feat(plans/plan_sdlgpu.md): close SDLGPU-33 -- SDL_GPU
   EnvironmentMapEffect`, commit `7a078d06`/`3fe53c05`, 2026-07-15 — the same day as, and
   chronologically after, that report's own `SDLGPU-36` RenderTargetCube commit
   `3d248aa7`/`68c6fd33`). Worth a synthesis-pass correction to that report.

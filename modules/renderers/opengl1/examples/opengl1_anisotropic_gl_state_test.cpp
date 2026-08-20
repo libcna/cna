@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // OPENGL1 renderer: verifies the real GL_EXT_texture_filter_anisotropic wiring added to
-// OpenGL1Renderer::ApplySamplerState() (plan_opengl1.md phase 1, runtime GL version/
+// OpenGL1Renderer::ApplySamplerState() (plans/plan_opengl1.md phase 1, runtime GL version/
 // extension discovery) actually reaches the driver, rather than trusting the startup
 // capability-dump log alone.
 //
@@ -92,7 +92,7 @@ protected:
         Texture2D tex = Texture2D::CreateFromPixels(dev, 1, 1, white);
 
         // Requesting Anisotropic without the extension being present is a documented no-op
-        // (plan_opengl1.md: "Anisotropic filtering is extension-only") -- confirm that's true,
+        // (plans/plan_opengl1.md: "Anisotropic filtering is extension-only") -- confirm that's true,
         // then exit cleanly; there is nothing further to verify against the real driver here.
         {
             const char* ext = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));

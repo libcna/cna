@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx8.md DX8-0/design decision 2: run a Windows cross-compiled .exe (DIRECTX8 renderer) under Wine
+# plans/plan_dx8.md DX8-0/design decision 2: run a Windows cross-compiled .exe (DIRECTX8 renderer) under Wine
 # with DXVK, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-directx8.sh <path-to.exe> [args...]

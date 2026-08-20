@@ -37,7 +37,7 @@ namespace
     };
 }
 
-// plan_media.md MEDIA-32: the no-SOUND_ENABLED fallback is a pure, always-compiled function, so
+// plans/plan_media.md MEDIA-32: the no-SOUND_ENABLED fallback is a pure, always-compiled function, so
 // it can be exercised directly regardless of which audio backend this build has.
 TEST(MediaPlayerNoSoundFallbackTest, DoesNotTriggerForNullActiveSong)
 {
@@ -64,7 +64,7 @@ TEST(MediaPlayerNoSoundFallbackTest, TriggersOnceElapsedReachesDuration)
     EXPECT_TRUE(MediaPlayer::DetectSongEndedByElapsedTime(&song, System::TimeSpan::FromMilliseconds(2500)));
 }
 
-// plan_media.md MEDIA-33: FNA's shuffle picks uniformly among every index, including the one
+// plans/plan_media.md MEDIA-33: FNA's shuffle picks uniformly among every index, including the one
 // currently playing -- confirmed by reading MediaPlayer.cs's NextSong (no exclusion). With a
 // 2-song queue and enough trials, a genuinely uniform pick must repeat the same index back-to-back
 // at least once; an (incorrect) "exclude current" implementation never would. P(0 repeats in 200
@@ -94,7 +94,7 @@ TEST_F(MediaPlayerTest, ShuffleCanRepeatTheSameSongIndex)
     EXPECT_TRUE(observedRepeat);
 }
 
-// plan_media.md MEDIA-34: FNA's own comment -- "XNA duplicates the Song object and then assigns a
+// plans/plan_media.md MEDIA-34: FNA's own comment -- "XNA duplicates the Song object and then assigns a
 // bunch of stuff to it at Play time" -- Play() enqueues a *copy*, not the caller's own instance.
 TEST_F(MediaPlayerTest, PlayEnqueuesADuplicateNotTheOriginalInstance)
 {
@@ -124,7 +124,7 @@ TEST_F(MediaPlayerTest, VolumeClampsToZeroOneRange)
     EXPECT_FLOAT_EQ(MediaPlayer::getVolumeProperty(), 0.0f);
 }
 
-// plan_media.md MEDIA-80: the plain Play(SongCollection) overload (distinct from
+// plans/plan_media.md MEDIA-80: the plain Play(SongCollection) overload (distinct from
 // Play(SongCollection, index), already covered by ShuffleCanRepeatTheSameSongIndex/etc.) --
 // confirms it starts at index 0, matching Play(songs, 0)'s own documented equivalence.
 TEST_F(MediaPlayerTest, PlaySongCollectionStartsAtIndexZero)
@@ -141,7 +141,7 @@ TEST_F(MediaPlayerTest, PlaySongCollectionStartsAtIndexZero)
     EXPECT_EQ(active->getNameProperty(), "A");
 }
 
-// plan_media.md MEDIA-80: State transitions across Play/Pause/Resume/Stop -- not asserted
+// plans/plan_media.md MEDIA-80: State transitions across Play/Pause/Resume/Stop -- not asserted
 // anywhere else in this file (other tests exercise the queue/index side effects only).
 TEST_F(MediaPlayerTest, StateTransitionsAcrossPlayPauseResumeStop)
 {
@@ -161,7 +161,7 @@ TEST_F(MediaPlayerTest, StateTransitionsAcrossPlayPauseResumeStop)
     EXPECT_EQ(MediaPlayer::getStateProperty(), Microsoft::Xna::Framework::Media::MediaState::Stopped);
 }
 
-// plan_media.md MEDIA-81: MovePrevious(), never exercised anywhere else in this file (only
+// plans/plan_media.md MEDIA-81: MovePrevious(), never exercised anywhere else in this file (only
 // MoveNext() is, via ShuffleCanRepeatTheSameSongIndex); non-shuffled so movement is deterministic.
 TEST_F(MediaPlayerTest, MovePreviousMovesBackwardThroughTheQueue)
 {
@@ -176,7 +176,7 @@ TEST_F(MediaPlayerTest, MovePreviousMovesBackwardThroughTheQueue)
     EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
 }
 
-// plan_media.md MEDIA-81: IsRepeating/IsShuffled getters -- only the setters were previously
+// plans/plan_media.md MEDIA-81: IsRepeating/IsShuffled getters -- only the setters were previously
 // exercised (indirectly, via SetUp/TearDown resets and ShuffleCanRepeatTheSameSongIndex).
 TEST_F(MediaPlayerTest, IsRepeatingAndIsShuffledGettersReflectSetters)
 {
@@ -190,7 +190,7 @@ TEST_F(MediaPlayerTest, IsRepeatingAndIsShuffledGettersReflectSetters)
     EXPECT_TRUE(MediaPlayer::getIsShuffledProperty());
 }
 
-// plan_media.md MEDIA-82: IsMuted get/set, zero coverage anywhere else in this file.
+// plans/plan_media.md MEDIA-82: IsMuted get/set, zero coverage anywhere else in this file.
 TEST_F(MediaPlayerTest, IsMutedGetSet)
 {
     EXPECT_FALSE(MediaPlayer::getIsMutedProperty());
@@ -200,7 +200,7 @@ TEST_F(MediaPlayerTest, IsMutedGetSet)
     EXPECT_FALSE(MediaPlayer::getIsMutedProperty());
 }
 
-// plan_media.md MEDIA-83: ActiveSongChanged/MediaStateChanged, driven through the real, already-
+// plans/plan_media.md MEDIA-83: ActiveSongChanged/MediaStateChanged, driven through the real, already-
 // wired FrameworkDispatcher::Update() call chain (not a direct OnActiveSongChanged()/
 // OnMediaStateChanged() invocation) -- confirms the deferred-event plumbing genuinely fires, not
 // just that the raise-if-called methods work in isolation. Uses Add()/Remove() (not operator+=)
@@ -237,7 +237,7 @@ TEST_F(MediaPlayerTest, ActiveSongChangedAndMediaStateChangedFireThroughFramewor
     MediaPlayer::MediaStateChanged.Remove(mediaStateToken);
 }
 
-// plan_media.md MEDIA-84/188/189/190: IsVisualizationEnabled/GetVisualizationData.
+// plans/plan_media.md MEDIA-84/188/189/190: IsVisualizationEnabled/GetVisualizationData.
 //
 // This test previously asserted the STUB behavior as if it were the specification -- that the
 // setter was a no-op, the getter always returned false, and GetVisualizationData left the caller's
@@ -257,7 +257,7 @@ TEST_F(MediaPlayerTest, IsVisualizationEnabledRoundTrips)
 
 // With visualization disabled, XNA produces no data. CNA returns zeroed arrays rather than
 // throwing or leaving the caller's buffer untouched -- matching VisualizationData's own
-// zero-initialized construction (plan_media.md MEDIA-189).
+// zero-initialized construction (plans/plan_media.md MEDIA-189).
 TEST_F(MediaPlayerTest, GetVisualizationDataZeroesTheBuffersWhileDisabled)
 {
     MediaPlayer::setIsVisualizationEnabledProperty(false);
@@ -276,7 +276,7 @@ TEST_F(MediaPlayerTest, GetVisualizationDataZeroesTheBuffersWhileDisabled)
 // CI case). NOTE: the old wording here said it degrades to "flag is on, data stays zero" -- that
 // stopped being true with MEDIA-222, which made the flag reflect reality: with no mixer the enable
 // simply does not take effect and the flag stays FALSE. Corrected rather than left contradicting
-// the code (plan_media.md MEDIA-225).
+// the code (plans/plan_media.md MEDIA-225).
 TEST_F(MediaPlayerTest, EnablingVisualizationIsSafeWithoutAnAudioDevice)
 {
     EXPECT_NO_THROW(MediaPlayer::setIsVisualizationEnabledProperty(true));
@@ -287,11 +287,11 @@ TEST_F(MediaPlayerTest, EnablingVisualizationIsSafeWithoutAnAudioDevice)
     MediaPlayer::setIsVisualizationEnabledProperty(false);
 }
 
-// plan_media.md MEDIA-220: callback installation returns bool and that result is now acted on.
+// plans/plan_media.md MEDIA-220: callback installation returns bool and that result is now acted on.
 // This asserts the observable contract that follows from it -- IsVisualizationEnabled must never
 // report true when no tap could be installed, because a caller would then poll forever for data
 // that can never arrive. On a machine where the tap DOES install, it must report true.
-// NOTE ON WHAT THIS DOES *NOT* COVER (plan_media.md MEDIA-222): the whole suite runs with a dummy
+// NOTE ON WHAT THIS DOES *NOT* COVER (plans/plan_media.md MEDIA-222): the whole suite runs with a dummy
 // SDL audio driver, so GetMixer() always succeeds here and the no-mixer/failed-install branch is
 // never exercised. GetMixer() also caches its device, so a later test cannot force it to fail
 // either. That branch is therefore correct BY CONSTRUCTION (the flag is assigned only from what

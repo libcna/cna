@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-22: a RenderTargetCube face cannot take part in a multi-render-target bind on
+// plans/plan_igl.md IGL-22: a RenderTargetCube face cannot take part in a multi-render-target bind on
 // this renderer -- `IglRenderer::SetRenderTargets()` refuses it explicitly by name
 // (`IglRenderer.cpp`: "a RenderTargetCube face cannot take part in a multi-render-target bind on
 // this renderer") rather than silently misbinding it or crashing, matching this project's design

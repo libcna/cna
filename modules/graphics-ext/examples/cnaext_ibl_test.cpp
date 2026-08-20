@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1225/MOD-1227/MOD-1229/MOD-1245/MOD-1246: image-based lighting, end to end.
+// plans/plan_modern.md MOD-1225/MOD-1227/MOD-1229/MOD-1245/MOD-1246: image-based lighting, end to end.
 //
 // The precompute has its own unit tests; what those cannot show is whether the three products
 // actually reach a shader and light a surface. This does, by drawing the same quad several times

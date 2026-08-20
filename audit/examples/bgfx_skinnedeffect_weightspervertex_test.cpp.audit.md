@@ -35,7 +35,7 @@ an unmistakable, binary-strength discriminator (unlike a subtly-wrong pixel colo
 history, as a **currently-failing, confirmed pre-existing CTest failure** as of the most recent
 commit that touched this area (`0cb4a591`, 2026-07-16), and it has not since been fixed or further
 root-caused. This is not speculative: it is stated directly in that commit's own message and echoed
-in `plan_graphics.md`'s Task 1104 entry (see F1). Independently, this audit also found that this
+in `plans/plan_graphics.md`'s Task 1104 entry (see F1). Independently, this audit also found that this
 file's own render/readback pattern diverges from every one of its close siblings in this exact
 shard in a way that plausibly explains a flaky/wrong result on this specific backend (see F2).
 
@@ -90,7 +90,7 @@ conceptual design.
   via `git stash` that it fails identically against the unmodified code); ... A full unfiltered
   `ctest -R \"^Bgfx_\"` sweep (this worktree's first-ever Bgfx build) surfaced several other
   pre-existing failures/timeouts, spot-checked via the same git-stash method and confirmed
-  unrelated to this task."* This is corroborated verbatim in `plan_graphics.md`'s own Task 1104
+  unrelated to this task."* This is corroborated verbatim in `plans/plan_graphics.md`'s own Task 1104
   entry. By contrast, Task 895's own original commit (`c0f4d981`, 2026-07-11, the commit that
   *introduced* this test) reports a clean full regression ("Full regression suites reconfirmed
   clean on all 3 backends (only known pre-existing baseline failures remain: `Vulkan_DepthBias`;
@@ -110,7 +110,7 @@ conceptual design.
   freshly-identified FNA-parity question (the FNA-parity question this test targets was already
   correctly identified and fixed at the production-code level by Task 895 across all 3 backends;
   what's unresolved is why *this specific test*, on *this specific backend*, no longer passes).
-- Related files: `cmake/Tests/BgfxTests.cmake:467-471` (registration); `plan_graphics.md` (Task
+- Related files: `cmake/Tests/BgfxTests.cmake:467-471` (registration); `plans/plan_graphics.md` (Task
   895/1104 entries, where this status is recorded); see F2 for this audit's own candidate root-cause
   theory.
 - Suggested future action (not implemented by this audit): re-run

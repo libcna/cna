@@ -92,7 +92,7 @@ namespace CNA::Graphics {
         /**
          * @brief Adds a small triangular noise to the output to break up quantisation banding.
          *
-         * plan_modern.md `MOD-2132`. **Off by default**, so a frame that never asked for it is
+         * plans/plan_modern.md `MOD-2132`. **Off by default**, so a frame that never asked for it is
          * unchanged to the bit.
          *
          * An eight-bit frame has 256 values to hold a gradient with. In the shadows, where the

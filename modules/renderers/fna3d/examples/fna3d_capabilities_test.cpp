@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-14: pins the FNA3D renderer's capability answers and its deterministic
+// plans/plan_fna3d.md FNA3D-14: pins the FNA3D renderer's capability answers and its deterministic
 // rejections. A renderer that quietly claims a capability it cannot serve is worse than one that
 // refuses, so the point of this test is that each "false" below is matched by a real refusal and
 // each "true" is matched by something the other example tests actually exercise.

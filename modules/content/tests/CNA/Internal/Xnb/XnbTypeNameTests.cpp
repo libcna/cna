@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-13/XNB-13A: unit tests for the .xnb type-reader name parser/normalizer.
+// plans/plan_xnb.md XNB-13/XNB-13A: unit tests for the .xnb type-reader name parser/normalizer.
 
 #include <gtest/gtest.h>
 

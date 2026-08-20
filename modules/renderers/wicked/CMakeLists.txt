@@ -1,4 +1,4 @@
-# plan_wicked.md WICKED-2: Wicked Engine vendors its own Vulkan headers and loads the loader
+# plans/plan_wicked.md WICKED-2: Wicked Engine vendors its own Vulkan headers and loads the loader
 # through volk at runtime, so no find_package(Vulkan) is needed here (unlike the VULKAN renderer).
 # WickedEngine is PUBLIC because WickedRenderer.hpp includes wiGraphicsDevice.h -- every
 # target compiling against this renderer's header needs the same include directory and the same

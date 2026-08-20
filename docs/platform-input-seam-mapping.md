@@ -1,6 +1,6 @@
 # The input backend seam, mapped onto the platform contract
 
-*plan_platform.md Task PLAT-77. Written before migration and updated after PLAT-77c/PLAT-82;
+*plans/plan_platform.md Task PLAT-77. Written before migration and updated after PLAT-77c/PLAT-82;
 historical snippets below show the seam that was removed.*
 
 `modules/input` already has an abstraction layer. It is not the platform contract, it was not

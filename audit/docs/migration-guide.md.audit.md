@@ -4,7 +4,7 @@
 - Source file: `docs/migration-guide.md` (349 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (Task 486, `plan_graphics.md` Phase 54, plus later Tasks 487-489)
+- File type: Markdown documentation (Task 486, `plans/plan_graphics.md` Phase 54, plus later Tasks 487-489)
 - Cross-references: `docs/xna-4-api-coverage.md`, `docs/graphics-backend-feature-matrix.md`,
   `docs/sdl-renderer-2d-completeness.md` (all referenced, not independently re-audited by this pass)
 

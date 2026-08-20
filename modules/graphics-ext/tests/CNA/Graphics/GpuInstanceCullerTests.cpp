@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2091: culling whose answer never comes back to the CPU.
+// plans/plan_modern.md MOD-2091: culling whose answer never comes back to the CPU.
 //
 // MOD-1551 already proved a compute shader culls the same objects FrustumCullerEXT does. What is
 // new here is where the answer goes, so that is what these cases pin: the surviving count is

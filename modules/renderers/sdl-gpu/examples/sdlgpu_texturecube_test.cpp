@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube proof for the SDL_GPU graphics
+// plans/plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube proof for the SDL_GPU graphics
 // renderer -- a single SDL_GPU_TEXTURETYPE_CUBE texture, SAMPLER usage only (never a render
 // target), real per-face SetData/GetData via a transfer-buffer copy pass. Matches the byte-exact
 // round-trip bar SDLGPU-40 (Texture3D) already met, and re-checks that the cycle=true orphan-write

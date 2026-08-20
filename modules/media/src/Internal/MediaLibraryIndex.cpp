@@ -29,7 +29,7 @@ namespace CNA::Internal::Media
                             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             // Only formats this project's selected mixer decoder can genuinely PLAY are indexed --
             // advertising a song MediaPlayer::Play() would fail on is worse than not listing it
-            // (plan_media.md MEDIA-199). Verified against the bundled decoder set:
+            // (plans/plan_media.md MEDIA-199). Verified against the bundled decoder set:
             // decoder_vorbis/stb_vorbis (.ogg/.oga), decoder_drmp3/mpg123 (.mp3), decoder_wav
             // (.wav), decoder_flac/drflac (.flac), decoder_opus (.opus).
             //
@@ -55,7 +55,7 @@ namespace CNA::Internal::Media
     void MediaLibraryIndex::ScanDirectory(const std::filesystem::path& dir,
                                            std::set<std::filesystem::path>& visited)
     {
-        // plan_media.md MEDIA-53: guard against symlink cycles by tracking canonical (symlink-
+        // plans/plan_media.md MEDIA-53: guard against symlink cycles by tracking canonical (symlink-
         // resolved) paths already visited, and skip (rather than crash on) unreadable/broken
         // entries -- a real filesystem scan of a real user directory can hit both.
         std::error_code ec;

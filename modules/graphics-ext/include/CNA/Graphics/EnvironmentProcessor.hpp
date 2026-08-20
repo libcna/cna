@@ -28,7 +28,7 @@ namespace CNA::Graphics {
     /**
      * @brief Turns environment images into the forms the renderer can sample.
      *
-     * plan_modern.md Phase 11/12. The first thing it does is the one every HDR environment needs:
+     * plans/plan_modern.md Phase 11/12. The first thing it does is the one every HDR environment needs:
      * the panoramas people actually have are **equirectangular** -- one wide image, longitude
      * across and latitude down -- and a renderer samples a **cube**. Nothing else in the sky or IBL
      * path can start until that conversion exists.
@@ -75,7 +75,7 @@ namespace CNA::Graphics {
         /**
          * @brief Convolves an environment into a diffuse irradiance cube.
          *
-         * plan_modern.md `MOD-1202`. Each output texel is the cosine-weighted average of every
+         * plans/plan_modern.md `MOD-1202`. Each output texel is the cosine-weighted average of every
          * direction in the hemisphere around it -- what a matte surface facing that way receives
          * from the whole environment. It is deliberately small: irradiance is a very low-frequency
          * signal, and 32 pixels a face is already more than the function has detail to fill.
@@ -94,7 +94,7 @@ namespace CNA::Graphics {
         /**
          * @brief Prefilters an environment for specular reflection, one mip per roughness.
          *
-         * plan_modern.md `MOD-1204`. The split-sum approximation's first half: mip 0 is the
+         * plans/plan_modern.md `MOD-1204`. The split-sum approximation's first half: mip 0 is the
          * environment as it is (a mirror), and each mip after it is the GGX lobe for a rougher
          * surface. A shader then reads the roughness it needs as a mip level, which is why the
          * mapping between the two has to be one function -- @ref mipForRoughness -- rather than
@@ -114,7 +114,7 @@ namespace CNA::Graphics {
         /**
          * @brief Projects an environment onto a light probe's nine coefficients.
          *
-         * plan_modern.md `MOD-2080`. The same cube-reading path the irradiance convolution above
+         * plans/plan_modern.md `MOD-2080`. The same cube-reading path the irradiance convolution above
          * uses, and deliberately not a second one -- but a *cheaper* integral: projecting onto
          * spherical harmonics visits each texel of the environment once, where the convolution
          * visits each texel of the *output* and integrates a hemisphere for it.
@@ -135,7 +135,7 @@ namespace CNA::Graphics {
         /**
          * @brief Generates the split-sum BRDF lookup table.
          *
-         * plan_modern.md `MOD-1207`. The second half of the split sum, and the half that depends on
+         * plans/plan_modern.md `MOD-1207`. The second half of the split sum, and the half that depends on
          * nothing but the BRDF: a 2D table indexed by (N·V, roughness) holding the scale and bias
          * to apply to a surface's F0. It is the same table for every scene, so it is generated once
          * and could equally be a shipped asset.
@@ -171,7 +171,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the i-th point of the Hammersley sequence over @p count points.
          *
-         * plan_modern.md `MOD-1206`. Exposed because every importance-sampled integral here rests
+         * plans/plan_modern.md `MOD-1206`. Exposed because every importance-sampled integral here rests
          * on it, and a radical inverse with a wrong bit twiddle produces a sequence that still
          * looks random and still converges -- to the wrong number.
          *

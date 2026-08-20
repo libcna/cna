@@ -92,10 +92,10 @@ bone-retargeting step at all.
 **Phase 11a ("one male + one female avatar that draws") is functionally complete as of
 Task 11.9. Phase 11b (real C++ engine integration) is complete as of Task 11.12. Phase
 11c (procedural variety) is complete as of Task 11.15** — see
-`docs/avatar-real-rendering-ext.md` and `plan_net.md` for full detail. Phase 11d
+`docs/avatar-real-rendering-ext.md` and `plans/plan_net.md` for full detail. Phase 11d
 (Task 11.16, optional/future, not scheduled) is all that remains.
 
-**Update (`plan_net.md` Phase 7, decision 4b):** the body/clothing generation this file
+**Update (`plans/plan_net.md` Phase 7, decision 4b):** the body/clothing generation this file
 describes below (`generate_body.py`/`generate_clothes.py`, joined via Blender's plain
 `bpy.ops.object.join()`) is what actually produced the "monster" avatars — visible
 self-intersecting mesh explosions at every joint, both statically and mid-animation, since
@@ -110,7 +110,7 @@ The original `generate_body.py`/`generate_clothes.py` (documented in their origi
 unmodified form in the rest of this file) remain standalone-runnable and are not deleted,
 but are no longer what a normal `generate_avatar.py` run actually builds.
 
-Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator") and Phase 7
+Full task detail: `plans/plan_net.md` Phase 11 ("Procedural Avatar Asset Generator") and Phase 7
 ("Avatar asset quality: stop the 'monster' avatars").
 
 ## Canonical skeleton (`generate_skeleton.py`)
@@ -240,7 +240,7 @@ have not been re-measured against the mesh-craft pipeline's own geometry; treat 
 historical record of the original Phase 11 pipeline, not the current state. Smaller gaps remain
 open on the new pipeline, honestly documented rather than glossed over: a residual shoe-area dark
 artifact, a `Wave`-pose chest-band artifact, and `validate_gltf.py` still lacking NaN/Inf/
-bone-index-bounds checks on generated content (see `plan_net.md` Phase 7's own "Honest overall
+bone-index-bounds checks on generated content (see `plans/plan_net.md` Phase 7's own "Honest overall
 assessment" for the authoritative, up-to-date list).
 
 Verify: `blender --background --python tools/avatar_builder/generate_body_meshcraft.py` runs the
@@ -262,7 +262,7 @@ itself).
 way as the skeleton/body builders, for reuse by `generate_avatar.py` (Task 11.7).
 
 These are explicitly placeholder flat colors, not final art — texture painting or
-tinting variety is out of scope until a later iteration (`plan_net.md` Phase 11c).
+tinting variety is out of scope until a later iteration (`plans/plan_net.md` Phase 11c).
 
 Verify: `blender --background --python tools/avatar_builder/generate_materials.py` runs
 without error and asserts all 5 materials exist with `Skin` as the body mesh's sole

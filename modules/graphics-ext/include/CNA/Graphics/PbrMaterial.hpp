@@ -55,7 +55,7 @@ namespace CNA::Graphics {
      * `KHR_materials_emissive_strength`) and the three alpha-coverage modes. Textures are
      * non-owning pointers; see the ownership note below.
      *
-     * **The point of this type is that it is lossless** (plan_modern.md `MOD-1300`–`MOD-1305`).
+     * **The point of this type is that it is lossless** (plans/plan_modern.md `MOD-1300`–`MOD-1305`).
      * Every field here corresponds to exactly one piece of `PbrEffect` state, so
      * `applyMaterial(material, effect)` followed by `extractMaterial(effect)` returns an equal
      * material. Before Phase 13 it described a subset and quietly dropped the rest, which made it
@@ -140,7 +140,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the linear emissive factor.
          *
-         * A `Vector3`, not a `Color` (plan_modern.md `MOD-1301`): `KHR_materials_emissive_strength`
+         * A `Vector3`, not a `Color` (plans/plan_modern.md `MOD-1301`): `KHR_materials_emissive_strength`
          * multiplies the authored factor by an unbounded scale, so an 8-bit colour cannot hold
          * what an HDR pipeline is meant to receive. The base colour factor stays a `Color` because
          * glTF bounds it to [0,1], where 8 bits per channel is the authored precision.
@@ -180,7 +180,7 @@ namespace CNA::Graphics {
          * @brief Returns how this material's alpha is interpreted.
          *
          * `Microsoft::Xna::Framework::Graphics::AlphaModeEXT`, not an enumeration of this layer's
-         * own (plan_modern.md `MOD-1302`): `PbrEffect` already carries that type, and two
+         * own (plans/plan_modern.md `MOD-1302`): `PbrEffect` already carries that type, and two
          * independently declared alpha-mode enums would only ever meet in a conversion function
          * nobody could delete.
          */

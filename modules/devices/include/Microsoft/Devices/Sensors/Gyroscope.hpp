@@ -80,7 +80,7 @@ namespace Microsoft::Devices::Sensors
          * statement and touches `this` for nothing afterward, so — with
          * this token fix — destroying this same instance from within its
          * own CurrentValueChanged handler is fully supported for this
-         * class (see plan_devices_phase8.md Task P8-1).
+         * class (see plans/plan_devices_phase8.md Task P8-1).
          */
         std::shared_ptr<std::vector<std::thread::id>> dispatchToken_;
 

@@ -71,7 +71,7 @@ factor_correct(z) = saturate((z + FogEnd) / (FogEnd - FogStart))
 
 This is **exactly** the formula this project's own `74ad3bae` commit ("fix(Task 1111): correct EasyGL's fog
 formula to genuinely match FNA, not just at z=0", 2026-07-16) independently derived and installed into
-EasyGL, validated by a real XNA-oracle diff (`plan_dx9.md D9-A6`: divergent pixels dropped from 23,716/65,536
+EasyGL, validated by a real XNA-oracle diff (`plans/plan_dx9.md D9-A6`: divergent pixels dropped from 23,716/65,536
 to near-zero). That commit's own message explicitly calls out the *other* formula —
 `(FogEnd-z)/(FogEnd-FogStart)` — as "a naive... falloff... **never actually equivalent to FNA even for
 FogStart<FogEnd**."
@@ -147,7 +147,7 @@ task being opened.
   EasyGL's own pre-existing fog tests.
 - FNA/XNA comparison: genuine divergence — confirmed via exact symbolic derivation from
   `EffectHelpers.SetFogVector`/`Common.fxh` (see above), independently corroborated by this project's own
-  `plan_dx9.md D9-A6` XNA-oracle-diff finding for the mathematically identical EasyGL case.
+  `plans/plan_dx9.md D9-A6` XNA-oracle-diff finding for the mathematically identical EasyGL case.
 - Related files: `bgfx_basiceffect_fog_test.cpp` (colored3d pipeline, same bug), `bgfx_basiceffect_lit_fog_test.cpp`
   (lit_textured3d pipeline, same bug); Vulkan's `colored3d.vert.glsl` and siblings (same bug, out of this
   batch's scope but flagged as a cross-backend consequence); `74ad3bae` (the EasyGL fix that was never

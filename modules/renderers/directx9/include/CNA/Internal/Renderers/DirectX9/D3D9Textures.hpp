@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.
+// plans/plan_dx9.md Phase D9-5 (D9-50/D9-51): real D3D9 texture renderers.
 //
 // RGBA8 storage only (D3DFMT_A8B8G8R8) -- matches D3D11Textures.hpp's own established
 // simplification (see that file's header comment): every ITextureRenderer/ITextureCubeRenderer/

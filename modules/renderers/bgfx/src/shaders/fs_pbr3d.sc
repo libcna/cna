@@ -2,7 +2,7 @@ $input v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor, v
 
 #include <bgfx_shader.sh>
 
-// plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect's fragment stage. Mirrors
+// plans/plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect's fragment stage. Mirrors
 // EasyGLRenderer::EnsurePbrProgram()'s PbrLight()/main() exactly (real glTF 2.0 reference
 // BRDF -- GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility, Schlick Fresnel, glTF Appendix
 // B.3.2-B.3.4) -- see that function's own doc comment for the full rationale, and
@@ -18,7 +18,7 @@ SAMPLER2D(s_texSpecular, 5);
 SAMPLER2D(s_texSpecularColor, 6);
 
 uniform vec4 u_diffuseColor;
-// plan_gltf.md GLTF-465: the shared VertexColorEnabled gate every other CNA bgfx program uses.
+// plans/plan_gltf.md GLTF-465: the shared VertexColorEnabled gate every other CNA bgfx program uses.
 uniform vec4 u_vertexColorEnabled3D;
 uniform vec4 u_ambientColor;
 uniform vec4 u_emissiveColor;
@@ -111,7 +111,7 @@ void main()
     vec4 baseColorTex = texture2D(s_texColor, rtFlipUV(
         pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 0), 0), u_rtFlipV.x));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), u_srgb.x);
-    // plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the
+    // plans/plan_gltf.md GLTF-465: COLOR_0 multiplies the base colour product, ALPHA INCLUDED -- the
     // alpha half is where a BLEND-mode vertex-coloured primitive's transparency comes from. The
     // colour is linear, so unlike the base-colour texture it is not sRGB-decoded.
     vec4 cnaVertexColor = u_vertexColorEnabled3D.x > 0.5 ? v_vertexColor0 : vec4(1.0, 1.0, 1.0, 1.0);

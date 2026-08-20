@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::Math (MODULARIZATION_PLAN.md §4): a consumer using only the
+// Minimal-link probe for CNA::Math (plans/MODULARIZATION_PLAN.md §4): a consumer using only the
 // XNA math surface must link nothing beyond the math module and sharp-runtime. The paired
 // ModuleLinkClosure_Math ctest inspects this executable's generated link line.
 #include "Microsoft/Xna/Framework/Color.hpp"

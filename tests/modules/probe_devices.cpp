@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::Devices (MODULARIZATION_PLAN.md §4/§11): the XNA-compatible
+// Minimal-link probe for CNA::Devices (plans/MODULARIZATION_PLAN.md §4/§11): the XNA-compatible
 // device base (Microsoft::Devices sensors/vibration) must be usable without the CNA device
 // extensions (devices-ext), graphics extensions or networking. The paired
 // ModuleLinkClosure_Devices ctest asserts neither extension archive appears.

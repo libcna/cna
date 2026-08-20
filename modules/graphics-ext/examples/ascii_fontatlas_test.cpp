@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Migrated from the former ASCII graphics renderer (plan_ascii.md Phase G2, ASCII-10/11): smoke
+// Migrated from the former ASCII graphics renderer (plans/plan_ascii.md Phase G2, ASCII-10/11): smoke
 // test for AsciiPostProcessEffect's hand-authored glyph-density font atlas.
 //
 // Check A -- every glyph's pixel-count (popcount of its 8x8 bitmap) is strictly increasing along

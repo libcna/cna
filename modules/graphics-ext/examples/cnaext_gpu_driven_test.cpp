@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2090..MOD-2095: section 20.10 end to end, with its costs.
+// plans/plan_modern.md MOD-2090..MOD-2095: section 20.10 end to end, with its costs.
 //
 // The unit tests already assert that each of these subsystems does what it says. What no test can
 // say is what any of it *costs*, and the section's whole argument is about cost -- a readback is a

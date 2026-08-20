@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-10: render-target oracle for the FNA3D renderer. FNA3D models a render
+// plans/plan_fna3d.md FNA3D-10: render-target oracle for the FNA3D renderer. FNA3D models a render
 // target as a destination texture plus, when multisampled, a separate colour renderbuffer that
 // must be resolved into it, with the depth/stencil renderbuffer handed to SetRenderTargets as a
 // third object -- so these checks exercise binding, drawing, resolving and reading back, not just

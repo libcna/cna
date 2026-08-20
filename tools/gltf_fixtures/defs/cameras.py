@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Camera fixtures -- owning group ``cameras`` (plan_gltf.md §24.2).
+"""Camera fixtures -- owning group ``cameras`` (plans/plan_gltf.md §24.2).
 
 ``cgltf_camera`` had **zero occurrences** in CNA: a file's cameras were dropped entirely, so an
 asset that had been framed by its author arrived with no framing at all.
@@ -108,7 +108,7 @@ def _camera_fixture(*, fixture_id: str, camera: dict, projection: list[float],
             0.0, 0.0, 1.0, 0.0,
             -_CAMERA_TRANSLATION[0], -_CAMERA_TRANSLATION[1], -_CAMERA_TRANSLATION[2], 1.0]
 
-    # plan_gltf.md GLTF-322. §3.10.3 makes aspectRatio optional and means "the viewport's" when it
+    # plans/plan_gltf.md GLTF-322. §3.10.3 makes aspectRatio optional and means "the viewport's" when it
     # is absent -- something an importer cannot know. The decision is stated here in both forms:
     # what was authored, and what the importer must therefore assume. A consumer that cannot tell
     # the two apart either stretches a deliberately framed shot or letterboxes a deliberately

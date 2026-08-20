@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2094: projected decals.
+// plans/plan_modern.md MOD-2094: projected decals.
 //
 // The row's acceptance criterion is one sentence -- a decal lands on the surface under it and not
 // on the surface behind it -- and it is the whole test. Two quads are drawn at very different

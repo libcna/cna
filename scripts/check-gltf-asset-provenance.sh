@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plan_gltf.md GLTF-406: CNA's chosen licence policy is that every committed glTF/GLB container is
+# plans/plan_gltf.md GLTF-406: CNA's chosen licence policy is that every committed glTF/GLB container is
 # CNA-generated corpus output. Real-world third-party models are fetched on demand by
 # fetch-gltf-sample-assets.sh and never copied into the repository.
 

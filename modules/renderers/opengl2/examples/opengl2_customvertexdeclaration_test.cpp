@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: proof that a genuinely custom VertexDeclaration (attribute order that matches
+// plans/plan_opengl2.md: proof that a genuinely custom VertexDeclaration (attribute order that matches
 // NONE of this renderer's fixed byte-strides) is honored via VertexBuffer::SetDataRaw() ->
 // IVertexBufferRenderer::SetVertexDeclaration() -> BindVertexAttributesForDeclaration(), instead
 // of silently falling back to (and misreading data through) the fixed-offset stride dispatch.

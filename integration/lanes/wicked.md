@@ -132,7 +132,7 @@ carried — why there is no feature-matrix column — was preserved and reworded
 | Underlying API | **Vulkan** via `wi::graphics::GraphicsDevice`. D3D12 exists in Wicked but is **not selectable** (`WICKED-60`: Wicked's HLSL6 path needs a root-signature macro CNA's shader source does not declare), so the Vulkan device is chosen on every platform |
 | Dependency | Wicked Engine, **source build**, pinned revision, plus its SDL3 platform patch |
 | Tests | `Wicked_PipelineKey` (device-independent) + `Wicked_Demo2D_SmokeTest` (registered only when examples build) |
-| Docs | `docs/wicked-backend.md`, `plan_wicked.md` |
+| Docs | `docs/wicked-backend.md`, `plans/plan_wicked.md` |
 
 **One public CNA backend, not several.** Wicked's internal Vulkan/D3D12 routes are *its* dispatch,
 not additional CNA contracts, and are deliberately not counted as such.
@@ -341,7 +341,7 @@ none unmatched**. Every difference classified, none unexplained:
 
 **Blob-level:** **9 of the 16 files are byte-identical** to the original head
 (`WickedGraphicsBackend.hpp/.cpp`, `WickedShaderSources.hpp`, `WickedPipelineKeyTest.cpp`,
-`plan_wicked.md`, `docs/wicked-backend.md`, `ThirdPartyWicked.cmake`, `WickedTests.cmake`,
+`plans/plan_wicked.md`, `docs/wicked-backend.md`, `ThirdPartyWicked.cmake`, `WickedTests.cmake`,
 `wicked-sdl3-platform.patch` — before the obligation commit edits two of them). The 7 that differ
 are exactly the union-resolved registration files. **The lane changed nothing outside its 16
 files** — verified by diffing the adapted head against the integration head and filtering them out.
@@ -746,4 +746,4 @@ the unpatched engine. Note on §13.3: the ThinkPad-preserved `wicked-repro/` bui
 did not survive the /rv migration to the EliteBook — both probes were rebuilt from the documented
 specification, and the current evidence set lives in the EliteBook WICKED build tree's
 `wicked-repro/` (location recorded in `NEXT.md`). Full record:
-`integration/BATCH_2_STABILIZATION.md` §12 and `plan_wicked.md` `WICKED-80`.
+`integration/BATCH_2_STABILIZATION.md` §12 and `plans/plan_wicked.md` `WICKED-80`.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-700..MOD-745: the orchestrator.
+// plans/plan_modern.md MOD-700..MOD-745: the orchestrator.
 //
 // Two properties matter more than the rest and are tested first: a pipeline with nothing enabled
 // must produce the frame the game would have produced without it (D8), and it must not pay for an
@@ -342,7 +342,7 @@ TEST(RenderPipelineTest, TheFixedPassOrderIsSsaoThenBloomThenTonemapThenFxaa)
 
 TEST(RenderPipelineTest, SsrSitsBetweenSsaoAndBloom)
 {
-    // plan_modern.md MOD-2005. Two decisions, each with a reason. SSR runs **after SSAO**, because
+    // plans/plan_modern.md MOD-2005. Two decisions, each with a reason. SSR runs **after SSAO**, because
     // what a mirror shows should be the shaded scene rather than the unshaded one; and **before the
     // tonemapper**, for the reason bloom is -- a reflection carries scene-referred colour, and
     // mixing it in after the range has been compressed makes a reflected highlight
@@ -367,7 +367,7 @@ TEST(RenderPipelineTest, SsrSitsBetweenSsaoAndBloom)
 
 TEST(RenderPipelineTest, TheCameraHistoryAdvancesOncePerFrameAndNotPerSetCamera)
 {
-    // plan_modern.md MOD-2031. Motion blur compares this frame's camera against the one the
+    // plans/plan_modern.md MOD-2031. Motion blur compares this frame's camera against the one the
     // *previous frame was rendered from*, so the history has to advance in end() and nowhere else.
     // Advancing it in setCamera would make a game that sets the camera twice in a frame -- or once
     // every other frame -- compare against a camera nothing was ever drawn with, and the blur would
@@ -403,7 +403,7 @@ TEST(RenderPipelineTest, TheCameraHistoryAdvancesOncePerFrameAndNotPerSetCamera)
 
 TEST(RenderPipelineTest, DepthOfFieldSitsBeforeBloomBecauseItBelongsToTheLens)
 {
-    // plan_modern.md MOD-2011. An out-of-focus highlight should bloom as the spread circle it
+    // plans/plan_modern.md MOD-2011. An out-of-focus highlight should bloom as the spread circle it
     // became, not as the point it was. Blooming first and blurring the glow afterwards is wrong in
     // the same way tonemapping before bloom would be, so the lens runs first.
     GraphicsDevice gd;

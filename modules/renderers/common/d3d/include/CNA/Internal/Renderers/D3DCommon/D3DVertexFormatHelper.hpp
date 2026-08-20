@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX3 (DX-16-vtx): stride-keyed vertex layout inference, mirroring the exact
+// plans/plan_dx.md Phase DIRECTX3 (DX-16-vtx): stride-keyed vertex layout inference, mirroring the exact
 // convention this project already established for WebGPU/Software (16/20/24/32/52-byte strides
 // map to VertexPositionColor/VertexPositionTexture/VertexPositionColorTexture/
 // VertexPositionNormalTexture/VertexPositionNormalTextureSkinned) -- not a new convention.
@@ -36,7 +36,7 @@ namespace CNA::Internal::Renderers::D3DCommon
     ///       (R8G8B8A8_UINT, 64)
     const D3D11_INPUT_ELEMENT_DESC* InputElementsForStride(std::size_t strideInBytes, UINT& count);
 
-    /// plan_dx.md Phase DX12 (DX-107): D3D12 counterpart of InputElementsForStride() above, same
+    /// plans/plan_dx.md Phase DX12 (DX-107): D3D12 counterpart of InputElementsForStride() above, same
     /// stride-keyed layouts (16/20/24/32/48/52/56/68 -- the last three added by the D3D12 PBR/
     /// skinned-vertex-color reconciliation follow-up, additive-only: D3D11's own InputElementsForStride()
     /// already covered them), same byte offsets/semantic names -- D3D11_INPUT_ELEMENT_DESC and

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-007: the L5 golden vertex/index buffer comparator, and the corpus asserted
+// plans/plan_gltf.md GLTF-007: the L5 golden vertex/index buffer comparator, and the corpus asserted
 // through it.
 //
 // Two halves, in the order they have to be trusted:

@@ -2,7 +2,7 @@
 
 **Audit date:** 2026-07-17  
 **Scope:** `Microsoft::Xna::Framework::Audio`, audio-related `Media`, CNA internal audio/XACT/XNB code, tests, examples, deployment paths, and SDL3/SDL3_mixer integration.  
-**Independence rule:** the pre-existing `plan_audio.md` was deliberately not read. This report and the replacement plan were derived from source code, tests, fixtures, and external reference implementations/documentation only.
+**Independence rule:** the pre-existing `plans/plan_audio.md` was deliberately not read. This report and the replacement plan were derived from source code, tests, fixtures, and external reference implementations/documentation only.
 
 ## Executive conclusion
 
@@ -274,4 +274,4 @@ The exact thresholds should be finalized after collecting XNA reference captures
 - SDL3 documentation for `SDL_AudioStream` creation and data submission.
 - SDL3_mixer documentation for track audio streams and frequency ratios.
 
-The replacement `plan_audio.md` contains the actionable work breakdown and completion gates derived from this report.
+The replacement `plans/plan_audio.md` contains the actionable work breakdown and completion gates derived from this report.

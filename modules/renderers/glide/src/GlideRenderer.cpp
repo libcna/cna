@@ -3330,7 +3330,7 @@ namespace CNA::Internal::Renderers::Glide
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_GLIDE
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Glide { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

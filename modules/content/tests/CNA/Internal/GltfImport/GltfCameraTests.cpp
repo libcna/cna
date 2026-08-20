@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-317 … GLTF-321: glTF cameras.
+// plans/plan_gltf.md GLTF-317 … GLTF-321: glTF cameras.
 //
 // `cgltf_camera` had ZERO occurrences in CNA. A file's cameras were dropped entirely, so an asset
 // that had been framed by its author arrived with no framing and every viewer had to invent one.
@@ -220,7 +220,7 @@ TEST(GltfCameras, AFileWithNoCamerasReportsNoneRatherThanADefault)
     EXPECT_TRUE(model.getCamerasEXTProperty().empty());
 }
 
-// --- plan_gltf.md GLTF-296: animation of camera (and light) nodes -----------------------------------
+// --- plans/plan_gltf.md GLTF-296: animation of camera (and light) nodes -----------------------------------
 
 // §3.11 animates *nodes*, and a camera node is an ordinary node -- so a channel targeting one needs
 // no camera-specific path at all: it is exactly the rigid animation GLTF-293 imports. This proves

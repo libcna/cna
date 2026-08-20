@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-24: real occlusion queries for the OpenGL4 graphics renderer --
+// plans/plan_opengl4.md GL4-24: real occlusion queries for the OpenGL4 graphics renderer --
 // OpenGL4OcclusionQueryRenderer wraps a genuine GL 1.5 core query object using GL_SAMPLES_PASSED
 // (an exact passed-sample count), unlike EasyGLOcclusionQueryRenderer's GLES3
 // GL_ANY_SAMPLES_PASSED (0/1-only) query -- matching real XNA's own desktop OcclusionQuery

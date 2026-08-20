@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-021 / GLTF-022 / GLTF-023 / GLTF-024: the container-level validation pass.
+// plans/plan_gltf.md GLTF-021 / GLTF-022 / GLTF-023 / GLTF-024: the container-level validation pass.
 //
 // Before this, cgltf_validate() had ZERO occurrences in CNA production code and extensionsRequired
 // was never read. A file whose accessor reached past its own bufferView decoded whatever was

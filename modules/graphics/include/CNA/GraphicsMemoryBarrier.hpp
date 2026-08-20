@@ -6,7 +6,7 @@ namespace CNA {
     /**
      * @brief Which memory accesses a barrier must order after a compute dispatch.
      *
-     * plan_modern.md `MOD-1503`. A bitmask of ordinals rather than a native constant, for the
+     * plans/plan_modern.md `MOD-1503`. A bitmask of ordinals rather than a native constant, for the
      * same reason every other value crossing the renderer boundary is: `IGraphicsRenderer` may not
      * name a backend's own enumerations, and each renderer translates these into its own bits.
      *
@@ -38,7 +38,7 @@ namespace CNA {
         /**
          * @brief The data will be read as the arguments of an indirect draw or dispatch.
          *
-         * plan_modern.md `MOD-2090`. Distinct from @ref ShaderStorage even though the same buffer
+         * plans/plan_modern.md `MOD-2090`. Distinct from @ref ShaderStorage even though the same buffer
          * usually carries both roles: writing a draw's vertex count through a storage binding and
          * then *fetching* it as a command are two different accesses, and ordering only the first
          * lets the command fetch read the previous frame's numbers on hardware that separates the

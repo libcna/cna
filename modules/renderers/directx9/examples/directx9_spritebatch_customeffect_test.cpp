@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-11 (D9-112): SpriteBatch::Begin(effect) wiring. Mirrors D3D11's own
+// plans/plan_dx9.md Phase D9-11 (D9-112): SpriteBatch::Begin(effect) wiring. Mirrors D3D11's own
 // DX-71 Check AA exactly (a runtime-compiled custom HLSL pair replaces the stock SpriteEffect
 // shaders for the whole batch, driving a deliberate RGB color inversion), adapted to D3D9's own
 // real SM2/SM3 HLSL syntax and its existing stride-24 SpriteVertex contract (POSITION0 FLOAT3,
@@ -106,7 +106,7 @@ protected:
         ShaderEffect invertEffect(dev, kVertexShaderSrc, kPixelShaderSrc);
         check(invertEffect.IsEffectValid(),
               "ShaderEffect (D3D9): a runtime-compiled custom HLSL pair for SpriteBatch's own "
-              "stride-24 SpriteVertex contract compiles successfully (plan_dx9.md D9-112)");
+              "stride-24 SpriteVertex contract compiles successfully (plans/plan_dx9.md D9-112)");
 
         Texture2D tex(dev, 1, 1);
         const Color redPixel[1] = {kRed};

@@ -108,7 +108,7 @@ provenance remains authoritative.
 
 Common base is `d79214e7600c0411ce912be11f8e762866be23ee`. Planning changed 45 paths from it,
 integration 1,148; eight overlap and seven of those are byte-identical. The only genuine both-side
-content divergence was `plan_postaudit.md`.
+content divergence was `plans/plan_postaudit.md`.
 
 Selectively reconciled into the integration tree:
 
@@ -116,7 +116,7 @@ Selectively reconciled into the integration tree:
 - all 21 lane cards and Batch 0–6 stabilization/completion records under `integration/`;
 - `integration/INTEGRATION_BRANCH_INVENTORY.md`,
   `INTEGRATION_HISTORY_POLICY.md`, and `INTEGRATION_ORDER.md`;
-- current `plan_postaudit.md`, retaining the integration-side N50/N51 correction;
+- current `plans/plan_postaudit.md`, retaining the integration-side N50/N51 correction;
 - `remediation/INTEGRATION_BRANCH_INVENTORY.md`, `REMEDIATION_EXIT.md`,
   `REMEDIATION_INDEX.md`, and `REMEDIATION_PROGRESS.md`;
 - current renderer documentation and this final reconciliation record.

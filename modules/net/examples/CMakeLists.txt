@@ -1,4 +1,4 @@
-# plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# plans/plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
 # wrong once:
 #
 #   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the

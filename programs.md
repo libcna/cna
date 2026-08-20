@@ -150,7 +150,7 @@ sudo apt-get install -y apitrace apitrace-tracers
 
 - **`apitrace`** (+ `apitrace-tracers`, the `LD_PRELOAD`-based OpenGL/EGL call interceptor) — traces
   the exact sequence of GL calls (with arguments) a test binary issues; used to debug a real,
-  still-open bug (Task 952, `plan_graphics.md`) where a `RenderTargetCube` face's FBO silently stops
+  still-open bug (Task 952, `plans/plan_graphics.md`) where a `RenderTargetCube` face's FBO silently stops
   producing color output the instant a depth texture is attached, with **no GL error at all**
   (confirmed via `MESA_DEBUG=1 LIBGL_DEBUG=verbose`, which also needs no extra package — both are
   Mesa runtime env vars, not separate tools). Works fully headless — no GUI needed
@@ -186,7 +186,7 @@ sudo apt-get install -y apitrace apitrace-tracers
       view-processing order* (not just call-issue order like `apitrace dump`), including every
       argument. `renderdoccmd thumb -o out.png <capture>.rdc` extracts a quick sanity-check
       thumbnail. Both were sufficient to rule out several hypotheses (FBO handle validity, view-id
-      targeting, texture-handle identity) with hard evidence — see `plan_graphics.md`'s Task 952
+      targeting, texture-handle identity) with hard evidence — see `plans/plan_graphics.md`'s Task 952
       entry for what was actually found this way. What's still blocked without the GUI: pixel
       history / arbitrary internal-texture readback (only exposed via the Python API or the GUI's
       own texture viewer), which is what's needed to finish Task 952.
@@ -201,13 +201,13 @@ Only needed for `-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake` builds
 §9, "Build (Linux → Windows cross-compilation with MinGW-w64)"). Not needed for any Linux-native
 backend.
 
-## 9. Optional: D3D11 backend Wine+DXVK dev loop (`plan_dx.md`)
+## 9. Optional: D3D11 backend Wine+DXVK dev loop (`plans/plan_dx.md`)
 
 ```bash
 sudo apt-get install -y dxvk-wine64
 ```
 
-Only needed if you're working on the `D3D11`/`D3D12` graphics backend plan (`plan_dx.md`, not yet
+Only needed if you're working on the `D3D11`/`D3D12` graphics backend plan (`plans/plan_dx.md`, not yet
 implemented as of this writing — Phase DX1 only). Not needed for any other backend or task in this
 repo. Builds on §8 (`mingw-w64`) — this is the piece that lets a cross-compiled `D3D11` `.exe`
 actually be *run and pixel-tested* on this Debian machine instead of only compiled.
@@ -227,7 +227,7 @@ actually be *run and pixel-tested* on this Debian machine instead of only compil
   its own binary will need to use `wine` instead (see `scripts/run-wine-dxvk.sh`).
 
 **Setting up a dedicated Wine prefix with DXVK installed** (this project's own convention —
-`plan_dx.md` `DX-2`, keeps this isolated from any other Wine prefix you might have):
+`plans/plan_dx.md` `DX-2`, keeps this isolated from any other Wine prefix you might have):
 
 ```bash
 export WINEPREFIX=~/.wine-cna-d3d11
@@ -262,11 +262,11 @@ unless no real GPU is available). If DXVK's DLL override isn't actually in effec
 calls would instead go through Wine's own built-in `WineD3D` — which also runs without crashing, so
 a missing/absent DXVK log file (not an error!) is the actual tell, not a visible failure.
 
-### D3D9 backend: three separate Wine prefixes (`plan_dx9.md`, `D9-130`)
+### D3D9 backend: three separate Wine prefixes (`plans/plan_dx9.md`, `D9-130`)
 
-The `D3D9` backend (`plan_dx9.md`) needs the same `dxvk-wine64` package as above, but uses **three
+The `D3D9` backend (`plans/plan_dx9.md`) needs the same `dxvk-wine64` package as above, but uses **three
 separate Wine prefixes** for three different jobs — using the wrong one wastes real time, since a
-prefix missing the right DLL still runs, just silently wrong (see `plan_dx9.md`'s own "The Wine
+prefix missing the right DLL still runs, just silently wrong (see `plans/plan_dx9.md`'s own "The Wine
 prefixes already exist" note):
 
 - **`~/.wine-cna-d3d9-spike`** (or `~/.wine-cna-d3d11`, the default `CNA_D3D9_WINEPREFIX` falls
@@ -298,7 +298,7 @@ verification discipline as §9 above.
 
 Android cross-compilation needs the Android NDK (not an apt package — a separate SDK/NDK download
 and toolchain file), and is currently **blocked** by pre-existing build regressions in the sibling
-`sharp-runtime` repo unrelated to system packages (`NEXT.md`/`plan_graphics.md` Task 920). Not
+`sharp-runtime` repo unrelated to system packages (`NEXT.md`/`plans/plan_graphics.md` Task 920). Not
 included in the list above; set up the NDK separately if/when that work resumes.
 
 ---

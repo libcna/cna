@@ -149,7 +149,7 @@ validation scene above, independently confirming the SpriteBatch pipeline, Textu
 resize/present paths against a second, unrelated codebase.
 
 `WEBGPU-131` closes the native 2D baseline on this evidence: `WEBGPU-124`–`WEBGPU-130` are all
-verified. 3D effects, render targets and MRT remain open (Phase 57 onward in `plan_webgpu.md`).
+verified. 3D effects, render targets and MRT remain open (Phase 57 onward in `plans/plan_webgpu.md`).
 
 ## GPU readback and a real translucency fix (2026-07-12)
 
@@ -287,7 +287,7 @@ relied on `BasicEffect`'s default `RasterizerState` (`CullCounterClockwiseFace`)
 `RasterizerState::CullNone` override every other WebGPU 3D test in this suite sets, and the
 triangle's winding is a genuine XNA back face under this renderer's (independently correct)
 `ToWGPUCullMode()` mapping, so it was being legitimately backface-culled regardless of MSAA. See
-`WEBGPU-58`'s `plan_webgpu.md` row for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
+`WEBGPU-58`'s `plans/plan_webgpu.md` row for the full investigation. `WebGPU_RenderTarget2D` (8 checks) verifies a Clear-only round
 trip and a real `BasicEffect` draw round trip via `GetData()`, a depth+stencil-tested target (a
 farther red quad loses to a nearer green one, with a genuine `ClearOptions::Stencil` clear — this
 also closed `WEBGPU-8`/`9`'s previously-unexercised stencil-attachment gap), sampling all 3 targets
@@ -462,7 +462,7 @@ The initial renderer is deliberately useful rather than an empty scaffold. It cu
 ## Important limitations
 
 This is **not yet equivalent to CNA's Vulkan, EasyGL or Bgfx 3D renderers**. The following remain
-open in `plan_webgpu.md`:
+open in `plans/plan_webgpu.md`:
 
 - `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedEffect`,
   `SkinnedPbrEffect`, `EnvironmentMapEffect` real dispatch and real instancing
@@ -543,4 +543,4 @@ line-by-line Vulkan translation:
 - Native surface creation is performed directly from SDL3 window properties; CNA does not require
   the separate `sdl3webgpu` compatibility library.
 
-See `plan_webgpu.md` for task-level status and the remaining parity work.
+See `plans/plan_webgpu.md` for task-level status and the remaining parity work.

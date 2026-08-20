@@ -1,4 +1,4 @@
-# plan_fx.md FX-061/FX-062/FX-063/FX-065: the MojoShader-to-CNA half of compiled effect support,
+# plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: the MojoShader-to-CNA half of compiled effect support,
 # shared by every backend that executes XNA Effect Framework bytecode. Extracted from the FNA3D
 # renderer once SDL_GPU needed the same code; before that it had exactly one consumer and there was
 # nothing to share.

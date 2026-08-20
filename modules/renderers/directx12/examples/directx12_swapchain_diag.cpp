@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx.md DX-102/DX-116: one-time, honest diagnostic for D3D12's real (window-attached)
+// plans/plan_dx.md DX-102/DX-116: one-time, honest diagnostic for D3D12's real (window-attached)
 // swap-chain path -- deliberately NOT registered as a CTest (mirrors this project's own
 // cna_diag_software precedent: a real, plain executable a developer/script runs by hand, not part
 // of the default green suite). Under vanilla Wine's own dxgi.dll (scripts/run-wine-vkd3d.sh),

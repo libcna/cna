@@ -119,7 +119,7 @@ namespace Microsoft::Xna::Framework::Media
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
         // MediaLibrary is the only component that knows which member song carries embedded art;
-        // this stays internal rather than widening the public XNA surface (plan_media.md MEDIA-208).
+        // this stays internal rather than widening the public XNA surface (plans/plan_media.md MEDIA-208).
         CNAEXT friend class MediaLibrary;
 
         /** @brief Returns whether two albums are equal. */
@@ -142,7 +142,7 @@ namespace Microsoft::Xna::Framework::Media
         // Audio file carrying embedded cover art (ID3v2 APIC / FLAC PICTURE), used only when no
         // file-based art exists. Stored as a path rather than the decoded bytes so a large library
         // does not hold every album's artwork in memory; extraction happens on demand in
-        // GetAlbumArt() (plan_media.md MEDIA-206/207/208).
+        // GetAlbumArt() (plans/plan_media.md MEDIA-206/207/208).
         std::string embeddedArtSourcePath_;
         SongCollection* songs_; // non-owning
         bool isDisposed_ = false;

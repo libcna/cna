@@ -5,7 +5,7 @@
 - Audit status: AUDITED
 - Subsystem: `examples-demo_achievement_showcase` shard
 - File type: standalone `Game`-subclass demo implementation (Task 15.9, later extended by
-  plan_net.md Task 4.5)
+  plans/plan_net.md Task 4.5)
 - XNA/FNA relevance: exercises `Achievement::CreateInternal`, `SignedInGamer::AwardAchievement`/
   `GetAchievements`, `AchievementCollection`
 - Related production code: `Achievement.hpp`/`.cpp`, `AchievementCollection.hpp`/`.cpp`,
@@ -47,7 +47,7 @@ note this file's own comments and printed output contradict — see `Achievement
 ## Cross-File Observations
 This file's own comments (lines 103-108, 118-123, 171-175) are the direct evidence proving the
 paired header's "confirmed no-op"/"always empty" scope note is stale — a real, later API upgrade
-(Task 4.5, plan_net.md Phase 4) made both `AwardAchievement` and `GetAchievements` genuinely
+(Task 4.5, plans/plan_net.md Phase 4) made both `AwardAchievement` and `GetAchievements` genuinely
 functional, disk-backed operations, and this file's comments were updated to reflect that while the
 header's were not.
 

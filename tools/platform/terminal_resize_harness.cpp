@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_platform.md PLAT-136 -- the terminal resize path, exercised where a terminal really exists.
+// plans/plan_platform.md PLAT-136 -- the terminal resize path, exercised where a terminal really exists.
 //
 // TerminalPlatform installs its SIGWINCH watcher only when it is attached to a terminal, and reads
 // the new size from its own standard output. Neither is true inside CnaTests: CI redirects output,

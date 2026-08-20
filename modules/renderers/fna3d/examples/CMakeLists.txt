@@ -76,14 +76,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
     cna_register_renderer_test(NAME Fna3d_Compressed COMMAND cna_test_fna3d_compressed
         TIMEOUT 120 LABELS "Fna3d")
 
-    # plan_fna3d.md FNA3D-26: the same tools/xna-oracle/CnaOracleRender.cpp the D3D9, EasyGL,
+    # plans/plan_fna3d.md FNA3D-26: the same tools/xna-oracle/CnaOracleRender.cpp the D3D9, EasyGL,
     # OpenGLES1 and Skia branches already build, linked against this renderer, so the checked-in
     # scene corpus can be rendered through FNA3D and diffed against the real XNA 4.0 reference
     # images by scripts/run-oracle-corpus-diff-fna3d.sh. This corpus is the only thing in the tree
     # that drives DualTextureEffect, EnvironmentMapEffect, SkinnedEffect, the lighting variants and
     # fog through this renderer.
     cna_fna3d_test(cna_oracle_render_fna3d ${CMAKE_SOURCE_DIR}/tools/xna-oracle/CnaOracleRender.cpp)
-    # plan_fna3d.md FNA3D-27: registered as a real CTest, unlike the OpenGLES1 twin, because this
+    # plans/plan_fna3d.md FNA3D-27: registered as a real CTest, unlike the OpenGLES1 twin, because this
     # is the only permanent coverage DualTextureEffect, EnvironmentMapEffect and SkinnedEffect have
     # under this renderer. The script gates on a scene failing to RENDER, not on pixel equality --
     # the corpus carries a host-wide XNA-vs-GL divergence that is not renderer-specific, and

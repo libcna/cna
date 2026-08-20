@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Content
      *        (`src/Content/ContentReader.cs`) -- the object-graph reader passed to every
      *        `ContentTypeReader<T>::Read()`.
      *
-     * Implements plan_xnb.md XNB-15 (shared-resource fixups), XNB-16/16B (1-based
+     * Implements plans/plan_xnb.md XNB-15 (shared-resource fixups), XNB-16/16B (1-based
      * type-reader-index root/nested-object dispatch, reader-version enforcement), and XNB-35
      * (`ReadExternalReference<T>()`, which needs a working `ContentManager::Load<T>()` round-trip
      * -- see that method's own docs).
@@ -74,7 +74,7 @@ namespace Microsoft::Xna::Framework::Content
          *                               @p manager if null and @p manager is non-null, else is a
          *                               no-op (see RecordDisposable()).
          * @param limits                 Bounds applied to the type-reader/shared-resource counts
-         *                               (plan_xnb.md XNB-10A).
+         *                               (plans/plan_xnb.md XNB-10A).
          */
         ContentReader(
             ContentManager* manager,
@@ -119,7 +119,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief FNA's `T ReadExternalReference<T>()`: reads a relative-path string naming a
-         *        sibling asset and loads it through the owning `ContentManager` (plan_xnb.md
+         *        sibling asset and loads it through the owning `ContentManager` (plans/plan_xnb.md
          *        XNB-35).
          *
          * The path is resolved relative to this `ContentReader`'s own asset name (matching FNA's
@@ -219,7 +219,7 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
-         * @brief FNA's `void ReadSharedResource<T>(Action<T> fixup)` (plan_xnb.md XNB-15).
+         * @brief FNA's `void ReadSharedResource<T>(Action<T> fixup)` (plans/plan_xnb.md XNB-15).
          *
          * Reads the shared-resource's 1-based index; index 0 means "no reference", and @p fixup
          * is never called. Otherwise, @p fixup is queued and invoked once the referenced shared
@@ -261,7 +261,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief FNA's internal `void InitializeTypeReaders()`: parses the type-reader table
-         *        (plan_xnb.md XNB-12) at the stream's current position, creates one fresh reader
+         *        (plans/plan_xnb.md XNB-12) at the stream's current position, creates one fresh reader
          *        instance per entry via `ContentTypeReaderManager` (XNB-14/14A), calls
          *        `Initialize()` on each, then reads the shared-resource count and allocates the
          *        per-resource fixup lists.
@@ -284,7 +284,7 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief CNAEXT bounds check for a collection reader's (`ArrayReader<T>`/`ListReader<T>`/
          *        `DictionaryReader<TKey,TValue>`) declared element count against
-         *        `XnbReadLimits::maxCollectionElementCount` (plan_xnb.md XNB-43), called before
+         *        `XnbReadLimits::maxCollectionElementCount` (plans/plan_xnb.md XNB-43), called before
          *        any collection allocation/reservation is attempted -- a corrupt or adversarial
          *        count (e.g. `0xFFFFFFFF` from a `uint32`, or a negative `int32` reinterpreted as
          *        an enormous `size_t` by `std::vector::reserve`) could otherwise trigger a huge
@@ -302,7 +302,7 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief CNAEXT bounds check for a decoded pixel/voxel buffer's byte size (e.g.
          *        `width * height * 4` for an uncompressed `Texture2D`) against
-         *        `XnbReadLimits::maxDecompressedSize` (plan_xnb.md XNB-43), called before any
+         *        `XnbReadLimits::maxDecompressedSize` (plans/plan_xnb.md XNB-43), called before any
          *        texture-sized allocation is attempted.
          *
          * Deliberately a *separate* check from `CheckCollectionElementCount()`, not a reuse of
@@ -324,7 +324,7 @@ namespace Microsoft::Xna::Framework::Content
          * @brief CNAEXT hardened counterpart of `BinaryReader::ReadBytes(int)` for `.xnb` readers
          *        that read a declared-length raw byte blob (texture pixel data, audio data,
          *        vertex/index buffer data) and require getting back *exactly* that many bytes
-         *        (plan_xnb.md XNB-43).
+         *        (plans/plan_xnb.md XNB-43).
          *
          * `BinaryReader::ReadBytes(int)` itself silently trims its result on a truncated stream
          * (matching real .NET's own non-throwing `ReadBytes(int)` contract) -- correct for that

@@ -15,7 +15,7 @@
  * the `CNAEXT`-marked extension members inside `Microsoft::Xna::Framework::Graphics` (PbrEffect,
  * ShaderEffect, morph targets, ...) are always compiled and are not affected by this option.
  *
- * @see CNAEXT.md for the design of this layer, and `plan_modern.md` for its task backlog.
+ * @see CNAEXT.md for the design of this layer, and `plans/plan_modern.md` for its task backlog.
  */
 
 #ifdef CNA_CNAEXT
@@ -27,7 +27,7 @@
  * Everything here is compiled only when the `CNA_CNAEXT` CMake option is on, which it is not by
  * default. The layer covers the HDR pipeline and its post-process chain, shadows, sky and
  * image-based lighting, materials, instancing with LOD and culling, and compute; `CNAEXT.md`
- * describes the design and `plan_modern.md` tracks the work.
+ * describes the design and `plans/plan_modern.md` tracks the work.
  * @{
  */
 

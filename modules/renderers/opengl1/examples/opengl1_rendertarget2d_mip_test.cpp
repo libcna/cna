@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: RenderTarget2D mip-chain generation on unbind (plan_opengl1.md item 21,
+// OPENGL1 renderer: RenderTarget2D mip-chain generation on unbind (plans/plan_opengl1.md item 21,
 // EasyGL parity).
 //
 // Before this, OpenGL1Renderer::CreateRenderTarget2D() silently dropped its own mipMap
@@ -13,7 +13,7 @@
 // degrades to a plain (non-mipmap) GL_LINEAR MIN_FILTER whenever the sampled texture's HasMips()
 // is false, so a flat color reads back identically whether or not a real mip chain exists --
 // exactly the "default value masks bug" trap this project's own test-design history has already
-// been burned by once (see plan_opengl1.md phase 6's SamplerState finding). Confirmed empirically:
+// been burned by once (see plans/plan_opengl1.md phase 6's SamplerState finding). Confirmed empirically:
 // a first version of this test using solid blue passed even with mip regeneration completely
 // disabled via mutation.
 //

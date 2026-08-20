@@ -603,7 +603,7 @@ _(pending — revisit once more backends are audited)_
 ## CI-masking risk: known-failing tests registered without an expected-failure annotation
 
 - `bgfx_rendertargetcube_depthformat_test.cpp` (`Bgfx_RenderTargetCube_DepthFormat` CTest target) asserts an
-  outcome the project's own `plan_graphics.md`/git log confirm is a still-open, known-failing case (Task 952) —
+  outcome the project's own `plans/plan_graphics.md`/git log confirm is a still-open, known-failing case (Task 952) —
   registered with no `WILL_FAIL`/skip annotation, meaning CI either already shows this red (masked among other
   noise) or something else is suppressing it.
 - `bgfx_skinnedeffect_weightspervertex_test.cpp` (`Bgfx_SkinnedEffect_WeightsPerVertex`) is confirmed via git
@@ -846,7 +846,7 @@ _(pending)_
   `cna-internal-core`'s Media subsystem. A potential OOB read if a video stream changes resolution mid-decode
   (low likelihood for this project's authored-cutscene use case, but currently unguarded). Notable because
   this file otherwise has the densest prior-review-fix documentation of any file in the whole audit
-  (18+ cited `plan_media.md` findings) yet doesn't address this specific case. See
+  (18+ cited `plans/plan_media.md` findings) yet doesn't address this specific case. See
   `src/CNA/Internal/Media/VideoDecoder.cpp.audit.md`.
 
 - **HIGH: `TextureCubeContentTypeReader.cpp` is missing the byte-count-vs-pixel-count validation both of
@@ -969,7 +969,7 @@ _(pending)_
   `applyToExistingBackend()`. This "happens to work" for preference-change resets routed through
   `GraphicsDeviceManager` itself, but a confirmed, real, independent path exists that bypasses it
   entirely: `Graphics::GraphicsDevice.cpp`'s `createBackend()` installs a `deviceEventCallback`
-  (lines 1459-1478, cited by its own comment as "plan_dx9.md D9-34: forward a REAL, backend-detected
+  (lines 1459-1478, cited by its own comment as "plans/plan_dx9.md D9-34: forward a REAL, backend-detected
   device-lost/reset event... Nine of the ten backends never call this") that raises
   `GraphicsDevice`'s *own* `DeviceResetting`/`DeviceReset` directly for a genuine backend-detected
   device-lost recovery (e.g. a D3D9-class alt-tab/display-mode-change scenario) — completely outside
@@ -1210,7 +1210,7 @@ _(pending)_
   suggested fix shape (report-only, no source changes made).
 - All 42 files in this shard are otherwise correct; no other new defects found. The shard is notable for
   unusually thorough self-documentation: nearly every non-trivial member across `NetworkSession`,
-  `NetworkGamer`, `LocalNetworkGamer`, and `AvailableNetworkSession` cites a specific `plan_net.md` task ID
+  `NetworkGamer`, `LocalNetworkGamer`, and `AvailableNetworkSession` cites a specific `plans/plan_net.md` task ID
   and/or a sibling-repo `DEFERRED.md` item number for every claimed FNA-stub-versus-restored-behavior
   distinction, rather than an unverifiable bare assertion -- the strongest practical substitute available
   given the total absence of an FNA reference for this namespace.
@@ -2063,7 +2063,7 @@ skipped for any environmental reason).
 ### Reconciliation note: this is a THIRD, previously-undocumented reason `ctest` is unreliable here, distinct from the project's own two already-known reasons
 
 Before detailing the finding below: this project's own `CMakePresets.json` ("tests" preset
-description) and `plan_audio20260717.md` (task `P9-BUILD-007`, consulted as secondary context per
+description) and `plans/plan_audio20260717.md` (task `P9-BUILD-007`, consulted as secondary context per
 D-3 -- not authoritative, but relevant here) already document that running the general suite via
 `ctest` (rather than the `CnaTests` binary directly) is unreliable, for two *specific*, different,
 already-disclosed reasons: (a) several tests share hardcoded `/tmp/cna_*_test/` scratch paths,

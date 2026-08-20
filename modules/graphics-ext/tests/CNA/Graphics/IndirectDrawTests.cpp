@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2090: indirect draws.
+// plans/plan_modern.md MOD-2090: indirect draws.
 //
 // The claim under test is not "a triangle appeared" -- an ordinary draw can do that. It is that the
 // numbers deciding how much to draw were read out of GPU memory. So the same geometry, the same

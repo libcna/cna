@@ -35,7 +35,7 @@ resolved *content* is correct, not merely that rendering didn't throw.
 **Needs attention** — the test itself is correctly constructed and its 6 checks all pass for the
 right structural reasons (real MSAA texture creation, real clamped `MultiSampleCount`, real
 resolve-and-readback), but the file's own header comment's central claim about *why* Checks D/E
-matter is contradicted by this project's own git-log-documented verification attempt: `plan_sdlgpu.md`'s
+matter is contradicted by this project's own git-log-documented verification attempt: `plans/plan_sdlgpu.md`'s
 SDLGPU-38 row states explicitly that reverting the actual pipeline-sample-count fix did **not**
 change Checks D/E's pass/fail outcome on this project's own dev environment — meaning the
 "only a real pixel readback... can [catch the bug]" claim (lines 25-28) is not just aspirational
@@ -96,14 +96,14 @@ overclaimed justification for Checks D/E — see F1.
 ### F1 — The header comment's claim that "only a real pixel readback... can [catch the sample-count-mismatch bug]" is contradicted by this project's own documented verification attempt, and the file does not disclose this
 
 - Severity: MEDIUM
-- Confidence: HIGH (directly quoting `plan_sdlgpu.md`'s own SDLGPU-38 row, which this audit
+- Confidence: HIGH (directly quoting `plans/plan_sdlgpu.md`'s own SDLGPU-38 row, which this audit
   consulted as required secondary context per the audit's cross-checking instructions)
 - Category: test-coverage / documentation-accuracy
 - Location/symbol: header comment lines 23-28 ("Checks D/E ... this is the actual discriminator
   for the adversarial-review finding that every pipeline hardcoded SDL_GPU_SAMPLECOUNT_1 ... only
   a real pixel readback proving the resolved content is correct can [catch it]"); Draw() Checks
   D/E (lines 202-218)
-- Evidence: `plan_sdlgpu.md`'s SDLGPU-38 row states, verbatim: *"Honest verification note: unlike
+- Evidence: `plans/plan_sdlgpu.md`'s SDLGPU-38 row states, verbatim: *"Honest verification note: unlike
   this session's other pipeline-state bugs, a git-stash-style revert of just this fix did **not**
   reproduce any visible pixel-readback difference on this dev environment's Vulkan driver
   (`SdlGpu_RenderTarget2DMSAA`'s new Checks D/E, added specifically to try to catch this, still
@@ -117,7 +117,7 @@ overclaimed justification for Checks D/E — see F1.
   comment, however, still asserts (present tense, unqualified) that a pixel readback "can" catch
   the bug, without the plan document's own caveat.
 - Why it matters: a future reader of this test file alone (without independently consulting
-  `plan_sdlgpu.md`, which is `EXEMPT`/not itself audited and easy to miss) would reasonably
+  `plans/plan_sdlgpu.md`, which is `EXEMPT`/not itself audited and easy to miss) would reasonably
   conclude Checks D/E provide real regression protection against a reintroduced hardcoded
   `SDL_GPU_SAMPLECOUNT_1` pipeline bug. Per the project's own documented experiment, they do not —
   a regression that reintroduced that exact bug would still pass this file's Checks D/E on this
@@ -128,7 +128,7 @@ overclaimed justification for Checks D/E — see F1.
 - FNA/XNA comparison: N/A — this is a test-authoring/documentation-accuracy question, not an
   XNA/FNA behavioral question; the underlying `MultiSampleCount`/resolve behavior itself was
   independently confirmed correct in the Behavioral Correctness section above.
-- Related files: `plan_sdlgpu.md` (SDLGPU-38 row, `EXEMPT` `planning-tracking-doc`, not itself
+- Related files: `plans/plan_sdlgpu.md` (SDLGPU-38 row, `EXEMPT` `planning-tracking-doc`, not itself
   audited, but load-bearing context this file's own claim should have echoed).
 - Suggested future action (not implemented by this audit): soften the header comment's claim to
   match the plan document's own honesty (e.g. "intended to discriminate this bug, though this
@@ -141,7 +141,7 @@ overclaimed justification for Checks D/E — see F1.
 
 - Directly contrasts with `sdlgpu_mrt_test.cpp`'s own Checks D/E in the same shard/batch, whose
   analogous "this is the real discriminator, not just didn't-throw" claim **was** independently
-  git-stash-verified per `plan_sdlgpu.md`'s SDLGPU-37 row (reverting to 1 attachment reproduced the
+  git-stash-verified per `plans/plan_sdlgpu.md`'s SDLGPU-37 row (reverting to 1 attachment reproduced the
   predicted failure exactly). The two files make structurally identical rhetorical claims about
   their own Checks D/E, but only one of the two claims is actually backed by a successful
   falsification experiment — this is exactly the kind of claim this audit's brief calls for

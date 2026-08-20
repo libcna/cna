@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-1..IGL-9: first end-to-end proof for the IGL graphics renderer. A real platform
+// plans/plan_igl.md IGL-1..IGL-9: first end-to-end proof for the IGL graphics renderer. A real platform
 // window, a real igl::IDevice on whichever backend the runtime selection picked, a real swap
 // surface, and a real 60-frame Clear() + Present() loop.
 //

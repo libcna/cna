@@ -71,7 +71,7 @@ permutation/preprocessor system) trades verbosity for simplicity and directness 
 GLES3-target backend without a more elaborate shader-variant infrastructure, though it does mean every new
 effect/vertex-format combination requires a new `Prog3D` member and a new `Ensure*Program()` method (as seen
 literally happening across this file's own history, e.g. PBR and SkinnedPbr being later additions per their
-`plan_cnj.md` citations).
+`plans/plan_cnj.md` citations).
 
 ### Maintainability
 629 lines for 11+ resource-class declarations plus the large `EasyGLGraphicsBackend` class itself is

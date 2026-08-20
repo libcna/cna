@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof #2 -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof #2 -- reuses
 // examples/easygl_basiceffect_golden_test.cpp's own BasicEffect scene verbatim (TextureEnabled+
 // VertexColorEnabled, DiffuseColor+EmissiveColor, LightingEnabled=false, constant UV=(0.25,0.25))
 // and its own golden PNG (examples/golden/easygl_basiceffect_golden_test.png), instead of a

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path tests for the DIRECTX3
+// plans/plan_freedirect.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path tests for the DIRECTX3
 // (DirectDraw, via the ../free-direct sibling) graphics renderer.
 //
 // Check A -- Draw() before Begin()/End() without Begin() throw (DX3-30 Begin/End contract).

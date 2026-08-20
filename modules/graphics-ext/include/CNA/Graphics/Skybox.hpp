@@ -27,7 +27,7 @@ namespace CNA::Graphics {
     /**
      * @brief Draws an environment cube map as the sky behind a scene.
      *
-     * plan_modern.md Phase 11. Small on its own, and the reason image-based lighting is worth
+     * plans/plan_modern.md Phase 11. Small on its own, and the reason image-based lighting is worth
      * looking at: an IBL-lit object reflects an environment the viewer cannot see is a hard sell.
      *
      * **One fullscreen triangle, no cube mesh** (`MOD-1102`). A sky drawn as a box needs a mesh,

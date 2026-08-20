@@ -24,7 +24,7 @@ namespace CNA::Graphics {
     /**
      * @brief Wireframe gizmos for the engine layer's own invisible structures.
      *
-     * plan_modern.md `MOD-2161`. This is the tool Phase 20 wanted and did without: a light's reach, a
+     * plans/plan_modern.md `MOD-2161`. This is the tool Phase 20 wanted and did without: a light's reach, a
      * probe grid's spacing, a cluster's depth slices and a cascade's fitted volume are all decisions
      * the layer makes silently, and every one of them was checked by arithmetic because there was no
      * way to look at one.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-14: the 2D pipeline end to end -- SpriteBatch through the IGL renderer's own
+// plans/plan_igl.md IGL-14: the 2D pipeline end to end -- SpriteBatch through the IGL renderer's own
 // dynamic vertex/index pool, uber-effect shader, sampler state and blend state, verified by reading
 // the rendered pixels back.
 //

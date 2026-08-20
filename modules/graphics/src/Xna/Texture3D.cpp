@@ -12,8 +12,8 @@
 #include <stdexcept>
 #include <vector>
 
-// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef volume-texture ceilings.
-// plan_runtimerenderer.md design decision 9: asked of the active renderer rather than the
+// plans/plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef volume-texture ceilings.
+// plans/plan_runtimerenderer.md design decision 9: asked of the active renderer rather than the
 // preprocessor -- only D3D9 has a real capability structure to answer from.
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -62,7 +62,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // REMED-CONTENT-004: Headless and Software both leave IGraphicsRenderer::CreateTexture3D()
         // at its shared default (returns nullptr) -- Headless has no real GPU resource of any kind
         // by design; Software's Texture3D support is an explicit, documented v1 scope boundary
-        // (plan_software.md Boundaries), not an oversight. Previously this left renderer_ null and
+        // (plans/plan_software.md Boundaries), not an oversight. Previously this left renderer_ null and
         // every subsequent SetData()/GetData() call silently no-op'd instead of failing -- a caller
         // had no way to know their data was silently discarded. Checked ahead of renderer creation,
         // matching this file's own D3D9 profile-ceiling check immediately below and the

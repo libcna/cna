@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: RenderTarget2D MSAA (plan_opengl1.md item 25, further improvement beyond
+// OPENGL1 renderer: RenderTarget2D MSAA (plans/plan_opengl1.md item 25, further improvement beyond
 // EasyGL parity).
 //
 // Before this, GetMultiSampleCount() was hardcoded 0 and the multiSampleCount constructor

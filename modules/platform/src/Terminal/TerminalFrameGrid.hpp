@@ -78,7 +78,7 @@ namespace CNA::Platform::Terminal {
      *
      * ### Why this is not `QuantizeFrameToGrid()` from `modules/graphics-ext`
      *
-     * `plan_platform.md` PLAT-132 proposed reusing that function, and it cannot be: it lives in
+     * `plans/plan_platform.md` PLAT-132 proposed reusing that function, and it cannot be: it lives in
      * `cna_graphics_ext`, which reaches `cna_platform` through `cna_graphics_core` → `cna_input`,
      * so calling into it from here would close a dependency cycle. The requirements diverged as
      * well — the terminal needs a four-rung colour ladder (PLAT-134) and cell-by-cell comparison

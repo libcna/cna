@@ -19,5 +19,5 @@
     "wBitsPerSample": 16
   },
   "supportMatrixStatus": "supported",
-  "notes": "plan_xnb.md XNB-33 support-matrix entry: 16-bit PCM stereo, confirming AudioChannels::Stereo (nChannels=2) is handled the same as mono."
+  "notes": "plans/plan_xnb.md XNB-33 support-matrix entry: 16-bit PCM stereo, confirming AudioChannels::Stereo (nChannels=2) is handled the same as mono."
 }

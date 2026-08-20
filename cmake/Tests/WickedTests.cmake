@@ -1,4 +1,4 @@
-# plan_runtimerenderer.md RTR-P9-21: membership, not equality -- these standalone targets should
+# plans/plan_runtimerenderer.md RTR-P9-21: membership, not equality -- these standalone targets should
 # build whenever WICKED is compiled in, including a multi-renderer build where it is not the default.
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND "WICKED" IN_LIST CNA_RENDERER_IDENTITIES)
@@ -45,7 +45,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         endif()
     endmacro()
 
-    # plan_wicked.md WICKED-70. Device-independent: the pipeline cache key is the one piece of this
+    # plans/plan_wicked.md WICKED-70. Device-independent: the pipeline cache key is the one piece of this
     # renderer that can be tested without a GPU, and also the piece where a mistake is silent -- a
     # key that compares or hashes two different render states as equal makes the cache return a
     # pipeline built for the wrong state, which renders with no error at all.
@@ -54,7 +54,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Wicked_PipelineKey COMMAND cna_test_wicked_pipeline_key)
     set_tests_properties(Wicked_PipelineKey PROPERTIES LABELS "Unit;Wicked" TIMEOUT 60)
 
-    # plan_wicked.md WICKED-78. The regression signal is the process surviving plain device
+    # plans/plan_wicked.md WICKED-78. The regression signal is the process surviving plain device
     # lifecycles: before the teardown fix, the first bare create/destroy aborted the binary inside
     # Wicked's VMA ("Some allocations were not freed"), which is also why the shared corpus could
     # not run under this renderer at all. Needs a real device, window and display, like the smoke
@@ -65,7 +65,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Wicked_DeviceLifecycle PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_wicked.md WICKED-77. The instanced route carries the geometry stream's whole public
+    # plans/plan_wicked.md WICKED-77. The instanced route carries the geometry stream's whole public
     # VertexOffset in the stream table (the ordinary routes fold it into baseVertex), and this
     # renderer dropped it at bind time -- an offset-selected record rendered nothing while the
     # identical bytes drew correctly through the ordinary indexed route.
@@ -75,7 +75,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Wicked_GeometryVertexOffset PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_wicked.md WICKED-80. Byte-exact staged-transfer matrix: narrow/aligned/boundary
+    # plans/plan_wicked.md WICKED-80. Byte-exact staged-transfer matrix: narrow/aligned/boundary
     # Texture3D volumes, sub-box upload and readback, repeated readbacks, and the WICKED-79
     # Texture2D, TextureCube-face and small-mip controls that ride the same staging arithmetic.
     # Before cmake/patches/wicked-staging-footprint.patch the upstream device under-allocated
@@ -101,7 +101,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Wicked_Pbr_FresnelFactors PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_wicked.md WICKED-74. Everything else in this renderer needs a real Vulkan device, a
+    # plans/plan_wicked.md WICKED-74. Everything else in this renderer needs a real Vulkan device, a
     # window and a display, so it is covered by the same demo smoke test the other GPU renderers
     # register. It is registered only when the examples are built, and skips rather than fails when
     # no display is available.

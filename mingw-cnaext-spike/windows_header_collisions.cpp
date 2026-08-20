@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_modern.md MOD-1719. A D3D renderer's translation unit includes <windows.h> before it
+// plans/plan_modern.md MOD-1719. A D3D renderer's translation unit includes <windows.h> before it
 // includes anything of ours, and <windows.h> is a macro minefield: `near` and `far` are object-like
 // macros in windef.h, and `GetObject`, `DrawText` and friends are #defined to their A/W variants.
 // Any of those turns a perfectly good declaration in this layer into a syntax error only on Windows

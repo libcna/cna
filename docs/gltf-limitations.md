@@ -18,7 +18,7 @@ a promise.
   `modules/content/src/GltfImport/GltfImportCore.cpp`, the same registry the `extensionsRequired`
   gate reads. `GltfLimitationsDoc.ExtensionTableAgreesWithTheRegistry` compares this file against
   it row by row and **prints the corrected table on failure** — paste that, do not edit the rows by
-  hand. (`plan_gltf.md` §19 carries the same table and the same rule; the two are generated from
+  hand. (`plans/plan_gltf.md` §19 carries the same table and the same rule; the two are generated from
   one registry, which is why they cannot disagree.)
 * **Every report field named below must exist.**
   `GltfLimitationsDoc.EveryReportFieldNamedHereExistsInTheHeader` reads
@@ -211,7 +211,7 @@ TRS composed *after* the node's own transform.
 
 **What CNA already has.** `GraphicsDevice::DrawInstancedPrimitives` is real XNA 4.0 API and is
 implemented on every GPU renderer; `GpuDrawParams::instanceCount` and a per-instance
-`VertexBuffer` stream already exist (`plan_cnj.md` §3.3). So the GPU half is not the work.
+`VertexBuffer` stream already exist (`plans/plan_cnj.md` §3.3). So the GPU half is not the work.
 
 **The sketch.**
 
@@ -258,4 +258,4 @@ rather than applied is a scope decision recorded in the API-change review, not a
 
 See also: `docs/gltf-conventions.md` (every decision with its rationale),
 `docs/gltf-conformance.md` (the oracle ladder and the corpus), `docs/gltf-api-change-review.md`
-(what may become public API), and `plan_gltf.md` (the 460-row campaign record).
+(what may become public API), and `plans/plan_gltf.md` (the 460-row campaign record).

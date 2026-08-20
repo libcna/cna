@@ -147,7 +147,7 @@ No CRITICAL/HIGH/MEDIUM findings.
   since it independently proves the real count via actual creation rather than reading the same
   literal back.
 - `git log --oneline -- examples/d3d9_shadercache_test.cpp` shows a single authoring commit
-  (`2082aa73 feat(plan_dx9.md): close D9-74 -- D3D9ShaderCache creates all 66 shaders live -- Phase
+  (`2082aa73 feat(plans/plan_dx9.md): close D9-74 -- D3D9ShaderCache creates all 66 shaders live -- Phase
   D9-7 COMPLETE`), consistent with the file's own single-task scope.
 - This test's Check D (stage-aware lookup) is a good complement to `d3d9_shaderdispatch_test.cpp`'s
   own exhaustive name-sweep — together the two files prove both "the name tables are transcribed

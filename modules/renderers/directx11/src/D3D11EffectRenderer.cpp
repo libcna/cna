@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX8 (DX-58).
+// plans/plan_dx.md Phase DIRECTX8 (DX-58).
 #include "CNA/Internal/Renderers/DirectX11/D3D11EffectRenderer.hpp"
 
 #include <d3dcompiler.h>

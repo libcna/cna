@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-19: AlphaTestEffect + DualTextureEffect for the OpenGL4 graphics renderer.
+// plans/plan_opengl4.md GL4-19: AlphaTestEffect + DualTextureEffect for the OpenGL4 graphics renderer.
 // Both effects reuse the existing textured3d (stride 20, VertexPositionTexture) and
 // colored_textured3d (stride 24) shader programs GL4-13 already built -- DualTextureEffect
 // samples both textures with the SAME UV set in real XNA (no separate UV1 vertex attribute), and

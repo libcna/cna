@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: genuine cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: genuine cross-renderer visual-parity proof -- reuses
 // examples/easygl_environmentmapeffect_golden_test.cpp's own combined EnvironmentMapEffect scene
 // verbatim (same texture, cube map, matrices, effect parameters) and its own golden PNG
 // (examples/golden/easygl_environmentmapeffect_golden_test.png, originally captured from the

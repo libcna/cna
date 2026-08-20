@@ -6,7 +6,7 @@ namespace CNA {
     /**
      * @brief How a compute shader will access a texture bound as an image.
      *
-     * plan_modern.md `MOD-1504`. Declaring the access is not a formality: a driver may keep a
+     * plans/plan_modern.md `MOD-1504`. Declaring the access is not a formality: a driver may keep a
      * write-only image's previous contents undefined, and a read-write binding costs coherence a
      * write-only one does not.
      */

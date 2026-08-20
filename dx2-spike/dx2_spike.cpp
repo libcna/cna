@@ -1,4 +1,4 @@
-// DX2-0 existence-gate spike (plan_dx2.md, to be written). Deliberately NOT part of the CNA
+// DX2-0 existence-gate spike (plans/plan_dx2.md, to be written). Deliberately NOT part of the CNA
 // build -- throwaway, standalone proof that real DirectX 2 execute-buffer Direct3D works end to
 // end via MinGW-w64 + Wine before any backend code is written.
 #include <windows.h>

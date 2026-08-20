@@ -16,7 +16,7 @@ front/back`) at a given mip level, plus the entire-texture convenience overloads
 Correct. `GetTypeName()` correctly returns the fully-qualified `.NET` name (confirmed in the paired
 `.cpp`, unlike the sibling `Texture2D`'s isolated regression). Move-only semantics are explicitly and
 correctly declared (copy deleted, move defaulted), with a well-documented rationale for why a move
-path was newly added (`plan_xnb.md` XNB-25's `Texture3DReader` needed to return this type by value).
+path was newly added (`plans/plan_xnb.md` XNB-25's `Texture3DReader` needed to return this type by value).
 
 ## Checklist Results
 - Doxygen coverage: complete.

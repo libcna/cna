@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12: D3D12 renderer. DX-101 landed CMake wiring + an honest all-stub skeleton.
+// plans/plan_dx.md Phase DX12: D3D12 renderer. DX-101 landed CMake wiring + an honest all-stub skeleton.
 // DX-102/DX-103/DX-104/DX-105 (this revision) make the device-lifetime group real: ID3D12Device +
 // command queue + descriptor heaps (RTV/DSV/CBV_SRV_UAV) + per-frame command allocators/command
 // list + fence-based frame synchronization. Clear()/Present()/draw calls are STILL honest
@@ -32,7 +32,7 @@ namespace CNA::Internal::Renderers::DirectX12
     using Microsoft::WRL::ComPtr;
 
     /**
-     * D3D12 graphics renderer (plan_dx.md Phase DX12). DX-100's own spike (real Wine+vkd3d-proton
+     * D3D12 graphics renderer (plans/plan_dx.md Phase DX12). DX-100's own spike (real Wine+vkd3d-proton
      * run) found `D3D12CreateDevice`/`CreateCommandQueue`/descriptor-heap/fence/command-allocator/
      * command-list calls all work genuinely well locally (feature level 12_1, DXR 1.1, SM 6.8 on
      * the real GPU), but `CreateSwapChainForHwnd` with `DXGI_SWAP_EFFECT_FLIP_DISCARD` crashes
@@ -575,7 +575,7 @@ namespace CNA::Internal::Renderers::DirectX12
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
 
-        // Device lifetime (plan_dx.md design decision 11's own grouping, reused for D3D12).
+        // Device lifetime (plans/plan_dx.md design decision 11's own grouping, reused for D3D12).
         ComPtr<ID3D12Device> device_;
         ComPtr<IDXGIFactory4> factory_;
         ComPtr<ID3D12CommandQueue> commandQueue_;

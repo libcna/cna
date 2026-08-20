@@ -14,7 +14,7 @@
 namespace CNA::Internal::Renderers::Headless
 {
     /**
-     * Runtime strictness dial for the Headless renderer (plan_headless.md design decision 1). Selected via
+     * Runtime strictness dial for the Headless renderer (plans/plan_headless.md design decision 1). Selected via
      * the CNA_HEADLESS_MODE environment variable (Fast/Validation/Trace, default Validation) and
      * overridable programmatically before Game::Run() via HeadlessRenderer::SetMode().
      */
@@ -37,7 +37,7 @@ namespace CNA::Internal::Renderers::Headless
     [[nodiscard]] HeadlessMode ParseHeadlessModeFromEnvironment();
 
     /// Thrown by HeadlessValidation/HeadlessTrace mode when a caller violates an argument or API-contract
-    /// rule (see plan_headless.md Phase N3). Carries the specific rule that was violated, not a
+    /// rule (see plans/plan_headless.md Phase N3). Carries the specific rule that was violated, not a
     /// generic message, so a failing test points directly at the actual mistake.
     class HeadlessValidationException : public std::runtime_error
     {
@@ -45,7 +45,7 @@ namespace CNA::Internal::Renderers::Headless
         explicit HeadlessValidationException(const std::string& message) : std::runtime_error(message) {}
     };
 
-    /// Cumulative and per-resource-type counters (plan_headless.md Phase N4). Read via
+    /// Cumulative and per-resource-type counters (plans/plan_headless.md Phase N4). Read via
     /// HeadlessRenderer::GetStatistics()/GetLastFrameStatistics().
     struct HeadlessStatistics
     {
@@ -73,7 +73,7 @@ namespace CNA::Internal::Renderers::Headless
         std::uint64_t occlusionQueriesCreated = 0;
     };
 
-    /// One entry in the shared resource registry (plan_headless.md HEADLESS-18). `id` is a monotonic
+    /// One entry in the shared resource registry (plans/plan_headless.md HEADLESS-18). `id` is a monotonic
     /// debug ID, not a GPU handle -- Headless resources never touch a GPU at all.
     struct HeadlessResourceRecord
     {
@@ -127,7 +127,7 @@ namespace CNA::Internal::Renderers::Headless
     /// is deliberately excluded since it is a redundant position counter, not meaningful call
     /// content). Intended for catching behavioral drift between two runs of the same
     /// (ideally deterministic) game across commits, independent of any pixel output --
-    /// plan_headless.md HEADLESS-43.
+    /// plans/plan_headless.md HEADLESS-43.
     [[nodiscard]] HeadlessTraceLogDiff CompareTraceLogs(const std::vector<HeadlessTraceEntry>& baseline,
                                                          const std::vector<HeadlessTraceEntry>& current);
 
@@ -184,7 +184,7 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] int Capacity() const { return capacity_; }
         [[nodiscard]] std::size_t Stride() const { return stride_; }
         /// Raw bytes from the most recent SetData() call -- kept (not discarded) so tests can
-        /// assert on actual buffer contents, not just that SetData() was called (plan_headless.md HEADLESS-10).
+        /// assert on actual buffer contents, not just that SetData() was called (plans/plan_headless.md HEADLESS-10).
         [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
     private:
@@ -454,7 +454,7 @@ namespace CNA::Internal::Renderers::Headless
         void BindTexture(int unit, ITextureRenderer* texture) override;
 
         /// Last scalar/vector value set for each uniform name, keyed by name -- lets a test assert
-        /// "did the game set this uniform" without a real shader compiler (plan_headless.md HEADLESS-16).
+        /// "did the game set this uniform" without a real shader compiler (plans/plan_headless.md HEADLESS-16).
         [[nodiscard]] const std::unordered_map<std::string, std::vector<float>>& UniformValues() const
         { return uniformValues_; }
         [[nodiscard]] bool IsBound() const { return bound_; }
@@ -471,7 +471,7 @@ namespace CNA::Internal::Renderers::Headless
         std::unordered_map<int, ITextureRenderer*> boundTextures_;
     };
 
-    /// One recorded SpriteBatch::Draw() call (plan_headless.md HEADLESS-17).
+    /// One recorded SpriteBatch::Draw() call (plans/plan_headless.md HEADLESS-17).
     struct HeadlessSpriteDrawRecord
     {
         const ITextureRenderer* texture = nullptr;
@@ -558,7 +558,7 @@ namespace CNA::Internal::Renderers::Headless
     /**
      * @brief Headless graphics renderer: touches no GPU and no window at all.
      *
-     * See plan_headless.md for the full task breakdown and design rationale. In short: every method
+     * See plans/plan_headless.md for the full task breakdown and design rationale. In short: every method
      * either does real bookkeeping (resource lifecycle, draw-call/state-change counters) or is a
      * genuine no-op, but nothing here ever allocates a GPU resource, compiles a real shader, or
      * requires SDL's video subsystem to be initialised.
@@ -659,7 +659,7 @@ namespace CNA::Internal::Renderers::Headless
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
-        // ---- Headless-specific, CNAEXT-equivalent debug/testing API (plan_headless.md Phase N4/N5) ----
+        // ---- Headless-specific, CNAEXT-equivalent debug/testing API (plans/plan_headless.md Phase N4/N5) ----
 
         /// Sets the runtime validation strictness. Safe to call before or during a run; takes
         /// effect for all subsequent calls.
@@ -675,7 +675,7 @@ namespace CNA::Internal::Renderers::Headless
         /// Walks the resource registry and returns every resource still alive. Empty means clean.
         [[nodiscard]] std::vector<HeadlessResourceRecord> AliveResources() const { return state_->registry.AliveResources(); }
         /// Throws HeadlessValidationException listing every still-alive resource, or returns
-        /// normally if none remain (plan_headless.md HEADLESS-34/35). Callable mid-run, not just at
+        /// normally if none remain (plans/plan_headless.md HEADLESS-34/35). Callable mid-run, not just at
         /// teardown.
         void AssertNoLeaks() const;
 
@@ -683,7 +683,7 @@ namespace CNA::Internal::Renderers::Headless
         [[nodiscard]] const std::vector<HeadlessTraceEntry>& TraceLog() const { return state_->traceLog; }
         /// Renders TraceLog() as human-readable text, one call per line
         /// ("[frame N #callIndex] method: argsSummary"), for CI logs or diffing between runs
-        /// (plan_headless.md HEADLESS-42).
+        /// (plans/plan_headless.md HEADLESS-42).
         [[nodiscard]] std::string FormatTraceLog() const;
         /// Convenience wrapper: writes FormatTraceLog() to @p out (stdout by default).
         void DumpTraceLog(std::FILE* out = stdout) const;

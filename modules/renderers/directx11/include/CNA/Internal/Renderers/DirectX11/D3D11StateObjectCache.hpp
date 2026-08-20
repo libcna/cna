@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX7 (DX-50/DX-51/DX-52): real ID3D11BlendState/ID3D11DepthStencilState/
+// plans/plan_dx.md Phase DIRECTX7 (DX-50/DX-51/DX-52): real ID3D11BlendState/ID3D11DepthStencilState/
 // ID3D11RasterizerState creation + caching from the raw XNA-level ordinals IGraphicsRenderer's
 // ApplyBlendState/ApplyDepthStencilState/ApplyRasterizerState already carry, via D3DCommon's
 // DX-12-state/this phase's own DX-51 StencilOperationToD3D11 mapping tables -- same per-distinct-

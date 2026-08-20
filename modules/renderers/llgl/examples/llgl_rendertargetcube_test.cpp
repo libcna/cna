@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-26: RenderTargetCube proof for the LLGL graphics renderer, asserted against
+// plans/plan_llgl.md LLGL-26: RenderTargetCube proof for the LLGL graphics renderer, asserted against
 // real pixels read back from the GPU.
 //
 // A distinct solid colour is cleared into each of the 6 faces (via GraphicsDevice.SetRenderTarget

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1406..MOD-1411: level-of-detail selection and frustum culling.
+// plans/plan_modern.md MOD-1406..MOD-1411: level-of-detail selection and frustum culling.
 //
 // Both classes answer a question rather than draw anything, so they are testable exactly: the
 // selection at a boundary, the selection either side of it, what hysteresis holds and what it

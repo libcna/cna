@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-163/184/373/374/379/394: repository-wide renderer contracts are tested from the
+// plans/plan_gltf.md GLTF-163/184/373/374/379/394: repository-wide renderer contracts are tested from the
 // renderer sources even when the current host cannot compile or execute a particular backend.
 // This covers 32-bit index-factory ownership as well as PBR texture bindings, packed-channel
 // semantics and neutral fallbacks.
@@ -137,7 +137,7 @@ namespace
          "params.pbrMetallicRoughnessMap->BindGL(2); else default_white_texture_.active_bind",
          "params.pbrEmissiveMap->BindGL(3); else default_white_texture_.active_bind",
          "params.pbrOcclusionMap->BindGL(4); else default_white_texture_.active_bind"},
-        // plan_igl.md: IGL compiles a shader variant per feature set, so an absent map is not
+        // plans/plan_igl.md: IGL compiles a shader variant per feature set, so an absent map is not
         // sampled at all rather than sampled from a neutral texture. Its dispositions are therefore
         // the feature-flag guards that decide which variant is built -- see
         // IglShaderLibrary.cpp's `cnaHas(CNA_NORMAL_MAP)` and friends for the consuming half, which
@@ -1312,7 +1312,7 @@ namespace
             "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned",
             "if (params.pbr) return StockProgramShape::Pbr",
             "Prog3D& p = SelectProgram(layoutStride, params)"}}},
-        // plan_igl.md: IGL bakes the cull mode into its pipeline key, so the caller's
+        // plans/plan_igl.md: IGL bakes the cull mode into its pipeline key, so the caller's
         // RasterizerState reaches the draw through the pipeline cache rather than through a
         // per-draw state call -- and a PBR draw is a feature-flag variant of the same shader, so
         // one key carries both.
@@ -1809,7 +1809,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoi
     }
 }
 
-// plan_gltf.md GLTF-476. The inventory below this one partitions the PBR renderers by whether they
+// plans/plan_gltf.md GLTF-476. The inventory below this one partitions the PBR renderers by whether they
 // sample KHR_materials_specular's two maps, and it labelled `igl` "factor-only" -- which was never
 // checked against anything. It was false: `igl` consumed 6 of the 20 PBR draw parameters, and the
 // 14 it dropped included four CORE glTF 2.0 material inputs (normalTexture.scale,
@@ -2733,7 +2733,7 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX11SkinnedEffectUsesOpaqueWhiteForMiss
     )"))) << "both the PBR and plain-skinned bindings require opaque-white texture0 fallbacks";
 }
 
-// --- plan_gltf.md GLTF-462/GLTF-465: the stride-60 record, per renderer ---------------------------
+// --- plans/plan_gltf.md GLTF-462/GLTF-465: the stride-60 record, per renderer ---------------------------
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60RecordOrIsNamedAsNotYet)
 {
@@ -2802,7 +2802,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherBindsTheStride60Record
 
 TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrRendererEitherBindsTheStride80RecordOrRefusesIt)
 {
-    // plan_gltf.md GLTF-463: stride 80 is the whole stride-76 skinned PBR record with a packed
+    // plans/plan_gltf.md GLTF-463: stride 80 is the whole stride-76 skinned PBR record with a packed
     // COLOR_0 appended, and it is where a SKINNED vertex-coloured metallic-roughness primitive now
     // imports to -- so it is ordinary content, not a corner case. Unlike stride 60 there is no
     // pre-existing row to grow a meaning: a renderer either declares the layout and its shader's
@@ -3023,7 +3023,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
         {"bgfx", "const float vcePbr[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };"},
         {"llgl", "uniforms[134] = params.vertexColorEnabled ? 1.0f : 0.0f;"},
         // SDL_GPU's PC block already carried the flag -- its own comment called it "unused".
-        {"sdl-gpu", "float vertexColorEnabled; // plan_gltf.md GLTF-465: gates the COLOR_0 product below"},
+        {"sdl-gpu", "float vertexColorEnabled; // plans/plan_gltf.md GLTF-465: gates the COLOR_0 product below"},
         {"opengl2", "if (lit || skinned || pbr || pbrSkinned)"},
         {"opengl4", "gl4_glUniform1f(vertexColorLoc, params.vertexColorEnabled ? 1.0f : 0.0f);"},
         {"vulkan", "pc[31] = p.vertexColorEnabled ? 1.f : 0.f;"},
@@ -3095,7 +3095,7 @@ TEST(GltfRendererPbrFallbackPolicy, VertexColourReachesTheBaseColourProductOnlyW
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrRefusesTheDrawExplicitly)
 {
-    // plan_gltf.md GLTF-465, and the reason this test exists rather than another prose row: the
+    // plans/plan_gltf.md GLTF-465, and the reason this test exists rather than another prose row: the
     // project owner rejected `GLTF CORE 2.0 CORRECT` on 2026-08-18 with an argument that decides the
     // shape of the whole task. A renderer that ACCEPTS a valid glTF asset carrying COLOR_0 on a
     // metallic-roughness material and then substitutes the opaque-white identity renders a visibly
@@ -3120,7 +3120,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrR
     // CPU cross-check" and reserves "full PBR renderer" for the other sixteen -- and it is why the
     // sixteen-renderer sets in the tests around this one exclude it. COLOR_0 specifically it does
     // evaluate, which is what this partition asks. Do not read the count as sixteen-plus-one
-    // equivalent implementations (plan_gltf.md GLTF-476).
+    // equivalent implementations (plans/plan_gltf.md GLTF-476).
     const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
     ASSERT_TRUE(std::filesystem::is_directory(renderers));
 
@@ -3183,7 +3183,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererEitherAppliesVertexColourOrR
 
 TEST(GltfRendererPbrFallbackPolicy, EveryStrideGatedPbrRouteAdmitsBothColourCarryingStrides)
 {
-    // plan_gltf.md GLTF-465, and the hole the two tests above cannot see. They ask whether a
+    // plans/plan_gltf.md GLTF-465, and the hole the two tests above cannot see. They ask whether a
     // renderer DECLARES the colour -- a layout row at offset 56/76, a shader that multiplies
     // `cnaVertexColor` into albedo. Neither asks whether a stride-60 or stride-80 draw ever REACHES
     // that shader, and in a renderer whose PBR route is chosen from an explicit stride list those
@@ -3335,7 +3335,7 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     constexpr std::array<const char*, 2> explicitRejecters{{"gdi", "skia"}};
     // PIXIJS overrides CreateIndexBuffer16 locally to name itself in the refusal but does NOT
     // override CreateIndexBuffer32, so its 32-bit path is the shared throwing default -- which is
-    // what puts it here rather than among the explicit rejecters (plan_pixijs.md).
+    // what puts it here rather than among the explicit rejecters (plans/plan_pixijs.md).
     constexpr std::array<const char*, 11> inheritedRejecters{{
         "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
         "nanovg", "openvg", "pixijs", "sdl-renderer", "svg-dom",
@@ -3374,7 +3374,7 @@ TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFa
     }};
     // PIXIJS overrides CreateIndexBuffer16 locally to name itself in the refusal but does NOT
     // override CreateIndexBuffer32, so its 32-bit path is the shared throwing default -- which is
-    // what puts it here rather than among the explicit rejecters (plan_pixijs.md).
+    // what puts it here rather than among the explicit rejecters (plans/plan_pixijs.md).
     constexpr std::array<const char*, 11> inheritedRejecters{{
         "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
         "nanovg", "openvg", "pixijs", "sdl-renderer", "svg-dom",

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-5 (D9-53): real D3D9 offscreen render-target renderers.
+// plans/plan_dx9.md Phase D9-5 (D9-53): real D3D9 offscreen render-target renderers.
 //
 // Both classes hold a non-owning DirectX9Renderer* (owner_) -- a render target's Unbind must be
 // able to restore the owner's default back-buffer/depth-stencil surfaces, which only the owning
@@ -27,7 +27,7 @@
 //
 // Mip-chain auto-generation on unbind (D3D11's documented mipMap behavior) is NOT implemented here
 // -- `mipMap` is accepted but only a single level is ever allocated. A genuine, named gap
-// (plan_dx9.md's own D9-53 row), not a silent divergence.
+// (plans/plan_dx9.md's own D9-53 row), not a silent divergence.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"

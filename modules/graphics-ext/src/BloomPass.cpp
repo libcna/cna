@@ -164,7 +164,7 @@ void main() {
         manualFilter_ = !device.SupportsCapability(
             CNA::GraphicsCapability::HalfFloatTextureLinearFiltering);
 
-        // plan_modern.md MOD-219, reported here rather than in apply(): the failure happens once,
+        // plans/plan_modern.md MOD-219, reported here rather than in apply(): the failure happens once,
         // at construction, and a pass that discovered it per frame would either spam the log or
         // need a flag to avoid doing so. Falling back to a copy is silent by design, and this is
         // what turns "bloom looks weak" into a line naming the pass and the compiler's own log.
@@ -212,7 +212,7 @@ void main() {
 
         iterations = std::clamp(iterations, kMinIterations, kMaxIterations);
 
-        // plan_modern.md MOD-220: bloom's requirement, stated by the pass. Every stage here reads a
+        // plans/plan_modern.md MOD-220: bloom's requirement, stated by the pass. Every stage here reads a
         // target at a *different* resolution from the one it writes, so point filtering would
         // sample one texel of four and turn the pyramid into a mosaic -- an image that still looks
         // like bloom, just wrong, with nothing in the frame to say why. Clamp matters at the edges

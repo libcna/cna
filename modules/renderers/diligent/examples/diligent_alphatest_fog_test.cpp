@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-31/DILIGENT-32: real-device proof for AlphaTestEffect's per-pixel
+// plans/plan_diligent.md DILIGENT-31/DILIGENT-32: real-device proof for AlphaTestEffect's per-pixel
 // discard and for BasicEffect's fog, through the public XNA API only.
 //
 // Check A -- AlphaTestEffect with CompareFunction::Greater and a reference above the surface's

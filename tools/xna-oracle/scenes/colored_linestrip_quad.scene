@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: colored_linestrip_quad
+# plans/plan_dx9.md D9-A5 scene corpus: colored_linestrip_quad
 # The third and final never-before-exercised PrimitiveType in the corpus, completing all 4 real
 # XNA PrimitiveType values (TriangleList was already covered by every other scene;
 # TriangleStrip/LineList were closed by colored_trianglestrip_quad/colored_linelist_quad).

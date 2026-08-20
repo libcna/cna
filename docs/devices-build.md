@@ -1,8 +1,8 @@
 # Building and Testing `Microsoft::Devices` — Reproducible Commands
 
 Every command below was actually run in a session working on `Microsoft::Devices`
-(`plan_devices_phase4.md`/`plan_devices_phase5.md`/`plan_devices_phase6.md`/
-`plan_devices_phase7.md`/`plan_devices_phase8.md`), not copy-pasted from
+(`plans/plan_devices_phase4.md`/`plans/plan_devices_phase5.md`/`plans/plan_devices_phase6.md`/
+`plans/plan_devices_phase7.md`/`plans/plan_devices_phase8.md`), not copy-pasted from
 documentation without running it. Where a command's success is asserted, it was
 verified in this repository, on this branch, this session.
 
@@ -100,7 +100,7 @@ cmake --build cmake-build-debug --target CnaTests -j"$(nproc)"
 ```
 
 The test target and its transitive CNA libraries build clean as of this writing (2026-07-04, `feature/devices`,
-`plan_devices_phase8.md`) — compiled and tested locally in this session's
+`plans/plan_devices_phase8.md`) — compiled and tested locally in this session's
 git checkout; see the ZIP-export caveat above for what this does not claim.
 
 ## 2. Devices-only test filter
@@ -160,11 +160,11 @@ Both commands' 2 skips are the same pair: `AccelerometerTests`/`GyroscopeTests`'
 is itself the expected, correct result here, not a failure.
 
 **Concurrency tests in this suite are stress tests, not single-shot checks — a single
-green `ctest` run does not prove a concurrency fix is correct.** `plan_devices_phase6.md`
+green `ctest` run does not prove a concurrency fix is correct.** `plans/plan_devices_phase6.md`
 Task P6-1's own addendum found a real, reproducible heap-corruption bug
 (`AccelerometerTests`/`GyroscopeTests`' concurrent-construction tests) that a single
 `ctest` run did not catch — it only surfaced after looping the same test binary
-invocation tens of times in a row. `plan_devices_phase7.md` reinforced the same lesson
+invocation tens of times in a row. `plans/plan_devices_phase7.md` reinforced the same lesson
 twice more: Task P7-1's cross-class SDL-mutex fix needed a *new* stress test that
 constructs/destroys/probes both `Accelerometer` and `Gyroscope` concurrently (not just
 one class at a time, which the P6-1-era test already covered) — verified clean over 40
@@ -205,15 +205,15 @@ propagating anywhere — it never will.
 cd cmake-build-debug && ctest --output-on-failure
 ```
 
-As of `plan_devices_phase8.md`: 2051 tests, 2 failures — both pre-existing, unrelated
+As of `plans/plan_devices_phase8.md`: 2051 tests, 2 failures — both pre-existing, unrelated
 `EasyGL`/`easy-gl` graphics-backend bugs (`EasyGL_MRT_TwoAttachments`,
 `easy-gl-resource-smoke-tests`) that that session's environment happened to have a real
 GPU/display to actually run for the first time (previously silently `Not Run`
 headless) — confirmed via direct investigation to be 100% unrelated to
-`Microsoft::Devices` (see `plan_devices_phase5.md` Task P5-1's Resolution for the full
+`Microsoft::Devices` (see `plans/plan_devices_phase5.md` Task P5-1's Resolution for the full
 finding).
 
-**As of `plan_devices.md` Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
+**As of `plans/plan_devices.md` Phase 10 (2026-07-05):** 3348 tests, 36 failures — same root
 cause category (`EasyGL`/graphics-backend, headless-environment-dependent — this
 session's container has no real GPU/display, so more `EasyGL` cases fail/skip than the
 2 from the session above that did have one), still confirmed 100% unrelated to
@@ -227,7 +227,7 @@ grows as `Microsoft::Devices` (and the rest of CNA) gains tests.
 
 Requires an Android NDK. This session found one already present at
 `~/Android/Sdk/ndk/30.0.14904198` — **do not assume this exists in every environment**;
-it was absent in every session before `plan_devices_phase4.md` Task P4-11, so check
+it was absent in every session before `plans/plan_devices_phase4.md` Task P4-11, so check
 first (`ls ~/Android/Sdk/ndk/` or equivalent) rather than assuming either way.
 
 ```bash
@@ -254,21 +254,21 @@ against the cross-compiled ARM64 object files):
     | grep -i landscape
 ```
 
-`plan_devices_phase7.md` Task P7-7 re-ran this same `llvm-nm` check against Phase 7's
+`plans/plan_devices_phase7.md` Task P7-7 re-ran this same `llvm-nm` check against Phase 7's
 actual then-new symbols (the global native sensor mutex, `WaitForDisposalToComplete()`,
 and the shared dispatch manager) in
 `Accelerometer.cpp.o`/`Gyroscope.cpp.o`, not just re-confirming the Task P4-11-era
 landscape symbols still compile — see that task's Resolution for the exact commands.
-`plan_devices_phase8.md` Task P8-8 did the same again for Phase 8's actual new symbols
+`plans/plan_devices_phase8.md` Task P8-8 did the same again for Phase 8's actual new symbols
 (`dispatchToken_`, the lock-proof-parameter overloads of
 `EnsureSubsystemInitialized()`/`OpenDefaultSensorLocked()`/`ProbeIsSupported()`).
-`plan_devices_phase9.md` Task P9-4 re-confirmed the library cross-compile once more
+`plans/plan_devices_phase9.md` Task P9-4 re-confirmed the library cross-compile once more
 (no source changes since Task P8-8, so `ninja` correctly reported nothing to rebuild).
 
-### 4.1 APK packaging and emulator/device run (`plan_devices.md` Phase 9, 2026-07-05)
+### 4.1 APK packaging and emulator/device run (`plans/plan_devices.md` Phase 9, 2026-07-05)
 
 **Superseded — `cna_demo_devices` now packages into a real, installable Android APK.**
-Every prior phase (through `plan_devices_phase9.md` Task P9-4) found this "not
+Every prior phase (through `plans/plan_devices_phase9.md` Task P9-4) found this "not
 available" for two independent reasons: no Gradle/CMake integration existed, and
 `/dev/kvm` was absent so no emulator could run even if one had. **Both are now
 resolved**, in this exact environment, this session — re-verify both before trusting
@@ -277,8 +277,8 @@ one just did).
 
 **1. `/dev/kvm` now exists.** `ls -la /dev/kvm` shows a real, openable device node
 (`crw-rw----+ 1 root kvm`), confirmed via a direct `open()` call, not just `stat`. Every
-session since `plan_devices_phase4.md` found this absent. First noticed during
-`plan_devices.md`'s Phase 0 audit (Task DEVICES-0012); exploited for real in Phase 9.
+session since `plans/plan_devices_phase4.md` found this absent. First noticed during
+`plans/plan_devices.md`'s Phase 0 audit (Task DEVICES-0012); exploited for real in Phase 9.
 
 **2. The Gradle/CMake integration now exists**, built from SDL's own vendored template
 rather than from scratch:
@@ -390,9 +390,9 @@ See Section 4.1.1 below for the actual emulator install/run result.
 ## 5. iOS — confirmed still blocked, not attempted
 
 No Apple/iOS toolchain of any kind exists in this Linux dev container — confirmed by
-actually checking (`plan_devices_phase4.md` Task P4-12, re-confirmed
-`plan_devices_phase5.md` Task P5-1's audit, `plan_devices_phase6.md` Task P6-10,
-`plan_devices_phase7.md` Task P7-7, and `plan_devices_phase8.md` Task P8-8): no
+actually checking (`plans/plan_devices_phase4.md` Task P4-12, re-confirmed
+`plans/plan_devices_phase5.md` Task P5-1's audit, `plans/plan_devices_phase6.md` Task P6-10,
+`plans/plan_devices_phase7.md` Task P7-7, and `plans/plan_devices_phase8.md` Task P8-8): no
 `xcodebuild`, no `xcrun`, no `osxcross`, nothing matching `*ios*toolchain*` anywhere
 on the filesystem. Unlike Android (a
 missing NDK package, which this session found had since been installed), iOS
@@ -465,7 +465,7 @@ dozens of loop iterations to get lucky. Both are worth using — a stress loop u
 sanitizer is stronger evidence than either alone.
 
 `CMakePresets.json` has three presets, each verified working in this session
-(`plan_devices_phase8.md` Task P8-4 — configured, built, and run against the full
+(`plans/plan_devices_phase8.md` Task P8-4 — configured, built, and run against the full
 Devices-only test suite, not just written and assumed):
 
 These use the same corrected, exact-suite-name filter as Section 2 above (a bare
@@ -492,7 +492,7 @@ cmake --build --preset devices-ubsan
 ./cmake-build-devices-ubsan/CnaTests --gtest_filter="AccelerometerFailedExceptionTests.*:AccelerometerReadingEventArgsTests.*:AccelerometerReadingTests.*:AccelerometerTests.*:AndroidSensorOrientationTests.*:AttitudeReadingTests.*:CalibrationEventArgsTests.*:CompassReadingTests.*:CompassTests.*:AndroidCompassMathTests.*:AndroidMotionMathTests.*:AndroidSensorBridgeTests.*:GyroscopeReadingTests.*:GyroscopeTests.*:MotionReadingTests.*:MotionTests.*:ScopeExitTests.*:SensorBaseTests.*:SensorFailedExceptionTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*"
 ```
 
-**Actual results as of `plan_devices_phase8.md` (2026-07-04), all three presets
+**Actual results as of `plans/plan_devices_phase8.md` (2026-07-04), all three presets
 configured, built, and run against this exact filter** (224 tests, 222 passed, 2
 expected skips — this direct `--gtest_filter` glob form matches a few more suites than
 Section 2's `ctest -R` regex form catches by name; both cover the same
@@ -528,7 +528,7 @@ by coverage):
   had been waved away without reading it.
 - **UBSan:** clean (0 issues).
 
-**Re-verified as of `plan_devices.md` Phase 10 (2026-07-05), all three presets
+**Re-verified as of `plans/plan_devices.md` Phase 10 (2026-07-05), all three presets
 reconfigured, rebuilt, and re-run against the updated filter above** (271 tests, 269
 passed, 2 expected skips):
 - **ASan:** clean (0 issues) — confirmed on Phases 6-8's new `Detail::AndroidSensorBridge`/
@@ -571,7 +571,7 @@ way, remember these are Debug, unoptimized-ish (`-O0`/`-O1`), instrumented build
 useful for correctness verification, not for measuring performance, and slower to
 build/run than a plain `cmake-build-debug`.
 
-## 7. Decided against: a native Android vibration backend (`plan_devices.md` Task DEVICES-0031, 2026-07-05)
+## 7. Decided against: a native Android vibration backend (`plans/plan_devices.md` Task DEVICES-0031, 2026-07-05)
 
 Do not build a JNI/`Vibrator`/`VibrationEffect` bridge for `VibrateController` on
 Android, and do not build an `IDeviceVibrationBackend` abstraction seam to select one
@@ -587,7 +587,7 @@ bridge would have had to reinvent. SDL's own Android manifest template
 (`third_party/SDL/android-project/app/src/main/AndroidManifest.xml`) already declares
 `android.permission.VIBRATE`, uncommented. Building a second (native) backend behind an
 abstraction seam that would only ever have one real implementation would be pure
-speculative abstraction — see `plan_devices.md`'s Task DEVICES-0031 for the full
+speculative abstraction — see `plans/plan_devices.md`'s Task DEVICES-0031 for the full
 evidence trail before reconsidering this.
 
 ## 8. Continuous Integration (`DEV-BUILD-003`, 2026-07-06)

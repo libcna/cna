@@ -28,7 +28,7 @@ namespace CNA::Internal::Renderers::Canvas
     /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsRenderer::ApplyBlendState's
     /// own parameter doc) to a CanvasCompositeOp; throws std::runtime_error for any Blend/BlendFunction
     /// combination that isn't one of the 4 standard presets (Design decision 5). Contains no EM_JS/JS
-    /// calls -- exposed standalone so plan_canvas.md CANVAS-80's structural GTest coverage can unit
+    /// calls -- exposed standalone so plans/plan_canvas.md CANVAS-80's structural GTest coverage can unit
     /// test this mapping directly, without needing a real CanvasRenderingContext2D.
     CanvasCompositeOp BlendStateToCompositeOp(int colorSrcBlend, int alphaSrcBlend,
                                               int colorDstBlend, int alphaDstBlend,
@@ -37,7 +37,7 @@ namespace CNA::Internal::Renderers::Canvas
     /**
      * @brief HTML Canvas 2D graphics renderer (Emscripten-only).
      *
-     * See plan_canvas.md for the full task breakdown and design rationale. Window/viewport
+     * See plans/plan_canvas.md for the full task breakdown and design rationale. Window/viewport
      * bookkeeping (C1), Clear/Present (C2), textures/render targets (C3), SpriteBatch incl.
      * SpriteFont (C4/C6), and blend/sampler state mapping (C5) are all real. The inherently-3D-only
      * pure virtuals (ClearColorAndDepth and friends, vertex/index buffers, DrawColoredPrimitives)
@@ -70,13 +70,13 @@ namespace CNA::Internal::Renderers::Canvas
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
-        // plan_canvas.md CANVAS-26: a Canvas2D context is inherently single-target (same
+        // plans/plan_canvas.md CANVAS-26: a Canvas2D context is inherently single-target (same
         // conclusion the native 2D renderer's Task 709 reached) -- throws for count > 1.
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        // plan_canvas.md CANVAS-40/41: maps the 4 standard BlendState presets to
+        // plans/plan_canvas.md CANVAS-40/41: maps the 4 standard BlendState presets to
         // globalCompositeOperation (Design decision 5); throws for any other Blend/BlendFunction
         // combination -- Canvas2D has no generic blend-factor/equation model to fall back on.
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
@@ -84,7 +84,7 @@ namespace CNA::Internal::Renderers::Canvas
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
 
-        // plan_canvas.md CANVAS-65: no Canvas2D target -- main canvas or off-screen -- ever has a
+        // plans/plan_canvas.md CANVAS-65: no Canvas2D target -- main canvas or off-screen -- ever has a
         // real depth/stencil buffer (same reasoning as IRenderTargetRenderer::HasRealDepthBuffer's
         // override, CANVAS-23), same as the native 2D renderer's override for the same reason.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
@@ -127,7 +127,7 @@ namespace CNA::Internal::Renderers::Canvas
     private:
         // Derives the logical (virtual) viewport size from the real canvas/window's client
         // pixel size and virtualWidth_/virtualHeight_/presentationMode_ -- same FixedHeightDynamicWidth
-        // math EasyGLRenderer::getLogicalSize() uses (plan_canvas.md CANVAS-13): this math is
+        // math EasyGLRenderer::getLogicalSize() uses (plans/plan_canvas.md CANVAS-13): this math is
         // renderer-agnostic; the platform snapshot supplies the drawable size and density.
         void getLogicalSize(int& width, int& height) const;
         void getWindowSize(int& width, int& height) const;

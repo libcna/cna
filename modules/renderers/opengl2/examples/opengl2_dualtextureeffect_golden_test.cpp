@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_dualtextureeffect_golden_test.cpp's own DualTextureEffect scene verbatim: a
 // 2x2 multi-texel texture, Texture2=gray(128,128,128) (cancels the `color.rgb *= 2` doubling
 // factor), DiffuseColor=(0.6,0.4,0.8), constant UV=(0.25,0.25) (top-left texel).

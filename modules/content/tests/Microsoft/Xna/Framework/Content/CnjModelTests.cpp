@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-19/CNB-20: first-ever gtest coverage for ModelTypeReader, migrated from
+// plans/plan_cnj.md CNB-19/CNB-20: first-ever gtest coverage for ModelTypeReader, migrated from
 // .model.json to .cnj (CNB-17). Prior exercise of this reader was example-program only (7
 // examples/*model_json*.cpp files, migrated to .cnj by CNB-18) -- no gtest coverage existed
 // before this, per docs/model-content-pipeline-support.md's own flagged gap.

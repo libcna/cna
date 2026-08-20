@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O4 (DX2-34, DX2-38): real Direct3D v2 texture sampling in a 3D draw --
+// plans/plan_dx2.md Phase O4 (DX2-34, DX2-38): real Direct3D v2 texture sampling in a 3D draw --
 // D3DRENDERSTATE_TEXTUREHANDLE bound via IDirect3DTexture2::GetHandle on a DirectX5TextureRenderer
 // surface (mirrors DX2-0's own dx2_spike7_full.cpp test B, now through the full XNA public API).
 //

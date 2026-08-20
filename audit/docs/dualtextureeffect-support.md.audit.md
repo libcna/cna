@@ -10,7 +10,7 @@
   specific effect class)
 
 ## Purpose
-Closes out Phase 44 (`plan_graphics.md` Tasks 381-390): documents `DualTextureEffect`'s
+Closes out Phase 44 (`plans/plan_graphics.md` Tasks 381-390): documents `DualTextureEffect`'s
 property/default audit, blend-formula bug (`color.rgb *= 2` doubling factor), alpha
 premultiplication, texture null-fallback, fog, and cross-backend consistency work.
 

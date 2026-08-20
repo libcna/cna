@@ -48,12 +48,12 @@ public: explicit OpenGL1IndexBufferRenderer(bool i32):i32_(i32){}
  const std::vector<std::uint8_t>& Data()const{return data_;}
 private:bool i32_=false;int count_=0;std::vector<std::uint8_t> data_;
 };
-// plan_opengl1.md phase 8: implements IOpenGL1Recoverable so Texture2D content survives a
+// plans/plan_opengl1.md phase 8: implements IOpenGL1Recoverable so Texture2D content survives a
 // simulated/real GL context loss -- ShareCpuPixels() retains the SAME shared_ptr<vector<uint8_t>>
 // Texture2D itself keeps (no duplicate copy; Texture2D's own SetData mutations are visible
 // through it automatically), which RecreateGLResource() re-uploads from after the context is
 // recreated.
-// plan_opengl1.md phase 6: mipMap_ tracks whether the ImageData that created/last-recreated this
+// plans/plan_opengl1.md phase 6: mipMap_ tracks whether the ImageData that created/last-recreated this
 // texture requested a mip chain (ImageData::mipLevels>1); hasMips_ tracks whether generation
 // actually succeeded (false only if mipMap_ is true but the driver has neither glGenerateMipmap
 // nor the older GL_GENERATE_MIPMAP/SGIS_generate_mipmap mechanism AND no CPU pixel data was
@@ -72,10 +72,10 @@ private:void RegenerateMips(const uint8_t*level0);
  unsigned int id_=0;int width_=0,height_=0;OpenGL1ResourceRegistry* registry_=nullptr;std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
  bool mipMap_=false;bool hasMips_=false;bool generateMipmapCap_=false;
 };
-// plan_opengl1.md phase 8 follow-up: implements IOpenGL1Recoverable so TextureCube content
+// plans/plan_opengl1.md phase 8 follow-up: implements IOpenGL1Recoverable so TextureCube content
 // survives a simulated/real GL context loss the same way OpenGL1TextureRenderer does --
 // ShareCpuPixels(face,...) retains the SAME shared_ptr<vector<uint8_t>> TextureCube itself keeps
-// per face (no duplicate copy). Closes the gap plan_opengl1.md previously documented as
+// per face (no duplicate copy). Closes the gap plans/plan_opengl1.md previously documented as
 // intentional (ITextureCubeRenderer had no ShareCpuPixels()-equivalent hook -- now added to the
 // shared IGraphicsRenderer.hpp interface with a default no-op, so every other renderer stays
 // source-compatible unchanged).
@@ -104,21 +104,21 @@ private:OpenGL1Renderer& owner_;bool begun_=false;Matrix transform_=Matrix::getI
 class OpenGL1Renderer final : public IGraphicsRenderer {
 public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Renderer()override;
  void Clear(float,float,float,float)override;void Present()override;void GetViewportSize(int&,int&)override;void OnSurfaceChanged(const RendererSurfaceInfo&)override;void SetVirtualResolution(int,int)override;
- // plan_opengl1.md item 13 (EasyGL parity): was a no-op -- now stores the mode, consulted by
+ // plans/plan_opengl1.md item 13 (EasyGL parity): was a no-op -- now stores the mode, consulted by
  // EffectiveWidth()/EffectiveHeight() (FixedHeightDynamicWidth only; see their own doc comment).
  void SetPresentationMode(int)override;
- // plan_opengl1.md item 13: uniform logical<->physical scale for FixedHeightDynamicWidth (no
+ // plans/plan_opengl1.md item 13: uniform logical<->physical scale for FixedHeightDynamicWidth (no
  // offset needed -- the logical canvas fills the window exactly, by construction, so there are no
  // letterbox bars to account for). Default (unimplemented, "window==logical") behavior stays for
  // every other presentation mode. Registered for GetForWindow() lookup already, in the
  // constructor (IGraphicsRenderer::RegisterForWindow) -- Mouse::logical_to_window's own consumer.
  bool TransformWindowToLogical(float windowX,float windowY,float&logX,float&logY)const override;
  bool TransformLogicalToWindow(float logX,float logY,float&windowX,float&windowY)const override;
- // plan_opengl1.md item 20 (EasyGL parity): only the constructor's swapInterval reached the host
+ // plans/plan_opengl1.md item 20 (EasyGL parity): only the constructor's swapInterval reached the host
  // before this -- a runtime GraphicsDevice.PresentationParameters/vsync change silently did
  // nothing.
  void SetSwapInterval(int)override;
- // plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA. The platform framebuffer sample
+ // plans/plan_opengl1.md item 22 (EasyGL parity): backbuffer MSAA. The platform framebuffer sample
  // attributes are requested before window creation (same GLX-visual-fixed-at-window-
  // creation-time constraint as depth/stencil) -- the constructor here only reads back whatever
  // the driver actually granted, since GLX can silently clamp/refuse the request. Cannot be
@@ -130,7 +130,7 @@ public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Rend
  std::unique_ptr<ITextureRenderer>CreateTexture(const ImageData&)override;std::unique_ptr<ISpriteBatchRenderer>CreateSpriteBatch()override;
  std::unique_ptr<IRenderTargetRenderer>CreateRenderTarget2D(int,int,int,bool,bool,int)override;void SetRenderTarget2D(IRenderTargetRenderer*)override;
  std::unique_ptr<ITextureCubeRenderer>CreateTextureCube(int,bool,int)override;
- // plan_opengl1.md item 24 (EasyGL parity): real cube-map render targets, combining the existing
+ // plans/plan_opengl1.md item 24 (EasyGL parity): real cube-map render targets, combining the existing
  // FBO (CreateRenderTarget2D) and cube-map (CreateTextureCube) machinery. Returns nullptr (the
  // documented IGraphicsRenderer contract) when either the FBO or cube-map capability is absent.
  // multiSampleCount is accepted but ignored -- out of scope for this item (item 25 addresses
@@ -148,7 +148,7 @@ public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Rend
  // the first target; a cube-face descriptor routes through SetRenderTargetCubeFace() above;
  // nullptr / count 0 restores the default back buffer.
  void SetRenderTargets(const RenderTargetBindingDescriptor*,int)override;
- // plan_opengl1.md item 23 (EasyGL parity): real ARB_occlusion_query/core-1.5 occlusion queries --
+ // plans/plan_opengl1.md item 23 (EasyGL parity): real ARB_occlusion_query/core-1.5 occlusion queries --
  // returns nullptr (the documented IGraphicsRenderer contract, matching CreateRenderTarget2D's own
  // capability-gated fallback) when the driver genuinely lacks it.
  std::unique_ptr<IOcclusionQueryRenderer>CreateOcclusionQuery()override;
@@ -165,19 +165,19 @@ public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Rend
  bool SupportsCapability(CNA::GraphicsCapability capability)const override;
  int VirtualWidth()const{return virtualWidth_;}int VirtualHeight()const{return virtualHeight_;}
  const OpenGL1Capabilities& Capabilities()const{return caps_;}
- // plan_opengl1.md item 13 (EasyGL parity): used to return the raw, never-recomputed
+ // plans/plan_opengl1.md item 13 (EasyGL parity): used to return the raw, never-recomputed
  // virtualWidth_/virtualHeight_ regardless of the window's actual current size or
  // presentationMode_ -- now applies the FixedHeightDynamicWidth aspect-correct recomputation
  // (logicalW = round(physicalW * preferredH / physicalH), preferredH fixed) when that mode is
  // active, matching EasyGL's own getLogicalSize(). Every other mode keeps today's original
  // behavior (see ComputeLogicalSize()'s own doc comment for why that's a real, not merely
  // deferred, answer for Stretch/NativeBackBuffer specifically).
- // plan_opengl1.md item 24: also checks currentCubeRt_ (a cube-face render target) before
+ // plans/plan_opengl1.md item 24: also checks currentCubeRt_ (a cube-face render target) before
  // falling back to the window-relative logical size -- see SetRenderTargetCubeFace()'s own doc
  // comment for why a cube-face target needs its own tracked pointer, separate from currentRt_.
  int EffectiveWidth()const{if(currentRt_)return currentRt_->GetWidth();if(currentCubeRt_)return currentCubeRt_->GetSize();int w,h;ComputeLogicalSize(w,h);return w;}
  int EffectiveHeight()const{if(currentRt_)return currentRt_->GetHeight();if(currentCubeRt_)return currentCubeRt_->GetSize();int w,h;ComputeLogicalSize(w,h);return h;}
- // plan_opengl1.md phase 8: context-loss resource recreation registry, independent of EasyGL's
+ // plans/plan_opengl1.md phase 8: context-loss resource recreation registry, independent of EasyGL's
  // own (::easygl::ResourceRegistry). SetContextRecoveryEnabled(false) stops future Create* calls
  // from registering (matches the documented IGraphicsRenderer contract: "safe to call ... when no
  // resources have been loaded yet"); DebugSimulateContextLoss()/DebugRestoreContext() perform one
@@ -187,14 +187,14 @@ public: explicit OpenGL1Renderer(const GraphicsRendererCreateArgs&);~OpenGL1Rend
  void DebugRestoreContext()override;
  OpenGL1ResourceRegistry* RegistryIfEnabled(){return contextRecoveryEnabled_?&registry_:nullptr;}
 private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawInternal(const OpenGL1VertexBufferRenderer&,const OpenGL1IndexBufferRenderer*,PrimitiveType,int,const GpuDrawParams*);
- // plan_opengl1.md item 22: reads back the actual multisample attributes the driver
+ // plans/plan_opengl1.md item 22: reads back the actual multisample attributes the driver
  // granted for the current GL context (not just echoing back what was requested -- GLX can
  // silently clamp/refuse), enables GL_MULTISAMPLE when genuinely present. Shared by the
  // constructor and DebugSimulateContextLoss() (same window, same fixed visual, but re-detected
  // for consistency rather than assumed unchanged).
  void DetectMultiSampleCount();
  int multiSampleCount_=0;
- // plan_opengl1.md item 13 (EasyGL parity): the actual FixedHeightDynamicWidth recomputation --
+ // plans/plan_opengl1.md item 13 (EasyGL parity): the actual FixedHeightDynamicWidth recomputation --
  // see EffectiveWidth()/EffectiveHeight()'s own doc comment above for the formula and rationale.
  // Every mode besides FixedHeightDynamicWidth (Letterbox/Overscan/Stretch/NativeBackBuffer)
  // returns virtualWidth_/virtualHeight_ unchanged: Stretch and NativeBackBuffer are honestly
@@ -202,7 +202,7 @@ private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawI
  // unscaled logical size mapped onto a differently-shaped physical viewport already produces;
  // NativeBackBuffer means "no scaling" by definition) -- Letterbox/Overscan (real bars/cropping)
  // would need the actual glViewport sub-rectangle adjusted, not just this SpriteBatch-facing
- // logical size, and are a documented, intentional gap (plan_opengl1.md).
+ // logical size, and are a documented, intentional gap (plans/plan_opengl1.md).
  void ComputeLogicalSize(int&outW,int&outH)const;
  int presentationMode_=4; // CnaPresentationMode::FixedHeightDynamicWidth, matches the shared interface's own default.
  // Fixes a real, pre-existing bug found while implementing phase 6's mip-aware filtering:
@@ -220,7 +220,7 @@ private:void SetupMatrices(const Matrix&,const Matrix&,const Matrix&);void DrawI
  std::unique_ptr<PlatformGlContextOwner> platformContext_;
  PlatformGlSurfaceState surface_;
  int virtualWidth_=0,virtualHeight_=0;int stencilRef_=0;OpenGL1Capabilities caps_;IRenderTargetRenderer* currentRt_=nullptr;
- // plan_opengl1.md item 24: currentCubeFace_ is only meaningful while currentCubeRt_ is
+ // plans/plan_opengl1.md item 24: currentCubeFace_ is only meaningful while currentCubeRt_ is
  // non-null -- used to re-bind the correct face after a context loss, the same "rebind whatever
  // was ACTIVE at loss time" fix phase 8 already established for currentRt_.
  IRenderTargetCubeRenderer* currentCubeRt_=nullptr;int currentCubeFace_=-1;

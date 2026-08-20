@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2050: exponential height fog, integrated along the view ray.
+// plans/plan_modern.md MOD-2050: exponential height fog, integrated along the view ray.
 //
 // The integral is the whole reason this is not a distance fade with a height term attached, so the
 // integral is what the tests check first -- against the formula computed here, not against numbers

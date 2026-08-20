@@ -99,7 +99,7 @@ namespace CNA::Graphics {
         /**
          * @brief The chain's intermediate-target pool, for a caller that must release it.
          *
-         * plan_modern.md `MOD-715`: after a device reset every pooled target names storage the
+         * plans/plan_modern.md `MOD-715`: after a device reset every pooled target names storage the
          * driver has destroyed, and `RenderPipeline` has to drop them. The const overload above
          * stays for the ordinary read-only uses.
          *
@@ -110,7 +110,7 @@ namespace CNA::Graphics {
         /**
          * @brief One pass's most recent GPU time.
          *
-         * plan_modern.md `MOD-2164`.
+         * plans/plan_modern.md `MOD-2164`.
          */
         struct PassTiming
         {
@@ -134,7 +134,7 @@ namespace CNA::Graphics {
         /**
          * @brief Measures each pass with its own GPU timer query.
          *
-         * plan_modern.md `MOD-2164`. **Off by default**, and not only for cost: a timer query per
+         * plans/plan_modern.md `MOD-2164`. **Off by default**, and not only for cost: a timer query per
          * pass is a query object per pass and a driver-side range around every draw in the chain,
          * which is a change to the thing being measured.
          *

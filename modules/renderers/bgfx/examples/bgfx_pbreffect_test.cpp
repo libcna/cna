@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: pixel test for PbrEffect's real glTF
+// plans/plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: pixel test for PbrEffect's real glTF
 // metallic-roughness BRDF shader (BgfxRenderer's vs_pbr3d.sc/fs_pbr3d.sc) -- proves the
 // stride-48 VertexPositionNormalTangentTexture layout, the TBN construction, and the BRDF math
 // itself all work end-to-end via a real GPU draw on the Bgfx renderer.

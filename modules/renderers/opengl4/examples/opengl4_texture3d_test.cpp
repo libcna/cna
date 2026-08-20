@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-20: plain (non-render-target) Texture3D for the OpenGL4 graphics renderer --
+// plans/plan_opengl4.md GL4-20: plain (non-render-target) Texture3D for the OpenGL4 graphics renderer --
 // CreateTexture3D previously fell through to IGraphicsRenderer's default (returns nullptr), so
 // Texture3D::SetData/GetData silently no-op'd on this renderer. OpenGL4Texture3DRenderer now
 // allocates a real GL_TEXTURE_3D with every mip level pre-allocated via gl4_glTexImage3D (needed

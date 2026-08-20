@@ -589,7 +589,7 @@ TEST(BuiltInVertexLayout, ObjectMemberOffsetsDoNotMatchTheDeclaredElementOffsets
 // requested slots in their own vertex colours.
 TEST_F(BuiltInVertexLayoutTest, PositionColorObjectsWithTheirOwnStaticDeclarationRender)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -624,7 +624,7 @@ TEST_F(BuiltInVertexLayoutTest, PositionColorObjectsWithTheirOwnStaticDeclaratio
 // identical frame -- and it fails if the fix ever packs an already-packed stream a second time.
 TEST_F(BuiltInVertexLayoutTest, PackedPodControlMatchesTheObjectArrayResult)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -658,7 +658,7 @@ TEST_F(BuiltInVertexLayoutTest, PackedPodControlMatchesTheObjectArrayResult)
 // the same draw and owe the same frame.
 TEST_F(BuiltInVertexLayoutTest, InferredAndExplicitDeclarationsAgree)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -700,7 +700,7 @@ TEST_F(BuiltInVertexLayoutTest, InferredAndExplicitDeclarationsAgree)
 // are applied in different units and neither may be folded into the other.
 TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexed16HonorsBothOffsets)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -736,7 +736,7 @@ TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexed16HonorsBothOffsets)
 
 TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexed32HonorsBothOffsets)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -773,7 +773,7 @@ TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexed32HonorsBothOffsets)
 // position.
 TEST_F(BuiltInVertexLayoutTest, PositionColorTextureObjectsWithTheirOwnStaticDeclarationRender)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -816,7 +816,7 @@ TEST_F(BuiltInVertexLayoutTest, PositionColorTextureObjectsWithTheirOwnStaticDec
 // so the whole frame depends on the object -> stream conversion being applied.
 TEST_F(BuiltInVertexLayoutTest, PositionTextureObjectsWithTheirOwnStaticDeclarationRender)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -854,7 +854,7 @@ TEST_F(BuiltInVertexLayoutTest, PositionTextureObjectsWithTheirOwnStaticDeclarat
 
 TEST_F(BuiltInVertexLayoutTest, PositionNormalTextureObjectsWithTheirOwnStaticDeclarationRender)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -901,7 +901,7 @@ TEST_F(BuiltInVertexLayoutTest, PositionNormalTextureObjectsWithTheirOwnStaticDe
 // single hardcoded stride cannot satisfy all three.
 TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexedRendersEveryTexturedFamily)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -980,7 +980,7 @@ TEST_F(BuiltInVertexLayoutTest, ExplicitDeclarationIndexedRendersEveryTexturedFa
 // caller already supplied a stream, and it must still consume one byte-for-byte.
 TEST_F(BuiltInVertexLayoutTest, PackedPodControlMatchesTheObjectArrayResultWhenIndexed)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -1031,7 +1031,7 @@ TEST_F(BuiltInVertexLayoutTest, PackedPodControlMatchesTheObjectArrayResultWhenI
 // its own stride -- so correcting the declaration must leave it byte-for-byte where it was.
 TEST_F(BuiltInVertexLayoutTest, VertexBufferPathIsUnchangedByTheCorrectedDeclaration)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
@@ -1073,14 +1073,14 @@ TEST_F(BuiltInVertexLayoutTest, VertexBufferPathIsUnchangedByTheCorrectedDeclara
 
 TEST_F(BuiltInVertexLayoutTest, SdlGpuObjectArrayWithStaticDeclarationRendersIntoATarget)
 {
-    // plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
+    // plans/plan_runtimerenderer.md RTR-P9-5: the renderers that raster and read back. This was a
     // compile-time gate around all of section B, so on every other renderer these tests did not
     // exist and reported nothing. It must sit in the test BODY: GTEST_SKIP() returns from the
     // function it appears in, so a skip inside a shared helper marks the test skipped and then
     // lets the caller run on to fail anyway.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
                                     WebGPU, Vulkan, DirectX9, DirectX11, Software);
-    // plan_runtimerenderer.md RTR-P9-5: SDL_GPU's own render-target oracle.
+    // plans/plan_runtimerenderer.md RTR-P9-5: SDL_GPU's own render-target oracle.
     CNA_SKIP_IF_RENDERER_IS_NOT(SdlGpu);
     RequireLayoutRendering();
     const SlotLayout layout = BackbufferLayout();

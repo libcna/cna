@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-604, MOD-607, MOD-608: FXAA on and off, and what it costs on each kind of image.
+// plans/plan_modern.md MOD-604, MOD-607, MOD-608: FXAA on and off, and what it costs on each kind of image.
 //
 // FXAA's whole job is to remove a specific artefact -- the stair-stepping along a high-contrast
 // diagonal -- so this measures exactly that: the total contrast between vertically adjacent texels

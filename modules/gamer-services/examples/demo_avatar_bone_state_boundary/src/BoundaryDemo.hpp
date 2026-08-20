@@ -23,18 +23,18 @@ public:
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
     void Draw(const Microsoft::Xna::Framework::GameTime& gameTime) override;
 
-    /** @brief Forces the F1 help overlay's initial visibility - Task 8 (plan_net.md Phase 8):
+    /** @brief Forces the F1 help overlay's initial visibility - Task 8 (plans/plan_net.md Phase 8):
      *  lets a non-interactive smoke/screenshot run verify the overlay actually renders. */
     void SetShowHelpForTestingEXT(bool visible) { showHelpEXT_ = visible; }
 
-    /** @brief Saves a PNG of the backbuffer on the final smoke frame - Task 8 (plan_net.md
+    /** @brief Saves a PNG of the backbuffer on the final smoke frame - Task 8 (plans/plan_net.md
      *  Phase 8), reusing Task 7.1's own examples/common/ScreenshotEXT.hpp helper. */
     void SetScreenshotPathEXT(std::string path) { screenshotPathEXT_ = std::move(path); }
 
 private:
     int framesBeforeExit_ = 30;
 
-    // Task 8 (plan_net.md Phase 8): F1 help overlay - same established pattern as demo_avatar's
+    // Task 8 (plans/plan_net.md Phase 8): F1 help overlay - same established pattern as demo_avatar's
     // own AvatarDemo (see that file's own comment for why this is a deliberate per-demo copy).
     // This demo has no other keyboard handling (it self-exits after a fixed frame count), so F1
     // and Esc are added here purely for the overlay, matching every other avatar demo's controls.

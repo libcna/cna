@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2106..MOD-2108: transparency that does not depend on order.
+// plans/plan_modern.md MOD-2106..MOD-2108: transparency that does not depend on order.
 //
 // The claim is unusually easy to state and unusually easy to fake: submitting the same surfaces in
 // any order must produce the same frame. So the central test draws two overlapping transparent

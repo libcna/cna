@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-11 (D9-111): custom ShaderEffect for D3D9 -- runtime D3DCompile() of
+// plans/plan_dx9.md Phase D9-11 (D9-111): custom ShaderEffect for D3D9 -- runtime D3DCompile() of
 // arbitrary HLSL vertex+fragment source, separate from the offline stock-shader pipeline (design
 // decision 5), mirroring D3D11EffectRenderer's own established contract as closely as D3D9's
 // fundamentally different constant-register model allows.

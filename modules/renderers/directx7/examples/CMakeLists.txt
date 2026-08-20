@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx7.md: real DirectX 7 renderer -- new IDirectDraw7/IDirect3D7 interfaces, viewport object
+# plans/plan_dx7.md: real DirectX 7 renderer -- new IDirectDraw7/IDirect3D7 interfaces, viewport object
 # removed, texture binding simplified; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -30,7 +30,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
         endif()
     endmacro()
 
-    # plan_dx7.md design decision 15: when cross-compiled from Linux (DIRECTX7 is Windows-only, design
+    # plans/plan_dx7.md design decision 15: when cross-compiled from Linux (DIRECTX7 is Windows-only, design
     # decision 1), CTest itself still runs on the Linux host, so the test COMMAND wraps the real
     # .exe with scripts/run-wine-directx7.sh -- a real, native Windows/MSVC configure needs no Wine
     # wrapper at all and runs the .exe directly, mirroring DirectX1Tests.cmake's own
@@ -43,7 +43,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
         endif()
     endmacro()
 
-    # plan_dx7.md design decision 16: a real, automated proof this renderer never quietly reaches
+    # plans/plan_dx7.md design decision 16: a real, automated proof this renderer never quietly reaches
     # for the proven-broken execute-buffer Direct3D path, the old D3DVT_*-enum vertex-type
     # submission, any pre-v7 DirectDraw/Direct3D interface, the removed viewport object, or the old
     # texture-handle mechanism -- pure text check via scripts/check-directx7-execute-buffer-discipline.sh,
@@ -177,7 +177,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX7")
     cna_register_renderer_test(NAME DirectX7_WireframeAniso COMMAND ${_directx7_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DIRECTX7")
 
-    # Phase S6 (plan_dx7.md): real stencil buffer write-then-test through the full XNA public API
+    # Phase S6 (plans/plan_dx7.md): real stencil buffer write-then-test through the full XNA public API
     # (GraphicsDevice.DepthStencilState), proving stencil (unchanged from DIRECTX6) survives the removed
     # viewport object -- mirrors the DX7-0 spike's own Test E/F shape (write REPLACE on half the
     # target, then test EQUAL against the full target and confirm the untouched half is correctly

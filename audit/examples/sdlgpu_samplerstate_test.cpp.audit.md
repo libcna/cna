@@ -35,7 +35,7 @@ Correct placement for a backend sampler-state integration test.
 `SdlGpuGraphicsBackend.cpp` and confirmed to exercise what their labels claim. One properly-
 disclosed (not stale) production limitation exists — `MaxAnisotropy`/`TextureFilter::Anisotropic`
 and the four mixed min/mag/mip `TextureFilter` values are not distinguished from plain `Point` by
-this backend — but `plan_sdlgpu.md`'s own SDLGPU-21 entry already states this accurately and
+this backend — but `plans/plan_sdlgpu.md`'s own SDLGPU-21 entry already states this accurately and
 current, so it is not a hidden/undocumented defect, and this test does not claim to cover it.
 
 ## Checklist Results
@@ -121,7 +121,7 @@ Anisotropic` and the 4 mixed-min/mag `TextureFilter` values are not exercised at
 - Category: architecture / feature-completeness
 - Location/symbol: `SamplerCacheIndex` (`SdlGpuGraphicsBackend.cpp` lines 24-30),
   `GetOrCreateSampler` (lines 1456-1476), `ApplySamplerState` (line 1200-1207)
-- Evidence: `plan_sdlgpu.md` line 442 (SDLGPU-21 entry) explicitly and currently states:
+- Evidence: `plans/plan_sdlgpu.md` line 442 (SDLGPU-21 entry) explicitly and currently states:
   *"`maxAnisotropy` is stored but not applied — `GetOrCreateSampler()`'s cache has no
   anisotropic-filtering dimension at all, a pre-existing limitation shared with SpriteBatch's own
   sampler path, not introduced here."* This audit independently confirmed the claim is still
@@ -154,7 +154,7 @@ Anisotropic` and the 4 mixed-min/mag `TextureFilter` values are not exercised at
   audit (`QueueColoredDraw`-adjacent dispatch near line 2124, `QueueDualTextureDraw` line 2894,
   `QueueSkinnedDraw` line 3014) — no divergence found across the 5 direct-3D-draw families that
   read slot 0.
-- `plan_sdlgpu.md`'s SDLGPU-21 entry (git commits `4578d403`/`807db24a`, "close SDLGPU-21 --
+- `plans/plan_sdlgpu.md`'s SDLGPU-21 entry (git commits `4578d403`/`807db24a`, "close SDLGPU-21 --
   ApplySamplerState for direct 3D draws") is this file's sole authoring commit per `git log`; no
   later commit touches `ApplySamplerState`/`GetOrCreateSampler` in a way that would contradict this
   file's header claims — consistent with the "documentation rot" cross-cutting watch-item **not**

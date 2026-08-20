@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-9: the engine layer's exception type.
+// plans/plan_modern.md MOD-9: the engine layer's exception type.
 //
 // The message shape is the point. A caller that catches this is usually writing it to a log a
 // human will read weeks later, so the sentence has to name all three parts of the failure without

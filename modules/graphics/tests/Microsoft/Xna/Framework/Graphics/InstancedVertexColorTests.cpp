@@ -106,7 +106,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
 // result back -- InstancedDrawMultiStreamTests.cpp's own permanent suite set, for the same reason.
-/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// plans/plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
 /// describes the ACTIVE renderer rather than the build default.
 [[nodiscard]] inline bool InstancedVertexColor()
 {
@@ -120,7 +120,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // environment permits) -- REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
 // instanced route from DiffuseColor, but an unmeasured renderer must not be asserted in either
 // direction. Every leg still PRINTS its reading there, which is the evidence those renderers lack.
-/// plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
+/// plans/plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorMeasured()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU);
@@ -141,7 +141,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // corrected and forced its own removal. `InstancedDiffuseColorTests.cpp` is that ticket's permanent
 // non-neutral-DiffuseColor oracle, and it is what keeps this file's white-DiffuseColor blind spot
 // from ever certifying a renderer again.
-/// plan_runtimerenderer.md RTR-P9-5: the public-contract set, asked of the ACTIVE renderer.
+/// plans/plan_runtimerenderer.md RTR-P9-5: the public-contract set, asked of the ACTIVE renderer.
 [[nodiscard]] inline bool InstancedVertexColorContract()
 {
     return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Vulkan, WebGPU, Bgfx);
@@ -150,7 +150,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 namespace
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a hand-maintained #if/#elif chain of renderer display
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a hand-maintained #if/#elif chain of renderer display
     // names, which had to be extended for every new renderer and answered "unknown" when it was
     // not. The runtime API already knows the active renderer's name, and knows it for all 46.
     inline std::string RendererName()
@@ -662,7 +662,7 @@ protected:
 
 TEST_F(InstancedVertexColorTest, VertexColorEnabledTrueConsumesGeometryColorOnBothRoutes)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -714,7 +714,7 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledTrueConsumesGeometryColorOnBo
 
 TEST_F(InstancedVertexColorTest, VertexColorEnabledFalseIgnoresGeometryColorOnBothRoutes)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -783,7 +783,7 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledFalseIgnoresGeometryColorOnBo
 
 TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOnBothRoutes)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -860,7 +860,7 @@ TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOn
 
 TEST_F(InstancedVertexColorTest, ThirtyTwoBitIndicesConsumeGeometryColorOnTheInstancedRoute)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -900,7 +900,7 @@ TEST_F(InstancedVertexColorTest, ThirtyTwoBitIndicesConsumeGeometryColorOnTheIns
 
 TEST_F(InstancedVertexColorTest, GeometryVertexOffsetSkipsTheDecoyAndKeepsItsOwnColors)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -937,7 +937,7 @@ TEST_F(InstancedVertexColorTest, GeometryVertexOffsetSkipsTheDecoyAndKeepsItsOwn
 
 TEST_F(InstancedVertexColorTest, InstanceFrequencyTwoRepeatsARecordWithoutTouchingTheColor)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -998,7 +998,7 @@ TEST_F(InstancedVertexColorTest, InstanceFrequencyTwoRepeatsARecordWithoutTouchi
 
 TEST_F(InstancedVertexColorTest, VertexColorEnabledTransitionsDoNotLeakBetweenFrames)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1060,7 +1060,7 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledTransitionsDoNotLeakBetweenFr
 
 TEST_F(InstancedVertexColorTest, QueuedInstancedDrawsKeepTheirOwnVertexColorStateAndData)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
@@ -1154,7 +1154,7 @@ TEST_F(InstancedVertexColorTest, QueuedInstancedDrawsKeepTheirOwnVertexColorStat
 
 TEST_F(InstancedVertexColorTest, QueuedInstancedDrawSurvivesItsGeometryWrapperBeingDestroyed)
 {
-    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    // plans/plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedVertexColor())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();

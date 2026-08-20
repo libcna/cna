@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-34-style extraction: ComputeMetalLogicalViewport() is pure C++ arithmetic
+// plans/plan_metal.md METAL-34-style extraction: ComputeMetalLogicalViewport() is pure C++ arithmetic
 // (plain ints/floats and CnaPresentationMode, a shared enum with zero Objective-C dependency) --
 // only fetching the real physical window size needs a live SDL window, and that step stays in
 // MetalRenderer.mm's own thin wrapper. No #if defined(CNA_RENDERER_METAL) gate, deliberately.
 //
-// plan_metal.md METAL-153-159: this exact formula had a real, previously-shipping bug (SpriteBatch
+// plans/plan_metal.md METAL-153-159: this exact formula had a real, previously-shipping bug (SpriteBatch
 // completely bypassed virtual-resolution/letterbox scaling, reading raw physical drawable pixels
 // instead). These tests exercise every CnaPresentationMode with concrete, hand-computed expected
 // numbers, to lock the fixed behavior in against a future regression.

@@ -344,7 +344,7 @@ namespace
     };
 }
 
-// plan_fx.md FX-060: the renderer-neutral half of the compiled-effect contract lives in
+// plans/plan_fx.md FX-060: the renderer-neutral half of the compiled-effect contract lives in
 // tests/support/CNA/TestSupport/CompiledEffectConformance.hpp so that every backend claiming
 // GraphicsCapability::CompiledEffects runs the identical assertions with nothing but its own
 // device setup. FNA3D is the reference backend, so it runs the shared contract here and keeps its
@@ -354,7 +354,7 @@ namespace
 {
     using CNA::Internal::JsonValue;
 
-    /** @brief Reads FNA's checked-in reflection oracle (plan_fx.md FX-005). */
+    /** @brief Reads FNA's checked-in reflection oracle (plans/plan_fx.md FX-005). */
     JsonValue LoadFnaReflectionOracle()
     {
         const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
@@ -454,7 +454,7 @@ namespace
         // float3 as a padded float4 register, so a getter that returned the padding, or dropped a
         // row, would look identical in the structural comparison above.
         // Struct members are deliberately excluded -- CNA and FNA genuinely disagree there, and
-        // the disagreement is recorded in plan_fx.md rather than asserted either way here.
+        // the disagreement is recorded in plans/plan_fx.md rather than asserted either way here.
         const JsonValue* value = insideStructure ? nullptr : oracle.FindMember("value");
         if (value != nullptr && value->type == CNA::Internal::JsonType::Array &&
             parameter.getParameterTypeProperty() == EffectParameterType::Single)
@@ -514,7 +514,7 @@ namespace
     }
 }
 
-// plan_fx.md FX-005: the only check here that is not self-consistency. Every other reflection
+// plans/plan_fx.md FX-005: the only check here that is not self-consistency. Every other reflection
 // test compares CNA against the format or against CNA's own fixtures; this one compares it
 // against reflection produced by *running* FNA over the same bytes, through the same pinned
 // FNA3D/MojoShader. Regenerate the oracle with tools/fna-reference (see its README).
@@ -573,7 +573,7 @@ TEST(Fna3dCompiledEffectTest, StockFixtureReflectionMatchesTheFnaOracle)
     }
 }
 
-// plan_fx.md FX-004: the same states, but declared in HLSL and compiled by the Effect compiler
+// plans/plan_fx.md FX-004: the same states, but declared in HLSL and compiled by the Effect compiler
 // XNA itself used, rather than assembled byte by byte by CNA. This is the case a synthetic
 // fixture cannot cover: it proves CNA reads what a real compiler writes, including the sampler
 // states and pass render states it chooses to emit.
@@ -626,7 +626,7 @@ TEST(Fna3dCompiledEffectTest, CompilerProducedFixtureAppliesItsStatesAndSamplers
     EXPECT_EQ(blend.getColorBlendFunctionProperty(), BlendFunction::Add);
 }
 
-// plan_fx.md FX-051: inputs that once crashed the process, kept so they cannot again. Each was
+// plans/plan_fx.md FX-051: inputs that once crashed the process, kept so they cannot again. Each was
 // written by the coverage-guided fuzzer when it found a defect in the pinned MojoShader; the fixes
 // live in a patch applied to a specific revision, so these are what notice if a future pin bump
 // stops carrying them.
@@ -671,7 +671,7 @@ TEST(Fna3dCompiledEffectTest, CrashCorpusIsRejectedWithoutCrashing)
     EXPECT_GT(replayed, 0) << "the crash corpus directory contains no .fxb inputs";
 }
 
-// plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
+// plans/plan_fx.md FX-084/FX-086: the shared draw matrix. Each of these renders the compiled effect's
 // own Tint parameter into a render target and reads it back, so a draw that silently used a stock
 // shader -- or bound an attribute from the wrong stream -- fails instead of passing quietly.
 

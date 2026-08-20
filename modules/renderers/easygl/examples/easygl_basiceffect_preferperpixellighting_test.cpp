@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Task 1102 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): BasicEffect pixel test --
+// Task 1102 (plans/plan_graphics.md Phase 80 / plans/plan_dx9.md Divergence 1): BasicEffect pixel test --
 // PreferPerPixelLighting genuinely selects between two different lighting evaluations (EasyGL
 // renderer).
 //
@@ -7,7 +7,7 @@
 // (VSBasicVertexLighting*) and Gouraud-interpolated across the triangle. true -> lighting is
 // re-evaluated per fragment (VSBasicPixelLighting*/PSBasicPixelLighting*). Before this task,
 // EasyGL always evaluated per pixel regardless of this flag's value -- the opposite of XNA's own
-// default -- and GpuDrawParams didn't even carry the flag at all (plan_graphics.md Task 1100).
+// default -- and GpuDrawParams didn't even carry the flag at all (plans/plan_graphics.md Task 1100).
 //
 // Reuses the exact scene from easygl_basiceffect_specular_test.cpp's own "(a) eye straight on"
 // case, chosen there (and reused here) because a single shared vertex normal makes DIFFUSE

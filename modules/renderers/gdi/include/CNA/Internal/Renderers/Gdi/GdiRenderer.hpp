@@ -61,7 +61,7 @@ namespace CNA::Internal::Renderers::Gdi
         /**
          * @brief Reports the sample count GDI actually applied, ignoring the request.
          *
-         * plan_runtimerenderer.md design decision 9: GDI clamps to its one real optional mode (4x)
+         * plans/plan_runtimerenderer.md design decision 9: GDI clamps to its one real optional mode (4x)
          * at construction, so echoing the game's request back would misreport the device.
          *
          * @param requestedMultiSampleCount Ignored -- the applied count is what this renderer has.
@@ -225,7 +225,7 @@ namespace CNA::Internal::Renderers::Gdi
     /**
      * @brief Creates the GDI renderer.
      *
-     * plan_runtimerenderer.md design decision 4: the factory lives in this family's own namespace
+     * plans/plan_runtimerenderer.md design decision 4: the factory lives in this family's own namespace
      * so that several renderer archives can link into one binary. Declared here because this
      * family's example/contract programs construct a renderer directly, without going through
      * GraphicsDevice.

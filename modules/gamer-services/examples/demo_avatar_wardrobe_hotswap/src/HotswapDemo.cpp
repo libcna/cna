@@ -37,7 +37,7 @@ namespace
         return "?";
     }
 
-    // Post-plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
+    // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
     // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
     // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
     // (every character rendered as an identical rectangle) by an independent audit.
@@ -134,7 +134,7 @@ void HotswapDemo::LoadContent()
     ConfigureRenderer();
     hairState_ = 0;
 
-    // Task 8.1/8.3 (plan_net.md Phase 8): F1 help overlay plumbing.
+    // Task 8.1/8.3 (plans/plan_net.md Phase 8): F1 help overlay plumbing.
     auto& device = getGraphicsDeviceProperty();
     spriteBatch_ = std::make_unique<SpriteBatch>(device);
     const std::vector<uint8_t> px = {255, 255, 255, 255};
@@ -237,7 +237,7 @@ void HotswapDemo::Draw(const GameTime& /*gameTime*/)
         spriteBatch_->End();
     }
 
-    // Task 8.5 (plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
+    // Task 8.5 (plans/plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
     // AvatarDemo - Game::Exit() suppresses Draw() on the frame Update() actually calls it.
     if (smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty())
     {

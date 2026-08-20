@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX6 (DX-44).
+// plans/plan_dx.md Phase DIRECTX6 (DX-44).
 #include "CNA/Internal/Renderers/DirectX11/D3D11SamplerCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 

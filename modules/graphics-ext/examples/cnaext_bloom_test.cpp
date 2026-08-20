@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1809: a 2D SpriteBatch program gaining HDR bloom, in about ten lines.
+// plans/plan_modern.md MOD-1809: a 2D SpriteBatch program gaining HDR bloom, in about ten lines.
 //
 // The claim this program exists to check is the entry cost. Everything below the "--- the ten
 // lines" marker is an ordinary CNA 2D game: a texture, a SpriteBatch, one Draw. The engine layer

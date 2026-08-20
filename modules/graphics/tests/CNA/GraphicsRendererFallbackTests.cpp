@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P5-18/19/20: the fallback chain's behaviour.
+// plans/plan_runtimerenderer.md RTR-P5-18/19/20: the fallback chain's behaviour.
 //
 // A single-renderer build can still exercise real substitution, and these tests do: naming a
 // renderer this build does NOT contain as the preference, with the built one as the chain, makes

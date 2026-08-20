@@ -18,7 +18,7 @@ def W(path, text):
 # =====================================================================================
 W("modules/CMakeLists.txt", r'''
 # =====================================================================================
-# CNA physical module composition (MODULARIZATION_PLAN.md §11). Each subsystem owns
+# CNA physical module composition (plans/MODULARIZATION_PLAN.md §11). Each subsystem owns
 # modules/<name>/{CMakeLists.txt,include/,src/,tests/}; this file detects the shared
 # third-party media dependencies, defines the shared build-flag surface, composes the
 # modules, and keeps the source-partition/no-loss ownership gate.
@@ -49,7 +49,7 @@ if(CNA_FFMPEG_AVAILABLE)
     pkg_check_modules(LIBSWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
 endif()
 
-# --- Draco (KHR_draco_mesh_compression mesh decoding, plan_cnj.md CNB-91, Phase 14F) — optional,
+# --- Draco (KHR_draco_mesh_compression mesh decoding, plans/plan_cnj.md CNB-91, Phase 14F) — optional,
 # genuinely a system dependency (unlike cgltf.h/stb_image.h, which are vendored single-header
 # libs): Draco is a real multi-file C++ library, not something worth vendoring wholesale just to
 # decode compressed meshes. Detected via CMake's own exported package config (Debian's
@@ -146,7 +146,7 @@ target_link_libraries(CNA INTERFACE
         ${BACKEND_TARGET}
 )
 
-# --- Physical source-partition validator (no-loss ownership gate, MODULARIZATION_PLAN.md
+# --- Physical source-partition validator (no-loss ownership gate, plans/MODULARIZATION_PLAN.md
 # §5/§11): file physical module location == declared CMake ownership. Every production TU
 # must live under a declared module's src/ tree (module CMakeLists glob exactly their own
 # src/, so location IS ownership); a TU outside every module src/ tree, or a module
@@ -320,9 +320,9 @@ cna_add_module(cna_content Content ${CNA_CONTENT_SOURCES})
 target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media cna_math cna_core)
 cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO)
 target_link_libraries(cna_content PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
-# plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
+# plans/plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
 # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
-# plan_cnj.md CNB-88 (Phase 14E): RemapOcclusionImageForDualTextureEXT needs
+# plans/plan_cnj.md CNB-88 (Phase 14E): RemapOcclusionImageForDualTextureEXT needs
 # stb_image.h/stb_image_write.h.
 target_include_directories(cna_content PRIVATE
         ${CMAKE_SOURCE_DIR}/third_party/cgltf
@@ -359,7 +359,7 @@ if(ANDROID)
     # ASensorManager_*/ASensorEventQueue_*/ALooper_* API directly (no JNI) --
     # those symbols live in libandroid.so, not libc/libc++. PUBLIC so any
     # executable linking the devices module (e.g. cna_demo_devices) picks up the
-    # transitive dependency automatically (plan_devices.md Task DEVICES-0121).
+    # transitive dependency automatically (plans/plan_devices.md Task DEVICES-0121).
     #
     # Task ANDR2-006 (2026-07-17): the same file's debug-only
     # __android_log_print() diagnostic (disable/destroy failure reporting)
@@ -450,7 +450,7 @@ function(cna_renderer_backend_common_setup)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
         target_include_directories(${BACKEND_TARGET} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     endif()
-    # D3D11's/D3D12's SpriteBatch backend (plan_dx.md DX-70/DX-71) calls back into
+    # D3D11's/D3D12's SpriteBatch backend (plans/plan_dx.md DX-70/DX-71) calls back into
     # Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s
     # custom-Effect path -- a genuine, honest circular dependency between the backend static
     # library and the CNA graphics core (the backend needs a CNA-defined symbol, while CNA needs
@@ -489,14 +489,14 @@ get_filename_component(CNA_SELECTED_RENDERER "${BACKEND_DIR}" NAME)
 add_subdirectory(metal)
 add_subdirectory(glide)
 
-# plan_dx.md design decision 4: D3DCommon shared core, consumed by the d3d11 and d3d12
+# plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by the d3d11 and d3d12
 # families only -- D3D9 and D3D10 are confirmed independent (design decisions 12 and the
-# plan_d3d10.md link audit).
+# plans/plan_d3d10.md link audit).
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     add_subdirectory(common/d3d)
 endif()
 
-# plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
+# plans/plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
 # SdlGraphicsBackend (composition, not reimplementation) -- the sdl-renderer module builds
 # its sources as a shared core library for the ASCII configuration.
 if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
@@ -517,10 +517,10 @@ endif()
 ''')
 
 W("modules/renderers/common/d3d/CMakeLists.txt", r'''
-# plan_dx.md design decision 4: D3DCommon shared core, consumed by cna_backend_graphics_d3d11
+# plans/plan_dx.md design decision 4: D3DCommon shared core, consumed by cna_backend_graphics_d3d11
 # and cna_backend_graphics_d3d12. Only built when actually needed -- the renderers
 # composition adds this directory for the D3D11/D3D12 configurations only.
-# plan_dx9.md design decision 12: D3D9 deliberately does NOT join this condition. D3DFORMAT is a
+# plans/plan_dx9.md design decision 12: D3D9 deliberately does NOT join this condition. D3DFORMAT is a
 # different enum space from DXGI_FORMAT and D3D9 has no state objects at all -- D3D9 gets its own
 # D3D9FormatMapping/D3D9StateMapping/D3D9VertexDeclarations instead of expanding this shared core.
 # D3D10 is likewise independent (its own format/state mapping, no D3DCommon include or link
@@ -536,29 +536,29 @@ target_link_libraries(cna_backend_graphics_d3dcommon PRIVATE cna_graphics_core c
 ''')
 
 SIMPLE = {
-    "headless": "# plan_headless.md: no GPU, no window, no native graphics SDK -- the backend ends at\n# the common interface and the declared reverse edges.\ncna_add_renderer_backend()\n",
-    "stub": "# plan_stub.md: deliberately minimal no-op backend -- renders nothing, touches no SDL\n# window/video subsystem/GPU library.\ncna_add_renderer_backend()\n",
-    "canvas": "# plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,\n# so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)\n",
-    "html-dom": "# plan_html_dom.md design decision 2: reuses the SDL-created window/canvas element for sizing,\n# input and events, so SDL3 is still linked even though every draw goes through EM_JS/DOM/CSS\n# and no SDL_Renderer is ever created.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)\n",
+    "headless": "# plans/plan_headless.md: no GPU, no window, no native graphics SDK -- the backend ends at\n# the common interface and the declared reverse edges.\ncna_add_renderer_backend()\n",
+    "stub": "# plans/plan_stub.md: deliberately minimal no-op backend -- renders nothing, touches no SDL\n# window/video subsystem/GPU library.\ncna_add_renderer_backend()\n",
+    "canvas": "# plans/plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,\n# so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)\n",
+    "html-dom": "# plans/plan_html_dom.md design decision 2: reuses the SDL-created window/canvas element for sizing,\n# input and events, so SDL3 is still linked even though every draw goes through EM_JS/DOM/CSS\n# and no SDL_Renderer is ever created.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)\n",
     "vulkan": "cna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 Vulkan::Vulkan)\n",
     "direct2d": "# Direct2D 1.1 presents through a BGRA-capable D3D11/DXGI flip-model swap chain. d2d1 is\n# the renderer; d3d11/dxgi provide only the device and presentation surface it targets.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d2d1 d3d11 dxgi)\n",
-    "d3d10": "# plan_d3d10.md design decision: unlike DX8, mingw-w64 ships a REAL d3d10 import library\n# (libd3d10.a) -- no DXVK .dll.a linking hack needed. DXVK itself ships no d3d10.dll at all\n# (only d3d10core.dll); the real d3d10.dll/d3d10_1.dll come from Wine's own builtin, which\n# forward to d3d10core (overridden to DXVK's real implementation at the Wine-prefix level, not\n# a link-time concern).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)\n",
-    "d3d11": "# plan_dx.md design decision 3 (DX-1): d3d11/dxgi is the confirmed minimal link set for the\n# stock offline-compiled shader pipeline. d3dcompiler is linked too, specifically for DX-58's\n# runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link\n# in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)\n",
-    "d3d12": "# plan_dx.md DX-100/DX-101: d3d12+dxgi alone was confirmed sufficient for device/queue/\n# command-list creation by DX-100's own spike -- start from that minimum, same discipline as\n# DX-12/design decision 3. dxguid is deliberately NOT linked (still unneeded). d3dcompiler was\n# added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in\n# isolation by D3D11's own DX-14-compile/DX-58 precedent.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)\n",
-    "freedirect": "# plan_freedirect.md design decision 10: free-direct's own public target is the literal lowercase\n# `free-direct` (PUBLIC-links free-api::free-api, PUBLIC-exposes its own include/ dir so\n# #include <ddraw.h> resolves) -- no ALIAS namespace exists for it, unlike easy-gl's own target.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 free-direct)\n",
-    "dx1": "# plan_dx1.md design decision 10: ddraw + dxguid (GUID storage for IID_IDirectDraw etc.) is the\n# confirmed minimal link set (DX1-0 spike) -- no free-direct, no DXVK, no d3dcompiler, no\n# d3d11/dxgi. SDL3 is linked only for window/HWND access (design decision 3), same as every\n# other backend.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
-    "dx2": "# plan_dx2.md design decision 10: same confirmed minimal link set as DX1 -- ddraw + dxguid +\n# SDL3::SDL3. No separate Direct3D import library is needed: IDirect3D2/IDirect3DDevice2 are\n# obtained purely via QueryInterface/CreateDevice on DirectDraw objects/surfaces (confirmed\n# during the DX2-0 spike, see plan_dx2.md section 1).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
-    "dx3": "# plan_dx3.md design decision 6: same confirmed minimal link set as DX1/DX2 -- ddraw + dxguid +\n# SDL3::SDL3. No separate Direct3D import library is needed here either (DX30-0 spike confirmed\n# IDirect3D2/IDirect3DDevice2 are still obtained purely via QueryInterface/CreateDevice, now off\n# an IDirectDraw2 object instead of v1 -- see plan_dx3.md section 1).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
-    "dx5": "# plan_dx5.md design decision 9: same confirmed minimal link set as DX1/DX2/DX3 -- ddraw +\n# dxguid + SDL3::SDL3. No separate Direct3D import library is needed here either (DX5-0 spike\n# confirmed IDirect3D3/IDirect3DDevice3 are still obtained purely via QueryInterface/\n# CreateDevice, now off an IDirectDraw4 object instead of v2 -- see plan_dx5.md section 1).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
-    "dx6": "# plan_dx6.md design decision 10: same confirmed minimal link set as DX1/DX2/DX3/DX5 -- ddraw +\n# dxguid + SDL3::SDL3. DX6 introduces no new interface at all, so no new link dependency either.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
-    "dx7": "# plan_dx7.md design decision 14: same confirmed minimal link set as DX1/DX2/DX3/DX5/DX6 --\n# ddraw + dxguid + SDL3::SDL3. DirectDrawCreateEx/IDirectDraw7/IDirect3D7 all resolve from the\n# same import libraries, spike-confirmed (DX7-0) with no new link dependency.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
-    "magnum": "# plan_magnum.md MAGNUM-2: Magnum::GL is the whole rendering surface this backend uses, and\n# Magnum::<platform>Context supplies the OpenGL function loader Platform::GLContext needs for a\n# context CNA created itself through SDL3 (which stays the window/context owner, exactly as in\n# every other windowed backend here). CNA_MAGNUM_CONTEXT_COMPONENT is resolved per platform in\n# cmake/ThirdPartyMagnum.cmake.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE\n    SDL3::SDL3 Magnum::GL Magnum::${CNA_MAGNUM_CONTEXT_COMPONENT} Magnum::Magnum)\n",
+    "d3d10": "# plans/plan_d3d10.md design decision: unlike DX8, mingw-w64 ships a REAL d3d10 import library\n# (libd3d10.a) -- no DXVK .dll.a linking hack needed. DXVK itself ships no d3d10.dll at all\n# (only d3d10core.dll); the real d3d10.dll/d3d10_1.dll come from Wine's own builtin, which\n# forward to d3d10core (overridden to DXVK's real implementation at the Wine-prefix level, not\n# a link-time concern).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d10 dxgi d3dcompiler)\n",
+    "d3d11": "# plans/plan_dx.md design decision 3 (DX-1): d3d11/dxgi is the confirmed minimal link set for the\n# stock offline-compiled shader pipeline. d3dcompiler is linked too, specifically for DX-58's\n# runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link\n# in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)\n",
+    "d3d12": "# plans/plan_dx.md DX-100/DX-101: d3d12+dxgi alone was confirmed sufficient for device/queue/\n# command-list creation by DX-100's own spike -- start from that minimum, same discipline as\n# DX-12/design decision 3. dxguid is deliberately NOT linked (still unneeded). d3dcompiler was\n# added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in\n# isolation by D3D11's own DX-14-compile/DX-58 precedent.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)\n",
+    "freedirect": "# plans/plan_freedirect.md design decision 10: free-direct's own public target is the literal lowercase\n# `free-direct` (PUBLIC-links free-api::free-api, PUBLIC-exposes its own include/ dir so\n# #include <ddraw.h> resolves) -- no ALIAS namespace exists for it, unlike easy-gl's own target.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 free-direct)\n",
+    "dx1": "# plans/plan_dx1.md design decision 10: ddraw + dxguid (GUID storage for IID_IDirectDraw etc.) is the\n# confirmed minimal link set (DX1-0 spike) -- no free-direct, no DXVK, no d3dcompiler, no\n# d3d11/dxgi. SDL3 is linked only for window/HWND access (design decision 3), same as every\n# other backend.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
+    "dx2": "# plans/plan_dx2.md design decision 10: same confirmed minimal link set as DX1 -- ddraw + dxguid +\n# SDL3::SDL3. No separate Direct3D import library is needed: IDirect3D2/IDirect3DDevice2 are\n# obtained purely via QueryInterface/CreateDevice on DirectDraw objects/surfaces (confirmed\n# during the DX2-0 spike, see plans/plan_dx2.md section 1).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
+    "dx3": "# plans/plan_dx3.md design decision 6: same confirmed minimal link set as DX1/DX2 -- ddraw + dxguid +\n# SDL3::SDL3. No separate Direct3D import library is needed here either (DX30-0 spike confirmed\n# IDirect3D2/IDirect3DDevice2 are still obtained purely via QueryInterface/CreateDevice, now off\n# an IDirectDraw2 object instead of v1 -- see plans/plan_dx3.md section 1).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
+    "dx5": "# plans/plan_dx5.md design decision 9: same confirmed minimal link set as DX1/DX2/DX3 -- ddraw +\n# dxguid + SDL3::SDL3. No separate Direct3D import library is needed here either (DX5-0 spike\n# confirmed IDirect3D3/IDirect3DDevice3 are still obtained purely via QueryInterface/\n# CreateDevice, now off an IDirectDraw4 object instead of v2 -- see plans/plan_dx5.md section 1).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
+    "dx6": "# plans/plan_dx6.md design decision 10: same confirmed minimal link set as DX1/DX2/DX3/DX5 -- ddraw +\n# dxguid + SDL3::SDL3. DX6 introduces no new interface at all, so no new link dependency either.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
+    "dx7": "# plans/plan_dx7.md design decision 14: same confirmed minimal link set as DX1/DX2/DX3/DX5/DX6 --\n# ddraw + dxguid + SDL3::SDL3. DirectDrawCreateEx/IDirectDraw7/IDirect3D7 all resolve from the\n# same import libraries, spike-confirmed (DX7-0) with no new link dependency.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 ddraw dxguid)\n",
+    "magnum": "# plans/plan_magnum.md MAGNUM-2: Magnum::GL is the whole rendering surface this backend uses, and\n# Magnum::<platform>Context supplies the OpenGL function loader Platform::GLContext needs for a\n# context CNA created itself through SDL3 (which stays the window/context owner, exactly as in\n# every other windowed backend here). CNA_MAGNUM_CONTEXT_COMPONENT is resolved per platform in\n# cmake/ThirdPartyMagnum.cmake.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE\n    SDL3::SDL3 Magnum::GL Magnum::${CNA_MAGNUM_CONTEXT_COMPONENT} Magnum::Magnum)\n",
     "opengl1": "cna_add_renderer_backend()\nfind_package(OpenGL REQUIRED)\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)\n",
     "opengl2": "cna_add_renderer_backend()\nfind_package(OpenGL REQUIRED)\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)\n",
-    "opengl4": "# plan_opengl4.md GL4-1: real desktop OpenGL 4.x core profile via the platform's own GL\n# library (libGL/opengl32/OpenGL.framework, resolved by find_package(OpenGL) in\n# BackendSelection.cmake) plus SDL3 for window/context management -- no other new\n# third-party dependency (GL4Loader.hpp/.cpp is this backend's own hand-rolled loader for\n# the GL 1.2+ entry points a core profile needs).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)\n",
-    "easygl": "# The EasyGL family implements the four public GL-profile identities\n# (OPENGLES/OPENGL33/WEBGL1/WEBGL2) on top of the sibling easy-gl -> meta-gl chain\n# (plan_glbackends.md); the profile define CNA_GL_PROFILE_* is applied by\n# BackendSelection.cmake at identity-selection time.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)\n",
-    "diligent": "# plan_diligent.md DILIGENT-2: SDL3 provides the window (and the native handle Diligent's swap\n# chain is created from); every graphics call goes through the Diligent engine targets that\n# cna_configure_diligent() actually built for this platform.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)\ncna_link_diligent(${BACKEND_TARGET})\n",
-    "sokol": "# plan_sokol.md SOKOL-2/SOKOL-3: cna_sokol_headers (cmake/ThirdPartySokol.cmake) carries the\n# fetched sokol include directory, the CNA_SOKOL_API define sokol_gfx.h dispatches on, and --\n# for the GL APIs -- OpenGL::GL, since sokol_gfx.h has no GL loader outside Windows. SDL3\n# supplies the window and, via SDL_GL_CreateContext, the GL context sokol_gfx renders into\n# (design decision 1: CNA keeps owning the window and the game loop, so sokol_app is not used).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_sokol_headers)\n",
+    "opengl4": "# plans/plan_opengl4.md GL4-1: real desktop OpenGL 4.x core profile via the platform's own GL\n# library (libGL/opengl32/OpenGL.framework, resolved by find_package(OpenGL) in\n# BackendSelection.cmake) plus SDL3 for window/context management -- no other new\n# third-party dependency (GL4Loader.hpp/.cpp is this backend's own hand-rolled loader for\n# the GL 1.2+ entry points a core profile needs).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 OpenGL::GL)\n",
+    "easygl": "# The EasyGL family implements the four public GL-profile identities\n# (OPENGLES/OPENGL33/WEBGL1/WEBGL2) on top of the sibling easy-gl -> meta-gl chain\n# (plans/plan_glbackends.md); the profile define CNA_GL_PROFILE_* is applied by\n# BackendSelection.cmake at identity-selection time.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE easy-gl SDL3::SDL3)\n",
+    "diligent": "# plans/plan_diligent.md DILIGENT-2: SDL3 provides the window (and the native handle Diligent's swap\n# chain is created from); every graphics call goes through the Diligent engine targets that\n# cna_configure_diligent() actually built for this platform.\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)\ncna_link_diligent(${BACKEND_TARGET})\n",
+    "sokol": "# plans/plan_sokol.md SOKOL-2/SOKOL-3: cna_sokol_headers (cmake/ThirdPartySokol.cmake) carries the\n# fetched sokol include directory, the CNA_SOKOL_API define sokol_gfx.h dispatches on, and --\n# for the GL APIs -- OpenGL::GL, since sokol_gfx.h has no GL loader outside Windows. SDL3\n# supplies the window and, via SDL_GL_CreateContext, the GL context sokol_gfx renders into\n# (design decision 1: CNA keeps owning the window and the game loop, so sokol_app is not used).\ncna_add_renderer_backend()\ntarget_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_sokol_headers)\n",
 }
 for fam, body in SIMPLE.items():
     W(f"modules/renderers/{fam}/CMakeLists.txt", body)
@@ -568,7 +568,7 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
     cna_add_renderer_backend()
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
-    # plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
+    # plans/plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
     # SdlGraphicsBackend (composition, not reimplementation) -- it needs SdlGraphicsBackend.cpp's
     # real implementation compiled in even though CNA_GRAPHICS_BACKEND=SDL_RENDERER was not itself
     # selected. Mirrors the D3DCommon shared-core pattern: a small static lib, built only when
@@ -637,7 +637,7 @@ W("modules/renderers/gdi/CMakeLists.txt", r'''
 cna_add_renderer_backend(${CNA_GDI_SOFTWARE_SOURCES})
 target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 gdi32 cna_renderer_software_headers)
 
-# GDI-078: report the actual GDI archive boundary at configure time, so plan_gdi.md/NEXT_gdi.md
+# GDI-078: report the actual GDI archive boundary at configure time, so plans/plan_gdi.md/NEXT_gdi.md
 # source/object counts can be checked against generated evidence instead of a copied number.
 list(LENGTH CNA_GDI_SOFTWARE_SOURCES CNA_GDI_SHARED_SOURCE_COUNT)
 math(EXPR CNA_GDI_ARCHIVE_TOTAL "${CNA_GDI_SHARED_SOURCE_COUNT} + 3")
@@ -647,7 +647,7 @@ message(STATUS
 ''')
 
 W("modules/renderers/d3d9/CMakeLists.txt", r'''
-# plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectBackend.cpp calls
+# plans/plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectBackend.cpp calls
 # D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
 # stock D3D9 pipeline must stay d3dcompiler-free (unlike D3D11/D3D12, which link it into their
 # whole backend target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its
@@ -681,7 +681,7 @@ endif()
 
 add_library(${BACKEND_TARGET} STATIC ${_cna_d3d9_sources})
 cna_renderer_backend_common_setup()
-# plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
+# plans/plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
 # dxgi -- D3D9 predates DXGI) by D9-2's own spike. No cna_backend_graphics_d3dcommon (design
 # decision 12 -- D3D9 does not share D3DCommon). d3dcompiler is deliberately NOT linked here --
 # design decision 9/16 keep the stock pipeline dependency-free; it lives on the isolated effect
@@ -695,7 +695,7 @@ endif()
 ''')
 
 W("modules/renderers/dx8/CMakeLists.txt", r'''
-# plan_dx8.md design decision 2/14: mingw-w64's x86_64 target ships NO real d3d8 import
+# plans/plan_dx8.md design decision 2/14: mingw-w64's x86_64 target ships NO real d3d8 import
 # library at all (only the unrelated libd3d8thk.a "thunk" library; only the i686/32-bit target
 # has a real one) -- DXVK's own d3d8.dll.a (D8VK, merged into DXVK 2.0+) exports the real
 # Direct3DCreate8 symbol and is linked against directly instead, spike-confirmed (DX8-0a).
@@ -719,7 +719,7 @@ target_include_directories(${BACKEND_TARGET} PRIVATE ${CNA_BGFX_SHADER_INCLUDE_D
 ''')
 
 W("modules/renderers/wicked/CMakeLists.txt", r'''
-# plan_wicked.md WICKED-2: Wicked Engine vendors its own Vulkan headers and loads the loader
+# plans/plan_wicked.md WICKED-2: Wicked Engine vendors its own Vulkan headers and loads the loader
 # through volk at runtime, so no find_package(Vulkan) is needed here (unlike the VULKAN backend).
 # WickedEngine is PUBLIC because WickedGraphicsBackend.hpp includes wiGraphicsDevice.h -- every
 # target compiling against this backend's header needs the same include directory and the same
@@ -769,13 +769,13 @@ endif()
 ''')
 
 W("modules/renderers/sdl-gpu/CMakeLists.txt", r'''
-# plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
+# plans/plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
 # into the same SDL3 library every other backend links against) -- no separate find_package
 # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX.
 cna_add_renderer_backend()
 target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 
-# plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectBackend needs a REAL runtime GLSL->SPIR-V compile
+# plans/plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectBackend needs a REAL runtime GLSL->SPIR-V compile
 # for arbitrary user ShaderEffect source (SDL_gpu only accepts precompiled bytecode) -- unlike
 # D3D11/D3D12's d3dcompiler, this environment has no libshaderc-dev package (no unversioned
 # .so symlink, no headers), only the runtime libshaderc1 package's versioned .so.1. Prefer a
@@ -801,7 +801,7 @@ target_link_libraries(${BACKEND_TARGET} PRIVATE "${CNA_SHADERC_LIBRARY}")
 ''')
 
 W("modules/renderers/opengles1/CMakeLists.txt", r'''
-# plan_opengles1.md design decision 1: requires a REAL system OpenGL ES 1.1 (fixed-function
+# plans/plan_opengles1.md design decision 1: requires a REAL system OpenGL ES 1.1 (fixed-function
 # "Common", CM) library and Khronos headers -- e.g. Debian/Ubuntu's libgles1 + libgles-dev
 # (GLESv1_CM.so + GLES/gl.h + GLES/glext.h), or the equivalent on an embedded/Android SDK.
 # Same "hard system dependency, not vendored, FATAL_ERROR with install instructions if
@@ -846,7 +846,7 @@ else()
 endif()
 target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 
-# plan_llgl.md LLGL-27: LlglEffectBackend needs a REAL runtime GLSL->SPIR-V compile for
+# plans/plan_llgl.md LLGL-27: LlglEffectBackend needs a REAL runtime GLSL->SPIR-V compile for
 # arbitrary user ShaderEffect source when the Vulkan module is selected at runtime (LLGL's own
 # OpenGL module accepts the same GLSL text directly, no compiler needed there) -- the exact
 # same problem SDL_GPU's own effect backend already solved with libshaderc, and the

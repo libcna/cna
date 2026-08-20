@@ -4,7 +4,7 @@
 backend added after the original platform campaign. This document is its capability boundary and
 its supported build; the contract it implements is described in
 [`docs/platform-abstraction.md`](platform-abstraction.md), and the task ledger is §11 of
-[`plan_platform.md`](../plan_platform.md).
+[`plans/plan_platform.md`](../plans/plan_platform.md).
 
 **It is not `sdl2-compat`.** The backend is written against SDL 2.30's own API and links
 `SDL2::SDL2` directly. A compatibility shim running on SDL3 underneath would reach no operating
@@ -16,7 +16,7 @@ system SDL3 cannot already reach, which is the whole reason this implementation 
 
 SDL3 requires a platform SDL3 supports. SDL2 is still the version packaged by older
 distributions and still builds for hosts SDL3 has dropped. Adding it is also the first real test
-of the claim `plan_platform.md` makes about itself: that `IPlatform` is a contract CNA needed
+of the claim `plans/plan_platform.md` makes about itself: that `IPlatform` is a contract CNA needed
 rather than SDL3's shape with the names changed. A second SDL generation, with a different event
 model and a different display API, is the cheapest way to find out — and it did find things (see
 *What building it exposed*).

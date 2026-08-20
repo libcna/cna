@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2048: clustered forward shading, end to end, with its cost per light count.
+// plans/plan_modern.md MOD-2048: clustered forward shading, end to end, with its cost per light count.
 //
 // The section's claim is that a scene can hold hundreds of lights because a fragment only pays for
 // the ones its own cluster holds. That claim is only worth as much as the numbers behind it, so
@@ -274,7 +274,7 @@ protected:
 
         if (benchmark_)
         {
-            // plan_modern.md MOD-2077: what each material lobe costs, measured rather than
+            // plans/plan_modern.md MOD-2077: what each material lobe costs, measured rather than
             // asserted. 64 lights, so the light loop is the thing the lobes are being added to.
             std::printf("--- MOD-2077: material lobes at 64 lights, %dx%d, Mesa llvmpipe ---\n",
                         kFrame, kFrame);

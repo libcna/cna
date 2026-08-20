@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-56: multi-target MSAA for the MAGNUM renderer.
+// plans/plan_magnum.md MAGNUM-56: multi-target MSAA for the MAGNUM renderer.
 //
 // "Is this attachment genuinely multisampled?" cannot be answered by looking at a resolved image:
 // a single-sampled attachment resolves to the same colour a multisampled one does whenever every

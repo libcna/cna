@@ -1,12 +1,12 @@
 # glTF center-collapse verdict (`GLTF-011`)
 
-**Task:** `GLTF-011` — the terminus of the P0 center-collapse track (`plan_gltf.md` §28).
+**Task:** `GLTF-011` — the terminus of the P0 center-collapse track (`plans/plan_gltf.md` §28).
 **Question answered:** *why do imported glTF models collapse toward the centre?*
 **Answer:** two independent mechanisms, both now fixed, plus three further defects that damage
 geometry in other ways. Every one is named below with its first divergent layer, its before/after
 numbers, its owning task and the permanent fixture that locks it.
 
-This report depends on the fixes, never the other way round (`plan_gltf.md` §28.2). It is written
+This report depends on the fixes, never the other way round (`plans/plan_gltf.md` §28.2). It is written
 **after** `GLTF-007`, `GLTF-063`, `GLTF-071`, `GLTF-115`, `GLTF-248` and `GLTF-260` landed, and it
 records what those tasks measured — it does not re-open them. §3.5 was extended when `GLTF-072`
 closed the topology conversion immediately afterwards.
@@ -446,7 +446,7 @@ The center-collapse track is closed. It is deliberately narrow, and these remain
 | `ctest -L gltf-conformance` single label | `GLTF-010` | landed for L0–L6 plus the ledger and the `.cnj` tool; gains an L7 entry when `GLTF-009` lands |
 | `cgltf_validate()` / `extensionsRequired` | `GLTF-021`, `GLTF-023` | Track B Phase 1 |
 
-Per `plan_gltf.md` §28, Track B's Phases 8–23 were gated on this report and are now unblocked.
+Per `plans/plan_gltf.md` §28, Track B's Phases 8–23 were gated on this report and are now unblocked.
 
 ---
 
@@ -456,7 +456,7 @@ Per `plan_gltf.md` §28, Track B's Phases 8–23 were gated on this report and a
 |---|---|
 | Generated fixtures **when this report was written** | **21** distinct assets (`manifest.json` → `distinctAssetCount`), each with a `.glb` twin |
 | Generated fixtures today | **27** — `GLTF-021`/`GLTF-023` added the first container and robustness fixtures, `GLTF-267` added §11.4's `xf-scale-nonuniform`, `GLTF-137` added `skin-plus-static-mesh`, `GLTF-222` added `mat-emissive-strength`, `GLTF-299` added `anim-nonzero-start`, `GLTF-249` added `skin-skeleton-hint`, `GLTF-317` added the three `camera-*` fixtures, `GLTF-241` added `mat-vertex-color-pbr`, and `GLTF-224`/`GLTF-225` added `mat-normal-occlusion-scale`, and `GLTF-060` added `accessor-count-mismatch`, and `GLTF-296` added `camera-animated-node`, and `GLTF-281`/`GLTF-282` added `morph-node-weights-override`, and `GLTF-256`/`GLTF-261` added `skin-unnormalized` and `skin-73-joints` |
-| Planned corpus (`plan_gltf.md` §24.2) | **135** when this report was written; **136** today — `GLTF-137` added a row to §15.4's ladder for a file shape no ladder foresaw, which is a deliberate plan change and not the count error below returning. Completed by `GLTF-399` |
+| Planned corpus (`plans/plan_gltf.md` §24.2) | **135** when this report was written; **136** today — `GLTF-137` added a row to §15.4's ladder for a file shape no ladder foresaw, which is a deliberate plan change and not the count error below returning. Completed by `GLTF-399` |
 | L5 goldens | 17 of 21 at the time of writing; **34 of 38 today** — the four point/line topologies gained theirs with `GLTF-073`/`GLTF-078`, and the two remaining assets are the rejection fixtures, which have no L5 by construction |
 
 `skin-mesh-node-transform` was the corpus's 16th asset, added by `GLTF-260`; `GLTF-072` then
@@ -521,4 +521,4 @@ For the assets the owner reported as deformed:
   the material model selects the effect, and every authored factor survives to `PbrEffect`) and
   **`GLTF-228`/`229`/`231` (open:** `alphaMode`, `alphaCutoff`, `doubleSided`).
 
-The P0 center-collapse track (`plan_gltf.md` §28) is **complete**.
+The P0 center-collapse track (`plans/plan_gltf.md` §28) is **complete**.

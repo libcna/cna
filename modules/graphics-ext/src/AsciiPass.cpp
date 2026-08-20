@@ -35,7 +35,7 @@ namespace CNA::Graphics {
 
         // The effect draws wherever the device currently points, so the pass's whole job is to
         // point it at the destination -- and to put the previous target back afterwards, including
-        // when the readback inside Draw throws (plan_modern.md MOD-203).
+        // when the readback inside Draw throws (plans/plan_modern.md MOD-203).
         const ScopedRenderTarget bound(device_, context.destination);
         effect_->Draw(*context.source, Rectangle(0, 0, context.width, context.height));
     }

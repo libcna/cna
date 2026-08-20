@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-713, MOD-717, MOD-730, MOD-731: the pipeline's failure path, its statistics,
+// plans/plan_modern.md MOD-713, MOD-717, MOD-730, MOD-731: the pipeline's failure path, its statistics,
 // and what a settings bag does with values it should not have been given.
 
 #ifdef CNA_CNAEXT

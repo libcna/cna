@@ -33,7 +33,7 @@ include/System/Device/Location/GeoPositionAccuracy.hpp
 
 Likely real API members (from the documented WP7 `System.Device.Location` surface —
 not independently re-verified against an archived MSDN page the way
-`Microsoft::Devices::Sensors` was in `plan_devices_phase2.md` Task P2-2; treat these as
+`Microsoft::Devices::Sensors` was in `plans/plan_devices_phase2.md` Task P2-2; treat these as
 a starting sketch, re-verify before actually implementing):
 
 - **`GeoCoordinateWatcher`** — the main entry point, roughly mirroring this codebase's
@@ -105,7 +105,7 @@ sketched above, `Compass`'s consumption of it should be:
   built, not a commitment that it will be. The answer to "should CNA implement real
   declination right now" remains **no**, per this document's existing reasoning
   (`System::Device::Location` doesn't exist yet at all, and building it is a
-  substantially separate, unscoped effort from anything in `plan_devices.md`).
+  substantially separate, unscoped effort from anything in `plans/plan_devices.md`).
 
 ## Explicitly not doing right now
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx1.md Phase O7 (DX1-60..DX1-67, DX1-69): ThrowNo3D wiring and remaining-default
+// plans/plan_dx1.md Phase O7 (DX1-60..DX1-67, DX1-69): ThrowNo3D wiring and remaining-default
 // verification for the DIRECTX1 (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 // DirectDraw is 2D-only -- every 3D entry point either throws honestly or degrades to a
 // documented "unsupported, returns nullptr" default, matching this renderer's own class-level

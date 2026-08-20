@@ -128,7 +128,7 @@ def render(rows_public, rows_internal) -> str:
     out = []
     out.append("# Input source → test coverage (INPUT-AUDIT-002)")
     out.append("")
-    out.append("> **Related input docs (INP-0003):** [plan](../plan_input.md) · "
+    out.append("> **Related input docs (INP-0003):** [plan](../plans/plan_input.md) · "
                "[backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · "
                "[member-parity matrix](input-member-parity-matrix.md) · "
                "[frozen API + tier glossary](input-public-api-frozen.md) · "

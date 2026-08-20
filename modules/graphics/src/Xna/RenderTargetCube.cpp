@@ -53,7 +53,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                                  // "always discard".
                                                  RenderTargetUsagePreservesContentsEXT(usage), mipMap,
                                                  ClosestMSAAPower(preferredMultiSampleCount),
-                                                 // plan_modern.md MOD-107: the format stops being
+                                                 // plans/plan_modern.md MOD-107: the format stops being
                                                  // dropped here, the way RenderTarget2D's already
                                                  // is. TextureCube's own constructor checks it
                                                  // against the renderer's verdict.

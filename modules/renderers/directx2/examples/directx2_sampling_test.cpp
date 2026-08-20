@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter (nearest vs. bilinear) and
+// plans/plan_dx2.md Phase O2 (DX2-12, 2D layer ported from DX1-45/DX1-46): TextureFilter (nearest vs. bilinear) and
 // TextureAddressMode (Wrap/Mirror/Clamp) sampling tests for the DIRECTX2 (DirectDraw, via the
 // real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //

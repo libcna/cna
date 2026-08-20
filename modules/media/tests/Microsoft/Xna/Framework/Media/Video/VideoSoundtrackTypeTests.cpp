@@ -5,7 +5,7 @@
 
 using Microsoft::Xna::Framework::Media::VideoSoundtrackType;
 
-// plan_media.md MEDIA-31: confirmed-correct finding, no code change -- values match FNA exactly.
+// plans/plan_media.md MEDIA-31: confirmed-correct finding, no code change -- values match FNA exactly.
 TEST(VideoSoundtrackTypeTest, ValuesMatchFnaOrder)
 {
     EXPECT_EQ(static_cast<int>(VideoSoundtrackType::Music), 0);

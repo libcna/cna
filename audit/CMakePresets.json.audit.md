@@ -18,7 +18,7 @@ general native desktop test build).
 ## Executive Verdict
 Correct and thoroughly self-documented. Each preset's `description` field doubles as real
 engineering documentation — citing the specific plan/task ID that verified it works
-(`plan_devices_phase8.md Task P8-4`), what each sanitizer does and does NOT catch (ASan: "does not
+(`plans/plan_devices_phase8.md Task P8-4`), what each sanitizer does and does NOT catch (ASan: "does not
 detect data races; use devices-tsan for that"), and — most valuably — the ONE known, disclosed,
 out-of-scope finding from the last real run of each sanitizer preset (`devices-tsan`'s description
 states it reports exactly one pre-existing, unrelated race in `sharp-runtime`'s `TimeSpan` copy
@@ -33,7 +33,7 @@ constructor debug counter, and that this is out of scope for `Microsoft::Devices
   both spuriously reports unbuilt display-dependent graphics smoke-test executables as failed AND
   races several tests sharing hardcoded `/tmp` fixture paths across processes — and correctly
   attributes this to a `ctest`-invocation artifact, not a real bug in the tests themselves,
-  citing `plan_audio.md P9-BUILD-007` for the full rationale. This is exactly the kind of "known
+  citing `plans/plan_audio.md P9-BUILD-007` for the full rationale. This is exactly the kind of "known
   false-negative source" documentation that prevents a future contributor from chasing a phantom
   test failure.
 - Every sanitizer preset correctly sets both `CMAKE_CXX_FLAGS` (`-fsanitize=...

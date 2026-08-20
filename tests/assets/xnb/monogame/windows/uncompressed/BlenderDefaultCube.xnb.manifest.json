@@ -18,7 +18,7 @@
     "Microsoft.Xna.Framework.Content.IndexBufferReader",
     "Microsoft.Xna.Framework.Content.BasicEffectReader"
   ],
-  "notes": "Originally vendored for plan_xnb.md XNB-32's BasicEffectReader tests (byte-offset slice only, ModelReader didn't exist yet). Now also the real end-to-end fixture for XNB-41 (Phase F, ModelReader) -- content.Load<Model>() loads this file completely: 2 bones (RootNode -> Cube), 1 mesh ('Cube', parent bone 'Cube', BoundingSphere radius sqrt(3) matching a unit cube's half-diagonal), 1 mesh part (24 vertices/12 primitives, Position+Normal vertex layout, 16-bit index buffer), and the BasicEffect material documented below. Fully parsed field-by-field with an independent Python script before writing the C++ reader (not assumed from FNA's source alone).",
+  "notes": "Originally vendored for plans/plan_xnb.md XNB-32's BasicEffectReader tests (byte-offset slice only, ModelReader didn't exist yet). Now also the real end-to-end fixture for XNB-41 (Phase F, ModelReader) -- content.Load<Model>() loads this file completely: 2 bones (RootNode -> Cube), 1 mesh ('Cube', parent bone 'Cube', BoundingSphere radius sqrt(3) matching a unit cube's half-diagonal), 1 mesh part (24 vertices/12 primitives, Position+Normal vertex layout, 16-bit index buffer), and the BasicEffect material documented below. Fully parsed field-by-field with an independent Python script before writing the C++ reader (not assumed from FNA's source alone).",
   "basicEffectSharedResourceByteRange": {
     "typeReaderIndexOffset": 1755,
     "fieldsOffset": 1756,

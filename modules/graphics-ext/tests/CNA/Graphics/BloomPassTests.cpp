@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-400..MOD-418: bloom.
+// plans/plan_modern.md MOD-400..MOD-418: bloom.
 //
 // Bloom is the pass where "it looks about right" is least trustworthy -- a broken threshold, a
 // blur that never runs, or a composite that loses the scene all produce images that look like

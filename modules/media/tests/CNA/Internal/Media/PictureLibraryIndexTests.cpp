@@ -30,7 +30,7 @@ TEST(PictureLibraryIndexTest, ScansAllThreeFixturePictures)
     EXPECT_EQ(index.GetPictures().size(), 3u);
 }
 
-// plan_media.md MEDIA-56/D4: dimensions come from the real, already-existing ImageLoader, not a
+// plans/plan_media.md MEDIA-56/D4: dimensions come from the real, already-existing ImageLoader, not a
 // reimplemented decoder.
 TEST(PictureLibraryIndexTest, ReadsRealDimensionsViaImageLoader)
 {
@@ -53,7 +53,7 @@ TEST(PictureLibraryIndexTest, ReadsRealDimensionsViaImageLoader)
     EXPECT_EQ(portrait->height, 80);
 }
 
-// plan_media.md MEDIA-56/MEDIA-67: real parent/child album tree matching the actual directory
+// plans/plan_media.md MEDIA-56/MEDIA-67: real parent/child album tree matching the actual directory
 // structure -- Vacation/Day 2/sunset.png is 2 levels deep, Family/portrait.png is 1 level deep.
 TEST(PictureLibraryIndexTest, BuildsARealParentChildAlbumTree)
 {

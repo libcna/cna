@@ -12,7 +12,7 @@ occlusion, bloom, tonemapping and FXAA — verified on EasyGL against Mesa's sof
 is still only designed: shadow maps, the skybox, image-based lighting, compute shaders, and the
 instancing/LOD helpers. Do not describe those as available. The design is
 [`../CNAEXT.md`](../CNAEXT.md); the task backlog and its evidence trail are
-[`../plan_modern.md`](../plan_modern.md).
+[`../plans/plan_modern.md`](../plans/plan_modern.md).
 
 Enable it with:
 
@@ -41,7 +41,7 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 
 | Type | Header | Purpose |
 |---|---|---|
-| `RenderPipelineSettings` | `CNA/Graphics/RenderPipelineSettings.hpp` | Configuration bag (HDR, exposure, gamma, tonemapping, bloom, SSAO, quality, shadows). **No consumer yet** — `plan_modern.md` Phase 7 builds it. |
+| `RenderPipelineSettings` | `CNA/Graphics/RenderPipelineSettings.hpp` | Configuration bag (HDR, exposure, gamma, tonemapping, bloom, SSAO, quality, shadows). **No consumer yet** — `plans/plan_modern.md` Phase 7 builds it. |
 | `TonemappingMode`, `RenderQuality`, `ShadowQuality` | same directory | Enumerations used by the settings bag. |
 | `PbrMaterial` (+ `PbrTextureSlot`) | `CNA/Graphics/PbrMaterial.hpp` | A lossless, comparable value description of everything `PbrEffect` renders. |
 | `applyMaterial`, `extractMaterial`, `applyMaterialState` | `CNA/Graphics/MaterialBinding.hpp` | Moves a material onto an effect and back, and applies the device state it implies. |
@@ -84,7 +84,7 @@ which must instead match XNA 4.0 exactly.
 - **Capability-gated, never crashing.** Each subsystem checks
   `GraphicsDevice::SupportsCapability()` and documents its fallback. No renderer is mandatory, and
   no subsystem may make one so.
-- **Shader profile: GLSL ES 3.00, and ES 3.10 for compute.** `plan_modern.md` `MOD-15`. Every pass,
+- **Shader profile: GLSL ES 3.00, and ES 3.10 for compute.** `plans/plan_modern.md` `MOD-15`. Every pass,
   caster and lighting shader in this layer is written to that floor, and `ShaderEffect` owns the
   `#version` line and the down-level rewriting — a pass never writes one and never branches on the
   profile. The floor is ES 3.00 rather than desktop GL because the WebGL2 and OpenGL ES 3 renderers
@@ -102,7 +102,7 @@ which must instead match XNA 4.0 exactly.
 
 ## Float render targets: formats, and what each one means
 
-`plan_modern.md` `MOD-109`–`MOD-111`, `MOD-140`. The HDR pipeline rests entirely on one question —
+`plans/plan_modern.md` `MOD-109`–`MOD-111`, `MOD-140`. The HDR pipeline rests entirely on one question —
 will this renderer give me a render target that keeps values above 1.0 — so the answer is written
 down per format rather than per renderer, and the mapping is stated once here instead of being
 inferred from each renderer's source.
@@ -240,7 +240,7 @@ no effect applied. Ask all three.
 
 ### Every renderer identity
 
-`plan_modern.md` `MOD-1698`. The table above compares subsystems across the three renderers this
+`plans/plan_modern.md` `MOD-1698`. The table above compares subsystems across the three renderers this
 plan committed to; this one leaves nobody out. A renderer missing from a matrix reads as "fine",
 which is exactly what an unexamined renderer is not — so `scripts/check_cnaext_matrix.py` derives
 the list from `CNA::GraphicsRendererType` itself and fails if an identity has no row or no status.
@@ -281,7 +281,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `Canvas` | ⛔ 2D-only by identity |  |
 | `HtmlDom` | ⛔ 2D-only by identity |  |
 | `SvgDom` | ⛔ 2D-only by identity |  |
-| `PixiJs` | ⛔ 2D-only by identity | Emscripten-only, and not yet built on any real toolchain (`plan_pixijs.md`). |
+| `PixiJs` | ⛔ 2D-only by identity | Emscripten-only, and not yet built on any real toolchain (`plans/plan_pixijs.md`). |
 | `Skia` | ⛔ 2D-only by identity | CPU raster; advertises no 3D/depth/MSAA/MRT. |
 | `Blend2D` | ⛔ 2D-only, and now measured | **0 engine-layer failures**; answers no to every capability the layer asks about. |
 | `OpenVg` | ⛔ 2D-only, and now measured | **0 engine-layer failures**; the one renderer that supports *nothing at all*, which is what showed `RequireCapabilityTest` had assumed every renderer supports something. Needs `libglu1-mesa-dev`. |
@@ -296,7 +296,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `OpenGLES1` | ⛔ fixed-function; not measurable here | The container's GLX offers only an ES 3.2 profile, so an ES 1.x context request fails with `BadAlloc` before any CNA code runs. |
 | `Sokol` | 🟨 measured | **0 engine-layer failures**. Accepts an effect without executing its source. Single-context: `sg_setup` asserts and aborts on a second renderer, so `Sokol::CreateGraphicsRenderer` now refuses by name. |
 | `Diligent` | 🟨 measured | **0 engine-layer failures** on the Vulkan device it selects here. The only renderer measured that answers `CustomEffects: no` outright while still rasterizing 3D, so there is no promise/behaviour gap to catch. Measured on one native API, not the two the row wants. |
-| `Llgl` | 🟨 measured | **0 engine-layer failures**, after its descriptor was made to compile at all. Refuses a `RenderTargetCube` from the constructor, which is why three tests now gate on cube render targets. A second device leaves LLGL's globals broken and the teardown terminates — recorded for `plan_llgl.md`. |
+| `Llgl` | 🟨 measured | **0 engine-layer failures**, after its descriptor was made to compile at all. Refuses a `RenderTargetCube` from the constructor, which is why three tests now gate on cube render targets. A second device leaves LLGL's globals broken and the teardown terminates — recorded for `plans/plan_llgl.md`. |
 | `Igl` | 🟨 partial | Capabilities measured (accepts effects, executes no source; reports `MultiStreamVertexInput`). The suite cannot finish: IGL's own *"Dangling IContext reference left behind"* assert raises `SIGTRAP` in Debug and segfaults in Release whenever a device is destroyed — including on the copy-through path. Needs `-DENABLE_OPT=0`. |
 | `Metal` | ⛔ macOS only | Hard configure gate; no cross-compilation route from Linux. |
 | `Fna3d` | ⬜ builds, cannot run here | `FNA3D_CreateDevice` fails for every driver in this container, so nothing can be measured. |
@@ -328,7 +328,7 @@ normals, which means drawing the geometry a second time with a different effect.
 
 ### Threading: owner-thread only
 
-`plan_modern.md` `MOD-744`. Construct a `RenderPipeline`, configure it, call `begin`/`end` and
+`plans/plan_modern.md` `MOD-744`. Construct a `RenderPipeline`, configure it, call `begin`/`end` and
 destroy it **on the thread that owns the `GraphicsDevice`**, and nowhere else. The same applies to
 every other type in this layer.
 
@@ -343,7 +343,7 @@ that is the owner thread, and a renderer that changed it would need to say so.
 
 ### The depth/normal prepass, and what a game has to do
 
-`plan_modern.md` `MOD-500`–`MOD-507`, `MOD-529`. Screen-space effects need to know the *shape* of
+`plans/plan_modern.md` `MOD-500`–`MOD-507`, `MOD-529`. Screen-space effects need to know the *shape* of
 the scene, not its colour. `DepthNormalPrepass` produces the two images that describe it — how far
 each pixel is, and which way it faces — and the app drives it, the same way it drives `ShadowMap`.
 
@@ -378,7 +378,7 @@ expects AO and does not see it should check here first.
 **`isSupported()` will not tell you.** This paragraph used to say the pass answers
 `isSupported() == false` without its inputs, and that was never true: the method takes a
 `GraphicsDevice` and nothing else, so it cannot see a frame's inputs at all
-(`plan_modern.md` `MOD-2006`). The division is worth stating plainly, because a game that gates its
+(`plans/plan_modern.md` `MOD-2006`). The division is worth stating plainly, because a game that gates its
 prepass on `isSupported()` gets `true` and then wonders why the effect does nothing:
 
 | Question | Asked of | Answered by |
@@ -429,7 +429,7 @@ correcting that needs an inverse per draw that nothing else in this layer pays f
 
 ### Why depth is packed into eight bits rather than stored as a float
 
-`plan_modern.md` `MOD-2035`. `DepthNormalPrepass` writes linear depth as **32 bits packed across an
+`plans/plan_modern.md` `MOD-2035`. `DepthNormalPrepass` writes linear depth as **32 bits packed across an
 RGBA8 target**, everywhere, even on renderers that offer half-float render targets. That looks like a
 workaround and it is not one — packing is the more precise of the two encodings and needs no
 capability — but the reason it is unconditional is worth knowing, because it is a defect in somebody
@@ -486,7 +486,7 @@ passes for the right reason.
 
 ### FXAA, and when to prefer MSAA instead
 
-`plan_modern.md` `MOD-604`, `MOD-609`.
+`plans/plan_modern.md` `MOD-604`, `MOD-609`.
 
 The two solve the same problem from opposite ends, and the choice is usually made by the renderer
 rather than by taste:
@@ -520,7 +520,7 @@ guidance that goes with it.
 
 ### SSAO: what it approximates, and where AO is applied
 
-`plan_modern.md` `MOD-520`, `MOD-521`, `MOD-522`, `MOD-523`.
+`plans/plan_modern.md` `MOD-520`, `MOD-521`, `MOD-522`, `MOD-523`.
 
 **AO is multiplied into the frame, not into the ambient term.** A physically-motivated ambient
 occlusion darkens only *ambient* light — the sky, the environment map — and leaves direct light
@@ -557,7 +557,7 @@ being weak.
 
 ### Screen-space reflections, and the two things they cannot do
 
-`plan_modern.md` `MOD-2000`–`MOD-2009`. `SsrPass` reflects the scene in itself: it walks the
+`plans/plan_modern.md` `MOD-2000`–`MOD-2009`. `SsrPass` reflects the scene in itself: it walks the
 reflected ray forward in view space, projects each step back to a screen position, and asks the
 depth image whether anything is standing there. It reads the same two images SSAO does and needs one
 more thing SSAO does not — a camera, supplied by `RenderPipeline::setCamera`.
@@ -610,7 +610,7 @@ stair-steps every reflected edge and halving the step moves the whole reflection
 
 ### Depth of field, in the units a photographer uses
 
-`plan_modern.md` `MOD-2010`–`MOD-2015`. `DepthOfFieldPass` blurs each pixel by the **circle of
+`plans/plan_modern.md` `MOD-2010`–`MOD-2015`. `DepthOfFieldPass` blurs each pixel by the **circle of
 confusion** a thin lens would produce at its distance, so the settings mean what they mean on a
 camera: a 135 mm lens at f/1.4 focused two metres away has a shallow depth of field here for the
 reason it does in the world.
@@ -653,7 +653,7 @@ makes the frame sharper than the lens would.
 
 ### Bloom: what the numbers mean, and what they do not
 
-`plan_modern.md` `MOD-417`, `MOD-405`, `MOD-409`.
+`plans/plan_modern.md` `MOD-417`, `MOD-405`, `MOD-409`.
 
 **Bloom here is not physically normalised, and `intensity` is an artistic dial.** A physically based
 bloom would conserve energy: light spread into the halo would be light removed from the source, and
@@ -690,7 +690,7 @@ worse path where the better one exists.
 
 ### Volumetrics: air you can see, and three passes that do it differently
 
-`plan_modern.md` `MOD-2050`–`MOD-2054`. Three passes put light *in the air between things* rather
+`plans/plan_modern.md` `MOD-2050`–`MOD-2054`. Three passes put light *in the air between things* rather
 than on the things themselves, and they are not alternatives to each other -- they cost different
 amounts and answer different questions. All three are **off when their own amount is zero**, which
 is the default, and each reads its numbers from `RenderPipelineSettings` when the pipeline supplies
@@ -746,7 +746,7 @@ settings.setVolumetricFogDensity(0.3f);   // 0 is off
 
 ### Motion blur, and the half of it that is not here
 
-`plan_modern.md` `MOD-2030`–`MOD-2034`. `MotionBlurPass` works out where each pixel used to be
+`plans/plan_modern.md` `MOD-2030`–`MOD-2034`. `MotionBlurPass` works out where each pixel used to be
 rather than storing it: the depth image and the camera give a world position, putting that position
 through the **previous frame's** camera says where it was on screen, and the difference is the
 pixel's velocity. It needs no new render target.
@@ -810,7 +810,7 @@ along an arbitrary direction would put a one-frame glitch on every cut.
 
 ### The lens and the grade: four passes and where each one belongs
 
-`plan_modern.md` `MOD-2020`–`MOD-2027`. Four small passes, all **off by default**, whose positions in
+`plans/plan_modern.md` `MOD-2020`–`MOD-2027`. Four small passes, all **off by default**, whose positions in
 the chain are decided by one question: is this describing the lens the scene was shot through, or
 the image the viewer is looking at?
 
@@ -910,7 +910,7 @@ one property that makes flare read as a lens rather than as a smear.
 
 ### Tonemapping: what goes in, what comes out, and what CNA does not do
 
-`plan_modern.md` `MOD-316`, `MOD-320`.
+`plans/plan_modern.md` `MOD-316`, `MOD-320`.
 
 **The contract.** `TonemapPass` takes **linear, scene-referred** colour — values where 1.0 is "as
 bright as white paper" and 8.0 is a genuinely eight-times-brighter highlight — and produces
@@ -950,7 +950,7 @@ change how the game looks, which is not what a quality preset is for.
 
 ### Letting the GPU decide how much to draw: indirect draws
 
-`plan_modern.md` `MOD-2090`. An indirect draw takes its vertex count, instance count and offsets out
+`plans/plan_modern.md` `MOD-2090`. An indirect draw takes its vertex count, instance count and offsets out
 of a GPU buffer instead of from its arguments. That is the one piece of GPU-driven rendering the
 reference renderer's profile floor can actually reach — mesh shaders and the rest of that family do
 not exist below GL 4.6 — and what it buys is that a compute shader can decide how much to draw
@@ -1002,7 +1002,7 @@ outright for the same kind of reason.
 
 ### Decals: gluing an image onto geometry that knows nothing about it
 
-`plan_modern.md` `MOD-2094`. Bullet holes, scorch marks, puddles, tyre tracks. `DecalPass` projects a
+`plans/plan_modern.md` `MOD-2094`. Bullet holes, scorch marks, puddles, tyre tracks. `DecalPass` projects a
 texture onto whatever the depth prepass says is already there: for each pixel the depth gives a
 position, the decal's inverse transform puts that position in the decal's own space, and the pixel is
 painted only if it lands **inside the decal's unit box**. No geometry is generated, and the receiving
@@ -1040,7 +1040,7 @@ a decal is worth drawing at all before spending one.
 
 ### Transparency, and choosing between two answers
 
-`plan_modern.md` `MOD-2101`–`MOD-2110`. Until Phase 21 the layer had no transparency story at all,
+`plans/plan_modern.md` `MOD-2101`–`MOD-2110`. Until Phase 21 the layer had no transparency story at all,
 and said so: `MaterialBinding.hpp` read *"Draw order still belongs to the application: CNA does not
 sort."* Every subsystem before it assumes opaque geometry, because the depth prepass writes one depth
 per pixel and SSAO, SSR, fog and motion blur all reconstruct from that one depth.
@@ -1094,7 +1094,7 @@ source, the pipeline **falls back to `Sorted` and names the missing requirement*
 
 ### Particles
 
-`plan_modern.md` `MOD-2095`. An emitter, a simulation and a draw. Particles are simulated on the GPU
+`plans/plan_modern.md` `MOD-2095`. An emitter, a simulation and a draw. Particles are simulated on the GPU
 where the device has compute and on the CPU where it does not, and drawn as camera-facing billboards
 in one instanced call.
 
@@ -1139,7 +1139,7 @@ fallback gets exercised at all on a machine that does not need it.
 
 ### Culling that becomes the draw: `GpuInstanceCuller`
 
-`plan_modern.md` `MOD-2091`. A compute shader tests every instance against the frustum, compacts the
+`plans/plan_modern.md` `MOD-2091`. A compute shader tests every instance against the frustum, compacts the
 survivors, and writes the surviving count straight into an indirect draw command. One call then
 draws them. **Nothing about the result is read back to submit the frame** — which is the whole point,
 because reading a cull verdict back is the CPU waiting on work it has only just submitted.
@@ -1183,7 +1183,7 @@ consumer is the draw, and that consumer is the GPU.
 
 ### HDR display output, and why it is currently a refusal
 
-`plan_modern.md` `MOD-2092`. Two separate things wear the name "HDR", and only one of them has been
+`plans/plan_modern.md` `MOD-2092`. Two separate things wear the name "HDR", and only one of them has been
 in this layer since Phase 1. Rendering in HDR — a float scene target, exposure, tonemapping — is what
 `RenderPipeline` has always done. *Presenting* in HDR means handing the display a signal it
 interprets as absolute luminance, and that needs a swap chain nobody here has.
@@ -1227,7 +1227,7 @@ half-float target to hold what comes out.
 
 ### Rendering small and showing big: spatial upscaling
 
-`plan_modern.md` `MOD-2093`. `SpatialUpscalePass` is the cheapest performance dial the layer has:
+`plans/plan_modern.md` `MOD-2093`. `SpatialUpscalePass` is the cheapest performance dial the layer has:
 render the scene at a fraction of the output size, and let one pass — the only one that touches
 every output pixel — put it on screen at full size.
 
@@ -1271,7 +1271,7 @@ screen would say why.
 
 ### Seeing what the layer is doing: debug shapes and GPU time
 
-`plan_modern.md` `MOD-2160`–`MOD-2165`. Two gaps that were felt directly rather than predicted: every
+`plans/plan_modern.md` `MOD-2160`–`MOD-2165`. Two gaps that were felt directly rather than predicted: every
 frustum, probe grid, cluster slice and light bound built in Phase 20 was verified by arithmetic
 because nothing here could draw one, and every number in [`cnaext-perf.md`](cnaext-perf.md) came from
 a CPU wall clock because nothing here could ask the GPU.
@@ -1329,7 +1329,7 @@ The costs, and what they turned out to say about the existing table, are in
 
 ### Writing your own pass
 
-`plan_modern.md` `MOD-233`. There are two routes, and the shorter one is right more often than it
+`plans/plan_modern.md` `MOD-233`. There are two routes, and the shorter one is right more often than it
 looks.
 
 **If you have a shader, you do not need a class.** `EffectPass` runs any `Effect` as a fullscreen
@@ -1401,7 +1401,7 @@ hard to see:
 
 ### Many lights: clustered forward shading
 
-`plan_modern.md` `MOD-2040`–`MOD-2048`. The XNA lit effects carry three directional lights plus one
+`plans/plan_modern.md` `MOD-2040`–`MOD-2048`. The XNA lit effects carry three directional lights plus one
 shadowed punctual light, and that is a budget rather than an implementation limit. Clustered forward
 lifts it: the view frustum is cut into a grid of cells, each light is sorted into the cells its
 volume touches, and a fragment shades with the handful its own cell holds.
@@ -1712,7 +1712,7 @@ pipeline.setSkyboxCamera(view, projection);  // the pipeline has no camera of it
 
 ### A sky computed instead of sampled
 
-`plan_modern.md` `MOD-2053`. `AtmosphericSky` is an alternative to `Skybox`, not a replacement: the
+`plans/plan_modern.md` `MOD-2053`. `AtmosphericSky` is an alternative to `Skybox`, not a replacement: the
 cube path above is untouched, and a game that wants an artist's sky keeps using it. What this buys
 is that **a time of day becomes a number rather than an asset**.
 
@@ -1753,7 +1753,7 @@ sky.draw(view, projection, width, height);           // before the scene's geome
 
 ### Aerial perspective: the air between the camera and the mountain
 
-`plan_modern.md` `MOD-2140`–`MOD-2142`. `AtmosphericSky` has drawn a physically-derived sky since
+`plans/plan_modern.md` `MOD-2140`–`MOD-2142`. `AtmosphericSky` has drawn a physically-derived sky since
 `MOD-1100`, and everything in front of that sky was drawn as though the air between it and the camera
 were not there. A ridge twenty kilometres away arriving at full contrast and full saturation against
 a visibly atmospheric sky is the single clearest tell that the sky is a backdrop rather than a place.
@@ -1821,7 +1821,7 @@ edge along every silhouette rather than as a wrong colour.
 
 ### Area lights, and the two things they do not do
 
-`plan_modern.md` `MOD-2060`–`MOD-2063`. A punctual light is a point, so its highlight is a point and
+`plans/plan_modern.md` `MOD-2060`–`MOD-2063`. A punctual light is a point, so its highlight is a point and
 its shadow has a hard edge. Almost every real light is a *surface*, and the difference is not
 brightness — a window is a bright rectangle in a polished floor, and no amount of tuning turns a
 point light into one.
@@ -1950,7 +1950,7 @@ pbrEffect.setImageBasedLightEXT(environment);   // SkinnedPbrEffect has the same
 
 ### Probe-based indirect light
 
-`plan_modern.md` `MOD-2080`–`MOD-2087`. `ImageBasedLightEXT` lights a whole scene from one
+`plans/plan_modern.md` `MOD-2080`–`MOD-2087`. `ImageBasedLightEXT` lights a whole scene from one
 environment, applied uniformly: every surface gets the same ambient whether it stands in the doorway
 or at the back of the cellar. A probe grid is the answer to *where*.
 
@@ -2063,7 +2063,7 @@ The mapping, field for field (`MOD-1300`):
 
 ### Material extensions beyond glTF core
 
-`plan_modern.md` `MOD-2070`–`MOD-2077`. `PbrMaterial` describes what `PbrEffect` can render. The
+`plans/plan_modern.md` `MOD-2070`–`MOD-2077`. `PbrMaterial` describes what `PbrEffect` can render. The
 lobes past that — clearcoat, sheen, transmission with its volume, iridescence, and a subsurface
 approximation — are carried by a **separate** `PbrMaterialExtensions` and shaded by
 `ClusteredForwardEffect`.
@@ -2226,7 +2226,7 @@ Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · �
 ## Related documents
 
 - [`../CNAEXT.md`](../CNAEXT.md) — the design of this layer (what it is, what it is not, why).
-- [`../plan_modern.md`](../plan_modern.md) — the task backlog implementing that design.
+- [`../plans/plan_modern.md`](../plans/plan_modern.md) — the task backlog implementing that design.
 - [`ascii-post-process-effect.md`](ascii-post-process-effect.md) — the ASCII effect in detail.
 - [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) — the XNA-level
   per-renderer feature matrix this one sits above.

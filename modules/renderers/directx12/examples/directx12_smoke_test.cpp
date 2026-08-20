@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx.md Phase DX12 (DX-102/DX-103/DX-104/DX-105): smoke test for D3D12's device-lifetime
+// plans/plan_dx.md Phase DX12 (DX-102/DX-103/DX-104/DX-105): smoke test for D3D12's device-lifetime
 // resources. Deliberately constructed OFF-SCREEN (surface.windowId = 0) --
 // DX-100's own real spike found CreateSwapChainForHwnd(..., DXGI_SWAP_EFFECT_FLIP_DISCARD) crashes
 // inside vanilla Wine's own dxgi.dll, so this primary smoke test never constructs a window and
 // never reaches that code path, keeping this CTest genuinely green on this dev loop. The real
 // (window-attached) swap-chain attempt is exercised separately, once, honestly, outside the
-// default CTest suite -- see plan_dx.md DX-102's own row for that real outcome.
+// default CTest suite -- see plans/plan_dx.md DX-102's own row for that real outcome.
 //
 // Check A -- real ID3D12Device created, feature level >= 11_0 (D3D12CreateDevice's own retry-loop
 //   fallback, DX-102), tearing-capability query ran without throwing.
@@ -27,7 +27,7 @@
 //   GetSwapChainEXT() == nullptr, by design (see class doc comment) -- confirms the crash-prone path
 //   was never touched by this run.
 //
-// plan_dx.md DX-106/DX-107/DX-108 (this revision) add:
+// plans/plan_dx.md DX-106/DX-107/DX-108 (this revision) add:
 // Check G -- D3D12ResourceStateTracker (DX-106): a real throwaway committed buffer resource is
 //   registered, transitioned through 2 distinct states (a real barrier IS emitted + tracked state
 //   updates), then re-requested at the state it's already in (NO redundant barrier emitted, proven
@@ -42,7 +42,7 @@
 //   identity, same pattern as Check H.
 //
 //
-// plan_dx.md DX-109/DX-110 (this revision) add:
+// plans/plan_dx.md DX-109/DX-110 (this revision) add:
 // Check J -- D3D12VertexBufferRenderer/D3D12IndexBufferRenderer (DX-109): known vertex data is
 //   uploaded through a real DEFAULT-heap resource + UPLOAD-heap staging + CopyBufferRegion, then
 //   copied back out to a D3D12_HEAP_TYPE_READBACK buffer and Map()'d on the CPU -- an exact byte
@@ -62,7 +62,7 @@
 //   NEW device -- real proof the recreation path produces a genuinely working renderer, not just
 //   non-null pointers.
 //
-// plan_dx.md DX-111 (this revision) adds:
+// plans/plan_dx.md DX-111 (this revision) adds:
 // Check M -- the first real 3D triangle this D3D12 renderer has ever drawn: a genuine
 //   DrawColoredPrimitives()/DrawIndexedColoredPrimitives() call (real root signature + PSO from
 //   Check H/I, real PerDraw/FogParams constant buffers, a real command-list-recorded DrawInstanced/
@@ -74,7 +74,7 @@
 //   stale/cached value -- same "before/after Clear()" discipline D3D11's own Check P established
 //   (directx11_smoke_test.cpp), reused here for the analogous D3D12 proof.
 //
-// plan_dx.md DX-111 (continued -- textured3d/colored_textured3d/lit_textured3d/alpha_test3d) adds:
+// plans/plan_dx.md DX-111 (continued -- textured3d/colored_textured3d/lit_textured3d/alpha_test3d) adds:
 // Check N -- DrawPrimitivesEx()/DrawIndexedPrimitivesEx() with real GpuDrawParams: textured3d
 //   (stride 20) samples the exact known texture color (diffuseColor=white) over the Clear()
 //   background, and colored_textured3d (stride 24) multiplies an exact known vertex color through a
@@ -112,7 +112,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
-// plan_dx.md DX-132/DX-148/DX-140: the XNA-level public API (SpriteFont, Model, Texture2D::
+// plans/plan_dx.md DX-132/DX-148/DX-140: the XNA-level public API (SpriteFont, Model, Texture2D::
 // FromStream/SaveAsPng) needs a real GraphicsDevice. Until PresentationParameters::HeadlessEXT
 // landed, constructing one for D3D12 forced a real window -> a real swap chain -> the crash path
 // this dev loop's plain Wine cannot survive (DX-100/DX-102). HeadlessEXT makes a genuinely
@@ -415,7 +415,7 @@ namespace
     }
 }
 
-// plan_dx.md DX-120 adds:
+// plans/plan_dx.md DX-120 adds:
 // Check AA -- D3D12OcclusionQueryRenderer: a real ID3D12QueryHeap(D3D12_QUERY_TYPE_OCCLUSION) +
 //   D3D12_HEAP_TYPE_READBACK buffer, Begin()/EndQuery()/ResolveQueryData() all genuinely recorded
 //   and executed through Wine+vkd3d-proton on the real GPU. A visible full-viewport triangle
@@ -424,7 +424,7 @@ namespace
 //   reports PixelCount() == 0 -- a genuine visible-vs-invisible discriminating result, not just
 //   "the query completed" (closes Phase DX15's own DX-147 D3D12 half).
 
-// plan_dx.md DX-121 adds:
+// plans/plan_dx.md DX-121 adds:
 // Check BB -- D3D12EffectRenderer: runtime D3DCompile() of arbitrary HLSL source (not one of
 //   DX-13-hlsl's offline-compiled stock variants) builds a real PSO+constant-buffer end to end,
 //   driven manually (SpriteBatch/GraphicsDevice can't be constructed safely in this off-screen-only
@@ -565,7 +565,7 @@ int main()
               "E3: the most recently signaled value (v2) eventually completes when explicitly waited on");
     }
 
-    // ---- Check E4 (plan_dx.md DX-113 follow-up): SignalAndWaitForFrameEXT's WaitForSingleObject
+    // ---- Check E4 (plans/plan_dx.md DX-113 follow-up): SignalAndWaitForFrameEXT's WaitForSingleObject
     // branch genuinely stalls the CPU thread under real pending GPU work, not just an
     // already-satisfied fence returning near-instantly (E1-E3 above only proved the VALUE-ordering
     // contract, not that the wait itself is a real block). Proven via a RELATIVE timing comparison,
@@ -642,7 +642,7 @@ int main()
                 Check(loadDuration > controlDuration * 3 || loadDuration > std::chrono::milliseconds(2),
                       "E4: SignalAndWaitForFrameEXT's WaitForSingleObject branch genuinely blocks the CPU "
                       "measurably longer when its wait target sits behind real pending GPU work than the "
-                      "already-satisfied control case (plan_dx.md DX-113 follow-up)");
+                      "already-satisfied control case (plans/plan_dx.md DX-113 follow-up)");
             }
         }
     }
@@ -717,7 +717,7 @@ int main()
         catch (const std::runtime_error&) { threwTransition = true; }
         Check(threwTransition,
               "G9: TransitionTo() on a never-tracked resource genuinely throws std::runtime_error "
-              "(plan_dx.md DX-106/DX-113), not silently emitting an ad-hoc barrier from an unknown state");
+              "(plans/plan_dx.md DX-106/DX-113), not silently emitting an ad-hoc barrier from an unknown state");
 
         bool threwGetState = false;
         try { (void)tracker.GetTrackedStateEXT(untrackedResource.Get()); }
@@ -1170,7 +1170,7 @@ int main()
         auto afterN = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(beforeN, 0, 255, 0, 255) && regionIs(afterN, 11, 22, 33, 255),
               "N1: DrawPrimitivesEx() real textured3d draw samples the exact texture color "
-              "(diffuseColor=white) over the Clear() background (plan_dx.md DX-111)");
+              "(diffuseColor=white) over the Clear() background (plans/plan_dx.md DX-111)");
 
         // Indexed path, same textured3d draw -- proves DrawIndexedPrimitivesEx shares the same real
         // pipeline (DrawPrimitivesExImpl), not just the non-indexed entry point.
@@ -1212,7 +1212,7 @@ int main()
         auto afterCT = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(afterCT, 80, 160, 240, 255),
               "N3: DrawPrimitivesEx() real colored_textured3d draw multiplies the exact vertex color "
-              "through a white texture (plan_dx.md DX-111)");
+              "through a white texture (plans/plan_dx.md DX-111)");
 
         // DX-137: dedicated fog on/off discriminating test for colored_textured3d -- same
         // Z-at-FogEnd methodology as textured3d's own fog test below, reusing this block's
@@ -1232,7 +1232,7 @@ int main()
         auto colTexFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(colTexFogOff, 30, 30), 80, 160, 240, 255),
               "N3b: DrawPrimitivesEx() colored_textured3d fogEnabled=false leaves the exact "
-              "vertex*texture color unblended (plan_dx.md DX-137)");
+              "vertex*texture color unblended (plans/plan_dx.md DX-137)");
 
         ctp.fogEnabled = true;
         ctp.fogVector[2] = 2.0f;
@@ -1242,7 +1242,7 @@ int main()
         auto colTexFogOn = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(colTexFogOn, 30, 30), 0, 255, 0, 255),
               "N3c: DrawPrimitivesEx() colored_textured3d fogEnabled=true with Z at FogEnd genuinely "
-              "blends all the way to the exact FogColor (plan_dx.md DX-137)");
+              "blends all the way to the exact FogColor (plans/plan_dx.md DX-137)");
 
         // DX-137: dedicated fog on/off discriminating test for textured3d -- a representative
         // variant of the 7 fog-capable non-colored3d variants (chosen for its simple, already-
@@ -1266,7 +1266,7 @@ int main()
         auto texFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(texFogOff, 30, 30), 11, 22, 33, 255),
               "N4: DrawPrimitivesEx() textured3d fogEnabled=false leaves the exact sampled texture "
-              "color unblended (plan_dx.md DX-137)");
+              "color unblended (plans/plan_dx.md DX-137)");
 
         tp.fogEnabled = true;
         tp.fogVector[2] = 2.0f;
@@ -1277,7 +1277,7 @@ int main()
         Check(isColor(pixelAt(texFogOn, 30, 30), 0, 255, 0, 255),
               "N5: DrawPrimitivesEx() textured3d fogEnabled=true with Z at FogEnd genuinely blends "
               "all the way to the exact FogColor, distinctly different from the fogEnabled=false "
-              "case above (plan_dx.md DX-137)");
+              "case above (plans/plan_dx.md DX-137)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
@@ -1359,7 +1359,7 @@ int main()
         auto unlitResult = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(unlitResult, 44, 55, 66, 255),
               "O1: DrawPrimitivesEx() real lit_textured3d unlit branch samples diffuseColor*texture "
-              "exactly (plan_dx.md DX-111)");
+              "exactly (plans/plan_dx.md DX-111)");
 
         GpuDrawParams litP = unlitP;
         litP.lightingEnabled = true;
@@ -1384,7 +1384,7 @@ int main()
         }
         Check(litDiffersFromUnlitAndBackground,
               "O2: DrawPrimitivesEx() real lit_textured3d lit branch genuinely computes a different "
-              "color than both the unlit result and the Clear() background (plan_dx.md DX-111)");
+              "color than both the unlit result and the Clear() background (plans/plan_dx.md DX-111)");
 
         // DX-137: dedicated fog on/off discriminating test for lit_textured3d -- reuses the unlit
         // branch's own deterministic fixture (exact base color (44,55,66)) above, same
@@ -1406,7 +1406,7 @@ int main()
         auto litFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(litFogOff, 30, 30), 44, 55, 66, 255),
               "O3: DrawPrimitivesEx() lit_textured3d fogEnabled=false leaves the exact unlit texture "
-              "color unblended (plan_dx.md DX-137)");
+              "color unblended (plans/plan_dx.md DX-137)");
 
         litFogP.fogEnabled = true;
         litFogP.fogVector[2] = 2.0f;
@@ -1416,12 +1416,12 @@ int main()
         auto litFogOn = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(litFogOn, 30, 30), 0, 255, 0, 255),
               "O4: DrawPrimitivesEx() lit_textured3d fogEnabled=true with Z at FogEnd genuinely "
-              "blends all the way to the exact FogColor (plan_dx.md DX-137)");
+              "blends all the way to the exact FogColor (plans/plan_dx.md DX-137)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check O3 (Task 1107, plan_graphics.md Phase 80): PreferPerPixelLighting genuinely
+    // ---- Check O3 (Task 1107, plans/plan_graphics.md Phase 80): PreferPerPixelLighting genuinely
     // selects between two different lit_textured3d dispatch variants (vertex-lit vs pixel-lit).
     // Reuses the exact scene/analytically-derived values already independently verified in
     // examples/easygl_basiceffect_preferperpixellighting_test.cpp (Task 1102) and
@@ -1511,7 +1511,7 @@ int main()
         const auto vertexLitPixel = pixelAt(vertexLitResult, kRtWidth / 2, kRtHeight / 2);
         Check(closeTo(vertexLitPixel[0], 127, 10) && closeTo(vertexLitPixel[1], 127, 10) && closeTo(vertexLitPixel[2], 127, 10),
               "O3-1: DrawPrimitivesEx() preferPerPixelLighting=false (XNA's real default) genuinely "
-              "computes the Gouraud-averaged specular result, ~127 (Task 1107, plan_graphics.md Phase 80)");
+              "computes the Gouraud-averaged specular result, ~127 (Task 1107, plans/plan_graphics.md Phase 80)");
 
         pplP.preferPerPixelLighting = true;
         renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
@@ -1521,17 +1521,17 @@ int main()
         const auto pixelLitPixel = pixelAt(pixelLitResult, kRtWidth / 2, kRtHeight / 2);
         Check(closeTo(pixelLitPixel[0], 155, 10) && closeTo(pixelLitPixel[1], 155, 10) && closeTo(pixelLitPixel[2], 155, 10),
               "O3-2: DrawPrimitivesEx() preferPerPixelLighting=true genuinely computes a fresh "
-              "per-fragment specular result, ~155 (Task 1107, plan_graphics.md Phase 80)");
+              "per-fragment specular result, ~155 (Task 1107, plans/plan_graphics.md Phase 80)");
 
         Check(vertexLitPixel[0] != pixelLitPixel[0],
               "O3-3: DrawPrimitivesEx() preferPerPixelLighting is a real dispatch selector, not a "
               "decorative no-op -- the two draws above produce genuinely different pixel values "
-              "(Task 1107, plan_graphics.md Phase 80)");
+              "(Task 1107, plans/plan_graphics.md Phase 80)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check EE (plan_dx.md DX-138): lit_textured3d -- DirectionalLight1/DirectionalLight2/
+    // ---- Check EE (plans/plan_dx.md DX-138): lit_textured3d -- DirectionalLight1/DirectionalLight2/
     // EmissiveColor each independently and exactly contribute, not just Light0 (already proven by
     // Check O). All 3 sub-checks use a plain white 1x1-solid texture so the shader's tex-multiply
     // doesn't scale the result, and ambientColor/light0Diffuse are zeroed so only the field under
@@ -1608,7 +1608,7 @@ int main()
         auto r1 = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(centerIsExact(r1, 255, 0, 0),
               "EE1: DrawPrimitivesEx() real lit_textured3d -- DirectionalLight1 alone contributes the "
-              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-138)");
+              "exact expected red, independent of Light0/Light2 (plans/plan_dx.md DX-138)");
 
         // EE2: same geometry/light1Dir, but light1Diffuse disabled (black, matches DX-60a's own
         // "Enabled=false zeroes Diffuse" convention) -- proves EE1 wasn't some other constant leaking in.
@@ -1620,7 +1620,7 @@ int main()
         auto r1off = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(centerIsExact(r1off, 0, 0, 0),
               "EE2: disabling DirectionalLight1's diffuse (zeroed, matching Enabled=false) removes "
-              "its contribution exactly -- confirms EE1 was real, not a leaked default (plan_dx.md DX-138)");
+              "its contribution exactly -- confirms EE1 was real, not a leaked default (plans/plan_dx.md DX-138)");
 
         // EE3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
         GpuDrawParams p2 = baseP;
@@ -1632,7 +1632,7 @@ int main()
         auto r2 = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(centerIsExact(r2, 0, 255, 0),
               "EE3: DrawPrimitivesEx() real lit_textured3d -- DirectionalLight2 alone contributes the "
-              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-138)");
+              "exact expected green, independent of Light0/Light1 (plans/plan_dx.md DX-138)");
 
         // EE4: EmissiveColor alone (all lights + ambient off) -> exact (0,0,255), a constant,
         // light-independent contribution (not scaled by any NdotL term).
@@ -1644,12 +1644,12 @@ int main()
         auto r3 = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(centerIsExact(r3, 0, 0, 255),
               "EE4: DrawPrimitivesEx() real lit_textured3d -- EmissiveColor alone contributes the "
-              "exact expected blue with every light off, a constant additive term (plan_dx.md DX-138)");
+              "exact expected blue with every light off, a constant additive term (plans/plan_dx.md DX-138)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check FF (plan_dx.md DX-139): lit_textured3d -- real Blinn-Phong specular highlight,
+    // ---- Check FF (plans/plan_dx.md DX-139): lit_textured3d -- real Blinn-Phong specular highlight,
     // discriminating (not the zeroed-for-CPU-determinism gap DX-125's own D3D11 row documents).
     // Geometry deliberately chosen so the half-vector H exactly equals the surface normal N: eye at
     // (0,0,-10) looking toward +Z, surface normal (0,0,-1), light1 traveling in +Z (so the
@@ -1720,7 +1720,7 @@ int main()
         sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
         sp.specularColor[0] = 1.0f; sp.specularColor[1] = 1.0f; sp.specularColor[2] = 1.0f;
         sp.specularPower = 16.0f;
-        // Task 1107 (plan_graphics.md Phase 80): this check's own dot(H,N)=1 exactness only holds
+        // Task 1107 (plans/plan_graphics.md Phase 80): this check's own dot(H,N)=1 exactness only holds
         // AT THE SAMPLED FRAGMENT under a fresh per-fragment evaluation -- the eye vector E is
         // position-dependent (eye at a finite (0,0,-10), not infinitely far away), so this
         // triangle's 3 vertices each see a slightly different E than the sampled centre pixel
@@ -1737,7 +1737,7 @@ int main()
         Check(centerIsExact(specOn, 255, 255, 255),
               "FF1: DrawPrimitivesEx() real lit_textured3d -- Blinn-Phong specular at a geometry "
               "deliberately chosen so dot(H,N)=1 exactly contributes the exact expected full-white "
-              "highlight, with diffuse/ambient/emissive all zero (plan_dx.md DX-139)");
+              "highlight, with diffuse/ambient/emissive all zero (plans/plan_dx.md DX-139)");
 
         GpuDrawParams spOff = sp;
         spOff.specularColor[0] = 0.0f; spOff.specularColor[1] = 0.0f; spOff.specularColor[2] = 0.0f;
@@ -1748,7 +1748,7 @@ int main()
         Check(centerIsExact(specOff, 0, 0, 0),
               "FF2: the SAME geometry/light with material SpecularColor zeroed produces exact black -- "
               "proves FF1's white came genuinely from the specular term, not diffuse/ambient/emissive "
-              "(plan_dx.md DX-139)");
+              "(plans/plan_dx.md DX-139)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
@@ -1835,7 +1835,7 @@ int main()
         auto discardResult = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(discardResult, 0, 255, 0, 255),
               "P1: DrawPrimitivesEx() real alpha_test3d clip() genuinely drops a failing pixel, "
-              "leaving the Clear() background untouched (plan_dx.md DX-111)");
+              "leaving the Clear() background untouched (plans/plan_dx.md DX-111)");
 
         // Sub-check 2: replace the texture's alpha with 64/255 (< 0.5) -> passes -> drawn exactly.
         std::vector<uint8_t> passPixels(2 * 2 * 4);
@@ -1852,7 +1852,7 @@ int main()
         auto passResult = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(passResult, 200, 100, 50, 64),
               "P2: DrawPrimitivesEx() real alpha_test3d draws the exact texture color (including its "
-              "own alpha byte) when the test passes (plan_dx.md DX-111)");
+              "own alpha byte) when the test passes (plans/plan_dx.md DX-111)");
 
         // DX-137: dedicated fog on/off discriminating test for alpha_test3d -- reuses the
         // already-PASSING fixture above (alpha=64/255 < AlphaRef=0.5, so nothing is discarded and
@@ -1874,7 +1874,7 @@ int main()
         auto atFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(atFogOff, 30, 30), 200, 100, 50, 64),
               "P3: DrawPrimitivesEx() alpha_test3d fogEnabled=false leaves the exact passing texture "
-              "color unblended (plan_dx.md DX-137)");
+              "color unblended (plans/plan_dx.md DX-137)");
 
         atp.fogEnabled = true;
         // All D3DCommon stock shaders use the same authoritative zero-vector disabled encoding.
@@ -1887,9 +1887,9 @@ int main()
               pixelAt(atFogOn, 30, 30)[2] == 0,
               "P4: DrawPrimitivesEx() alpha_test3d fogEnabled=true with Z at FogEnd genuinely blends "
               "all the way to the exact FogColor, and the passing fragment survives the alpha test "
-              "to reach the fog blend at all (plan_dx.md DX-137)");
+              "to reach the fog blend at all (plans/plan_dx.md DX-137)");
 
-        // plan_dx.md DX-136: AlphaTestEffect.VertexColorEnabled -- alpha_test3d's new stride-24
+        // plans/plan_dx.md DX-136: AlphaTestEffect.VertexColorEnabled -- alpha_test3d's new stride-24
         // sibling (alpha_test_colored3d, VertexPositionColorTexture) gives it a real vertex-color
         // attribute. A white, fully-opaque texture isolates the vertex-color contribution: with
         // VertexColorEnabled=true a red vertex color multiplies through exactly; with it false,
@@ -1928,7 +1928,7 @@ int main()
         Check(isColor(pixelAt(acOn, 30, 30), 255, 0, 0, 255),
               "P5: DrawPrimitivesEx() real alpha_test_colored3d (stride 24) with "
               "VertexColorEnabled=true multiplies the exact vertex color (red) through a white "
-              "texture (plan_dx.md DX-136)");
+              "texture (plans/plan_dx.md DX-136)");
 
         acp.vertexColorEnabled = false;
         renderer.Clear(0.0f, 0.0f, 1.0f, 1.0f);
@@ -1938,7 +1938,7 @@ int main()
         Check(isColor(pixelAt(acOff, 30, 30), 255, 255, 255, 255),
               "P6: DrawPrimitivesEx() the SAME vertex buffer with VertexColorEnabled=false "
               "genuinely ignores its vertex color -- only DiffuseColor (white) survives, "
-              "distinctly different from the true case above (plan_dx.md DX-136)");
+              "distinctly different from the true case above (plans/plan_dx.md DX-136)");
 
         // Alpha test itself still genuinely discards on this new stride-24 path. AlphaTol=0
         // (comparison mode), AlphaRef=0.5: alpha=200/255 (~0.784, NOT < 0.5) genuinely fails ->
@@ -1960,7 +1960,7 @@ int main()
         Check(isColor(pixelAt(acDiscard, 30, 30), 0, 255, 0, 255),
               "P7: DrawPrimitivesEx() alpha_test_colored3d's alpha-test discard logic still "
               "genuinely works on the new stride-24/vertex-color path -- a failing alpha drops "
-              "the pixel, leaving the Clear() background untouched (plan_dx.md DX-136)");
+              "the pixel, leaving the Clear() background untouched (plans/plan_dx.md DX-136)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
@@ -2055,7 +2055,7 @@ int main()
         Check(regionIs(beforeQ, 0, 255, 0, 255) && regionIs(afterQ, 120, 160, 200, 255),
               "Q1: DrawPrimitivesEx() real dual_texture3d draw combines two independently-allocated "
               "textures' SRVs through a genuinely contiguous per-draw descriptor table -- exact "
-              "expected byte result, not just \"a draw call succeeded\" (plan_dx.md DX-111)");
+              "expected byte result, not just \"a draw call succeeded\" (plans/plan_dx.md DX-111)");
 
         // Indexed path -- proves the same contiguous-table binding survives DrawIndexedPrimitivesEx.
         static const uint16_t kTriDualIdx[3] = {0, 1, 2};
@@ -2088,7 +2088,7 @@ int main()
         auto dtFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(dtFogOff, 30, 30), 120, 160, 200, 255),
               "Q3: DrawPrimitivesEx() dual_texture3d fogEnabled=false leaves the exact "
-              "combined-texture color unblended (plan_dx.md DX-137)");
+              "combined-texture color unblended (plans/plan_dx.md DX-137)");
 
         dp.fogEnabled = true;
         dp.fogVector[2] = 2.0f;
@@ -2098,7 +2098,7 @@ int main()
         auto dtFogOn = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(dtFogOn, 30, 30), 0, 255, 0, 255),
               "Q4: DrawPrimitivesEx() dual_texture3d fogEnabled=true with Z at FogEnd genuinely "
-              "blends all the way to the exact FogColor (plan_dx.md DX-137)");
+              "blends all the way to the exact FogColor (plans/plan_dx.md DX-137)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
@@ -2206,7 +2206,7 @@ int main()
         auto afterR1 = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(leftRegionIs(afterR1, 200, 50, 30, 255) && rightRegionIs(afterR1, 30, 80, 220, 255),
               "R2: D3D12SpriteBatchRenderer::Draw() places a real quad-batched sprite at the exact "
-              "expected screen position, sampling the exact source-texel colors (plan_dx.md DX-112)");
+              "expected screen position, sampling the exact source-texel colors (plans/plan_dx.md DX-112)");
 
         renderer.Clear(0.0f, 1.0f, 0.0f, 1.0f);
         sb->Begin();
@@ -2216,7 +2216,7 @@ int main()
         auto afterR2 = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(leftRegionIs(afterR2, 30, 80, 220, 255) && rightRegionIs(afterR2, 200, 50, 30, 255),
               "R3: SpriteEffects::FlipHorizontally genuinely swaps left/right source sampling -- not "
-              "just \"a draw call succeeded\" (plan_dx.md DX-112)");
+              "just \"a draw call succeeded\" (plans/plan_dx.md DX-112)");
 
         // ---- DX-131: rotation/scale/crop-rect, D3D12 counterpart of D3D11's own Check Y2/Y3/Y4.
         // D3D12SpriteBatchRenderer's default sampler is bilinear (confirmed empirically while writing
@@ -2268,7 +2268,7 @@ int main()
             Check(r4Ok,
                   "R4: D3D12SpriteBatchRenderer::Draw() -- a real 90-degree rotation around a centered "
                   "origin permutes the 4 corner colors into the geometrically-predicted screen "
-                  "quadrants, same derivation as D3D11's own DX-131 check (plan_dx.md DX-131)");
+                  "quadrants, same derivation as D3D11's own DX-131 check (plans/plan_dx.md DX-131)");
 
             // R5 (scale): destRect half the normal size (16x16) -- a pixel inside the old 32x32 size
             // but outside the new 16x16 one must show the clear color, not sprite content.
@@ -2282,7 +2282,7 @@ int main()
                 isColor(pixelAt(afterR5, 24, 24), 10, 10, 10, 255);     // inside old size only -> clear color
             Check(r5Ok,
                   "R5: D3D12SpriteBatchRenderer::Draw() -- a real, distinct destRect SIZE genuinely "
-                  "scales the sprite, same proof shape as D3D11's own DX-131 check (plan_dx.md DX-131)");
+                  "scales the sprite, same proof shape as D3D11's own DX-131 check (plans/plan_dx.md DX-131)");
 
             // R6 (source crop-rect): an 8x1 strip texture, 2 texels per color, cropped via
             // sourceRectangle to just the middle 4 texels (purple-purple-cyan-cyan).
@@ -2314,7 +2314,7 @@ int main()
                 isColor(pixelAt(afterR6, 24, 4), 0, 255, 255, 255);     // right pair -> cyan
             Check(r6Ok,
                   "R6: D3D12SpriteBatchRenderer::Draw() -- sourceRectangle genuinely crops to only the "
-                  "requested sub-region, same proof shape as D3D11's own DX-131 check (plan_dx.md DX-131)");
+                  "requested sub-region, same proof shape as D3D11's own DX-131 check (plans/plan_dx.md DX-131)");
 
             // R7/R8 (DX-133): TextureAddressMode::Wrap/Mirror via SetSamplerFilter()/
             // SetSamplerAddressMode() -- the raw ISpriteBatchRenderer equivalent of what
@@ -2339,7 +2339,7 @@ int main()
             Check(isColor(pixelAt(afterR7, 4, 20), 255, 0, 0, 255),
                   "R7: D3D12SpriteBatchRenderer::SetSamplerAddressMode(Wrap) genuinely tiles past UV "
                   "1.0 instead of clamping to the edge color -- proves real, live sampler wiring, not "
-                  "a stored-but-ignored value (plan_dx.md DX-133)");
+                  "a stored-but-ignored value (plans/plan_dx.md DX-133)");
 
             renderer.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
             sb->SetSamplerFilter(kTextureFilterPoint);
@@ -2351,7 +2351,7 @@ int main()
             Check(isColor(pixelAt(afterR8, 4, 28), 255, 0, 0, 255),
                   "R8: D3D12SpriteBatchRenderer::SetSamplerAddressMode(Mirror) genuinely reflects past "
                   "UV 1.0 (distinct from both Wrap's repeat and Clamp's edge-extend at the same probe "
-                  "point) (plan_dx.md DX-133)");
+                  "point) (plans/plan_dx.md DX-133)");
 
             // Reset to the default (LinearClamp-equivalent) for any later check in this file that
             // relies on the pre-DX-133 default sampling behavior.
@@ -2463,7 +2463,7 @@ int main()
         auto afterS = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(afterS, 77, 88, 99, 255),
               "S1: DrawPrimitivesEx() real skinned3d with a genuinely-populated single identity bone "
-              "(D3DBoneConstants, not left zero) samples the exact texture color (plan_dx.md DX-111)");
+              "(D3DBoneConstants, not left zero) samples the exact texture color (plans/plan_dx.md DX-111)");
 
         // DX-135: WeightsPerVertex discriminating test, mirrors D3D11's own DX-135 exactly (see that
         // file's own detailed comment for the real, non-obvious math property this relies on: a
@@ -2494,7 +2494,7 @@ int main()
         Check(isColor(pixelAt(afterW1, 54, 10), 77, 88, 99, 255),
               "S2: DrawPrimitivesEx() real skinned3d with weightsPerVertex=1 genuinely ignores "
               "bone1's contribution -- the probe point still shows bone0's unshrunk Identity result "
-              "(plan_dx.md DX-135)");
+              "(plans/plan_dx.md DX-135)");
 
         sp.weightsPerVertex = 2;
         renderer.Clear(1.0f / 255.0f, 2.0f / 255.0f, 3.0f / 255.0f, 1.0f);
@@ -2506,7 +2506,7 @@ int main()
               "bone1's contribution -- the blended Scale(0.55) transform shrinks the triangle away "
               "from this same probe point (Clear() background shows through), distinctly different "
               "from the weightsPerVertex=1 case above with identical vertex weight data "
-              "(plan_dx.md DX-135)");
+              "(plans/plan_dx.md DX-135)");
 
         // DX-137: dedicated fog on/off discriminating test for skinned3d -- a fresh copy of this
         // block's own original single-bone identity fixture (exact base result (77,88,99); `sp`/
@@ -2542,7 +2542,7 @@ int main()
         auto skinFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(skinFogOff, 30, 30), 77, 88, 99, 255),
               "S4: DrawPrimitivesEx() skinned3d fogEnabled=false leaves the exact "
-              "single-bone-identity texture color unblended (plan_dx.md DX-137)");
+              "single-bone-identity texture color unblended (plans/plan_dx.md DX-137)");
 
         skinFogP.fogEnabled = true;
         skinFogP.fogVector[2] = 2.0f;
@@ -2552,12 +2552,12 @@ int main()
         auto skinFogOn = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(skinFogOn, 30, 30), 0, 255, 0, 255),
               "S5: DrawPrimitivesEx() skinned3d fogEnabled=true with Z at FogEnd genuinely blends "
-              "all the way to the exact FogColor (plan_dx.md DX-137)");
+              "all the way to the exact FogColor (plans/plan_dx.md DX-137)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check QQ (plan_dx.md DX-150): skinned3d -- DirectionalLight1/DirectionalLight2 each
+    // ---- Check QQ (plans/plan_dx.md DX-150): skinned3d -- DirectionalLight1/DirectionalLight2 each
     // independently and exactly contribute. Reuses this file's own single-identity-bone
     // skinned3d fixture (DX-67/DX-111/DX-135, boneCount=1/weightsPerVertex=1 so bone math doesn't
     // complicate the lighting isolation) combined with DX-124/DX-138's own exact-color-per-term
@@ -2639,7 +2639,7 @@ int main()
         auto rQQ1 = ReadBackRenderTargetFull(renderer, rtQQ.Get(), kRtWidth, kRtHeight);
         Check(centerIsExactQQ(rQQ1, 255, 0, 0),
               "QQ1: DrawPrimitivesEx() real skinned3d -- DirectionalLight1 alone contributes the "
-              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-150)");
+              "exact expected red, independent of Light0/Light2 (plans/plan_dx.md DX-150)");
 
         // QQ2: same geometry/light1Dir, but light1Diffuse disabled (black) -- proves QQ1 wasn't
         // some other constant leaking in.
@@ -2651,7 +2651,7 @@ int main()
         auto rQQ1off = ReadBackRenderTargetFull(renderer, rtQQ.Get(), kRtWidth, kRtHeight);
         Check(centerIsExactQQ(rQQ1off, 0, 0, 0),
               "QQ2: disabling DirectionalLight1's diffuse (zeroed) removes its contribution "
-              "exactly -- confirms QQ1 was real, not a leaked default (plan_dx.md DX-150)");
+              "exactly -- confirms QQ1 was real, not a leaked default (plans/plan_dx.md DX-150)");
 
         // QQ3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
         GpuDrawParams qp2 = baseQP;
@@ -2663,12 +2663,12 @@ int main()
         auto rQQ2 = ReadBackRenderTargetFull(renderer, rtQQ.Get(), kRtWidth, kRtHeight);
         Check(centerIsExactQQ(rQQ2, 0, 255, 0),
               "QQ3: DrawPrimitivesEx() real skinned3d -- DirectionalLight2 alone contributes the "
-              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-150)");
+              "exact expected green, independent of Light0/Light1 (plans/plan_dx.md DX-150)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check RR (plan_dx.md DX-151): skinned3d -- real Blinn-Phong specular highlight,
+    // ---- Check RR (plans/plan_dx.md DX-151): skinned3d -- real Blinn-Phong specular highlight,
     // discriminating. Applies DX-139's own half-vector-equals-normal trick (eye at (0,0,-10),
     // surface normal (0,0,-1), light1 traveling +Z -> dot(H,N)=1 exactly, an EXACT expected
     // specular color regardless of SpecularPower) to skinned3d.frag.hlsl's own specular formula,
@@ -2752,7 +2752,7 @@ int main()
         Check(centerIsExactRR(specOnRR, 255, 255, 255),
               "RR1: DrawPrimitivesEx() real skinned3d -- Blinn-Phong specular at a geometry "
               "deliberately chosen so dot(H,N)=1 exactly contributes the exact expected full-white "
-              "highlight, with diffuse/ambient all zero (plan_dx.md DX-151)");
+              "highlight, with diffuse/ambient all zero (plans/plan_dx.md DX-151)");
 
         GpuDrawParams rpOff = rp;
         rpOff.specularColor[0] = 0.0f; rpOff.specularColor[1] = 0.0f; rpOff.specularColor[2] = 0.0f;
@@ -2763,12 +2763,12 @@ int main()
         Check(centerIsExactRR(specOffRR, 0, 0, 0),
               "RR2: the SAME geometry/light with material SpecularColor zeroed produces exact black -- "
               "proves RR1's white came genuinely from the specular term, not diffuse/ambient "
-              "(plan_dx.md DX-151)");
+              "(plans/plan_dx.md DX-151)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check S2 (Task 1107, plan_graphics.md Phase 80): same PreferPerPixelLighting
+    // ---- Check S2 (Task 1107, plans/plan_graphics.md Phase 80): same PreferPerPixelLighting
     // discriminator as Check O3 above, but for skinned3d -- a single Identity bone at 100% weight
     // keeps skinning a mathematical no-op, isolating the vertex-lit-vs-pixel-lit dispatch
     // difference exactly like Check O3 does. Same scene/values as
@@ -2859,7 +2859,7 @@ int main()
         Check(closeTo(skVertexLitPixel[0], 127, 10) && closeTo(skVertexLitPixel[1], 127, 10) && closeTo(skVertexLitPixel[2], 127, 10),
               "S2-1: DrawPrimitivesEx() skinned3d preferPerPixelLighting=false (XNA's real default) "
               "genuinely computes the Gouraud-averaged specular result, ~127 (Task 1107, "
-              "plan_graphics.md Phase 80)");
+              "plans/plan_graphics.md Phase 80)");
 
         skPplP.preferPerPixelLighting = true;
         renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
@@ -2869,11 +2869,11 @@ int main()
         const auto skPixelLitPixel = pixelAt(skPixelLitResult, kRtWidth / 2, kRtHeight / 2);
         Check(closeTo(skPixelLitPixel[0], 155, 10) && closeTo(skPixelLitPixel[1], 155, 10) && closeTo(skPixelLitPixel[2], 155, 10),
               "S2-2: DrawPrimitivesEx() skinned3d preferPerPixelLighting=true genuinely computes a "
-              "fresh per-fragment specular result, ~155 (Task 1107, plan_graphics.md Phase 80)");
+              "fresh per-fragment specular result, ~155 (Task 1107, plans/plan_graphics.md Phase 80)");
 
         Check(skVertexLitPixel[0] != skPixelLitPixel[0],
               "S2-3: DrawPrimitivesEx() skinned3d preferPerPixelLighting is a real dispatch "
-              "selector, not a decorative no-op (Task 1107, plan_graphics.md Phase 80)");
+              "selector, not a decorative no-op (Task 1107, plans/plan_graphics.md Phase 80)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
@@ -2969,7 +2969,7 @@ int main()
         Check(regionIs(afterT, 255, 255, 0, 255),
               "T1: DrawInstancedPrimitivesEx() real instanced3d draw with a genuine per-instance "
               "world buffer (dual vertex stream: slot 0 per-vertex POSITION, slot 1 per-instance "
-              "INSTANCEWORLD0-3) outputs the exact instance DiffuseColor (plan_dx.md DX-111)");
+              "INSTANCEWORLD0-3) outputs the exact instance DiffuseColor (plans/plan_dx.md DX-111)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
@@ -3070,7 +3070,7 @@ int main()
         auto afterU = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(afterU, 10, 20, 30, 255),
               "U1: DrawPrimitivesEx() real env_map3d samples the exact distinctly-colored cube face "
-              "via a real D3D12TextureCubeRenderer SRV (plan_dx.md DX-111, closing 10/10 stock variants)");
+              "via a real D3D12TextureCubeRenderer SRV (plans/plan_dx.md DX-111, closing 10/10 stock variants)");
 
         // DX-134: same fixture, envMapAmount=0.0 -> blendFactor=0 -> the lerp(baseColor,
         // envSample*alpha, blendFactor) formula must collapse to the pure base color (lit=0, since
@@ -3087,7 +3087,7 @@ int main()
               "U2: DrawPrimitivesEx() real env_map3d with envMapAmount=0.0 collapses the base-lerp "
               "to the pure (unlit) base color, distinctly different from the envMapAmount=1.0 "
               "reflected-face color above -- proves the lerp is a genuine graduated blend control, "
-              "not just an on/off gate (plan_dx.md DX-134)");
+              "not just an on/off gate (plans/plan_dx.md DX-134)");
 
         // DX-137: dedicated fog on/off discriminating test for env_map3d -- reuses this block's
         // own deterministic reflected-face fixture (exact base result (10,20,30) at
@@ -3110,7 +3110,7 @@ int main()
         auto envFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(envFogOff, 30, 30), 10, 20, 30, 255),
               "U3: DrawPrimitivesEx() env_map3d fogEnabled=false leaves the exact reflected "
-              "cube-face color unblended (plan_dx.md DX-137)");
+              "cube-face color unblended (plans/plan_dx.md DX-137)");
 
         ep.fogEnabled = true;
         ep.fogVector[2] = 2.0f;
@@ -3120,12 +3120,12 @@ int main()
         auto envFogOn = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(isColor(pixelAt(envFogOn, 30, 30), 0, 255, 0, 255),
               "U4: DrawPrimitivesEx() env_map3d fogEnabled=true with Z at FogEnd genuinely blends "
-              "all the way to the exact FogColor (plan_dx.md DX-137)");
+              "all the way to the exact FogColor (plans/plan_dx.md DX-137)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check PP (plan_dx.md DX-149): env_map3d -- DirectionalLight1/DirectionalLight2 each
+    // ---- Check PP (plans/plan_dx.md DX-149): env_map3d -- DirectionalLight1/DirectionalLight2 each
     // independently and exactly contribute, not just Light0. Reuses Check U's own fixture
     // (normal +Z, white 2x2 texture, a dummy cube -- irrelevant content since envMapAmount=0.0
     // collapses the base-lerp to the pure lit*texColor path per DX-134's own already-proven
@@ -3206,7 +3206,7 @@ int main()
         auto rPP1 = ReadBackRenderTargetFull(renderer, rtPP.Get(), kRtWidth, kRtHeight);
         Check(centerIsExactPP(rPP1, 255, 0, 0),
               "PP1: DrawPrimitivesEx() real env_map3d -- DirectionalLight1 alone contributes the "
-              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-149)");
+              "exact expected red, independent of Light0/Light2 (plans/plan_dx.md DX-149)");
 
         // PP2: same geometry/light1Dir, but light1Diffuse disabled (black) -- proves PP1 wasn't
         // some other constant leaking in.
@@ -3218,7 +3218,7 @@ int main()
         auto rPP1off = ReadBackRenderTargetFull(renderer, rtPP.Get(), kRtWidth, kRtHeight);
         Check(centerIsExactPP(rPP1off, 0, 0, 0),
               "PP2: disabling DirectionalLight1's diffuse (zeroed) removes its contribution "
-              "exactly -- confirms PP1 was real, not a leaked default (plan_dx.md DX-149)");
+              "exactly -- confirms PP1 was real, not a leaked default (plans/plan_dx.md DX-149)");
 
         // PP3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
         GpuDrawParams pp2 = baseEP;
@@ -3230,7 +3230,7 @@ int main()
         auto rPP2 = ReadBackRenderTargetFull(renderer, rtPP.Get(), kRtWidth, kRtHeight);
         Check(centerIsExactPP(rPP2, 0, 255, 0),
               "PP3: DrawPrimitivesEx() real env_map3d -- DirectionalLight2 alone contributes the "
-              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-149)");
+              "exact expected green, independent of Light0/Light1 (plans/plan_dx.md DX-149)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
@@ -3310,7 +3310,7 @@ int main()
         auto afterFogOff = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(regionIs(afterFogOff, 255, 0, 0, 255),
               "V1: DrawPrimitivesEx() colored3d bundle, fogEnabled=false leaves the exact vertex "
-              "color unblended (plan_dx.md DX-69/DX-113)");
+              "color unblended (plans/plan_dx.md DX-69/DX-113)");
 
         GpuDrawParams fogOn = fogOff;
         fogOn.fogEnabled = true;
@@ -3323,7 +3323,7 @@ int main()
         Check(regionIs(afterFogOn, 0, 255, 0, 255),
               "V2: DrawPrimitivesEx() colored3d bundle, fogEnabled=true with Z at FogEnd genuinely "
               "blends all the way to the exact FogColor (fogFactor=0), distinctly different from "
-              "the fogEnabled=false case above (plan_dx.md DX-69/DX-113)");
+              "the fogEnabled=false case above (plans/plan_dx.md DX-69/DX-113)");
 
         GpuDrawParams fogOffAgain = fogOn;
         fogOffAgain.fogEnabled = false;
@@ -3364,7 +3364,7 @@ int main()
         Check(rt0Readback[centerIdx + 0] == 51 && rt0Readback[centerIdx + 1] == 102 &&
               rt0Readback[centerIdx + 2] == 153 && rt0Readback[centerIdx + 3] == 255,
               "W4: Clear() on a real bound RenderTarget2D writes the exact requested color, read back "
-              "through its own real GPU resource (plan_dx.md DX-117)");
+              "through its own real GPU resource (plans/plan_dx.md DX-117)");
 
         // A real triangle drawn into the render target, same "oversized triangle" trick Check M
         // established -- proves DrawColoredPrimitives() genuinely targets this real render target,
@@ -3383,13 +3383,13 @@ int main()
         Check(rt0AfterDraw[centerIdx + 0] == 0 && rt0AfterDraw[centerIdx + 1] == 255 &&
               rt0AfterDraw[centerIdx + 2] == 0 && rt0AfterDraw[centerIdx + 3] == 255,
               "W5: DrawColoredPrimitives() paints the exact vertex color into a real bound "
-              "RenderTarget2D (plan_dx.md DX-117)");
+              "RenderTarget2D (plans/plan_dx.md DX-117)");
 
         renderer.SetRenderTarget2D(nullptr);
         Check(!renderer.HasBoundColorTargetEXT(),
               "W6: SetRenderTarget2D(nullptr) on an off-screen (no swap chain) renderer genuinely "
               "restores the honest 'nothing bound' state, via RestoreBackBufferRenderTargetEXT()'s "
-              "own real fallback (plan_dx.md DX-117)");
+              "own real fallback (plans/plan_dx.md DX-117)");
 
         // ---- Real MRT: 2 independently-created render targets, one SetRenderTargets() bind call, ----
         // ---- Clear() genuinely writes both -- same proof shape D3D11's own DX-46 established. ----
@@ -3415,7 +3415,7 @@ int main()
                               rtBReadback[centerIdx + 2] == 255 && rtBReadback[centerIdx + 3] == 255;
         Check(rtAExact && rtBExact,
               "W8: real 2-target MRT -- one Clear() call after one SetRenderTargets() bind writes "
-              "the exact color into BOTH independently-readable GPU resources (plan_dx.md DX-117)");
+              "the exact color into BOTH independently-readable GPU resources (plans/plan_dx.md DX-117)");
 
         renderer.SetRenderTarget2D(nullptr);
 
@@ -3506,9 +3506,9 @@ int main()
         Check(rtCubeReadback[centerIdx + 0] == 255 && rtCubeReadback[centerIdx + 1] == 153 &&
               rtCubeReadback[centerIdx + 2] == 0 && rtCubeReadback[centerIdx + 3] == 255,
               "W12: Clear() on a real bound RenderTargetCube face writes the exact requested color, "
-              "read back through its own real GPU resource (subresource 0 = face 0, plan_dx.md "
+              "read back through its own real GPU resource (subresource 0 = face 0, plans/plan_dx.md "
               "DX-117 -- only face 0 exercised, remaining faces are the same honest-scope gap "
-              "D3D11's own RenderTargetCube coverage already has, see plan_dx.md Phase DX15 DX-129)");
+              "D3D11's own RenderTargetCube coverage already has, see plans/plan_dx.md Phase DX15 DX-129)");
 
         rtCube->UnbindAsRenderTarget();
         Check(!renderer.HasBoundColorTargetEXT(), "W13: UnbindAsRenderTarget() on RenderTargetCube restores the honest 'nothing bound' state");
@@ -3683,7 +3683,7 @@ int main()
     // include/Microsoft/Xna/Framework/Graphics/{Blend,BlendFunction,CullMode,FillMode,
     // CompareFunction}.hpp while writing this task, NOT copied from D3D12PipelineStateDesc.hpp's own
     // default-value comments, which this task found to be WRONG for 2 fields (documented in
-    // plan_dx.md's DX-118 row -- colorSrcBlend's default 2 is really Blend::SourceColor not
+    // plans/plan_dx.md's DX-118 row -- colorSrcBlend's default 2 is really Blend::SourceColor not
     // Blend::One, and depthFunc's default 4 is really CompareFunction::Equal not LessEqual; both are
     // functionally inert today since they only apply when nothing has called Apply*State yet, and
     // this task deliberately did not touch those pre-existing defaults to avoid any regression risk
@@ -4193,7 +4193,7 @@ int main()
         auto afterWrap = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
         Check(probeIs(afterWrap, 255, 0, 0, 255),
               "Z1: real ApplySamplerState(..., AddressU=Wrap) genuinely tiles past U=1.0 -- probe "
-              "samples texel column 0 (red), U's wrapped fractional part (plan_dx.md DX-119)");
+              "samples texel column 0 (red), U's wrapped fractional part (plans/plan_dx.md DX-119)");
 
         renderer.ApplySamplerState(0, /*filter=*/1 /*Point*/,
                                   /*addressU=*/1 /*TextureAddressMode::Clamp*/,
@@ -4206,7 +4206,7 @@ int main()
               "Z2: real ApplySamplerState(..., AddressU=Clamp) genuinely holds at U=1.0 -- SAME "
               "geometry/UVs as Z1, opposite outcome (texel column 1, green), purely from the "
               "SamplerState change -- proves this is a real, live sampler binding, not a hardcoded "
-              "default (plan_dx.md DX-119)");
+              "default (plans/plan_dx.md DX-119)");
 
         // Cache identity/distinctness proof, mirroring D3D11SamplerCache's own established pattern
         // (D3D11's Check L, DX-44). Note: state (currentSamplerAddressU_ etc.) is tracked, not
@@ -4228,7 +4228,7 @@ int main()
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- plan_dx.md DX-154: per-slot SamplerState, all 16 slots bound SIMULTANEOUSLY with 16
+    // ---- plans/plan_dx.md DX-154: per-slot SamplerState, all 16 slots bound SIMULTANEOUSLY with 16
     // genuinely DIFFERENT SamplerState configurations, then verified independent -- ports D3D11's
     // own DX-142 methodology to D3D12SamplerCache. Check Z above already proved cache
     // identity/distinctness for a single slot in isolation, but nothing has proven slot N's
@@ -4250,7 +4250,7 @@ int main()
             if (boundAtApplyTime[slot].ptr == 0) allSlotsNonNull = false;
         Check(allSlotsNonNull,
               "UU0: D3D12SamplerCache: all 16 sampler slots hold a real, non-null descriptor handle "
-              "immediately after being applied (plan_dx.md DX-154)");
+              "immediately after being applied (plans/plan_dx.md DX-154)");
 
         // Re-query every slot NOW, after all 16 have been applied -- if applying a later slot (e.g.
         // 15) ever clobbered an earlier one (e.g. 0) via an off-by-one or aliasing bug, this is
@@ -4265,10 +4265,10 @@ int main()
         Check(allSlotsStillCorrect,
               "UU1: D3D12SamplerCache: every one of the 16 slots still holds its OWN originally-bound "
               "sampler descriptor handle after all 16 were applied -- proves genuine per-slot "
-              "independence, not a shared/aliased single slot (plan_dx.md DX-154)");
+              "independence, not a shared/aliased single slot (plans/plan_dx.md DX-154)");
     }
 
-    // ---- plan_dx.md DX-120: D3D12OcclusionQueryRenderer -- a real visible-vs-invisible
+    // ---- plans/plan_dx.md DX-120: D3D12OcclusionQueryRenderer -- a real visible-vs-invisible
     // discriminating occlusion query, closing Phase DX15's own DX-147 D3D12 half too. ----
     {
         constexpr int kRtWidth = 64;
@@ -4345,12 +4345,12 @@ int main()
         Check(invisibleCount == 0,
               "AA4: the SAME query object, reused around off-screen (clipped) geometry, reports "
               "EXACTLY 0 -- a genuine visible-vs-invisible discriminating result, not just \"the "
-              "query completed\" (plan_dx.md DX-120, closes DX-147's D3D12 half)");
+              "query completed\" (plans/plan_dx.md DX-120, closes DX-147's D3D12 half)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- plan_dx.md DX-121: D3D12EffectRenderer -- runtime D3DCompile() of custom HLSL, driven
+    // ---- plans/plan_dx.md DX-121: D3D12EffectRenderer -- runtime D3DCompile() of custom HLSL, driven
     // manually (see the top-of-file comment block for why SpriteBatch/GraphicsDevice can't be used
     // safely in this off-screen-only suite). ----
     {
@@ -4390,7 +4390,7 @@ int main()
             "float4 main(PSIn input):SV_Target { return input.col; }");
         Check(effect && effect->IsValid(),
               "BB1: DirectX12Renderer::CreateEffectRenderer() -- real runtime D3DCompile() of "
-              "arbitrary HLSL source builds a real PSO+constant-buffer end to end (plan_dx.md DX-121)");
+              "arbitrary HLSL source builds a real PSO+constant-buffer end to end (plans/plan_dx.md DX-121)");
 
         bool effIsExact = false;
         if (effect && effect->IsValid())
@@ -4471,15 +4471,15 @@ int main()
         Check(effIsExact,
               "BB3: D3D12EffectRenderer::Bind() -- a real custom-compiled shader pair, driven by "
               "SetUniformVec4()'s fixed-slot constant buffer, draws the exact expected color "
-              "(plan_dx.md DX-121)");
+              "(plans/plan_dx.md DX-121)");
 
         auto badEffect = renderer.CreateEffectRenderer("this is not valid HLSL {{{", "also not valid ]]]");
         Check(badEffect && !badEffect->IsValid() && !badEffect->GetCompileError().empty(),
               "BB4: DirectX12Renderer::CreateEffectRenderer() -- a deliberately broken HLSL source "
-              "fails CompileProgram() with a real, non-empty compiler error message (plan_dx.md DX-121)");
+              "fails CompileProgram() with a real, non-empty compiler error message (plans/plan_dx.md DX-121)");
     }
 
-    // ---- plan_dx.md DX-122: D3D12Texture3DRenderer -- a genuine sub-volume (not just full-level)
+    // ---- plans/plan_dx.md DX-122: D3D12Texture3DRenderer -- a genuine sub-volume (not just full-level)
     // upload/readback round-trip, with distinct per-Z-slice colors so the Z offset itself is
     // proven, not just X/Y. ----
     {
@@ -4516,7 +4516,7 @@ int main()
         Check(volOk, "GFX130a: D3D12Texture3DRenderer::GetData reports a completed readback");
         Check(readback == uploadData,
               "CC2: D3D12Texture3DRenderer::SetData()/GetData() round-trip EXACT bytes for a real "
-              "off-center sub-volume upload, including the per-Z-slice color difference (plan_dx.md DX-122)");
+              "off-center sub-volume upload, including the per-Z-slice color difference (plans/plan_dx.md DX-122)");
 
         // REMED-GFX-130: an out-of-range mip level must report false WITHOUT writing one byte, so
         // the shared layer raises System::NotSupportedException instead of converting its own
@@ -4531,7 +4531,7 @@ int main()
               "the caller's buffer byte-for-byte untouched (REMED-GFX-130)");
     }
 
-    // ---- plan_dx.md DX-123: D3D12TextureCubeRenderer::GetData() -- real readback, mirroring
+    // ---- plans/plan_dx.md DX-123: D3D12TextureCubeRenderer::GetData() -- real readback, mirroring
     // Texture3D's own off-center sub-rect + face-selectivity proof (not just full-face). ----
     {
         D3D12TextureCubeRenderer ddCube(&renderer, 8, false, 0);
@@ -4571,11 +4571,11 @@ int main()
 
         Check(readbackFace2 == face2Data,
               "DD1: D3D12TextureCubeRenderer::GetData() round-trips EXACT bytes for a real off-center "
-              "sub-rect upload on face 2 (plan_dx.md DX-123)");
+              "sub-rect upload on face 2 (plans/plan_dx.md DX-123)");
         Check(readbackFace4 == face4Data,
               "DD2: GetData() on a DIFFERENT face (4) at a DIFFERENT offset reads its own distinct "
               "content, not face 2's -- proves real per-face subresource selection, not just "
-              "\"some data came back\" (plan_dx.md DX-123)");
+              "\"some data came back\" (plans/plan_dx.md DX-123)");
 
         // A never-written region of face 2 must read back as the texture's real zero-initialized
         // GPU content, not stale/uninitialized CPU memory -- a genuine live-GPU readback proof.
@@ -4586,10 +4586,10 @@ int main()
             if (untouchedRegion[i] != 0) { untouchedIsZero = false; break; }
         Check(untouchedIsZero,
               "DD3: GetData() on face 2's UNTOUCHED region reads real zero-initialized GPU content, "
-              "not the CPU buffer's poison value -- confirms this is a genuine live readback (plan_dx.md DX-123)");
+              "not the CPU buffer's poison value -- confirms this is a genuine live readback (plans/plan_dx.md DX-123)");
     }
 
-    // ---- Check GG (plan_dx.md DX-140, partial -- NPOT only): a genuinely non-power-of-two
+    // ---- Check GG (plans/plan_dx.md DX-140, partial -- NPOT only): a genuinely non-power-of-two
     // Texture2D (5x3), never exercised anywhere in this test suite before. 5*4=20 bytes/row does
     // NOT divide evenly into D3D12_TEXTURE_DATA_PITCH_ALIGNMENT (256) -- exactly the kind of odd
     // width that could expose a row-pitch-alignment bug in the upload path. Sampled via a real
@@ -4662,7 +4662,7 @@ int main()
         D3D12TextureRenderer npotTex(&renderer, npotImg);
         Check(npotTex.GetWidth() == 5 && npotTex.GetHeight() == 3,
               "GG1: real D3D12TextureRenderer construction with a genuinely non-power-of-two "
-              "5x3 size reports the exact requested dimensions (plan_dx.md DX-140)");
+              "5x3 size reports the exact requested dimensions (plans/plan_dx.md DX-140)");
 
         GpuDrawParams gp;
         gp.texture0 = &npotTex;
@@ -4675,12 +4675,12 @@ int main()
         Check(regionIsExact(ggResult, 123, 45, 200, 255),
               "GG2: DrawPrimitivesEx() samples the exact color from a real 5x3 NPOT texture upload -- "
               "20 bytes/row does not divide evenly into D3D12_TEXTURE_DATA_PITCH_ALIGNMENT (256), "
-              "genuinely exercising the row-pitch-alignment path for an odd width (plan_dx.md DX-140)");
+              "genuinely exercising the row-pitch-alignment path for an odd width (plans/plan_dx.md DX-140)");
 
         renderer.UnbindOffscreenColorTargetEXT();
     }
 
-    // ---- Check HH (plan_dx.md DX-141): D3D12 counterpart to DX-126 (D3D11) -- mip level > 0
+    // ---- Check HH (plans/plan_dx.md DX-141): D3D12 counterpart to DX-126 (D3D11) -- mip level > 0
     // SetData/upload dedicated test. D3D12TextureRenderer::UpdatePixelsLevel() (DX-40/DX-109) already
     // exists but had never been exercised. Rather than trying to force the GPU's automatic mip
     // selection to pick level 1 during a shader Sample() (fragile/driver-dependent -- the stock
@@ -4789,15 +4789,15 @@ int main()
         auto level1Readback = readbackMip(1, 2, 2);
         Check(isSolid(level1Readback, 210, 220, 230, 255),
               "HH1: UpdatePixelsLevel(1, ...) round-trips EXACT bytes for a real mip level 1 upload, "
-              "read back via a direct CopyTextureRegion of subresource 1 (plan_dx.md DX-141)");
+              "read back via a direct CopyTextureRegion of subresource 1 (plans/plan_dx.md DX-141)");
 
         auto level0Readback = readbackMip(0, 4, 4);
         Check(isSolid(level0Readback, 10, 20, 30, 255),
               "HH2: level 0's own content is genuinely unaffected by the level-1 upload -- proves "
-              "UpdatePixelsLevel(1, ...) targeted the correct subresource, not level 0 (plan_dx.md DX-141)");
+              "UpdatePixelsLevel(1, ...) targeted the correct subresource, not level 0 (plans/plan_dx.md DX-141)");
     }
 
-    // plan_dx.md DX-145: RenderTarget2D DepthStencilFormat fidelity for D3D12 -- confirms a render
+    // plans/plan_dx.md DX-145: RenderTarget2D DepthStencilFormat fidelity for D3D12 -- confirms a render
     // target actually gets the SPECIFIC depth/stencil DXGI format requested
     // (D3DFormatMapping.cpp's DepthFormatToDxgi(), the same shared table D3D11 uses), not just some
     // working depth buffer: Depth16 -> DXGI_FORMAT_D16_UNORM, Depth24/Depth24Stencil8 both ->
@@ -4810,7 +4810,7 @@ int main()
         auto* rtNoneImpl = dynamic_cast<D3D12RenderTargetRenderer*>(rtNone.get());
         Check(rtNoneImpl != nullptr && rtNoneImpl->GetDepthResourceEXT() == nullptr,
               "II0: D3D12RenderTargetRenderer: DepthFormat::None creates no depth resource at all "
-              "(plan_dx.md DX-145)");
+              "(plans/plan_dx.md DX-145)");
 
         auto GetDepthFormat = [](D3D12RenderTargetRenderer* rt) -> DXGI_FORMAT
         {
@@ -4824,24 +4824,24 @@ int main()
         Check(rtD16Impl != nullptr && GetDepthFormat(rtD16Impl) == DXGI_FORMAT_D16_UNORM,
               "II1: D3D12RenderTargetRenderer: DepthFormat::Depth16 genuinely creates a "
               "DXGI_FORMAT_D16_UNORM depth resource, not silently upgraded to a combined "
-              "depth+stencil format (plan_dx.md DX-145)");
+              "depth+stencil format (plans/plan_dx.md DX-145)");
 
         auto rtD24 = renderer.CreateRenderTarget2D(4, 4, 2 /*DepthFormat::Depth24*/);
         auto* rtD24Impl = dynamic_cast<D3D12RenderTargetRenderer*>(rtD24.get());
         Check(rtD24Impl != nullptr && GetDepthFormat(rtD24Impl) == DXGI_FORMAT_D24_UNORM_S8_UINT,
               "II2: D3D12RenderTargetRenderer: DepthFormat::Depth24 lands on the documented "
               "DXGI_FORMAT_D24_UNORM_S8_UINT fallback, the same shared-format decision D3D11's own "
-              "mapping table already documents (plan_dx.md DX-145)");
+              "mapping table already documents (plans/plan_dx.md DX-145)");
 
         auto rtD24S8 = renderer.CreateRenderTarget2D(4, 4, 3 /*DepthFormat::Depth24Stencil8*/);
         auto* rtD24S8Impl = dynamic_cast<D3D12RenderTargetRenderer*>(rtD24S8.get());
         Check(rtD24S8Impl != nullptr && GetDepthFormat(rtD24S8Impl) == DXGI_FORMAT_D24_UNORM_S8_UINT,
               "II3: D3D12RenderTargetRenderer: DepthFormat::Depth24Stencil8 also creates "
               "DXGI_FORMAT_D24_UNORM_S8_UINT -- Depth24 and Depth24Stencil8 genuinely share the SAME "
-              "real DXGI resource format (plan_dx.md DX-145)");
+              "real DXGI resource format (plans/plan_dx.md DX-145)");
     }
 
-    // ---- plan_dx.md DX-146: the 5 combo Clear* variants -- prove each genuinely clears ONLY what it
+    // ---- plans/plan_dx.md DX-146: the 5 combo Clear* variants -- prove each genuinely clears ONLY what it
     // was asked to, against a real Depth24Stencil8 render target.
     //
     // Depth is proven by its real effect on rasterization (DX-118's PSO depth state is real): the
@@ -4858,7 +4858,7 @@ int main()
         auto rtObj = renderer.CreateRenderTarget2D(kRtW, kRtH, /*depthFormat=*/3 /*Depth24Stencil8*/);
         auto* rtImpl = dynamic_cast<D3D12RenderTargetRenderer*>(rtObj.get());
         Check(rtImpl != nullptr && rtImpl->GetDepthResourceEXT() != nullptr,
-              "JJ0: Depth24Stencil8 render target with a real depth-stencil resource created (plan_dx.md DX-146)");
+              "JJ0: Depth24Stencil8 render target with a real depth-stencil resource created (plans/plan_dx.md DX-146)");
 
         renderer.SetRenderTarget2D(rtObj.get());
 
@@ -4938,7 +4938,7 @@ int main()
             for (uint8_t v : stencilAfterAll) if (v != 0x5A) { allAre5A = false; break; }
             Check(allAre5A,
                   "JJ2: ClearColorDepthAndStencil(stencil=0x5A) genuinely wrote 0x5A into EVERY pixel of "
-                  "the real stencil plane, read straight back off the GPU (plan_dx.md DX-146)");
+                  "the real stencil plane, read straight back off the GPU (plans/plan_dx.md DX-146)");
 
             // --- ClearStencil alone: must change the stencil and leave depth ALONE. ---
             // Depth is verified separately below via the depth test; here we prove the stencil
@@ -4949,7 +4949,7 @@ int main()
             for (uint8_t v : stencilAfterStencilOnly) if (v != 0x3C) { allAre3C = false; break; }
             Check(allAre3C,
                   "JJ3: ClearStencil(0x3C) alone genuinely overwrites the stencil plane to 0x3C -- a real, "
-                  "different value than JJ2's 0x5A, so this is a real clear, not a silent no-op (plan_dx.md DX-146)");
+                  "different value than JJ2's 0x5A, so this is a real clear, not a silent no-op (plans/plan_dx.md DX-146)");
         }
 
         // --- Depth: proven by its real effect on the depth test (DX-118's PSO depth state). ---
@@ -4998,7 +4998,7 @@ int main()
         const auto passPx = drawTriAndSampleCenter();
         Check(passPx[0] == 255 && passPx[1] == 0 && passPx[2] == 0,
               "JJ4: ClearColorAndDepth(depth=0.9) -- the z=0.5 triangle passes depthFunc=Less and draws "
-              "its exact red, proving the cleared DEPTH value is real (plan_dx.md DX-146)");
+              "its exact red, proving the cleared DEPTH value is real (plans/plan_dx.md DX-146)");
 
         // Depth cleared NEAR (0.1): the same z=0.5 triangle is farther -> Less fails -> blue survives.
         renderer.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.1f);
@@ -5007,7 +5007,7 @@ int main()
               "JJ5: ClearColorAndDepth(depth=0.1) -- the SAME triangle at the SAME z=0.5 is now correctly "
               "REJECTED by the depth test (background survives). Only the cleared depth value differs "
               "between JJ4 and JJ5, so each Clear* variant genuinely writes the depth it was given, not a "
-              "fixed default (plan_dx.md DX-146)");
+              "fixed default (plans/plan_dx.md DX-146)");
 
         // --- ClearDepth alone must NOT touch the color target. ---
         renderer.ClearColorAndDepth(0.0f, 1.0f, 0.0f, 1.0f, /*depth=*/0.9f); // green, far depth
@@ -5016,13 +5016,13 @@ int main()
         const std::size_t ci = (static_cast<std::size_t>(kRtH / 2) * kRtW + kRtW / 2) * 4;
         Check(afterDepthOnly[ci + 1] == 255 && afterDepthOnly[ci + 0] == 0,
               "JJ6: ClearDepth() alone leaves the COLOR target untouched (the prior green survives) -- "
-              "proves each variant clears only what it was asked for (plan_dx.md DX-146)");
+              "proves each variant clears only what it was asked for (plans/plan_dx.md DX-146)");
 
         renderer.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         renderer.SetRenderTarget2D(nullptr);
     }
 
-    // ---- plan_dx.md DX-144: RenderTarget2D mip-chain generation -- proves the real CPU
+    // ---- plans/plan_dx.md DX-144: RenderTarget2D mip-chain generation -- proves the real CPU
     // box-filter downsample cascade (D3D12RenderTargetRenderer::GenerateMipsEXT(), triggered from
     // UnbindAsRenderTarget()) actually writes correct content into mip levels > 0, not
     // zero/garbage. Mirrors D3D11's own already-closed DX-144 methodology exactly: a solid single
@@ -5038,7 +5038,7 @@ int main()
 
         Check(d3dRtMip != nullptr && d3dRtMip->GetLevelCountEXT() == 4,
               "LL0: D3D12RenderTargetRenderer: an 8x8 mipMap=true render target reports the expected "
-              "4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
+              "4-level mip chain (8x8/4x4/2x2/1x1, plans/plan_dx.md DX-144)");
 
         // Direct GPU readback of a given mip subresource -- same real, direct-readback discipline
         // DX-122/DX-123/DX-141's own readbackMip already establish, kept test-local since there is
@@ -5121,16 +5121,16 @@ int main()
             Check(isSolidRt(mip1, 200, 90, 10, 255),
                   "LL1: D3D12RenderTargetRenderer: GenerateMipsEXT()-on-unbind writes the exact "
                   "box-filtered (here: solid-color-preserving) content into mip level 1, read back "
-                  "directly from the real GPU resource, not zero/garbage (plan_dx.md DX-144)");
+                  "directly from the real GPU resource, not zero/garbage (plans/plan_dx.md DX-144)");
 
             const auto mip2 = readbackRtMip(2, 2, 2);
             Check(isSolidRt(mip2, 200, 90, 10, 255),
                   "LL2: D3D12RenderTargetRenderer: mip level 2 (2x2) is also exact, confirming the "
-                  "full mip chain regenerates correctly, not just level 1 (plan_dx.md DX-144)");
+                  "full mip chain regenerates correctly, not just level 1 (plans/plan_dx.md DX-144)");
         }
     }
 
-    // ---- plan_dx.md DX-144 follow-up: RenderTargetCube mip-chain generation -- same real CPU
+    // ---- plans/plan_dx.md DX-144 follow-up: RenderTargetCube mip-chain generation -- same real CPU
     // box-filter downsample cascade as D3D12RenderTargetRenderer's own 2D leg above, extended to
     // D3D12RenderTargetCubeRenderer. Only the active face's chain regenerates on unbind, mirroring
     // D3D11RenderTargetCubeRenderer's own face-0-only test precedent (a real, honest scope match,
@@ -5140,7 +5140,7 @@ int main()
         auto* d3dRtCubeMip = dynamic_cast<D3D12RenderTargetCubeRenderer*>(rtCubeMip.get());
         Check(d3dRtCubeMip != nullptr && d3dRtCubeMip->GetLevelCountEXT() == 4,
               "MM0: D3D12RenderTargetCubeRenderer: an 8x8 mipMap=true cube render target reports "
-              "the expected 4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
+              "the expected 4-level mip chain (8x8/4x4/2x2/1x1, plans/plan_dx.md DX-144)");
 
         if (d3dRtCubeMip != nullptr)
         {
@@ -5223,11 +5223,11 @@ int main()
             Check(cubeMip1Exact,
                   "MM1: D3D12RenderTargetCubeRenderer: GenerateMipsEXT()-on-unbind regenerates face "
                   "0's own mip chain correctly, read back directly from the real GPU resource "
-                  "(plan_dx.md DX-144)");
+                  "(plans/plan_dx.md DX-144)");
         }
     }
 
-    // ---- plan_dx.md DX-153: RenderTargetCube mip-chain generation for a NON-zero face -- MM1
+    // ---- plans/plan_dx.md DX-153: RenderTargetCube mip-chain generation for a NON-zero face -- MM1
     // above only ever proved face 0. D3D12's own GenerateMipsEXT() is explicitly activeFace_-scoped
     // (confirmed by reading the code, not assumed), so this mainly confirms the
     // mip + face*levelCount subresource math generalizes correctly past face 0. ----
@@ -5235,7 +5235,7 @@ int main()
         auto rtCubeMip2 = renderer.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, true /*mipMap*/);
         auto* d3dRtCubeMip2 = dynamic_cast<D3D12RenderTargetCubeRenderer*>(rtCubeMip2.get());
         Check(d3dRtCubeMip2 != nullptr, "TT0: D3D12RenderTargetCubeRenderer: a second 8x8 mipMap=true "
-              "cube render target constructs cleanly (plan_dx.md DX-153)");
+              "cube render target constructs cleanly (plans/plan_dx.md DX-153)");
 
         if (d3dRtCubeMip2 != nullptr)
         {
@@ -5315,11 +5315,11 @@ int main()
             Check(face2Mip1Exact,
                   "TT1: D3D12RenderTargetCubeRenderer: GenerateMipsEXT()-on-unbind regenerates a "
                   "NON-zero face's (face 2) own mip chain correctly, not just face 0's, read back "
-                  "directly from the real GPU resource (plan_dx.md DX-153)");
+                  "directly from the real GPU resource (plans/plan_dx.md DX-153)");
         }
     }
 
-    // ---- plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
+    // ---- plans/plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
     // of scope, this class's own prior header comment) landing now, not just a test. Mirrors
     // DX-117's own RenderTarget2D MSAA follow-up methodology exactly: an 8x8 cube face requested
     // at 4x MSAA, cleared, read back through GetSampleableColorResourceEXT() (the resolved,
@@ -5331,7 +5331,7 @@ int main()
         auto rtCubeMsaa = renderer.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*preserveContents*/, false /*mipMap*/, 4);
         auto* d3dRtCubeMsaa = dynamic_cast<D3D12RenderTargetCubeRenderer*>(rtCubeMsaa.get());
         Check(d3dRtCubeMsaa != nullptr, "SS0: D3D12RenderTargetCubeRenderer: CreateRenderTargetCube(multiSampleCount=4) "
-              "returns a real renderer object (plan_dx.md DX-152)");
+              "returns a real renderer object (plans/plan_dx.md DX-152)");
 
         if (d3dRtCubeMsaa != nullptr)
         {
@@ -5347,12 +5347,12 @@ int main()
             Check(msaaCubeMatches,
                   "SS1: D3D12RenderTargetCubeRenderer (MSAA): Clear()+ResolveSubresource()-on-unbind "
                   "produces the exact color in the resolved, sampleable resource for face 0, read back "
-                  "directly from the real GPU resource (plan_dx.md DX-152)");
+                  "directly from the real GPU resource (plans/plan_dx.md DX-152)");
             std::printf("    RenderTargetCube MSAA: requested 4x, device-applied %dx\n", d3dRtCubeMsaa->GetMultiSampleCount());
         }
     }
 
-    // ---- plan_dx.md DX-117 MSAA follow-up: RenderTarget2D MSAA support -- mirrors D3D11's own
+    // ---- plans/plan_dx.md DX-117 MSAA follow-up: RenderTarget2D MSAA support -- mirrors D3D11's own
     // already-closed DX-45 methodology exactly: an 8x8 render target requested at 4x MSAA, cleared,
     // then read back through GetSampleableColorResourceEXT() (the resolved, single-sample resource
     // ResolveMsaaEXT() writes on unbind) via the same ReadBackRenderTargetFull() helper every other
@@ -5364,7 +5364,7 @@ int main()
         auto rtMsaa = renderer.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, false, 4);
         auto* d3dRtMsaa = dynamic_cast<D3D12RenderTargetRenderer*>(rtMsaa.get());
         Check(d3dRtMsaa != nullptr, "OO0: D3D12RenderTargetRenderer: CreateRenderTarget2D(multiSampleCount=4) "
-              "returns a real renderer object (plan_dx.md DX-117)");
+              "returns a real renderer object (plans/plan_dx.md DX-117)");
 
         if (d3dRtMsaa != nullptr)
         {
@@ -5380,13 +5380,13 @@ int main()
             Check(msaaMatches,
                   "OO1: D3D12RenderTargetRenderer (MSAA): Clear()+ResolveSubresource()-on-unbind produces "
                   "the exact color in the resolved, sampleable resource, read back directly from the "
-                  "real GPU resource (plan_dx.md DX-117)");
+                  "real GPU resource (plans/plan_dx.md DX-117)");
             std::printf("    MSAA: requested 4x, device-applied %dx\n", d3dRtMsaa->GetMultiSampleCount());
         }
     }
 
     // ================================================================================================
-    // plan_dx.md DX-132 / DX-148 / DX-140: the XNA-level public API, through a REAL, WINDOWLESS
+    // plans/plan_dx.md DX-132 / DX-148 / DX-140: the XNA-level public API, through a REAL, WINDOWLESS
     // GraphicsDevice (PresentationParameters::HeadlessEXT).
     //
     // Everything above this point drives the raw IGraphicsRenderer directly. SpriteFont, Model and
@@ -5416,7 +5416,7 @@ int main()
 
         Check(true, "KK0: a real, WINDOWLESS D3D12 GraphicsDevice constructs (PresentationParameters::"
                     "HeadlessEXT) -- no SDL video subsystem, no window, no swap chain, under plain Wine "
-                    "(plan_dx.md DX-132/DX-148/DX-140)");
+                    "(plans/plan_dx.md DX-132/DX-148/DX-140)");
 
         // The device's own renderer -- the RenderTarget2D below belongs to THIS renderer, not to the
         // standalone one the rest of this file uses, so readback must go through it.
@@ -5489,7 +5489,7 @@ int main()
             Check(glyphPlaced,
                   "KK2: SpriteBatch::DrawString() places a single glyph at EXACTLY its destination rect "
                   "(4,4,8,8) -- checked inside plus all four edge midpoints, so an X-only or Y-only "
-                  "misplacement cannot pass (plan_dx.md DX-132)");
+                  "misplacement cannot pass (plans/plan_dx.md DX-132)");
 
             // (b) Two glyphs -> the second must advance by exactly one glyph width (8px).
             auto pxSpacing = renderToTarget(kBlack, [&] {
@@ -5504,7 +5504,7 @@ int main()
                 && isBlack(pixelAt(pxSpacing, 20, 4));  // nothing beyond the second glyph
             Check(spacingOk,
                   "KK3: DrawString(\"AB\") advances the SECOND glyph by exactly one glyph width -- both "
-                  "cells are drawn and nothing spills past them (plan_dx.md DX-132)");
+                  "cells are drawn and nothing spills past them (plans/plan_dx.md DX-132)");
 
             // (c) Newline -> the second line must drop by exactly lineSpacing (8px), back to x=0.
             auto pxNewline = renderToTarget(kBlack, [&] {
@@ -5519,7 +5519,7 @@ int main()
                 && isBlack(pixelAt(pxNewline, 12, 4));  // line 1 has ONE glyph -- x reset, not advanced
             Check(newlineOk,
                   "KK4: DrawString(\"A\\nA\") drops the second line by exactly lineSpacing AND resets x "
-                  "to the start -- a newline that only did one of the two cannot pass (plan_dx.md DX-132)");
+                  "to the start -- a newline that only did one of the two cannot pass (plans/plan_dx.md DX-132)");
 
             // (d) SpriteEffects::FlipVertically -- an ASYMMETRIC glyph is required, otherwise a flip of
             // a solid block is indistinguishable from no flip at all. Rebuild the atlas so glyph 'A'
@@ -5556,7 +5556,7 @@ int main()
             Check(noFlipOk && flipOk,
                   "KK5: SpriteEffects::FlipVertically genuinely flips a glyph -- an asymmetric (top-half-"
                   "white) glyph lands top-half-white unflipped and bottom-half-white flipped, so a no-op "
-                  "flip cannot pass (plan_dx.md DX-132)");
+                  "flip cannot pass (plans/plan_dx.md DX-132)");
         }
 
         // ---- DX-148: Model / ModelMesh / ModelMeshPart / ModelBone runtime API. ----
@@ -5608,7 +5608,7 @@ int main()
                       && centre.getBProperty() <= 60,
                   "KK6: Model::Draw() -> ModelMesh::Draw()'s real orchestration (bone transform + "
                   "SetVertexBuffer + setIndices + DrawIndexedPrimitives + EffectPass::Apply) paints the "
-                  "mesh's exact red over the green clear, through the D3D12 renderer (plan_dx.md DX-148)");
+                  "mesh's exact red over the green clear, through the D3D12 renderer (plans/plan_dx.md DX-148)");
         }
 
         // ---- DX-155: Model root-bone-index flexibility (Task 916's own rootBoneIndex constructor
@@ -5656,7 +5656,7 @@ int main()
 
             Check(modelR.getRootProperty() == &bone1R,
                   "VV0: Model: the 5-argument constructor's rootBoneIndex=1 genuinely sets Root to "
-                  "the bone at that NON-zero index, not silently defaulting to bones[0] (plan_dx.md "
+                  "the bone at that NON-zero index, not silently defaulting to bones[0] (plans/plan_dx.md "
                   "DX-155)");
 
             auto pxModelR = renderToTarget(X::Color(0, 255, 0, 255), [&] {
@@ -5676,7 +5676,7 @@ int main()
                   "targeting the NON-zero-indexed bone1R, rootBoneIndex=1) genuinely draws the mesh's "
                   "exact red over the green clear -- proves meshParentBones correctly selected "
                   "bone1R's own Identity transform, not bone0R's off-screen-translating one, through "
-                  "the real D3D12 renderer (plan_dx.md DX-155)");
+                  "the real D3D12 renderer (plans/plan_dx.md DX-155)");
         }
 
         // ---- DX-140 (remaining half): Texture2D::SaveAsPng() / FromStream() round-trip. ----
@@ -5697,7 +5697,7 @@ int main()
             const bool encoded = png.getLengthProperty() > 0;
             Check(encoded,
                   "KK7: Texture2D::SaveAsPng() encodes a real, non-empty PNG through a windowless "
-                  "GraphicsDevice (plan_dx.md DX-140)");
+                  "GraphicsDevice (plans/plan_dx.md DX-140)");
 
             if (encoded)
             {
@@ -5705,7 +5705,7 @@ int main()
                 XG::Texture2D decoded = XG::Texture2D::FromStream(dev, png);
                 Check(decoded.getWidthProperty() == kTexW && decoded.getHeightProperty() == kTexH,
                       "KK8: Texture2D::FromStream() decodes that PNG back to the exact original "
-                      "dimensions (plan_dx.md DX-140)");
+                      "dimensions (plans/plan_dx.md DX-140)");
 
                 std::vector<X::Color> back(kTexW * kTexH, X::Color(0, 0, 0, 0));
                 decoded.GetData(back.data(), kTexW * kTexH);
@@ -5719,11 +5719,11 @@ int main()
                 Check(exact,
                       "KK9: SaveAsPng() -> FromStream() round-trips EVERY pixel of a deliberately varying "
                       "4x4 pattern EXACTLY -- a decoder that dropped, reordered or channel-swapped pixels "
-                      "could not pass (plan_dx.md DX-140)");
+                      "could not pass (plans/plan_dx.md DX-140)");
             }
         }
 
-        // plan_dx.md DX-121: SpriteBatch::Begin(effect) -- a custom Effect draws sprites through
+        // plans/plan_dx.md DX-121: SpriteBatch::Begin(effect) -- a custom Effect draws sprites through
         // that effect's own shader (a deliberate RGB color inversion) instead of the stock
         // sprite2d pipeline, mirroring D3D11's own already-closed DX-71 methodology exactly (same
         // HLSL source, same Sprite2DVertex contract, same 128-byte constant-buffer layout --
@@ -5755,7 +5755,7 @@ int main()
             Check(invertEffect.IsEffectValid(),
                   "NN0: ShaderEffect (D3D12): a runtime-compiled custom HLSL pair for SpriteBatch's "
                   "own Sprite2DVertex contract compiles successfully, through the windowless "
-                  "GraphicsDevice (plan_dx.md DX-121)");
+                  "GraphicsDevice (plans/plan_dx.md DX-121)");
 
             XG::Texture2D redTex(dev, 2, 2);
             std::vector<X::Color> redPixels(2 * 2, X::Color(255, 0, 0, 255));
@@ -5779,7 +5779,7 @@ int main()
                   "NN1: D3D12SpriteBatchRenderer + SpriteBatch::Begin(effect): sprites draw through "
                   "the custom Effect's own shader, producing its exact expected (inverted) output "
                   "color, not the stock sprite2d pipeline's -- through the real public XNA API, off-"
-                  "screen (plan_dx.md DX-121)");
+                  "screen (plans/plan_dx.md DX-121)");
         }
     }
 

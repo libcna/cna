@@ -1,6 +1,6 @@
 # glTF ↔ XNA conventions: what is *not* converted
 
-`plan_gltf.md` `GLTF-105`. This document exists to state, once and in one place, which conventions
+`plans/plan_gltf.md` `GLTF-105`. This document exists to state, once and in one place, which conventions
 glTF 2.0 and XNA 4.0 agree on and where their rasterizer-facing winding rules differ. Each is a
 place where a well-meaning "fix" could silently break every asset in the project, and where the
 absence of import-time conversion code looks like an omission rather than a decision.
@@ -103,7 +103,7 @@ operand is applied first:
 
 ## The transform pipeline
 
-`plan_gltf.md` `GLTF-132`. Where a node's authored transform goes, end to end, and which stage owns
+`plans/plan_gltf.md` `GLTF-132`. Where a node's authored transform goes, end to end, and which stage owns
 each step. The architecture is `GLTF-103` Option A: **vertex positions stay mesh-local**, and a
 node's placement travels as a `ModelBone` transform. Nothing is ever baked into a vertex buffer,
 which is what lets one mesh be instanced by many nodes.
@@ -196,7 +196,7 @@ transform's determinant sign per placement (`GLTF-176`).
 
 ### Bounds follow the same placement
 
-`plan_gltf.md` `GLTF-128`. Each glTF loader initialises the ordinary XNA
+`plans/plan_gltf.md` `GLTF-128`. Each glTF loader initialises the ordinary XNA
 `ModelMesh::BoundingSphere` in **mesh-local space**, from the positions of every primitive grouped
 into that mesh. The direct and offline paths both use the vertex pose that is initially uploaded,
 including authored non-zero `mesh.weights` or `node.weights`; the `.cnj` format needs no additional
@@ -225,7 +225,7 @@ accessor will use the updated value on its next call.
 
 ## `KHR_materials_variants`: source indices and complete part states
 
-`plan_gltf.md` `GLTF-341`/`GLTF-342`. CNA preserves the extension's root variant array in source
+`plans/plan_gltf.md` `GLTF-341`/`GLTF-342`. CNA preserves the extension's root variant array in source
 order and uses its integer position as identity. Display names are exposed for UI, but they are not
 keys: the specification does not require them to be unique. A freshly loaded model always reports
 selection `-1`, meaning every primitive's core `material`; importing the extension never changes
@@ -251,7 +251,7 @@ one selection contract, including mappings that cross PBR and unlit layouts.
 
 ## `KHR_texture_transform`: per-map shader state
 
-`plan_gltf.md` `GLTF-184`/`GLTF-186`. The extension belongs to a texture reference, not to a vertex
+`plans/plan_gltf.md` `GLTF-184`/`GLTF-186`. The extension belongs to a texture reference, not to a vertex
 stream. CNA therefore keeps authored UV bytes unchanged and carries five independent transforms in
 base-colour, normal, metallic-roughness, emissive and occlusion order. Each map first selects one of
 the two packed authored UV channels and then applies its own transform:
@@ -296,7 +296,7 @@ choice to the implementation.
 
 ## Where normals and tangents are renormalised
 
-`plan_gltf.md` `GLTF-177`. §3.7.2.1 requires `NORMAL` and `TANGENT` to be unit length, but three
+`plans/plan_gltf.md` `GLTF-177`. §3.7.2.1 requires `NORMAL` and `TANGENT` to be unit length, but three
 things downstream break that, and each is renormalised at a **stated** point rather than wherever
 it happened to be convenient:
 
@@ -324,7 +324,7 @@ Two consequences worth stating, because both look like bugs from the outside:
 
 ## Attributes CNA has nowhere to put
 
-`plan_gltf.md` `GLTF-090`/`GLTF-091`/`GLTF-092`. Three places where a file authors more than an XNA
+`plans/plan_gltf.md` `GLTF-090`/`GLTF-091`/`GLTF-092`. Three places where a file authors more than an XNA
 vertex layout can carry. None is an error, all three are reported, and each is reported at the
 severity it deserves:
 
@@ -343,7 +343,7 @@ imports as ordinary geometry — so it is named at debug level rather than warne
 
 ## Every primitive gets an index buffer
 
-`plan_gltf.md` `GLTF-070`. §3.7.2 makes `indices` optional: a primitive without it draws its
+`plans/plan_gltf.md` `GLTF-070`. §3.7.2 makes `indices` optional: a primitive without it draws its
 vertices in order. CNA **always materialises one** anyway — `0, 1, 2, …` for a non-indexed
 primitive — and that is a decision rather than an oversight.
 
@@ -358,7 +358,7 @@ asserts the generated run is `0,1,2`, not absent.
 
 ## The joint matrix, in both conventions
 
-`plan_gltf.md` `GLTF-251`. §3.7.3.2's own equation, written once so no reader has to reconstruct it
+`plans/plan_gltf.md` `GLTF-251`. §3.7.3.2's own equation, written once so no reader has to reconstruct it
 from three call sites:
 
 ```
@@ -388,7 +388,7 @@ Three properties of that equation are load-bearing, and each was a defect when i
 
 ### Scene nodes and palette slots are different identities
 
-`plan_gltf.md` `GLTF-252`. A joint participates in three index spaces that happen to coincide in
+`plans/plan_gltf.md` `GLTF-252`. A joint participates in three index spaces that happen to coincide in
 simple files and must therefore never be inferred from one another:
 
 | Space | Meaning | Consumer |
@@ -407,7 +407,7 @@ keeps its stable order, the palette becomes topological, both maps invert one an
 
 ## A primitive with no `NORMAL` is split, not smoothed
 
-`plan_gltf.md` `GLTF-461`. §3.7.2.1 makes flat normals a **MUST**, and flat shading gives a vertex one
+`plans/plan_gltf.md` `GLTF-461`. §3.7.2.1 makes flat normals a **MUST**, and flat shading gives a vertex one
 normal **per face** — so a vertex shared between differently oriented faces has no single correct
 value and the only conforming answer is to duplicate it once per orientation.
 
@@ -436,7 +436,7 @@ value and the only conforming answer is to duplicate it once per orientation.
 
 ## Morphing happens on the CPU
 
-`plan_gltf.md` `GLTF-285`. A morph target is a per-vertex delta array, and CNA applies the weighted
+`plans/plan_gltf.md` `GLTF-285`. A morph target is a per-vertex delta array, and CNA applies the weighted
 sum **on the CPU**, re-uploading the whole vertex buffer through `SetDataRaw` whenever the weights
 change. The decision and its cost, recorded together:
 
@@ -456,7 +456,7 @@ change. The decision and its cost, recorded together:
 
 ## Which effect a primitive gets
 
-`plan_gltf.md` `GLTF-215`/`GLTF-240`. The rule is the **material model the file declares**, never
+`plans/plan_gltf.md` `GLTF-215`/`GLTF-240`. The rule is the **material model the file declares**, never
 which texture maps happen to be present — that earlier rule was `D7`, and it downgraded a
 factor-only metallic-roughness material to an untextured white `BasicEffect`.
 
@@ -545,7 +545,7 @@ relocates the geometry.
 
 ## Lighting: what an imported model looks like with no lights
 
-`plan_gltf.md` `GLTF-242`/`GLTF-243`. `PbrEffect` defaults to **zero ambient with every light
+`plans/plan_gltf.md` `GLTF-242`/`GLTF-243`. `PbrEffect` defaults to **zero ambient with every light
 disabled**, which is correct XNA behaviour — XNA's stock effects light nothing until the
 application says so — and it means a glTF file that declares no light imports perfectly and renders
 **black**. That is not a bug and the defaults are deliberately unchanged; what would be a bug is

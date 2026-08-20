@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         // displayName was never supplied, never for an explicitly-passed empty string.
         : displayName_(displayName.has_value() ? std::move(*displayName) : gamertag)
         , gamertag_(gamertag)
-        // Task 4.3 (plan_net.md Phase 4): LeaderboardWriter needs to know its owning gamer to
+        // Task 4.3 (plans/plan_net.md Phase 4): LeaderboardWriter needs to know its owning gamer to
         // persist to the right per-gamer local store entry - `this` is a valid pointer value in a
         // member-initializer-list (LeaderboardWriter's constructor only stores it, never
         // dereferences it before Gamer itself is fully constructed).

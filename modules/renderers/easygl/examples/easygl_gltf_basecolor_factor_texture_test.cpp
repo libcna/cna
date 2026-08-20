@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-218: a generated corpus material through the whole runtime render path.
+// plans/plan_gltf.md GLTF-218: a generated corpus material through the whole runtime render path.
 //
 // The fixture's texture byte 128 decodes to 0.2158605 linear. Its independently authored linear
 // baseColorFactor is 0.5, so the shader must encode 0.10793025 and produce byte 92. Ignoring the

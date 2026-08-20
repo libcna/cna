@@ -23,7 +23,7 @@ namespace Microsoft::Xna::Framework::Media
         // FileNotFoundException before ever touching the file (Video.cs). CNA's equivalent
         // previously just probed via VideoDecoder::Open and silently left width_/height_/
         // duration_ at 0 on failure, with no exception at all -- a real fidelity gap
-        // (plan_media.md MEDIA-44).
+        // (plans/plan_media.md MEDIA-44).
         if (!std::filesystem::exists(fileName_))
         {
             throw System::IO::FileNotFoundException(

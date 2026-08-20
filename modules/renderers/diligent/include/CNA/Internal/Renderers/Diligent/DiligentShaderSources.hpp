@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-68: every built-in shader's HLSL source, split out of
+// plans/plan_diligent.md DILIGENT-68: every built-in shader's HLSL source, split out of
 // DiligentRenderer.cpp so a shader/lighting change is reviewable on its own instead of
 // buried in a 4700-line implementation file. Diligent compiles HLSL at runtime on every device
 // type (SPIR-V via glslang on Vulkan, GLSL via HLSL2GLSL on OpenGL, DXBC/DXIL on Direct3D), so

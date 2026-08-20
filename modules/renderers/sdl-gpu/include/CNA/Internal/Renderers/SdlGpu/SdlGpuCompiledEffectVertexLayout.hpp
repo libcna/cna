@@ -3,7 +3,7 @@
 
 /**
  * @file SdlGpuCompiledEffectVertexLayout.hpp
- * @brief plan_fx.md FX-071: the generic `VertexDeclaration`-to-`SDL_GPUVertexAttribute` builder a
+ * @brief plans/plan_fx.md FX-071: the generic `VertexDeclaration`-to-`SDL_GPUVertexAttribute` builder a
  * compiled-effect draw needs.
  *
  * Every one of this renderer's eight built-in draw routes selects a fixed, hand-written

@@ -15,7 +15,7 @@ A `friend`-style test-access shim exposing `VideoPlayer`'s private internal stat
 **PASS with one MEDIUM finding.** The accessors themselves are precise, well-scoped, and clearly justified (each is tied to a specific numbered regression). The one finding concerns a real cross-test global-state side effect in `SimulateAudioDeviceBecomingUnavailable`.
 
 ## Checklist Results
-- Every accessor is minimal (single-purpose, returns exactly the value the corresponding test needs) and carries an inline comment naming the specific `plan_media.md` task and defect it was added to prove.
+- Every accessor is minimal (single-purpose, returns exactly the value the corresponding test needs) and carries an inline comment naming the specific `plans/plan_media.md` task and defect it was added to prove.
 - `GetAudioStreamPtr` (line 55) correctly returns RAW POINTER IDENTITY rather than just a boolean presence/pause-state check — the comment explains this is necessary to prove a track switch that shouldn't touch the audio stream genuinely left the SAME object alone, rather than a tear-down/reopen cycle that happens to end up in the same state.
 
 ## Detailed Findings

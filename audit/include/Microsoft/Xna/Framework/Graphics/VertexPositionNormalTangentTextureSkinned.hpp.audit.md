@@ -23,7 +23,7 @@ with the struct's own field sizes (`Vector3`+`Vector3`+`Vector4`+`Vector2`+`Vect
 - `BlendIndices` is `std::array<std::uint8_t, 4>`, correctly mapped to
   `VertexElementFormat::Byte4` (a 4-byte format) in the declaration.
 - Doc comment correctly cross-references its design precedent
-  (`VertexPositionNormalTextureSkinned`) and tracked task (`plan_cnj.md CNB-57/Phase 13A
+  (`VertexPositionNormalTextureSkinned`) and tracked task (`plans/plan_cnj.md CNB-57/Phase 13A
   follow-up`).
 
 ## Detailed Findings

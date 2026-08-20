@@ -36,7 +36,7 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-// plan_runtimerenderer.md RTR-P9-9: a compile-time guard, because this block needs the WebGPU
+// plans/plan_runtimerenderer.md RTR-P9-9: a compile-time guard, because this block needs the WebGPU
 // renderer's own headers. Widened from the DEFAULT-renderer macro to "compiled into this build",
 // so a multi-renderer build that contains WebGPU without selecting it still compiles these tests.
 #if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_PRESENT_WEBGPU)
@@ -404,7 +404,7 @@ TEST_F(IndexBufferEmptyDataTest, NonzeroUploadsRemainExactForBothWidthsAndBuffer
 #ifdef CNA_TEST_WEBGPU_AVAILABLE
 TEST_F(IndexBufferEmptyDataTest, WebGpuNativeErrorScopesStayClean)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever WebGPU is in the build, run only when it
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever WebGPU is in the build, run only when it
     // is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     RequireIndexBuffers();

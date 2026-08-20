@@ -4,7 +4,7 @@
 - Source file: `examples/demo_leaderboard_viewer/src/LeaderboardGame.hpp` (62 lines)
 - Audit status: AUDITED
 - Subsystem: `examples-demo_leaderboard_viewer` shard
-- File type: standalone `Game`-subclass demo header (Task 15.10, re-scoped by plan_net.md Task
+- File type: standalone `Game`-subclass demo header (Task 15.10, re-scoped by plans/plan_net.md Task
   4.3/4.4)
 - XNA/FNA relevance: exercises `LeaderboardWriter`/`LeaderboardEntry`/`LeaderboardReader`/
   `LeaderboardIdentity`

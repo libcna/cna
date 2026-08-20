@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-268: first focused corpus L7 witness for the combined skinned-PBR path.
+// plans/plan_gltf.md GLTF-268: first focused corpus L7 witness for the combined skinned-PBR path.
 //
 // Unlike the effect-only EasyGL tests, this loads the generated
 // tests/assets/gltf/skin-nonuniform-joint-scale.gltf through ContentManager. The fixture already

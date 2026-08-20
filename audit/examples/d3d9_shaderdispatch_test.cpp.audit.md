@@ -149,7 +149,7 @@ direction.
   skinned meshes are unconditionally lit in real XNA (no such guard exists in its own `OnApply()`),
   so this is a correct omission, not a missing parameter.
 - `git log --oneline -- examples/d3d9_shaderdispatch_test.cpp` shows a single authoring commit
-  (`699524a9 feat(plan_dx9.md): close D9-80/D9-81 -- XNA shader-permutation dispatch + audit
+  (`699524a9 feat(plans/plan_dx9.md): close D9-80/D9-81 -- XNA shader-permutation dispatch + audit
   re-verification`) — the commit message's own "audit re-verification" phrasing is consistent with
   the file's own comment about the prefix-check mutation-testing finding having already prompted one
   round of self-review before this audit's independent pass.

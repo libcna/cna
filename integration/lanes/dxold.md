@@ -14,7 +14,7 @@
 | `GpuDrawParams` cost | **zero** — none of the four `fc0dd2a2`-removed fields appears anywhere in the lane (re-verified by grep) |
 | Dependencies | MinGW-w64 system import libraries (`ddraw`, `dxguid`, `d3d10`, `dxgi`, `d3dcompiler`); DXVK's `d3d8.dll.a` for DX8 (system package path, overridable `CNA_DX8_DXVK_LIB`); Wine at runtime. **No vendored code, no downloads, no absolute developer-only paths** |
 | Conflict class | **LOW** as recorded — confirmed for code; the real conflict surface was 6 shared files whose lane hunks were already superseded at the base |
-| Development status | DEVELOPMENT COMPLETE (per `plan_dxold.md`, all 8 backends spiked, implemented, CTest-verified 2026-07-20/21) |
+| Development status | DEVELOPMENT COMPLETE (per `plans/plan_dxold.md`, all 8 backends spiked, implemented, CTest-verified 2026-07-20/21) |
 | History class | **AUTHOR/TRAILER CLEANUP REQUIRED — partial (3/28)** + **MESSAGE CLEANUP (3/25)** — see below |
 | Integration readiness | **ADAPTED AND MERGED — see §Adaptation record** |
 
@@ -50,7 +50,7 @@ their sibling docs mention them).
 ## The owner-ordered naming transition, executed inside this lane
 
 Mid-integration (2026-08-04) the project owner instructed, live: *`DX3` becomes `FREEDIRECT`,
-then `DX30` becomes `DX3`.* This executes the transition `plan_dxold.md` had recorded as
+then `DX30` becomes `DX3`.* This executes the transition `plans/plan_dxold.md` had recorded as
 "owner-authorized, not yet executed" since the lane was authored (the real DirectX 3 backend
 shipped under the temporary `DX30` name precisely because the `free-direct`-backed backend owned
 `DX3`). The owner's spelling **`FREEDIRECT`** supersedes the plan's earlier `FREE_DIRECT` sketch.

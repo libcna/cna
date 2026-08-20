@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-235: renderer-independent analytic spot checks for the direct-light
+// plans/plan_gltf.md GLTF-235: renderer-independent analytic spot checks for the direct-light
 // metallic-roughness BRDF used by every CNA PBR shader. These are specification values, not a
 // captured image: each test pins one term so a plausible alternative formula cannot accidentally
 // preserve the final colour.

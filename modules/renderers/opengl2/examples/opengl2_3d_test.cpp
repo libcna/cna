@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact 3D vertex-format proof for the native OpenGL 2.1 graphics renderer
+// plans/plan_opengl2.md: pixel-exact 3D vertex-format proof for the native OpenGL 2.1 graphics renderer
 // -- colored3d, textured3d, colored_textured3d, and a real depth-test occlusion proof, all
 // drawn through the real public XNA API (VertexBuffer/BasicEffect/GraphicsDevice.DrawPrimitives)
 // and verified via ReadBackbuffer, mirroring opengl2_2d_test.cpp's rigor for the 3D path.
@@ -20,7 +20,7 @@
 // Check E -- 120 frames of the whole scene render with no exception.
 //
 // BasicEffect lighting (VertexPositionNormalTexture/EnableDefaultLighting) is deliberately not
-// covered here -- this renderer's 3D shaders are unlit (plan_opengl2.md's own documented
+// covered here -- this renderer's 3D shaders are unlit (plans/plan_opengl2.md's own documented
 // follow-up work), so a lit-scene pixel assertion would not be meaningful yet.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.

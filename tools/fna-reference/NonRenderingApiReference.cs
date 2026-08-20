@@ -13,7 +13,7 @@
 // verified by *running* the real reference implementation, not just reading/transcribing it),
 // and removes any chance of a hand-copied value being wrong.
 //
-// "Exceptions" (the third item in this task's own one-line description, plan_graphics.md Task
+// "Exceptions" (the third item in this task's own one-line description, plans/plan_graphics.md Task
 // 472) is deliberately NOT covered here: every Graphics-namespace class whose validation-guard
 // exceptions would be worth capturing (Texture2D, VertexBuffer, RenderTarget2D, ...) needs a
 // live GraphicsDevice to construct at all -- the same GraphicsDevice/windowing problem flagged

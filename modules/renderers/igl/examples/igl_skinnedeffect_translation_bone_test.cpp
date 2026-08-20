@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-36/IGL-55: SkinnedEffect with a real, non-identity bone transform.
+// plans/plan_igl.md IGL-36/IGL-55: SkinnedEffect with a real, non-identity bone transform.
 //
 // `igl_skinnedeffect_test.cpp` only proved the bone/weight/index attributes and the 72-bone
 // uniform block reach the shader at all, using SkinnedEffect's own default identity palette (so

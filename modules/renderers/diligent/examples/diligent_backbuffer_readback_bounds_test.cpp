@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-63: real-device proof that DiligentRenderer::ReadBackbuffer()
+// plans/plan_diligent.md DILIGENT-63: real-device proof that DiligentRenderer::ReadBackbuffer()
 // is valid and bounded for every CnaPresentationMode -- constructed directly against
 // IGraphicsRenderer (bypassing GraphicsDevice/GraphicsDeviceManager, matching
 // directx3_resize_transaction_test.cpp's own established low-level pattern), since the physical

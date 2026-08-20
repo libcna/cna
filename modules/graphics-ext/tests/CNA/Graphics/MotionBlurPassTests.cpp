@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2030..MOD-2034: camera motion blur.
+// plans/plan_modern.md MOD-2030..MOD-2034: camera motion blur.
 //
 // Every test here changes exactly one thing between two frames of the same scene, because that is
 // the only way to say what the blur is reacting to. A blur that reacted to nothing, or to

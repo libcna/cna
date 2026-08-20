@@ -6,7 +6,7 @@
 // so SM1.x buys nothing for CNA's own actual content.
 //
 // DX8 is architecturally very different from DX1..DX7:
-//   1. No DirectDraw at all -- "DirectDraw+Direct3D merged" (plan_dxold.md's own DX8 row). A single
+//   1. No DirectDraw at all -- "DirectDraw+Direct3D merged" (plans/plan_dxold.md's own DX8 row). A single
 //      IDirect3D8::CreateDevice(adapter, type, hFocusWindow, behaviorFlags, &presentParams, &device)
 //      call creates BOTH the device and its own swap chain -- no separate ddraw object, no manual
 //      "shadow backbuffer + Blt to primary" trick DX1..DX7 all needed.

@@ -41,7 +41,7 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsDevice& device, int width, int height, SurfaceFormat format,
         DepthFormat depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
-        // plan_runtimerenderer.md design decision 9: renderability is the renderer's own question.
+        // plans/plan_runtimerenderer.md design decision 9: renderability is the renderer's own question.
         // A renderer that answers Defer accepts the framework's rule, which is what every renderer
         // except SKIA did when this was an #ifdef block.
         switch (device.GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))

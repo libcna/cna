@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_direct2d.md D2D-121: run the whole Direct2D CTest label against a Wine prefix created from
+# plans/plan_direct2d.md D2D-121: run the whole Direct2D CTest label against a Wine prefix created from
 # nothing, so a pass can never depend on a developer's accumulated ~/.wine state (installed
 # runtimes, DLL overrides, registry tweaks, leftover Proton upgrades).
 #

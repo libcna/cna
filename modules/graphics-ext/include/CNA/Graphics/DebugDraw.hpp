@@ -31,7 +31,7 @@ namespace CNA::Graphics {
     /**
      * @brief Draws wireframe shapes for looking at what the engine layer is doing.
      *
-     * plan_modern.md `MOD-2160`. Nothing in this layer could draw a debug shape before, and the gap
+     * plans/plan_modern.md `MOD-2160`. Nothing in this layer could draw a debug shape before, and the gap
      * was felt directly: every frustum, probe grid, cluster slice and light bound built in Phase 20
      * was verified by arithmetic, because there was no way to look at one.
      *
@@ -165,7 +165,7 @@ namespace CNA::Graphics {
         /**
          * @brief Sets whether shapes submitted from now on are hidden behind geometry.
          *
-         * plan_modern.md `MOD-2162`, and it is set **per submission** rather than per batch because
+         * plans/plan_modern.md `MOD-2162`, and it is set **per submission** rather than per batch because
          * the two modes answer different questions in the same frame. Depth-tested tells you where
          * a shape is *relative to the scene* — whether the light's volume really does contain the
          * pillar. Overlay tells you where a shape is *at all*, which is the only way to find one

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_magnum.md MAGNUM-40: structural GTest coverage for everything on the MAGNUM renderer that
+// plans/plan_magnum.md MAGNUM-40: structural GTest coverage for everything on the MAGNUM renderer that
 // does not need a live OpenGL context -- the XNA-ordinal -> Magnum-enum mappings, the vertex
 // layout resolution both the stock and the declaration-driven routes share, and the generated
 // stock GLSL. Everything that needs a real context (resource creation, draws, readback) is left to
 // the on-device smoke checks, since a headless CI container has no GL driver to create one on.
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_MAGNUM is defined project-wide.
@@ -232,7 +232,7 @@ TEST(MagnumVertexLayoutTest, SkinnedStridesResolveToTheirBonePaletteAttributes)
 
 TEST(MagnumVertexLayoutTest, TheTwoColourCarryingPbrStridesBindCOLOR_0AtLocationSix)
 {
-    // plan_gltf.md GLTF-462/GLTF-463/GLTF-465. Stride 60 is the rigid PBR record with a packed
+    // plans/plan_gltf.md GLTF-462/GLTF-463/GLTF-465. Stride 60 is the rigid PBR record with a packed
     // COLOR_0 at offset 56 and stride 80 the skinned one with the same colour at 76. glTF 2.0 §3.9.2
     // makes that colour a multiplier on base colour, so it has to reach the shader -- and it has to
     // reach it at the location the generated PBR source declares (6), past the four rigid PBR
@@ -278,7 +278,7 @@ TEST(MagnumVertexLayoutTest, TheTwoColourCarryingPbrStridesBindCOLOR_0AtLocation
 
 TEST(MagnumStockProgramTest, TheColourCarryingPbrStridesSelectTheSamePbrProgramsAsTheirBareTwins)
 {
-    // plan_gltf.md GLTF-465: a vertex colour is a term in the metallic-roughness product, not a
+    // plans/plan_gltf.md GLTF-465: a vertex colour is a term in the metallic-roughness product, not a
     // different material model, so stride 60 must select the same program as 48 and stride 80 the
     // same as 68. Selecting nothing (which is what this renderer did before) refuses the draw --
     // acceptable while the product was unimplemented, and wrong now that it is.
@@ -721,7 +721,7 @@ TEST(MagnumStockShaderTest, PbrShaderImplementsTheGltfMetallicRoughnessBrdf)
     // `dielectricF0`, computed from uSpecularFresnelInputs and the specular colour texture. The rule
     // being asserted is unchanged -- F0 interpolates from the dielectric endpoint to the albedo with
     // metalness -- so only the name of the endpoint moves. Found by running Magnum's own tests, which
-    // this environment had never done (plan_gltf.md GLTF-465).
+    // this environment had never done (plans/plan_gltf.md GLTF-465).
     EXPECT_NE(source.find("mix(dielectricF0, albedo, metallic)"), std::string::npos);
 }
 

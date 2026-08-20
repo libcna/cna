@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D39: the Llgl family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D39: the Llgl family's pre-construction contract.
 //
 // LLGL is itself an abstraction layer and picks its renderer module (OpenGL or Vulkan) at RUNTIME,
 // so the window flag has to follow that decision rather than a compile-time renderer choice. Only
@@ -25,7 +25,7 @@ namespace CNA::Internal::Renderers::Llgl
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

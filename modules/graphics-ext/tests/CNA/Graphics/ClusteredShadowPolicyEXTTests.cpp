@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2047: which of many lights gets a shadow map.
+// plans/plan_modern.md MOD-2047: which of many lights gets a shadow map.
 //
 // The section's honest statement is that clustered shading lifted the limit on lighting and none
 // at all on shadowing, so this is a budget rather than a solution. What the tests check is that the

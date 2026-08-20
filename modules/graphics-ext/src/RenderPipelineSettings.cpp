@@ -17,7 +17,7 @@
 namespace CNA::Graphics {
 
     namespace {
-        /// plan_modern.md MOD-730. Only the values whose out-of-range case is *undefined* are
+        /// plans/plan_modern.md MOD-730. Only the values whose out-of-range case is *undefined* are
         /// clamped -- a gamma of zero is a division by zero, a negative exposure or intensity is a
         /// sign error rather than a look. Values that are merely extreme (a bloom threshold of 100,
         /// a sample count of 500) are stored as given, because MOD-22 established that the passes

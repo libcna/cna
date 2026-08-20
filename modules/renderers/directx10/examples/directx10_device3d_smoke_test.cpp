@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_d3d10.md: smoke test for the D3D10 renderer's 3D device state -- a real attached
+// plans/plan_d3d10.md: smoke test for the D3D10 renderer's 3D device state -- a real attached
 // DXGI_FORMAT_D24_UNORM_S8_UINT depth-stencil buffer and the ClearColorAndDepth/
 // ClearColorDepthAndStencil entry points. Pixel-verified 3D rendering (real shader draws) is
 // covered by the shared EasyGL-authored BlendState/DepthStencilState/RasterizerState tests

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-47: commit reproducible RenderTargetCube mipmap coverage.
+// plans/plan_sokol.md SOKOL-47: commit reproducible RenderTargetCube mipmap coverage.
 //
 // SOKOL-39 closed the cube half of mip-mapped render targets using only a throwaway, uncommitted
 // verification program, at a time before SOKOL-34 (real cube sampling) had landed -- neither is
@@ -87,7 +87,7 @@ protected:
               "A: LevelCount reports the real 32->16->8->4->2->1 chain");
 
         // Fill level 0 with solid green, then unbind -- this is where
-        // RegenerateMipmapsIfNeededEXT()'s glGenerateMipmap runs (plan_sokol.md SOKOL-39).
+        // RegenerateMipmapsIfNeededEXT()'s glGenerateMipmap runs (plans/plan_sokol.md SOKOL-39).
         dev.SetRenderTarget(&cube, CubeMapFace::PositiveX);
         dev.Clear(Color(0, 255, 0, 255));
         dev.SetRenderTargets({});

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-10: verify OpenGL4Renderer::ReadBackbuffer()/
+// plans/plan_opengl4.md GL4-10: verify OpenGL4Renderer::ReadBackbuffer()/
 // GraphicsDevice::GetBackBufferData() actually return the pixels that were just drawn -- a real
 // glReadPixels() from the default framebuffer (GL_BACK), Y-flipped to XNA's top-left-origin
 // convention. Adapted from webgpu_clear_readback_test.cpp's own check list (renderer-agnostic:

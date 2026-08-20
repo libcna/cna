@@ -5,7 +5,7 @@
 // requires neither. For the SDL3 failure path, g_mixer (AudioMixer.cpp) is a process-wide,
 // once-ever-initialized cache -- once any earlier
 // test in this shared CnaTests binary succeeds even once, every later attempt sees the already
-// -cached mixer and can never exercise GetMixer()'s failure branch again (see plan_audio.md
+// -cached mixer and can never exercise GetMixer()'s failure branch again (see plans/plan_audio.md
 // P9-HARDWARE-002's verification caveat). A real regression test for the no-audio-hardware path
 // therefore needs a fresh, isolated OS process with an invalid SDL_AUDIODRIVER set before
 // anything else in that process ever calls SDL_Init(SDL_INIT_AUDIO) -- provided here by spawning

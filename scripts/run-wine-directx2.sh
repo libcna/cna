@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx2.md design decision 11: run a Windows cross-compiled .exe (DIRECTX2 renderer) under Wine
+# plans/plan_dx2.md design decision 11: run a Windows cross-compiled .exe (DIRECTX2 renderer) under Wine
 # against real DirectDraw v1, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-directx2.sh <path-to.exe> [args...]
@@ -11,11 +11,11 @@
 #
 # Set CNA_DX2_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DIRECTX2
 # deliberately REUSES DIRECTX1's own already-initialized prefix rather than creating a fresh
-# ~/.wine-cna-dx2 (plan_dx2.md design decision 11: the DX2-0 spike itself ran entirely against
+# ~/.wine-cna-dx2 (plans/plan_dx2.md design decision 11: the DX2-0 spike itself ran entirely against
 # ~/.wine-cna-dx1 and confirmed it works for DIRECTX2's own DirectDraw v1 + Direct3D v2 needs, so there
 # is nothing DX2-specific a separate prefix would buy).
 #
-# plan_dx2.md design decision 11: this wrapper also ASSERTS that Wine's real ddraw.dll actually
+# plans/plan_dx2.md design decision 11: this wrapper also ASSERTS that Wine's real ddraw.dll actually
 # engaged (not a silently-missing/no-op DirectDraw implementation), the DIRECTX2 equivalent of
 # run-wine-dxvk9.sh's "DXVK: <version>" gate -- a `trace:ddraw:` WINEDEBUG channel line only
 # appears when the real ddraw.dll handled at least one DirectDraw call. Set

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-41: real-device proof that OcclusionQuery on the Diligent renderer
+// plans/plan_diligent.md DILIGENT-41: real-device proof that OcclusionQuery on the Diligent renderer
 // reports a genuine GPU visible-sample result, through the public XNA API only.
 //
 // The checks below only ever assert "zero" vs. "greater than zero", deliberately, rather than an

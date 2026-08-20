@@ -18,7 +18,7 @@ established.
 
 The immutable historical lane is `feature/metal` through `48928d113cb864f78d754256d2d559d914d4f1a7`.
 Its latest production-changing commit is `e0f42426836ce9f2d4823d50732850877020aef1`;
-the final four commits only change `NEXT.md` or `plan_metal.md`.
+the final four commits only change `NEXT.md` or `plans/plan_metal.md`.
 
 GitHub Actions run `29814126178` built `e0f42426836ce9f2d4823d50732850877020aef1`
 successfully on `macos-14` with Xcode 15.4 and Metal validation enabled. It then passed 136 of
@@ -47,7 +47,7 @@ and support-confidence boundary, not an integration blocker.
 
 ### Post-audit findings
 
-These IDs continue the existing `plan_metal.md` sequence without changing any historical finding:
+These IDs continue the existing `plans/plan_metal.md` sequence without changing any historical finding:
 
 | Finding | Severity | Evidence | Disposition |
 |---|---|---|---|
@@ -220,7 +220,7 @@ blocker.
 
 ## Historical record
 
-`plan_metal.md` retains the original task-by-task narrative as historical evidence. It is not the
+`plans/plan_metal.md` retains the original task-by-task narrative as historical evidence. It is not the
 current support matrix. `docs/metal-history-map.tsv` accounts for all 99 commits in the historical
 lane and maps the 88 chronological signed replays plus 11 documented omissions onto this
 adaptation.

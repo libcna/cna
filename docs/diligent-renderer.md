@@ -5,7 +5,7 @@
 The Diligent Engine renderer is CNA's newest graphics renderer and is **experimental**. Its
 implemented surface covers the 2D/3D baseline plus render targets (2D and cube), occlusion queries,
 MSAA, hardware instancing, `PbrEffect`/`SkinnedPbrEffect` and most stock effects, described in
-`plan_diligent.md` Phases `DILIGENT-1` through `4`; it is **not** at parity with the Vulkan, EasyGL,
+`plans/plan_diligent.md` Phases `DILIGENT-1` through `4`; it is **not** at parity with the Vulkan, EasyGL,
 SDL_GPU or bgfx renderers (custom `ShaderEffect` programs and `RenderTargetCube` MSAA are still
 unimplemented). Read
 ["What works / what does not"](#what-works--what-does-not) before using it for anything real.
@@ -178,7 +178,7 @@ Not implemented — each **throws with its own name** rather than rendering an a
   shader variant for them from the stride alone. An application that binds one of those buffers to a
   non-PBR effect -- a `BasicEffect` on a `VertexPositionNormalTangentTexture` buffer, say -- is
   refused by name rather than rendered through the PBR shader, which used to answer black
-  (`plan_gltf.md GLTF-475`). Nothing on the glTF path is affected: it drives those five strides
+  (`plans/plan_gltf.md GLTF-475`). Nothing on the glTF path is affected: it drives those five strides
   through `PbrEffect`/`SkinnedPbrEffect`. Lifting the limitation means adding an unlit program for
   those layouts, not relaxing the check.
 - **X11 only on Linux.** Diligent's `LinuxNativeWindow` carries an X11 window id and display (or an
@@ -206,7 +206,7 @@ Not implemented — each **throws with its own name** rather than rendering an a
   `Diligent_Npot`, `Diligent_MSAA`, `Diligent_DrawOffset`, `Diligent_VertexLit`,
   `Diligent_SpriteFont` and 6 of `Diligent_DepthBias`'s 7 checks.
 
-  Six checks across six binaries remain open under GL, all documented in `plan_diligent.md`
+  Six checks across six binaries remain open under GL, all documented in `plans/plan_diligent.md`
   `DILIGENT-66`: `Diligent_MultiSampleMask` and the instancing family
   (`Diligent_Instanced`/`Diligent_InstancedStride`) are confirmed genuine upstream/driver
   limitations, not CNA bugs -- `SampleMask` is explicitly unimplemented in DiligentCore v2.5.6's
@@ -393,5 +393,5 @@ fails identically on the `HEADLESS` renderer and is unrelated to this one.
 
 The renderer is deliberately absent from `docs/graphics-renderer-feature-matrix.md`: that document's
 columns mean "verified on a real hardware GPU", and everything here was measured on a software
-Vulkan device. See `plan_diligent.md`'s "Verification status" section for the levels it
+Vulkan device. See `plans/plan_diligent.md`'s "Verification status" section for the levels it
 distinguishes.

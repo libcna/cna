@@ -94,7 +94,7 @@ describes the (buggy) formula actually implemented, without asserting FNA-equiva
 
 - Identical root-cause defect to `bgfx_alphatest_fog_test.cpp` and `bgfx_basiceffect_lit_fog_test.cpp` (this
   batch) — see the first file's report for the full symbolic derivation and git-history corroboration
-  (commit `74ad3bae`, `plan_dx9.md D9-A6` oracle finding).
+  (commit `74ad3bae`, `plans/plan_dx9.md D9-A6` oracle finding).
 - Uses `fx.VertexColorEnabled = true;` (line 126, via the `setupBase` lambda) — same bare-public-field API
   observation as `bgfx_basiceffect_combined_test.cpp` (this batch); not re-detailed here to avoid repetition.
 

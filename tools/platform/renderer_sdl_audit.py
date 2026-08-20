@@ -5,7 +5,7 @@ PLAT-3 / PLAT-76 - audit which renderers legitimately require SDL3, and which on
 
 Purpose
 -------
-plan_platform.md allows exactly one class of exception to "no SDL outside modules/platform":
+plans/plan_platform.md allows exactly one class of exception to "no SDL outside modules/platform":
 renderers whose identity *is* an SDL3 API. PLAT-3 establishes that allowlist by auditing all 46
 renderer identities; PLAT-76 re-runs the same audit at the end of Phase 4 to prove nothing else
 survived. Same tool, two moments -- which is why this is a script with a --check mode rather than
@@ -55,7 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sdl_classify import classify_symbol  # noqa: E402
 from sdl_inventory import scan  # noqa: E402
 
-# Renderers whose identity is an SDL3 API. This is the allowlist plan_platform.md's design
+# Renderers whose identity is an SDL3 API. This is the allowlist plans/plan_platform.md's design
 # decision 6 permits; PLAT-76's --check asserts nothing else has joined it.
 SDL_NATIVE = frozenset({"sdl-renderer", "sdl-gpu"})
 

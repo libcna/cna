@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md Phase 16: what does *this* renderer actually promise?
+// plans/plan_modern.md Phase 16: what does *this* renderer actually promise?
 //
 // Every Phase 16 row asks the same question of a different renderer, and answering it by reading
 // the renderer's source is how MOD-1699 got answered wrongly three times. This prints the answers

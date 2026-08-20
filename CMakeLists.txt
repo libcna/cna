@@ -65,7 +65,7 @@ endif()
 # before sharp-runtime is added below, since unwinding requires every frame in the call chain
 # to agree on the same exception-handling ABI.
 #
-# plan_glbackends.md GLB-39: uses the modern Wasm exception-handling proposal
+# plans/plan_glbackends.md GLB-39: uses the modern Wasm exception-handling proposal
 # (-fwasm-exceptions), not the legacy JS-based -fexceptions model this project used previously.
 # Forced by a real link failure once the GL-family renderers (OPENGLES3/OPENGL33/WEBGL1/WEBGL2)
 # started depending on the sibling easy-gl -> meta-gl chain: easy-gl's own
@@ -108,7 +108,7 @@ set_property(CACHE CNA_DIRECT2D_TEST_RUNTIME PROPERTY STRINGS WINE PROTON)
 # suite against a virtual display (Xvfb) instead of the real desktop.
 set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creating ctest tests")
 
-# Apple platform resolution (macOS/iOS, plan_apple.md). Must run before the vendored SDL builds
+# Apple platform resolution (macOS/iOS, plans/plan_apple.md). Must run before the vendored SDL builds
 # below: those are separate cmake invocations that inherit nothing from this cache, so the
 # sysroot/architecture/deployment target this file settles has to exist before they are launched.
 include(cmake/ApplePlatform.cmake)
@@ -148,7 +148,7 @@ endif()
 # repo (Task DEV-BUILD-001) -- `git submodule update --init` cannot fetch it.
 # It must be cloned next to this repo's own directory, so that
 # "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" resolves to a real checkout.
-# CNA_SHARP_RUNTIME_ROOT (MODULARIZATION_PLAN.md §3) points builds at a different
+# CNA_SHARP_RUNTIME_ROOT (plans/MODULARIZATION_PLAN.md §3) points builds at a different
 # checkout -- e.g. a pinned read-only worktree of the modular sharp-runtime --
 # without moving worktrees around.
 set(CNA_SHARP_RUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../sharp-runtime" CACHE PATH
@@ -180,7 +180,7 @@ endif()
 
 include(cmake/RendererSelection.cmake)
 
-# plan_runtimerenderer.md design decision 3: emit the explicit table of renderer families
+# plans/plan_runtimerenderer.md design decision 3: emit the explicit table of renderer families
 # linked into this build. Must run after RendererSelection.cmake has resolved the identity.
 include(cmake/RendererRegistry.cmake)
 cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${_cna_renderer_identities})
@@ -188,7 +188,7 @@ cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${_cna_renderer_iden
 # The descriptor compilation gate reads the same registry map, so it must follow that include.
 # It defines its target from modules/renderers/CMakeLists.txt, once the selected families are known.
 include(cmake/RendererDescriptorGate.cmake)
-# Platform implementation selection (plan_platform.md PLAT-11). A separate axis from
+# Platform implementation selection (plans/plan_platform.md PLAT-11). A separate axis from
 # CNA_GRAPHICS_RENDERER: the renderer decides how pixels are produced, the platform decides
 # where the window, events and input come from.
 include(cmake/PlatformSelection.cmake)
@@ -200,17 +200,17 @@ if(CNA_PLATFORM STREQUAL "SDL2")
     cna_configure_sdl2()
 endif()
 
-# Playback/capture implementation selection (plan_platform.md PLAT-93). This is intentionally
+# Playback/capture implementation selection (plans/plan_platform.md PLAT-93). This is intentionally
 # independent from CNA_PLATFORM: window/input and audio backends are orthogonal choices.
 include(cmake/AudioPlatformSelection.cmake)
 include(cmake/Sdl2OnlyConfiguration.cmake)
 
-# Platform ratchet (plan_platform.md PLAT-8): reports how much of CNA still calls SDL
+# Platform ratchet (plans/plan_platform.md PLAT-8): reports how much of CNA still calls SDL
 # directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning
 # only until PLAT-121 flips it strict; skips itself cleanly with no Python 3 present.
 include(cmake/PlatformRatchet.cmake)
 
-# Hot-path lint (plan_platform.md PLAT-9): rejects platform calls inside per-pixel,
+# Hot-path lint (plans/plan_platform.md PLAT-9): rejects platform calls inside per-pixel,
 # per-vertex, per-fragment, per-sample and per-event loops, per design decision 4. A hard
 # error rather than a warning like the ratchet above: this one starts at zero violations
 # and every regression is a single deliberate line with an obvious fix or an annotation.
@@ -223,7 +223,7 @@ if(CNA_BUILD_TESTS)
     enable_testing()
 endif()
 
-# Physical module composition (MODULARIZATION_PLAN.md §11): every subsystem and renderer
+# Physical module composition (plans/MODULARIZATION_PLAN.md §11): every subsystem and renderer
 # family owns modules/<name>/{CMakeLists.txt,include/,src/,tests/}; the former central
 # cmake/BackendLibraries.cmake + cmake/CnaLibrary.cmake manifests dissolved into the
 # per-module files this directory composes.
@@ -251,10 +251,10 @@ include(cmake/UnitTests.cmake)
 # entry point, native framework closure, selected renderer and generated bundle all link together.
 include(cmake/AppleSmoke.cmake)
 
-# Minimal-link module probes + renderer-identity registry gate (MODULARIZATION_PLAN.md §4).
+# Minimal-link module probes + renderer-identity registry gate (plans/MODULARIZATION_PLAN.md §4).
 include(cmake/Tests/ModuleProbes.cmake)
 
-# Apple bundle sweep (plan_apple.md, APPLE-3). Every executable target in the tree -- examples,
+# Apple bundle sweep (plans/plan_apple.md, APPLE-3). Every executable target in the tree -- examples,
 # tools, tests -- is registered by now, so this is the one place that can hand each of them the
 # Info.plist/signing configuration an iOS product cannot launch without, and the only alternative
 # to editing ~200 module-local example registrations that know nothing about Apple. No-op on

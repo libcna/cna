@@ -13,7 +13,7 @@
 - Related production code: `src/CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.cpp` —
   `BgfxRenderTargetCubeBackend` ctor (800-835), `BindAsRenderTargetFace()` (845-866, recreates the FBO
   fresh on every bind).
-- Cross-referenced project docs: `plan_graphics.md` Task 952 (two long entries, 2026-07-11), git log
+- Cross-referenced project docs: `plans/plan_graphics.md` Task 952 (two long entries, 2026-07-11), git log
   (`7c5862b8 investigate(Task 952): apitrace-based root-cause continuation, no fix yet`).
 
 ## Purpose
@@ -53,10 +53,10 @@ value:
   cube texture via `bgfx::createTextureCube(...)` and, when a depth format is requested, a **separate**
   2D depth texture shared across all 6 faces (`depthTex`, lines 826-832) — structurally identical in
   shape to `RenderTarget2D`'s own already-working depth attachment (which the Task 952 write-up in
-  `plan_graphics.md` also independently confirms via apitrace comparison).
+  `plans/plan_graphics.md` also independently confirms via apitrace comparison).
 - `BindAsRenderTargetFace()` (845-866) **recreates the framebuffer object from scratch on every single
   face bind** (`if (bgfx::isValid(fbo)) bgfx::destroy(fbo);` then a fresh `bgfx::createFrameBuffer(...)`)
-  — `plan_graphics.md`'s Task 952 entry independently flags this exact "FBO-recreation-per-bind pattern"
+  — `plans/plan_graphics.md`'s Task 952 entry independently flags this exact "FBO-recreation-per-bind pattern"
   as "the most plausible remaining CNA-side suspect, but NOT yet confirmed" after a RenderDoc capture
   ruled out FBO-handle validity, view-id targeting, and texture-handle identity as the cause.
 - The git log confirms the investigation is real and recent: `7c5862b8 investigate(Task 952):
@@ -95,7 +95,7 @@ suite, and per the analysis above that signal is very likely FAIL.
   source checkout is present to build against, per `AUDIT_SCOPE.md`'s D-6 "bgfx is a genuine
   external/upstream dependency, reference-only" scoping decision — but corroborated by three
   independent, mutually-reinforcing pieces of primary evidence: (1) this file's own header comment
-  giving an exact, specific description of the current failure mode; (2) `plan_graphics.md`'s Task 952
+  giving an exact, specific description of the current failure mode; (2) `plans/plan_graphics.md`'s Task 952
   entries, which describe a real, tool-assisted (apitrace + RenderDoc) investigation spanning multiple
   sessions, explicitly marked `⬜` (open) and "DEFERRED (2026-07-11) — explicitly paused by the project
   owner... do not resume investigating this without explicit direction"; (3) `git log` confirming the
@@ -105,7 +105,7 @@ suite, and per the analysis above that signal is very likely FAIL.
 - Location/symbol: `check(matches(gotDepth, kGreen), ...)` (lines 224-227); CTest registration
   `Bgfx_RenderTargetCube_DepthFormat` (`cmake/Tests/BgfxTests.cmake:512-515`, no `CNA_BGFX_RENDERER`
   override, no `WILL_FAIL`/skip)
-- Evidence: `plan_graphics.md` row 952 states verbatim (abridged): *"DepthFormat::None correctly reads
+- Evidence: `plans/plan_graphics.md` row 952 states verbatim (abridged): *"DepthFormat::None correctly reads
   back green... while Depth24Stencil8 reads back nothing at all... Root cause still not found... commit-
   free scratch history, not present in the tree... DEFERRED — explicitly paused by the project owner
   after this round; resolve later, not this session."* This file's own `getResult()` returns
@@ -116,7 +116,7 @@ suite, and per the analysis above that signal is very likely FAIL.
   `Bgfx_RenderTargetCube_DepthFormat` as FAILED alongside any genuinely new regression, with nothing in
   the CTest output itself distinguishing "known, deferred, already-triaged Task 952 issue" from "a
   change I just made broke something new." Anyone running the suite without having independently read
-  this file's header comment (or `plan_graphics.md`) would reasonably treat this as a fresh regression
+  this file's header comment (or `plans/plan_graphics.md`) would reasonably treat this as a fresh regression
   to chase. The project's own established convention for a similar situation
   (`Bgfx_RenderTarget2D_MsaaResolve`, audited separately in this same batch) is to route the CTest
   environment through `CNA_BGFX_RENDERER=VULKAN` specifically because the OpenGL path is known-broken
@@ -131,7 +131,7 @@ suite, and per the analysis above that signal is very likely FAIL.
   so the underlying capability gap is real and in-scope, even though this specific finding is about test
   suite hygiene rather than the production bug's root cause (which the project has already spent
   substantial, tool-assisted effort chasing and deliberately paused, per `NEXT.md`'s own "do not resume"
-  framing referenced in the `plan_graphics.md` entry).
+  framing referenced in the `plans/plan_graphics.md` entry).
 - Suggested follow-up (not implemented by this audit, per the audit-only mandate): either (a) mark this
   CTest target `WILL_FAIL` / add a project-appropriate expected-failure convention referencing Task 952
   until the underlying bug is fixed, so a real regression elsewhere doesn't hide behind this always-red

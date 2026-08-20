@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 694: Verify SpriteEffects flip + rotation/origin/scale with DrawString on SDL_Renderer.
-// Mirrors Tasks 428-429 (both still ⬜ in plan_graphics.md's Phase 48 -- no existing EasyGL
+// Mirrors Tasks 428-429 (both still ⬜ in plans/plan_graphics.md's Phase 48 -- no existing EasyGL
 // test to port, same situation as Tasks 690-693; this is a NEW test).
 //
 // REAL BUG FOUND AND FIXED (shared, renderer-agnostic SpriteBatch.cpp, not SDL_Renderer-specific

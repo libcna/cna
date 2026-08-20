@@ -8,7 +8,7 @@
 - XNA/FNA relevance: NOXNA (glTF is not part of XNA 4.0; this is CNA's own content-pipeline
   extension). Tests runtime (non-CLI) in-process glTF loading through `ContentManager::Load<Model>()`
   via `ModelTypeReader::ReadGltfModel()` / `CNA::Internal::GltfImport::GltfImportCore`
-  (plan_cnj.md CNB-70/71, Phase 13D)
+  (plans/plan_cnj.md CNB-70/71, Phase 13D)
 - Main related tests: N/A (this IS a test file); complements `GltfToCnjToolTests.cpp` (offline CLI
   tool, audited separately in this batch) and `GltfImportCoreTests.cpp` (not in this shard's batch)
 

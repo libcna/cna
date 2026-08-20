@@ -1,5 +1,5 @@
 // Shader Model 5.0 (vs_5_0). Physically-based (metallic-roughness) unskinned pipeline -- HLSL
-// port of EasyGLRenderer::EnsurePbrProgram()'s vertex stage (plan_cnj.md CNB-58, PbrEffect).
+// port of EasyGLRenderer::EnsurePbrProgram()'s vertex stage (plans/plan_cnj.md CNB-58, PbrEffect).
 // Stride 48: VertexPositionNormalTangentTexture (float3 pos + float3 normal + float4 tangent
 // [xyz + bitangent handedness sign in w, glTF convention] + float2 uv). CNA_PBR_DUAL_UV adds
 // the canonical stride-60 TEXCOORD_1 suffix.

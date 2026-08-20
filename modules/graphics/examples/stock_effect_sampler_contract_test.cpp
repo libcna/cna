@@ -827,7 +827,7 @@ private:
         catch (const std::exception& e)
         {
             // D3D9 declares stride 20 with vertexColor=false unsupported for DualTextureEffect
-            // (plan_dx9.md D9-82d), so it has no two-slot stock family to measure here.
+            // (plans/plan_dx9.md D9-82d), so it has no two-slot stock family to measure here.
             std::printf("[SKIP] M: this renderer does not implement DualTextureEffect (%s)\n", e.what());
             std::fflush(stdout);
             return;

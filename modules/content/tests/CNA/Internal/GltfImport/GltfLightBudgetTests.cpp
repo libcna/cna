@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-327 / GLTF-329 / GLTF-330 / GLTF-331 / GLTF-332: the corpus half of the
+// plans/plan_gltf.md GLTF-327 / GLTF-329 / GLTF-330 / GLTF-331 / GLTF-332: the corpus half of the
 // `KHR_lights_punctual` approximation.
 //
 // `GltfClipAndLight` already locks the per-light *rules* on scratch documents that can vary one

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-25: BasicEffect's lit path, asserted against real pixels.
+// plans/plan_llgl.md LLGL-25: BasicEffect's lit path, asserted against real pixels.
 //
 // A single quad, facing the camera, lit by one directional light. The light direction and the
 // quad's normal make the geometry itself the test: a light pointed straight at the surface is

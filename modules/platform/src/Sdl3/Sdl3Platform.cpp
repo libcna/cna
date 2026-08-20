@@ -91,7 +91,7 @@ namespace CNA::Platform::Sdl3 {
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
-        // plan_apple.md APPLE-15. The orientation set is a pre-initialization hint: it has to be
+        // plans/plan_apple.md APPLE-15. The orientation set is a pre-initialization hint: it has to be
         // in place before the video subsystem starts, which is earlier than any window exists and
         // therefore earlier than the game can have chosen anything. Seed the full XNA default set
         // here so the first window is not accidentally locked to one orientation;

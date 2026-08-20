@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: proof for TextureCube (GL_TEXTURE_CUBE_MAP) on the native OpenGL 2.1 graphics
+// plans/plan_opengl2.md: proof for TextureCube (GL_TEXTURE_CUBE_MAP) on the native OpenGL 2.1 graphics
 // renderer. No stock effect samples a cube map yet on this renderer (EnvironmentMapEffect is still
 // a follow-up item), so this verifies the storage/upload/readback round-trip directly through
 // TextureCube::SetData()/GetData() rather than a rendered pixel.

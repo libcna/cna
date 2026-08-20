@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-34-style extraction: SelectMetalPipelineKind() only reads GpuDrawParams
+// plans/plan_metal.md METAL-34-style extraction: SelectMetalPipelineKind() only reads GpuDrawParams
 // (plain C++, zero Objective-C dependency) and a stride -- arguably the single most safety-critical
 // dispatch decision in the whole Metal renderer, since it decides which concrete MSL shader pair
 // every 3D draw call actually uses, yet until now it had never actually been executed by anything,

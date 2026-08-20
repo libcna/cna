@@ -1,9 +1,9 @@
 # glTF campaign retrospective
 
-Status: written 2026-08-18 (`GLTF-460`). Scope: `plan_gltf.md`'s 475 rows, from the 2026-08-11
+Status: written 2026-08-18 (`GLTF-460`). Scope: `plans/plan_gltf.md`'s 475 rows, from the 2026-08-11
 forensic audit to the milestone in force today.
 
-This is not a summary of what was done — `plan_gltf.md` is that, row by row, and it is the record.
+This is not a summary of what was done — `plans/plan_gltf.md` is that, row by row, and it is the record.
 This is the part a row cannot carry: **which kind of evidence caught which kind of defect**, and what
 that implies for the next subsystem campaign. It is written to be reusable, so every claim below is
 tied to a specific defect that actually happened rather than to a principle that sounds right.

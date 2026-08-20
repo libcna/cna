@@ -69,7 +69,7 @@ would win with depth testing off, first-drawn must win with it genuinely on), no
 throw." However, the CTest itself never reads back the resulting pixel to confirm this — see F1
 and the cross-reference to `sdlgpu_draworder_test.cpp`'s report, which shows this exact
 "read back the centre pixel" technique is both known to this project and readily available via
-`RenderTarget2D::GetData()` (already proven working for this backend per `plan_sdlgpu.md`
+`RenderTarget2D::GetData()` (already proven working for this backend per `plans/plan_sdlgpu.md`
 `SDLGPU-39`), just not applied here.
 
 ### Logic

@@ -12,17 +12,17 @@ narrow, two-game-scoped DirectDraw subset, itself built on SDL3 internally (neve
 CNA). Every unsupported 3D-only feature fails loudly (throws) or degrades gracefully to a
 documented `nullptr`, matching this project's house style.
 
-This document is the completeness status after `plan_freedirect.md`'s full Phase X1–X8 implementation
-plus a subsequent external code review pass (see `plan_freedirect.md`'s own status-header correction
+This document is the completeness status after `plans/plan_freedirect.md`'s full Phase X1–X8 implementation
+plus a subsequent external code review pass (see `plans/plan_freedirect.md`'s own status-header correction
 notes for what that review found and fixed). Every row cites the task(s) that verified it — see
-`plan_freedirect.md`'s own task tables for full design rationale and code detail.
+`plans/plan_freedirect.md`'s own task tables for full design rationale and code detail.
 
 **Status legend** (matches `docs/sdl-renderer-2d-completeness.md`'s own convention)
 
 - ✅ — fully supported, matches FNA/XNA behavior exactly (or as closely as a 2D-only renderer
   reasonably can).
 - 🟨 — code exists but does not fully meet its own stated goal; a real, documented, permanent
-  limitation rather than a hidden gap (matches `plan_freedirect.md`'s own status-legend definition).
+  limitation rather than a hidden gap (matches `plans/plan_freedirect.md`'s own status-legend definition).
 - ❌-throws-by-design — intentionally unsupported; throws a clear, specific exception rather than
   silently no-op'ing or producing wrong output (`ThrowNo3D`).
 - ⚪-degrades-to-nullptr — intentionally unsupported, but via `IGraphicsRenderer`'s own
@@ -104,7 +104,7 @@ notes for what that review found and fixed). Every row cites the task(s) that ve
 | `SupportsDepthStencil()` | ✅ | Always `false` (DX3-65). |
 | `CreateOcclusionQuery()` | ⚪-degrades-to-nullptr (fixed) | **Real bug found and fixed**: this was throwing in the Phase X1/X2 skeleton, inconsistent with `OcclusionQuery`'s own null-safe design (its constructor/`Begin`/`End`/getters all degrade gracefully against a null renderer). Fixed by removing the override, matching `CreateTexture3D`/etc.'s already-correct pattern (DX3-66). |
 | `CreateEffectRenderer()` | ⚪-degrades-to-nullptr | No override needed — `ShaderEffect` (the class that calls it) is null-safe throughout (DX3-67). |
-| `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ | A real letterbox scale+offset computed from the actual physical `SDL_Window` size, matching `free-direct`'s own hardcoded `SDL_LOGICAL_PRESENTATION_LETTERBOX` behavior without ever needing access to its internal (never-exposed) `SDL_Renderer`. Automatically benefits `Mouse::SetPosition` (`plan.md` a-0001) with zero DX3-specific code there (DX3-68). |
+| `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ | A real letterbox scale+offset computed from the actual physical `SDL_Window` size, matching `free-direct`'s own hardcoded `SDL_LOGICAL_PRESENTATION_LETTERBOX` behavior without ever needing access to its internal (never-exposed) `SDL_Renderer`. Automatically benefits `Mouse::SetPosition` (`plans/plan.md` a-0001) with zero DX3-specific code there (DX3-68). |
 | `DebugSimulateContextLoss`/`DebugRestoreContext` | ✅ | Confirmed no-ops (inherited default) — no other 2D-only CNA renderer overrides these either; only `EasyGL` does, since it's the only renderer with a real GL context that can genuinely be lost/restored (DX3-69). |
 
 ---
@@ -157,6 +157,6 @@ the `Clear()` alpha-channel discard, the `DetectBlendMode()` `BlendFunction`-ign
 process issue — a background agent's commit falsely claimed prior user approval for Phase X1/X2,
 corrected via a follow-up doc commit rather than rewriting history — plus a full-test-output
 undercounting mistake caught and corrected at Phase X4 closure, and DX3-16 correctly downgraded
-from ✅ to 🟨 rather than left overclaimed. See `plan_freedirect.md`'s own status-header correction notes
+from ✅ to 🟨 rather than left overclaimed. See `plans/plan_freedirect.md`'s own status-header correction notes
 for full detail. No BLOCKED decisions remain open for
 this renderer.

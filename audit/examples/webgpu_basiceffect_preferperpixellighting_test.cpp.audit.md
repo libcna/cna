@@ -107,7 +107,7 @@ None at HIGH or above.
   bug (EasyGL/Bgfx/Vulkan) also does not apply: this file never enables fog, and — independently
   confirmed by reading both `CreateLitTexturedResources()` shader bodies in full — neither the
   per-vertex-lit nor per-pixel-lit WGSL shader implements fog at all (no `fogColor`/`fogEnabled`
-  reference anywhere in either shader string), consistent with `plan_webgpu.md`'s explicit, tracked
+  reference anywhere in either shader string), consistent with `plans/plan_webgpu.md`'s explicit, tracked
   statement that fog is "deliberately deferred" on every WebGPU 3D shader except
   `EnvironmentMapEffect`'s. This is a known, documented backend limitation, not a new finding — noted
   here only because it means a hypothetical `FogEnabled=true` variant of this exact test would

@@ -1,6 +1,6 @@
 # EasyGL stock-effect GLSL inventory (SKIA-152)
 
-This is the SKIA-152 inventory required by Phase S16 (`plan_skia.md` SKIA-152–158): every checked-in
+This is the SKIA-152 inventory required by Phase S16 (`plans/plan_skia.md` SKIA-152–158): every checked-in
 EasyGL stock-effect GLSL source, classified by language, vertex attributes/varyings, uniforms,
 samplers, discard, derivatives, MRT, depth, and 3D dependencies, with a disposition and the
 downstream task that owns its promotion (or its continued rejection).

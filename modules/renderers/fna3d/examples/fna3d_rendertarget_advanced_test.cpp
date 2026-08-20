@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-30/31/32: the three render-target features FNA3D-10 claimed as done while
+// plans/plan_fna3d.md FNA3D-30/31/32: the three render-target features FNA3D-10 claimed as done while
 // the test it cited rendered none of them.
 //
 // `fna3d_rendertarget_test.cpp` covers RenderTarget2D only. Cube targets had exactly one check

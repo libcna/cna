@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_sokol.md SOKOL-16/17: sokol_gfx renderer CTest registration. Needs a real display and GL
+# plans/plan_sokol.md SOKOL-16/17: sokol_gfx renderer CTest registration. Needs a real display and GL
 # context, same as the EasyGL/Vulkan/Bgfx entries above -- run with a real (or Xvfb) DISPLAY.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -36,35 +36,35 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         endif()
     endmacro()
 
-    # plan_sokol.md SOKOL-16: real window + real GPU context + real sg_setup, a 60-frame
+    # plans/plan_sokol.md SOKOL-16: real window + real GPU context + real sg_setup, a 60-frame
     # Clear()/Present() loop, and a back-buffer readback of the clear colour.
     cna_sokol_test(cna_test_sokol_smoke sokol_smoke_test.cpp)
     cna_register_renderer_test(NAME Sokol_Smoke COMMAND cna_test_sokol_smoke
         TIMEOUT 120 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-17: Texture2D + SpriteBatch vertical slice, every draw pixel-verified
+    # plans/plan_sokol.md SOKOL-17: Texture2D + SpriteBatch vertical slice, every draw pixel-verified
     # through GetBackBufferData().
     cna_sokol_test(cna_test_sokol_2d sokol_2d_test.cpp)
     cna_register_renderer_test(NAME Sokol_2D COMMAND cna_test_sokol_2d
         TIMEOUT 120 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-20: vertex-coloured 3D geometry through the public VertexBuffer/
+    # plans/plan_sokol.md SOKOL-20: vertex-coloured 3D geometry through the public VertexBuffer/
     # BasicEffect/DrawPrimitives API, including a real depth-occlusion proof.
     cna_sokol_test(cna_test_sokol_3d sokol_3d_test.cpp)
     cna_register_renderer_test(NAME Sokol_3D COMMAND cna_test_sokol_3d
         TIMEOUT 120 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-21: textured and lit BasicEffect draws (ambient, directional lights,
+    # plans/plan_sokol.md SOKOL-21: textured and lit BasicEffect draws (ambient, directional lights,
     # emissive, fog), through the same public API.
     cna_sokol_test(cna_test_sokol_lit3d sokol_lit3d_test.cpp)
     cna_register_renderer_test(NAME Sokol_Lit3D COMMAND cna_test_sokol_lit3d
         TIMEOUT 120 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-25: RenderTarget2D. These are shared, renderer-agnostic oracles (already
+    # plans/plan_sokol.md SOKOL-25: RenderTarget2D. These are shared, renderer-agnostic oracles (already
     # registered for EasyGL/Vulkan/Bgfx/SdlGpu/etc.) exercising only the public XNA API, reused
     # here rather than duplicated -- Task 338 (viewport/scissor reset on bind/unbind) and Task 335
     # (a render target's own depth buffer genuinely gates its draws).
@@ -122,7 +122,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 60 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-29: a real raw-GL GL_SAMPLES_PASSED occlusion query. Shared,
+    # plans/plan_sokol.md SOKOL-29: a real raw-GL GL_SAMPLES_PASSED occlusion query. Shared,
     # renderer-agnostic oracle (already registered for EasyGL/Bgfx) reused here rather than
     # duplicated -- Begin/End/IsComplete/PixelCount plus the invalid-call-sequence and
     # dispose-while-active safety checks.
@@ -156,7 +156,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-26: RenderTarget2D MSAA + resolve, following sokol_gfx.h's own documented
+    # plans/plan_sokol.md SOKOL-26: RenderTarget2D MSAA + resolve, following sokol_gfx.h's own documented
     # offscreen-MSAA workflow. Task 337's own differential (MultiSampleCount=0 vs 8) real-AA proof
     # -- renderer-agnostic despite its "EasyGL" filename -- reused here rather than duplicated.
     cna_sokol_test(cna_test_sokol_rendertarget2d_msaa ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_msaa_test.cpp)
@@ -177,7 +177,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-37: Viewport.MinDepth/MaxDepth. REMED-GFX-079's own renderer-agnostic 3D
+    # plans/plan_sokol.md SOKOL-37: Viewport.MinDepth/MaxDepth. REMED-GFX-079's own renderer-agnostic 3D
     # viewport oracle (despite its "software_" filename) -- checks A-G/I-O already exercise the
     # general viewport transform this renderer already had; check H is the MinDepth/MaxDepth depth
     # remap this task adds.
@@ -186,7 +186,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-33: DualTextureEffect. Task 889's own renderer-agnostic VertexColorEnabled
+    # plans/plan_sokol.md SOKOL-33: DualTextureEffect. Task 889's own renderer-agnostic VertexColorEnabled
     # oracle (no CNA_RENDERER_* conditionals) -- also exercises the base doubling+overlay+diffuse+
     # alpha formula both cases share, reused here rather than duplicated.
     cna_sokol_test(cna_test_sokol_dualtextureeffect_vertexcolor
@@ -196,7 +196,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-39: mipmapped RenderTarget2D. Task 336's own renderer-agnostic mip-chain
+    # plans/plan_sokol.md SOKOL-39: mipmapped RenderTarget2D. Task 336's own renderer-agnostic mip-chain
     # completeness proof (no CNA_RENDERER_* conditionals despite its "easygl_" filename) -- reused
     # here rather than duplicated.
     cna_sokol_test(cna_test_sokol_rendertarget2d_mip ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rendertarget2d_mip_test.cpp)
@@ -204,7 +204,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-35: SkinnedEffect. Task 123's own renderer-agnostic 2-bone GPU transform +
+    # plans/plan_sokol.md SOKOL-35: SkinnedEffect. Task 123's own renderer-agnostic 2-bone GPU transform +
     # mesh deformation oracle (no CNA_RENDERER_* conditionals), reused here rather than duplicated.
     cna_sokol_test(cna_test_sokol_skinned_integration ${CNA_GRAPHICS_EXAMPLES_DIR}/skinned_effect_integration_test.cpp)
     cna_register_renderer_test(NAME Sokol_SkinnedEffect_BoneDeformation
@@ -221,7 +221,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-36: instanced draws. WEBGPU-27/38/68's own renderer-agnostic oracle (no
+    # plans/plan_sokol.md SOKOL-36: instanced draws. WEBGPU-27/38/68's own renderer-agnostic oracle (no
     # CNA_RENDERER_* conditionals, drives IGraphicsRenderer::DrawInstancedPrimitivesEx() directly),
     # reused here rather than duplicated.
     cna_sokol_test(cna_test_sokol_instanced3d ${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/examples/webgpu_instanced3d_test.cpp)
@@ -229,7 +229,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-34: EnvironmentMapEffect. Task 891's own renderer-agnostic oracle (no
+    # plans/plan_sokol.md SOKOL-34: EnvironmentMapEffect. Task 891's own renderer-agnostic oracle (no
     # CNA_RENDERER_* conditionals, already registered for EasyGL/Vulkan/Bgfx), reused here rather
     # than duplicated.
     cna_sokol_test(cna_test_sokol_environmentmapeffect_alphascaledlerp
@@ -239,7 +239,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-28: custom ShaderEffect via SpriteBatch.Begin(effect). Task 132's own
+    # plans/plan_sokol.md SOKOL-28: custom ShaderEffect via SpriteBatch.Begin(effect). Task 132's own
     # renderer-agnostic oracle (no CNA_RENDERER_* conditionals, already registered for EasyGL),
     # reused here rather than duplicated -- its fixed location=0/1/2 attribute convention matches
     # SokolSpriteBatchRenderer's own raw-GL custom-effect draw path exactly.
@@ -248,7 +248,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-28: custom ShaderEffect via a real 3D GraphicsDevice::DrawIndexedPrimitives
+    # plans/plan_sokol.md SOKOL-28: custom ShaderEffect via a real 3D GraphicsDevice::DrawIndexedPrimitives
     # call (not just SpriteBatch). Task 1079's own renderer-agnostic oracle (no CNA_RENDERER_*
     # conditionals, already registered for EasyGL), reused here rather than duplicated.
     cna_sokol_test(cna_test_sokol_shader_effect_3d ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_shadereffect_3d_test.cpp)
@@ -256,7 +256,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-26: multiple render targets (MRT). REMED-GFX-016's own renderer-agnostic
+    # plans/plan_sokol.md SOKOL-26: multiple render targets (MRT). REMED-GFX-016's own renderer-agnostic
     # oracle (no CNA_RENDERER_* conditionals, already registered for EasyGL), reused here rather than
     # duplicated -- its four-output ESSL 3.00 ShaderEffect fragment shader exercises the same
     # raw-GL custom-effect draw path SOKOL-28 already established, now against a real
@@ -266,7 +266,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-40: GraphicsDevice.BlendFactor must not be cached away by a stale Sokol
+    # plans/plan_sokol.md SOKOL-40: GraphicsDevice.BlendFactor must not be cached away by a stale Sokol
     # pipeline -- sg_pipeline_desc.blend_color is baked at creation time with no dynamic
     # blend-constant call, unlike Vulkan/EasyGL, so it must be part of every pipeline cache key.
     cna_sokol_test(cna_test_sokol_blendfactor_pipeline_cache
@@ -276,7 +276,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-45: GL-context creation must share the constructor's transactional
+    # plans/plan_sokol.md SOKOL-45: GL-context creation must share the constructor's transactional
     # cleanup path -- platform CreateContext() succeeding followed by MakeCurrent() failing must
     # not leak the context.
     cna_sokol_test(cna_test_sokol_gl_context_transactional
@@ -286,7 +286,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-42: OcclusionQuery/ShaderEffect must release their raw-GL renderer objects
+    # plans/plan_sokol.md SOKOL-42: OcclusionQuery/ShaderEffect must release their raw-GL renderer objects
     # during GraphicsDevice::Dispose(), before the renderer device/GL context is torn down.
     cna_sokol_test(cna_test_sokol_dispose_order_occlusionquery_shadereffect
                     sokol_dispose_order_occlusionquery_shadereffect_test.cpp)
@@ -295,7 +295,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-44: a custom ShaderEffect's deferred texture bindings must survive the
+    # plans/plan_sokol.md SOKOL-44: a custom ShaderEffect's deferred texture bindings must survive the
     # bound texture being re-uploaded (SetData()) between SetTexture() and the eventual draw.
     cna_sokol_test(cna_test_sokol_customeffect_texture_reupload
                     sokol_customeffect_texture_reupload_test.cpp)
@@ -304,7 +304,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-41: SpriteBatch's raw-GL custom-effect draw path must apply the device's
+    # plans/plan_sokol.md SOKOL-41: SpriteBatch's raw-GL custom-effect draw path must apply the device's
     # real BlendState instead of inheriting whatever GL_BLEND state a previous draw left behind.
     cna_sokol_test(cna_test_sokol_customeffect_blendstate_order
                     sokol_customeffect_blendstate_order_test.cpp)
@@ -313,7 +313,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-47: committed RenderTargetCube mipmap coverage, replacing SOKOL-39's
+    # plans/plan_sokol.md SOKOL-47: committed RenderTargetCube mipmap coverage, replacing SOKOL-39's
     # original throwaway/uncommitted verification program.
     cna_sokol_test(cna_test_sokol_rendertargetcube_mip
                     sokol_rendertargetcube_mip_test.cpp)
@@ -322,7 +322,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-48: compact state-transition/lifetime regression matrix -- two-object
+    # plans/plan_sokol.md SOKOL-48: compact state-transition/lifetime regression matrix -- two-object
     # OcclusionQuery interleaving (both orders) and DrawCustomEffect3D cull-mode independence from
     # a preceding stock draw's leftover GL state.
     cna_sokol_test(cna_test_sokol_state_lifetime_regression_matrix
@@ -332,7 +332,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-23: RasterizerState.FillMode == WireFrame, implemented via CPU-side
+    # plans/plan_sokol.md SOKOL-23: RasterizerState.FillMode == WireFrame, implemented via CPU-side
     # triangle-to-GL_LINES re-expansion (the same technique EasyGLRenderer::DrawWireframe()
     # uses) despite sokol_gfx exposing no native polygon-fill-mode API.
     cna_sokol_test(cna_test_sokol_wireframe sokol_wireframe_test.cpp)
@@ -340,7 +340,7 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         TIMEOUT 30 LABELS "Sokol"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_sokol.md SOKOL-24: VertexBuffer/IndexBuffer SetData() reuses its sokol_gfx buffer via
+    # plans/plan_sokol.md SOKOL-24: VertexBuffer/IndexBuffer SetData() reuses its sokol_gfx buffer via
     # sg_update_buffer() for same-shape re-uploads across frames instead of always recreating it,
     # falling back to recreate when the data outgrows what is allocated or a second upload lands
     # within the same frame (sokol_gfx's own one-update-per-buffer-per-frame rule).

@@ -16,7 +16,7 @@ namespace CNA::Graphics {
         // pass answers false and copies instead of failing. But `CustomEffects` only means the
         // renderer *accepts* an effect: SOFTWARE and HEADLESS accept any shader source and render
         // with their own fixed path, and a pass that believed them reported success while copying
-        // its input, which is worse than refusing (plan_modern.md `MOD-1699`). Both must hold.
+        // its input, which is worse than refusing (plans/plan_modern.md `MOD-1699`). Both must hold.
         return device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
             && device.ExecutesShaderEffectSourceEXT();
     }

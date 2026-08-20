@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: blend equation beyond additive (plan_opengl1.md item 18, EasyGL parity).
+// OPENGL1 renderer: blend equation beyond additive (plans/plan_opengl1.md item 18, EasyGL parity).
 //
 // Before this, ApplyBlendState() dropped colorBlendFunc/alphaBlendFunc entirely -- glBlendFunc
 // always implied GL_FUNC_ADD regardless of what BlendState.ColorBlendFunction/AlphaBlendFunction

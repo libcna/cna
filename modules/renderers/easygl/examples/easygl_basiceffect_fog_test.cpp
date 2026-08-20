@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // Task 195: BasicEffect linear fog pixel integration test — EasyGL.
-// Formula corrected under Task 1111 (see that task's plan_graphics.md row): the previous
+// Formula corrected under Task 1111 (see that task's plans/plan_graphics.md row): the previous
 // (FogEnd-Z)/(FogEnd-FogStart) falloff was never actually equivalent to FNA's real
 // EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor dot product, even for FogStart<FogEnd —
 // it happened to give the same answer at this test's own Z=0 midpoint but was wrong everywhere

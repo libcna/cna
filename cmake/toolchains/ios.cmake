@@ -1,4 +1,4 @@
-# iOS toolchain for building CNA on macOS targeting iPhone/iPad (plan_apple.md, APPLE-2).
+# iOS toolchain for building CNA on macOS targeting iPhone/iPad (plans/plan_apple.md, APPLE-2).
 #
 # Usage (from the cna repo root, on a macOS host with Xcode installed):
 #

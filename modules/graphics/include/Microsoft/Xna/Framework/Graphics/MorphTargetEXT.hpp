@@ -18,7 +18,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief One morph-weight animation keyframe: a full weight vector (one entry per morph
      * target) at a point in time.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API. plan_cnj.md CNB-64 (Phase 13B).
+     * @note CNAEXT — not part of the XNA 4.0 API. plans/plan_cnj.md CNB-64 (Phase 13B).
      */
     struct MorphWeightKeyframeEXT
     {
@@ -65,13 +65,13 @@ namespace Microsoft::Xna::Framework::Graphics
      * current blend weights, and (optionally) a time-varying weight animation track.
      *
      * @note CNAEXT — not part of the XNA 4.0 API. Mirrors SkinningData's own established
-     * precedent (plan_cnj.md CNB-70/Task 941): attached to a loaded ModelMeshPart's own real
+     * precedent (plans/plan_cnj.md CNB-70/Task 941): attached to a loaded ModelMeshPart's own real
      * XNA `Tag` property (real XNA's ModelMeshPart has no dedicated morph-target property of its
      * own) -- game code retrieves it via `static_cast<MorphTargetDataEXT*>(part.getTagProperty())`.
      * Blending is CPU-side (re-blend + re-upload the vertex buffer via SetMorphWeightsEXT), not a
      * GPU vertex-shader technique: this works unchanged with every existing effect/shader on
      * every graphics renderer, at the cost of a full vertex-buffer re-upload whenever weights
-     * change -- a deliberate simplicity-over-throughput tradeoff (see plan_cnj.md CNB-62's own
+     * change -- a deliberate simplicity-over-throughput tradeoff (see plans/plan_cnj.md CNB-62's own
      * design-decision notes for the full reasoning).
      */
     CNAEXT struct MorphTargetDataEXT : public System::Object
@@ -91,7 +91,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * @brief Per-target, per-vertex tangent deltas, or an empty inner vector for a target with
          * no TANGENT delta.
          *
-         * @note CNAEXT — plan_gltf.md `GLTF-279`. `Vector3`, not `Vector4`: glTF morphs the tangent
+         * @note CNAEXT — plans/plan_gltf.md `GLTF-279`. `Vector3`, not `Vector4`: glTF morphs the tangent
          * **direction** only. The handedness `w` describes the UV winding and cannot be
          * interpolated — blending `+1` and `−1` passes through `0`, which is not a handedness — so
          * it stays on the base vertex and the blend never touches it. Only meaningful for strides
@@ -105,7 +105,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief True when the blend must recompute flat normals from the morphed positions.
          *
-         * @note CNAEXT — plan_gltf.md `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not
+         * @note CNAEXT — plans/plan_gltf.md `GLTF-461`. §3.7.2.2: "When the base mesh primitive does not
          * specify normals, client implementations **MUST** calculate flat normals for each morph
          * target." A `POSITION` delta can rotate a face, so a normal baked at rest is only right at
          * weight zero — and the same section makes an original attribute a precondition for a
@@ -117,7 +117,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief The triangle list the recomputation needs, three indices per face.
          *
-         * @note CNAEXT — plan_gltf.md `GLTF-461`. Only read when @ref RecomputeFlatNormalsEXT is
+         * @note CNAEXT — plans/plan_gltf.md `GLTF-461`. Only read when @ref RecomputeFlatNormalsEXT is
          * true, and empty otherwise, so an ordinary morph target costs nothing for it. Held here
          * rather than read back from the part's `IndexBuffer` because index readback is not
          * something every renderer can offer. A vertex that several faces still reach — which the

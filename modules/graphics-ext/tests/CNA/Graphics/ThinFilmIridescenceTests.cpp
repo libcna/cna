@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2073: the thin-film term, checked against what interference actually does.
+// plans/plan_modern.md MOD-2073: the thin-film term, checked against what interference actually does.
 //
 // A thin film is the one shading term whose *correctness* is easy to state and easy to get subtly
 // wrong: the colour has to move with thickness and with angle, and a film of no thickness has to be

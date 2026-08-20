@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: alphatest_equal_quad
+# plans/plan_dx9.md D9-A5 scene corpus: alphatest_equal_quad
 # The first scene to exercise AlphaTestEffect.AlphaFunction=Equal -- a STRUCTURALLY different
 # pixel shader bucket from Greater/Less (both alphatest_quad.scene and alphatest_less_quad.scene
 # use real XNA's shared PSAlphaTestLtGt shader; Equal/NotEqual instead compile to the entirely

@@ -10,7 +10,7 @@ physics integration and the Lua scripting layer are part of the same static libr
 called — CNA owns the XNA 4.0 programming model above this boundary and needs a device abstraction
 below it, not a second engine.
 
-The full task list and status is `plan_wicked.md`.
+The full task list and status is `plans/plan_wicked.md`.
 
 ---
 
@@ -224,4 +224,4 @@ As of 2026-08-13 the renderer builds against the patched Wicked Engine, creates 
 platform-surface state suite and all 22 device lifecycle, geometry-offset and staged-transfer GPU
 tests pass through the CNA X11 native-window bridge on an Intel Iris Xe Vulkan device and a real X11
 display. The earlier software Vulkan/Xvfb results remain useful portability coverage; this run also
-closes the former hardware-verification caveat (`plan_wicked.md` `WICKED-18` / `WICKED-74`).
+closes the former hardware-verification caveat (`plans/plan_wicked.md` `WICKED-18` / `WICKED-74`).

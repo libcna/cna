@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 // Task 676: SDL_Renderer SpriteBatch::Begin(effect) custom-Effect behavior decision.
 //
-// Decision (per plan_graphics.md Task 676): SDL_Renderer has no programmable shader stage at
+// Decision (per plans/plan_graphics.md Task 676): SDL_Renderer has no programmable shader stage at
 // all, so a custom Effect passed to SpriteBatch::Begin can never actually be applied. Silently
 // ignoring it (drawing with the built-in sprite blit instead) would misrender any game that
 // depends on the custom shader's visual output, with no error at all -- unacceptable. Mirrors

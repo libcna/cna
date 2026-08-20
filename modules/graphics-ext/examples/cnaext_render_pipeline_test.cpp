@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-738..MOD-742: the layer's showcase, and the four claims it has to keep.
+// plans/plan_modern.md MOD-738..MOD-742: the layer's showcase, and the four claims it has to keep.
 //
 // Everything else in this plan tests one subsystem. This tests the promise the layer as a whole
 // makes: wrap your existing draw in begin/end, switch things on, and the frame gets better without
@@ -274,7 +274,7 @@ protected:
         // whether the renderer accepts an effect. SOFTWARE and HEADLESS report CustomEffects true,
         // accept every shader source and go on rendering with their own fixed path -- so a gate on
         // the capability alone passes here and then fails the bloom check three lines later, which
-        // is exactly what it did the first time this program was run on SOFTWARE (plan_modern.md
+        // is exactly what it did the first time this program was run on SOFTWARE (plans/plan_modern.md
         // MOD-1699).
         const bool runsShaders = device.SupportsCapability(CNA::GraphicsCapability::CustomEffects)
                               && device.ExecutesShaderEffectSourceEXT();

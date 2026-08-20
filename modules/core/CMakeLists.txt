@@ -23,6 +23,6 @@ target_include_directories(cna_core PUBLIC ${CNA_GENERATED_INCLUDE_DIR})
 if(EMSCRIPTEN)
     target_link_options(cna_core INTERFACE "-lembind")
 endif()
-# No SDL: plan_platform.md PLAT-53 moved Logger onto its own sink and PLAT-54 moved
+# No SDL: plans/plan_platform.md PLAT-53 moved Logger onto its own sink and PLAT-54 moved
 # Entrypoint.hpp into the platform module, so nothing under modules/core includes an SDL header
 # any more. This is the first module to come off SDL entirely.

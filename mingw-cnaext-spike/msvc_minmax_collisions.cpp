@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_modern.md MOD-1719, the half MinGW alone cannot test.
+// plans/plan_modern.md MOD-1719, the half MinGW alone cannot test.
 //
 // MinGW-w64 guards windef.h's `min`/`max` macros with `#ifndef __cplusplus`, so a C++ translation
 // unit never sees them. MSVC's windef.h does not, and MSVC is the compiler a real D3D build uses.
@@ -13,7 +13,7 @@
 // library out of the blast radius and leave only our own headers in it.
 //
 // check.sh does not require this file to compile. It requires that whatever fails does not live in
-// modules/graphics-ext -- see the note there and in plan_modern.md MOD-1719.
+// modules/graphics-ext -- see the note there and in plans/plan_modern.md MOD-1719.
 
 #ifdef CNA_CNAEXT
 

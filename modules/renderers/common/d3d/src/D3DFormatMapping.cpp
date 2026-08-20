@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX3 (DX-11-fmt).
+// plans/plan_dx.md Phase DIRECTX3 (DX-11-fmt).
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"

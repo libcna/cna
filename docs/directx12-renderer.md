@@ -20,13 +20,13 @@ cmake --build cmake-build-d3d12 --target CnaTests
 
 `D3D12` is hard-gated to `CMAKE_SYSTEM_NAME=Windows` at configure time, same as `D3D11`. The
 `cna_renderer_directx12` target links only `d3d12`+`dxgi`+`D3DCommon` — no `dxguid`, no
-`d3dcompiler` (`plan_dx.md` `DX-100`'s confirmed minimum).
+`d3dcompiler` (`plans/plan_dx.md` `DX-100`'s confirmed minimum).
 
 ## What this renderer is for (and isn't)
 
 D3D12 is CNA's second native Direct3D renderer, built directly on top of `D3D11`'s own experience
 (shared `D3DCommon` HLSL/DXBC bytecode, shared format/state mapping tables, shared constant-buffer
-struct layouts) rather than developed from scratch — `plan_dx.md` Phase DX12's own intro explicitly
+struct layouts) rather than developed from scratch — `plans/plan_dx.md` Phase DX12's own intro explicitly
 deferred detailed D3D12 design until D3D11's own dev-loop lessons could inform it.
 
 **What it proves**: a real `ID3D12Device` executing CNA's XNA-shaped `IGraphicsRenderer` contract —
@@ -50,7 +50,7 @@ diagnostic, see "Known limitations"), not just "the API call returned `S_OK`."
   (`modules/renderers/directx12/examples/directx12_swapchain_diag.cpp`), not the routine `DirectX12_Smoke` CTest, since Proton's own
   bootstrap launch is too heavy/slow for a normal CTest run on this dev loop. See "Known
   limitations" for the full plain-Wine-vs-Proton distinction.
-- **Not verified on real Windows.** `plan_dx.md` `DX-114` (the D3D12 equivalent of `D3D11`'s
+- **Not verified on real Windows.** `plans/plan_dx.md` `DX-114` (the D3D12 equivalent of `D3D11`'s
   `DX-90`) is explicitly `needs_human` — no real Windows machine is available in this dev
   environment.
 - **`D3D12TextureCubeRenderer::GetData()`** was a no-op — now real (`DX-123`).
@@ -79,7 +79,7 @@ prefix**:
 
 1. Install the cross toolchain (same as `D3D11`): `sudo apt install mingw-w64`.
 2. Obtain `vkd3d-proton`'s `d3d12.dll`/`d3d12core.dll`. This dev machine already had them locally
-   via its Steam "Proton - Experimental" install (`plan_dx.md` `DX-100`'s own spike) — no new
+   via its Steam "Proton - Experimental" install (`plans/plan_dx.md` `DX-100`'s own spike) — no new
    install or `sudo` needed, the same no-elevated-changes bar DXVK's own setup met. If Steam/Proton
    isn't available, `vkd3d-proton` ships prebuilt releases on GitHub that can be dropped in the same
    way.
@@ -90,7 +90,7 @@ prefix**:
    WINEPREFIX=~/.wine-cna-d3d12 wine reg add 'HKEY_CURRENT_USER\Software\Wine\DllOverrides' /v d3d12 /d native /f
    WINEPREFIX=~/.wine-cna-d3d12 wine reg add 'HKEY_CURRENT_USER\Software\Wine\DllOverrides' /v d3d12core /d native /f
    ```
-   See `plan_dx.md` `DX-100`'s own row for the exact steps this machine used.
+   See `plans/plan_dx.md` `DX-100`'s own row for the exact steps this machine used.
 4. Configure and build as shown above.
 5. Run any built `.exe` through `scripts/run-wine-vkd3d.sh` — mirrors `D3D11`'s own
    `scripts/run-wine-dxvk.sh`/`DX-85` gate exactly, but for vkd3d-proton: sets `WINEPREFIX`
@@ -139,7 +139,7 @@ lettered A through VV as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149
 Continue the existing check-lettering convention (currently through double letters, `AA`–`NN`)
 rather than starting a new scheme.
 
-## Known limitations (2026-07-14, re-audited against `plan_dx.md`'s actual `DX-100`–`DX-148` row
+## Known limitations (2026-07-14, re-audited against `plans/plan_dx.md`'s actual `DX-100`–`DX-148` row
 status — most of this section's earlier revisions predated Phase DX13/DX14/DX15 landing and were
 significantly stale; re-derived from source, not copy-edited)
 
@@ -187,7 +187,7 @@ significantly stale; re-derived from source, not copy-edited)
   `PresentationParameters::HeadlessEXT` removed the windowed-`GraphicsDevice` blocker that
   originally kept the integration itself from being independently proven.
 - **The following are all real and closed now, despite earlier revisions of this section claiming
-  otherwise** — re-verify against `plan_dx.md`'s own row status before trusting any *other* specific
+  otherwise** — re-verify against `plans/plan_dx.md`'s own row status before trusting any *other* specific
   claim in this file, since this whole section was significantly stale before this re-audit:
   runtime-settable `BlendState`/`DepthStencilState`/`RasterizerState` → PSO objects (`DX-118`,
   replacing the old hardcoded `depthEnable=false`/`cullMode=None` PSO defaults); real per-slot
@@ -209,6 +209,6 @@ significantly stale; re-derived from source, not copy-edited)
   limitation (`DX-100`/`DX-102`) and need the Proton launch path, not plain `wine`, to run — no new
   gap, just this pre-existing one now reachable through `CnaTests` too.
 
-See `plan_dx.md` for the full task-by-task status (`DX-100` through `DX-148`) and design rationale,
+See `plans/plan_dx.md` for the full task-by-task status (`DX-100` through `DX-148`) and design rationale,
 and `docs/graphics-renderer-feature-matrix.md` for a row-by-row comparison against the other
 established renderers (including `D3D11`).

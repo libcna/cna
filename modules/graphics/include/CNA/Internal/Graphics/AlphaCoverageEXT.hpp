@@ -8,7 +8,7 @@
 /**
  * @file
  * @brief glTF alpha coverage expressed in the alpha-test vector every renderer already reads
- *        (plan_gltf.md `GLTF-372`).
+ *        (plans/plan_gltf.md `GLTF-372`).
  *
  * glTF §3.9.4 gives a material three alpha-coverage modes; only `MASK` changes what a fragment
  * program does, and what it asks for — *discard below a cutoff* — is exactly what

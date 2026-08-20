@@ -9,7 +9,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 5: points the draw path at a render target's own Canvas2D
+// plans/plan_svg_dom.md design decision 5: points the draw path at a render target's own Canvas2D
 // context, or back at the SVG backbuffer for id 0. While Module['cnaSvgDomBoundCtx'] is set,
 // CNA_SvgDom_FlushSprites replays commands into it instead of writing SVG elements.
 EM_JS(void, CNA_SvgDom_SetBoundTarget, (int id), {
@@ -177,7 +177,7 @@ namespace CNA::Internal::Renderers::SvgDom
         if (!exceedsBounds) return;
 
         // Clamp=1. Overflow on a Clamp axis would need a per-draw edge-extended texture variant
-        // (plan_svg_dom.md SVGDOM-2, not yet implemented) -- a real, narrower boundary than
+        // (plans/plan_svg_dom.md SVGDOM-2, not yet implemented) -- a real, narrower boundary than
         // HtmlDom's own kMaxClampPadding-bounded padded-variant cache.
         if (addressU == 1 || addressV == 1)
             throw std::runtime_error(

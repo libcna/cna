@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-087 / GLTF-088 / GLTF-096 / GLTF-182 / GLTF-185 / GLTF-187: which UV
+// plans/plan_gltf.md GLTF-087 / GLTF-088 / GLTF-096 / GLTF-182 / GLTF-185 / GLTF-187: which UV
 // channels a primitive packs, and which per-map transform travels beside them.
 //
 // CNA carries two UV channels for PBR material maps. A one-set material keeps the compact legacy
@@ -231,7 +231,7 @@ TEST(GltfUvChannel, TwoSampledTexcoordSetsAreBothPackedExactlyAndMappedPerTextur
         EXPECT_NEAR(kUv1[vertex * 2], uv1[0], kTolerance);
         EXPECT_NEAR(kUv1[vertex * 2 + 1], uv1[1], kTolerance);
 
-        // plan_gltf.md GLTF-462: those four bytes stopped being padding and became the packed
+        // plans/plan_gltf.md GLTF-462: those four bytes stopped being padding and became the packed
         // COLOR_0 slot. This primitive authors no COLOR_0, and the fill has to be the MULTIPLIER'S
         // IDENTITY -- opaque white -- because §3.7.2.1 makes vertex colour a linear multiplier on
         // base colour. The zero fill that used to be here would multiply an uncoloured surface to

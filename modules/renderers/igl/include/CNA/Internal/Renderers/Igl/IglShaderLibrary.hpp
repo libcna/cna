@@ -88,7 +88,7 @@ namespace CNA::Internal::Renderers::Igl
         /** @brief The SkinnedEffect bone-matrix block. */
         inline constexpr std::uint32_t Bones = 1;
         /**
-         * @brief A custom `ShaderEffect`'s own parameter block (plan_igl.md IGL-43).
+         * @brief A custom `ShaderEffect`'s own parameter block (plans/plan_igl.md IGL-43).
          *
          * Only a custom effect declares this; the generated shaders do not, so the binding is free
          * for one. A Vulkan custom shader that wants parameters declares
@@ -192,7 +192,7 @@ namespace CNA::Internal::Renderers::Igl
         /**
          * @brief glTF `normalTexture.scale`, `occlusionTexture.strength`, then padding.
          *
-         * plan_gltf.md GLTF-224/GLTF-225. Both are core glTF 2.0 material inputs, not extensions:
+         * plans/plan_gltf.md GLTF-224/GLTF-225. Both are core glTF 2.0 material inputs, not extensions:
          * a renderer that ignores them draws an authored material with different semantics.
          */
         float pbrScales[4] = {1, 1, 0, 0};
@@ -235,7 +235,7 @@ namespace CNA::Internal::Renderers::Igl
          * @brief x = @ref EffectFeature bitmask, y = weights per vertex, z = bone count,
          *        w = the seven-bit PBR texture-coordinate-set mask.
          *
-         * plan_gltf.md GLTF-182/GLTF-183: bit i of `w` selects `TEXCOORD_1` for PBR texture slot i
+         * plans/plan_gltf.md GLTF-182/GLTF-183: bit i of `w` selects `TEXCOORD_1` for PBR texture slot i
          * -- base colour, normal, metallic-roughness, emissive, occlusion, specular strength,
          * specular colour -- and a clear bit selects `TEXCOORD_0`.
          */

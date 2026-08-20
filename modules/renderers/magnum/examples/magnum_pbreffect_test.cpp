@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-53: PbrEffect pixel test for the MAGNUM renderer.
+// plans/plan_magnum.md MAGNUM-53: PbrEffect pixel test for the MAGNUM renderer.
 //
 // A fully analytic setup, so every expected byte is derived from the glTF metallic-roughness BRDF
 // rather than captured from a run: the eye sits on +Z looking straight down -Z at a flat quad in

@@ -52,7 +52,7 @@ See checklist Section 1 for the code under test and full step-by-step instructio
 | 5. Face-up vs. face-down | `Acceleration.Z` sign flips | | |
 
 - Is the coordinate convention the same in portrait as landscape, or does it change
-  with device orientation? (Directly answers `ACCEL-008`, `plan_devices.md` — an
+  with device orientation? (Directly answers `ACCEL-008`, `plans/plan_devices.md` — an
   archived MSDN Magazine article claims the real WP7 accelerometer's coordinate system
   "is the same whether... running in portrait or landscape mode," which would
   contradict this codebase's entire `ConvertAndroidAccelerometerToXnaLandscape()`
@@ -124,7 +124,7 @@ See checklist Section 7.
 | `HeadingAccuracy` / `Calibrate` event | fires when accuracy genuinely degrades (e.g. near a magnet) | | |
 | `TrueHeading == MagneticHeading` always (no declination applied) | matches (documented limitation, not a bug) | | |
 
-- **Tilt-dependent axis behavior** (directly answers `COMPASS-009`, `plan_devices.md`):
+- **Tilt-dependent axis behavior** (directly answers `COMPASS-009`, `plans/plan_devices.md`):
   does the heading calculation visibly change/misbehave when the device goes from
   held-upright to lying-flat? The real WP7 API documents switching its heading-axis
   calculation based on physical device tilt; this codebase's Android compass math has

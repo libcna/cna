@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX3 (DX-11-fmt): XNA SurfaceFormat/DepthFormat -> DXGI_FORMAT mapping, shared
+// plans/plan_dx.md Phase DIRECTX3 (DX-11-fmt): XNA SurfaceFormat/DepthFormat -> DXGI_FORMAT mapping, shared
 // between D3D11 and D3D12 (design decision 4). Cross-checked against the equivalent XNA/FNA/D3D
 // format correspondences used by every other renderer's own format table.
 

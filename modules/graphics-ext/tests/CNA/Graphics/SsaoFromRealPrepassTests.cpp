@@ -1,4 +1,4 @@
-    // plan_modern.md MOD-2035, rewritten twice.
+    // plans/plan_modern.md MOD-2035, rewritten twice.
     //
     // For several sessions this test pinned a bisection: SSAO produced no occlusion at all from the
     // prepass's own depth target while producing plenty from an 8-bit copy of the same values, and
@@ -17,7 +17,7 @@
     // whole time, and the one a game actually cares about: does SSAO occlude from what the prepass
     // actually wrote?
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2035: does SSAO produce occlusion from a *real* prepass?
+// plans/plan_modern.md MOD-2035: does SSAO produce occlusion from a *real* prepass?
 //
 // Every SSAO test until now fed the pass synthetic 8-bit images built by hand. That covers the
 // estimator and nothing else, and it is why `CNAEXT_Showcase`'s check E could sit at zero
@@ -303,7 +303,7 @@ TEST(SsaoFromRealPrepassTest, TheSameStepOccludesFromATextureAndFromARenderTarge
 
 TEST(SsaoFromRealPrepassTest, ThePrepassesOwnDepthTargetOccludes)
 {
-    // plan_modern.md MOD-2035, rewritten twice and finally answered.
+    // plans/plan_modern.md MOD-2035, rewritten twice and finally answered.
     //
     // For several sessions this test pinned a bisection: SSAO produced no occlusion at all from the
     // prepass's own depth target while producing plenty from an 8-bit copy of the same values, and

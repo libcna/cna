@@ -192,7 +192,7 @@ TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
     EXPECT_NO_THROW(window.EndScreenDeviceChange("test"));
 }
 
-// plan_apple.md APPLE-15: SupportedOrientations is the framework's own bookkeeping on a desktop
+// plans/plan_apple.md APPLE-15: SupportedOrientations is the framework's own bookkeeping on a desktop
 // and the channel into the operating system on iOS/Android. These cases pin down both halves --
 // the fallback rule that is platform-independent, and the forwarding to the platform window that
 // is what makes the declaration mean anything on a mobile target.
@@ -335,7 +335,7 @@ TEST(GameWindowTest, SetSupportedOrientations_DefaultClearsThePlatformPreference
 
 TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindow)
 {
-    // plan_platform.md PLAT-SDL2-6: constructing a Game constructs a GraphicsDevice, and the
+    // plans/plan_platform.md PLAT-SDL2-6: constructing a Game constructs a GraphicsDevice, and the
     // selected platform may refuse to make a window this build's renderer can use. That is a
     // legitimate refusal, not a GameWindow defect -- the same distinction PLAT-118's golden suite
     // already draws -- and there is nothing to delegate to when it happens, so it skips.

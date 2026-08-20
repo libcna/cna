@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-65 follow-up: the conformance pass that a SurfaceFormat has to survive before
+// plans/plan_igl.md IGL-65 follow-up: the conformance pass that a SurfaceFormat has to survive before
 // this renderer promotes it to the PUBLIC XNA texture API.
 //
 // The previous audit deliberately refused to promote any non-`Color` format, and gave the right

@@ -211,7 +211,7 @@ def main():
         # Stride-76 companion, selected only for dual-UV skinned PBR vertices.
         ("pbr3d_skinned.vert.glsl",      VERTEX_SHADER,   "kPbr3dSkinnedDualUvVertSpv"),
         ("pbr3d_skinned.frag.glsl",      FRAGMENT_SHADER, "kPbr3dSkinnedDualUvFragSpv"),
-        # plan_gltf.md GLTF-463/GLTF-465: stride-80 companion -- the stride-76 record with a packed
+        # plans/plan_gltf.md GLTF-463/GLTF-465: stride-80 companion -- the stride-76 record with a packed
         # COLOR_0 appended. It needs its own SPIR-V because stride 76 has no colour slot to bind,
         # and Vulkan requires every shader input to have a vertex attribute description.
         ("pbr3d_skinned.vert.glsl",      VERTEX_SHADER,   "kPbr3dSkinnedDualUvColorVertSpv"),
@@ -227,7 +227,7 @@ def main():
         ("instanced_colored3d.vert.glsl", VERTEX_SHADER,  "kInstancedColored3dVertSpv"),
     ]
 
-    # plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.
+    # plans/plan_gltf.md GLTF-465: the PBR variants whose vertex record carries a packed COLOR_0 slot.
     # The rigid dual-UV variant is only ever selected for stride 60, and InferredLayoutForStride(60)
     # always has a Color element at offset 56 -- so it is in this set unconditionally. The skinned
     # dual-UV variant is stride 76, which has no colour slot, so stride 80 gets its own variant.

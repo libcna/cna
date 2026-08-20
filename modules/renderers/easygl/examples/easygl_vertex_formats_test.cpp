@@ -195,7 +195,7 @@ class VertexFormatsTest : public Game
         check(isRed(readCenter(dev)), "stride=32 (Vector3+Vector3+Vector2)", readCenter(dev));
     }
 
-    // plan_gltf.md GLTF-337: EasyGL reuses its lit stride-32 program for BasicEffect's unlit
+    // plans/plan_gltf.md GLTF-337: EasyGL reuses its lit stride-32 program for BasicEffect's unlit
     // variant. Keep a vertex exactly at the shader's default eye position. Before the explicit
     // uLightingEnabled branch, the supposedly-disabled specular calculation evaluated
     // normalize(0), and NaN*zero contaminated the whole primitive into black. XNA's separate

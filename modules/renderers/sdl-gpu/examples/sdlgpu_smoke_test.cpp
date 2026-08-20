@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-6..12: end-to-end smoke test for the SDL_GPU graphics renderer's
+// plans/plan_sdlgpu.md SDLGPU-6..12: end-to-end smoke test for the SDL_GPU graphics renderer's
 // device/window/swapchain lifecycle and color+depth+stencil clear/present. Real window, real
 // SDL_GPUDevice, a real 60-frame Clear()+Present() loop -- this is the renderer's first genuine
 // proof gate (SDLGPU-12's own bar). Texture2D/VertexBuffer/SpriteBatch are not yet implemented on

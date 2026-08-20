@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
-// plan_metal.md METAL-34-style extraction: this is the small row-major 4x4 matrix helper set used
+// plans/plan_metal.md METAL-34-style extraction: this is the small row-major 4x4 matrix helper set used
 // to build every 3D draw's WVP matrix (transpose(multiply(multiply(fromXna(world),fromXna(view)),
 // fromXna(projection)))) -- plain float arithmetic plus Microsoft::Xna::Framework::Matrix (itself
 // plain C++, zero Objective-C/Metal-framework dependency), so it compiles and runs on any platform

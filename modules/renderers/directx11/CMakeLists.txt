@@ -1,4 +1,4 @@
-# plan_dx.md design decision 3 (DX-1): d3d11/dxgi is the confirmed minimal link set for the
+# plans/plan_dx.md design decision 3 (DX-1): d3d11/dxgi is the confirmed minimal link set for the
 # stock offline-compiled shader pipeline. d3dcompiler is linked too, specifically for DX-58's
 # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectRenderer) -- confirmed safe to link
 # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.

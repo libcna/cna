@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D38: the Gdi family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D38: the Gdi family's pre-construction contract.
 //
 // Classic Win32 GDI blits into the window's own DC -- an ordinary window, no graphics-API flag.
 
@@ -14,7 +14,7 @@ namespace CNA::Internal::Renderers::Gdi
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

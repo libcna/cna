@@ -333,7 +333,7 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Window::SetSupportedOrientations(const ScreenOrientation orientations)
     {
-        // plan_apple.md APPLE-15. Desktop keeps this as pure framework bookkeeping; only a mobile
+        // plans/plan_apple.md APPLE-15. Desktop keeps this as pure framework bookkeeping; only a mobile
         // operating system actually consults the declared set.
         if constexpr (!CNA::isMobilePlatform())
         {

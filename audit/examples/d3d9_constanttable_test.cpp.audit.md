@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_constanttable_test.cpp` (215 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note below)
 - Subsystem: `examples-tests-d3d9` shard — `D3D9ConstantTable`'s CTAB binary parser
-  (`plan_dx9.md` Phase D9-11 / D9-110).
+  (`plans/plan_dx9.md` Phase D9-11 / D9-110).
 - File type: standalone `main()`-based executable, no `Game`/device/window, but DOES link and call
   the real Windows `d3dcompiler_47.dll` (`D3DCompile`/`D3DDisassemble`) — CTest-registered as
   `D3D9_ConstantTable` (`cmake/Tests/D3D9Tests.cmake:164-174`), pinned to a specific Wine prefix

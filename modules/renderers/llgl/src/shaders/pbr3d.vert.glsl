@@ -44,7 +44,7 @@ layout(location = 7) in vec2 texCoord1;
 #endif
 layout(location = 3) in vec3 normal;
 layout(location = 6) in vec4 tangent;
-// plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
+// plans/plan_gltf.md GLTF-465: glTF 2.0 3.9.2 makes COLOR_0 an additional linear multiplier on base
 // colour. Location 1 is this renderer's colour slot -- the same one the pipeline used to strip
 // from every PBR shader's attribute list. Declared only for the variants whose vertex format
 // supplies it (strides 60 and 80); the others pass opaque white, the multiplier's identity.

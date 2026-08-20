@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-21: the Sokol renderer's textured, unlit 3D program -- BasicEffect with
+// plans/plan_sokol.md SOKOL-21: the Sokol renderer's textured, unlit 3D program -- BasicEffect with
 // TextureEnabled=true, LightingEnabled=false. Also serves AlphaTestEffect's own textured-quad
 // shape, since alphaTest's default {0,0,1,1} is a true no-op (see GpuDrawParams::alphaTest's own
 // doc) and this shader applies it unconditionally rather than needing a second variant.

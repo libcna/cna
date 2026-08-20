@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-004: the eight proven defects D1-D8, as executable tests.
+// plans/plan_gltf.md GLTF-004: the eight proven defects D1-D8, as executable tests.
 //
 // EVERY TEST IN THIS FILE IS GREEN WHILE CNA IS BROKEN. That inversion is deliberate and is the
 // mechanism that makes a known defect visible and reproducible without turning the ordinary suite
@@ -281,7 +281,7 @@ TEST(GltfKnownDefect, EveryOpenDefectInTheCorpusLedgerHasAnExecutableTestHere)
     }
 }
 
-// --- plan_gltf.md GLTF-241/GLTF-462: vertex-coloured PBR, carried rather than reported ----------
+// --- plans/plan_gltf.md GLTF-241/GLTF-462: vertex-coloured PBR, carried rather than reported ----------
 
 // This used to be the one material combination CNA could not import as the file asks.
 // `mat-vertex-color-pbr` carries COLOR_0 and a metallic-roughness material, and GLTF-241 chose the

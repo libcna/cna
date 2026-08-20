@@ -846,7 +846,7 @@ namespace CNA::Internal::Renderers::Diligent
      * environment variable). All shaders are authored once in HLSL and cross-compiled by Diligent
      * for whichever device was selected.
      *
-     * The implemented surface is the 2D/3D baseline described in `plan_diligent.md`: swap chain
+     * The implemented surface is the 2D/3D baseline described in `plans/plan_diligent.md`: swap chain
      * setup, the clear/present family, `Texture2D`, vertex/index buffers, `SpriteBatch`, the
      * untextured/textured/lit 3D draw paths, back-buffer readback, occlusion queries, MSAA (back
      * buffer and `RenderTarget2D`), and the blend/depth-stencil/rasterizer/sampler state family.
@@ -1370,7 +1370,7 @@ namespace CNA::Internal::Renderers::Diligent
             Instanced3D,        ///< position-only vertex + a per-instance world matrix, flat colour
             LitTexturedVertexLit3D, ///< stride 32: LitTextured3D's PreferPerPixelLighting==false sibling
             SkinnedVertexLit3D,     ///< stride 52: Skinned3D's PreferPerPixelLighting==false sibling
-            /// plan_gltf.md GLTF-474: stride 56 is the stride-52 skinned record with a packed
+            /// plans/plan_gltf.md GLTF-474: stride 56 is the stride-52 skinned record with a packed
             /// COLOR_0 appended at 52. It is what a skinned, vertex-coloured
             /// KHR_materials_unlit primitive imports to, and this renderer had no layout for it
             /// at all -- `skin-vertex-color` was refused as "unsupported vertex stride 56".

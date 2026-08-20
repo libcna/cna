@@ -7,7 +7,7 @@
 - Subsystem: `examples-tests-sdlrenderer` shard — foundational `GetBackBufferData` readback test
 - Build/CTest registration: `cna_sdl_test(cna_test_sdl_readback …)` /
   `cna_register_backend_test(NAME SDL_Renderer_Readback …)`, `cmake/Tests/SdlRendererTests.cmake:20-24`. Header
-  comment traces to Task 666 (`plan_graphics.md` Tasks 666-861, the whole SDL_Renderer pixel-test audit phase).
+  comment traces to Task 666 (`plans/plan_graphics.md` Tasks 666-861, the whole SDL_Renderer pixel-test audit phase).
 - XNA/FNA relevance: `GraphicsDevice.GetBackBufferData` (`Microsoft::Xna::Framework::Graphics`), `SpriteBatch`
   draw-then-readback verification methodology used throughout this project's other backend test suites.
 - Related production code: `src/CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.cpp`

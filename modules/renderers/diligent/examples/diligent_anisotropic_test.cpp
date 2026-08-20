@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-52: real-device proof that SamplerState.MaxAnisotropy reaches the
+// plans/plan_diligent.md DILIGENT-52: real-device proof that SamplerState.MaxAnisotropy reaches the
 // Diligent renderer without crashing and is genuinely used to build a real Dg::SamplerDesc, even at
 // an extreme over-cap request.
 //

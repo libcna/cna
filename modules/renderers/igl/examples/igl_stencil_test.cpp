@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-39/IGL-55: DepthStencilState's stencil test, wired into the real 3D pipeline.
+// plans/plan_igl.md IGL-39/IGL-55: DepthStencilState's stencil test, wired into the real 3D pipeline.
 //
 // Scene: clear colour+depth+stencil to black/0. Draw a blue quad covering the LEFT half, with
 // StencilFunction::Always/StencilPass::Replace/ReferenceStencil=5 -- stamps stencil=5 across the

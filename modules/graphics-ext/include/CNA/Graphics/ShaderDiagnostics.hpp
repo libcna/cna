@@ -15,7 +15,7 @@ namespace CNA::Graphics::detail {
     /**
      * @brief Reports, once, that a pass's shader did not compile — with the pass's name and the log.
      *
-     * plan_modern.md `MOD-219`. A pass whose shader fails to compile falls back to a copy, which is
+     * plans/plan_modern.md `MOD-219`. A pass whose shader fails to compile falls back to a copy, which is
      * the right behaviour and also a completely silent one: the frame keeps rendering and the effect
      * simply is not there. This is what turns that into something a developer can act on.
      *

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-835, MOD-838, MOD-840, MOD-852: shadows that are actually visible.
+// plans/plan_modern.md MOD-835, MOD-838, MOD-840, MOD-852: shadows that are actually visible.
 //
 // Every other shadow test in this branch checks a value on its way somewhere -- the fitted
 // matrices, the state each lit effect hands to GpuDrawParams. All of them can pass while the

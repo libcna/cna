@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_runtimerenderer.md RTR-P1-D32: the OpenGL1 family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D32: the OpenGL1 family's pre-construction contract.
 //
 // OPENGL1 is the ONE family that needs a non-default framebuffer fixed before its window exists.
 // It requests a legacy/compatibility (non-ES) GL context, which on X11 goes through GLX rather
@@ -12,7 +12,7 @@
 // here: GL_STENCIL_BITS read back 0 without it and 8 with it. The same constraint applies to the
 // multisample attributes, hence wantsMultiSample.
 //
-// MERGE (plan_platform.md PLAT-8): this was an applyPreWindowAttributes hook calling the windowing
+// MERGE (plans/plan_platform.md PLAT-8): this was an applyPreWindowAttributes hook calling the windowing
 // library directly. It is now descriptor data that GraphicsDevice hands to the platform contract;
 // the finding above is unchanged, only the mechanism is.
 
@@ -29,7 +29,7 @@ namespace CNA::Internal::Renderers::OpenGL1
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA audio-platform selection (plan_platform.md Task PLAT-93)
+# CNA audio-platform selection (plans/plan_platform.md Task PLAT-93)
 #
 # Independent from CNA_PLATFORM: a headless/terminal application may still use SDL3 audio,
 # while a graphical SDL3 application may deliberately select deterministic NULL audio.
@@ -24,7 +24,7 @@ if(CNA_AUDIO_PLATFORM IN_LIST _cna_audio_platforms_reserved)
     message(FATAL_ERROR
         "CNA: CNA_AUDIO_PLATFORM=${CNA_AUDIO_PLATFORM} is a reserved identifier that is NOT implemented.\n"
         "Only ${_cna_audio_platforms_available} are available today.\n"
-        "See plan_platform.md Phase 6 and section 12 -- OpenAL, WASAPI and ALSA are future "
+        "See plans/plan_platform.md Phase 6 and section 12 -- OpenAL, WASAPI and ALSA are future "
         "audio implementations, not fallbacks.\n"
         "This is a hard error on purpose: falling back to SDL3 would build something other "
         "than what you asked for.")

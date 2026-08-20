@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-26..30: end-to-end 3D vertex-format proof for the SDL_GPU graphics
+// plans/plan_sdlgpu.md SDLGPU-26..30: end-to-end 3D vertex-format proof for the SDL_GPU graphics
 // renderer -- colored3d, textured3d, colored_textured3d, and lit_textured3d (BasicEffect), all
 // drawn through the real public XNA API (VertexBuffer/BasicEffect/GraphicsDevice.DrawPrimitives),
 // exercising DrawPrimitivesEx's real GpuDrawParams dispatch by vertex stride, plus a real
 // depth-test proof (a nearer quad drawn BEFORE a farther one still occludes it -- proves the
 // depth buffer is real, not just "didn't throw").
 //
-// No pixel-level readback exists yet on this renderer (plan_sdlgpu.md Phase SDLGPU-8/39), so this
+// No pixel-level readback exists yet on this renderer (plans/plan_sdlgpu.md Phase SDLGPU-8/39), so this
 // test proves correctness via a real screenshot (same bar as sdlgpu_2d_test.cpp's own
 // SpriteBatch verification), not automated pixel assertions.
 //

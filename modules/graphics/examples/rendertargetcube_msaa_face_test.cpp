@@ -197,7 +197,7 @@ namespace
     // `msaaEngages` false: sokol_gfx's own validation layer hard-rejects a CUBE image with
     // sample_count > 1 (VALIDATE_IMAGEDESC_ATTACHMENT_MSAA_CUBE_IMAGE) -- a permanent API boundary
     // this renderer cannot cross, unlike RenderTarget2D's real MSAA support. `readback` Exact as of
-    // plan_sokol.md SOKOL-38: SokolRenderTargetCubeRenderer::GetData now round-trips a single-sample
+    // plans/plan_sokol.md SOKOL-38: SokolRenderTargetCubeRenderer::GetData now round-trips a single-sample
     // face's content via a throwaway GL FBO around the raw GL texture sg_gl_query_image_info()
     // exposes; `msaaReadback` stays Unsupported since a multisampled cube can never exist here at
     // all (nothing to read back).

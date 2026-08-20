@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-032 / GLTF-198: a glTF file may only reference files inside its own directory.
+// plans/plan_gltf.md GLTF-032 / GLTF-198: a glTF file may only reference files inside its own directory.
 //
 // These fixtures are written to a scratch directory rather than generated into the corpus, and
 // that is deliberate rather than a shortcut. What is under test is *a path on disk* -- a URI that

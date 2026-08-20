@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx8.md: real DirectX 8 renderer -- DXVK-delivered (not DirectDraw-based), fixed-function 3D
+# plans/plan_dx8.md: real DirectX 8 renderer -- DXVK-delivered (not DirectDraw-based), fixed-function 3D
 # only, real GPU-quad SpriteBatch; same Windows-only/MinGW-cross-compile/Wine-wrapper shape.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -30,7 +30,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
         endif()
     endmacro()
 
-    # plan_dx8.md design decision 15: when cross-compiled from Linux (DIRECTX8 is Windows-only, design
+    # plans/plan_dx8.md design decision 15: when cross-compiled from Linux (DIRECTX8 is Windows-only, design
     # decision 1), CTest itself still runs on the Linux host, so the test COMMAND wraps the real
     # .exe with scripts/run-wine-directx8.sh -- a real, native Windows/MSVC configure needs no Wine
     # wrapper at all and runs the .exe directly, mirroring DirectX1Tests.cmake's own
@@ -43,7 +43,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
         endif()
     endmacro()
 
-    # plan_dx8.md design decision 16: a real, automated proof this renderer never quietly reaches
+    # plans/plan_dx8.md design decision 16: a real, automated proof this renderer never quietly reaches
     # for any DirectDraw interface at all (DIRECTX8 has no DirectDraw concept -- "DirectDraw+Direct3D
     # merged"), the removed D3DTLVERTEX macro/D3DVT_* old vertex-type enum, or the legacy
     # D3DRENDERSTATE_* render-state naming (DIRECTX8 uses only the modern D3DRS_* names) -- pure text
@@ -181,7 +181,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX8")
     cna_register_renderer_test(NAME DirectX8_WireframeAniso COMMAND ${_directx8_wireframe_aniso_cmd}
         TIMEOUT 60 LABELS "DIRECTX8")
 
-    # Phase S6 (plan_dx8.md): real stencil buffer write-then-test through the full XNA public API
+    # Phase S6 (plans/plan_dx8.md): real stencil buffer write-then-test through the full XNA public API
     # (GraphicsDevice.DepthStencilState), proving stencil (unchanged from DIRECTX6) survives the removed
     # viewport object -- mirrors the DX8-0 spike's own Test E/F shape (write REPLACE on half the
     # target, then test EQUAL against the full target and confirm the untouched half is correctly

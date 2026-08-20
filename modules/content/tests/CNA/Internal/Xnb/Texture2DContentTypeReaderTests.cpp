@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-23/24: unit tests for Texture2DReader's own behavior (registration, and the
+// plans/plan_xnb.md XNB-23/24: unit tests for Texture2DReader's own behavior (registration, and the
 // unsupported-SurfaceFormat error path) -- see ContentManagerTexture2DXnbTests.cpp for the
 // full end-to-end milestone test through ContentManager.
 
@@ -67,7 +67,7 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
 }
 
-// plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
+// plans/plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
 // declared byteCount field independently of width/height -- confirmed as a real
 // heap-buffer-overflow under -DCNA_SANITIZE=address,undefined (the pixel-unpack loop indexed into
 // `bytes` using width*height*4, not the byte count actually available).

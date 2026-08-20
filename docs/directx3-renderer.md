@@ -1,7 +1,7 @@
 # DIRECTX3 (real DirectX 3 — DirectDraw v2 + Direct3D v2 `DrawPrimitive`) Renderer — Completeness Status
 
 > **Naming: rename executed 2026-08-04 (owner instruction, dxold integration).** This is CNA's
-> real, Route-B "DirectX 3" renderer per `plan_dxold.md`'s roadmap (row 3). It originally shipped
+> real, Route-B "DirectX 3" renderer per `plans/plan_dxold.md`'s roadmap (row 3). It originally shipped
 > under the temporary CMake name `DX30` while the `../free-direct`-backed 2D renderer still owned
 > `DIRECTX3`; that renderer is now `FREEDIRECT` (`docs/freedirect-renderer.md`) and this one owns its
 > final `CNA_GRAPHICS_RENDERER=DIRECTX3` identity. Historical `DX30-*` task IDs are unchanged.
@@ -9,7 +9,7 @@
 `DIRECTX3` is architecturally `DIRECTX2` (`docs/directx2-renderer.md`) plus exactly one upgrade: the
 `IDirectDraw` object obtained from `DirectDrawCreate` is immediately upgraded via
 `dd->QueryInterface(IID_IDirectDraw2, &dd2)`, and every subsequent DirectDraw call goes through
-the resulting `LPDIRECTDRAW2` instead of the v1 pointer. Per `plan_dxold.md`'s roadmap, "DIRECTX3
+the resulting `LPDIRECTDRAW2` instead of the v1 pointer. Per `plans/plan_dxold.md`'s roadmap, "DIRECTX3
 (real)" = *"DirectDraw v2 (`IDirectDraw2`, adds refresh-rate to `SetDisplayMode`) + execute-buffer
 Direct3D, matured."* The execute-buffer half of that description is already known non-functional
 in this environment (`dx2-spike/README.md`'s 14-variant finding) — `DIRECTX2` already resolved the 3D
@@ -54,7 +54,7 @@ if (FAILED(hr)) ThrowHr("IDirectDraw::QueryInterface(IID_IDirectDraw2)", hr);
 `Impl::dd` is `LPDIRECTDRAW2` (was `LPDIRECTDRAW` in `DIRECTX2`); every other method on the renderer
 (2D and 3D alike) is byte-identical to `DIRECTX2`'s post-Phase-O9 source, mechanically renamed
 (`DirectX2`→`DirectX3`). `GetAvailableVidMem` is confirmed real (`DX30-0b`) but not exposed through
-`IGraphicsRenderer` — no existing capability slot, no current consumer, out of scope (plan_dx3.md
+`IGraphicsRenderer` — no existing capability slot, no current consumer, out of scope (plans/plan_dx3.md
 design decision 4).
 
 ## 3. CTest results
@@ -90,8 +90,8 @@ port with only the `IDirectDraw2` upgrade described above.
 
 ## See also
 
-- `plan_dx3.md` — this renderer's own implementation plan; its status note records the executed
+- `plans/plan_dx3.md` — this renderer's own implementation plan; its status note records the executed
   `DX30`→`DIRECTX3` naming transition.
-- `plan_dx2.md`, `docs/directx2-renderer.md` — the renderer this one ports verbatim.
+- `plans/plan_dx2.md`, `docs/directx2-renderer.md` — the renderer this one ports verbatim.
 - `dx3-spike/README.md` — the full `DX30-0` spike record.
-- `plan_dxold.md` — the roadmap this renderer is row 3 of.
+- `plans/plan_dxold.md` — the roadmap this renderer is row 3 of.

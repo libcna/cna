@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
+// plans/plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_RENDERER=D3D11).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -24,14 +24,14 @@ namespace CNA::Internal::Renderers::DirectX11
     class D3D11RenderTargetCubeRenderer;
 
     /**
-     * D3D11 graphics renderer (plan_dx.md). Implements IGraphicsRenderer on top of Direct3D 11 via
+     * D3D11 graphics renderer (plans/plan_dx.md). Implements IGraphicsRenderer on top of Direct3D 11 via
      * DXGI: real device/swap-chain/back-buffer/clear/present/readback (Phase DIRECTX4), vertex/index
      * buffers + input layout caching (Phase DIRECTX5), textures/render targets/MSAA/MRT/occlusion
      * queries (Phase DIRECTX6), blend/depth-stencil/rasterizer state objects (Phase DIRECTX7), all 10 stock
      * shader variants + custom ShaderEffect (Phase DIRECTX8), and SpriteBatch (Phase DX9). Phase DX10
      * (broader test coverage) and DX11 (docs) are what remains unstarted.
      *
-     * Resource lifetime is split into three independent groups (plan_dx.md design decision 11):
+     * Resource lifetime is split into three independent groups (plans/plan_dx.md design decision 11):
      *   - Device lifetime (device_/context_/factory_/allowTearingSupported_/featureLevel_):
      *     created once in CreateDeviceResources(), only torn down on device-removed recovery.
      *   - Swap-chain lifetime (swapChain_): created once in CreateSwapChainResources(); a plain
@@ -218,7 +218,7 @@ namespace CNA::Internal::Renderers::DirectX11
         int width_ = 0;
         int height_ = 0;
 
-        // Device lifetime (plan_dx.md design decision 11).
+        // Device lifetime (plans/plan_dx.md design decision 11).
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
         ComPtr<IDXGIFactory2> factory_;
@@ -323,7 +323,7 @@ namespace CNA::Internal::Renderers::DirectX11
         /// ApplyDepthStencilState(), SetDepthTestEnabled() and SetDepthWriteEnabled().
         void RebindDepthStencilState();
 
-        // Presentation policy (plan_dx.md design decision 13: capability vs. policy, kept separate).
+        // Presentation policy (plans/plan_dx.md design decision 13: capability vs. policy, kept separate).
         bool vsyncEnabled_ = true;
         bool allowTearingRequested_ = true;
         bool exclusiveFullscreen_ = false;
@@ -368,7 +368,7 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11Buffer* GetOrCreateBoneConstantBufferEXT();
         ID3D11Buffer* GetOrCreateSkinnedExtraConstantBufferEXT();
 
-        // plan_cnj.md CNB-58 follow-up: same "grow, never recreate" persistent dynamic constant
+        // plans/plan_cnj.md CNB-58 follow-up: same "grow, never recreate" persistent dynamic constant
         // buffers as above, for pbr3d/pbr_skinned3d's own PerDraw (b0, D3DPbrPerDrawConstants) and
         // PbrLights (b1 unskinned / b2 skinned, D3DPbrLightConstants) cbuffers. PbrSkinned3d's own
         // BoneBlock (b1) reuses boneConstantBuffer_/GetOrCreateBoneConstantBufferEXT() above
@@ -378,7 +378,7 @@ namespace CNA::Internal::Renderers::DirectX11
         ID3D11Buffer* GetOrCreatePbrPerDrawConstantBufferEXT();
         ID3D11Buffer* GetOrCreatePbrLightsConstantBufferEXT();
 
-        // plan_cnj.md CNB-58 follow-up: lazily-created 1x1 fallback SRVs for PbrEffect's optional
+        // plans/plan_cnj.md CNB-58 follow-up: lazily-created 1x1 fallback SRVs for PbrEffect's optional
         // normal/metallic-roughness/emissive/occlusion maps when GpuDrawParams leaves the
         // corresponding pointer null -- mirrors EasyGLRenderer's own
         // EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture() fallback textures so "map

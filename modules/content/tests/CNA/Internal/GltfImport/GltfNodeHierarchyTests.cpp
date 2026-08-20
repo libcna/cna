@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-111 / GLTF-112 / GLTF-120 / GLTF-122 / GLTF-124 / GLTF-125 / GLTF-126 /
+// plans/plan_gltf.md GLTF-111 / GLTF-112 / GLTF-120 / GLTF-122 / GLTF-124 / GLTF-125 / GLTF-126 /
 // GLTF-145 / GLTF-146 / GLTF-147.
 //
 // The node hierarchy is where a transform bug becomes a *placement* bug: nothing crashes, nothing

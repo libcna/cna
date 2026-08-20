@@ -426,7 +426,7 @@ no `Co-Authored-By:` trailer, no session-identifier URL anywhere in the range.
 A deliberately wider sweep (bare `session`, `handoff`, `another agent`, `in this pass`) returns a
 larger set, which splits cleanly:
 
-- **ALLOWED — factual `plan_opengl2.md` "Session N" heading citations** (policy F3): `cd730f41`,
+- **ALLOWED — factual `plans/plan_opengl2.md` "Session N" heading citations** (policy F3): `cd730f41`,
   `7f2143a5`, `6f263e3c`, `842dc3cd`, `ef1268ca`, `44de48ed`, and the `6f1bb99c` subject. These name
   a real section of a tracked planning document.
 - **ALLOWED — provenance description in merge bodies**: `bc29a976` and `9e6d62ed` describe what was
@@ -545,7 +545,7 @@ polymorphic, so UBSan's vptr check catches it.
   mode. Whether exit criterion **E3** (supported-path silent wrong result) is satisfied is therefore
   **arguable, not demonstrated**.
 
-Full ticket: `plan_postaudit.md` §17.
+Full ticket: `plans/plan_postaudit.md` §17.
 
 ---
 
@@ -555,7 +555,7 @@ Full ticket: `plan_postaudit.md` §17.
 
 | ID | Severity | Status |
 |---|---|---|
-| **`REMED-GFX-220`** | HIGH | **OPEN** — static initialization order fiasco between `BlendState` and `Color`; see §8.4 and `plan_postaudit.md` §17 |
+| **`REMED-GFX-220`** | HIGH | **OPEN** — static initialization order fiasco between `BlendState` and `Color`; see §8.4 and `plans/plan_postaudit.md` §17 |
 
 No ticket was raised for the README omissions, the missing name-table arms, the provenance record
 corrections, or the sanitizer bookkeeping — all are carry-forward or expected-correction classes
@@ -616,7 +616,7 @@ every build tree used above.
 ### 11.1 What changed
 
 `REMED-GFX-220` — the only entry on the blocker set — is **fixed and closed**. Full record:
-`plan_postaudit.md` §17.
+`plans/plan_postaudit.md` §17.
 
 The defect was reproduced before anything was modified, on the unmodified integration HEAD
 `5a0ca509`. Decoding `.init_array` across all 38 OpenGL 1 sanitizer binaries showed the hazard is

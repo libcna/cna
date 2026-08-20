@@ -5,7 +5,7 @@
 - Audit status: AUDITED (full read, 56 lines)
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header
-- XNA/FNA relevance: N/A -- NOXNA (plan_media.md MEDIA-56/D4)
+- XNA/FNA relevance: N/A -- NOXNA (plans/plan_media.md MEDIA-56/D4)
 - Main related tests: not independently located in this pass
 
 ## Purpose

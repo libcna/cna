@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md Phase D9-7 (D9-74): creates real IDirect3DVertexShader9/IDirect3DPixelShader9
+// plans/plan_dx9.md Phase D9-7 (D9-74): creates real IDirect3DVertexShader9/IDirect3DPixelShader9
 // objects from D9-71's embedded bytecode (d3d9_shaders.hpp), through a live D3D9 device.
 //
 // Lookup is by name ("<EffectName>_<EntryPointName>", e.g. "BasicEffect_VSBasic" -- matches

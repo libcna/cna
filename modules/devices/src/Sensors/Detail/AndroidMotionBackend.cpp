@@ -377,7 +377,7 @@ namespace Microsoft::Devices::Sensors::Detail
                 // queues, nearest/interpolated selection within a tight,
                 // hardware-measured skew, replacing this fixed 500ms
                 // latest-value bound) -- see this method's own class-level
-                // doc comment and plan_devices.md's MOT2-003 resolution
+                // doc comment and plans/plan_devices.md's MOT2-003 resolution
                 // note for why that is deliberately deferred as its own,
                 // larger design task rather than rushed here.
                 ++droppedFusionFrameCountForTesting_;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-30: real custom ShaderEffect (CreateEffectRenderer) for the OpenGL4 graphics
+// plans/plan_opengl4.md GL4-30: real custom ShaderEffect (CreateEffectRenderer) for the OpenGL4 graphics
 // renderer -- CreateEffectRenderer() previously wasn't overridden (default returns nullptr), so a
 // caller-supplied GLSL vertex/fragment source pair had no way to compile on this renderer at all.
 // Added OpenGL4EffectRenderer (a thin IEffectRenderer wrapper around one OpenGL4RawProgram, modeled

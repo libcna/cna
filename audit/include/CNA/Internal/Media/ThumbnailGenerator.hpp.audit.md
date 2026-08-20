@@ -6,7 +6,7 @@
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header
 - XNA/FNA relevance: N/A -- NOXNA; backs real `Album::GetThumbnail()`/`Picture::GetThumbnail()`
-  (plan_media.md MEDIA-209/210), replacing a prior full-size-image stub
+  (plans/plan_media.md MEDIA-209/210), replacing a prior full-size-image stub
 - Main related tests: not independently located in this pass
 
 ## Purpose

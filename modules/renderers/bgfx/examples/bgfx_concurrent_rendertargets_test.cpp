@@ -2,7 +2,7 @@
 // Task 910: verify that binding + filling more than one RenderTarget2D within a single
 // un-advanced bgfx frame no longer corrupts all but the last one bound.
 //
-// Root cause (see plan_graphics.md/NEXT.md Task 910): bgfx::setViewFrameBuffer(viewId, fbo) is a
+// Root cause (see plans/plan_graphics.md/NEXT.md Task 910): bgfx::setViewFrameBuffer(viewId, fbo) is a
 // per-view-per-*frame* setting, resolved once at bgfx::frame() -- not per bgfx::submit()/touch()
 // call. Every render target previously shared ONE hardcoded view id (1), so binding RT_B after
 // RT_A within the same frame silently redirected RT_A's already-queued clear into RT_B's

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Migrated from the former ASCII graphics renderer (plan_ascii.md Phase G4, ASCII-30..33) to
+// Migrated from the former ASCII graphics renderer (plans/plan_ascii.md Phase G4, ASCII-30..33) to
 // AsciiPostProcessEffect's own internal quantizer -- pure function, no GraphicsDevice/window
 // needed at all.
 //

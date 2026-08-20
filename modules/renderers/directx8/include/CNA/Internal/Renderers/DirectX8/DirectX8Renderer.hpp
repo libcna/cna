@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx8.md: real DirectX 8 graphics renderer -- architecturally very different from DIRECTX1..DIRECTX7.
+// plans/plan_dx8.md: real DirectX 8 graphics renderer -- architecturally very different from DIRECTX1..DIRECTX7.
 // "DirectDraw+Direct3D merged" (no DirectDraw at all): a single IDirect3D8::CreateDevice call
 // creates both the device and its own swap chain. Delivered via DXVK (D8VK, merged into DXVK
 // 2.0+), not Wine's own d3d8.dll -- mingw-w64's x86_64 target ships no real d3d8 import library at
@@ -23,7 +23,7 @@
 namespace CNA::Internal::Renderers::DirectX8
 {
     /**
-     * DIRECTX8 graphics renderer (plan_dx8.md): real DirectX 8 (IDirect3D8/IDirect3DDevice8), delivered
+     * DIRECTX8 graphics renderer (plans/plan_dx8.md): real DirectX 8 (IDirect3D8/IDirect3DDevice8), delivered
      * via DXVK (Direct3DCreate8 resolved from DXVK's own d3d8.dll.a, design decision 2 -- mingw-w64
      * ships no real d3d8 import library for x86_64). Device/window bring-up (design decision 3,
      * modeled on DirectX9Renderer's own shape rather than DIRECTX1..DIRECTX7's DirectDraw-based one): a
@@ -114,7 +114,7 @@ namespace CNA::Internal::Renderers::DirectX8
                              int colorBlendFunc, int alphaBlendFunc,
                              const BlendWriteState& writeState) override;
 
-        // plan_dx8.md design decision 9: ApplyDepthStencilState honors depth AND the front-face
+        // plans/plan_dx8.md design decision 9: ApplyDepthStencilState honors depth AND the front-face
         // stencil parameters (enable/func/fail/zfail/pass/mask/writemask/ref) -- unchanged in
         // shape from DIRECTX6/DIRECTX7, only the render-state naming changed (D3DRS_* not
         // D3DRENDERSTATE_*). twoSidedStencilMode/ccwStencil* remain accepted-and-ignored:
@@ -140,7 +140,7 @@ namespace CNA::Internal::Renderers::DirectX8
         // ---- 3D pipeline: real, fixed-function only (scope decision, TL;DR), built on
         // IDirect3DDevice8::DrawIndexedPrimitiveUP via SetVertexShader(rawFvfValue) -- no vertex
         // buffer object, no Shader Model 1.x. What remains out of scope is documented per-method
-        // below and in plan_dx8.md's own Boundaries section. ----
+        // below and in plans/plan_dx8.md's own Boundaries section. ----
         [[nodiscard]] bool SupportsDepthStencil() const override { return true; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override
         {
@@ -148,7 +148,7 @@ namespace CNA::Internal::Renderers::DirectX8
             // that D3DFILL_WIREFRAME genuinely renders edge-only output on a software rasterizer
             // -- DXVK's real GPU rasterizer honors it too). MultiSampleAntiAliasing/
             // MultipleRenderTargets/OcclusionQuery/CustomEffects genuinely unavailable at this
-            // DirectX era (plan_dx8.md's Boundaries section). AnisotropicFiltering: unlike DIRECTX7's
+            // DirectX era (plans/plan_dx8.md's Boundaries section). AnisotropicFiltering: unlike DIRECTX7's
             // software-rasterizer finding, this renderer runs on a real GPU via DXVK, so
             // anisotropic filtering IS a real, distinct capability here -- reports true.
             using CNA::GraphicsCapability;

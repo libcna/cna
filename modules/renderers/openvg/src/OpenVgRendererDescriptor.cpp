@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D42: the OpenVg family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D42: the OpenVg family's pre-construction contract.
 //
 // OpenVG 1.1 via ShivaVG, which runs on top of a real desktop OpenGL context this renderer creates
 // itself through the platform -- same "own GL context, no EasyGL" shape as OPENGL1/OPENGL2/OPENGL4.
@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::OpenVg
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

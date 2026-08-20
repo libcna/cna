@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_freedirect.md Phase X1/X2: FreeDirect (formerly DIRECTX3) renderer skeleton + real DirectDraw (via the ../free-direct sibling)
+// plans/plan_freedirect.md Phase X1/X2: FreeDirect (formerly DIRECTX3) renderer skeleton + real DirectDraw (via the ../free-direct sibling)
 // device/window bring-up. 2D-only, like SDL_RENDERER -- every 3D entry point throws (Phase X7).
 //
 // This header intentionally does NOT include <ddraw.h> (design decision 9's containment rule),
@@ -79,7 +79,7 @@ namespace CNA::Internal::Renderers::FreeDirect
     };
 
     /**
-     * FreeDirect graphics renderer (formerly DIRECTX3; plan_freedirect.md): a CPU 2D compositor that uses free-direct's
+     * FreeDirect graphics renderer (formerly DIRECTX3; plans/plan_freedirect.md): a CPU 2D compositor that uses free-direct's
      * IDirectDraw/IDirectDrawSurface as its pixel storage/present mechanism. Real DirectDraw
      * device/window bring-up (Phase X2): DirectDrawCreate -> SetCooperativeLevel (against CNA's
      * own already-existing SDL_Window*) -> SetDisplayMode -> primary CreateSurface. Because

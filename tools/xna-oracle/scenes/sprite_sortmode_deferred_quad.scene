@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_sortmode_deferred_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_sortmode_deferred_quad
 # D9-93: SpriteSortMode only has an observable effect with 2+ overlapping, alpha-blended sprites
 # whose insertion order differs from their depth-sort order -- a single sprite (every other
 # spritebatchmode scene in this corpus) has no sort behavior to exercise at all. Two repeated

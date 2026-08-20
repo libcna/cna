@@ -594,7 +594,7 @@ namespace Microsoft::Xna::Framework
 
         auto& pp = gdi.getPresentationParametersProperty();
 
-        // plan_dx9.md D9-103 finding: Game's own GraphicsDevice_ member is eagerly
+        // plans/plan_dx9.md D9-103 finding: Game's own GraphicsDevice_ member is eagerly
         // default-constructed (hardcoded GraphicsProfile::Reach) before GraphicsDeviceManager
         // even exists, so a game's `graphics.GraphicsProfile = GraphicsProfile.HiDef;
         // graphics.ApplyChanges();` request had no path to ever reach the real device -- fixed by

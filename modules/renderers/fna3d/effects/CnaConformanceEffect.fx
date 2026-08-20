@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-004: CNA's own compiled-effect conformance source.
+// plans/plan_fx.md FX-004: CNA's own compiled-effect conformance source.
 //
 // Everything else in the compiled-effect suite is either a stock binary Microsoft compiled years
 // ago, or a container CNA assembles itself byte by byte. Both are useful and neither is compiler

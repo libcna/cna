@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2062: shading with a light that has area.
+// plans/plan_modern.md MOD-2062: shading with a light that has area.
 //
 // The diffuse half is exact -- a Lambertian surface reflects a clamped cosine, and the irradiance a
 // polygon delivers to one is a closed-form sum over its edges. Exactness is a claim that can be

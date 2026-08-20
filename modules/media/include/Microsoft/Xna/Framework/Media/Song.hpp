@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Media
 {
     // Forward-declared to break the Song <-> Album/Artist/Genre include cycle: each of those types
     // exposes a SongCollection of its members, and Song points back at all three. Matches the same
-    // pattern Album.hpp already uses to forward-declare SongCollection (plan_media.md MEDIA-174).
+    // pattern Album.hpp already uses to forward-declare SongCollection (plans/plan_media.md MEDIA-174).
     class Album;
     class Artist;
     class Genre;
@@ -99,7 +99,7 @@ namespace Microsoft::Xna::Framework::Media
          * than an unimplemented stub: the library scan only accepts plain, unencrypted container
          * formats, and a DRM-wrapped file (e.g. FairPlay .m4p) is not indexable in the first
          * place, so no indexed song can ever be protected. Revisit only if a future format
-         * expansion makes DRM-wrapped files reachable (plan_media.md MEDIA-185).
+         * expansion makes DRM-wrapped files reachable (plans/plan_media.md MEDIA-185).
          *
          * @return Always false.
          */
@@ -220,7 +220,7 @@ namespace Microsoft::Xna::Framework::Media
         // MediaLibrary is the only thing that may populate them: it owns the Album/Artist/Genre
         // objects and is the only component that knows the song-to-group mapping. Friendship keeps
         // the write path internal instead of widening the public XNA surface with a non-XNA setter
-        // (plan_media.md MEDIA-175) -- same approach VideoPlayer already uses to reach
+        // (plans/plan_media.md MEDIA-175) -- same approach VideoPlayer already uses to reach
         // Video::parent_.
         CNAEXT friend class MediaLibrary;
 
@@ -228,17 +228,17 @@ namespace Microsoft::Xna::Framework::Media
         // Non-owning back-pointers into the MediaLibrary that produced this song; null for any
         // song not created by a library scan. The library outlives the songs it owns, so these do
         // not dangle in normal use -- the same non-owning-pointer contract Album::songs_ already
-        // relies on (plan_media.md MEDIA-174).
+        // relies on (plans/plan_media.md MEDIA-174).
         Album*  album_  = nullptr;
         Artist* artist_ = nullptr;
         Genre*  genre_  = nullptr;
 
-        // Populated by MediaLibrary from the file's own tags (plan_media.md MEDIA-181). The index
+        // Populated by MediaLibrary from the file's own tags (plans/plan_media.md MEDIA-181). The index
         // already parsed the track number; it simply was never handed to Song, so this property
         // returned a hardcoded 0 for every song in the library.
         SharpRuntime::intcs trackNumber_ = 0;
 
-        // Real user rating parsed from the file's tags, 0-10 (plan_media.md MEDIA-184).
+        // Real user rating parsed from the file's tags, 0-10 (plans/plan_media.md MEDIA-184).
         SharpRuntime::intcs rating_ = 0;
         bool isRated_ = false;
 

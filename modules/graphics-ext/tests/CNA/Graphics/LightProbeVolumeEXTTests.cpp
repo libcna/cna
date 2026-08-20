@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2081: a grid of probes, blended so indirect light varies through a space.
+// plans/plan_modern.md MOD-2081: a grid of probes, blended so indirect light varies through a space.
 //
 // The thing that has to hold is that the blend is *smooth and correct at the ends*: at a probe's
 // own position the volume must return that probe unchanged, and between two probes it must move

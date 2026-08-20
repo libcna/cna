@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_fna3d.md FNA3D-33: sampler-state conformance.
+// plans/plan_fna3d.md FNA3D-33: sampler-state conformance.
 //
 // FNA3D-12 claimed "blend / depth-stencil / rasterizer / sampler state, write masks, scissor,
 // viewport" as done, but `Fna3d_State` covers everything in that list EXCEPT the sampler: the only

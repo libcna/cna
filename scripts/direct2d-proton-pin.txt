@@ -1,9 +1,9 @@
-# plan_direct2d.md D2D-122: the Proton runtimes the Direct2D compatibility lane is allowed to use.
+# plans/plan_direct2d.md D2D-122: the Proton runtimes the Direct2D compatibility lane is allowed to use.
 #
 # "Proton - Experimental" is a moving target: Steam upgrades it underneath a passing run, so a
 # result recorded against it cannot be reproduced later. It is therefore refused unless
 # CNA_DIRECT2D_PROTON_ALLOW_EXPERIMENTAL=1 is set explicitly for a one-off investigation, and such a
-# run must never be quoted as evidence in plan_direct2d.md.
+# run must never be quoted as evidence in plans/plan_direct2d.md.
 #
 # Format: one Steam library directory name per line, in priority order; the first one actually
 # installed under steamapps/common/ is used. Comments and blank lines are ignored.

@@ -18,7 +18,7 @@ against the equivalent real-FNA dump (`tools/fna-reference/*.cs`) via
 ## Executive Verdict
 Correct, and independently confirmed valuable by its own paired README: this exact tool already
 found and helped fix one genuine, real production bug (`IndexElementSize`'s numeric values not
-matching real FNA — `plan_graphics.md` Task 921, since fixed) via an actual, non-hypothetical
+matching real FNA — `plans/plan_graphics.md` Task 921, since fixed) via an actual, non-hypothetical
 comparison run against a real FNA build. A concrete demonstration that this kind of differential
 tooling catches real defects, not just theoretical value.
 

@@ -57,7 +57,7 @@ of this audit** (see `CLAUDE.md`/audit prompt "No-development rule").
   registration gap. Independently confirmed twice (two separately-dispatched investigations found
   the identical root cause), and reconciled against this project's own existing, narrower-scoped
   awareness that `ctest` is unreliable for the general suite (a `/tmp`-scratch-path race under
-  parallelism, `plan_audio.md` P9-BUILD-007) — this is a third, previously-undocumented, more
+  parallelism, `plans/plan_audio.md` P9-BUILD-007) — this is a third, previously-undocumented, more
   fundamental, and more impactful reason, not a duplicate of the known one. See
   `AUDIT_CROSS_CUTTING_FINDINGS.md` (Pass 6).
 - **`cna_demo_xact`'s Content-copy build step fails on every backend, confirmed universal across 6

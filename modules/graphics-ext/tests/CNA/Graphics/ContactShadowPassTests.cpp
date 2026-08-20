@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2120..MOD-2123: screen-space contact shadows.
+// plans/plan_modern.md MOD-2120..MOD-2123: screen-space contact shadows.
 //
 // The pass exists because of a limit no shadow-map resolution removes: where an object meets the
 // floor, visibility changes over a distance smaller than the map's filter width, so the map

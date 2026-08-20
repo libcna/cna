@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx7.md design decision 15: run a Windows cross-compiled .exe (DIRECTX7 renderer, CNA's real
+# plans/plan_dx7.md design decision 15: run a Windows cross-compiled .exe (DIRECTX7 renderer, CNA's real
 # DirectX 7 -- DirectDraw v7 + Direct3D v7, flattened no-viewport device model, plus real stencil
 # buffer operations) under Wine against real DirectDraw v7, using this project's own dedicated
 # Wine prefix.
@@ -13,7 +13,7 @@
 #
 # Set CNA_DX7_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DIRECTX7
 # deliberately REUSES DIRECTX1/DIRECTX2/DIRECTX3's own already-initialized prefix rather than creating a fresh
-# one (plan_dx7.md's own DX7-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works
+# one (plans/plan_dx7.md's own DX7-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works
 # for DIRECTX7's IDirectDraw7 + Direct3D v7 needs, so there is nothing DX7-specific a separate prefix
 # would buy).
 #

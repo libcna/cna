@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Graphics {
      * light can be tuned into producing.
      *
      * **In the XNA namespace, deliberately**, following `ImageBasedLightEXT` and `PunctualLightEXT`
-     * (plan_modern.md `MOD-1222`): an always-compiled XNA header must not include one that exists
+     * (plans/plan_modern.md `MOD-1222`): an always-compiled XNA header must not include one that exists
      * only under `CNA_CNAEXT`, and an effect's public surface must not depend on a build flag.
      *
      * **The shape is described by a centre and two half-axes**, rather than by four corners, so

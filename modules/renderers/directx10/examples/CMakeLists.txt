@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_d3d10.md: real Direct3D 10 renderer -- no fixed-function at all, real HLSL vs_4_0/ps_4_0
+# plans/plan_d3d10.md: real Direct3D 10 renderer -- no fixed-function at all, real HLSL vs_4_0/ps_4_0
 # shaders throughout, DXVK-delivered via d3d10core.
 
 # Example/test executables historically live at the build root (scripts, docs and
@@ -38,7 +38,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
         endif()
     endmacro()
 
-    # plan_d3d10.md: script that greps stripped source for forbidden legacy-interface symbols
+    # plans/plan_d3d10.md: script that greps stripped source for forbidden legacy-interface symbols
     # (D3DFVF_*, D3DRENDERSTATE_*, D3DTLVERTEX -- none of which have any place in a real D3D10
     # renderer), mirroring DIRECTX7/DIRECTX8's own established discipline scripts.
     add_test(NAME DirectX10_LegacyInterfaceDiscipline
@@ -65,7 +65,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
     cna_register_renderer_test(NAME DirectX10_GraphicsCapability COMMAND ${_directx10_cap_cmd}
         TIMEOUT 60 LABELS "DIRECTX10")
 
-    # plan_d3d10.md design decision 3/§1: D3D10 genuinely supports MRT (unlike DIRECTX1..DIRECTX8) --
+    # plans/plan_d3d10.md design decision 3/§1: D3D10 genuinely supports MRT (unlike DIRECTX1..DIRECTX8) --
     # verify SetRenderTargets(count>1) does NOT throw, the opposite assertion from every
     # DirectDraw-family renderer's own equivalent check.
     cna_directx10_test(cna_test_directx10_mrt directx10_mrt_test.cpp)

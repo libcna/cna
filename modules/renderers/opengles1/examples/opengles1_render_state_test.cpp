@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengles1.md OPENGLES1-79: runtime coverage for the render-state rows that the baseline
+// plans/plan_opengles1.md OPENGLES1-79: runtime coverage for the render-state rows that the baseline
 // smoke test does not reach -- OPENGLES1-25 (blend), OPENGLES1-26 (depth), OPENGLES1-27
 // (rasterizer cull) and OPENGLES1-28 (sampler filter), all through the real fixed-function
 // ES 1.1 pipeline and asserted with GetBackBufferData() pixel readback.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-231/MOD-232: the three CNAEXT effects that existed before this plan, used
+// plans/plan_modern.md MOD-231/MOD-232: the three CNAEXT effects that existed before this plan, used
 // inside the chain the plan built.
 //
 // The point of the adapters is that the effects did not change. So the tests here are about the
@@ -175,7 +175,7 @@ TEST(EffectPassTest, AnAdaptedEffectRunsInsideAChain)
     // The whole reason for the adapter: these effects predate the chain and must now sit in it.
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
-    // plan_modern.md MOD-1623: the two-part question, not just `CustomEffects`. Asking only whether
+    // plans/plan_modern.md MOD-1623: the two-part question, not just `CustomEffects`. Asking only whether
     // the renderer *accepts* an effect is the MOD-1699 mistake, and WebGPU is where it shows: it
     // accepts one and then throws "custom SpriteBatch effects are not implemented yet" from the
     // draw. Where effects are accepted but never executed the assertion below would only be

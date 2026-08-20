@@ -6,7 +6,7 @@
 namespace CNA::Internal::Xnb
 {
     /**
-     * @brief Sanity bounds consulted by every count-driven `.xnb` read (plan_xnb.md XNB-10A).
+     * @brief Sanity bounds consulted by every count-driven `.xnb` read (plans/plan_xnb.md XNB-10A).
      *
      * A validly bounds-checked binary reader can still be told, by a single corrupted or
      * adversarial count field, to allocate an enormous buffer/vector before any further

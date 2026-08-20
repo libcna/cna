@@ -135,13 +135,13 @@ committed: it is a benchmark input, not evidence.
 `SkinnedEffect.fx`, `SpriteEffect.fx`, `Macros.fxh`, `Common.fxh`, `Lighting.fxh`,
 `Structures.fxh`) copied **verbatim, byte-for-byte**, from FNA's own
 `src/Graphics/Effect/StockEffects/HLSL/` directory, which in turn vendors them from Microsoft's
-Stock Effects sample project. Not one line has been edited (`plan_dx9.md` design decision 3);
+Stock Effects sample project. Not one line has been edited (`plans/plan_dx9.md` design decision 3);
 `scripts/verify-d3d9-stock-effects-vendored.sh` diffs them against the FNA tree and fails on any
 delta. Licensed under the Microsoft Permissive License (Ms-PL) — the full license text is also
 checked in at `src/CNA/Internal/Backends/D3D9/shaders/xna/LICENSE`.
 
 CNA compiles these sources itself (`D3DCompile`, Microsoft's own `vs_2_0`/`ps_2_0` targets) rather
-than shipping Microsoft's pre-built `.fxb` bytecode — see `plan_dx9.md`'s "CNA's divergences from
+than shipping Microsoft's pre-built `.fxb` bytecode — see `plans/plan_dx9.md`'s "CNA's divergences from
 XNA 4.0" section and design decision 4 for why, and `src/CNA/Internal/Backends/D3D9/shaders/xna/README.md`
 for the full list of compiled entry points.
 
@@ -236,7 +236,7 @@ the reason this section is required rather than merely courteous:
 > original software. If you use this software in a product, an acknowledgment in the product and its
 > documentation *is* required.
 
-This section, together with `docs/tinygl-renderer.md` and `plan_tinygl.md`, is that acknowledgment.
+This section, together with `docs/tinygl-renderer.md` and `plans/plan_tinygl.md`, is that acknowledgment.
 A build configured with any other `CNA_GRAPHICS_RENDERER` value does not fetch, build or link
 TinyGL at all.
 

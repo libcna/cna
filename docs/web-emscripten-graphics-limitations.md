@@ -8,10 +8,10 @@ input, and device support under Emscripten are already covered elsewhere (`NEXTd
 
 **This document covers only the existing EasyGL-over-WebGL2 browser path.** The project owner
 activated the native `wgpu-native` renderer on 2026-07-12, but browser/Emscripten WebGPU remains a
-separate unimplemented workstream tracked in `plan_webgpu.md`. Nothing below should be read as a
+separate unimplemented workstream tracked in `plans/plan_webgpu.md`. Nothing below should be read as a
 status report for the native WebGPU renderer.
 
-> **2026-07-15 update, scoped to the new `CANVAS` renderer (`plan_canvas.md`), not EasyGL**: this
+> **2026-07-15 update, scoped to the new `CANVAS` renderer (`plans/plan_canvas.md`), not EasyGL**: this
 > document's own "no `.sdl-prebuilt-emscripten` directory... no `cmake-build-*emscripten*` directory
 > has ever existed" claim below is now out of date in one narrow respect — bringing up `CANVAS` on
 > `feature/canvas` required a real `emcmake`/`emcc` 6.0.2 configure+build, which succeeded and
@@ -20,7 +20,7 @@ status report for the native WebGPU renderer.
 > real, renderer-agnostic GTest suite genuinely passes under `node CnaTests.js` for `CANVAS`. This
 > does **not** extend to `EasyGL`/WebGL2 specifically — nothing below about that path has been
 > re-verified — but the *tooling* premise ("no one has ever actually run `emcc` here") no longer
-> holds project-wide. See `docs/canvas-renderer.md` and `plan_canvas.md` for what was actually
+> holds project-wide. See `docs/canvas-renderer.md` and `plans/plan_canvas.md` for what was actually
 > verified.
 
 ## Status headline: real build scaffolding, zero verified execution
@@ -143,7 +143,7 @@ device/adapter-model concern rather than a rendering-renderer one.
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Explicitly excluded on Emscripten — zero coverage |
 | WebGL context-loss handling (`EasyGLRenderer.cpp`) | Real, non-trivial code; never run against a real browser |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Anticipated only, not verified; current `SurfaceFormat`/anisotropy constraints happen to sidestep most of them today |
-| WebGPU | Native `wgpu-native` renderer is now active and experimental; browser/Emscripten WebGPU remains unimplemented and is tracked separately in `plan_webgpu.md` |
+| WebGPU | Native `wgpu-native` renderer is now active and experimental; browser/Emscripten WebGPU remains unimplemented and is tracked separately in `plans/plan_webgpu.md` |
 
 **Recommendation for whoever eventually does the first real Emscripten build**: start by getting
 `cna_house3d_demo` (the one target with a WebGL version pin already) running in an actual browser

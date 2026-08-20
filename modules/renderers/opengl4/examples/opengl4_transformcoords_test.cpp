@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-28: real TransformWindowToLogical/TransformLogicalToWindow for the OpenGL4
+// plans/plan_opengl4.md GL4-28: real TransformWindowToLogical/TransformLogicalToWindow for the OpenGL4
 // graphics renderer -- previously unoverridden (inherited the default no-op `return false`), so
 // Mouse::SetPosition (which calls TransformLogicalToWindow to place the OS cursor) and
 // SdlInputBridge (which calls TransformWindowToLogical to map incoming physical mouse events)

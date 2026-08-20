@@ -318,7 +318,7 @@ namespace CNA::Internal::Xnb
             std::to_string(wBitsPerSample) + ", channels=" + std::to_string(nChannels) +
             ", sampleRate=" + std::to_string(nSamplesPerSec) + "). CNA's .xnb SoundEffectReader "
             "supports 8/16-bit PCM, 32-bit IEEE float, and MS/IMA ADPCM; XMA2 has no decode path "
-            "anywhere in this stack (plan_audio.md AUD-06 support matrix).");
+            "anywhere in this stack (plans/plan_audio.md AUD-06 support matrix).");
     }
 
     void RegisterSoundEffectXnbReader()

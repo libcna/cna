@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: real GPU hardware-instancing proof via DrawInstancedPrimitivesEx -- adapts
+// plans/plan_opengl2.md: real GPU hardware-instancing proof via DrawInstancedPrimitivesEx -- adapts
 // examples/easygl_instancedmodel_shader_test.cpp's own scene, math derivation, and expected
 // values verbatim to GLSL 1.10 syntax (`attribute`/`varying`, no `#version 300 es`, no explicit
 // `layout(location=N)` -- this renderer binds custom-effect attributes by NAME via

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-30A: deterministic fuzz test for CNA::Internal::Xnb::DecompressXnbPayload().
+// plans/plan_xnb.md XNB-30A: deterministic fuzz test for CNA::Internal::Xnb::DecompressXnbPayload().
 // Mutates real, externally-produced LZX-compressed payloads (never hand-crafted -- valid LZX
 // bytes cannot be authored by hand, so mutation of real data is the only practical way to fuzz
 // this format) and asserts every call either completes or fails with a clean, expected exception

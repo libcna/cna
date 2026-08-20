@@ -14,7 +14,7 @@
 # This is the local comparison mechanism this task's own "CI stores benchmark baselines and
 # flags material regressions" acceptance criterion asks for -- actual GitHub Actions wiring to
 # run this automatically on every push is a separate, not-yet-done follow-up (see this task's own
-# plan_devices.md resolution note).
+# plans/plan_devices.md resolution note).
 import argparse
 import json
 import sys

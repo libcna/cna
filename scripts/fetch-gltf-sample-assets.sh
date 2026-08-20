@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plan_gltf.md GLTF-405: opt-in, sparse access to Khronos reference models. This script does not
+# plans/plan_gltf.md GLTF-405: opt-in, sparse access to Khronos reference models. This script does not
 # make any model part of CNA and does not review or grant its model-specific licence.
 
 set -euo pipefail

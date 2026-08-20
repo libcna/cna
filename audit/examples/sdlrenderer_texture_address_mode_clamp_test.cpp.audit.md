@@ -15,7 +15,7 @@
   `backend_->SetSamplerAddressMode(...)` call, lines 119-121); `src/CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.cpp`;
   `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp` (`ISpriteBatchBackend::SetSamplerAddressMode`
   default no-op, line 340).
-- Cross-referenced against `plan_graphics.md` (Task 737, line 720), which independently corroborates this
+- Cross-referenced against `plans/plan_graphics.md` (Task 737, line 720), which independently corroborates this
   file's own claim that "Task 269's own test... independently pixel-verified Wrap and Clamp at U=1.25" and
   explicitly notes "Task 685's SDL_Renderer test... only prints its context checks" for Wrap — an accurate,
   cross-file-verified characterization of this exact file.
@@ -63,7 +63,7 @@ arithmetic in `SampleAtUOnePointTwoFive`):
   when computing a UV coordinate (`u = texelX / actualTextureWidth`), gives `u = 2.5/2 = 1.25` — this is
   what "source position 1.25" means: a UV coordinate expressed as a fraction of the real texture's own
   width, not a raw index into the (doubled) sourceRect. Confirmed this convention is an established project
-  precedent, not invented for this file: `plan_graphics.md`'s Task 737 entry explicitly states Task 269's
+  precedent, not invented for this file: `plans/plan_graphics.md`'s Task 737 entry explicitly states Task 269's
   own EasyGL test "pixel-verified `Wrap`/`Clamp` at `U=1.25`" using the identical construction (2x1
   texture, sourceRect double-width, sample at `U=1.25`).
 - At `u=1.25`: `Clamp` (out of `[0,1]`) clamps to the last real texel (index 1 = Blue) — matches
@@ -118,7 +118,7 @@ correctly documented rather than silently implied to be broader. See Missing or 
 
 ### Cross-file consistency
 The claim "Task 686... its own row already anticipated needing an emulate-via-tiled-draws-or-throw
-decision" was cross-checked against `plan_graphics.md`'s own text, which independently lists Task 686 in a
+decision" was cross-checked against `plans/plan_graphics.md`'s own text, which independently lists Task 686 in a
 table of currently-BLOCKED tasks (line 620, "447, 686, 687, 725, 732") — confirming Task 686 is a real,
 still-open, tracked gap, not a fabricated or stale reference.
 
@@ -141,7 +141,7 @@ No HIGH/MEDIUM findings. One informational note:
 - FNA/XNA comparison: FNA's `SpriteBatch` never clamps `sourceRectangle` to the texture's own bounds (noted
   correctly in the header comment, lines 32-33) — this file's scenario (a sourceRect twice the texture
   width) is a faithful reproduction of a real, common XNA technique (scrolling/tiling backgrounds).
-- Related files: Task 686 (open, tracked in `plan_graphics.md`'s BLOCKED table).
+- Related files: Task 686 (open, tracked in `plans/plan_graphics.md`'s BLOCKED table).
 - Suggested future action (not implemented by this audit): none needed from this file itself; Task 686's own
   eventual fix should either extend this file's assertions or add its own dedicated `Wrap` test.
 

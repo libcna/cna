@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-26: real dynamic SamplerState for OpenGL4's direct 3D draws
+// plans/plan_opengl4.md GL4-26: real dynamic SamplerState for OpenGL4's direct 3D draws
 // (DrawPrimitivesEx/DrawIndexedPrimitivesEx). A real, now-fixed bug: BindProgramForStride used to
 // unconditionally call ApplySamplerState(slot, 0, 1, 1, 1) (Linear + hardcoded Clamp) for every
 // bound texture unit AFTER GraphicsDevice::applySamplerStatesToRenderer() had already applied the

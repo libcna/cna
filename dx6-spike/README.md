@@ -15,11 +15,11 @@ states/capabilities on the *same* interface: real stencil buffer operations
 (`D3DRENDERSTATE_STENCILENABLE`/`STENCILFUNC`/`STENCILFAIL`/`STENCILZFAIL`/`STENCILPASS`/
 `STENCILREF`/`STENCILMASK`/`STENCILWRITEMASK`, all confirmed present in `d3dtypes.h`),
 multitexturing (`SetTextureStageState`/`D3DTSS_*`, also confirmed present), and DXTn compression
-(not spiked — see `plan_dx6.md` for why it's out of scope).
+(not spiked — see `plans/plan_dx6.md` for why it's out of scope).
 
 **This spike tests only stencil** — the one DX6-era capability `DX2`/`DX3`/`DX5` have all
 explicitly documented as "no real stencil buffer exists at this DirectX era (DX6+)." Multitexture
-was investigated but deferred (see `plan_dx6.md` design decision 6): the header-defined
+was investigated but deferred (see `plans/plan_dx6.md` design decision 6): the header-defined
 `D3DTLVERTEX`/`D3DFVF_TLVERTEX` vertex format carries only a single texture-coordinate pair
 (`D3DFVF_TEX1`), so genuine two-independent-UV multitexture would require a second vertex layout
 (`D3DFVF_TEX2`) and extending the whole CPU transform/clip pipeline to carry a second UV channel —

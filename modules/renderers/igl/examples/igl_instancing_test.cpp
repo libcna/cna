@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-31/IGL-42..45/IGL-55: DrawInstancedPrimitives -- a genuine per-instance vertex
+// plans/plan_igl.md IGL-31/IGL-42..45/IGL-55: DrawInstancedPrimitives -- a genuine per-instance vertex
 // stream (igl::VertexSampleFunction::Instance + sampleRate), not just an instance count plumbed
 // through unused.
 //
@@ -72,7 +72,7 @@ void main() {
 }
 )";
 
-    // The SPIR-V variant (plan_igl.md IGL-43). This effect takes no parameters, so the only
+    // The SPIR-V variant (plans/plan_igl.md IGL-43). This effect takes no parameters, so the only
     // difference is the one SPIR-V forces: an explicit location on every user input and output.
     // The attribute locations are IGL's own usage-to-slot table, the same one the shader above
     // reaches by name, so the instanced vertex layout is unchanged between backends.

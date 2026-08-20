@@ -270,7 +270,7 @@ This renderer has **no programmable shader path at all** — `CreateEffectRender
 `IGraphicsRenderer`'s base `nullptr` default. The following are **permanent, not "not yet
 implemented"**, gaps for a fixed-function ES 1.1 pipeline.
 
-**How an unsupported effect behaves, since 2026-08-18 (plan_gltf.md `GLTF-473`).** Each of these used
+**How an unsupported effect behaves, since 2026-08-18 (plans/plan_gltf.md `GLTF-473`).** Each of these used
 to fall through to the plain colored path, and that was worse than it sounds: the colour path binds
 `glColorPointer` at byte offset 12, which is a colour in exactly two of CNA's vertex records (stride
 16 and stride 24) and is the `NORMAL` in every PBR and skinned one. Six of the eight canonical glTF
@@ -375,4 +375,4 @@ extension exists for. Wireframe rendering has no native fixed-function path at a
 draw time instead, the same technique already established by `EasyGLRenderer::DrawWireframe`
 for its own (different) "no polygon-mode" problem.
 
-See `plan_opengles1.md` for task-level status and the remaining work.
+See `plans/plan_opengles1.md` for task-level status and the remaining work.

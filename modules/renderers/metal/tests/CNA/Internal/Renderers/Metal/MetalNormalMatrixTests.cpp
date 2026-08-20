@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_metal.md METAL-34-style extraction: ComputeMetalNormalMatrixCols() is pure C++ (plain float
+// plans/plan_metal.md METAL-34-style extraction: ComputeMetalNormalMatrixCols() is pure C++ (plain float
 // arrays, basic arithmetic), so unlike the rest of the Metal renderer it compiles and runs on any
 // platform CnaTests already builds for -- no #if defined(CNA_RENDERER_METAL) gate, deliberately.
 //

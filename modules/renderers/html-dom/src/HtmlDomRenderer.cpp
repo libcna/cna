@@ -16,7 +16,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_html_dom.md HTMLDOM-10 / design decision 2: creates the <div> every sprite element lives in,
+// plans/plan_html_dom.md HTMLDOM-10 / design decision 2: creates the <div> every sprite element lives in,
 // positioned over the platform-owned <canvas>.
 //
 // The canvas itself is made transparent but deliberately NOT hidden, removed or display:none'd --
@@ -25,7 +25,7 @@
 // canvas underneath. `contain:strict` keeps the sprite subtree's layout and painting isolated from
 // the rest of the page, and clips sprites that leave the viewport.
 //
-// plan_html_dom.md HTMLDOM-108: #cna-dom-root now lives inside a second wrapper element,
+// plans/plan_html_dom.md HTMLDOM-108: #cna-dom-root now lives inside a second wrapper element,
 // #cna-dom-viewport, sized/positioned to the CANVAS's own physical bounds with its own
 // `overflow:hidden`. Root's own CSS box is always exactly the logical (game-coordinate) size and
 // gets a per-CnaPresentationMode `transform: scale()` plus a `left`/`top` offset (both computed by
@@ -39,7 +39,7 @@
 // this clipping is self-contained within this renderer's own DOM structure, independent of whatever
 // the host page's own layout happens to be.
 //
-// plan_html_dom.md HTMLDOM-115: the REST of the host-page integration surface -- an existing
+// plans/plan_html_dom.md HTMLDOM-115: the REST of the host-page integration surface -- an existing
 // element ID-colliding with this renderer's own, the canvas's own pre-existing `visibility` value
 // (preserved and restored exactly, not assumed to have been unset), and a `window.resize` listener
 // so a host-page reflow that MOVES the canvas without resizing it (Present()'s own dirty check only
@@ -58,7 +58,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // "no surface, nothing renders". No document means no root and no ref count either, matching
     // CNA_HtmlDom_DestroyRoot's own no-op there.
     if (typeof document === 'undefined') return;
-    // plan_html_dom.md HTMLDOM-114: reference-counted, not a plain "already initialized" guard.
+    // plans/plan_html_dom.md HTMLDOM-114: reference-counted, not a plain "already initialized" guard.
     // A SECOND HtmlDomRenderer constructed while a FIRST one is still alive (an unusual but
     // real-to-guard-against scenario -- nothing in IGraphicsRenderer prevents constructing more than
     // one) must not silently ADOPT this shared root and then rip it out from under the first
@@ -69,7 +69,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     if (Module['cnaDomRoot']) return;
     const canvas = Module['canvas'] || document.querySelector('canvas');
     if (!canvas) { console.error('[CNA] HTML_DOM: no <canvas> element to anchor the DOM surface to'); return; }
-    // plan_html_dom.md HTMLDOM-115: a page that already has its OWN unrelated element using either
+    // plans/plan_html_dom.md HTMLDOM-115: a page that already has its OWN unrelated element using either
     // of these exact ids is a real, if unlikely, host-page integration hazard -- silently adopting/
     // conflating it with this renderer's own root would let some other script's DOM manipulation
     // corrupt this renderer's rendering in confusing ways. Fails loudly, the same way the missing-
@@ -100,7 +100,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // Preserve the host page's exact inline opacity for symmetric teardown.
     Module['cnaDomOriginalCanvasOpacity'] = canvas.style.opacity;
     canvas.style.opacity = '0';
-    // plan_html_dom.md HTMLDOM-115: Present()'s own dirty check only re-derives geometry when the
+    // plans/plan_html_dom.md HTMLDOM-115: Present()'s own dirty check only re-derives geometry when the
     // LOGICAL or PHYSICAL SIZE changes -- a host-page layout reflow that moves the canvas WITHOUT
     // resizing it (a responsive layout shift, an animated margin/position change elsewhere on the
     // page, ...) would never trip that check, leaving the wrapper's own left/top visibly stale
@@ -120,7 +120,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     Module['cnaDomScissorRect'] = null;
     Module['cnaDomViewport'] = null;
     Module['cnaDomMaxRegions'] = 16;
-    // plan_html_dom.md HTMLDOM-94: sprites are grouped into per-scissor-rect DOM containers
+    // plans/plan_html_dom.md HTMLDOM-94: sprites are grouped into per-scissor-rect DOM containers
     // ("regions") instead of one flat pool directly under #cna-dom-root, so a scissor rect active
     // for one SpriteBatch Begin/End batch cannot retroactively clip sprites a DIFFERENT batch drew
     // earlier in the same frame under a different rect (or vice versa) -- see
@@ -129,30 +129,30 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // uses until a game actually narrows the scissor rect below the current surface size; its
     // container IS #cna-dom-root itself and its pool IS the same flat pool this renderer always
     // had, so the overwhelmingly common no-scissor case costs nothing beyond what it always did.
-    // plan_html_dom.md HTMLDOM-116: idleStreak/idleUsed drive CNA_HtmlDom_PresentFrame's own pool
+    // plans/plan_html_dom.md HTMLDOM-116: idleStreak/idleUsed drive CNA_HtmlDom_PresentFrame's own pool
     // age-out below -- see that function's comment for what they track.
     Module['cnaDomRegions'] = {
         'full': { container: root, pool: [], used: 0, highWater: 0, rect: null, idleStreak: 0, idleUsed: -1 }
     };
     Module['cnaDomRegionOrder'] = [];
-    // plan_html_dom.md HTMLDOM-103: which non-default regions a batch has actually flushed into
+    // plans/plan_html_dom.md HTMLDOM-103: which non-default regions a batch has actually flushed into
     // THIS FRAME -- reset in CNA_HtmlDom_Clear (frame start), populated by cnaDomTouchRegion. A
     // region in this set must never be evicted, even if it is the least-recently-used candidate:
     // evicting it would remove a container whose sprites are still part of the frame being built,
     // making already-submitted draws silently disappear.
     Module['cnaDomRegionsTouchedThisFrame'] = new Set();
-    // plan_html_dom.md HTMLDOM-103: a monotonically increasing per-flush counter, used as each
+    // plans/plan_html_dom.md HTMLDOM-103: a monotonically increasing per-flush counter, used as each
     // region's/full-region-sprite's CSS z-index so paint order reflects the ACTUAL sequence of
     // SpriteBatch flushes this frame, not merely each region's own first-creation order (DOM
     // position, which HTMLDOM-94 originally relied on, only ever captured the latter).
     Module['cnaDomPaintOrderCounter'] = 0;
-    // plan_html_dom.md HTMLDOM-110: whether a named (non-'full') region has EVER been created this
+    // plans/plan_html_dom.md HTMLDOM-110: whether a named (non-'full') region has EVER been created this
     // session -- set once, in cnaDomGetRegion's own region-creation path, never reset. Lets
     // CNA_HtmlDom_FlushSprites skip 'full'-region sprites' otherwise-unconditional per-frame
     // z-index write when there is provably nothing to interleave it against yet -- see that
     // write's own comment for the full rationale and its one narrow, accepted caveat.
     Module['cnaDomAnyNamedRegionEverCreated'] = false;
-    // plan_html_dom.md HTMLDOM-110: total CSS property writes / total flush calls
+    // plans/plan_html_dom.md HTMLDOM-110: total CSS property writes / total flush calls
     // CNA_HtmlDom_FlushSprites has issued this session -- CNAEXT instrumentation only, read (and
     // optionally reset) via Module['cnaDomStyleWriteCount']/['cnaDomFlushCallCount'] directly by
     // test code. Never read by the renderer itself.
@@ -165,7 +165,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // clip instead of leaving stale insets applied to boxes that have since changed size
     // (HTMLDOM-93).
     //
-    // plan_html_dom.md HTMLDOM-107: rect.x/rect.y are in ABSOLUTE render-target pixel space -- the
+    // plans/plan_html_dom.md HTMLDOM-107: rect.x/rect.y are in ABSOLUTE render-target pixel space -- the
     // SAME space #cna-dom-root's own local coordinate space now always occupies, since root is kept
     // at the full backbuffer at all times (see CNA_HtmlDom_UpdateSurface below) and is never itself
     // moved/resized to track a sub-viewport any more. Scissor and viewport are independent absolute-
@@ -185,7 +185,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
             'inset(' + top + 'px ' + right + 'px ' + bottom + 'px ' + left + 'px)';
     };
 
-    // plan_html_dom.md HTMLDOM-107: positions and sizes #cna-dom-root to the full LOGICAL surface,
+    // plans/plan_html_dom.md HTMLDOM-107: positions and sizes #cna-dom-root to the full LOGICAL surface,
     // always -- HTMLDOM-98 previously shrank/moved root to track a sub-rectangle Viewport directly,
     // which meant a SECOND viewport set later in the SAME frame retroactively moved/clipped every
     // sprite already drawn under an EARLIER viewport (the split-screen/sub-panel use case the
@@ -198,7 +198,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     // sprite position, not root's own box or a region's clip, is the correct place for it. This is
     // an entirely different concept from the CnaPresentationMode offset/scale below.
     //
-    // plan_html_dom.md HTMLDOM-108: root's PHYSICAL placement (offset + scale) now follows
+    // plans/plan_html_dom.md HTMLDOM-108: root's PHYSICAL placement (offset + scale) now follows
     // HtmlDomRenderer::ComputeLogicalViewport's per-CnaPresentationMode geometry -- an
     // earlier version applied a single height-derived uniform scale() unconditionally, correct only
     // for FixedHeightDynamicWidth (which happens to always fill the physical surface exactly) and
@@ -251,7 +251,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
 
     // Returns the region that should own sprites drawn under the given scissor rect (an {x,y,w,h}
     // object in absolute backbuffer pixels, or null/undefined for "no scissor rect has been set").
-    // plan_html_dom.md HTMLDOM-107: scissor and viewport are independent absolute-space concepts
+    // plans/plan_html_dom.md HTMLDOM-107: scissor and viewport are independent absolute-space concepts
     // (see cnaDomApplyRegionClip's own comment) -- whether a rect is "full" depends only on the
     // BACKBUFFER's own size, never on whatever viewport happens to be active, so this checks
     // Module['cnaDomLogicalW'/'H'] alone. A rect that currently covers the whole backbuffer
@@ -273,7 +273,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
 
         // LRU-evict the least-recently-used non-default region at capacity -- bounds a
         // pathological game that cycles through many distinct scissor rects, mirroring the texture
-        // variant cache's own cap. plan_html_dom.md HTMLDOM-103: skips any region already touched
+        // variant cache's own cap. plans/plan_html_dom.md HTMLDOM-103: skips any region already touched
         // THIS FRAME (cnaDomRegionsTouchedThisFrame) -- the old unconditional order.shift() could
         // remove the oldest region even while its sprites were still part of the frame being built
         // right now, making an already-submitted draw silently disappear. Scans oldest-first (the
@@ -303,7 +303,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
             delete regions[evictKey];
         }
 
-        // plan_html_dom.md HTMLDOM-101: width/height:100% (of #cna-dom-root, which HTMLDOM-107 keeps
+        // plans/plan_html_dom.md HTMLDOM-101: width/height:100% (of #cna-dom-root, which HTMLDOM-107 keeps
         // sized to the full backbuffer at all times) gives this container a REAL, non-zero layout
         // box. Without an explicit size an absolutely-positioned element's own absolutely-positioned
         // children (the sprite <div>s -- also position:absolute) contribute no intrinsic size at
@@ -319,7 +319,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
         region = { container: container, pool: [], used: 0, highWater: 0, rect: rect,
                    idleStreak: 0, idleUsed: -1 };
         regions[key] = region;
-        // plan_html_dom.md HTMLDOM-110: this is the first-ever NAMED region -- see
+        // plans/plan_html_dom.md HTMLDOM-110: this is the first-ever NAMED region -- see
         // CNA_HtmlDom_FlushSprites' own needsFullRegionZIndex comment for why this flag exists.
         Module['cnaDomAnyNamedRegionEverCreated'] = true;
         Module['cnaDomTouchRegion'](key);
@@ -329,7 +329,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
 });
 
 EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
-    // plan_html_dom.md HTMLDOM-114: mirrors CNA_HtmlDom_EnsureRoot's own reference count -- only
+    // plans/plan_html_dom.md HTMLDOM-114: mirrors CNA_HtmlDom_EnsureRoot's own reference count -- only
     // the LAST renderer to call this actually tears the shared DOM surface down. A second (or
     // third, ...) live renderer, constructed while this one was already alive, keeps the surface
     // alive for whichever renderer(s) are still using it; only its own count decrements here.
@@ -339,14 +339,14 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
         Module['cnaDomRendererRefCount'] = Math.max(0, (Module['cnaDomRendererRefCount'] || 1) - 1);
         if (Module['cnaDomRendererRefCount'] > 0) return;
     }
-    // plan_html_dom.md HTMLDOM-108: removes #cna-dom-viewport (which contains root), not root
+    // plans/plan_html_dom.md HTMLDOM-108: removes #cna-dom-viewport (which contains root), not root
     // directly -- root's own parent is now the wrapper, not the canvas's own parent, so removing
     // just root would leave the (now-empty) wrapper behind.
     const viewportEl = Module['cnaDomViewportEl'];
     if (viewportEl && viewportEl.parentNode) viewportEl.parentNode.removeChild(viewportEl);
     const canvas = Module['canvas'] ||
                    (typeof document === 'undefined' ? null : document.querySelector('canvas'));
-    // plan_html_dom.md HTMLDOM-115: restores the EXACT pre-existing value CNA_HtmlDom_EnsureRoot
+    // plans/plan_html_dom.md HTMLDOM-115: restores the EXACT pre-existing value CNA_HtmlDom_EnsureRoot
     // captured, not a hardcoded "" -- see that capture's own comment.
     if (canvas) canvas.style.opacity = Module['cnaDomOriginalCanvasOpacity'] || "";
     Module['cnaDomOriginalCanvasOpacity'] = null;
@@ -364,7 +364,7 @@ EM_JS(void, CNA_HtmlDom_DestroyRoot, (), {
     Module['cnaDomPaintOrderCounter'] = null;
 });
 
-// plan_html_dom.md HTMLDOM-11 / design decision 9: XNA's Clear overwrites everything drawn so far,
+// plans/plan_html_dom.md HTMLDOM-11 / design decision 9: XNA's Clear overwrites everything drawn so far,
 // which in a retained-mode surface means two things -- repaint the background, and drop every
 // sprite queued this frame (hiding any that are still visible from an earlier point in the same
 // frame, then rewinding the pool cursor so the next draw starts from element 0 again).
@@ -402,7 +402,7 @@ EM_JS(void, CNA_HtmlDom_Clear, (double r, double g, double b, double a), {
         root.style.backgroundColor = css;
         Module['cnaDomClearColor'] = css;
     }
-    // plan_html_dom.md HTMLDOM-103: Clear() is this renderer's own "frame start" marker (design
+    // plans/plan_html_dom.md HTMLDOM-103: Clear() is this renderer's own "frame start" marker (design
     // decision 9's own reasoning -- XNA games call it once per frame, before any Draw()), so it is
     // where "which regions are active THIS frame" resets, ready for cnaDomTouchRegion to repopulate
     // as this frame's batches actually flush.
@@ -422,7 +422,7 @@ EM_JS(void, CNA_HtmlDom_Clear, (double r, double g, double b, double a), {
     }
 });
 
-// plan_html_dom.md HTMLDOM-12: ends the frame by hiding the pool elements this frame did not use --
+// plans/plan_html_dom.md HTMLDOM-12: ends the frame by hiding the pool elements this frame did not use --
 // and only those, tracked by a high-water mark, so a steady frame count touches nothing. There is
 // no buffer to swap: the browser compositor presents the DOM on its next paint tick.
 //
@@ -443,7 +443,7 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
         }
         region.highWater = used;
 
-        // plan_html_dom.md HTMLDOM-116: every sprite element created in HtmlDomSpriteBatchRenderer.cpp
+        // plans/plan_html_dom.md HTMLDOM-116: every sprite element created in HtmlDomSpriteBatchRenderer.cpp
         // gets 'will-change:transform' (that file's own comment on why), which forces its own
         // permanent compositor layer -- and until this fix, the pool never released one once
         // created: elements past `used` are only ever hidden via display:none above, never removed.
@@ -487,11 +487,11 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
 // values), because these are the renderer's only layout-affecting style writes -- doing them every
 // frame would defeat the whole design.
 //
-// plan_html_dom.md HTMLDOM-107: sizes/positions #cna-dom-root directly, to the full backbuffer --
+// plans/plan_html_dom.md HTMLDOM-107: sizes/positions #cna-dom-root directly, to the full backbuffer --
 // root no longer tracks a sub-rectangle Viewport at all (see cnaDomApplySurfaceGeometry's own
 // comment, CNA_HtmlDom_EnsureRoot, for why).
 //
-// plan_html_dom.md HTMLDOM-108: offsetX/offsetY/scaleX/scaleY come from
+// plans/plan_html_dom.md HTMLDOM-108: offsetX/offsetY/scaleX/scaleY come from
 // HtmlDomRenderer::ComputeLogicalViewport, computed on the C++ side once per Present() --
 // the same per-CnaPresentationMode geometry the GPU reference implementation
 // uses, replacing a single height-derived uniform scale that was only ever correct for
@@ -515,7 +515,7 @@ EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH,
     Module['cnaDomApplySurfaceGeometry']();
 });
 
-// plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`.
+// plans/plan_html_dom.md HTMLDOM-80 / design decision 13: real scissor clipping via `clip-path: inset()`.
 // Exact, with no transform-inverse maths needed: region containers carry no rotation (only the
 // scale()/translate() CNA_HtmlDom_UpdateSurface applies to #cna-dom-root, which every region
 // container inherits -- HTMLDOM-108: per-axis scale under Stretch, uniform under every other mode,
@@ -544,7 +544,7 @@ EM_JS(void, CNA_HtmlDom_SetScissorRect, (int x, int y, int w, int h), {
     Module['cnaDomScissorRect'] = { x: x, y: y, w: w, h: h };
 });
 
-// plan_html_dom.md HTMLDOM-107: ONLY records the new viewport now -- it does not touch the DOM at
+// plans/plan_html_dom.md HTMLDOM-107: ONLY records the new viewport now -- it does not touch the DOM at
 // all, the same shape CNA_HtmlDom_SetScissorRect already uses. The viewport recorded here is read
 // once per SpriteBatch Begin/End batch, at CNA_HtmlDom_FlushSprites (HtmlDomSpriteBatchRenderer.cpp),
 // which applies its (X,Y) offset directly to that batch's own sprites -- so a viewport set later in
@@ -567,7 +567,7 @@ EM_JS(int, CNA_HtmlDom_ReadBound, (int x, int y, int w, int h, uint8_t* outPixel
     return 1;
 });
 
-// plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending's real, queryable answer --
+// plans/plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending's real, queryable answer --
 // memoized, since CSS.supports' own answer can never change mid-session, the same "compute once,
 // cache on Module" shape this renderer already uses elsewhere rather than re-querying the CSSOM on
 // every SupportsCapability() call.
@@ -643,7 +643,7 @@ namespace CNA::Internal::Renderers::HtmlDom
             surface_.drawableSize.height / surface_.displayScale));
         const float scaleX = viewport.logicalWidth > 0.0f ? viewport.width / viewport.logicalWidth : 1.0f;
         const float scaleY = viewport.logicalHeight > 0.0f ? viewport.height / viewport.logicalHeight : 1.0f;
-        // plan_html_dom.md HTMLDOM-108: tracks the full viewport (offset + scale), not just logical/
+        // plans/plan_html_dom.md HTMLDOM-108: tracks the full viewport (offset + scale), not just logical/
         // physical W/H as before -- a SetPresentationMode call alone (same virtual and physical
         // size, different mode, therefore a different scale/offset) must also re-apply geometry, and
         // the old W/H-only comparison could not detect that.
@@ -671,7 +671,7 @@ namespace CNA::Internal::Renderers::HtmlDom
 
     HtmlDomRenderer::LogicalViewport HtmlDomRenderer::ComputeLogicalViewport() const
     {
-        // plan_html_dom.md HTMLDOM-108: ported from the established GPU presentation geometry, so every
+        // plans/plan_html_dom.md HTMLDOM-108: ported from the established GPU presentation geometry, so every
         // CnaPresentationMode's geometry matches an already-tested reference exactly. See
         // LogicalViewport's own doc comment (HtmlDomRenderer.hpp) for what x/y/width/height
         // and logicalWidth/logicalHeight mean per mode.
@@ -763,7 +763,7 @@ namespace CNA::Internal::Renderers::HtmlDom
 
     void HtmlDomRenderer::SetPresentationMode(int mode)
     {
-        // plan_html_dom.md HTMLDOM-108: matches the GPU renderer's presentation-mode
+        // plans/plan_html_dom.md HTMLDOM-108: matches the GPU renderer's presentation-mode
         // validation -- an invalid ordinal used to be stored unchecked, silently corrupting every
         // later ComputeLogicalViewport() call instead of failing at the actual bad input.
         if (mode < static_cast<int>(CnaPresentationMode::Letterbox) ||
@@ -903,7 +903,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         if (count < 0)
             throw System::ArgumentOutOfRangeException(
                 "count", std::to_string(count), "count must not be negative.");
-        // plan_html_dom.md HTMLDOM-120: GraphicsDevice::SetRenderTargets (the shared layer, the
+        // plans/plan_html_dom.md HTMLDOM-120: GraphicsDevice::SetRenderTargets (the shared layer, the
         // only caller a real game ever goes through) always passes count=0 for a null pointer
         // (GraphicsDevice.cpp), so this can only fire via a direct call to this renderer bypassing
         // the shared layer entirely -- exactly the case this ticket audits. Without this check,
@@ -930,7 +930,7 @@ namespace CNA::Internal::Renderers::HtmlDom
                 "be: the backbuffer here is a live DOM subtree composited by the browser, and no "
                 "browser API rasterizes one to pixels. Render into a RenderTarget2D and read that "
                 "instead, or use the CANVAS renderer when backbuffer readback is required.");
-        // plan_html_dom.md HTMLDOM-120: GraphicsDevice::GetBackBufferData (the shared layer) already
+        // plans/plan_html_dom.md HTMLDOM-120: GraphicsDevice::GetBackBufferData (the shared layer) already
         // validates a null buffer and bounds-checks the rectangle against PresentationParameters --
         // but NOT against the actually-bound render target's own real size, which can legitimately
         // be smaller (a too-large region there silently reads back transparent padding rather than
@@ -1067,7 +1067,7 @@ namespace CNA::Internal::Renderers::HtmlDom
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace HtmlDom { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

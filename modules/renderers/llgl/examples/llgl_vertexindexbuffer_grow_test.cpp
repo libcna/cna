@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-46: growing a persistent VertexBuffer/IndexBuffer mid-frame must not corrupt
+// plans/plan_llgl.md LLGL-46: growing a persistent VertexBuffer/IndexBuffer mid-frame must not corrupt
 // or crash an earlier, still-queued draw against that same buffer object's SMALLER, PREVIOUS
 // content.
 //

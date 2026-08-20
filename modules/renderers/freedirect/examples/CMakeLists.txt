@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_freedirect.md Phase X2/X8 (DX3-18/DX3-80): DIRECTX3 (DirectDraw via free-direct) CTest registration.
+# plans/plan_freedirect.md Phase X2/X8 (DX3-18/DX3-80): DIRECTX3 (DirectDraw via free-direct) CTest registration.
 # Unlike SDL_RENDERER's own window-based ctests, these do NOT need a real/virtual X11 display:
 # every pixel assertion reads back through the shadow-backbuffer surface directly
 # (FreeDirectRenderer::ReadBackbuffer/GetBackBufferData), never through real physical
@@ -51,32 +51,32 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME FreeDirect_ResizeTransaction COMMAND cna_test_freedirect_resize_transaction
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT;REMED-GFX-029")
 
-    # plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture/render-target renderer CTest.
+    # plans/plan_freedirect.md Phase X3 (DX3-20..DX3-28): texture/render-target renderer CTest.
     cna_directx3_test(cna_test_freedirect_texture_rendertarget freedirect_texture_rendertarget_test.cpp)
     cna_register_renderer_test(NAME FreeDirect_TextureRenderTarget COMMAND cna_test_freedirect_texture_rendertarget
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 
-    # plan_freedirect.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path CTest.
+    # plans/plan_freedirect.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path CTest.
     cna_directx3_test(cna_test_freedirect_spritebatch freedirect_spritebatch_test.cpp)
     cna_register_renderer_test(NAME FreeDirect_SpriteBatch COMMAND cna_test_freedirect_spritebatch
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 
-    # plan_freedirect.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math CTest.
+    # plans/plan_freedirect.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math CTest.
     cna_directx3_test(cna_test_freedirect_blend freedirect_blend_test.cpp)
     cna_register_renderer_test(NAME FreeDirect_Blend COMMAND cna_test_freedirect_blend
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 
-    # plan_freedirect.md Phase X5 (DX3-45/DX3-46): TextureFilter + TextureAddressMode sampling CTest.
+    # plans/plan_freedirect.md Phase X5 (DX3-45/DX3-46): TextureFilter + TextureAddressMode sampling CTest.
     cna_directx3_test(cna_test_freedirect_sampling freedirect_sampling_test.cpp)
     cna_register_renderer_test(NAME FreeDirect_AddressMode COMMAND cna_test_freedirect_sampling
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 
-    # plan_freedirect.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString CTest.
+    # plans/plan_freedirect.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString CTest.
     cna_directx3_test(cna_test_freedirect_spritefont freedirect_spritefont_test.cpp)
     cna_register_renderer_test(NAME FreeDirect_SpriteFont COMMAND cna_test_freedirect_spritefont
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 
-    # plan_freedirect.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring / remaining-defaults CTest.
+    # plans/plan_freedirect.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring / remaining-defaults CTest.
     cna_directx3_test(cna_test_freedirect_no3d freedirect_no3d_test.cpp)
     cna_register_renderer_test(NAME FreeDirect_No3D COMMAND cna_test_freedirect_no3d
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
@@ -93,7 +93,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         COMMAND cna_test_freedirect_unsupported_3d_behavior
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "FREEDIRECT")
 
-    # plan_freedirect.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
+    # plans/plan_freedirect.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
     # SDL_VIDEODRIVER=dummy reports a fixed 1024x768 "window" size (no real display to query), so
     # this test's letterbox-invariant checks run against that fixed size rather than whatever a
     # real display would report -- still a genuine, non-trivial letterbox (1024x768 vs 64x64

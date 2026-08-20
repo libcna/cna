@@ -5,7 +5,7 @@
 - Audit status: AUDITED (full read, 27 lines)
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header
-- XNA/FNA relevance: N/A -- NOXNA, backs `MediaLibrary::SavePicture` (plan_media.md MEDIA-59/D7)
+- XNA/FNA relevance: N/A -- NOXNA, backs `MediaLibrary::SavePicture` (plans/plan_media.md MEDIA-59/D7)
 - Main related tests: not independently located in this pass
 
 ## Purpose

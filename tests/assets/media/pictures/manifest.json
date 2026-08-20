@@ -1,7 +1,7 @@
 {
-  "producer": "ImageMagick convert, synthetic solid-color fixture authored for plan_media.md Phase 0",
+  "producer": "ImageMagick convert, synthetic solid-color fixture authored for plans/plan_media.md Phase 0",
   "provenance": "100% self-generated synthetic images -- no third-party content, no NOTICE.md/THIRD_PARTY_NOTICES.md entry required (MEDIA-8)",
-  "purpose": "plan_media.md MEDIA-4: real Picture/PictureAlbum tree fixture for PictureLibraryIndex (MEDIA-56) tests",
+  "purpose": "plans/plan_media.md MEDIA-4: real Picture/PictureAlbum tree fixture for PictureLibraryIndex (MEDIA-56) tests",
   "tree": [
     { "path": "Vacation/beach.jpg", "format": "jpeg", "width": 64, "height": 48, "parentAlbumDepthFromRoot": 1 },
     { "path": "Vacation/Day 2/sunset.png", "format": "png", "width": 32, "height": 32, "parentAlbumDepthFromRoot": 2 },

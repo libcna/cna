@@ -20,7 +20,7 @@ namespace CNA::Graphics {
     /**
      * @brief Filters a list of bounds down to the ones a camera can see.
      *
-     * plan_modern.md `MOD-1409`. Built on XNA's own `BoundingFrustum` rather than on planes
+     * plans/plan_modern.md `MOD-1409`. Built on XNA's own `BoundingFrustum` rather than on planes
      * extracted here: the test is `BoundingFrustum::Intersects`, which already exists and is
      * already tested, and a second implementation would only be a second thing to get wrong.
      *
@@ -95,7 +95,7 @@ namespace CNA::Graphics {
         /**
          * @brief Keeps only the transforms whose bounds are visible, in their original order.
          *
-         * plan_modern.md `MOD-1410`: the composition an instanced draw wants, since uploading a
+         * plans/plan_modern.md `MOD-1410`: the composition an instanced draw wants, since uploading a
          * transform for an object nobody can see costs the same as one they can. The two input
          * vectors are parallel; a shorter bounds list means the extra transforms are treated as
          * having no bounds, and are kept -- dropping geometry because a caller forgot a bound

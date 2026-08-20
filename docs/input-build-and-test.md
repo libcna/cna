@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MS-PL -->
 # Building and Testing CNA Input
 
-> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+> **Related input docs (INP-0003):** [plan](../plans/plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
 
 This document explains how to build and run the CNA `Input` unit tests from a **complete** checkout,
 and — importantly — what **cannot** be verified from a source-only archive or in a headless CI
@@ -81,7 +81,7 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 
 ## Test counts (authoritative baseline)
 
-Recorded **2026-07-16** (updated from the 2026-07-06 baseline as part of `plan_input.md` P13-006, the
+Recorded **2026-07-16** (updated from the 2026-07-06 baseline as part of `plans/plan_input.md` P13-006, the
 Input subsystem grew substantially in between — including the `feature/xnb` merge and the
 `audit_input.md` Phase 13 defect-remediation pass) in this checkout: Debian 13, g++ 14.2.0, CMake
 3.31.6, Ninja 1.12.1. Input is backend-agnostic — the input-filter count is identical on EasyGL /
@@ -144,11 +144,11 @@ option to pick another backend). Verified in `cmake/ThirdPartySDL.cmake` and `CM
 
 | Metric | Count |
 |--------|-------|
-| Canonical input filter (the filter above) | **524 passed**, 0 failed, 5x `--gtest_shuffle --gtest_repeat` clean (updated 2026-07-17, `plan_input.md` Phases 1-9) |
+| Canonical input filter (the filter above) | **524 passed**, 0 failed, 5x `--gtest_shuffle --gtest_repeat` clean (updated 2026-07-17, `plans/plan_input.md` Phases 1-9) |
 | Full `CnaTests` suite (unfiltered) | **does not currently complete** — see below |
 
 Notes:
-- **Updated 2026-07-17 (`plan_input.md` P9-027):** the input-filter count grew from the 2026-07-16
+- **Updated 2026-07-17 (`plans/plan_input.md` P9-027):** the input-filter count grew from the 2026-07-16
   baseline of 496 to **524** across the `feature/input` audit. The Phase 1-9 sessions covered by this
   update added 7 tests directly (`KeyboardStateTest.GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice`
   P2-011; the former P2-056 modifier combination is now covered by
@@ -159,16 +159,16 @@ Notes:
   `GestureDetectorTest.GestureTimestampIsNonNegativeAndAdvancesWithTheClock` P6-012;
   `SdlGamepadSubsystemInit.ShutdownQuitsSubsystemAndIsSafeToCallRepeatedly` P8-002); the remaining
   21 were added by earlier session work (the Phase 1 per-type audits) between the 496 baseline and
-  this update — see each task's own `plan_input.md` Result for its exact test name.
+  this update — see each task's own `plans/plan_input.md` Result for its exact test name.
 - **The unfiltered full-suite count above is deliberately NOT restated as a stable N-passed/N-failed
-  figure, because it is no longer accurate to give one.** `plan_input.md` P9-031 (2026-07-17) found
+  figure, because it is no longer accurate to give one.** `plans/plan_input.md` P9-031 (2026-07-17) found
   that running the full unfiltered `CnaTests` binary now **crashes** with `double free or corruption
   (fasttop)` (SIGABRT) inside `ENetBackendTest` (the Net subsystem) before reaching a final summary —
   confirmed, via isolation testing, to be **unrelated to Input** (`ENetBackendTest.*` alone passes
   cleanly; the corruption requires ~800 preceding tests' allocation history to manifest) and **not**
   present in any Input-filtered run this session (including under AddressSanitizer+UndefinedBehaviorSanitizer,
   P9-005/006). This is flagged as a real, separate, out-of-Input-scope memory-safety defect requiring
-  dedicated bisection — see `plan_input.md`'s P9-031 Result and `NEXT.md` for the full record. Until
+  dedicated bisection — see `plans/plan_input.md`'s P9-031 Result and `NEXT.md` for the full record. Until
   it is root-caused and fixed, do not trust or restate a "full suite N/N" figure from this checkout;
   the previously-recorded 2026-07-16 figure (4623 passed / 20 failed / 2 skipped, 4645 ran) predates
   this crash's discovery and should not be treated as still achievable.
@@ -205,7 +205,7 @@ of the translation logic only, and are otherwise manual/hardware-gated:
   rumble/LED/sensor support, GUID formatting) is headless-tested at both sides of the platform
   contract: pure SDL mapping helpers plus a complete canned `IPlatformGamepad` drive public
   `GamePad` without hardware. What these tests cannot prove is that the physical device *acts* —
-  that stays manual/hardware-gated. See `plan_input.md`
+  that stays manual/hardware-gated. See `plans/plan_input.md`
   (Phase I15) and `docs/input-manual-verification-results.md`.
   - **Startup invariant:** the SDL gamepad subsystem is initialized explicitly in
     `Game::DoInitialize()` — before the first event pump and snapshot update — through

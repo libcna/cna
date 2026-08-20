@@ -32,7 +32,7 @@ tracks only the *colour* factors regardless of what the alpha factors are doing.
 
 **Needs attention** — the test design itself is sound and its math is correct, but it carries the same stale
 Vulkan/Task-868 narrative pattern found in four sibling files, here specifically asserting a per-check
-pass/fail split ("expect Check A to pass and Check B to fail") that `plan_graphics.md`'s Task 868 closure entry
+pass/fail split ("expect Check A to pass and Check B to fail") that `plans/plan_graphics.md`'s Task 868 closure entry
 directly contradicts (records `SeparateFactors` as one of the 5 tests that failed before the fix and passed,
 in full, afterward).
 
@@ -110,12 +110,12 @@ file's own header comment states it "mirrors Task 307's approach... but for the 
 - Severity: MEDIUM
 - Confidence: HIGH
 - Category: maintainability / documentation-accuracy
-- Location/symbol: lines 21-26: *"NOTE: Vulkan's ApplyBlendState (Task 868, see plan_graphics.md) hardcodes
+- Location/symbol: lines 21-26: *"NOTE: Vulkan's ApplyBlendState (Task 868, see plans/plan_graphics.md) hardcodes
   colorSrcBlend=SourceAlpha, colorDstBlend=InverseSourceAlpha regardless of what's requested. At alpha=255 that
   collapses to 'source only'... which happens to match Check A's expectation by coincidence, but NOT Check B's...
   Expect Check A to pass and Check B to fail on Vulkan; do not read a passing Check A as evidence Task 868 is
   fixed."*
-- Evidence: `plan_graphics.md` line 393 (Task 868, `✅ CLOSED`) lists `SeparateFactors` among the 5 tests
+- Evidence: `plans/plan_graphics.md` line 393 (Task 868, `✅ CLOSED`) lists `SeparateFactors` among the 5 tests
   (`AlphaBlend`/`Additive`/`SeparateFunctions`/`SeparateFactors`/`BlendFactor`) that failed with "the exact
   previously-documented wrong values" before the fix and were reconfirmed to fully pass (both checks, not just
   Check A) afterward.

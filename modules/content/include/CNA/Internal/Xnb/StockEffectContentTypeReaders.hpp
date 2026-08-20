@@ -12,7 +12,7 @@
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 
-// plan_xnb.md XNB-32: stock-effect .xnb readers -- see PrimitiveContentTypeReaders.hpp's own note
+// plans/plan_xnb.md XNB-32: stock-effect .xnb readers -- see PrimitiveContentTypeReaders.hpp's own note
 // on why these live in CNA::Internal::Xnb (FNA's own equivalents are all `internal`/default-
 // visibility classes, never subclassed by game code).
 //
@@ -26,14 +26,14 @@
 // Target the common std::shared_ptr<Effect> base, not std::shared_ptr<ConcreteEffectType>: unlike
 // FNA (where ReadSharedResource<Effect>()'s C# cast succeeds via ordinary RTTI regardless of which
 // concrete effect type a reader's own generic parameter names), CNA's std::any_cast<T> requires an
-// *exact* type match -- plan_xnb.md XNB-40 (a ModelMeshPart's Effect, read via
+// *exact* type match -- plans/plan_xnb.md XNB-40 (a ModelMeshPart's Effect, read via
 // ReadSharedResource<std::shared_ptr<Effect>>()) cannot know which of the 5 concrete effect types a
 // given file actually used, so every reader must erase to the same base type for that dispatch to
 // ever work. Each Read() still constructs the real concrete type internally; the upcast to
 // shared_ptr<Effect> happens implicitly on return.
 //
 // Each stock effect's texture field(s) are read via ContentReader::ReadExternalReference<T>()
-// (plan_xnb.md XNB-35) and given to the effect via SetOwnedTexture()/SetOwnedTexture2()/
+// (plans/plan_xnb.md XNB-35) and given to the effect via SetOwnedTexture()/SetOwnedTexture2()/
 // SetOwnedEnvironmentMap() -- CNAEXT additions that let the effect keep its own texture reference
 // alive (matching XNA's real GC-tracked Effect.Texture), since a standalone content-loaded effect
 // has no external owner the way a Model's shared texture pool does.

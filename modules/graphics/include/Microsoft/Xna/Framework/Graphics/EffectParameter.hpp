@@ -487,7 +487,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // Storage: raw float buffer for numeric types, string for string, pointer for textures.
         // Texture2D/Texture3D/TextureCube each get their own slot even though all three now
         // inherit Texture (matching FNA) -- collapsing these into one Texture* slot is a
-        // separate, larger EffectParameter API-shape change, out of scope here (plan_graphics.md
+        // separate, larger EffectParameter API-shape change, out of scope here (plans/plan_graphics.md
         // Task 863).
         std::vector<float> floatData_;
         std::vector<int>   intData_;

@@ -28,7 +28,7 @@
 //   - The CLIENT has only a one-shot QualityOfService sample from NetworkSession::Find()'s
 //     discovery reply (Task 4.2) - a real measured wall-clock query/reply RTT, but not a live,
 //     continuously-refreshing value. A client's own live view of the host's RTT is a documented,
-//     known gap (see plan_net.md Task 4.1's own scope decision: the star-topology client side has
+//     known gap (see plans/plan_net.md Task 4.1's own scope decision: the star-topology client side has
 //     no direct ENetPeer to read a live RTT from without further plumbing) - this demo's client
 //     side prints the one-shot discovery QoS once, then honestly labels the live-refresh column
 //     as "not tracked from the client side (Task 4.1 documented gap)" rather than showing a

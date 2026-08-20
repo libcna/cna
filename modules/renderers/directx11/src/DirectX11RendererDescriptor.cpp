@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P1-D11: the DirectX11 family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D11: the DirectX11 family's pre-construction contract.
 //
 // Direct3D 11 creates its swap chain from the window's HWND.
 
@@ -14,7 +14,7 @@ namespace CNA::Internal::Renderers::DirectX11
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

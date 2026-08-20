@@ -15,8 +15,8 @@
 #include <stdexcept>
 #include <vector>
 
-// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
-// ceilings. plan_runtimerenderer.md design decision 9: asked of the active renderer rather than
+// plans/plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
+// ceilings. plans/plan_runtimerenderer.md design decision 9: asked of the active renderer rather than
 // convention exactly.
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -77,7 +77,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // CreateTextureCube's own renderer call never actually forwards it -- a RenderTargetCube
         // could report a non-Color Format() while its real GPU resource was always Color.
         //
-        // plan_modern.md MOD-107: the format is forwarded now (CreateRenderTargetCubeEXT), so the
+        // plans/plan_modern.md MOD-107: the format is forwarded now (CreateRenderTargetCubeEXT), so the
         // rule that keeps that finding fixed is no longer "Color only" but "whatever the renderer
         // says it really creates". The same tri-state verdict RenderTarget2D consults answers it,
         // so a cube and a 2D target can never disagree about a format.

@@ -8,7 +8,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief How a draw's source pixels must be prepared, and how the result composites.
      *
-     * plan_html_dom.md design decisions 7 and 8. CSS compositing offers exactly one blend operator
+     * plans/plan_html_dom.md design decisions 7 and 8. CSS compositing offers exactly one blend operator
      * this renderer needs (`plus-lighter`) and no blend-factor model at all, so three of the four
      * standard XNA `BlendState` presets are reproduced by preparing the SOURCE PIXELS instead of
      * the compositing step:
@@ -19,7 +19,7 @@ namespace CNA::Internal::Renderers::HtmlDom
      *   draw paths reproduce this differently. The bound-render-target path has a real Canvas2D
      *   context and uses Porter-Duff `'copy'` on the texture's STRAIGHT (as-uploaded) pixels,
      *   clipped to exactly the sprite's own footprint first (`'copy'` is evaluated over the WHOLE
-     *   compositing area, not just the drawn shape -- the same pitfall plan_canvas.md CANVAS-44
+     *   compositing area, not just the drawn shape -- the same pitfall plans/plan_canvas.md CANVAS-44
      *   found and fixed with an identical clip). The DOM `<div>` backbuffer path has no such
      *   operator -- CSS cannot make one stacked, blended element erase whatever is beneath another
      *   while still showing its own partial alpha through -- so it falls back to an alpha-stripped
@@ -33,7 +33,7 @@ namespace CNA::Internal::Renderers::HtmlDom
      *   its pixels are used exactly as uploaded.
      * - `Additive` needs no pixel preparation, only `mix-blend-mode: plus-lighter`.
      *
-     * plan_html_dom.md HTMLDOM-105: the colour-channel equivalences above are exact and pixel-
+     * plans/plan_html_dom.md HTMLDOM-105: the colour-channel equivalences above are exact and pixel-
      * verified (HTMLDOM-84/85/86/87), but re-deriving each preset's RAW factor-based RGBA equation
      * (both colour AND alpha channels, independently of what any browser actually does) found a
      * real, architectural ALPHA-channel gap for two presets specifically -- confirmed via a headless-
@@ -83,7 +83,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief Which cached variant of a texture's pixels a DomCompositeOp draws from.
      *
-     * The JS-side variant cache is keyed on this plus the tint colour (plan_html_dom.md
+     * The JS-side variant cache is keyed on this plus the tint colour (plans/plan_html_dom.md
      * HTMLDOM-23), so `Additive` and `NonPremultiplied` deliberately share variant 0 rather than
      * generating two identical copies of the same pixels.
      *
@@ -107,7 +107,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief Maps raw XNA BlendState factor/function ordinals to a DomCompositeOp.
      *
-     * Pure function -- contains no `EM_JS`/DOM access at all, so plan_html_dom.md HTMLDOM-70's
+     * Pure function -- contains no `EM_JS`/DOM access at all, so plans/plan_html_dom.md HTMLDOM-70's
      * GTest coverage can exercise it directly without a browser. The ordinals are the same ones
      * `IGraphicsRenderer::ApplyBlendState` documents (Blend: One=0, Zero=1, SourceAlpha=4,
      * InverseSourceAlpha=5; BlendFunction: Add=0).
@@ -148,7 +148,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief CNAEXT. Returns whether the most recent ApplyRasterizerState enabled scissor testing.
      *
-     * plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable was previously never read by
+     * plans/plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable was previously never read by
      * this renderer at all -- SetScissorRect's clip-path/Canvas2D clip applied unconditionally,
      * matching the native 2D renderer's omission but not real XNA fidelity (that renderer never
      * overrides ApplyRasterizerState either, so it has no enable bit to read in the first place;
@@ -171,7 +171,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief CNAEXT. Returns the JS-side canvas id of the currently bound render target.
      *
-     * plan_html_dom.md design decision 10: while a render target is bound, draws cannot go to the
+     * plans/plan_html_dom.md design decision 10: while a render target is bound, draws cannot go to the
      * DOM (a `<div>` cannot render into an off-screen surface) and route through the target's own
      * Canvas2D context instead. The sprite-batch renderer reads this to pick its path.
      *
@@ -189,7 +189,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief One sprite in a batch, encoded for a single wasm→JS handoff.
      *
-     * plan_html_dom.md design decision 5: `Draw()` appends one of these per sprite and `End()`
+     * plans/plan_html_dom.md design decision 5: `Draw()` appends one of these per sprite and `End()`
      * hands the whole array to JS in ONE `EM_JS` call, so a 2000-sprite frame crosses the wasm/JS
      * boundary once instead of 2000 times. The layout is deliberately 20 four-byte fields so JS can
      * walk it with plain `HEAP32`/`HEAPF32`/`HEAPU32` index arithmetic and no per-field offset
@@ -282,7 +282,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief Rejects the one TextureAddressMode combination this renderer still cannot reproduce.
      *
-     * plan_html_dom.md HTMLDOM-45/HTMLDOM-97. Only relevant when the requested source rectangle
+     * plans/plan_html_dom.md HTMLDOM-45/HTMLDOM-97. Only relevant when the requested source rectangle
      * actually leaves the texture's own bounds -- the single case in which Wrap/Mirror can ever
      * differ visibly from Clamp. `Wrap` maps to CSS background tiling; symmetric `Mirror` (the same
      * mode on both axes -- `SamplerState` has no built-in Mirror preset at all, so a game always

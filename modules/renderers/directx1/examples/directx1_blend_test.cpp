@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx1.md Phase O5 (DX1-40..DX1-44): blend-mode compositing math tests for the DIRECTX1
+// plans/plan_dx1.md Phase O5 (DX1-40..DX1-44): blend-mode compositing math tests for the DIRECTX1
 // (real DirectDraw v1, run under Wine -- no ../free-direct anywhere in this renderer) graphics renderer.
 //
 // All 4 checks draw the SAME source pixel (200, 0, 0, 100) over the SAME background

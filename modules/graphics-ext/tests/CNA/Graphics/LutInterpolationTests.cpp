@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2131: which interpolation a lookup table is read with, decided by measurement.
+// plans/plan_modern.md MOD-2131: which interpolation a lookup table is read with, decided by measurement.
 //
 // Both agree exactly on every entry the table holds, so nothing about a grid point separates them.
 // The difference is entirely between the entries, which is where almost every pixel lands: a

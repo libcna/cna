@@ -52,7 +52,7 @@ namespace Microsoft::Xna::Framework::Content
         System::IServiceProvider* serviceProvider_ = nullptr;
         bool disposed_ = false;
 
-        // plan_cnj.md CNB-36: keyed by (T's type_index, normalized logical name), not name
+        // plans/plan_cnj.md CNB-36: keyed by (T's type_index, normalized logical name), not name
         // alone -- otherwise a second Load<T2>() for a logical name a different T1 already
         // cached under would std::any_cast<T2> a std::any actually holding T1, throwing
         // std::bad_any_cast (an unrelated, undocumented exception type) instead of reaching the
@@ -81,7 +81,7 @@ namespace Microsoft::Xna::Framework::Content
         std::unordered_map<AssetCacheKey, std::any, AssetCacheKeyHash> loadedAssets_;
         std::unordered_map<std::type_index, std::any> typeReaders_;
 
-        // plan_cnj.md CNB-24: per-C++-type table of named .cnj loaders, keyed first by the
+        // plans/plan_cnj.md CNB-24: per-C++-type table of named .cnj loaders, keyed first by the
         // requested type T (std::type_index), then by the .cnj document's own "type" string.
         // Populated by RegisterCnjLoader<T>(); consulted by GenericCnjTypeReader<T> below.
         std::unordered_map<std::type_index, std::unordered_map<std::string, std::any>> cnjNamedLoaders_;
@@ -94,7 +94,7 @@ namespace Microsoft::Xna::Framework::Content
         };
         std::unordered_map<std::string, WeakTextureEntry> textureCache_;
 
-        // plan_xnb.md Phase B3 (XNB-65/66/67): a point-in-time snapshot of the content root,
+        // plans/plan_xnb.md Phase B3 (XNB-65/66/67): a point-in-time snapshot of the content root,
         // built lazily on first access (or explicitly via RefreshContentManifest()). Additive
         // only in this pass -- NOT yet consulted by ResolveAssetPath()/Load<T>()'s own
         // exists()-based resolution, which keeps its existing live-filesystem-check behavior
@@ -165,7 +165,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief CNAEXT: (re)scans the content root and rebuilds the content manifest
-         *        (plan_xnb.md XNB-65/65A), replacing any previous scan. Not called
+         *        (plans/plan_xnb.md XNB-65/65A), replacing any previous scan. Not called
          *        automatically after construction -- the first call to GetContentManifest()/
          *        GetXnbReaderUsageSummary() triggers it lazily if it hasn't run yet.
          *
@@ -176,7 +176,7 @@ namespace Microsoft::Xna::Framework::Content
         CNAEXT void RefreshContentManifest();
 
         /**
-         * @brief CNAEXT: returns the content manifest (plan_xnb.md XNB-66), one entry per logical
+         * @brief CNAEXT: returns the content manifest (plans/plan_xnb.md XNB-66), one entry per logical
          *        asset name found under the content root, building it via RefreshContentManifest()
          *        first if it hasn't been built yet.
          *
@@ -186,7 +186,7 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief CNAEXT: aggregates the manifest's per-file `.xnb` reader-name inventories
-         *        (plan_xnb.md XNB-67) into one row per distinct reader name -- how many files
+         *        (plans/plan_xnb.md XNB-67) into one row per distinct reader name -- how many files
          *        reference it, and whether `ContentTypeReaderManager` currently has a reader
          *        registered for it. Builds the manifest first via GetContentManifest() if needed.
          *
@@ -229,7 +229,7 @@ namespace Microsoft::Xna::Framework::Content
          * existing reader already registered (built-in or via RegisterTypeReader<T>()); throws
          * immediately if one already exists, since it would never be consulted by that reader.
          *
-         * Registration is deterministic and fails fast (plan_cnj.md CNB-37): an empty
+         * Registration is deterministic and fails fast (plans/plan_cnj.md CNB-37): an empty
          * @p typeName or an empty @p factory is rejected immediately, and re-registering an
          * already-used `(T, typeName)` pair throws rather than silently replacing the earlier
          * factory -- two *different* `typeName`s for the same `T` remain fully supported (that
@@ -324,7 +324,7 @@ namespace Microsoft::Xna::Framework::Content
             // be silently shadowed by CNA's own loose-file/.cnj conveniences). Unlike the
             // loose-file path, .xnb dispatch needs no per-T reader registered on ContentManager
             // at all -- root-object dispatch is entirely driven by the file's own type-reader
-            // table via the process-wide ContentTypeReaderManager registry (plan_xnb.md XNB-17B).
+            // table via the process-wide ContentTypeReaderManager registry (plans/plan_xnb.md XNB-17B).
             const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
             if (std::filesystem::exists(xnbCandidate))
             {
@@ -409,8 +409,8 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief Loads @p assetName as a real `.xnb` binary asset from @p xnbPath
-         *        (plan_xnb.md XNB-17B), via ContentReader's root-object dispatch. LZX-compressed
-         *        files (plan_xnb.md XNB-28/29) are decompressed first.
+         *        (plans/plan_xnb.md XNB-17B), via ContentReader's root-object dispatch. LZX-compressed
+         *        files (plans/plan_xnb.md XNB-28/29) are decompressed first.
          *
          * @tparam T        Requested asset type; must match (via `std::any_cast`) whatever the
          *                  file's root type-reader actually produces.
@@ -440,7 +440,7 @@ namespace Microsoft::Xna::Framework::Content
             // header.totalLength is a value the FILE ITSELF declares, not something ParseXnbHeader
             // can verify against the real file size on its own -- cross-check it against the
             // actual number of bytes just read from disk before it's used for any pointer
-            // arithmetic below (plan_xnb.md XNB-43). A file claiming more bytes than it actually
+            // arithmetic below (plans/plan_xnb.md XNB-43). A file claiming more bytes than it actually
             // has (truncated, or an adversarial totalLength) would otherwise let the Lzx branch's
             // compressedSize computation read past the end of `bytes`.
             if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
@@ -479,7 +479,7 @@ namespace Microsoft::Xna::Framework::Content
                 case CNA::Internal::Xnb::XnbCompression::Lz4:
                     throw ContentLoadException(
                         "'" + xnbPath + "' uses MonoGame's Lz4 compression, which CNA does not yet "
-                        "support (plan_xnb.md XNB-30C).");
+                        "support (plans/plan_xnb.md XNB-30C).");
                 case CNA::Internal::Xnb::XnbCompression::Unknown:
                 default:
                     throw ContentLoadException(
@@ -519,7 +519,7 @@ namespace Microsoft::Xna::Framework::Content
             // .cnj is always tried before any native/reader-declared extension (cnj.md's "core
             // rule" -- when a .cnj sidecar is present, it always has final say over how an asset
             // name resolves, even if a native file with the same name also exists). This makes
-            // .cnj usable as an optional metadata sidecar (plan_cnj.md CNB-4), not just a
+            // .cnj usable as an optional metadata sidecar (plans/plan_cnj.md CNB-4), not just a
             // mutually-exclusive alternative to a native file.
             const std::string cnjCandidate = base + ".cnj";
             if (std::filesystem::exists(cnjCandidate))

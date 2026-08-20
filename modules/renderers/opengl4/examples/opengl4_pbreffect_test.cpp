@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-23: PbrEffect for the OpenGL4 graphics renderer -- adds a dedicated pbr3d
+// plans/plan_opengl4.md GL4-23: PbrEffect for the OpenGL4 graphics renderer -- adds a dedicated pbr3d
 // GLSL 410 core program (new stride 48, VertexPositionNormalTangentTexture) implementing the
 // real glTF 2.0 metallic-roughness BRDF (GGX normal distribution, Smith-Schlick-GGX visibility,
 // Schlick Fresnel), plus a pbr_skinned3d sibling (new stride 68) for SkinnedPbrEffect. Ported

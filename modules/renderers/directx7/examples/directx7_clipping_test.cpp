@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O4 (DX2-30, DX2-39): near-plane clipping (DirectX7ClipTriangleNearPlane, ported
+// plans/plan_dx2.md Phase O4 (DX2-30, DX2-39): near-plane clipping (DirectX7ClipTriangleNearPlane, ported
 // verbatim from SoftwareRenderer.cpp's SOFTWARE-83) -- a triangle straddling the near plane
 // renders its visible portion only, with no crash or garbage output.
 //

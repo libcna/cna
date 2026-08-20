@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: cross-renderer visual-parity proof -- reuses
+// plans/plan_opengl2.md: cross-renderer visual-parity proof -- reuses
 // examples/easygl_pbreffect_golden_test.cpp's own glTF metallic-roughness BRDF scene and
 // hand-derived/captured expected values verbatim (4 quads: A=white/rough/non-metallic/flat
 // normal, B=same as A with a tilted normal map, C=red/fully-metallic, D=red/fully-dielectric).

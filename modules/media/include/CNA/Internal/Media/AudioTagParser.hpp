@@ -8,7 +8,7 @@
 namespace CNA::Internal::Media
 {
     /// Tag fields read from (or inferred for) one audio file. Fields that couldn't be determined
-    /// stay empty/zero -- plan_media.md MEDIA-47..51/D2.
+    /// stay empty/zero -- plans/plan_media.md MEDIA-47..51/D2.
     struct AudioTags
     {
         std::string title;
@@ -22,7 +22,7 @@ namespace CNA::Internal::Media
         /// Source formats disagree wildly: ID3v2 POPM is 0-255 (0 meaning "unrated"), while the
         /// Vorbis `RATING` comment has no standard at all -- different taggers write 0-100, 0-5 or
         /// 0-10. The chosen interpretations are documented in CHECKLIST.md; neither XNA nor FNA
-        /// defines a conversion, so these are CNA decisions (plan_media.md MEDIA-182/183).
+        /// defines a conversion, so these are CNA decisions (plans/plan_media.md MEDIA-182/183).
         int rating = 0;
 
         /// True only if a real rating tag was present -- this is what XNA's Song.IsRated means
@@ -34,7 +34,7 @@ namespace CNA::Internal::Media
     /// Minimal, from-scratch audio-tag reader: real Ogg Vorbis-comment and ID3v2.3/2.4 parsing,
     /// falling back to filename/folder heuristics for untagged or unsupported files. No
     /// third-party tag library dependency (matches this project's established from-scratch-parser
-    /// precedent, e.g. XactParser/Json.hpp) -- plan_media.md D2.
+    /// precedent, e.g. XactParser/Json.hpp) -- plans/plan_media.md D2.
     class AudioTagParser
     {
     public:
@@ -57,7 +57,7 @@ namespace CNA::Internal::Media
         ///
         /// Supports ID3v2 APIC frames (MP3) and FLAC METADATA_BLOCK_PICTURE (block type 6).
         /// Front cover (picture type 3) is preferred when several images are present; otherwise
-        /// the first image found is used (plan_media.md MEDIA-206/207).
+        /// the first image found is used (plans/plan_media.md MEDIA-206/207).
         ///
         /// @param path     Audio file to read.
         /// @param outImage Receives the raw encoded image bytes (JPEG/PNG as stored in the tag).
@@ -65,10 +65,10 @@ namespace CNA::Internal::Media
         static bool ExtractEmbeddedArt(const std::string& path, std::vector<uint8_t>& outImage);
 
 
-        /// Reads an Ogg-Opus "OpusTags" comment header (plan_media.md MEDIA-202).
+        /// Reads an Ogg-Opus "OpusTags" comment header (plans/plan_media.md MEDIA-202).
         static bool TryReadOpusTags(const std::vector<uint8_t>& fileBytes, AudioTags& out);
 
-        /// Reads a native-FLAC VORBIS_COMMENT metadata block (plan_media.md MEDIA-200).
+        /// Reads a native-FLAC VORBIS_COMMENT metadata block (plans/plan_media.md MEDIA-200).
         static bool TryReadFlacComments(const std::vector<uint8_t>& fileBytes, AudioTags& out);
 
         /// Walks a length-prefixed "KEY=value" Vorbis-comment list; shared by all three readers.

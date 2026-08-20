@@ -27,7 +27,7 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         const int stride = morph.Stride;
-        // plan_gltf.md GLTF-278. This used to be the literal list {32, 52, 56}, written when those
+        // plans/plan_gltf.md GLTF-278. This used to be the literal list {32, 52, 56}, written when those
         // were the only strides a mesh with normals could have. GLTF-215 changed which effect a
         // metallic-roughness material selects, and with it the strides an ordinary glTF mesh gets
         // (48 unskinned, 68 skinned) -- both of which carry Normal at offset 12 and neither of
@@ -47,7 +47,7 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 normalOffset = layout.elements[i].offset;
             }
-            // plan_gltf.md GLTF-279. Vector4 in the layout, but only its xyz is morphed: `w` is the
+            // plans/plan_gltf.md GLTF-279. Vector4 in the layout, but only its xyz is morphed: `w` is the
             // handedness and stays exactly as the base vertex has it.
             else if (layout.elements[i].usage == VertexElementUsage::Tangent &&
                      layout.elements[i].usageIndex == 0 &&
@@ -76,7 +76,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 const float w = weights[t];
                 if (w == 0.0f) { continue; }
                 // Empty means "this target authors no POSITION delta", the same convention the
-                // normal and tangent arrays already used (plan_gltf.md GLTF-292). Before that,
+                // normal and tangent arrays already used (plans/plan_gltf.md GLTF-292). Before that,
                 // such a target arrived zero-filled and this read was safe by accident.
                 if (!morph.PositionDeltas[t].empty())
                 {
@@ -143,7 +143,7 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         }
 
-        // plan_gltf.md GLTF-461. §3.7.2.2: "When the base mesh primitive does not specify normals,
+        // plans/plan_gltf.md GLTF-461. §3.7.2.2: "When the base mesh primitive does not specify normals,
         // client implementations MUST calculate flat normals for each morph target." Everything
         // above blends what the file authored; this recomputes what it did not.
         //
@@ -270,7 +270,7 @@ namespace Microsoft::Xna::Framework::Graphics
             const double t1 = track.Keys[i + 1].Time.getTotalSecondsProperty();
             if (timeSeconds >= t0 && timeSeconds <= t1)
             {
-                // plan_gltf.md GLTF-301, the same half-open-interval rule as the bone channels'
+                // plans/plan_gltf.md GLTF-301, the same half-open-interval rule as the bone channels'
                 // own StepSampleIndex: §3.6 holds key i's value on [t0, t1), so at exactly t1 the
                 // next key is already in force. Returning key i there makes every interior
                 // keyframe of a STEP weight track play the previous key's value.

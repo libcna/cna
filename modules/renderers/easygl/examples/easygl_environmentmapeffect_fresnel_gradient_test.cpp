@@ -26,7 +26,7 @@
 // (weights derived by solving P = sum(w_i * v_i) per triangle; BL/BR always carry the bottom-
 // edge scalar, TL/TR the top-edge scalar). Expected colour = fresnel * (200,100,50).
 //
-// The bug being tested for (Task 1112, found via plan_dx9.md's D9-A6 oracle cross-check): with
+// The bug being tested for (Task 1112, found via plans/plan_dx9.md's D9-A6 oracle cross-check): with
 // the OLD per-fragment computation, interpolating and renormalizing the RAW NORMAL VECTORS
 // (not the final scalar) then re-running dot/pow on the result does not preserve the true
 // per-vertex-interpolated shape here -- most of the surface reads close to the top vertex's

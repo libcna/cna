@@ -1,6 +1,6 @@
 # Direct2D log fixtures
 
-Inputs for `scripts/verify-direct2d-debug-log.py --self-test` (plan_direct2d.md D2D-113/D2D-124).
+Inputs for `scripts/verify-direct2d-debug-log.py --self-test` (plans/plan_direct2d.md D2D-113/D2D-124).
 
 Every file matching `debug-log-*.log` is classified by its name:
 

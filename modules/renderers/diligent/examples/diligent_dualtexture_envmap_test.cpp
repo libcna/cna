@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-33/DILIGENT-34: real-device proof for DualTextureEffect's two-layer
+// plans/plan_diligent.md DILIGENT-33/DILIGENT-34: real-device proof for DualTextureEffect's two-layer
 // modulate and for EnvironmentMapEffect's cube-map reflection, through the public XNA API only.
 //
 // Check A -- DualTextureEffect with a mid-grey second layer leaves the first layer's colour
@@ -12,7 +12,7 @@
 //   cube's colour, not the diffuse texture's.
 // Check D -- the same geometry with EnvironmentMapAmount = 0 shows the lit diffuse colour instead,
 //   so C cannot pass on a renderer that always samples the cube.
-// Check E/F -- plan_diligent.md DILIGENT-48: GraphicsDevice.SamplerStates[1] (texture2's own slot)
+// Check E/F -- plans/plan_diligent.md DILIGENT-48: GraphicsDevice.SamplerStates[1] (texture2's own slot)
 //   is genuinely independent of SamplerStates[0] (texture0's slot), not silently aliased to it.
 //   Texture0 is a uniform white 1x1 (immune to address mode -- any sample reads the same value, so
 //   its own slot-0 state can never explain a difference here), texture1 is a 2-texel-wide

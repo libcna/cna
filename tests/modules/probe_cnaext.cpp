@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Composition probe for the CNA::CnaExt compatibility umbrella (MODULARIZATION_PLAN.md §11):
+// Composition probe for the CNA::CnaExt compatibility umbrella (plans/MODULARIZATION_PLAN.md §11):
 // linking the historical umbrella name must provide BOTH extension modules (graphics-ext +
 // devices-ext) without dragging in networking. The paired ModuleLinkClosure_CnaExtComposition
 // ctest REQUIRES both extension archives on the link line, proving the umbrella is a

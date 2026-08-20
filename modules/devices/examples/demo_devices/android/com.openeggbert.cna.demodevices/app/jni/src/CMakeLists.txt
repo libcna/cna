@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.6)
 
 project(my_app)
 
-# plan_devices.md Task DEVICES-0124: CNA's own add_subdirectory(cna_build)
+# plans/plan_devices.md Task DEVICES-0124: CNA's own add_subdirectory(cna_build)
 # (the parent CMakeLists.txt) already cached SDL3_DIR pointing at the
 # cross-compiled .sdl-prebuilt-Android-aarch64 install, but the SDL3::SDL3
 # IMPORTED target itself is scoped to that directory, not visible to this

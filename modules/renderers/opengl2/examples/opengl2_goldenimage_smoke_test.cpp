@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: canary test proving PixelTestGame::CompareGoldenImage() genuinely works end
+// plans/plan_opengl2.md: canary test proving PixelTestGame::CompareGoldenImage() genuinely works end
 // to end on OpenGL2 (live readback, checked-in reference PNG load via Texture2D::FromStream,
 // per-pixel tolerance compare) -- reuses examples/easygl_goldenimage_smoke_test.cpp's own
 // trivial solid-blue scene verbatim, tolerance=0 (exact match expected).

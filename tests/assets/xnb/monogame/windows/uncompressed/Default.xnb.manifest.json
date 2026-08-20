@@ -36,5 +36,5 @@
     "kerningCount": 95,
     "hasDefaultCharacter": false
   },
-  "notes": "First real, externally-produced, uncompressed SpriteFont .xnb fixture (plan_xnb.md XNB-31/M3). Glyph atlas is Dxt3-compressed (already handled by the existing Texture2DReader from the M2 milestone), so this fixture also exercises Texture2DReader's compressed-format path via a nested ReadObject<Texture2D>() call, not just the uncompressed Color path white-1.xnb covers. Verified field-by-field with an independent Python parser before writing the C++ reader, not assumed from FNA's source alone."
+  "notes": "First real, externally-produced, uncompressed SpriteFont .xnb fixture (plans/plan_xnb.md XNB-31/M3). Glyph atlas is Dxt3-compressed (already handled by the existing Texture2DReader from the M2 milestone), so this fixture also exercises Texture2DReader's compressed-format path via a nested ReadObject<Texture2D>() call, not just the uncompressed Color path white-1.xnb covers. Verified field-by-field with an independent Python parser before writing the C++ reader, not assumed from FNA's source alone."
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-23: MSAA back buffer -- a real antialiased edge, not just a bookkeeping check.
+// plans/plan_llgl.md LLGL-23: MSAA back buffer -- a real antialiased edge, not just a bookkeeping check.
 //
 // MultiSampleCount is honoured by the LLGL renderer ONLY at swap-chain construction time
 // (LlglRenderer::LlglRenderer reads it once into requestedSampleCount_, forwarded

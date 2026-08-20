@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-1..GL4-9: end-to-end smoke test for the real desktop OpenGL 4.x
+// plans/plan_opengl4.md GL4-1..GL4-9: end-to-end smoke test for the real desktop OpenGL 4.x
 // core-profile graphics renderer's device/window/context lifecycle and color/depth/stencil
 // clear+present. Real window, a real SDL_GLContext requesting SDL_GL_CONTEXT_PROFILE_CORE
 // (unlike EasyGL's SDL_GL_CONTEXT_PROFILE_ES), and a real 60-frame Clear()+Present() loop.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2046: the app-facing light collection, and the bounding volume the cluster
+// plans/plan_modern.md MOD-2046: the app-facing light collection, and the bounding volume the cluster
 // assignment sorts by.
 //
 // The bounding sphere is the part worth testing hard. A point light's is obvious. A spot light's is

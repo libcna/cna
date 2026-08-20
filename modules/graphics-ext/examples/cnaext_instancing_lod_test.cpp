@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1403/MOD-1410/MOD-1412/MOD-1413: instancing, LOD and culling together.
+// plans/plan_modern.md MOD-1403/MOD-1410/MOD-1412/MOD-1413: instancing, LOD and culling together.
 //
 // A field of 10 000 cubes, three levels of detail, and a camera that can see about a third of it.
 // The unit tests already pin each class's answers; what only a real device can show is that the

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-064 existence gate: prove that the pinned MojoShader's raw "spirv" profile
+// plans/plan_fx.md FX-064 existence gate: prove that the pinned MojoShader's raw "spirv" profile
 // (MOJOSHADER_PROFILE_SPIRV) turns a committed compiled effect into a shader pair a real Vulkan
 // device accepts and renders correctly -- before any CNA renderer code is written for it.
 //
@@ -585,7 +585,7 @@ namespace
         vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
     }
 
-    /// plan_fx.md FX-064 golden-pixel render: parses, links and renders one technique/pass of a
+    /// plans/plan_fx.md FX-064 golden-pixel render: parses, links and renders one technique/pass of a
     /// committed effect through a hand-rolled Vulkan backend, then reads the target back. No CNA
     /// code anywhere in this path -- MojoShader and the Vulkan loader only.
     int RenderAndReadback(const char* path, VulkanContext& vk,

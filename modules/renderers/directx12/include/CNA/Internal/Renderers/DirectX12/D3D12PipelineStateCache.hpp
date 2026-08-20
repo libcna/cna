@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12 (DX-107): pipeline state objects (PSOs). Bootstraps directly off D3D11's own
+// plans/plan_dx.md Phase DX12 (DX-107): pipeline state objects (PSOs). Bootstraps directly off D3D11's own
 // already-solved pieces (design decision 4/5): D3DShaderCache's checked-in DXBC bytecode
 // (DX-14-compile -- the *same* compiled bytes D3D11 uses, PSOs accept DXBC directly, no DXIL
 // requirement), D3DVertexFormatHelper's stride-keyed D3D12_INPUT_ELEMENT_DESC arrays (DX-16-vtx's

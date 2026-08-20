@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-35: RenderTargetCube mip-mapping -- real, correctly downsampled mip content in
+// plans/plan_llgl.md LLGL-35: RenderTargetCube mip-mapping -- real, correctly downsampled mip content in
 // a RenderTargetCube's own shared colour texture, not just a declared LevelCount, mirroring
 // examples/llgl_rendertarget2d_mip_test.cpp's own LLGL-26 follow-up technique against one cube
 // face (CubeMapFace::PositiveX) instead of a plain RenderTarget2D.

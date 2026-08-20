@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2009: does the view-position reconstruction agree with the camera the prepass
+// plans/plan_modern.md MOD-2009: does the view-position reconstruction agree with the camera the prepass
 // was driven with?
 //
 // `cnaViewPositionFromDepth` has shipped since MOD-503 and has never been exercised end to end.

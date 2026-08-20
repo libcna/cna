@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-22: real-device proof that RenderTargetCube on the Diligent renderer
+// plans/plan_diligent.md DILIGENT-22: real-device proof that RenderTargetCube on the Diligent renderer
 // renders into individual faces and can be sampled back, through the public XNA API only.
 //
 // Check A -- rendering a distinct clear colour into face 0 (+X) and reading it back via

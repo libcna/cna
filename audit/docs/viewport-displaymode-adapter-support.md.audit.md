@@ -4,7 +4,7 @@
 - Source file: `docs/viewport-displaymode-adapter-support.md` (150 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 40, `plan_graphics.md` Tasks 341-350)
+- File type: Markdown documentation (closes Phase 40, `plans/plan_graphics.md` Tasks 341-350)
 - Cross-references: `docs/devices-build.md` (referenced for the Android KVM-failure precedent, not
   independently re-audited by this pass)
 

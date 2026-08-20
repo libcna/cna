@@ -1,4 +1,4 @@
-# CNA platform module (plan_platform.md PLAT-10): the CNA-owned contract that separates the
+# CNA platform module (plans/plan_platform.md PLAT-10): the CNA-owned contract that separates the
 # framework from SDL3, plus the implementations of that contract.
 #
 # This module is the ONE place a platform library may be linked. Every other module talks to

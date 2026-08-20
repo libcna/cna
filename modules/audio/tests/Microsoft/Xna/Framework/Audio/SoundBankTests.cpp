@@ -737,7 +737,7 @@ TEST(SoundBankTest, FireAndForgetCueIsForceSweptPastSafetyNetEvenIfStillPlaying)
     bank.PlayCue("Explosion");
     ASSERT_EQ(SoundBankTestAccess::FireAndForgetCount(bank), 1u);
 
-    // Past the 5-minute safety net (plan_audio.md Fáze 7 D6): must be force-swept even though
+    // Past the 5-minute safety net (plans/plan_audio.md Fáze 7 D6): must be force-swept even though
     // Cue never reports itself as finished, so a caller that only ever PlayCue()s a
     // looping/very-long cue can't grow this list unbounded.
     SoundBankTestAccess::BackdateLastFireAndForget(bank, std::chrono::minutes(10));

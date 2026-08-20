@@ -24,7 +24,7 @@
 // (all CNAEXT); Accelerometer::InjectSyntheticSensorUpdate()/*ForTesting()
 // (all CNAEXT); Gyroscope/Compass/Motion::getStateProperty() (CNAEXT on those
 // three specifically — only Accelerometer::getStateProperty() is real, see
-// `DEV-API-003`'s resolution in plan_devices.md); any reading struct's
+// `DEV-API-003`'s resolution in plans/plan_devices.md); any reading struct's
 // operator==/operator!=/ToString()/GetHashCode() (all CNAEXT per
 // `DEV-API-004`); SensorBase<T>::TimeBetweenUpdatesChanged (CNAEXT per
 // `SENSORBASE-007`).

@@ -37,7 +37,7 @@ TEST_F(SavedPictureStoreTest, GetSavedPicturesDirectoryCreatesItIfMissing)
     EXPECT_EQ(std::filesystem::path(dir).filename().string(), "Saved Pictures");
 }
 
-// plan_media.md MEDIA-59: a real file is written and readable back with correct content, using
+// plans/plan_media.md MEDIA-59: a real file is written and readable back with correct content, using
 // a real PNG loaded via the same ImageLoader PictureLibraryIndex uses.
 TEST_F(SavedPictureStoreTest, SavePictureWritesARealReadableFile)
 {

@@ -5,7 +5,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 
-// plan_xnb.md XNB-34: SongReader -- see PrimitiveContentTypeReaders.hpp's own note on why this
+// plans/plan_xnb.md XNB-34: SongReader -- see PrimitiveContentTypeReaders.hpp's own note on why this
 // lives in CNA::Internal::Xnb (FNA's SongReader is `internal class`, never subclassed by game
 // code).
 

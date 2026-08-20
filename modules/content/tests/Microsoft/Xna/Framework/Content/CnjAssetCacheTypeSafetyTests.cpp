@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-36: ContentManager's general loadedAssets_ cache must be keyed by (type, name),
+// plans/plan_cnj.md CNB-36: ContentManager's general loadedAssets_ cache must be keyed by (type, name),
 // not name alone -- otherwise Load<T2>() for a logical name a different T1 is already cached
 // under throws std::bad_any_cast (an unrelated, undocumented exception type) instead of reaching
 // normal .cnj envelope validation and a clear ContentLoadException.

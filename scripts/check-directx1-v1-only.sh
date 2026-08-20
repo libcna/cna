@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx1.md section 1: a real, automated proof that the DIRECTX1 renderer never silently drifts into
+# plans/plan_dx1.md section 1: a real, automated proof that the DIRECTX1 renderer never silently drifts into
 # DIRECTX3+ (or Direct3D) territory -- greps its own source for any IDirectDraw2+/IDirectDrawSurface2+/
 # DDSURFACEDESC2 symbol, or anything from d3d.h. Registered as the DirectX1_V1OnlyDiscipline CTest
 # (cmake/Tests/DirectX1Tests.cmake) -- pure text check, no compiled binary, no Wine needed, runs
@@ -31,7 +31,7 @@ done < <(find "$dx1_src" "$dx1_include" -type f \( -name '*.cpp' -o -name '*.hpp
 if [ "$violations" -ne 0 ]; then
     echo "error: DIRECTX1 renderer source references a DIRECTX3+/Direct3D symbol above -- DIRECTX1 must use ONLY" >&2
     echo "v1 DirectDraw interfaces (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC), never" >&2
-    echo "IDirectDraw2+/IDirectDrawSurface2+/DDSURFACEDESC2/anything from d3d.h (plan_dx1.md section 1)." >&2
+    echo "IDirectDraw2+/IDirectDrawSurface2+/DDSURFACEDESC2/anything from d3d.h (plans/plan_dx1.md section 1)." >&2
     exit 1
 fi
 

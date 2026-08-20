@@ -1,7 +1,7 @@
 # Platform abstraction performance baseline
 
 This is the PLAT-7 baseline and the PLAT-120 post-migration comparison. It measures the same public
-XNA fixed scene at the last revision before `plan_platform.md` was introduced (`e19e52fb6`) and at
+XNA fixed scene at the last revision before `plans/plan_platform.md` was introduced (`e19e52fb6`) and at
 the completed platform migration (`4d99e6d19`, plus the benchmark-only instrumentation being
 measured). The instrumentation patch is identical in both trees; it does not change renderer or
 platform implementation code.

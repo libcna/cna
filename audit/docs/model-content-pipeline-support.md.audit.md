@@ -4,7 +4,7 @@
 - Source file: `docs/model-content-pipeline-support.md` (121 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (Phase 49, `plan_graphics.md` Tasks 431-440, plus a later
+- File type: Markdown documentation (Phase 49, `plans/plan_graphics.md` Tasks 431-440, plus a later
   2026-07-16 update note)
 - Cross-references: `xna-graphics` shard audit (191 files, 6 HIGH findings — none in `Model`/
   `ModelMesh` specifically); `docs/xnb-content-pipeline-support.md` (the real binary `.xnb`

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-42/IGL-43: does the custom `ShaderEffect` path work on the VULKAN backend?
+// plans/plan_igl.md IGL-42/IGL-43: does the custom `ShaderEffect` path work on the VULKAN backend?
 //
 // Until now nothing answered that. The three tests that drive a custom effect
 // (`Igl_ShaderEffectTexture3D`, `Igl_Instancing`, `Igl_SpriteBatchShaderEffect`) all run whatever
@@ -105,7 +105,7 @@ void main() {
 }
 )";
 
-    // --- The same pair again, with a PARAMETER (plan_igl.md IGL-43) ---
+    // --- The same pair again, with a PARAMETER (plans/plan_igl.md IGL-43) ---
     //
     // OpenGL takes a loose uniform. Vulkan cannot: its parameters must be members of a std140
     // block, and the block's binding is the one CNA reserves for a custom effect

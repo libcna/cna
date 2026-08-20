@@ -120,7 +120,7 @@ void main() {
                                                     RenderTargetUsage::PreserveContents);
 
         const bool canRaster  = device.SupportsCapability(CNA::GraphicsCapability::ThreeD);
-        // Two questions, not one (plan_modern.md `MOD-1699`): `CustomEffects` only means the
+        // Two questions, not one (plans/plan_modern.md `MOD-1699`): `CustomEffects` only means the
         // renderer *accepts* an effect. SOFTWARE and HEADLESS accept any shader source and go
         // on rendering with their own fixed path, so a caster that believed them would report
         // a working shadow map while writing depth nothing had shaded.

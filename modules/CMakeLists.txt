@@ -1,5 +1,5 @@
 # =====================================================================================
-# CNA physical module composition (MODULARIZATION_PLAN.md §11). Each subsystem owns
+# CNA physical module composition (plans/MODULARIZATION_PLAN.md §11). Each subsystem owns
 # modules/<name>/{CMakeLists.txt,include/,src/,tests/}; this file detects the shared
 # third-party media dependencies, defines the shared build-flag surface, composes the
 # modules, and keeps the source-partition/no-loss ownership gate.
@@ -34,7 +34,7 @@ if(CNA_FFMPEG_AVAILABLE)
     pkg_check_modules(LIBSWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
 endif()
 
-# --- Draco (KHR_draco_mesh_compression mesh decoding, plan_gltf.md GLTF-353/GLTF-363) ---------
+# --- Draco (KHR_draco_mesh_compression mesh decoding, plans/plan_gltf.md GLTF-353/GLTF-363) ---------
 # The default is the repository's immutable gitlink at google/draco 1.5.7, not a host package:
 # conformance must not silently depend on which distro version happened to be installed. A system
 # package remains an explicit escape hatch for packagers, and the decoder-free configuration stays
@@ -139,7 +139,7 @@ set(CNA_GRAPHICS_EXAMPLES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/graphics/examples")
 # not-yet-defined target names at generate time, so cycles and forward references are fine.
 add_subdirectory(core)
 add_subdirectory(math)
-# The platform contract (plan_platform.md): composed before the subsystems that will consume
+# The platform contract (plans/plan_platform.md): composed before the subsystems that will consume
 # it, so the read order matches the dependency direction even though CMake does not require it.
 add_subdirectory(platform)
 add_subdirectory(graphics)
@@ -197,7 +197,7 @@ if(CNA_BUILD_C_API)
     add_subdirectory(c-api)
 endif()
 
-# --- Physical source-partition validator (no-loss ownership gate, MODULARIZATION_PLAN.md
+# --- Physical source-partition validator (no-loss ownership gate, plans/MODULARIZATION_PLAN.md
 # §5/§11): file physical module location == declared CMake ownership. Every production TU
 # must live under a declared module's src/ tree (module CMakeLists glob exactly their own
 # src/, so location IS ownership); a TU outside every module src/ tree, or a module

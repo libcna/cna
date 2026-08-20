@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O5 (DX2-40..DX2-42): DirectX5VertexBufferRenderer/DirectX5IndexBufferRenderer CTest.
+// plans/plan_dx2.md Phase O5 (DX2-40..DX2-42): DirectX5VertexBufferRenderer/DirectX5IndexBufferRenderer CTest.
 // Neither IVertexBufferRenderer nor IIndexBufferRenderer exposes a GetData()-style readback (both
 // are write-only from the public interface's own perspective, matching every other CNA renderer) --
 // so "round-trip" here means: SetData() succeeds and the buffer's own count/width metadata

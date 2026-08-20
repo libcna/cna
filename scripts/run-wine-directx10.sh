@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_d3d10.md: run a Windows cross-compiled .exe (D3D10 renderer) under Wine with DXVK, using
+# plans/plan_d3d10.md: run a Windows cross-compiled .exe (D3D10 renderer) under Wine with DXVK, using
 # this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-directx10.sh <path-to.exe> [args...]

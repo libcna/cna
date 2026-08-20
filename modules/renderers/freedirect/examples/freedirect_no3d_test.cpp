@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring and remaining-default
+// plans/plan_freedirect.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring and remaining-default
 // verification for the DIRECTX3 (DirectDraw, via the ../free-direct sibling) graphics renderer.
 // DirectDraw is 2D-only -- every 3D entry point either throws honestly or degrades to a
 // documented "unsupported, returns nullptr" default, matching this renderer's own class-level

@@ -5,7 +5,7 @@ PLAT-9 - keep platform calls out of hot loops.
 
 What this enforces
 ------------------
-plan_platform.md design decision 4, verbatim: *no platform call may appear inside a per-pixel,
+plans/plan_platform.md design decision 4, verbatim: *no platform call may appear inside a per-pixel,
 per-vertex, per-fragment, per-sample or per-event loop*. The contract is coarse-grained by
 construction -- events arrive as a batch, audio is filled a buffer at a time, input is a per-frame
 snapshot, capabilities are read once and cached -- and every one of those guarantees is undone by

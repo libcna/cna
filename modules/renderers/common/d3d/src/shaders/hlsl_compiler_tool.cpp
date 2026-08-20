@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx.md DX-14-compile: standalone offline HLSL->DXBC compiler tool.
+// plans/plan_dx.md DX-14-compile: standalone offline HLSL->DXBC compiler tool.
 //
 // D3DCompile() only exists at runtime, in d3dcompiler.dll -- MinGW ships the header/import-lib
 // for *linking* only, not a native Linux implementation (design decision 5). So this cannot be a

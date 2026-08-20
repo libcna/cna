@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md Phase 14J WebGPU counterpart: verify WebGPURenderer's skinned3d.wgsl family
+// plans/plan_cnj.md Phase 14J WebGPU counterpart: verify WebGPURenderer's skinned3d.wgsl family
 // (GetOrCreatePipelineSkinned3D()/QueueSkinnedDraw()/DrawPrimitivesEx() dispatch) for SkinnedEffect
 // on stride-52 (VertexPositionNormalTextureSkinned) and stride-56 (with a trailing per-vertex
 // Color, CNB-67) draws -- closing this renderer's pre-existing "no skinning shader at all" gap.

@@ -14,7 +14,7 @@
 // SourceAlpha/InverseSourceAlpha, but this test never reads back alpha, so that mismatch is
 // invisible here). This means: a PASSING result on Vulkan is NOT evidence that Task 868 is fixed,
 // or that Vulkan's blend state handling works in general — it doesn't, for Additive or any custom
-// BlendState. See plan_graphics.md Task 868 for the full, real finding. Do not close Task 868
+// BlendState. See plans/plan_graphics.md Task 868 for the full, real finding. Do not close Task 868
 // based on this test passing.
 //
 // Source colour: Color(255, 0, 0, 128) — RAW (non-premultiplied) red at ~50% opacity. Background:

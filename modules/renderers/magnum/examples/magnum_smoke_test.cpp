@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_magnum.md MAGNUM-41: MAGNUM renderer integration smoke test.
+// plans/plan_magnum.md MAGNUM-41: MAGNUM renderer integration smoke test.
 //
 // Exercises the four paths that need a live OpenGL context and therefore cannot be covered by the
 // GTest suite: clear + back-buffer readback, a SpriteBatch textured quad, a 3D coloured primitive

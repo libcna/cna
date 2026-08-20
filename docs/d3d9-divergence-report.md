@@ -1,9 +1,9 @@
-# D3D9 renderer — divergence report (plan_dx9.md D9-121)
+# D3D9 renderer — divergence report (plans/plan_dx9.md D9-121)
 
 **Status: 2026-07-15. Corpus: 31 scenes, `D9-A5`. Result: 0 measured pixel divergences from real
 XNA 4.0, at `--tolerance 0` (exact match), across the entire current corpus.**
 
-This is the deliverable `plan_dx9.md`'s own Phase D9-12 asks for: not a feature checklist, but a
+This is the deliverable `plans/plan_dx9.md`'s own Phase D9-12 asks for: not a feature checklist, but a
 measurement. "Indistinguishable from XNA 4.0" is a claim this renderer makes; this document is the
 evidence for it, and — just as importantly — the explicit boundary of what has and has not been
 measured yet. A short divergence list is a triumph. A short list produced by not looking hard
@@ -70,7 +70,7 @@ for — a divergence report with nothing in this section would be a weaker one, 
    D3D9-specific; found while building `D9-103`'s own tests, which is exactly the kind of thing
    a feature that never gets tested through the real public API stays broken indefinitely.
 
-Neither bug is a "CNA vs. XNA divergence" in the sense `plan_dx9.md`'s own six-divergences section
+Neither bug is a "CNA vs. XNA divergence" in the sense `plans/plan_dx9.md`'s own six-divergences section
 means (a deliberate or historical CNA design choice diverging from documented XNA behavior) — both
 were straightforward implementation bugs, caught precisely because this project insists on
 testing through the real public API against a real oracle rather than trusting the implementation.
@@ -93,7 +93,7 @@ isn't closed yet, not just "not gotten to":
 
 ## The six project-wide CNA-vs-XNA divergences — status as measured by this renderer
 
-`plan_dx9.md`'s own "CNA's divergences from XNA 4.0" section names six confirmed divergences
+`plans/plan_dx9.md`'s own "CNA's divergences from XNA 4.0" section names six confirmed divergences
 present on **every** CNA renderer, discovered by taking XNA seriously as the specification before
 writing D3D9 renderer code. They are cross-cutting (`GpuDrawParams` + shader-variant work spanning
 all 10 renderers) and explicitly **not this plan's to fix** — see Boundaries. What follows is their
@@ -107,13 +107,13 @@ fix them:
 2. **`oneLight` inferred, not carried in `GpuDrawParams`.** Resolved for D3D9's own *dispatch*
    specifically (`D9-82b`'s own finding: a provably-lossless derivation from existing
    `GpuDrawParams` fields, not a `GpuDrawParams` change) — but this is a shader-selection
-   correctness fix, not a measurement of the divergence's pixel impact, which `plan_dx9.md`'s own
+   correctness fix, not a measurement of the divergence's pixel impact, which `plans/plan_dx9.md`'s own
    text already predicts is likely zero (a black light contributes nothing either way).
 3. **`GraphicsProfile` was decorative.** **No longer true on D3D9** — this is what Phase D9-10
    (this session) closed: `IsProfileSupported()`, `QueryRenderTargetFormat()`/
    `QueryBackBufferFormat()`, and resource-creation-time enforcement (`Texture2D`/`TextureCube`/
    `Texture3D` size ceilings, `MaxRenderTargets`) are all real now, verified through the real
-   public API. Still decorative on the other 9 renderers, correctly so — `plan_dx9.md`'s own text
+   public API. Still decorative on the other 9 renderers, correctly so — `plans/plan_dx9.md`'s own text
    already anticipated this is D3D9-only fixable (no `D3DCAPS9` exists elsewhere to consult).
 4. **`SpriteBatch`'s D3D9 half-texel convention was never modeled or measured.** **Now measured
    and confirmed correct on D3D9** — `D9-91`'s own half-pixel offset formula, oracle-verified AND
@@ -164,7 +164,7 @@ only) — not a claim that D3D9 is finished. `D9-84`/`D9-A5` (grow the corpus fu
 `tools/xna-oracle/reference/*.png`, same `xna-diff.py --tolerance 0` — now also run through the
 EasyGL renderer. Result: 10/31 pixel-perfect, 21/31 diverge.**
 
-`plan_dx9.md`'s own `D9-A6` row calls this "free": the D3D9 half of the corpus already exists
+`plans/plan_dx9.md`'s own `D9-A6` row calls this "free": the D3D9 half of the corpus already exists
 (`D9-A3`/`D9-A5`), and `CnaOracleRender.cpp` was already renderer-agnostic (verified before touching
 anything — a grep for D3D9-specific code found only two cosmetic `printf` strings and one comment,
 all now parameterized/updated; see "What was built" below). The only genuinely new work was a
@@ -217,7 +217,7 @@ imperceptible) vs "large" (`>3`) differing pixels, plus the location/values of t
 delta, to distinguish genuinely different root causes rather than reporting one flat "21 fail"
 number. **None of these were investigated further or fixed, per this task's own explicit rule** —
 each is logged here with its observed evidence and a best-guess cause for whoever picks up the
-matching `plan_graphics.md` item next.
+matching `plans/plan_graphics.md` item next.
 
 **Pattern A — boundary/edge-only divergence, 17 scenes.** Every differing pixel sits in a thin band
 at a primitive's silhouette edge; the interior is bit-exact in every one of these. Values toggle
@@ -249,7 +249,7 @@ convention gap, not a shading/math bug:
 | `colored_linelist_quad` | 816/65536 | 237 | (26,63): clear → `(255,0,0,255)` |
 
 The five "lit/skinned/multilight/dualtexture/envmap" rows here are the interesting negative result:
-`plan_dx9.md`'s own prediction for `D9-A6` was that the `PreferPerPixelLighting` gap (design
+`plans/plan_dx9.md`'s own prediction for `D9-A6` was that the `PreferPerPixelLighting` gap (design
 decision 8: CNA always lights per-pixel, XNA defaults per-vertex) would produce "at least one
 guaranteed hit" — but these five scenes all use a spatially **uniform** normal/light direction
 across every vertex (by their own scene-file design, e.g. `lit_textured_quad`'s comment: "every
@@ -274,7 +274,7 @@ vertex's near-pure color — right at the sharp apex tip).
 
 **Pattern C — real, large, whole-primitive divergence, 2 scenes.** These are not edge noise or
 rounding — the two are genuinely, visibly wrong across nearly the entire primitive, and are the
-real, concrete "opens a `plan_graphics.md` bug" result this task's own notes predicted:
+real, concrete "opens a `plans/plan_graphics.md` bug" result this task's own notes predicted:
 
 - **`fog_gradient_quad`** (23,716/65,536 differing; 23,410 of those `>3`). The scene is deliberately
   built (`FogStart=0`, `FogEnd=-1`, negative on purpose — see the scene file's own extensive
@@ -304,7 +304,7 @@ real, concrete "opens a `plan_graphics.md` bug" result this task's own notes pre
   Fresnel term in a way that doesn't correctly Gouraud-interpolate the per-vertex-computed scalar
   across the primitive (possibly evaluating it from an interpolated per-fragment normal instead of
   interpolating the already-computed per-vertex Fresnel value, or a flat/qualifier issue on the
-  varying that carries it) — consistent with, and a concrete confirmation of, `plan_dx9.md`'s own
+  varying that carries it) — consistent with, and a concrete confirmation of, `plans/plan_dx9.md`'s own
   design-decision-8 prediction, in the one scene actually shaped to detect it. Same caveat as
   `fog_gradient_quad`: D3D9 already renders this exact scene correctly (0/65536), so this is
   EasyGL-renderer-local, not a shared cross-renderer `GpuDrawParams` gap.
@@ -314,7 +314,7 @@ real, concrete "opens a `plan_graphics.md` bug" result this task's own notes pre
 This measurement cost nothing beyond reusing existing tooling, and it did exactly what `D9-A6`'s own
 notes predicted: it converted a standing assumption ("EasyGL is probably close to XNA-correct,
 nobody has actually measured it") into a real number (10/31 pixel-perfect, three named, evidenced
-divergence patterns for the rest) and surfaced two concrete, previously-unmeasured `plan_graphics.md`
+divergence patterns for the rest) and surfaced two concrete, previously-unmeasured `plans/plan_graphics.md`
 candidates (`fog_gradient_quad`'s negative-`FogEnd` handling, `envmap_fresnel_quad`'s Fresnel
 interpolation) plus one systemic rasterization-boundary gap (Pattern A, 17 scenes) — all **logged
 here, not fixed**, per this task's own explicit scope boundary. `Vulkan`/`D3D11` remain unmeasured by

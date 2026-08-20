@@ -11,7 +11,7 @@
 namespace CNA::Internal::Xnb
 {
     /**
-     * @brief A parsed, assembly-stripped .NET type name (plan_xnb.md XNB-13), used as the
+     * @brief A parsed, assembly-stripped .NET type name (plans/plan_xnb.md XNB-13), used as the
      *        canonical `.xnb` type-reader registry key decided in XNB-5.
      *
      * Represents `Namespace.TypeName` (optionally with a generic-arity backtick suffix like
@@ -154,7 +154,7 @@ namespace CNA::Internal::Xnb
 
     /**
      * @brief Parses a raw, possibly assembly-qualified `.xnb` type-reader name into its
-     *        canonical, assembly-stripped form (plan_xnb.md XNB-13).
+     *        canonical, assembly-stripped form (plans/plan_xnb.md XNB-13).
      *
      * Handles nested generic-argument brackets correctly (`ListReader\`1[[Vector3, ...]]`,
      * `DictionaryReader\`2[[String, ...],[ListReader\`1[[Int32, ...]], ...]]`) -- a naive
@@ -164,7 +164,7 @@ namespace CNA::Internal::Xnb
      * @param rawTypeName The type-reader name exactly as read from a `.xnb` type-reader table
      *                    entry (or an already-bare name; the parser tolerates both).
      * @param limits      Bounds the generic-argument nesting depth (REMED-CONTENT-006,
-     *                    plan_xnb.md XNB-43); defaults to @ref DefaultXnbReadLimits().
+     *                    plans/plan_xnb.md XNB-43); defaults to @ref DefaultXnbReadLimits().
      * @return The parsed name, ready for ToCanonicalString() or direct field inspection.
      * @throws std::invalid_argument if @p rawTypeName has unbalanced or malformed brackets, or
      *         nests generic arguments deeper than @p limits.maxObjectNestingDepth.

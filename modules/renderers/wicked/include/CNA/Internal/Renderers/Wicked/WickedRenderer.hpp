@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// plan_wicked.md: CNA's WICKED graphics renderer, implemented on top of Wicked Engine's render
+// plans/plan_wicked.md: CNA's WICKED graphics renderer, implemented on top of Wicked Engine's render
 // hardware interface (wi::graphics::GraphicsDevice), which itself dispatches to Vulkan on
 // Linux/Windows and to D3D12 on Windows.
 //
 // Only the RHI layer of Wicked Engine is used. wi::renderer, wi::scene, wi::Application, wi::input
 // and the physics/scripting layers are deliberately not linked into CNA's own runtime: CNA already
 // owns the XNA 4.0 programming model above this boundary and needs a device abstraction below it,
-// not a second engine (plan_wicked.md design decision 1).
+// not a second engine (plans/plan_wicked.md design decision 1).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
@@ -290,7 +290,7 @@ namespace CNA::Internal::Renderers::Wicked
      * @brief CNAEXT. A cube map exposed to CNA as an `ITextureCubeRenderer`.
      *
      * Upload and readback only. This renderer has no `EnvironmentMapEffect` shader variant yet
-     * (plan_wicked.md WICKED-56), so a cube map cannot currently be sampled by a draw — it can be
+     * (plans/plan_wicked.md WICKED-56), so a cube map cannot currently be sampled by a draw — it can be
      * filled and read back, and `SetData`/`GetData` report honestly whether they did so.
      */
     class WickedTextureCubeRenderer final : public ITextureCubeRenderer
@@ -928,7 +928,7 @@ namespace CNA::Internal::Renderers::Wicked
     /**
      * @brief The CNA graphics renderer implemented on Wicked Engine's `wi::graphics::GraphicsDevice`.
      *
-     * Frame structure (plan_wicked.md design decision 5): all game rendering goes into an
+     * Frame structure (plans/plan_wicked.md design decision 5): all game rendering goes into an
      * off-screen "scene" colour target sized to the virtual resolution, and `Present()` blits that
      * target into the swap chain with the letterbox/overscan/stretch rectangle CNA's presentation
      * mode asks for. Wicked Engine's swap-chain render pass acquires an image and always clears, so

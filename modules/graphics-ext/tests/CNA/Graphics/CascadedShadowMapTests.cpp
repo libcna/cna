@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-900..MOD-904, MOD-907, MOD-911: cascaded shadow maps.
+// plans/plan_modern.md MOD-900..MOD-904, MOD-907, MOD-911: cascaded shadow maps.
 //
 // The two properties that make cascades worth having over one big map are both invisible in a
 // still image and both about *stability*: turning the camera must not change how big a cascade is,

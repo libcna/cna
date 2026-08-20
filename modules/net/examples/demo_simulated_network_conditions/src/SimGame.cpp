@@ -183,7 +183,7 @@ void SimGame::Update(GameTime& gameTime)
     localPaddlePos_.Y = std::clamp(localPaddlePos_.Y, 0.0f, kScreenHeight - kPaddleHeight);
 
     // 1/2 lower/raise simulated latency by 100ms per press; 3/4 lower/raise simulated packet loss
-    // by 10 percentage points per press. Task 6.1-6.5 (plan_net.md Phase 6): both now drive a
+    // by 10 percentage points per press. Task 6.1-6.5 (plans/plan_net.md Phase 6): both now drive a
     // real receive-side delayed-delivery queue and probabilistic drop in ENetBackend - raising
     // either one now visibly stutters/drops the remote paddle and (on the client) the
     // host-authoritative ball position. The HUD's "Real measured RTT" column still won't move in

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-7 (D9-72): disassembles a compiled D3D9 shader (via D3DDisassemble(), the
+// plans/plan_dx9.md Phase D9-7 (D9-72): disassembles a compiled D3D9 shader (via D3DDisassemble(), the
 // real Microsoft d3dcompiler_47.dll's own disassembler) and prints the result to stdout. Used by
 // extract_shader_registers.py to read the compiler's own authoritative "// Registers:" comment
 // block -- the real, per-entry-point register/size table, which can genuinely differ from what a

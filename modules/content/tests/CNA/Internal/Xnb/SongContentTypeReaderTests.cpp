@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-34: unit tests for SongReader's own behavior (registration, extension-probing
+// plans/plan_xnb.md XNB-34: unit tests for SongReader's own behavior (registration, extension-probing
 // fallback) -- see SongContentManagerXnbTests.cpp for the full end-to-end test through
 // ContentManager against a real fixture.
 
@@ -69,7 +69,7 @@ TEST_F(SongContentTypeReaderTest, ReferenceToNonexistentFileFallsBackToUnstrippe
     // fallback logic still ran correctly (it did fall back to the un-stripped path, matching FNA),
     // it's just that CNA's Song rejects that fallback instead of accepting it silently.
     //
-    // plan_media.md MEDIA-10/MEDIA-75: Song's ctor now throws System::IO::FileNotFoundException
+    // plans/plan_media.md MEDIA-10/MEDIA-75: Song's ctor now throws System::IO::FileNotFoundException
     // (matching the established AudioEngine/SoundBank/WaveBank precedent) instead of a bare
     // std::runtime_error -- confirms the corrected exception type propagates all the way through
     // ContentManager::Load<Song>(), not just at the raw Song constructor level.

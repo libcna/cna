@@ -4,7 +4,7 @@
 - Source file: `docs/sdl-renderer-2d-completeness.md` (251 lines)
 - Audit status: AUDITED (full read)
 - Subsystem: `docs` shard
-- File type: Markdown documentation (closes Phase 70, `plan_graphics.md` Tasks 666-731 — the
+- File type: Markdown documentation (closes Phase 70, `plans/plan_graphics.md` Tasks 666-731 — the
   largest single-backend audit phase referenced anywhere in this documentation shard)
 - Cross-references: `docs/migration-guide.md` (references this doc's §11 BLOCKED decisions
   directly); `xna-graphics`/`backend-sdlrenderer` shard audits (no contradicting finding)

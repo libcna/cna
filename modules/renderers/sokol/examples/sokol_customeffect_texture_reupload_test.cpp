@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-44: a custom ShaderEffect's deferred texture bindings must survive the
+// plans/plan_sokol.md SOKOL-44: a custom ShaderEffect's deferred texture bindings must survive the
 // bound texture being re-uploaded between ShaderEffect::SetTexture() and the eventual draw.
 //
 // SokolEffectRenderer::BindTexture()/BindTextureCube() only RECORD a pending bind (see
@@ -24,7 +24,7 @@
 //   not carry (SokolEffectRenderer's own LiveSampledRendererRegistryEXT() safely detects this and
 //   skips re-binding rather than dereferencing the now-gone object, matching this same overload's
 //   pre-SOKOL-44 behaviour of silently sampling nothing rather than crashing) -- a known,
-//   documented residual boundary, not attempted here; plan_sokol.md SOKOL-44's own remediation
+//   documented residual boundary, not attempted here; plans/plan_sokol.md SOKOL-44's own remediation
 //   note explains why fixing it would require a cross-renderer IEffectRenderer interface change.
 // Check B -- Cube: a full-screen quad sampling a re-uploaded TextureCube face reads back the NEW
 //   colour (TextureCube::SetData always mutates the same renderer object in place).
@@ -183,7 +183,7 @@ class CustomEffectTextureReuploadTest : public Game
         // Bind while PositiveX shows RED -- only recorded, not resolved yet (SOKOL-44).
         fx.SetTexture(0, cube);
 
-        // Recreates the WHOLE cube's underlying sg_image (plan_sokol.md SOKOL-34's own "recreated
+        // Recreates the WHOLE cube's underlying sg_image (plans/plan_sokol.md SOKOL-34's own "recreated
         // whole on every SetData()" note) -- the pending bind above must not still point at the
         // now-destroyed image.
         const Color kGreen(0, 255, 0, 255);

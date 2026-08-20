@@ -2,7 +2,7 @@
 // Task 299: verify anisotropic filtering caps and fallback on a 3D stock effect
 // (DualTextureEffect).
 //
-// Audit findings this task confirmed via code reading (see plan_graphics.md Task 299 for the
+// Audit findings this task confirmed via code reading (see plans/plan_graphics.md Task 299 for the
 // full writeup): Vulkan correctly queries the real device anisotropy cap
 // (VkPhysicalDeviceProperties::limits.maxSamplerAnisotropy) and clamps SamplerState.MaxAnisotropy
 // to it before creating the sampler — the only renderer where the requested level has any real

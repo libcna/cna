@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-200..MOD-210, MOD-225..MOD-228: the fullscreen-pass infrastructure.
+// plans/plan_modern.md MOD-200..MOD-210, MOD-225..MOD-228: the fullscreen-pass infrastructure.
 //
 // The identity chain is the load-bearing assertion here. A chain of copies has to reproduce its
 // input exactly, and almost every way of getting the ping-pong bookkeeping wrong breaks it: reading
@@ -292,7 +292,7 @@ TEST(PostProcessChainTest, OwnedAndBorrowedPassesRunTogether)
 
 // ── The two accessors nothing else calls ─────────────────────────────────────
 //
-// plan_modern.md MOD-1742. MOD-1741's coverage run found getName() and isSupported() unreached by
+// plans/plan_modern.md MOD-1742. MOD-1741's coverage run found getName() and isSupported() unreached by
 // the whole suite: apply() is exercised heavily below, but nothing ever asked the pass to identify
 // itself. Both are public API, so both get a case.
 

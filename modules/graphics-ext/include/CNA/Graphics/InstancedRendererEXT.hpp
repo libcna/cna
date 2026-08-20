@@ -26,7 +26,7 @@ namespace CNA::Graphics {
     /**
      * @brief Draws one mesh part many times in a single draw call.
      *
-     * plan_modern.md `MOD-1400`–`MOD-1405`. Convenience over `GraphicsDevice::SetVertexBuffers`
+     * plans/plan_modern.md `MOD-1400`–`MOD-1405`. Convenience over `GraphicsDevice::SetVertexBuffers`
      * and `DrawInstancedPrimitives`, which already exist: what this owns is the per-instance
      * transform stream, its declaration, and the decision of what to do on a renderer that cannot
      * instance at all.
@@ -64,7 +64,7 @@ namespace CNA::Graphics {
         /**
          * @brief The declaration of the per-instance transform stream.
          *
-         * plan_modern.md `MOD-1402`. Four `Vector4` elements at `TextureCoordinate` usage indices
+         * plans/plan_modern.md `MOD-1402`. Four `Vector4` elements at `TextureCoordinate` usage indices
          * 1 through 4, 64 bytes in total -- the layout CNA's renderers already expect from an
          * instance stream, and the one the stock shaders bind to locations 12..15. It is a static
          * because a caller building its own instance buffer needs to describe it identically.
@@ -88,7 +88,7 @@ namespace CNA::Graphics {
         /**
          * @brief Uploads the per-instance world transforms.
          *
-         * plan_modern.md `MOD-1401`. The buffer grows when it has to and is otherwise reused, so
+         * plans/plan_modern.md `MOD-1401`. The buffer grows when it has to and is otherwise reused, so
          * a game re-uploading the same number of instances every frame allocates nothing after the
          * first upload -- which @ref getInstanceCapacity makes assertable.
          *
@@ -99,7 +99,7 @@ namespace CNA::Graphics {
         /**
          * @brief Uploads a per-instance tint, when the tint stream is enabled.
          *
-         * plan_modern.md `MOD-1404`. Ignored while the stream is disabled, so a game can keep the
+         * plans/plan_modern.md `MOD-1404`. Ignored while the stream is disabled, so a game can keep the
          * colours it has and switch the stream on and off without re-uploading them.
          *
          * @param tints One colour per instance; a shorter list leaves the remainder white.
@@ -138,7 +138,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns whether the device can draw this renderer's instanced path.
          *
-         * plan_modern.md `MOD-1621`. **Two capabilities, not one**, because the instanced path
+         * plans/plan_modern.md `MOD-1621`. **Two capabilities, not one**, because the instanced path
          * binds the per-instance transforms as a *second* vertex stream: a renderer that reports
          * `Instancing` but not `MultiStreamVertexInput` cannot run it. SDL_GPU is exactly that
          * renderer -- `Instancing` is `true` by base-class default while
@@ -153,7 +153,7 @@ namespace CNA::Graphics {
         /**
          * @brief Enables the single-draw-per-instance fallback. Off by default.
          *
-         * plan_modern.md `MOD-1405`. Deliberately opt-in rather than automatic: the fallback costs
+         * plans/plan_modern.md `MOD-1405`. Deliberately opt-in rather than automatic: the fallback costs
          * one draw call per instance, which for the ten thousand instances this class exists to
          * make cheap is not a fallback but a different program. A game that would rather draw
          * slowly than not at all says so; one that would rather know says nothing and gets an

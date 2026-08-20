@@ -75,7 +75,7 @@ difference from XNA is the *shared* GL-versus-XNA divergence rather than anythin
 
 | scene(s) | EasyGL | OPENGLES1 | explanation |
 | --- | --- | --- | --- |
-| `skinned_*` (6 scenes) | 306–8569 | 23716–27694 | **Expected, permanent.** No fixed-function skinning (no `GL_OES_matrix_palette` implemented); these fall back to the plain colored path by design — see the deviation table in `plan_opengles1.md`. |
+| `skinned_*` (6 scenes) | 306–8569 | 23716–27694 | **Expected, permanent.** No fixed-function skinning (no `GL_OES_matrix_palette` implemented); these fall back to the plain colored path by design — see the deviation table in `plans/plan_opengles1.md`. |
 | `envmap_specular_quad` | 307 | 23716 | **Expected, documented.** `EnvironmentMapEffect`'s specular tint from the cube alpha has no fixed-function analogue. |
 | `envmap_fresnel_quad` | 18820 | 23716 | **Expected, documented.** Fresnel edge-weighting needs a per-vertex-varying blend factor ES1 cannot express. Note EasyGL diverges heavily here too. |
 | `lit_textured_quad_pixellighting`, `skinned_pixellighting_*` | 7956–8569 | 23563–27694 | **Expected.** "Pixel lighting" is per-pixel by definition; ES 1.1 lighting is per-vertex and interpolated. EasyGL is closer because it has a real fragment shader. |

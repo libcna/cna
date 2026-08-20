@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O7 (DX2-60..DX2-66): the remaining IGraphicsRenderer entry points that are
+// plans/plan_dx2.md Phase O7 (DX2-60..DX2-66): the remaining IGraphicsRenderer entry points that are
 // genuinely unavailable at this DirectX era. None of these needed any DX2-specific code -- they
 // were already satisfied by simply not overriding IGraphicsRenderer's own shared defaults
 // (matching DIRECTX1/DIRECTX3's identical precedent), but this test proves that claim rather than just

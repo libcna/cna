@@ -3,16 +3,16 @@
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
-// plan_dx1.md design decision 9: <ddraw.h> (and the real <windows.h> it pulls in) is contained to
+// plans/plan_dx1.md design decision 9: <ddraw.h> (and the real <windows.h> it pulls in) is contained to
 // this .cpp only -- see DirectX2Renderer.hpp's own comment. This file's 2D layer (ported from
-// DIRECTX1, plan_dx1.md section 1) may only name v1 DirectDraw symbols (IDirectDraw/IDirectDrawSurface/
+// DIRECTX1, plans/plan_dx1.md section 1) may only name v1 DirectDraw symbols (IDirectDraw/IDirectDrawSurface/
 // DDSURFACEDESC/DirectDrawCreate) -- never IDirectDraw2+/IDirectDrawSurface2+/DDSURFACEDESC2 (that
-// boundary is permanent, plan_dx2.md section 1). Unlike DIRECTX1, <d3d.h>/IDirect3D2/IDirect3DDevice2
+// boundary is permanent, plans/plan_dx2.md section 1). Unlike DIRECTX1, <d3d.h>/IDirect3D2/IDirect3DDevice2
 // are NOT forbidden here -- this renderer's own 3D layer (Phase O3/O4) is built on them -- only the
 // literal execute-buffer surface (IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/
 // IDirect3DExecuteBuffer/D3DOP_*/the un-versioned IDirect3D/IDirect3DDevice) is permanently
 // forbidden, asserted by the DirectX2_ExecuteBufferDiscipline CTest
-// (scripts/check-directx2-execute-buffer-discipline.sh, plan_dx2.md design decision 12).
+// (scripts/check-directx2-execute-buffer-discipline.sh, plans/plan_dx2.md design decision 12).
 #include <ddraw.h>
 #include <d3d.h>
 
@@ -46,7 +46,7 @@ namespace CNA::Internal::Renderers::DirectX2
                                       std::to_string(static_cast<unsigned long>(hr)));
         }
 
-        // ---- 3D pipeline: NOT YET implemented (this is Phase O1/O2, plan_dx2.md -- 2D layer
+        // ---- 3D pipeline: NOT YET implemented (this is Phase O1/O2, plans/plan_dx2.md -- 2D layer
         // only). Every 3D entry point is wired to this same throw for now, identical to
         // DirectX1Renderer's own (permanent, for DIRECTX1) ThrowNo3D -- a later phase (O3/O4) replaces
         // these with real IDirect3D2/IDirect3DDevice2::DrawPrimitive-based implementations, unlike
@@ -223,7 +223,7 @@ namespace CNA::Internal::Renderers::DirectX2
         // Fills the full (width, height) extent of `surface` with a solid RGBA8 color via
         // Lock()/Unlock() (not DDBLT_COLORFILL -- writing all 4 channels directly avoids relying on
         // whatever a given ddraw.dll implementation's ColorFill does with the alpha channel,
-        // matching DIRECTX3's own found-and-fixed lesson (plan_freedirect.md DX3-14) proactively instead of
+        // matching DIRECTX3's own found-and-fixed lesson (plans/plan_freedirect.md DX3-14) proactively instead of
         // re-discovering the same class of bug here). Writes into g_layout's real native byte
         // positions, not fixed (R,G,B,A) positions -- see DetectChannelLayout's own comment.
         void FillSurfaceColor(LPDIRECTDRAWSURFACE surface, int width, int height,
@@ -247,7 +247,7 @@ namespace CNA::Internal::Renderers::DirectX2
             surface->Unlock(desc.lpSurface);
         }
 
-        // Phase O3 (plan_dx2.md design decision 5, DX2-0's dx2_spike8_zclear.cpp finding):
+        // Phase O3 (plans/plan_dx2.md design decision 5, DX2-0's dx2_spike8_zclear.cpp finding):
         // IDirect3DViewport(2)::Clear() has no depth/color VALUE parameter at all (only
         // IDirect3DViewport3::Clear2, DIRECTX5+, takes an explicit dvZ) -- so ClearDepth/
         // ClearColorAndDepth's arbitrary caller-requested depth value cannot go through it. Mirrors
@@ -287,7 +287,7 @@ namespace CNA::Internal::Renderers::DirectX2
         // physical drawable size in the current surface snapshot, shared by Present() (the on-screen Blt
         // destination) and TransformWindowToLogical/TransformLogicalToWindow, so those three are
         // always mutually consistent and a resize/SetVirtualResolution change is correct on the
-        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plan_freedirect.md DX3-16).
+        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plans/plan_freedirect.md DX3-16).
         bool ComputeLetterbox(const PlatformRendererSurfaceState& surface,
                               int logicalWidth, int logicalHeight,
                               float& scale, float& offsetX, float& offsetY)
@@ -308,7 +308,7 @@ namespace CNA::Internal::Renderers::DirectX2
         // ---- Phase O4: CPU 2D compositor (design decision 5) ----
         // IDirectDrawSurface::Blt/BltFast has never supported rotation in any DirectX version, so
         // every DirectDraw-family CNA renderer needs this same architecture -- ported verbatim from
-        // DIRECTX3's own already-verified CompositeQuad (plan_dx1.md design decision 5), not re-derived.
+        // DIRECTX3's own already-verified CompositeQuad (plans/plan_dx1.md design decision 5), not re-derived.
 
         // Signed area of triangle (a, b, c) -- also the raw (un-normalized) edge function used by
         // BarycentricWeights below. Positive/negative depending on winding; consistent use of the
@@ -723,7 +723,7 @@ namespace CNA::Internal::Renderers::DirectX2
         // resolution, that Clear() and (from Phase O4 on) SpriteBatch draws always composite into.
         LPDIRECTDRAWSURFACE backBuffer = nullptr;
 
-        // Phase O3 (plan_dx2.md design decisions 3/5): the real Direct3D v2 device, built directly
+        // Phase O3 (plans/plan_dx2.md design decisions 3/5): the real Direct3D v2 device, built directly
         // on the shadow backbuffer (design decision 4's DDSCAPS_3DDEVICE flag). d3d2 only needs `dd`
         // and is created once, reused across backbuffer resizes; zbuffer/device2/viewport2 are all
         // tied to the specific backBuffer surface instance and must be torn down and recreated
@@ -887,7 +887,7 @@ namespace CNA::Internal::Renderers::DirectX2
         // Unlike DIRECTX3's own CreateSurfaces (which also recreated the primary via SetDisplayMode
         // every time), the primary here never changes size or needs recreation -- design decision
         // 4 -- so SetVirtualResolution only ever touches this shadow buffer.
-        // plan_dx2.md design decision 4: unlike DIRECTX1's plain DDSCAPS_OFFSCREENPLAIN, this ONE
+        // plans/plan_dx2.md design decision 4: unlike DIRECTX1's plain DDSCAPS_OFFSCREENPLAIN, this ONE
         // surface (the shadow backbuffer that Clear()/Present()/the default backbuffer all use) is
         // also flagged DDSCAPS_3DDEVICE, so a later phase (O3) can attach a DDSCAPS_ZBUFFER surface
         // and create a real Direct3D device against it -- 2D SpriteBatch draws and 3D
@@ -1149,12 +1149,12 @@ namespace CNA::Internal::Renderers::DirectX2
     // premultiplied by invW the way Software's RasterVertex is -- real Direct3D's rasterizer
     // already performs perspective-correct attribute interpolation internally via rhw, so
     // premultiplying here would double-apply the correction (a load-bearing distinction found and
-    // documented before this code was written, see plan_dx2.md design decision 6).
+    // documented before this code was written, see plans/plan_dx2.md design decision 6).
 
     /// One vertex in clip space (before the perspective divide), matching
     /// SoftwareRenderer.cpp's own ClipVertex (position + un-premultiplied color/uv only --
     /// no world-space position/normal, unlike Software's, since envMap/skinning are out of scope).
-    /// `sr`/`sg`/`sb` (Phase O9, plan_dx2.md design decision 13): the specular highlight
+    /// `sr`/`sg`/`sb` (Phase O9, plans/plan_dx2.md design decision 13): the specular highlight
     /// contribution, additive, packed into D3DTLVERTEX::specular and composited by real
     /// D3DRENDERSTATE_SPECULARENABLE hardware AFTER the texture-modulate stage -- zero for every
     /// draw except a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx (stride 32/52, lightingEnabled).
@@ -1238,7 +1238,7 @@ namespace CNA::Internal::Renderers::DirectX2
         float specR = 0.0f, specG = 0.0f, specB = 0.0f;
     };
 
-    /// CPU-side BasicEffect-style per-vertex lighting (Phase O9, plan_dx2.md design decision 13):
+    /// CPU-side BasicEffect-style per-vertex lighting (Phase O9, plans/plan_dx2.md design decision 13):
     /// ambient + up to 3 directional lights, Lambertian diffuse + Blinn-Phong specular. Ported
     /// from EasyGLRenderer.cpp's EnsureLit3DVertexLitProgram() GLSL (CNA's default
     /// per-vertex-lit path -- BasicEffect::preferPerPixelLighting_ defaults to false, matching
@@ -1374,7 +1374,7 @@ namespace CNA::Internal::Renderers::DirectX2
 
     /// Perspective-divides the POSITION ONLY and maps into a real D3DTLVERTEX ready for
     /// DrawPrimitive/DrawIndexedPrimitive. Deliberately does NOT premultiply color/uv by invW --
-    /// see this section's own header comment and plan_dx2.md design decision 6 for why.
+    /// see this section's own header comment and plans/plan_dx2.md design decision 6 for why.
     D3DTLVERTEX DirectX2ClipVertexToD3DTLVERTEX(const DirectX2ClipVertex& cv, int viewportWidth, int viewportHeight)
     {
         const float invW = 1.0f / cv.w;
@@ -1441,7 +1441,7 @@ namespace CNA::Internal::Renderers::DirectX2
     /// order (i in [0, primitiveCount*3)); the caller supplies whichever stride/index-buffer
     /// resolution its own entry point needs. `texHandle` is applied via
     /// D3DRENDERSTATE_TEXTUREHANDLE every call (0 = no texture) since it is a per-draw state,
-    /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plan_dx2.md design decision 6).
+    /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plans/plan_dx2.md design decision 6).
     /// `specularEnabled` (Phase O9, design decision 13): sets D3DRENDERSTATE_SPECULARENABLE per
     /// draw -- true only for a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx call, spike-confirmed
     /// (dx2_spike10) to genuinely composite D3DTLVERTEX::specular additively after the
@@ -2172,7 +2172,7 @@ namespace CNA::Internal::Renderers::DirectX2
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_DIRECTX2
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX2 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

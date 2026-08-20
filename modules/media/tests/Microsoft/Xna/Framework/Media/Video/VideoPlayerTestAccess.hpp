@@ -3,7 +3,7 @@
 
 #include <cstddef>
 
-// plan_platform.md PLAT-SDL2-8: the mixer engine exists only under SOUND_ENABLED (the SDL3_mixer
+// plans/plan_platform.md PLAT-SDL2-8: the mixer engine exists only under SOUND_ENABLED (the SDL3_mixer
 // selection). The two accessors that need it are guarded with it; the rest reach VideoPlayer's own
 // state and stay available in every audio profile, so a suite that only asks about the decoder or
 // the scratch buffer still builds under SDL2/NULL audio.
@@ -20,7 +20,7 @@ namespace Microsoft::Xna::Framework::Media
     // audio/video output -- not just "didn't throw" -- and that a freshly-opened audio stream is
     // genuinely resumed, not left paused (the playback stream opens paused by contract;
     // VideoPlayer itself exposes no public getters for either question) --
-    // plan_media.md MEDIA-90/MEDIA-131, found by external code review.
+    // plans/plan_media.md MEDIA-90/MEDIA-131, found by external code review.
     struct VideoPlayerTestAccess
     {
         static int GetDecoderSampleRate(const VideoPlayer& player)
@@ -56,7 +56,7 @@ namespace Microsoft::Xna::Framework::Media
         // Raw pointer identity, not just presence/pause-state -- proves a track switch that
         // shouldn't touch the audio stream at all (e.g. a video-only track switch) genuinely left
         // it alone rather than tearing it down and reopening a new one, which would discard
-        // whatever audio was already queued for playback (plan_media.md MEDIA-148, found by
+        // whatever audio was already queued for playback (plans/plan_media.md MEDIA-148, found by
         // external code review).
         static const void* GetAudioStreamPtr(const VideoPlayer& player)
         {
@@ -64,7 +64,7 @@ namespace Microsoft::Xna::Framework::Media
         }
 
         // Size of the transient decoded-audio scratch buffer -- needed to prove it doesn't grow
-        // unboundedly when there's no audio stream to drain it into (plan_media.md MEDIA-153,
+        // unboundedly when there's no audio stream to drain it into (plans/plan_media.md MEDIA-153,
         // found by external code review).
         static std::size_t GetAudioBufferSize(const VideoPlayer& player)
         {

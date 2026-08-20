@@ -104,7 +104,7 @@ namespace CNA::Graphics {
         /**
          * @brief The scattering model as GLSL, for a pass that needs the same air on geometry.
          *
-         * plan_modern.md `MOD-2141`. Emitted rather than duplicated, for the reason `MOD-2035`
+         * plans/plan_modern.md `MOD-2141`. Emitted rather than duplicated, for the reason `MOD-2035`
          * charged this layer for: two copies of one model agree until somebody edits one of them,
          * and the symptom is a frame that looks slightly wrong with nothing to point at.
          *

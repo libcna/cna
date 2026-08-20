@@ -46,7 +46,7 @@ namespace
         return "?";
     }
 
-    // Post-plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
+    // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
     // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
     // per-demo uniform-rectangle "block font" - the old per-file copy was confirmed unreadable
     // (every character rendered as an identical rectangle) by an independent audit.
@@ -261,7 +261,7 @@ void TintStudioDemo::Draw(const GameTime& /*gameTime*/)
         spriteBatch_->End();
     }
 
-    // Task 8.5 (plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
+    // Task 8.5 (plans/plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
     // AvatarDemo - Game::Exit() suppresses Draw() on the frame Update() actually calls it.
     if (smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty())
     {

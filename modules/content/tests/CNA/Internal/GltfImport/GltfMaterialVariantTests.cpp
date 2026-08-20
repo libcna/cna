@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-341 / GLTF-342 -- KHR_materials_variants import and selection.
+// plans/plan_gltf.md GLTF-341 / GLTF-342 -- KHR_materials_variants import and selection.
 
 #include <gtest/gtest.h>
 

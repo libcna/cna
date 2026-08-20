@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-15/IGL-55: real MSAA into a RenderTarget2D -- an antialiased edge actually
+// plans/plan_igl.md IGL-15/IGL-55: real MSAA into a RenderTarget2D -- an antialiased edge actually
 // resolved into the render target's colour texture, not just a bookkeeping check that the count
 // round-trips. Mirrors llgl_msaa_rendertarget_test.cpp's own technique (design decision 5 in
-// plan_igl.md means this renderer's own back-buffer viewport/scissor handling never enters the
+// plans/plan_igl.md means this renderer's own back-buffer viewport/scissor handling never enters the
 // picture here -- a plain orthographic-projected render target is enough).
 //
 // A right triangle with its hypotenuse crossing a scanned row puts a hard, unblended edge into a
@@ -104,7 +104,7 @@ protected:
 
         int appliedNoMsaa = -1;
         const Color noMsaaPixel = RenderEdgePixel(device, 0, appliedNoMsaa);
-        // IGL's own convention (already documented in plan_igl.md for the back buffer and cube
+        // IGL's own convention (already documented in plans/plan_igl.md for the back buffer and cube
         // render targets) reports an unmultisampled surface as 1, not 0.
         ExpectTrue("MultiSampleCount=0 really applies no multisampling to a RenderTarget2D",
                   appliedNoMsaa == 1);

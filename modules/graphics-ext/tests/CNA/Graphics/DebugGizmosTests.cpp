@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2161: gizmos for the engine layer's own invisible structures.
+// plans/plan_modern.md MOD-2161: gizmos for the engine layer's own invisible structures.
 //
 // This is the tool Phase 20 wanted and did without. A light's reach, a probe grid's spacing, a
 // cluster's depth slices and a cascade's fitted volume are decisions the layer makes silently, and

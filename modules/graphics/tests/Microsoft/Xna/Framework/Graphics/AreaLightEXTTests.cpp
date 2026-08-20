@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2060: the third kind of light -- one that is a surface rather than a point.
+// plans/plan_modern.md MOD-2060: the third kind of light -- one that is a surface rather than a point.
 //
 // The struct is data, so the only behaviour it has is IsValidEXT, and the only thing that makes it
 // worth testing is what "valid" has to mean: a shape the form factor can integrate over. Two

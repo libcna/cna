@@ -1,13 +1,13 @@
 # CNA — XNA 4.0 Coverage Report
 
-**Date:** 2026-06-21 (Net/GamerServices rows corrected 2026-07-17, `plan_net.md` Task 9.5 - see
+**Date:** 2026-06-21 (Net/GamerServices rows corrected 2026-07-17, `plans/plan_net.md` Task 9.5 - see
 `docs/xna-4-api-coverage.md` §9 for the current, continuously-maintained per-feature status; this
 file otherwise remains the original one-time dated snapshot, not continuously updated)  
 **Branch:** develop  
 **HEAD:** 04f0692  
-**Analysis method:** static source inspection of `include/`, `src/`, `plan_graphics.md`,
+**Analysis method:** static source inspection of `include/`, `src/`, `plans/plan_graphics.md`,
 `IGraphicsRenderer.hpp`, and renderer `.cpp` files. FNA class counts estimated from known
-XNA 4.0 documentation and plan_graphics.md. Build was not run during analysis.
+XNA 4.0 documentation and plans/plan_graphics.md. Build was not run during analysis.
 
 ---
 
@@ -22,13 +22,13 @@ XNA 4.0 documentation and plan_graphics.md. Build was not run during analysis.
 **Justification for ~70 % functional (EasyGL/Vulkan):**  
 Graphics (the largest namespace) is ~92–93 % functional. Input is ~90 %. Audio
 (`SoundEffect`/`SoundEffectInstance` plus real XACT `AudioEngine`/`SoundBank`/`WaveBank`/`Cue`
-and `Microphone` capture — see `plan_audio.md` for the full file-by-file history) is ~90 %,
+and `Microphone` capture — see `plans/plan_audio.md` for the full file-by-file history) is ~90 %,
 updated 2026-07-04 (Fáze 9 `P9-DOCS-003`; the XACT/Microphone stub status this figure used to
 describe predates that branch's work by roughly two weeks). Media playback (Song/Video via
 SDL3_mixer + FFmpeg) is ~55 %. Content is ~60 % for the custom JSON/PNG/OGG descriptor
 format; the XNA binary `.xnb` format is entirely absent. Framework.Net was 0 % and GamerServices
 was ~5 % **as of this report's original 2026-06-21 analysis — both are now stale: `feature/net`
-(decision 1a, `plan_net.md`) implemented real GamerServices (Achievements, Avatar, Friends,
+(decision 1a, `plans/plan_net.md`) implemented real GamerServices (Achievements, Avatar, Friends,
 Presence, Leaderboards, Privileges, Profile, SignedInGamer) and a real ENet-backed Net transport
 (`SystemLink` play, host migration, simulated latency/packet-loss). See
 `docs/xna-4-api-coverage.md` §9 for the current, maintained per-feature breakdown — this file is a
@@ -51,7 +51,7 @@ this row's original "will not compile at all" claim is stale.**
 | **Framework** (Game, math, collision, curves) | ~50 | 41 | ~95 % | ~90 % | Game loop, all math types, BoundingBox/Sphere/Frustum, Curve, MathHelper fully implemented |
 | **Framework.Graphics** | ~75 | 117 | ~95 % | see per-renderer table | Detailed in next section |
 | **Framework.Input** | ~20 | 26 | ~100 % | ~90 % | Keyboard, Mouse, GamePad, Touch wired to SDL3; rumble/vibration untested |
-| **Framework.Audio** | ~15 | 20 | ~100 % | ~90 % | SoundEffect/Instance real (SDL3_mixer, real filters, instance-tracking cascade); AudioEngine/Cue/WaveBank/SoundBank real (hand-written XACT parser, category/lifecycle/3D all functional); Microphone real (SDL3 capture). Remaining gaps are documented accepted deviations (no HRTF/elevation, `instanceLimit`/fade parsed not enforced), not stubs — updated 2026-07-04, see `plan_audio.md` |
+| **Framework.Audio** | ~15 | 20 | ~100 % | ~90 % | SoundEffect/Instance real (SDL3_mixer, real filters, instance-tracking cascade); AudioEngine/Cue/WaveBank/SoundBank real (hand-written XACT parser, category/lifecycle/3D all functional); Microphone real (SDL3 capture). Remaining gaps are documented accepted deviations (no HRTF/elevation, `instanceLimit`/fade parsed not enforced), not stubs — updated 2026-07-04, see `plans/plan_audio.md` |
 | **Framework.Media** | ~25 | 24 | ~100 % | ~55 % | MediaPlayer and VideoPlayer real (FFmpeg); Song/Album/Artist/Genre/Picture/MediaLibrary = pure stubs |
 | **Framework.Content** | ~20 | 4 | ~20 % | ~60 % | ContentManager works with custom JSON/PNG/OGG descriptors; **no .xnb binary support** |
 | **Framework.Storage** | ~5 | 3 | ~100 % | ~75 % | StorageDevice/Container with filesystem; async patterns simplified |
@@ -147,7 +147,7 @@ this row's original "will not compile at all" claim is stale.**
 |---|---|---|
 | **Content pipeline (.xnb) — 0 %** | Blocking for most existing XNA games | XNA binary asset format not supported; ContentManager requires CNA custom JSON/PNG/OGG descriptors |
 | ~~**Framework.Net — 0 %**~~ / ~~**GamerServices — ~5 %**~~ | **Stale (2026-06-21) — corrected `feature/net`** | Both rows described these as blocking gaps with entirely-absent headers; both are now real, tested implementations (`SystemLink`/host-migration/simulated-conditions for Net; Achievements/Leaderboards/Friends/Presence/Privileges/Avatar for GamerServices). See `docs/xna-4-api-coverage.md` §9 for current per-feature status; `PlayerMatch`/`Ranked`/invites remain stubs (no matchmaking renderer exists), not a namespace-wide gap. |
-| **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/elevation), not stubbing — see `plan_audio.md` |
+| **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/elevation), not stubbing — see `plans/plan_audio.md` |
 | **Microphone — ~95 %** | Minor (updated 2026-07-04) | Real SDL3 capture device enumeration, Start/Stop, GetData/GetQueuedBytes, BufferReady event |
 | **Media library (Album/Artist/Genre) — ~5 %** | Minor for most games | Song/Video playback real; device media-library browsing = pure stubs |
 | **Bgfx: EnvironmentMapEffect** | Medium | No cube-map reflection shader; falls back to lit shader |

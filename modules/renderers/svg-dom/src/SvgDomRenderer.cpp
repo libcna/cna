@@ -16,7 +16,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 1/6 and SVGDOM-5/7: creates the SVG surface over the
+// plans/plan_svg_dom.md design decision 1/6 and SVGDOM-5/7: creates the SVG surface over the
 // platform-owned <canvas> -- the same host-integration shape as HtmlDom's own root (canvas stays in
 // layout AND in pointer hit testing, via opacity:0 not visibility:hidden, because the platform
 // registered its mouse/touch handlers on that exact element), but the surface itself is a real <svg>
@@ -825,7 +825,7 @@ namespace CNA::Internal::Renderers::SvgDom
 
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace SvgDom { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

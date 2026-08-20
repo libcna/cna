@@ -80,10 +80,10 @@ TEST_F(MediaLibraryTestFixture, GetTypeNameIsFullyQualified)
     EXPECT_EQ(library->GetTypeName(), "Microsoft.Xna.Framework.Media.MediaLibrary");
 }
 
-// plan_media.md MEDIA-69: cross-class object-graph integration audit -- walks every relationship
+// plans/plan_media.md MEDIA-69: cross-class object-graph integration audit -- walks every relationship
 // round-trip to confirm the object graph is internally consistent, not just individually populated.
 //
-// This was originally labelled a "full" audit, which overstated it (corrected per plan_media.md
+// This was originally labelled a "full" audit, which overstated it (corrected per plans/plan_media.md
 // MEDIA-179): until MEDIA-174 there were no Song->Album/Artist/Genre members at all, so the
 // Song-side reverse edges below were structurally impossible to check. CNA inherited that gap
 // straight from FNA, whose own Song.cs omits those XNA members -- see MEDIA-180 for the resulting
@@ -200,7 +200,7 @@ TEST_F(MediaLibraryTestFixture, ObjectGraphIsInternallyConsistent)
 
 namespace
 {
-    // plan_media.md MEDIA-59/MEDIA-62: SavePicture writes real files -- uses a scratch,
+    // plans/plan_media.md MEDIA-59/MEDIA-62: SavePicture writes real files -- uses a scratch,
     // writable copy of the Pictures fixture rather than the checked-in tree, so the test doesn't
     // leave an untracked "Saved Pictures" directory inside the repo's real fixture tree.
     class MediaLibrarySavePictureTest : public ::testing::Test
@@ -260,7 +260,7 @@ TEST_F(MediaLibrarySavePictureTest, SavePictureFromBufferCreatesARealReadablePic
     EXPECT_EQ(library.GetPictureFromToken(saved->getTokenEXT()), saved);
 }
 
-// plan_media.md MEDIA-59/D7 (corrected -- found by external code review): the first SavePicture()
+// plans/plan_media.md MEDIA-59/D7 (corrected -- found by external code review): the first SavePicture()
 // call on a library with no pre-existing "Saved Pictures" folder must create a real PictureAlbum
 // tree node for it (as a child of RootPictureAlbum), not silently leave the saved Picture parented
 // to the root album with no dedicated node at all.
@@ -302,7 +302,7 @@ TEST_F(MediaLibrarySavePictureTest, SavePictureCreatesARealSavedPicturesAlbumNod
 
 namespace
 {
-    // plan_media.md MEDIA-132 (found incomplete by external code review): a dedicated scratch
+    // plans/plan_media.md MEDIA-132 (found incomplete by external code review): a dedicated scratch
     // fixture whose Pictures root directory is deliberately never created before MediaLibrary's
     // own construction (unlike MediaLibrarySavePictureTest's own SetUp(), which always
     // pre-creates an empty scratchPictureRoot directory) -- this specifically exercises the case
@@ -379,7 +379,7 @@ TEST_F(MediaLibrarySavePictureTest, SavePictureFromStreamThrowsArgumentNullExcep
                  System::ArgumentNullException);
 }
 
-// plan_media.md MEDIA-174/177/178: Song::Album/Artist/Genre are real XNA 4.0 members that CNA
+// plans/plan_media.md MEDIA-174/177/178: Song::Album/Artist/Genre are real XNA 4.0 members that CNA
 // simply did not have until Phase 16 -- FNA's own Song.cs omits them, so every prior audit against
 // FNA (eight adversarial review rounds) structurally could not surface the gap. This asserts the
 // forward round-trip by POINTER IDENTITY: the Album a song points at must be the very same object
@@ -441,7 +441,7 @@ TEST_F(MediaLibraryTestFixture, SongsPointBackAtTheirOwningAlbumArtistAndGenre)
 
 // A Song that never came from a library scan has no library context, so all three return nullptr
 // (owner decision: nullptr rather than empty singletons, matching C# null semantics for a get-only
-// reference property) -- plan_media.md MEDIA-174.
+// reference property) -- plans/plan_media.md MEDIA-174.
 TEST(SongLibraryBackReferenceTest, StandaloneSongHasNoAlbumArtistOrGenre)
 {
     Song song("tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg", "Standalone");
@@ -450,7 +450,7 @@ TEST(SongLibraryBackReferenceTest, StandaloneSongHasNoAlbumArtistOrGenre)
     EXPECT_EQ(song.getGenreProperty(), nullptr);
 }
 
-// plan_media.md MEDIA-176: XNA declares Song.ToString(); CNA had no override at all (inherited
+// plans/plan_media.md MEDIA-176: XNA declares Song.ToString(); CNA had no override at all (inherited
 // System::Object's default). Matches Album/Artist/Genre/Playlist, which all return their own name.
 TEST(SongLibraryBackReferenceTest, ToStringReturnsTheSongName)
 {
@@ -458,7 +458,7 @@ TEST(SongLibraryBackReferenceTest, ToStringReturnsTheSongName)
     EXPECT_EQ(song.ToString(), "My Song Name");
 }
 
-// plan_media.md MEDIA-181: MediaLibraryIndex genuinely parsed each song's track number and stored
+// plans/plan_media.md MEDIA-181: MediaLibraryIndex genuinely parsed each song's track number and stored
 // it in IndexedSong::trackNumber, but MediaLibrary never passed it to the Song it constructed, so
 // getTrackNumberProperty() returned a hardcoded 0 for every song in the library -- real data
 // parsed and then silently dropped. Ground truth is tests/assets/media/music/manifest.json, whose
@@ -489,7 +489,7 @@ TEST_F(MediaLibraryTestFixture, LibrarySongsCarryTheirRealTrackNumberFromTags)
         << "did not find every expected fixture song in the library";
 }
 
-// plan_media.md MEDIA-199/204: the scan used to accept only .ogg/.oga/.mp3/.wav. FLAC and Opus are
+// plans/plan_media.md MEDIA-199/204: the scan used to accept only .ogg/.oga/.mp3/.wav. FLAC and Opus are
 // now indexed too -- and only formats this project's SDL3_mixer build can actually PLAY were
 // added. (.m4a/.aac are deliberately still excluded: SDL3_mixer ships no AAC decoder at all, so
 // indexing them would advertise songs MediaPlayer::Play() could never play.)
@@ -520,7 +520,7 @@ TEST_F(MediaLibraryTestFixture, LibraryIndexesFlacAndOpusFilesWithTheirRealTags)
     EXPECT_EQ(opus->getTrackNumberProperty(), 9);
 }
 
-// plan_media.md MEDIA-184: Song::IsRated/Rating were hardcoded false/0. Now carried end-to-end
+// plans/plan_media.md MEDIA-184: Song::IsRated/Rating were hardcoded false/0. Now carried end-to-end
 // from the file's own tags, through MediaLibraryIndex and MediaLibrary, exactly like TrackNumber.
 // Both rated fixtures encode the SAME XNA value (8) by DIFFERENT routes -- an ID3v2 POPM byte of
 // 196 and a Vorbis RATING of 80 -- so a bug in either conversion shows up independently.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // OPENGL1 renderer: SamplerState ordering + per-slot bugs found and fixed while implementing
-// plan_opengl1.md phase 6's mip-aware filtering (see plan_opengl1.md phase 6's own entry for the
+// plans/plan_opengl1.md phase 6's mip-aware filtering (see plans/plan_opengl1.md phase 6's own entry for the
 // full writeup).
 //
 // Bug 1 (ordering): ApplySamplerState() used to issue glTexParameteri() directly, called once per

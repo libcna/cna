@@ -25,7 +25,7 @@ not an invented one.
 - `NOXNA` tag present and correctly justified (real XNA has no built-in tangent-space vertex
   type).
 - Doc comment explicitly cross-references its own precedent (`VertexPositionNormalTextureSkinned`)
-  and tracked task (`plan_cnj.md CNB-57, Phase 13A`) rather than presenting itself as an
+  and tracked task (`plans/plan_cnj.md CNB-57, Phase 13A`) rather than presenting itself as an
   unmotivated addition.
 
 ## Detailed Findings

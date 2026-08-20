@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-20: 3D vertical-slice proof for the sokol_gfx graphics renderer -- real
+// plans/plan_sokol.md SOKOL-20: 3D vertical-slice proof for the sokol_gfx graphics renderer -- real
 // vertex-coloured geometry drawn through the public XNA API (`VertexBuffer` + `BasicEffect` +
 // `GraphicsDevice.DrawPrimitives`/`DrawIndexedPrimitives`), every result verified by reading the
 // rendered pixels back off the real back buffer.

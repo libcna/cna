@@ -6,7 +6,7 @@
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
 #include "CNA/Internal/Renderers/Vulkan/VulkanCompiledEffect.hpp"
 namespace {
-    /// plan_fx.md FX-112: the stream descriptor is spelled often enough in this file that the
+    /// plans/plan_fx.md FX-112: the stream descriptor is spelled often enough in this file that the
     /// fully-qualified nested name is noise.
     using VkFxStreamEXT =
         CNA::Internal::Renderers::Vulkan::VulkanCompiledEffect::CompiledVertexStreamEXT;
@@ -582,7 +582,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         // Task 878/879: this RT engages real MSAA only if it was asked for AND the renderer
         // itself was constructed with backbuffer MSAA enabled (sampleCount_ > 1) -- see the
-        // "piggyback on the renderer's own sampleCount_" scope decision in plan_graphics.md.
+        // "piggyback on the renderer's own sampleCount_" scope decision in plans/plan_graphics.md.
         // Reusing the renderer's single already-lazily-created MSAA pipeline/render-pass
         // infrastructure avoids threading an independent numeric sample count through every
         // pipeline cache key. If the renderer has no MSAA infrastructure at all, a RT-only MSAA
@@ -1300,7 +1300,7 @@ namespace CNA::Internal::Renderers::Vulkan
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
     void VulkanSpriteBatchRenderer::FlushPendingCompiledSpritesEXT()
     {
-        // plan_fx.md FX-102. XNA runs a compiled Effect's passes at FLUSH granularity over a whole
+        // plans/plan_fx.md FX-102. XNA runs a compiled Effect's passes at FLUSH granularity over a whole
         // contiguous run of same-texture sprites: FNA's SpriteBatch.FlushBatch splits the batch
         // into texture runs and DrawPrimitives wraps each run's draw in `foreach (pass)`. So the
         // submission order for two sprites sharing a texture and two passes is s0p0, s1p0, s0p1,
@@ -1431,7 +1431,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (!active_) throw std::runtime_error("Vulkan SpriteBatch: Draw called outside Begin/End");
 
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        // plan_fx.md FX-071/FX-080: customEffect_ is either ShaderEffect-derived or compiled,
+        // plans/plan_fx.md FX-071/FX-080: customEffect_ is either ShaderEffect-derived or compiled,
         // never both. A compiled Effect owns the whole program including the projection, so its
         // sprites leave the stock sprite pipeline entirely -- letting them fall through to it
         // would render the sprite with the stock shader and ignore the Effect silently.
@@ -1942,7 +1942,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (descriptorSetLayoutFogTex3D_ != VK_NULL_HANDLE) { vkDestroyDescriptorSetLayout(device_, descriptorSetLayoutFogTex3D_, nullptr); descriptorSetLayoutFogTex3D_ = VK_NULL_HANDLE; }
         if (pipelineLayout2D_      != VK_NULL_HANDLE) { vkDestroyPipelineLayout(device_, pipelineLayout2D_, nullptr);       pipelineLayout2D_      = VK_NULL_HANDLE; }
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        // plan_fx.md FX-065.
+        // plans/plan_fx.md FX-065.
         for (auto& [k, module] : compiledEffectShaderModules_)
             if (module != VK_NULL_HANDLE) vkDestroyShaderModule(device_, module, nullptr);
         compiledEffectShaderModules_.clear();
@@ -2775,7 +2775,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // "compatibility" (VUID-vkCmdDraw-renderPass-02684) requires matching subpass dependency
         // stage/access masks too, not just attachment descriptions/subpass shape -- confirmed via
         // live Vulkan validation errors from a depth-tested 3D draw into a non-MSAA RT before the
-        // original Task 905 fix (see plan_graphics.md). The depth-related stage/access bits are
+        // original Task 905 fix (see plans/plan_graphics.md). The depth-related stage/access bits are
         // harmlessly over-broad (safe over-synchronization) for the hasDepth=false variant, kept
         // identical across both for exact byte-for-byte parity with every other render pass in
         // this renderer rather than risk a subtly-incompatible narrower mask.
@@ -3286,7 +3286,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                                    int maxAnisotropy)
     {
         if (slot < 0 || slot >= 16) return;
-        // plan_fx.md FX-092: the slot's state is a function of THIS call's arguments and nothing
+        // plans/plan_fx.md FX-092: the slot's state is a function of THIS call's arguments and nothing
         // else. GraphicsDevice::applySamplerStatesToRenderer runs before every draw and follows
         // this call with ApplySamplerMipState and ApplySamplerAddressW, so a device-driven
         // application overwrites the three defaults below with the real SamplerState values
@@ -3382,7 +3382,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // Task 878: see CreateSampler()'s identical comment -- without this, every per-slot
         // sampler variant would silently clamp to mip level 0 too.
         ci.maxLod       = VK_LOD_CLAMP_NONE;
-        // plan_fx.md FX-091. XNA's MaxMipLevel names the most DETAILED level the sampler may
+        // plans/plan_fx.md FX-091. XNA's MaxMipLevel names the most DETAILED level the sampler may
         // select, so it is Vulkan's minLod, not its maxLod -- the two names run opposite ways.
         ci.minLod       = static_cast<float>(std::max(0, key.maxMipLevel));
         ci.mipLodBias   = key.lodBias;
@@ -4488,7 +4488,7 @@ namespace CNA::Internal::Renderers::Vulkan
     // Position@0 + Color@12 layout for a stride the canonical table does not list -- which is why
     // a position-only stride-12 buffer renders correctly here today -- while the Instanced3D
     // module is position-only for every stride PackedColorOffsetForStride below does not list.
-    // plan_fx.md FX-065: `compiledEffect` exempts a draw from this gate, and only this gate. The
+    // plans/plan_fx.md FX-065: `compiledEffect` exempts a draw from this gate, and only this gate. The
     // gate exists because the stock routes pick their VkVertexInputAttributeDescription set from
     // the buffer's STRIDE, so a declaration that set cannot represent would be rendered from the
     // wrong bytes. A compiled effect derives its attributes from the declaration itself, one per
@@ -4756,7 +4756,7 @@ namespace CNA::Internal::Renderers::Vulkan
                           // SkinnedPbrEffect (68, or dual-UV 76).
                           case 48: s = 5; break; case 56: s = 6; break; case 68: s = 7; break;
                           case 60: s = 8; break; case 76: s = 9; break;
-                          // plan_gltf.md GLTF-463: skinned PBR + COLOR_0.
+                          // plans/plan_gltf.md GLTF-463: skinned PBR + COLOR_0.
                           case 80: s = 10; break;
                           default: s = 0; }
         uint64_t t = 0;
@@ -6240,13 +6240,13 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-    // ---- Compiled XNA effects (plan_fx.md FX-065) -------------------------------------------
+    // ---- Compiled XNA effects (plans/plan_fx.md FX-065) -------------------------------------------
     //
     // MojoShader's SPIR-V profile fixes its descriptor sets at 0 = vertex samplers, 1 = vertex
     // uniform block, 2 = pixel samplers, 3 = pixel uniform block. Every pipeline layout declares
     // all four; the ones a shader does not use get an empty layout, which is what
     // vkCreatePipelineLayout needs at that index. Vertex-stage sampling is refused before we get
-    // here (plan_fx.md FX-109), so set 0 is always the empty one.
+    // here (plans/plan_fx.md FX-109), so set 0 is always the empty one.
 
     void VulkanRenderer::PrepareCompiledEffectDrawEXT(
         Pending3DDraw& d, const IVertexBufferRenderer& vb_in, const GpuDrawParams& params)
@@ -6297,7 +6297,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vertexShader != nullptr && vertexShader->parseData != nullptr &&
             vertexShader->parseData->sampler_count > 0)
         {
-            // plan_fx.md FX-109: MojoShader's SPIR-V profile reserves descriptor set 0 for them,
+            // plans/plan_fx.md FX-109: MojoShader's SPIR-V profile reserves descriptor set 0 for them,
             // but nothing above this renderer routes VertexSamplerStates down here, so a bound
             // vertex sampler would read an undefined image rather than the intended one.
             throw System::NotSupportedException(
@@ -6353,7 +6353,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 textureCube != nullptr ? MOJOSHADER_SAMPLER_CUBE
                 : texture3D != nullptr ? MOJOSHADER_SAMPLER_VOLUME
                                        : MOJOSHADER_SAMPLER_2D;
-            // plan_fx.md FX-110: a VkImageView carries its own view type, so binding a cube view
+            // plans/plan_fx.md FX-110: a VkImageView carries its own view type, so binding a cube view
             // where the shader declared sampler2D is undefined behaviour that a validation layer
             // catches and a release build renders. Named here instead of either.
             if (reflected.type != boundKind)
@@ -6375,7 +6375,7 @@ namespace CNA::Internal::Renderers::Vulkan
             }
             else if (texture3D != nullptr)
             {
-                // plan_fx.md FX-110: VulkanTexture3DRenderer's image already carries
+                // plans/plan_fx.md FX-110: VulkanTexture3DRenderer's image already carries
                 // VK_IMAGE_USAGE_SAMPLED_BIT and a VK_IMAGE_VIEW_TYPE_3D view, and SetData leaves
                 // it in SHADER_READ_ONLY_OPTIMAL, so sampling a volume needed an accessor rather
                 // than any new resource handling.
@@ -6407,7 +6407,7 @@ namespace CNA::Internal::Renderers::Vulkan
             SamplerStateKey samplerKey{};
             if (samplerAssigned)
             {
-                // plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
+                // plans/plan_fx.md FX-083: the pass's own sampler_state block, LOD clamp and bias
                 // included -- the key expresses all of it, so none of it is lost on the way to a
                 // VkSampler.
                 samplerKey.filter = static_cast<int>(samplerState.getFilterProperty());
@@ -6479,7 +6479,7 @@ namespace CNA::Internal::Renderers::Vulkan
             {&kSpriteDeclaration, static_cast<std::uint32_t>(sizeof(Sprite2DVertex)), false}};
         PrepareCompiledEffectDrawEXT(d, streams, runtime);
 
-        // plan_fx.md FX-103. FNA's SpriteBatch.DrawPrimitives sets GraphicsDevice.Textures[0] =
+        // plans/plan_fx.md FX-103. FNA's SpriteBatch.DrawPrimitives sets GraphicsDevice.Textures[0] =
         // texture immediately AFTER pass.Apply(), with the comment "Set this _after_ Apply,
         // otherwise EffectParameters override it!". So the sprite being drawn wins slot 0
         // unconditionally, whatever the effect's own texture parameter names -- a backend that
@@ -7761,7 +7761,7 @@ namespace CNA::Internal::Renderers::Vulkan
         if (dualUv)
         {
             attrs[4] = { 4, 0, VK_FORMAT_R32G32_SFLOAT,   48 }; // aUV1
-            // plan_gltf.md GLTF-462/GLTF-465: stride 60 always carries a packed COLOR_0 here --
+            // plans/plan_gltf.md GLTF-462/GLTF-465: stride 60 always carries a packed COLOR_0 here --
             // InferredLayoutForStride(60) has a Color element at 56 whether the primitive authored
             // one or the importer wrote the opaque-white identity, so the attribute is
             // unconditional for this variant and the shader's own uVertexColorEnabled decides
@@ -8040,7 +8040,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         if (stride != 68 && stride != 76 && stride != 80)
             throw std::runtime_error("Vulkan SkinnedPbrEffect requires vertex stride 68, 76 or 80");
-        // plan_gltf.md GLTF-463: stride 80 is stride 76's record with a packed COLOR_0 appended, so
+        // plans/plan_gltf.md GLTF-463: stride 80 is stride 76's record with a packed COLOR_0 appended, so
         // it is a dual-UV layout that additionally binds a colour.
         const bool dualUv  = stride == 76 || stride == 80;
         const bool colored = stride == 80;
@@ -8941,7 +8941,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                                      draw.viewportMinDepth, draw.viewportMaxDepth,
                                                      fbW, fbH);
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-                    // plan_fx.md FX-065: Vulkan's clip space has Y pointing down where D3D9's and
+                    // plans/plan_fx.md FX-065: Vulkan's clip space has Y pointing down where D3D9's and
                     // OpenGL's point up, and every stock shader here compensates with an explicit
                     // `pos.y = -pos.y` (see colored3d.vert.glsl). A MojoShader-translated D3D9
                     // shader carries no such line and cannot be asked to, so the flip moves to the
@@ -8961,7 +8961,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 // draw uses the MSAA pipeline variant when this specific RT actually engaged
                 // MSAA (VulkanRTSource::WantsMsaa(), true only when the renderer itself has MSAA
                 // infrastructure AND the RT requested it; see the "piggyback on sampleCount_"
-                // scope decision in plan_graphics.md).
+                // scope decision in plans/plan_graphics.md).
                 const bool drawMsaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT) &&
                                       (targetRT == nullptr || targetRT->WantsMsaa());
                 if (targetRT && targetRT->GetColorAttachmentCount() > 1) {
@@ -8978,7 +8978,7 @@ namespace CNA::Internal::Renderers::Vulkan
                 const VkFormat targetDepthFmt = targetRT ? targetRT->GetDepthFormat() : depthFormat_;
                 VkPipeline pipe;
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-                // plan_fx.md FX-065: a compiled Effect brings its own linked SPIR-V pair, vertex
+                // plans/plan_fx.md FX-065: a compiled Effect brings its own linked SPIR-V pair, vertex
                 // input layout and descriptor layout, so it selects a pipeline of its own instead
                 // of any of the stock stride-dispatched ones below.
                 if (draw.useCompiledEffect) {
@@ -10085,7 +10085,7 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         // multiSampleCount is honored on a "piggyback on the renderer's own sampleCount_" basis
         // (Task 878/879) — see VulkanRenderTargetRenderer's constructor comment and
-        // plan_graphics.md for the exact scope decision. mipMap (Task 878) is a real
+        // plans/plan_graphics.md for the exact scope decision. mipMap (Task 878) is a real
         // vkCmdBlitImage cascade regenerated every frame this RT is rendered into — see
         // VulkanRenderTargetRenderer::MaybeGenerateMips. depthFormat (Task 877) now gets true
         // per-instance fidelity (Task 911) — see VulkanRenderTargetRenderer's constructor comment.
@@ -10900,7 +10900,7 @@ namespace CNA::Internal::Renderers::Vulkan
         d.useFogTex3D    = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
                          && !needsPbr && !needsLitTextured;
         d.useDualTexture = needsDualTex;
-        // plan_cnj.md CNB-58/CNB-91 Vulkan port: pbr+skinned (SkinnedPbrEffect, stride 68) and
+        // plans/plan_cnj.md CNB-58/CNB-91 Vulkan port: pbr+skinned (SkinnedPbrEffect, stride 68) and
         // pbr-only (PbrEffect, stride 48) are two distinct pipelines/descriptor bundles; plain
         // skinned (stride 52/56) only when pbr is NOT also set (mirrors
         // EasyGLRenderer::SelectProgram()'s own pbr&&skinned / pbr / skinned priority order).
@@ -11097,7 +11097,7 @@ namespace CNA::Internal::Renderers::Vulkan
             }
         }
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        // plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
+        // plans/plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
         // stride-dispatched selection above rather than layering on it. Everything the deferred
         // replay needs is captured now, while the pass is still the applied one.
         if (params.compiledEffectRuntime != nullptr)
@@ -11184,7 +11184,7 @@ namespace CNA::Internal::Renderers::Vulkan
         d.useFogTex3D   = !needsAlphaTest && !needsDualTex && !needsEnvMap && !needsSkinned
                         && !needsPbr && !needsLitTextured;
         d.useDualTexture = needsDualTex;
-        // plan_cnj.md CNB-58/CNB-91 Vulkan port: see DrawPrimitivesEx's identical comment above.
+        // plans/plan_cnj.md CNB-58/CNB-91 Vulkan port: see DrawPrimitivesEx's identical comment above.
         d.usePbrSkinned  = needsPbr && needsSkinned;
         d.usePbr         = needsPbr && !needsSkinned;
         d.useSkinned     = needsSkinned && !needsPbr;
@@ -11375,7 +11375,7 @@ namespace CNA::Internal::Renderers::Vulkan
             }
         }
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        // plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
+        // plans/plan_fx.md FX-065: a compiled Effect owns the whole program, so it replaces the stock
         // stride-dispatched selection above rather than layering on it. Everything the deferred
         // replay needs is captured now, while the pass is still the applied one.
         if (params.compiledEffectRuntime != nullptr)
@@ -11422,7 +11422,7 @@ namespace CNA::Internal::Renderers::Vulkan
 #endif
         // REMED-GFX-DECL-GUARD: the geometry stream's declaration, against the Instanced3D
         // module's own inferred layout -- which binds a packed colour only at the two strides
-        // PackedColorOffsetForStride lists and is position-only everywhere else. plan_fx.md
+        // PackedColorOffsetForStride lists and is position-only everywhere else. plans/plan_fx.md
         // FX-112: not applied to a compiled draw, which builds its vertex input from the
         // declarations rather than from the stride, so any declaration it can satisfy is faithful
         // by construction.
@@ -11550,7 +11550,7 @@ namespace CNA::Internal::Renderers::Vulkan
         d.useInstanced = true;
         d.descSet      = defaultWhiteDescSet_;  // no per-draw texture for now
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        // plan_fx.md FX-112: two streams, per-vertex first, so binding 0 is the geometry and
+        // plans/plan_fx.md FX-112: two streams, per-vertex first, so binding 0 is the geometry and
         // binding 1 the per-instance records this route has already expanded to divisor 1 (see the
         // REMED-GFX-213 copy above -- the frequency is a data-copy concern here, never a pipeline
         // one). Everything else the compiled draw needs was captured by the block above; the
@@ -12550,7 +12550,7 @@ namespace CNA::Internal::Renderers::Vulkan
             depthVkFormat_ = PickDepthFormat(owner_->physicalDevice_, static_cast<DepthFormat>(depthFormat));
 
         // Task 903: mirrors VulkanRenderTargetRenderer's identical "piggyback on the renderer's own
-        // sampleCount_" scope decision (Task 878/879) -- see plan_graphics.md.
+        // sampleCount_" scope decision (Task 878/879) -- see plans/plan_graphics.md.
         const bool wantsMsaa = requestedMultiSampleCount > 0 &&
                                owner_->sampleCount_ > VK_SAMPLE_COUNT_1_BIT;
 
@@ -13038,7 +13038,7 @@ namespace CNA::Internal::Renderers::Vulkan
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_VULKAN
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Vulkan { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

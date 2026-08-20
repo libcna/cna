@@ -2,7 +2,7 @@
 // Task 691: Pixel test — draw multiple glyphs with spacing on SDL_Renderer.
 //
 // Task 425 (this row's own "mirrors" reference, the EasyGL original) is itself not yet
-// implemented (still ⬜ in plan_graphics.md's Phase 48) -- there is no existing test to port
+// implemented (still ⬜ in plans/plan_graphics.md's Phase 48) -- there is no existing test to port
 // here, same situation as Task 690. This is a NEW SpriteFont pixel test, building on Task 690's
 // established single-glyph fixture pattern to additionally exercise the horizontal-advance
 // math in the shared, renderer-agnostic SpriteBatch::DrawString: for the 2nd+ glyph in a line,

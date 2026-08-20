@@ -15,7 +15,7 @@ namespace Microsoft::Xna::Framework::GamerServices
 {
     namespace
     {
-        // Task 4.4 (plan_net.md Phase 4): no FNA reference exists for any of this - real
+        // Task 4.4 (plans/plan_net.md Phase 4): no FNA reference exists for any of this - real
         // FNA.NetStub's own LeaderboardReader is identically all-NotSupportedException, so sort
         // order/pivot-centering/friends-restriction semantics below are CNA-original, documented
         // defaults, not FNA fidelity.
@@ -200,7 +200,7 @@ namespace Microsoft::Xna::Framework::GamerServices
         // reader's *complete* board (full local leaderboard, or the gamer-restricted subset for a
         // friends board) rather than a partial client-side window of a larger remote total, so
         // there is no separate "more exists beyond what's cached" case to special-case here -
-        // unlike the isFriendBoard_ split this used to have (see Task 4.4's fix-up, plan_net.md
+        // unlike the isFriendBoard_ split this used to have (see Task 4.4's fix-up, plans/plan_net.md
         // Phase 4: the old non-friend branch's `pageStart_ < entryCache_.size()` was true for
         // almost the entire board, letting PageDown() walk one page past the real end).
         return (pageStart_ + pageSize_) < static_cast<int>(entryCache_.size());

@@ -19,7 +19,7 @@ namespace CNA::Graphics {
     /**
      * @brief Orders transparent draws back to front, without owning any of them.
      *
-     * plan_modern.md `MOD-2101`. Until this existed the layer said so plainly in
+     * plans/plan_modern.md `MOD-2101`. Until this existed the layer said so plainly in
      * `MaterialBinding.hpp`: *"Draw order still belongs to the application: CNA does not sort."*
      * That is a real gap — an alpha-blended surface only composites correctly if what is behind it
      * was drawn first, and getting that wrong produces a frame that looks almost right, which is
@@ -98,7 +98,7 @@ namespace CNA::Graphics {
          * @brief The distance a draw is sorted by: from the eye to the **nearest point** of its
          *        bounds.
          *
-         * plan_modern.md `MOD-2103`. Not the centre, and the difference is the classic sorted-
+         * plans/plan_modern.md `MOD-2103`. Not the centre, and the difference is the classic sorted-
          * transparency artefact: a long object crossing a short one has a distant centre and a near
          * end, so a centre sort puts it behind something it visibly passes in front of. The nearest
          * point is what the camera actually meets first.

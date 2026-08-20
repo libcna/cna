@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support for the OpenGL4 graphics
+// plans/plan_opengl4.md GL4-27: real GpuDrawParams::baseVertex support for the OpenGL4 graphics
 // renderer -- DrawIndexedPrimitivesEx now uses the real GL 3.2 core glDrawElementsBaseVertex
 // entry point (newly loaded via GL4Loader) instead of plain glDrawElements, adding
 // params.baseVertex to every fetched index before it indexes into the currently bound vertex

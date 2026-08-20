@@ -21,7 +21,7 @@
 // control. Software explicitly rejects every non-TriangleList topology (its documented v1
 // boundary) and is asserted as a rejection, never as approximate geometry. D3D12 is also an
 // explicit rejection while its PSO cache is fixed to triangle topology; its named source contract
-// is locked by GltfRendererPointTopologyPolicy. Vulkan joined this matrix with plan_gltf.md
+// is locked by GltfRendererPointTopologyPolicy. Vulkan joined this matrix with plans/plan_gltf.md
 // GLTF-393; the Direct3D disposition closes GLTF-394 / REMED-GFX-114.
 
 #include <algorithm>
@@ -74,7 +74,7 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// plans/plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
 // BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
 // condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
 // multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
@@ -1266,7 +1266,7 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 // REMED-GFX-111's topology contract.
 TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU);
     RequirePointRendering();
@@ -1313,7 +1313,7 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
 // pipeline object, so switching to and from point topology must not allocate any native resource.
 TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequirePointRendering();
@@ -1390,7 +1390,7 @@ TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
 // asserted here: three point-sized marks, never area geometry.
 TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequestedVertices)
 {
-    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // plans/plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
     // run only when bgfx is the active renderer.
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequirePointRendering();
@@ -1454,7 +1454,7 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequested
 // vertexStart, which this renderer honours.
 TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(SdlGpu);
     RequirePointRendering();
@@ -1531,7 +1531,7 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 // PointListEXT explicitly on every public entry point rather than approximating it.
 TEST_F(PointListPrimitiveTest, SoftwareExplicitlyRejectsPointListTopology)
 {
-    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // plans/plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
     // so on every other renderer these tests did not exist and reported nothing.
     CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequirePointRendering();

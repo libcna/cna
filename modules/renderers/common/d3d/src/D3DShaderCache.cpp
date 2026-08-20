@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX3 (DX-15-embed).
+// plans/plan_dx.md Phase DIRECTX3 (DX-15-embed).
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 
 #include "shaders/hlsl_shaders.hpp"

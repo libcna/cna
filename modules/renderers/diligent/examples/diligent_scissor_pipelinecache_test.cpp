@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-58: real-device proof that toggling RasterizerState.ScissorTestEnable
+// plans/plan_diligent.md DILIGENT-58: real-device proof that toggling RasterizerState.ScissorTestEnable
 // is not silently swallowed by the pipeline cache.
 //
 // Diligent pipeline state objects are immutable: RasterizerDesc.ScissorEnable is baked in at

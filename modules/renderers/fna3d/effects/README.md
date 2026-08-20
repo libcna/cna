@@ -61,7 +61,7 @@ artefact and is not committed; only these inputs are.
 
 ---
 
-## `CnaConformanceEffect.fx` / `.fxb` — CNA's own conformance fixture (plan_fx.md FX-004)
+## `CnaConformanceEffect.fx` / `.fxb` — CNA's own conformance fixture (plans/plan_fx.md FX-004)
 
 Everything above is a stock binary Microsoft compiled years ago; `Fna3dCompiledEffectTests.cpp`
 additionally assembles Effect Framework containers byte by byte. Neither is compiler output for a

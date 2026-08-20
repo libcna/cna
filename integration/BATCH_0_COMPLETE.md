@@ -119,7 +119,7 @@ Every row below was measured this session, not carried forward from a lane card.
 | `61bd1a1b` `depthcrt` | `d79214e7..61bd1a1b` | **13** |
 | `722a2f5a` `gltf` | `61bd1a1b..722a2f5a` | **1** — `gltfissues.md` |
 | `8a374b9f` `ext` | `722a2f5a..8a374b9f` | **1** — `NOXNA.md` |
-| `990d6b8a` `dxold` | `e0332214..990d6b8a` | **266** — 153 `examples/`, 16 `scripts/`, 13 `cmake/`, 11 each `include/`/`docs/`/`dx2-spike/`, 9 `src/`, 8 `tests/`, the six other `dx*-spike/` dirs, and 18 root-level files (12 `plan_*.md`, `README.md`, `CMakeLists.txt`, `CLAUDE.md`, `NOXNA.md`, `.gitignore`, `plan.md`) |
+| `990d6b8a` `dxold` | `e0332214..990d6b8a` | **266** — 153 `examples/`, 16 `scripts/`, 13 `cmake/`, 11 each `include/`/`docs/`/`dx2-spike/`, 9 `src/`, 8 `tests/`, the six other `dx*-spike/` dirs, and 18 root-level files (12 `plan_*.md`, `README.md`, `CMakeLists.txt`, `CLAUDE.md`, `NOXNA.md`, `.gitignore`, `plans/plan.md`) |
 
 Nothing outside the four lanes' declared scope entered the branch.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::Core (MODULARIZATION_PLAN.md §4): logging, exceptions and the
+// Minimal-link probe for CNA::Core (plans/MODULARIZATION_PLAN.md §4): logging, exceptions and the
 // renderer-identity enum must be usable without graphics, content, runtime or networking.
 // The paired ModuleLinkClosure_Core ctest inspects this executable's generated link line.
 #include "CNA/CNAException.hpp"

@@ -1,7 +1,7 @@
 // Shader Model 5.0 (vs_5_0). Ported line-by-line from
 // src/CNA/Internal/Renderers/Vulkan/shaders/colored3d.vert.glsl (Task 364/888/899 history).
 //
-// Matrix convention (plan_dx.md design decision 14): cbuffer matrices are declared row_major so
+// Matrix convention (plans/plan_dx.md design decision 14): cbuffer matrices are declared row_major so
 // the exact same byte layout XNA's CPU-side Matrix (row-major) uploads for Vulkan/EasyGL/Bgfx can
 // be uploaded here unchanged (no CPU-side transpose). Every `M * v` in the GLSL source becomes
 // `mul(v, M)` here (row-vector convention) -- this is the standard XNA/HLSL idiom (matches

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-// Shared scaffolding for the terminal-platform tests (plan_platform.md Phase 10).
+// Shared scaffolding for the terminal-platform tests (plans/plan_platform.md Phase 10).
 //
 // Everything a terminal does is invisible without a terminal, and CI has none: output is
 // redirected, so `isatty` is false and every interesting path refuses. A test that skips there is

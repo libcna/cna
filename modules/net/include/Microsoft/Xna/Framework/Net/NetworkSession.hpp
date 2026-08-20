@@ -153,7 +153,7 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether host migration is allowed.
          *
-         * Task 5.1-5.4 (plan_net.md Phase 5): real, local-only implementation - `false` (the
+         * Task 5.1-5.4 (plans/plan_net.md Phase 5): real, local-only implementation - `false` (the
          * default) keeps FNA's own reference behavior exactly (`ENetBackend::HandleDisconnect`
          * unconditionally ends the session the instant its host peer disconnects). `true` enables
          * a real, full-reconnect migration instead: every surviving peer independently computes
@@ -285,7 +285,7 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated network latency.
          *
-         * Task 6.1-6.5 (plan_net.md Phase 6): real, receive-side implementation - `ENetBackend`
+         * Task 6.1-6.5 (plans/plan_net.md Phase 6): real, receive-side implementation - `ENetBackend`
          * holds AppData bound for one of this session's own local gamers in a per-session delayed-
          * delivery queue, releasing it once `now >= receiveTime + SimulatedLatency` (see
          * `ENetBackend.cpp`'s `HandleAppData`/`ReleaseDuePendingDeliveries`). Scoped to AppData
@@ -311,7 +311,7 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated packet loss fraction.
          *
-         * Task 6.1-6.5 (plan_net.md Phase 6): real implementation - each AppData packet bound for
+         * Task 6.1-6.5 (plans/plan_net.md Phase 6): real implementation - each AppData packet bound for
          * one of this session's own local gamers is probabilistically dropped before ever
          * reaching game code, at exactly this rate (`ENetBackend.cpp`'s
          * `ShouldDropForSimulatedLoss`; 0.0 and 1.0 are handled deterministically without touching
@@ -347,7 +347,7 @@ namespace Microsoft::Xna::Framework::Net
          * until the static factory method returns). Real XNA's `GamerJoined` is documented to
          * replay itself immediately upon `+=` subscription for every gamer already in the session
          * - `System::EventHandler<T>` (sharp-runtime) has no such "replay on subscribe" hook, so
-         * this port cannot reproduce that automatically (see `plan_net.md`'s Task 12.3 for the
+         * this port cannot reproduce that automatically (see `plans/plan_net.md`'s Task 12.3 for the
          * full investigation). **Call `Update()` once, immediately after subscribing, to receive
          * the initial join event(s) for this session's own local gamers** - this is the
          * intentional, permanent, correct pattern (not a temporary workaround) given the above

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_html_dom.md HTMLDOM-70: GTest coverage for everything on the HTML_DOM renderer that does not
+// plans/plan_html_dom.md HTMLDOM-70: GTest coverage for everything on the HTML_DOM renderer that does not
 // need a real DOM -- the blend-state mapping, the addressing-mode validation, the sprite geometry
 // encoder, and the 3D "not yet implemented" surface. Deliberately structured so it runs under this
 // repo's `node CnaTests.js` runner or the native host-contract target: nothing here requires a
@@ -231,7 +231,7 @@ TEST(HtmlDomDrawCommand, OriginBecomesTheLocalPivotOffset)
     EXPECT_FLOAT_EQ(c.destY, 100.0f);
 }
 
-// plan_html_dom.md HTMLDOM-119: a negative origin is a valid, if unusual, XNA pivot (not clamped to
+// plans/plan_html_dom.md HTMLDOM-119: a negative origin is a valid, if unusual, XNA pivot (not clamped to
 // the sprite's own bounds -- a pivot placed OUTSIDE the sprite, e.g. for an object that should
 // rotate around a point beyond its own edge). localX/localY is plain negation with no sign branch
 // or clamp anywhere in BuildDrawCommandEXT, so this should compose identically to a positive
@@ -269,7 +269,7 @@ TEST(HtmlDomDrawCommand, FlipMirrorsAboutTheSpritesOwnCentreNotThePivot)
     EXPECT_FLOAT_EQ(topLeftPivot.flipCenterY, 8.0f);
 }
 
-// plan_html_dom.md HTMLDOM-104: Clamp samples the nearest EDGE TEXEL for the out-of-bounds portion
+// plans/plan_html_dom.md HTMLDOM-104: Clamp samples the nearest EDGE TEXEL for the out-of-bounds portion
 // -- it does NOT crop destination geometry. An earlier version narrowed sx/sw into the texture and
 // shifted localX to match, cropping the sprite's own footprint instead (the wrong result, per the
 // audit that reopened this task). The encoder now passes the RAW, unclamped source rect straight
@@ -290,7 +290,7 @@ TEST(HtmlDomDrawCommand, ClampKeepsTheRawSourceRectAndLeavesDestGeometryUnchange
     EXPECT_EQ(c.flags & FlagWrap, 0);
 }
 
-// plan_html_dom.md HTMLDOM-104: an honest boundary, not silent cropping -- overflow beyond
+// plans/plan_html_dom.md HTMLDOM-104: an honest boundary, not silent cropping -- overflow beyond
 // kMaxClampPadding texture pixels on any one edge is rejected outright rather than approximated.
 TEST(HtmlDomDrawCommand, ClampOverflowBeyondTheCapThrows)
 {
@@ -339,7 +339,7 @@ TEST(HtmlDomDrawCommand, MirrorMixedWithADifferentAxisModeThrowsFromTheEncoder)
 // HTMLDOM-97: mixed non-Mirror axes (U=Wrap, V=Clamp) tile only the U extent and clamp the V
 // extent independently -- flags carry each axis's own repetition, and the V extent is genuinely
 // narrowed while the U extent stays full, unlike the old whole-rect-follows-addressU behaviour.
-// plan_html_dom.md HTMLDOM-104: V (Clamp) keeps its own RAW source rect too now -- no narrowing,
+// plans/plan_html_dom.md HTMLDOM-104: V (Clamp) keeps its own RAW source rect too now -- no narrowing,
 // no localY shift -- independent of U (Wrap), which continues to tile as before.
 TEST(HtmlDomDrawCommand, MixedWrapUClampVTilesOnlyUAndClampsV)
 {
@@ -521,7 +521,7 @@ TEST(HtmlDomSpriteBatch, IdentityTransformMatrixIsAccepted)
     EXPECT_NO_THROW(batch.SetTransformMatrix(Matrix::CreateTranslation(10.0f, 20.0f, 0.0f)));
 }
 
-// plan_html_dom.md HTMLDOM-118: SetImmediateMode itself is trivially unit-testable (a plain
+// plans/plan_html_dom.md HTMLDOM-118: SetImmediateMode itself is trivially unit-testable (a plain
 // setter); the actual per-draw-flush BEHAVIOUR it enables needs a real ITextureRenderer (which
 // this file's own DrawBeforeBeginThrows comment notes cannot be reached without one) and a real
 // JS-side flush to observe -- that is verified end-to-end in htmldom_smoke_test.cpp instead,
@@ -635,7 +635,7 @@ TEST_F(HtmlDom3DSurfaceTest, CapabilityQueriesReportTheTwoDimensionalBoundaryUpF
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::WireFrame));
 }
 
-// plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending is the one capability this
+// plans/plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending is the one capability this
 // renderer answers for real rather than a blanket false -- under `node` (no __EMSCRIPTEN__,
 // CNA_HtmlDom_SupportsAdditiveBlending's own EM_JS body compiles out entirely) there is no CSS
 // engine to ask, so `false` is the correct native answer here, not merely the same "2D-only"
@@ -666,7 +666,7 @@ TEST_F(HtmlDom3DSurfaceTest, MultipleRenderTargetsAndCubeFacesThrow)
     EXPECT_NO_THROW(renderer.SetRenderTargets(nullptr, 0));
 }
 
-// plan_html_dom.md HTMLDOM-120: GraphicsDevice::SetRenderTargets (the shared layer, the only
+// plans/plan_html_dom.md HTMLDOM-120: GraphicsDevice::SetRenderTargets (the shared layer, the only
 // caller a real game ever goes through) always passes count=0 for a null pointer -- (nullptr,
 // count>0) can only happen via a direct call bypassing the shared layer, exactly what this test
 // audits. Without the fix, `renderTargets[0]` inside SetRenderTargets dereferences this null
@@ -694,7 +694,7 @@ TEST_F(HtmlDom3DSurfaceTest, BackbufferReadbackThrowsWithAnActionableMessage)
     }
 }
 
-// plan_html_dom.md HTMLDOM-120: once a target IS bound (so ReadBackbuffer gets past its own
+// plans/plan_html_dom.md HTMLDOM-120: once a target IS bound (so ReadBackbuffer gets past its own
 // "nothing bound" guard above), a null destination pointer or a non-positive/negative region must
 // be rejected with an actionable exception before crossing into JS -- not reach
 // CNA_HtmlDom_ReadBound, where a null pointer would write into the start of the wasm heap via
@@ -747,7 +747,7 @@ TEST_F(HtmlDom3DSurfaceTest, ViewportFollowsTheVirtualResolutionSetting)
     EXPECT_FALSE(renderer.TransformLogicalToWindow(10.0f, 10.0f, lx, ly));
 }
 
-// plan_html_dom.md HTMLDOM-120: SetVirtualResolution stores width/height completely unvalidated --
+// plans/plan_html_dom.md HTMLDOM-120: SetVirtualResolution stores width/height completely unvalidated --
 // confirming this is already safe by construction rather than leaving it unverified.
 // TransformWindowToLogical/TransformLogicalToWindow's own "no virtual resolution configured" guard
 // is `virtualWidth_ <= 0 || virtualHeight_ <= 0` (HtmlDomRenderer.cpp), so a NEGATIVE
@@ -808,7 +808,7 @@ TEST_F(HtmlDom3DSurfaceTest, StateSettersAcceptOnlyTheTruthfulTwoDimensionalSubs
     SetCurrentScissorEnableEXT(false);
 }
 
-// plan_html_dom.md HTMLDOM-102: ApplyRasterizerState's scissorTestEnable argument is the one field
+// plans/plan_html_dom.md HTMLDOM-102: ApplyRasterizerState's scissorTestEnable argument is the one field
 // this renderer genuinely reads -- verified directly here (pure C++ state, no DOM/browser needed),
 // separately from the inert-fields test above so a future change to either can't silently mask a
 // regression in the other.
@@ -827,7 +827,7 @@ TEST_F(HtmlDom3DSurfaceTest, ApplyRasterizerStateReadsScissorTestEnable)
     SetCurrentScissorEnableEXT(false);
 }
 
-// plan_html_dom.md HTMLDOM-98: under `node` (no __EMSCRIPTEN__), SetViewport's own EM_JS forwarding
+// plans/plan_html_dom.md HTMLDOM-98: under `node` (no __EMSCRIPTEN__), SetViewport's own EM_JS forwarding
 // call compiles out entirely, so there is no JS-side state for a native GTest to observe -- this
 // verifies the C++-side contract that IS testable here: arbitrary values never throw, a repeated
 // call with the SAME values (the idempotency guard's early-return branch) never throws either, and
@@ -841,7 +841,7 @@ TEST_F(HtmlDom3DSurfaceTest, SetViewportAcceptsArbitraryValuesAndIsIdempotent)
     EXPECT_NO_THROW(renderer.SetViewport(4, 4, 16, 16, 0.25f, 0.75f));  // same as the line above
 }
 
-// plan_html_dom.md HTMLDOM-120: SetViewport's w/h are stored into Module['cnaDomViewport'] but
+// plans/plan_html_dom.md HTMLDOM-120: SetViewport's w/h are stored into Module['cnaDomViewport'] but
 // (confirmed by grep) only ever READ as .x/.y by the sprite-flush path -- .w/.h are dead data this
 // renderer never derives anything from -- and minDepth/maxDepth are literally unnamed parameters,
 // never read or stored at all. So negative w/h and a genuinely inverted depth range (minDepth >
@@ -857,7 +857,7 @@ TEST_F(HtmlDom3DSurfaceTest, SetViewportAcceptsNegativeDimensionsAndInvertedDept
 // Texture/render-target size validation
 // ---------------------------------------------------------------------------------------------
 //
-// plan_html_dom.md HTMLDOM-120: neither Texture2D.cpp (upper-bound-only) nor RenderTarget2D.cpp
+// plans/plan_html_dom.md HTMLDOM-120: neither Texture2D.cpp (upper-bound-only) nor RenderTarget2D.cpp
 // (no size validation at all -- it never even reaches Texture2D's own dimension checks, since it
 // bypasses the two Texture2D constructors that call them) rejects a zero/negative width or height
 // anywhere in the shared layer -- confirmed by reading both files. HtmlDomTextureRenderer's own
@@ -893,7 +893,7 @@ TEST(HtmlDomTextureRendererSizeValidation, ZeroOrNegativeDimensionsThrowFromRend
     EXPECT_NO_THROW((HtmlDomRenderTargetRenderer{4, 4}));
 }
 
-// plan_html_dom.md HTMLDOM-120: locks in HtmlDomRenderTargetRenderer::GetData's own documented
+// plans/plan_html_dom.md HTMLDOM-120: locks in HtmlDomRenderTargetRenderer::GetData's own documented
 // `data == nullptr` contract (returns false rather than throwing, HtmlDomRenderTargetRenderer.cpp's
 // own comment: "false ... when no canvas exists") as an explicit, regression-proof test rather
 // than leaving it implicit in the implementation alone -- every OTHER invalid-argument case in

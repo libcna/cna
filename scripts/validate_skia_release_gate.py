@@ -18,7 +18,7 @@ def main() -> int:
         return 2
 
     root = pathlib.Path(sys.argv[1]).resolve()
-    plan_path = root / "plan_skia.md"
+    plan_path = root / "plans/plan_skia.md"
     release_path = root / "docs/skia-release-gate.md"
     surface_adr_path = root / "docs/skia-surface-mode-adr.md"
     capability_path = root / "modules/graphics/include/CNA/GraphicsCapability.hpp"

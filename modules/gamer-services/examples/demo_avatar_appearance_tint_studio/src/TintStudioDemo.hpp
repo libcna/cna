@@ -38,11 +38,11 @@ public:
     /** @brief Enables smoke-test mode: exit cleanly after @p n Draw frames. */
     void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
 
-    /** @brief Forces the F1 help overlay's initial visibility - Task 8 (plan_net.md Phase 8):
+    /** @brief Forces the F1 help overlay's initial visibility - Task 8 (plans/plan_net.md Phase 8):
      *  lets a non-interactive smoke/screenshot run verify the overlay actually renders. */
     void SetShowHelpForTestingEXT(bool visible) { showHelpEXT_ = visible; }
 
-    /** @brief Saves a PNG of the backbuffer on the final smoke frame - Task 8 (plan_net.md
+    /** @brief Saves a PNG of the backbuffer on the final smoke frame - Task 8 (plans/plan_net.md
      *  Phase 8), reusing Task 7.1's own examples/common/ScreenshotEXT.hpp helper. */
     void SetScreenshotPathEXT(std::string path) { screenshotPathEXT_ = std::move(path); }
 
@@ -66,7 +66,7 @@ private:
     int smokeFramesLeft_ = -1;
     int smokeStep_ = 0;
 
-    // Task 8 (plan_net.md Phase 8): F1 help overlay - same established pattern as demo_avatar's
+    // Task 8 (plans/plan_net.md Phase 8): F1 help overlay - same established pattern as demo_avatar's
     // own AvatarDemo (see that file's own comment for why this is a deliberate per-demo copy).
     std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteFont> font_;
     bool showHelpEXT_ = false;

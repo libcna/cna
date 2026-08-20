@@ -37,7 +37,7 @@
 //   Blue/Red (0/255-only channel values) rather than a blended reference colour such as
 //   CornflowerBlue deliberately: this renderer's swapchain format is frequently an sRGB variant,
 //   and a Clear() colour's exact byte-for-byte round trip through an sRGB-encoded attachment is a
-//   separate, already-known, renderer-wide characteristic (see plan_webgpu.md's WEBGPU-132 note on
+//   separate, already-known, renderer-wide characteristic (see plans/plan_webgpu.md's WEBGPU-132 note on
 //   "the exact value depends on whether the chosen swapchain format blends in linear or
 //   sRGB-encoded space") -- 0/255 channel values are gamma-invariant at both encoding endpoints,
 //   so this check exercises target separation specifically, without also depending on that
@@ -51,7 +51,7 @@
 //   RenderTarget2D, with MSAA actually engaged).
 // Check G -- CreateRenderTarget2D(mipMap=true) throws a clear exception rather than silently
 //   creating a single-level target while the XNA layer expects a full mip chain (a deliberate,
-//   documented scope cut -- see plan_webgpu.md WEBGPU-53/54).
+//   documented scope cut -- see plans/plan_webgpu.md WEBGPU-53/54).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 

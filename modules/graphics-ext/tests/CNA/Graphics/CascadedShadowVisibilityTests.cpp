@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-905, MOD-906, MOD-908..MOD-910: cascades that are actually sampled.
+// plans/plan_modern.md MOD-905, MOD-906, MOD-908..MOD-910: cascades that are actually sampled.
 //
 // CascadedShadowMapTests pins the arithmetic; this pins the half that arithmetic cannot reach.
 // Every one of these renders, because the failures worth catching here all look like correct code:
@@ -308,7 +308,7 @@ TEST_F(CascadedShadowVisibilityTest, TheCascadeStateReachesGpuDrawParamsIntact)
     cascades.setBlendBand(2.5f);
     cascades.setDebugTintEnabled(true);
 
-    // plan_modern.md MOD-1901's sweep found these two getters had no reader anywhere -- their
+    // plans/plan_modern.md MOD-1901's sweep found these two getters had no reader anywhere -- their
     // setters were used here and in the example, but nothing ever read the value back. A setter
     // whose getter is never exercised is a setter nobody has checked actually stores anything.
     EXPECT_FLOAT_EQ(cascades.getBlendBand(), 2.5f);

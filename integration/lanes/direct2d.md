@@ -31,7 +31,7 @@ The frozen-head record contained two arithmetic errors, corrected here without r
 original branch:
 
 - exactly **three**, not four, commits followed `6cd6ad06`: `701ea9e2`, `09411e77`, `9b17e783`;
-- `plan_direct2d.md` had **128 rows = 32 `✅` + 35 `🟨` + 61 `⬜`**, so its own status rules made
+- `plans/plan_direct2d.md` had **128 rows = 32 `✅` + 35 `🟨` + 61 `⬜`**, so its own status rules made
   **96 incomplete**, not the stale 88 repeated by earlier planning prose.
 
 ### Freeze-reason disposition
@@ -39,7 +39,7 @@ original branch:
 | Class | Recorded reason | Disposition |
 |---|---|---|
 | **A — resolved by current architecture** | Direct2D must not grow a second 3D renderer; the historical NET=OFF ENet failure was infrastructure, not a reason to emulate another backend | The current unsupported-3D policy preserves the 2D boundary. `REMED-BUILD-019` aligns NET=OFF tests with the omitted Net/GamerServices modules |
-| **B — still technically relevant** | The frozen lane carried a large mixture of correctness, evidence, performance, CI, and refactor work | Supported-path defects were repaired or converted to tested deterministic rejection. Remaining rows are classified in `plan_direct2d.md` as native/external evidence, stronger fault coverage, or nonblocking process/performance/refactor work |
+| **B — still technically relevant** | The frozen lane carried a large mixture of correctness, evidence, performance, CI, and refactor work | Supported-path defects were repaired or converted to tested deterministic rejection. Remaining rows are classified in `plans/plan_direct2d.md` as native/external evidence, stronger fault coverage, or nonblocking process/performance/refactor work |
 | **C — historical/process-only** | Direct2D moved during exit reconciliation, so integration lacked a stable source | Resolved by freezing `9b17e783` and preserving it behind the sole signed archive tag; neither ref moved |
 | **D — unsupported-host/environment** | Wine/Proton cannot prove native built-in effects/composites, physical presentation/DPI, adapter behavior, debug-layer/live-object output, or physical-Windows lifetime | Still external. Wine/Xvfb results are reported only as compatibility runtime evidence |
 | **E — owner governance/sequencing** | Explicit owner freeze and deferred Group G sequencing | Boundedly superseded for this lane only by the current authorization; the historical governance record remains intact |

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-100/MOD-101: the two float-render-target capabilities that the CNAEXT engine
+// plans/plan_modern.md MOD-100/MOD-101: the two float-render-target capabilities that the CNAEXT engine
 // layer's HDR pipeline is built on. What these tests protect is the *direction* of the default: the
 // shared IGraphicsRenderer::SupportsCapability() implementation answers true for almost everything,
 // so a capability describing a promise this specific ("values above 1.0 survive a render-to-target")

@@ -419,7 +419,7 @@ meaningful — they describe the default.
 
 Unbuildable combinations are rejected at configure time with a reason
 (`cmake/RendererCombinations.cmake`). See `docs/runtime-renderer-selection.md` and
-`plan_runtimerenderer.md`.
+`plans/plan_runtimerenderer.md`.
 
 `cmake-build-multi/` is the one addition to the build-directory list above; it is not a per-ticket
 directory and is shared by all multi-renderer work.
@@ -515,7 +515,7 @@ python3 tools/platform/hot_path_lint.py
 ```
 
 See `docs/platform-abstraction.md` for the contract and implementation checklist. The migration
-task/evidence log is `plan_platform.md`.
+task/evidence log is `plans/plan_platform.md`.
 
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
@@ -531,21 +531,21 @@ public identities; EasyGL remains an internal implementation shared by five GL p
 is experimental and has a functional native
 2D baseline, not yet the 3D/effect parity of the established GPU renderers.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
-`plan_magnum.md` for its own capability boundary.
+`plans/plan_magnum.md` for its own capability boundary.
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**
 (DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
-`plan_diligent.md` and `docs/diligent-renderer.md`.
+`plans/plan_diligent.md` and `docs/diligent-renderer.md`.
 `TINYGL` is the fixed-function CPU OpenGL renderer (C-Chads/tinygl) -- the fixed-function
 counterpart to `PORTABLEGL`'s shader-era CPU OpenGL. Its transparency is a 1-bit colour-key cutout,
 not alpha blending, and it has no stencil, scissor, render targets or shaders of any kind; see
-`docs/tinygl-renderer.md` and `plan_tinygl.md` for the full boundary.
+`docs/tinygl-renderer.md` and `plans/plan_tinygl.md` for the full boundary.
 `IGL` (facebook/igl) is the second portable-abstraction identity after `LLGL`: it drives IGL's own
 OpenGL (GLX) or Vulkan backend, fixed for the process by `CNA_IGL_BACKEND` because the platform
-window's render intent must be decided before the renderer exists -- see `plan_igl.md` and
+window's render intent must be decided before the renderer exists -- see `plans/plan_igl.md` and
 `docs/igl-renderer.md`.
 `SKIA` is a separate experimental CPU-raster 2D renderer backed by a pinned external Skia artifact;
 it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
-Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and
+Use `plans/plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and
 `docs/skia-developer-build.md` for that subsystem; do not reconstruct its state from the general
 `NEXT.md`.
 `PIXIJS` is the newest renderer, Emscripten-only and 2D-only in its v1 scope, rendering
@@ -557,7 +557,7 @@ Because PixiJS is a retained scene graph and `SpriteBatch` is not, this renderer
 submission point** -- `End()` (and each `Draw()` in `SpriteSortMode::Immediate`) rasterizes into
 the active target rather than leaving sprites parented for a later `Present()`. Preserve that when
 changing it: ordering, per-batch blend/sampler state and texture lifetime all depend on it. See
-`plan_pixijs.md` and `docs/pixijs-renderer.md` for the current status and the capability boundary
+`plans/plan_pixijs.md` and `docs/pixijs-renderer.md` for the current status and the capability boundary
 (no 3D, no custom `Effect`, no MRT, no depth/stencil).
 
 ---
@@ -573,7 +573,7 @@ enforces that. A game that does not opt in renders exactly what it rendered befo
 Do not reconstruct this subsystem's state by reading its code:
 
 - **`CNAEXT.md`** — the design (what the layer is, what it is not, why).
-- **`plan_modern.md`** — the task backlog implementing it, `MOD-1`–`MOD-1924`, with every deviation
+- **`plans/plan_modern.md`** — the task backlog implementing it, `MOD-1`–`MOD-1924`, with every deviation
   and refusal recorded in the row itself rather than in a commit message.
 - **`NEXT_modern.md`** — the running ledger: what is done, the decisions that did not survive
   contact, the full-suite baseline after each phase, and how to run the tests here
@@ -582,12 +582,12 @@ Do not reconstruct this subsystem's state by reading its code:
 - **`docs/cnaext-perf.md`** — every recorded measurement, with the recipe that produced it.
 
 The build directory for this work is `cmake-build-cnaext/` (`-DCNA_CNAEXT=ON`). EasyGL is the
-reference renderer; other renderers pick each subsystem up in `plan_modern.md` Phase 16, and until
+reference renderer; other renderers pick each subsystem up in `plans/plan_modern.md` Phase 16, and until
 they do they report `false` from the matching capability and take a documented fallback rather than
 failing.
 
 Two house rules that differ from the XNA layer, because there is no XNA name to preserve here
-(`plan_modern.md` `MOD-6`, `MOD-15`):
+(`plans/plan_modern.md` `MOD-6`, `MOD-15`):
 
 - **Naming.** Verbs are `lowerCamelCase` (`apply`, `resize`, `begin`); properties are
   `getX()`/`setX()`, or `isX()` for booleans. Types and enum values stay `UpperCamelCase`. The
@@ -615,7 +615,7 @@ while drawing nothing.
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
 its renderer implementation.
 
-- WebGPU tasks live in **`plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
+- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
   limitations current as implementation proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
@@ -647,7 +647,7 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 sudo apt-get install -y libgl1-mesa-dev libglx-dev libx11-dev
 
 # Draco — optional, enables KHR_draco_mesh_compression decoding in GltfImportCore
-# (plan_cnj.md CNB-91, Phase 14F). Detected via CMake's find_package(draco CONFIG); when absent,
+# (plans/plan_cnj.md CNB-91, Phase 14F). Detected via CMake's find_package(draco CONFIG); when absent,
 # a Draco-compressed glTF primitive throws a clear "not supported" error at import time instead
 # of failing to build. Not vendored (unlike cgltf.h/stb_image.h) — a real multi-file C++ library,
 # not a single header.

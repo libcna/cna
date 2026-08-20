@@ -28,7 +28,7 @@ namespace Microsoft::Xna::Framework::Media
     MediaQueue   MediaPlayer::queue_;
     std::mt19937 MediaPlayer::random_(std::random_device{}());
 
-    // Visualization capture state (plan_media.md MEDIA-186/188). Kept outside the SOUND_ENABLED
+    // Visualization capture state (plans/plan_media.md MEDIA-186/188). Kept outside the SOUND_ENABLED
     // guard so IsVisualizationEnabled still round-trips in a no-audio build; only the actual
     // post-mix tap below is audio-renderer specific.
     namespace
@@ -40,7 +40,7 @@ namespace Microsoft::Xna::Framework::Media
         // the user-visible flag goes false (the caller asked for off, and no data is served) while
         // a live callback is still writing. Without this, the early-return guard in the setter
         // would see "already false" and never retry the uninstall, leaving the tap installed
-        // forever (found by external code review, plan_media.md MEDIA-226).
+        // forever (found by external code review, plans/plan_media.md MEDIA-226).
         bool g_visualizationTapInstalled = false;
 
         CNA::Internal::Media::VisualizationCapture g_visualizationCapture;
@@ -69,7 +69,7 @@ namespace Microsoft::Xna::Framework::Media
         // Runs on the AUDIO THREAD for every mixed buffer: must stay real-time safe (no
         // allocation, no locking, no exceptions). VisualizationCapture::Push is written to that
         // contract. The audio facade supplies float32 PCM directly, so no format conversion is
-        // needed -- only a downmix to mono (plan_media.md MEDIA-186).
+        // needed -- only a downmix to mono (plans/plan_media.md MEDIA-186).
         void OnPostMix(void* /*userdata*/, int channels, float* pcm, int samples)
         {
             g_visualizationCapture.Push(pcm, samples, channels > 0 ? channels : 1);
@@ -186,7 +186,7 @@ namespace Microsoft::Xna::Framework::Media
     {
         // Early-out only when the request is genuinely already satisfied. Checking the flag alone
         // was not enough: after a FAILED uninstall the flag is false while a callback is still
-        // installed, and a later set(false) would return here and never retry it (plan_media.md
+        // installed, and a later set(false) would return here and never retry it (plans/plan_media.md
         // MEDIA-226).
         if (g_visualizationEnabled == value && g_visualizationTapInstalled == value)
         {
@@ -195,7 +195,7 @@ namespace Microsoft::Xna::Framework::Media
 
         // The flag is assigned only from what ACTUALLY happened, never up front. An earlier version
         // set it before even obtaining the mixer, so a mixer-creation failure left
-        // IsVisualizationEnabled reporting true with no mixer and no callback (plan_media.md
+        // IsVisualizationEnabled reporting true with no mixer and no callback (plans/plan_media.md
         // MEDIA-222).
 #ifdef SOUND_ENABLED
         try
@@ -358,7 +358,7 @@ namespace Microsoft::Xna::Framework::Media
     {
         // XNA only produces visualization data while it is switched on; with it off (or with
         // nothing captured yet) the arrays stay zeroed, matching VisualizationData's own
-        // zero-initialized construction rather than throwing (plan_media.md MEDIA-189).
+        // zero-initialized construction rather than throwing (plans/plan_media.md MEDIA-189).
         if (!g_visualizationEnabled || !g_visualizationCapture.HasData())
         {
             data.samp.fill(0.0f);
@@ -405,7 +405,7 @@ namespace Microsoft::Xna::Framework::Media
         bool songEnded = g_songEnded.exchange(false, std::memory_order_relaxed);
 #else
         // No native track-stopped signal in this build configuration -- fall back to comparing
-        // wall-clock elapsed time against the song's known duration (plan_media.md MEDIA-32).
+        // wall-clock elapsed time against the song's known duration (plans/plan_media.md MEDIA-32).
         bool songEnded = DetectSongEndedByElapsedTime(activeSong, TimerElapsed());
 #endif
         if (!songEnded)

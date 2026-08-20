@@ -11,7 +11,7 @@
 // pattern exactly — no shader changes needed on EasyGL.
 //
 // CNA's fog formula (EasyGL-specific, simpler than FNA's WorldViewProj-derived `FogVector` dot
-// product, and — corrected under Task 1111 (see plan_graphics.md) — genuinely equivalent to it
+// product, and — corrected under Task 1111 (see plans/plan_graphics.md) — genuinely equivalent to it
 // for these axis-aligned test cases, not just coincidentally matching at one point): `vFogFactor
 // = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)` per-vertex (raw object-space Z, `World`/`View`/
 // `Projection` are all Identity in this test — meaning `gl_Position.z` equals raw vertex `z`
@@ -72,7 +72,7 @@ static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 static constexpr float kFogStart = -0.9f;
 static constexpr float kFogEnd   =  0.9f;
 
-// Formula corrected under Task 1111 (see plan_graphics.md): the header comment's original
+// Formula corrected under Task 1111 (see plans/plan_graphics.md): the header comment's original
 // (FogEnd-z)/(FogEnd-FogStart) formula was never actually equivalent to FNA's real fog dot
 // product, only coincidentally right at z=0. Real formula (World=View=Identity):
 //   vFogFactor = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)

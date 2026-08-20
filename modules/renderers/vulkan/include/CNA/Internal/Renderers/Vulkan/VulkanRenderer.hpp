@@ -177,7 +177,7 @@ namespace CNA::Internal::Renderers::Vulkan
     // -------------------------------------------------------------------------
     // IVulkanVolumeSamplable -- the Texture3D counterpart of the two above.
     //
-    // plan_fx.md FX-110. Kept as its own interface rather than folded into
+    // plans/plan_fx.md FX-110. Kept as its own interface rather than folded into
     // IVulkanSamplable because a VkImageView carries its own view type: a
     // VK_IMAGE_VIEW_TYPE_3D view bound where the shader declared sampler2D is
     // undefined behaviour, so the three kinds must stay distinguishable by type
@@ -274,7 +274,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // Task 878/879: true once this instance actually engaged MSAA (msaaFramebuffer_ created).
         bool            WantsMsaa()                const { return msaaFramebuffer_ != VK_NULL_HANDLE; }
         // Real, renderer-clamped applied MultiSampleCount (0 if MSAA wasn't engaged — see the
-        // "piggyback on the renderer's own sampleCount_" scope decision in plan_graphics.md).
+        // "piggyback on the renderer's own sampleCount_" scope decision in plans/plan_graphics.md).
         int             GetMultiSampleCount()      const override { return appliedMultiSampleCount_; }
         VkDescriptorSet GetDescriptorSet()         const { return descriptorSet_; }
         VkImageView     GetColorView()             const { return colorView_; }
@@ -470,7 +470,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief Records whether SpriteBatch is in Immediate sort mode.
          *
-         * plan_fx.md FX-102. Only the compiled-effect route reads it: XNA applies an Effect's
+         * plans/plan_fx.md FX-102. Only the compiled-effect route reads it: XNA applies an Effect's
          * passes when the batch FLUSHES, which in Immediate mode is once per Draw and in every
          * other mode is once per contiguous same-texture run at End().
          * @param immediate True for SpriteSortMode.Immediate.
@@ -514,7 +514,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // Pushed onto VulkanRenderer::activeBatches_ at End() (not Begin()) so that a
         // 2nd Begin()/Draw()/End() cycle on the same SpriteBatch within one frame can never
         // clobber the 1st cycle's already-completed data before RecordCommandBuffer() harvests
-        // it at Present() (Task 664 fix — see plan_graphics.md).
+        // it at Present() (Task 664 fix — see plans/plan_graphics.md).
         struct BatchSnapshot
         {
             std::vector<Sprite2DVertex> vertices;
@@ -566,7 +566,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
     private:
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        /// plan_fx.md FX-102: one sprite held back until the batch flushes, so a whole run of
+        /// plans/plan_fx.md FX-102: one sprite held back until the batch flushes, so a whole run of
         /// same-texture sprites can be replayed once per pass rather than each sprite once per
         /// pass. Everything a quad needs is captured by value; nothing here outlives the flush.
         struct PendingCompiledSpriteEXT
@@ -1123,7 +1123,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief Whether this renderer runs compiled XNA Effect Framework bytecode.
          *
-         * plan_fx.md FX-065. True: `VulkanCompiledEffect` translates the effect through CNA's own
+         * plans/plan_fx.md FX-065. True: `VulkanCompiledEffect` translates the effect through CNA's own
          * MojoShader SPIR-V backend -- there is no `mojoshader_vulkan.c` -- and this renderer
          * builds a pipeline from the linked SPIR-V pair, binds the four descriptor sets the SPIR-V
          * profile fixes (0 = vertex samplers, 1 = vertex uniforms, 2 = pixel samplers, 3 = pixel
@@ -1148,7 +1148,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief CNAEXT. Returns this renderer's shared MojoShader effect-backend state.
          *
-         * plan_fx.md FX-065. One per renderer, exactly as `MOJOSHADER_glContext` and
+         * plans/plan_fx.md FX-065. One per renderer, exactly as `MOJOSHADER_glContext` and
          * `MOJOSHADER_sdlContext` are for the other two backends -- which is why the constant
          * register files it holds are shared, and why a deferred draw snapshots its uniforms.
          * @return The context; never null once the device exists.
@@ -1158,7 +1158,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief CNAEXT. Whether this renderer created @p texture, whatever its dimension.
          *
-         * plan_fx.md FX-065/FX-110. `ITextureRenderer`, `ITexture3DRenderer` and
+         * plans/plan_fx.md FX-065/FX-110. `ITextureRenderer`, `ITexture3DRenderer` and
          * `ITextureCubeRenderer` are three unrelated interfaces, so this cannot be answered by one
          * pointer cast; whether a DRAW can bind the texture is a separate question decided against
          * the shader's own declared sampler dimension.
@@ -1559,7 +1559,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkImageView     depthImageView_ = VK_NULL_HANDLE;
 
         // --- Sampler cache: one VkSampler per unique SamplerState ---
-        // plan_fx.md FX-091: every field XNA's SamplerState carries that this renderer can express
+        // plans/plan_fx.md FX-091: every field XNA's SamplerState carries that this renderer can express
         // is part of the key. Leaving MaxMipLevel, the LOD bias or AddressW out of it -- as this
         // key did before -- means two genuinely different sampler states collapse onto one
         // VkSampler, and whichever was created first silently wins.
@@ -1701,7 +1701,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkDeviceMemory, MaxFramesInFlight> fogTex3DUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> fogTex3DUBOPtr_ = {};
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-        // --- Compiled XNA effects (plan_fx.md FX-065) ---
+        // --- Compiled XNA effects (plans/plan_fx.md FX-065) ---
         //
         // MojoShader's SPIR-V profile puts its descriptors in four FIXED sets: 0 = vertex-stage
         // samplers, 1 = the vertex uniform block, 2 = pixel-stage samplers, 3 = the pixel uniform
@@ -1904,7 +1904,7 @@ namespace CNA::Internal::Renderers::Vulkan
             // no-GpuDrawParams DrawColoredPrimitives()/DrawIndexedColoredPrimitives() path, which
             // still falls through to the original zero-descriptor-set colored3d pipeline.
 #if defined(CNA_VULKAN_COMPILED_EFFECTS)
-            /// plan_fx.md FX-065: everything a compiled-effect draw needs, captured at queue time.
+            /// plans/plan_fx.md FX-065: everything a compiled-effect draw needs, captured at queue time.
             /// The uniform bytes and sampler views in particular CANNOT be read back at record
             /// time: the constant register files are shared by every effect this renderer owns, and
             /// a later ApplyPass would have overwritten them.
@@ -2054,7 +2054,7 @@ namespace CNA::Internal::Renderers::Vulkan
             const std::vector<VkSampler>& samplers);
         void RecordCompiledEffectDrawEXT(VkCommandBuffer cb, const Pending3DDraw& draw,
                                          uint32_t frameIdx);
-        /// plan_fx.md FX-065: capture everything the deferred replay of a compiled-effect draw
+        /// plans/plan_fx.md FX-065: capture everything the deferred replay of a compiled-effect draw
         /// needs, at the moment the draw is issued. Throws rather than dropping to a stock shader
         /// if any of it cannot be captured faithfully.
         void PrepareCompiledEffectDrawEXT(Pending3DDraw& d, const IVertexBufferRenderer& vb,
@@ -2077,7 +2077,7 @@ namespace CNA::Internal::Renderers::Vulkan
         /**
          * @brief CNAEXT. Returns a VkShaderModule over exactly these SPIR-V bytes.
          *
-         * plan_fx.md FX-065. Owned by the renderer and keyed by the SPIR-V's own content, for two
+         * plans/plan_fx.md FX-065. Owned by the renderer and keyed by the SPIR-V's own content, for two
          * reasons that are both correctness rather than economy. A draw is recorded at `Present()`
          * long after its pass was applied, so a module owned by the effect -- and destroyed the
          * next time that shader is re-linked, which `MOJOSHADER_linkSPIRVShaders` forces because it

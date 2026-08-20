@@ -32,8 +32,8 @@ authored *and* committed by Robert Vokac, zero trailers, zero attribution hits, 
 **Nine commit bodies carried session narrative** — more than `opengl1`'s three — and **two of the
 nine were caught only by a multiline-aware sweep** (`perl -0`, matching `this\nsession` across a
 line wrap) that a line-based grep misses. Reworded minimally at replay, patches untouched.
-Subject citations of the plan's own section headings (`(plan_opengl2.md session 13)`) were kept:
-`plan_opengl2.md` is organized by `Session N` headings, so these are F3 factual document
+Subject citations of the plan's own section headings (`(plans/plan_opengl2.md session 13)`) were kept:
+`plans/plan_opengl2.md` is organized by `Session N` headings, so these are F3 factual document
 references, not process narration.
 
 ### 2.2 Content — the probe found 17 errors, 14 distinct drifts
@@ -291,7 +291,7 @@ parents. Two corrections:
   session doesn't have to re-derive it"), `6f1bb99c` ("for a future session to pick up"), `d14ccf2d`
   ("from the previous session's final summary"), `473f119d` ("Also redid the session-8 … audit
   fresh"). Two of these are in bodies the sweep **did** edit — it removed one phrase per body and
-  missed a second. None is a §2 attribution violation and none is an F3 `plan_opengl2.md` citation.
+  missed a second. None is a §2 attribution violation and none is an F3 `plans/plan_opengl2.md` citation.
   They cannot be corrected without rewriting merged history, which this campaign forbids, so they are
   recorded as a permanent residual.
 - The "nine narrative bodies" count is right under both readings, but the nine bodies that *carry*

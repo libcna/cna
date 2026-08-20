@@ -1,7 +1,7 @@
-// plan_runtimerenderer.md RTR-P1-D30: the OpenGLES1 family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D30: the OpenGLES1 family's pre-construction contract.
 //
 // OpenGL ES 1.1 fixed-function "Common" profile against a real system GLESv1_CM library
-// (plan_opengles1.md design decision 1). the platform still needs the platform window intent to attach the context.
+// (plans/plan_opengles1.md design decision 1). the platform still needs the platform window intent to attach the context.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

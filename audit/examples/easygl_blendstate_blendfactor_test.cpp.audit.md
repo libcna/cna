@@ -33,7 +33,7 @@ calls only `setBlendStateProperty`, draws an all-white source quad, and checks t
 directly traceable to a real, verified propagation path in `GraphicsDevice.cpp`. Its **header comment about
 Vulkan is stale**, same finding class as `easygl_blendstate_additive_test.cpp` (Finding F1 below): it asserts
 Vulkan's `ApplyBlendState` "hardcodes a single blend equation that never selects VK_BLEND_FACTOR_CONSTANT_COLOR,"
-but `plan_graphics.md`'s Task 868 closure entry explicitly lists this test (`BlendFactor`) among the five that
+but `plans/plan_graphics.md`'s Task 868 closure entry explicitly lists this test (`BlendFactor`) among the five that
 failed before the fix and now passes after it.
 
 ## Checklist Results
@@ -109,7 +109,7 @@ Consistent with `GraphicsDevice.cpp`'s real implementation (verified above) and 
   attached to this file's Vulkan registration: *"NOTE: expected to FAIL on Vulkan per Task 868 - ApplyBlendState
   hardcodes a single blend equation that never selects VK_BLEND_FACTOR_CONSTANT_COLOR... Kept registered as a
   further documented confirmation of Task 868, not a new bug."*
-- Evidence: `plan_graphics.md` line 393 (Task 868, `✅ CLOSED`) explicitly states all 7 `Vulkan_BlendState_*` tests
+- Evidence: `plans/plan_graphics.md` line 393 (Task 868, `✅ CLOSED`) explicitly states all 7 `Vulkan_BlendState_*` tests
   — named individually, including `BlendFactor` — were reconfirmed passing after the fix (`ToVkBlendFactor`
   mapping added, matching `VK_BLEND_FACTOR_CONSTANT_COLOR` for `Blend::BlendFactor`).
 - Why it matters: this specific NOTE actively predicts the *opposite* of the test's current real outcome

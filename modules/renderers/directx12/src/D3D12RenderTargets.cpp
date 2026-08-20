@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX13 (DX-117); DX-144 (mip-chain generation).
+// plans/plan_dx.md Phase DX13 (DX-117); DX-144 (mip-chain generation).
 #include "CNA/Internal/Renderers/DirectX12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DFormatMapping.hpp"

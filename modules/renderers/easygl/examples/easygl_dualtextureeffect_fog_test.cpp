@@ -10,7 +10,7 @@
 // `uFogEnabled`/`uFogColor`/`uFogStart`/`uFogEnd` uniforms plus the standard fog blend (mirroring
 // `EnsureTextured3DProgram()`'s identical pattern exactly), then forwarded the 4 fog fields in
 // `FillGpuDrawParams()` (mirroring `AlphaTestEffect`'s Task 378 fix). Formula corrected under
-// Task 1111 (see plan_graphics.md): `vFogFactor = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)` /
+// Task 1111 (see plans/plan_graphics.md): `vFogFactor = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)` /
 // `mix(FogColor, original, vFogFactor)` — the original `(FogEnd-z)/(FogEnd-FogStart)` was never
 // actually equivalent to FNA's real fog dot product, only coincidentally right at `z=0`.
 //

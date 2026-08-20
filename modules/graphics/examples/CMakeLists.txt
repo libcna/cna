@@ -1,4 +1,4 @@
-# plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# plans/plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
 # wrong once:
 #
 #   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the
@@ -20,7 +20,7 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(CNA_BUILD_EXAMPLES)
-    # ---- Runtime renderer selection reference (plan_runtimerenderer.md RTR-P4-14) ----
+    # ---- Runtime renderer selection reference (plans/plan_runtimerenderer.md RTR-P4-14) ----
     # Renderer-agnostic: it reports whatever this build contains rather than assuming one.
     add_executable(cna_demo_renderer_selection
         renderer_selection/renderer_selection_demo.cpp
@@ -116,7 +116,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
     # only with renderers that support every graphics operation used by the scene: a GL-family
     # public renderer
     # (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see
-    # plan_glbackends.md), VULKAN, or FNA3D.
+    # plans/plan_glbackends.md), VULKAN, or FNA3D.
     add_executable(cna_house3d_demo house3d_demo.cpp)
 
     if(EMSCRIPTEN)
@@ -127,7 +127,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         # wasm-ld resolves circular static-lib references without linker groups.
         target_link_libraries(cna_house3d_demo PRIVATE
             CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
-        # plan_glbackends.md GLB-9 (revisited): MIN_WEBGL_VERSION/MAX_WEBGL_VERSION must match
+        # plans/plan_glbackends.md GLB-9 (revisited): MIN_WEBGL_VERSION/MAX_WEBGL_VERSION must match
         # whichever GL profile this target is actually compiled for -- pre-GLB-9 this was
         # hardcoded to WebGL 2 unconditionally, which would have forced a WebGL 2 context even
         # under -DCNA_GRAPHICS_RENDERER=WEBGL1 (contradicting EasyGLRenderer's own
@@ -170,7 +170,7 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
     endif()
 endif()
 
-# --- plan_software.md SOFTWARE-61/84: cross-renderer diagnostic comparator ---
+# --- plans/plan_software.md SOFTWARE-61/84: cross-renderer diagnostic comparator ---
 # Standalone, renderer-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
 # 64x64 RGBA8 dumps produced by cross_renderer_diagnostic_scene.cpp (built once per renderer by
 # the SOFTWARE and EASYGL suites) within a tolerance. Not wired into a single ctest run --
@@ -181,7 +181,7 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_diag_compare cross_renderer_diagnostic_compare.cpp)
 endif()
 
-# plan_html_dom.md Phase D10 and plan_platform.md PLAT-7/120: one renderer-agnostic fixed-scene
+# plans/plan_html_dom.md Phase D10 and plans/plan_platform.md PLAT-7/120: one renderer-agnostic fixed-scene
 # benchmark, built against whichever renderer this configure selected. Browser builds publish via
 # JavaScript as before; native builds use steady_clock and emit the raw samples as JSON. Keeping
 # this under either examples or tests makes a lean benchmark-only configure possible.

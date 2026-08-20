@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::Storage (MODULARIZATION_PLAN.md §4/§11): the storage surface
+// Minimal-link probe for CNA::Storage (plans/MODULARIZATION_PLAN.md §4/§11): the storage surface
 // must be usable with nothing but the storage archive, sharp-runtime and the core module's
 // header-only surface (PlayerIndex/CNAEXT marker -- no core symbol, so no core archive).
 // The paired ModuleLinkClosure_Storage ctest asserts no other CNA archive appears.

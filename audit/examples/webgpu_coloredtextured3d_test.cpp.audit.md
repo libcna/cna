@@ -93,7 +93,7 @@ None at HIGH or above.
   WebGPU-specific issue.
 - No `SkinnedEffect`/fog code paths are exercised — the skinned-normal-transform and fog-formula
   cross-cutting bugs this audit is watching for do not apply to this file. (Consistent with
-  `plan_webgpu.md`'s tracked statement that none of the core WebGPU 3D shaders, including this one's
+  `plans/plan_webgpu.md`'s tracked statement that none of the core WebGPU 3D shaders, including this one's
   `colored_textured3d.wgsl`, implement fog — a known, deliberate deferral, not silently missing.)
 
 ## Missing or Weak Tests

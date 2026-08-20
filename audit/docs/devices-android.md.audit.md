@@ -8,7 +8,7 @@
 - XNA/FNA relevance: `Microsoft::Devices`/`Microsoft::Devices::Sensors` on Android specifically
 
 ## Purpose
-Consolidates every Android-specific decision across `plan_devices.md`'s Phases 2/3/6/7/8/9 in one
+Consolidates every Android-specific decision across `plans/plan_devices.md`'s Phases 2/3/6/7/8/9 in one
 place: vibration (no native bridge needed), sensors (pure NDK native), permissions/manifest,
 build integration, emulator limitations, and what's still unimplemented.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2010..MOD-2014: depth of field.
+// plans/plan_modern.md MOD-2010..MOD-2014: depth of field.
 //
 // The optics are testable on their own, which is why they are a static function rather than only a
 // line of GLSL: `circleOfConfusionMillimetres` is checked against the thin-lens formula computed
@@ -268,7 +268,7 @@ TEST(DepthOfFieldTest, MovingTheFocusMovesWhichHalfIsSharp)
 
 TEST(DepthOfFieldTest, AFocusedSubjectDoesNotSmearIntoTheBlurredHalf)
 {
-    // plan_modern.md MOD-2012. A gather weighted only by the centre pixel's blur pulls the sharp
+    // plans/plan_modern.md MOD-2012. A gather weighted only by the centre pixel's blur pulls the sharp
     // half's colour across the boundary, and the sharp half visibly bleeds into the soft one -- the
     // giveaway of a naive implementation. The test looks at the blurred rows *immediately* past the
     // step and asks whether they still look like their own half.

@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12 (DX-111/DX-112 follow-up): real D3D12 SpriteBatch renderer -- quad batching
+// plans/plan_dx.md Phase DX12 (DX-111/DX-112 follow-up): real D3D12 SpriteBatch renderer -- quad batching
 // that feeds the stock sprite2d pipeline. Mirrors D3D11SpriteBatchRenderer's own structure and exact
 // destination/source-rect/origin/rotation/SpriteEffects-flip formula (D3D11SpriteBatch.cpp) as
 // closely as D3D12's genuinely different device/PSO/root-signature model allows -- CPU-side quad
@@ -46,7 +46,7 @@ namespace CNA::Internal::Renderers::DirectX12
 
     class DirectX12Renderer;
 
-    /// Real D3D12 SpriteBatch renderer (plan_dx.md Phase DX12, DX-111/DX-112 follow-up).
+    /// Real D3D12 SpriteBatch renderer (plans/plan_dx.md Phase DX12, DX-111/DX-112 follow-up).
     class D3D12SpriteBatchRenderer final : public ISpriteBatchRenderer
     {
     public:

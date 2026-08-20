@@ -1,7 +1,7 @@
 # `Microsoft::Devices` / `Microsoft::Devices::Sensors` — API Coverage
 
 A standalone, per-member reference for the XNA 4.0 / Windows Phone 7 API surface in this
-namespace, extracted from `plan_devices.md`'s Phase 0 audit matrices (Tasks
+namespace, extracted from `plans/plan_devices.md`'s Phase 0 audit matrices (Tasks
 DEVICES-0002–0008) and updated through Phase 8. This is a flat lookup table — for the
 prose history of *how* each row got here, see `AUDIT.md`'s `Microsoft::Devices::Sensors`
 section; for architecture, see `docs/devices-native-backend-design.md`.
@@ -306,12 +306,12 @@ file's prior content, rather than assuming the file was still current.
   pass. This includes re-checking the exact drift this task's acceptance criteria names
   as the example case to catch — `Accelerometer::getStateProperty()`'s missing `CNAEXT`
   marker vs. `Gyroscope`/`Compass`/`Motion`'s marked ones — which `DEV-API-003`
-  (2026-07-06, see `plan_devices.md`) had already independently re-investigated and
+  (2026-07-06, see `plans/plan_devices.md`) had already independently re-investigated and
   closed as **not** a bug: `Accelerometer.State` is real WP7 API (MSDN `ff707531` —
   corrected `ACCEL-001`, 2026-07-06: every prior citation of `ff707930` for this
   property was a mix-up with `Accelerometer.ReadingChanged`'s own, differently-numbered
   page; both pages were independently re-fetched to confirm which ID belongs to which
-  member, see `ACCEL-001`'s closing note in `plan_devices.md`), the other three
+  member, see `ACCEL-001`'s closing note in `plans/plan_devices.md`), the other three
   correctly have no such property (MSDN `hh239201`/`hh220912`/`hh239189`), so the
   asymmetric marking is the *correct* state, not drift this matrix needed to newly
   catch — it had already been caught and resolved.
@@ -358,7 +358,7 @@ file's prior content, rather than assuming the file was still current.
 - **Wrong signature/visibility (unverified): 2 found**, both newly recorded in "Flagged
   findings" above (`AccelerometerReadingEventArgs`'s and `SensorReadingEventArgs<T>`'s
   public setters, vs. every reading struct's `private`+`friend` convention) —
-  cross-referenced to `READINGS-002`, which already exists in `plan_devices.md` to
+  cross-referenced to `READINGS-002`, which already exists in `plans/plan_devices.md` to
   resolve them; not fixed by this task.
   **Update, same day:** `READINGS-002` resolved both — see "Flagged findings" above,
   now retitled "resolved" — against the archived MSDN pages (`ff707568`/`ff707712`/

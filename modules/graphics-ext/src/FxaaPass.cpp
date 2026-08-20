@@ -88,7 +88,7 @@ void main() {
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {
         effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kFragmentSource);
-        // plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
+        // plans/plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is
         // correct and completely silent. This names the pass and prints the compiler's log once.
         bool logged = false;
         detail::reportShaderCompileFailure(device, "FxaaPass", effect_.get(), logged);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-300..MOD-320: the tonemapper.
+// plans/plan_modern.md MOD-300..MOD-320: the tonemapper.
 //
 // The assertion that carries the weight is the last group: an HDR value is rendered through the
 // real shader and the result is compared against the CPU implementation of the same curve. A test

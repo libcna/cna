@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-051: one fuzz entry point for the whole compiled-effect surface -- construction,
+// plans/plan_fx.md FX-051: one fuzz entry point for the whole compiled-effect surface -- construction,
 // reflection walking, parameter reads, clone, technique/pass selection, apply and disposal. A
 // compiled Effect Framework binary is untrusted input handed to a native parser, so every one of
 // those stages has to survive arbitrary bytes, not just the constructor.

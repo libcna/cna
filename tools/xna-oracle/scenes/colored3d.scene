@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: colored3d
+# plans/plan_dx9.md D9-A5 scene corpus: colored3d
 # A single BasicEffect (VertexColorEnabled=true, LightingEnabled=false) triangle drawn over a
 # CornflowerBlue clear, World/View/Projection all Identity -- the exact scene D9-A2's own Oracle.cs
 # spike proved end-to-end (corner=CornflowerBlue, centre shows genuine Gouraud interpolation).

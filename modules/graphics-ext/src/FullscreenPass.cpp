@@ -45,7 +45,7 @@ namespace CNA::Graphics {
         if (width <= 0 || height <= 0)
             throw std::invalid_argument("CNA::Graphics::FullscreenPass::draw: destination size must be positive");
 
-        // plan_modern.md MOD-203: bound for this scope only. If the draw throws -- a shader that
+        // plans/plan_modern.md MOD-203: bound for this scope only. If the draw throws -- a shader that
         // will not link, a SpriteBatch already inside a Begin -- the destination does not stay
         // bound, so the next thing to render does not silently draw into a pass's intermediate.
         ScopedRenderTarget bound(device_, destination);

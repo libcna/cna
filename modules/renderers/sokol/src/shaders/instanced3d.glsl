@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-36: the Sokol renderer's instanced 3D program -- GraphicsDevice's
+// plans/plan_sokol.md SOKOL-36: the Sokol renderer's instanced 3D program -- GraphicsDevice's
 // DrawInstancedPrimitives, ported from VulkanRenderer's own instanced3d.{vert,frag}.glsl
 // (the same "VP-only in the shared uniform, World reconstructed from 4 per-instance vec4 columns
 // in the vertex stage" shape bgfx/WebGPU's own instanced3d shaders already use). A deliberate,

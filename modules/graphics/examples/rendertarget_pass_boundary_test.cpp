@@ -245,7 +245,7 @@ namespace
     constexpr Contract kContract{"DIRECTX12", true, Support::Exact, true, Support::Exact,
                                  true, true, false, true, true, true, true, false};
 #elif defined(CNA_RENDERER_SOKOL)
-    // plan_sokol.md SOKOL-25/26/38: both RenderTarget2D and RenderTargetCube can be created and
+    // plans/plan_sokol.md SOKOL-25/26/38: both RenderTarget2D and RenderTargetCube can be created and
     // bound, and GetData() now works on both single-sample targets (a throwaway GL FBO around the
     // raw GL texture sg_gl_query_image_info() exposes), so readback/cubeReadback=Exact and every
     // single-sample readback-driven check here measures real pixels. `msaaTargetReadback` stays

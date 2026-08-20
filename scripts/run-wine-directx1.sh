@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx1.md design decision 11: run a Windows cross-compiled .exe (DIRECTX1 renderer) under Wine
+# plans/plan_dx1.md design decision 11: run a Windows cross-compiled .exe (DIRECTX1 renderer) under Wine
 # against real DirectDraw v1, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-directx1.sh <path-to.exe> [args...]
@@ -10,9 +10,9 @@
 # implementation for this renderer -- no extra setup beyond `wineboot --init`.
 #
 # Set CNA_DX1_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 (created via
-# `wineboot --init`, see the DX1-0 existence-gate spike in plan_dx1.md).
+# `wineboot --init`, see the DX1-0 existence-gate spike in plans/plan_dx1.md).
 #
-# plan_dx1.md design decision 11: this wrapper also ASSERTS that Wine's real ddraw.dll actually
+# plans/plan_dx1.md design decision 11: this wrapper also ASSERTS that Wine's real ddraw.dll actually
 # engaged (not a silently-missing/no-op DirectDraw implementation), the DIRECTX1 equivalent of
 # run-wine-dxvk9.sh's "DXVK: <version>" gate -- a `trace:ddraw:` WINEDEBUG channel line only
 # appears when the real ddraw.dll handled at least one DirectDraw call. Set

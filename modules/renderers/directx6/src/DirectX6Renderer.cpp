@@ -3,22 +3,22 @@
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
-// plan_dx6.md: real DirectX 6 graphics renderer -- DirectDraw v4 (IDirectDraw4/
+// plans/plan_dx6.md: real DirectX 6 graphics renderer -- DirectDraw v4 (IDirectDraw4/
 // IDirectDrawSurface4/DDSURFACEDESC2/DDSCAPS2) + Direct3D v3 (IDirect3D3/IDirect3DDevice3/
 // IDirect3DViewport3), the EXACT SAME COM interfaces DIRECTX5 already uses -- DIRECTX6 introduces no new
 // interface revision at all (confirmed by inspection: no IDirect3D4/IDirect3DDevice4 exists).
 // DIRECTX6's own delta is purely new render states on that same interface: real stencil buffer
 // operations (D3DRENDERSTATE_STENCILENABLE/STENCILFUNC/STENCILFAIL/STENCILZFAIL/STENCILPASS/
-// STENCILREF/STENCILMASK/STENCILWRITEMASK, spike-confirmed real write+test behavior, plan_dx6.md
+// STENCILREF/STENCILMASK/STENCILWRITEMASK, spike-confirmed real write+test behavior, plans/plan_dx6.md
 // design decision 5) against a combined depth+stencil Z-buffer surface
 // (DDPF_ZBUFFER|DDPF_STENCILBUFFER, design decision 4). Multitexture is deliberately deferred
 // (design decision 6 -- D3DTLVERTEX only carries one texture-coordinate pair). <ddraw.h> (and the
 // real <windows.h> it pulls in) is contained to this .cpp only -- see DirectX6Renderer.hpp's
 // own comment. This file's 2D and 3D layers are otherwise a verbatim port of DIRECTX5's own
-// (plan_dx5.md, itself a port of DIRECTX3's, itself a port of DIRECTX2's) -- only the literal
+// (plans/plan_dx5.md, itself a port of DIRECTX3's, itself a port of DIRECTX2's) -- only the literal
 // execute-buffer surface (IDirect3DDevice::Execute/D3DEXECUTEBUFFERDESC/IDirect3DExecuteBuffer/
 // D3DOP_*/the un-versioned IDirect3D/IDirect3DDevice) is permanently forbidden, asserted by the
-// DirectX6_ExecuteBufferDiscipline CTest (scripts/check-directx6-execute-buffer-discipline.sh, plan_dx6.md
+// DirectX6_ExecuteBufferDiscipline CTest (scripts/check-directx6-execute-buffer-discipline.sh, plans/plan_dx6.md
 // design decision 12).
 #include <ddraw.h>
 #include <d3d.h>
@@ -219,7 +219,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // Fills the full (width, height) extent of `surface` with a solid RGBA8 color via
         // Lock()/Unlock() (not DDBLT_COLORFILL -- writing all 4 channels directly avoids relying on
         // whatever a given ddraw.dll implementation's ColorFill does with the alpha channel,
-        // matching DIRECTX3's own found-and-fixed lesson (plan_freedirect.md DX3-14) proactively instead of
+        // matching DIRECTX3's own found-and-fixed lesson (plans/plan_freedirect.md DX3-14) proactively instead of
         // re-discovering the same class of bug here). Writes into g_layout's real native byte
         // positions, not fixed (R,G,B,A) positions -- see DetectChannelLayout's own comment.
         void FillSurfaceColor(LPDIRECTDRAWSURFACE4 surface, int width, int height,
@@ -256,7 +256,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // physical drawable size in the current surface snapshot, shared by Present() (the on-screen Blt
         // destination) and TransformWindowToLogical/TransformLogicalToWindow, so those three are
         // always mutually consistent and a resize/SetVirtualResolution change is correct on the
-        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plan_freedirect.md DX3-16).
+        // very next call, unlike DIRECTX3's own documented stale-scale limitation (plans/plan_freedirect.md DX3-16).
         bool ComputeLetterbox(const PlatformRendererSurfaceState& surface,
                               int logicalWidth, int logicalHeight,
                               float& scale, float& offsetX, float& offsetY)
@@ -277,7 +277,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // ---- Phase O4: CPU 2D compositor (design decision 5) ----
         // IDirectDrawSurface::Blt/BltFast has never supported rotation in any DirectX version, so
         // every DirectDraw-family CNA renderer needs this same architecture -- ported verbatim from
-        // DIRECTX3's own already-verified CompositeQuad (plan_dx1.md design decision 5), not re-derived.
+        // DIRECTX3's own already-verified CompositeQuad (plans/plan_dx1.md design decision 5), not re-derived.
 
         // Signed area of triangle (a, b, c) -- also the raw (un-normalized) edge function used by
         // BarycentricWeights below. Positive/negative depending on winding; consistent use of the
@@ -394,7 +394,7 @@ namespace CNA::Internal::Renderers::DirectX6
             }
         }
 
-        // plan_dx6.md design decision 5: maps CNA's StencilOperation to the real D3DSTENCILOP
+        // plans/plan_dx6.md design decision 5: maps CNA's StencilOperation to the real D3DSTENCILOP
         // enum -- spike-confirmed (DX6-0b/DX6-0c) real write+test behavior through
         // D3DRENDERSTATE_STENCILFAIL/STENCILZFAIL/STENCILPASS. XNA's Increment/Decrement (wrap)
         // map to D3DSTENCILOP_INCR/DECR; IncrementSaturation/DecrementSaturation (clamp) map to
@@ -703,7 +703,7 @@ namespace CNA::Internal::Renderers::DirectX6
         PlatformRendererSurfaceState surface;
         HWND hwnd = nullptr;
 
-        // plan_dx5.md design decision 2: IDirectDraw4, not v1 -- upgraded via QueryInterface
+        // plans/plan_dx5.md design decision 2: IDirectDraw4, not v1 -- upgraded via QueryInterface
         // immediately after DirectDrawCreate() (see the constructor); every other DirectDraw call
         // this renderer makes, and every surface it creates, goes through v4 from here on
         // (LPDIRECTDRAWSURFACE4/DDSURFACEDESC2/DDSCAPS2 throughout), spike-confirmed (DX5-0a) to
@@ -718,7 +718,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // logical/virtual resolution, that Clear() and SpriteBatch draws always composite into.
         LPDIRECTDRAWSURFACE4 backBuffer = nullptr;
 
-        // Phase O3 (plan_dx2.md design decisions 3/5): the real Direct3D v2 device, built directly
+        // Phase O3 (plans/plan_dx2.md design decisions 3/5): the real Direct3D v2 device, built directly
         // on the shadow backbuffer (design decision 4's DDSCAPS_3DDEVICE flag). d3d3 only needs `dd`
         // and is created once, reused across backbuffer resizes; zbuffer/device3/viewport3 are all
         // tied to the specific backBuffer surface instance and must be torn down and recreated
@@ -814,9 +814,9 @@ namespace CNA::Internal::Renderers::DirectX6
                 if (FAILED(hr)) ThrowHr("IDirectDraw4::QueryInterface(IID_IDirect3D3)", hr);
             }
 
-            // plan_dx5.md design decision 2: DDSURFACEDESC2 dropped the old top-level
+            // plans/plan_dx5.md design decision 2: DDSURFACEDESC2 dropped the old top-level
             // dwZBufferBitDepth/DDSD_ZBUFFERBITDEPTH entirely -- v4 describes Z-buffer depth via
-            // ddpfPixelFormat's DDPF_ZBUFFER flag + dwZBufferBitDepth instead. plan_dx6.md design
+            // ddpfPixelFormat's DDPF_ZBUFFER flag + dwZBufferBitDepth instead. plans/plan_dx6.md design
             // decision 4: the Z-buffer is now a COMBINED depth+stencil surface
             // (DDPF_ZBUFFER|DDPF_STENCILBUFFER, 32 bits total: 24 depth + 8 stencil, a
             // D24S8-equivalent shape) instead of DIRECTX5's depth-only 16-bit surface -- spike-confirmed
@@ -836,7 +836,7 @@ namespace CNA::Internal::Renderers::DirectX6
             hr = backBuffer->AddAttachedSurface(zbuffer);
             if (FAILED(hr)) ThrowHr("IDirectDrawSurface4::AddAttachedSurface(z-buffer)", hr);
 
-            // plan_dx5.md design decision 3: IDirect3D3::CreateDevice takes an extra trailing
+            // plans/plan_dx5.md design decision 3: IDirect3D3::CreateDevice takes an extra trailing
             // IUnknown* outer parameter vs IDirect3D2::CreateDevice -- spike-confirmed (DX5-0b)
             // that nullptr is sufficient here, same as every other CNA renderer's COM aggregation.
             hr = d3d3->CreateDevice(IID_IDirect3DRGBDevice, backBuffer, &device3, nullptr);
@@ -895,7 +895,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // Unlike DIRECTX3's own CreateSurfaces (which also recreated the primary via SetDisplayMode
         // every time), the primary here never changes size or needs recreation -- design decision
         // 4 -- so SetVirtualResolution only ever touches this shadow buffer.
-        // plan_dx2.md design decision 4: unlike DIRECTX1's plain DDSCAPS_OFFSCREENPLAIN, this ONE
+        // plans/plan_dx2.md design decision 4: unlike DIRECTX1's plain DDSCAPS_OFFSCREENPLAIN, this ONE
         // surface (the shadow backbuffer that Clear()/Present()/the default backbuffer all use) is
         // also flagged DDSCAPS_3DDEVICE, so a later phase (O3) can attach a DDSCAPS_ZBUFFER surface
         // and create a real Direct3D device against it -- 2D SpriteBatch draws and 3D
@@ -933,7 +933,7 @@ namespace CNA::Internal::Renderers::DirectX6
             throw std::runtime_error("DirectX6Renderer requires a Win32 native window.");
         impl_->hwnd = static_cast<HWND>(nativeWindow.hwnd);
 
-        // plan_dx5.md design decision 2, spike-confirmed (DX5-0a): DirectDrawCreate only ever
+        // plans/plan_dx5.md design decision 2, spike-confirmed (DX5-0a): DirectDrawCreate only ever
         // hands back a v1 IDirectDraw object -- this renderer immediately upgrades it to
         // IDirectDraw4 via QueryInterface and releases the v1 pointer, using the v4 object (and,
         // from here on, v4 surfaces -- LPDIRECTDRAWSURFACE4/DDSURFACEDESC2 throughout, unlike
@@ -1170,12 +1170,12 @@ namespace CNA::Internal::Renderers::DirectX6
     // premultiplied by invW the way Software's RasterVertex is -- real Direct3D's rasterizer
     // already performs perspective-correct attribute interpolation internally via rhw, so
     // premultiplying here would double-apply the correction (a load-bearing distinction found and
-    // documented before this code was written, see plan_dx2.md design decision 6).
+    // documented before this code was written, see plans/plan_dx2.md design decision 6).
 
     /// One vertex in clip space (before the perspective divide), matching
     /// SoftwareRenderer.cpp's own ClipVertex (position + un-premultiplied color/uv only --
     /// no world-space position/normal, unlike Software's, since envMap/skinning are out of scope).
-    /// `sr`/`sg`/`sb` (Phase O9, plan_dx2.md design decision 13): the specular highlight
+    /// `sr`/`sg`/`sb` (Phase O9, plans/plan_dx2.md design decision 13): the specular highlight
     /// contribution, additive, packed into D3DTLVERTEX::specular and composited by real
     /// D3DRENDERSTATE_SPECULARENABLE hardware AFTER the texture-modulate stage -- zero for every
     /// draw except a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx (stride 32/52, lightingEnabled).
@@ -1259,7 +1259,7 @@ namespace CNA::Internal::Renderers::DirectX6
         float specR = 0.0f, specG = 0.0f, specB = 0.0f;
     };
 
-    /// CPU-side BasicEffect-style per-vertex lighting (Phase O9, plan_dx2.md design decision 13):
+    /// CPU-side BasicEffect-style per-vertex lighting (Phase O9, plans/plan_dx2.md design decision 13):
     /// ambient + up to 3 directional lights, Lambertian diffuse + Blinn-Phong specular. Ported
     /// from EasyGLRenderer.cpp's EnsureLit3DVertexLitProgram() GLSL (CNA's default
     /// per-vertex-lit path -- BasicEffect::preferPerPixelLighting_ defaults to false, matching
@@ -1395,7 +1395,7 @@ namespace CNA::Internal::Renderers::DirectX6
 
     /// Perspective-divides the POSITION ONLY and maps into a real D3DTLVERTEX ready for
     /// DrawPrimitive/DrawIndexedPrimitive. Deliberately does NOT premultiply color/uv by invW --
-    /// see this section's own header comment and plan_dx2.md design decision 6 for why.
+    /// see this section's own header comment and plans/plan_dx2.md design decision 6 for why.
     D3DTLVERTEX DirectX6ClipVertexToD3DTLVERTEX(const DirectX6ClipVertex& cv, int viewportWidth, int viewportHeight)
     {
         const float invW = 1.0f / cv.w;
@@ -1435,7 +1435,7 @@ namespace CNA::Internal::Renderers::DirectX6
     /// backbuffer is resized (Create3DDevice) -- caching would need explicit invalidation on
     /// resize for no real benefit, since QueryInterface+GetHandle is a cheap COM call.
     ///
-    /// plan_dx5.md design decision 6: IDirect3DTexture2::GetHandle never gained an
+    /// plans/plan_dx5.md design decision 6: IDirect3DTexture2::GetHandle never gained an
     /// IDirect3DDevice3 overload -- it only ever accepts an IDirect3DDevice2*. Spike-confirmed
     /// (DX5-0f) that QueryInterface(IID_IDirect3DDevice2) on the real device3 object returns a
     /// valid, usable view for exactly this call (real historical COM aggregation), so a temporary
@@ -1477,7 +1477,7 @@ namespace CNA::Internal::Renderers::DirectX6
     /// order (i in [0, primitiveCount*3)); the caller supplies whichever stride/index-buffer
     /// resolution its own entry point needs. `texHandle` is applied via
     /// D3DRENDERSTATE_TEXTUREHANDLE every call (0 = no texture) since it is a per-draw state,
-    /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plan_dx2.md design decision 6).
+    /// unlike D3DRENDERSTATE_LIGHTING (set once at device creation, plans/plan_dx2.md design decision 6).
     /// `specularEnabled` (Phase O9, design decision 13): sets D3DRENDERSTATE_SPECULARENABLE per
     /// draw -- true only for a lit DrawPrimitivesEx/DrawIndexedPrimitivesEx call, spike-confirmed
     /// (dx2_spike10) to genuinely composite D3DTLVERTEX::specular additively after the
@@ -1951,7 +1951,7 @@ namespace CNA::Internal::Renderers::DirectX6
         impl_->device3->SetRenderState(D3DRENDERSTATE_ZWRITEENABLE, depthWriteEnable ? TRUE : FALSE);
         impl_->device3->SetRenderState(D3DRENDERSTATE_ZFUNC, DirectX6CompareFunctionToD3D(depthFunc));
 
-        // plan_dx6.md design decision 5: real stencil, spike-confirmed (DX6-0b/DX6-0c) genuine
+        // plans/plan_dx6.md design decision 5: real stencil, spike-confirmed (DX6-0b/DX6-0c) genuine
         // write+test behavior against the combined depth+stencil Z-buffer surface (decision 4).
         // twoSidedStencilMode/ccwStencil* are accepted-and-ignored: two-sided stencil doesn't
         // exist at this DirectX era at all (a D3D9-era addition, confirmed by inspection).
@@ -1992,7 +1992,7 @@ namespace CNA::Internal::Renderers::DirectX6
         impl_->device3->SetRenderState(D3DRENDERSTATE_ANISOTROPY, static_cast<DWORD>(maxAnisotropy));
     }
 
-    // plan_dx5.md design decision 5: color still goes through the same ActiveSurface() 2D
+    // plans/plan_dx5.md design decision 5: color still goes through the same ActiveSurface() 2D
     // Lock()+fill path Clear(r,g,b,a) always uses (unchanged -- a custom bound RenderTarget2D has
     // no Direct3D device/viewport of its own to Clear2 against, decision 4); only the depth
     // portion (ClearDepth, below) uses the new real IDirect3DViewport3::Clear2 call, since only the
@@ -2003,7 +2003,7 @@ namespace CNA::Internal::Renderers::DirectX6
         ClearDepth(depth);
     }
 
-    // plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DIRECTX2/DIRECTX3's
+    // plans/plan_dx5.md design decision 5: a real IDirect3DViewport3::Clear2 call, replacing DIRECTX2/DIRECTX3's
     // manual Z-buffer Lock()-and-write-raw-values workaround (that workaround existed only because
     // IDirect3DViewport(2)::Clear() has no depth-value parameter at all -- Clear2, new at this
     // DirectX era, does). Spike-confirmed (DX5-0g) gotcha, must not be reintroduced: Clear2's
@@ -2018,7 +2018,7 @@ namespace CNA::Internal::Renderers::DirectX6
         if (FAILED(hr)) ThrowHr("IDirect3DViewport3::Clear2(ZBUFFER)", hr);
     }
 
-    // plan_dx6.md design decision 4/5: a real, combined depth+stencil Z-buffer now exists (unlike
+    // plans/plan_dx6.md design decision 4/5: a real, combined depth+stencil Z-buffer now exists (unlike
     // DIRECTX2/DIRECTX3/DIRECTX5, which had no real stencil buffer at all until this DirectX era) -- these clear
     // real stencil values via Clear2's own D3DCLEAR_STENCIL flag, instead of silently ignoring
     // the stencil parameter.
@@ -2248,7 +2248,7 @@ namespace CNA::Internal::Renderers::DirectX6
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_DIRECTX6
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace DirectX6 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

@@ -54,7 +54,7 @@ zero, so it cannot go back to agreeing with itself under either convention.
 
 ## glTF validation ran cgltf's validator before its own alignment check — FIXED 2026-08-12
 
-**Found by the container fuzz (`plan_gltf.md` `GLTF-040`) on its first run under UBSan**, not by
+**Found by the container fuzz (`plans/plan_gltf.md` `GLTF-040`) on its first run under UBSan**, not by
 inspection, and it is the same class as `REMED-NA-016` one call earlier.
 
 `ValidateGltfEXT` ran `cgltf_validate` first and CNA's own §3.6.2.4 alignment refusal after it. That
@@ -92,7 +92,7 @@ It was not idle in the meantime: **four of its cases had been failing since `GLT
 effect selection, on every renderer that reports `GraphicsCapability::ThreeD` — they assert
 `BasicEffect`/`SkinnedEffect`/`DualTextureEffect` for materials that now select the PBR path. The
 `STUB` renderer skips them, so a green run said nothing about them at all. They surfaced the moment
-a second renderer (`HEADLESS`) ran the corpus (`plan_gltf.md` `GLTF-383`).
+a second renderer (`HEADLESS`) ran the corpus (`plans/plan_gltf.md` `GLTF-383`).
 
 Fixed in three places: the ladder now matches a suite whose name **contains** `Gltf`, the rung list
 carries `RuntimeGltfModelTest.*`, and the CI job filters on `*Gltf*`. The four cases now assert the
@@ -100,7 +100,7 @@ effect the material model selects, and say why in a comment.
 
 ## A file with no `scenes` array imported every mesh at the origin — FIXED 2026-08-13
 
-Found by `scene-no-scenes`, a fixture written while completing `plan_gltf.md` `GLTF-399`'s scene
+Found by `scene-no-scenes`, a fixture written while completing `plans/plan_gltf.md` `GLTF-399`'s scene
 group. §3.5 permits a glTF file with **no `scenes` array at all** and says nothing is *required* to
 be rendered — which is not "nothing may be", and CNA's own documented decision is to import
 everything.
@@ -146,9 +146,9 @@ Fixed by moving the `resize` inside the branch, so **emptiness means "this targe
 nothing"** for positions exactly as it already did for normals and tangents, and by guarding the
 blend's read. One rule instead of two, and the report can now say what it was written to say.
 
-## glTF import: the eight defects the forensic audit found (`plan_gltf.md` D1–D8)
+## glTF import: the eight defects the forensic audit found (`plans/plan_gltf.md` D1–D8)
 
-`plan_gltf.md` `GLTF-012`. Every one was found by the conformance campaign's own oracle ladder
+`plans/plan_gltf.md` `GLTF-012`. Every one was found by the conformance campaign's own oracle ladder
 rather than by a bug report, which is the point worth recording: each produced a **model that
 rendered**, so none would have arrived as a bug report at all. Each has a corpus fixture that
 reproduces it, and each fixture keeps asserting the fixed behaviour so a regression fails a
@@ -241,7 +241,7 @@ SDL_GPU/SPIR-V, no new artifact. Not closed outright: the SPIR-V emitter still v
 shader bytecode with `assert()` in about fifty places no campaign has yet reached.
 
 A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
-written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
+written for compiler output, not for hostile content. The plans/plan_fx.md FX-051 mutation campaign
 (`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found forty-one distinct ways it crashed the
 process -- dereferenced NULL parse results, asserts on parsed values, allocations sized before
 their own bounds check, register copies sized by a constant table rather than by the parsed
@@ -270,7 +270,7 @@ MojoShader would be the better long-term home for these fixes.
 
 **Backend:** FNA3D (found on the SDL_GPU/Vulkan driver; the ownership bug is driver-independent).
 
-**Status:** OPEN. Found 2026-08-14 by the plan_fx.md FX-054 full-suite regression run; not caused
+**Status:** OPEN. Found 2026-08-14 by the plans/plan_fx.md FX-054 full-suite regression run; not caused
 by the compiled-effect work, which never touches these types.
 
 A `Fna3dRenderTargetCubeRenderer` (and, by the same pattern, the other `Fna3dResources.cpp`
@@ -358,7 +358,7 @@ shader hardcoded to output magenta still rendered black, and instrumenting LLGL'
 registrations (`Llgl_Smoke_OpenGL`, `Llgl_2D_OpenGL`) so it can never again be broken unnoticed by
 whatever the default preference happens to select.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-17`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-17`.
 
 ---
 
@@ -373,7 +373,7 @@ blend state genuinely references `Blend::BlendFactor`/`InverseBlendFactor` — c
 it keeps the overwhelming majority of blend states off a proc some GL tables genuinely lack. A game
 that really uses `Blend::BlendFactor` on such a driver still fails loudly, with LLGL's own error.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-18`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-18`.
 
 ---
 
@@ -397,7 +397,7 @@ unlike the swap chain's, which can resize). `QueueSpriteEXT` records which proje
 sprite command needs, and `ReplayFrameCommandsList` binds that one instead of the frame-global
 buffer whenever it is set.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-26`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-26`.
 
 ---
 
@@ -421,7 +421,7 @@ of the render target, its colour texture and its own sprite projection buffer un
 may still reference them has actually been submitted, exactly like `ScheduleBufferReleaseEXT`
 already does for GPU buffers.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-26`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-26`.
 
 ---
 
@@ -439,7 +439,7 @@ actually been recorded and submitted — which normally happens at `Present()` o
 **Fix:** added `LlglGraphicsBackend::FlushPendingFrameEXT()` -- submits and waits for any queued
 frame commands without presenting -- and `LlglRenderTargetBackend::GetData()` calls it first.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-26`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-26`.
 
 ---
 
@@ -473,7 +473,7 @@ match`. `llgl_basiceffect_test.cpp`'s Check D now explicitly sets `VertexColorEn
 real XNA usage requires) and gained two new checks proving `VertexColorEnabled = false` genuinely
 leaves a colour-carrying draw untinted.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-25`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-25`.
 
 ---
 
@@ -502,7 +502,7 @@ the same "infer the vertex format from the upload stride" technique the Vulkan b
 bytes) are deliberately still unrecognised: `SkinnedEffect` is not implemented on this backend at
 all yet, so there is no shader to feed them to.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-32`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-32`.
 
 ---
 
@@ -532,7 +532,7 @@ temporary debug-shader edits (hardcoded output colour, then real cube sampling w
 direction, then real `N`/`E`/`reflDir`, then individual field readouts) that progressively narrowed
 the divergence down to the final `mix()` call.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-25 (EnvironmentMapEffect)`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-25 (EnvironmentMapEffect)`.
 
 ---
 
@@ -572,7 +572,7 @@ by adding a temporary debug printf of the raw scanned edge-pixel values before a
 (confirmed the same hard 255→0 step with `appliedSampleCount=4` before the fix, and a genuine
 mid-tone blended pixel at the same scan position after it) rather than guessing at the cause.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-26` (MSAA render targets follow-up).
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-26` (MSAA render targets follow-up).
 
 ---
 
@@ -682,7 +682,7 @@ descriptor construction) to see whether two DIFFERENT `LLGL::PipelineState*` C++
 returned pointing at the same underlying `VkPipeline` handle, or whether `vkCmdBindPipeline` is
 actually being issued with the value this backend thinks it queued.
 
-**Tracked as:** `plan_llgl.md` task `LLGL-21`.
+**Tracked as:** `plans/plan_llgl.md` task `LLGL-21`.
 
 ---
 
@@ -758,7 +758,7 @@ actually hitting once the viewport-offset fix above was in place -- fixed by sim
 (`spritebatch_viewport_switch`). See the next entry for a newly-found, separate OpenGL-module-only
 limitation these files still hit under `CNA_LLGL_RENDERER=opengl`.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-39`.
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-7, `LLGL-39`.
 
 ---
 
@@ -828,7 +828,7 @@ partial-pass-suite precedent). `rendertargetcube_plural_binding` still has no `_
 <details>
 <summary>Original investigation history (2026-08-02/03), superseded by the confirmed root cause above</summary>
 
-**Status:** re-investigated for `plan_llgl.md`'s `LLGL-51` via LIVE instrumentation of the
+**Status:** re-investigated for `plans/plan_llgl.md`'s `LLGL-51` via LIVE instrumentation of the
 vendored LLGL source (temporary `fprintf` added to `~/deps/LLGL`'s own `GLStateManager.cpp`, run
 against this backend's real Xvfb/llvmpipe environment, then fully reverted via `git checkout --` --
 `~/deps/LLGL` is a pristine, unmodified pinned checkout again). This narrows out the ORIGINAL
@@ -912,7 +912,7 @@ abstraction entirely for the GL module, which the project's own architecture (a 
 draw kind, backend-agnostic) is not set up for. Filed as an environment/module limitation rather
 than attempted blind.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-51` (still open; also blocks `LLGL-7`'s own
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-51` (still open; also blocks `LLGL-7`'s own
 `LLGL-39` from registering `_OpenGL` variants of `spritebatch_custom_viewport`/
 `spritebatch_viewport_switch`/`rendertargetcube_plural_binding` -- see
 `cmake/Tests/LlglTests.cmake`'s own comment there). `Llgl_Deferred_Viewport`/`Llgl_Deferred_Scissor`
@@ -924,7 +924,7 @@ remain at 37/39 / 43/47 on the OpenGL module.
 
 ## LLGL backend: the swap chain's own render pass replayed wherever it FIRST appeared, not last — FIXED 2026-08-02
 
-**Symptom:** discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
+**Symptom:** discovered while wiring `plans/plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
 `backbuffer_pass_order_test.cpp`). The ordinary XNA pattern "render to a texture, then composite it
 onto the backbuffer in the SAME unflushed frame" (`RenderTarget2D t; SetRenderTarget(&t); fill red;
 SetRenderTarget(null); draw t onto the backbuffer`) sampled `t` as pure zero/transparent-black
@@ -957,13 +957,13 @@ cleanly under `CNA_LLGL_RENDERER=opengl` before hitting the separate, pre-existi
 `hasCubeTextures not supported` gap on check M2). Full `Llgl` (67/67) + `CnaTests` sweep run clean
 afterward with zero regressions.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`.
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-7, `LLGL-40`.
 
 ---
 
 ## LLGL backend: a `Texture2D`/`TextureCube`/`Texture3D` destroyed before `Present()` segfaulted — FIXED 2026-08-02
 
-**Symptom:** discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
+**Symptom:** discovered while wiring `plans/plan_llgl.md`'s Phase LLGL-7 (`LLGL-40`,
 `backbuffer_readback_dimension_test.cpp`/`backbuffer_first_read_test.cpp`). A completely ordinary
 pattern -- create a `Texture2D`, draw it via `SpriteBatch` inside a helper function, let it go out of
 scope when that function returns, THEN call `GraphicsDevice.GetBackBufferData()` later in the same
@@ -993,13 +993,13 @@ _test.cpp` (12/13 legs crashed) before the fix; both run to completion with zero
 the other 4 blocked on a separate, unrelated finding -- see the next entry). Full `Llgl` + `CnaTests`
 sweep run clean afterward with zero regressions.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7, `LLGL-40`.
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-7, `LLGL-40`.
 
 ---
 
 ## LLGL backend: `FixedHeightDynamicWidth`'s logical width ignores the requested backbuffer width — FIXED
 
-**Status:** fixed by `plan_llgl.md` `LLGL-50` (2026-08-03). The question this entry's own earlier
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-50` (2026-08-03). The question this entry's own earlier
 "why this needs more than a test-wiring fix" section left open -- whether the derived width should
 ever be allowed to fall below the requested one at all -- is answered: no. `ComputePresentationRect()`
 now treats the aspect-derived width as a FLOOR, not a hard override:
@@ -1086,7 +1086,7 @@ before and after this fix) to 15/17, the other 15 registered as `Llgl_DeferredSo
 `llgl_presentation_test.cpp` Check E (the mode's own intentional "wider window shows more content"
 behavior) remains 6/6 PASS, unaffected.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-50` -- fixed and verified (see above); all three
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-50` -- fixed and verified (see above); all three
 files are now registered (see `cmake/Tests/LlglTests.cmake`'s own comments there for the full
 per-leg breakdown of what remains excluded and why).
 
@@ -1132,7 +1132,7 @@ LATER, cube-texture-dependent leg under the OpenGL module specifically -- confir
 (reproduces identically against the pre-`LLGL-45` binary too), the same OpenGL-module capability gap
 already documented elsewhere in this file, unrelated to this entry.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8 (a follow-up correction to `LLGL-45`, not its own
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8 (a follow-up correction to `LLGL-45`, not its own
 numbered ticket). `Llgl_BackBuffer_PassOrder` remains registered (unchanged from before this
 session) since this sandbox cannot re-verify it against Vulkan either way; whoever next has real
 Vulkan or a DRI3-capable Xvfb should re-run it and, if V1/V2 fail there too, open a dedicated
@@ -1142,7 +1142,7 @@ follow-up ticket for the per-cycle viewport/scissor-on-backbuffer gap specifical
 
 ## LLGL backend: a target revisited after depending on another target replays out of public order — FIXED (4/5 reproductions), U2 unverified
 
-**Status:** fixed by `plan_llgl.md` `LLGL-45` (2026-08-03): `GroupFrameCommandsByTargetEXT()` now
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-45` (2026-08-03): `GroupFrameCommandsByTargetEXT()` now
 segments `frameCommands_` in TRUE public order (a new segment starts only when the target actually
 changes from the immediately preceding command, instead of merging every command sharing one target
 into a single first-appearance bucket), and every segment's own `BeginRenderPass()` uses a real
@@ -1254,7 +1254,7 @@ bind already queues its own explicit `Clear()` as that segment's first command. 
 not (a): no cross-bucket interleaving was needed once buckets stopped being merged by identity in the
 first place.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-45` -- fixed and verified for D5/F1/G1/I2 (see
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-45` -- fixed and verified for D5/F1/G1/I2 (see
 above); `rendertarget_producer_consumer_test.cpp` and `rendertarget_backbuffer_consumer_test.cpp` are
 now fully registered (`Llgl_RenderTarget_ProducerConsumer`, `Llgl_RenderTarget_BackbufferConsumer`),
 and `rendertarget_effect_source_test.cpp`'s F1 leg is registered alongside its other passing legs.
@@ -1265,7 +1265,7 @@ DRI3-capable-Xvfb verification (see above).
 
 ## LLGL backend: a custom `ShaderEffect` using multiple Vulkan descriptor sets crashes the driver — FIXED (implementation verified in isolation; end-to-end Vulkan run still needed)
 
-**Status:** fixed by `plan_llgl.md` `LLGL-46`/`LLGL-47` (2026-08-03) via option (b) from this entry's
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-46`/`LLGL-47` (2026-08-03) via option (b) from this entry's
 own original "why this needs more than a test-wiring fix" analysis: `LlglEffectBackend::CompileProgram()`
 now scans the SPIR-V shaderc just compiled for any `OpDecorate .../DescriptorSet` value other than 0
 (`SpirvUsesOnlyDescriptorSetZero()`, a minimal targeted binary scan -- not a full reflection library,
@@ -1320,7 +1320,7 @@ project's test environment has no validation layers enabled to turn that into a 
 rather than extend the pipeline layout to genuinely support multiple sets) -- see this entry's
 opening paragraphs for the implementation and how far it has been verified.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-47` -- fixed and verified in isolation (see
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-47` -- fixed and verified in isolation (see
 above); `Llgl_RenderTarget_EffectSource_C1` still needs an end-to-end Vulkan run (`LLGL-38`/`LLGL-55`)
 before it can be registered.
 
@@ -1328,7 +1328,7 @@ before it can be registered.
 
 ## LLGL backend: untextured+unlit `BasicEffect` with no vertex-colour attribute throws — FIXED
 
-**Status:** fixed by `plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed: a fresh, isolated run of the
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed: a fresh, isolated run of the
 `untextured+unlit+no-colour` combination no longer throws and renders `DiffuseColor` flat, as
 expected.
 
@@ -1360,13 +1360,13 @@ risking an unbound-attribute declaration) that declares ONLY `position` (locatio
 outputs `diffuseColor` unconditionally, selected instead of throwing when `!textured && !lit &&
 !hasColor`.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7/LLGL-8, `LLGL-39`/`LLGL-52`.
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-7/LLGL-8, `LLGL-39`/`LLGL-52`.
 
 ---
 
 ## LLGL backend: lit+textured `BasicEffect` with no normal attribute throws — FIXED
 
-**Status:** fixed by `plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed by a fresh
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed by a fresh
 `rendertarget_sampling_orientation_test.cpp` run: 61/61 checks pass (up from crashing at CD4),
 including the previously-uncaught CD4 check.
 
@@ -1389,13 +1389,13 @@ lit shader) instead of reading a normal attribute the layout does not supply, se
 `lit && textured && !hasNormal` (regardless of `hasColor`). Pairs with the existing
 `lit_textured3d.frag.glsl`/`.gl.frag.glsl` fragment shader unchanged.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7/LLGL-8, `LLGL-41`/`LLGL-52`.
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-7/LLGL-8, `LLGL-41`/`LLGL-52`.
 
 ---
 
 ## LLGL backend: lit+untextured `BasicEffect` with no vertex-colour attribute throws — FIXED
 
-**Status:** fixed by `plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed by a fresh
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-52` (2026-08-03). Confirmed by a fresh
 `rasterizerstate_cullmode_indexed_basiceffect_test.cpp` run: 6/6 PASS (up from an uncaught crash),
 plus `llgl_lighting_test.cpp`'s own Check H now lighting for real instead of asserting a throw
 (10/10 PASS).
@@ -1428,13 +1428,13 @@ between the existing `lit && hasColor` branch and the `textured` branch. Pairs w
 `lit_untextured3d.frag.glsl`/`.gl.frag.glsl` fragment shader unchanged -- its inputs
 (`vNormal`/`vWorldPos`/`vTint`/`vFogFactor`) are exactly what this new shader produces.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-52`.
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-52`.
 
 ---
 
 ## LLGL backend: `Orthographic` + `CreateLookAt` scenario reports geometry off-screen — OPEN
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s Phase LLGL-7 (LLGL-39); narrowed
+**Status:** open, discovered while wiring `plans/plan_llgl.md`'s Phase LLGL-7 (LLGL-39); narrowed
 considerably during `LLGL-52` (2026-08-03) by following this entry's own previously-suggested next
 step, and narrowed FURTHER on 2026-08-04 on real hardware (this machine's own physical desktop,
 `DISPLAY=:0`, has a real AMD Radeon 780M with a working RADV Vulkan driver -- confirmed via
@@ -1571,14 +1571,14 @@ of this specific geometry under Orthographic + this specific view matrix, which 
 a native GPU debugger (RenderDoc, apitrace) or a from-scratch minimal repro outside this whole
 engine to isolate further.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-7 / `LLGL-52` (blocks `LLGL-39`'s
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-7 / `LLGL-52` (blocks `LLGL-39`'s
 `Llgl_RasterizerState_CullMode_Camera` registration).
 
 ---
 
 ## LLGL backend: a `VertexBuffer`/`IndexBuffer` reused within one frame silently loses the earlier draw's content — FIXED
 
-**Status:** fixed by `plan_llgl.md` `LLGL-46` (2026-08-03). Confirmed by a fresh 127/127 run of
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-46` (2026-08-03). Confirmed by a fresh 127/127 run of
 `frontface_winding_test.cpp` (up from 115/127; now registered as `Llgl_FrontFaceWinding`), plus a new
 dedicated regression, `examples/llgl_vertexindexbuffer_grow_test.cpp` (registered as
 `Llgl_VertexIndexBuffer_Grow`, 6/6), that specifically targets the GROW case this entry's own earlier
@@ -1649,7 +1649,7 @@ this entry's own opening paragraphs for the full account of what it tried, why i
 the eventual fix (flush-before-write, no new tracking state at all) sidesteps that failure mode
 entirely rather than patching around it.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-46` -- fixed and verified (see above);
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-46` -- fixed and verified (see above);
 `frontface_winding_test.cpp` is now registered (`Llgl_FrontFaceWinding`), and a new dedicated
 grow-capacity regression is registered alongside it (`Llgl_VertexIndexBuffer_Grow`).
 
@@ -1657,7 +1657,7 @@ grow-capacity regression is registered alongside it (`Llgl_VertexIndexBuffer_Gro
 
 ## LLGL backend: every texture slot beyond slot 0 shares slot 0's own sampler state — FIXED
 
-**Status:** fixed by `plan_llgl.md` `LLGL-49` (2026-08-03). `ApplySamplerState(int slot, ...)` now
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-49` (2026-08-03). `ApplySamplerState(int slot, ...)` now
 writes into `samplerFilter_[slot]`/`samplerAddressU_[slot]`/`samplerAddressV_[slot]`/
 `samplerMaxAnisotropy_[slot]` (5-element arrays, `kTrackedSamplerSlotCount`) instead of a single
 global set of scalars, for the exact 5 slots this backend's stock effects ever consume (confirmed
@@ -1692,14 +1692,14 @@ of 4 for MRT), plus every multi-texture-unit `QueuePrimitives()` call site readi
 entry instead of a shared global. See this entry's opening paragraphs for the implementation and
 verification.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-49` -- fixed and verified (see above);
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-49` -- fixed and verified (see above);
 `stock_effect_sampler_contract_test.cpp` is now registered as `Llgl_StockEffectSampler`.
 
 ---
 
 ## LLGL backend: pipeline-cache key folding overflows and silently discards new fields — FIXED (process finding, LLGL-53)
 
-**Status:** fixed by `plan_llgl.md` `LLGL-53` (2026-08-04) as part of wiring `RasterizerState.
+**Status:** fixed by `plans/plan_llgl.md` `LLGL-53` (2026-08-04) as part of wiring `RasterizerState.
 DepthBias`/`SlopeScaleDepthBias` and the full stencil state into `AcquirePrimitivePipeline()`.
 Recorded here as its own entry because it is a REUSABLE lesson about this function's own key
 scheme, not just a one-off depth-bias bug -- the next person widening this key should read this
@@ -1758,13 +1758,13 @@ multiply-add steps to the single `key` variable past a handful of small (<256) m
 checking whether an EARLIER field's contribution still survives. A tuple/composite key sidesteps
 the whole class of bug and costs nothing extra at `std::map`'s scale.
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-53`.
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-53`.
 
 ---
 
 ## LLGL backend: `RasterizerState.SlopeScaleDepthBias`, custom `Viewport.MinDepth`/`MaxDepth`, and `RenderTarget2D` depth testing each have a genuine, unexplained defect — OPEN (LLGL-53)
 
-**Status:** open, discovered while wiring `plan_llgl.md`'s `LLGL-53`. Root cause NOT identified for
+**Status:** open, discovered while wiring `plans/plan_llgl.md`'s `LLGL-53`. Root cause NOT identified for
 any of the three; not fixed here. Distinct from the pipeline-cache-key entry above -- confirmed via
 isolation (disabling the depth-bias/stencil descriptor writes entirely, with the cache key already
 fixed, does NOT make any of these three pass), so none of these are a side effect of this ticket's
@@ -1915,7 +1915,7 @@ physical AMD Radeon 780M/RADV -- see `feedback_real_display_vulkan_available` in
   `AcquirePrimitivePipeline()`'s own `SupportsWireFrameEXT()` guard -- this is documented,
   intentional behaviour, not a new finding).
 
-**Tracked as:** `plan_llgl.md` Phase LLGL-8, `LLGL-53` -- left OPEN, now FOUR/FIVE distinct
+**Tracked as:** `plans/plan_llgl.md` Phase LLGL-8, `LLGL-53` -- left OPEN, now FOUR/FIVE distinct
 defects, none root-caused (the Vulkan-specific `DepthBias` failure is a NEW fifth one, found only
 once real Vulkan testing became possible on this machine). `Llgl_RasterizerState_DepthBias`
 (12/17 on OpenGL) and `Llgl_Stencil` (2/4, same on both modules) are both registered anyway as real
@@ -1958,7 +1958,7 @@ kind of guard `LLGL-55` gave the `examples/` binaries, or whether `ctest`'s per-
 isolation already makes this moot in normal CI use. Needs its own investigation before being
 folded into `LLGL-55`'s own scope or closed as "ctest isolation already covers it."
 
-**Tracked as:** new, not yet in `plan_llgl.md`'s task table -- follow-up for whoever continues
+**Tracked as:** new, not yet in `plans/plan_llgl.md`'s task table -- follow-up for whoever continues
 `LLGL-55`/`LLGL-56`.
 
 ---

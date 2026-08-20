@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: constant blend color (plan_opengl1.md item 17, EasyGL parity).
+// OPENGL1 renderer: constant blend color (plans/plan_opengl1.md item 17, EasyGL parity).
 //
 // Before this, SetBlendFactor() was a no-op and Blend.BlendFactor/InverseBlendFactor mapped to
 // GL_ONE/GL_ZERO in BlendF() -- not a degraded case, a silently WRONG color: a game using

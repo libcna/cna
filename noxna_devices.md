@@ -6,7 +6,7 @@ suggestion, not a commitment.
 
 **Scope of the question this document answers:** CNA currently implements
 `Microsoft::Devices`/`Microsoft::Devices::Sensors` strictly as the real XNA 4.0/Windows
-Phone 7 API surface (see `plan_devices.md`, now closed). That surface is fixed by
+Phone 7 API surface (see `plans/plan_devices.md`, now closed). That surface is fixed by
 definition — it cannot grow beyond what WP7 actually shipped. This document asks: what
 *additional*, CNA-specific (non-XNA) device/sensor capabilities could reasonably be
 added on top, using SDL3 as the only new dependency, so the result stays buildable on
@@ -52,10 +52,10 @@ texture-upload path into
 **Round 2 (Section 8, added 2026-07-07, after Phases 1-4 landed):** a second SDL3
 capability sweep found `MessageBox` — the single best cross-platform coverage of
 anything surveyed in either round — as the standout new candidate; it is now approved
-and being implemented as `DEVICES-CNA-011` (`plan_cna_devices.md`). A handful of other
+and being implemented as `DEVICES-CNA-011` (`plans/plan_cna_devices.md`). A handful of other
 candidates surfaced in that same sweep (`Monitors`/multi-display enumeration, `Process`,
 pen-device queries) were considered and rejected by the user as not a fit for this
-project; see Section 8 for the surviving analysis and `plan_cna_devices.md`'s progress
+project; see Section 8 for the surviving analysis and `plans/plan_cna_devices.md`'s progress
 log for the rejection record.
 
 ---
@@ -98,7 +98,7 @@ alongside the XNA-faithful `Microsoft::Xna::Framework` tree. Its shape:
 
 ### 2.2 The `Microsoft::Devices::Sensors` precedent — the template for hardware-backed classes
 
-The just-completed `plan_devices.md` work established a second, equally relevant
+The just-completed `plans/plan_devices.md` work established a second, equally relevant
 precedent for anything that talks to real hardware through SDL3:
 
 - **`Detail::I<X>Backend` interface + `SetBackendForTesting()`** (see
@@ -122,7 +122,7 @@ precedent for anything that talks to real hardware through SDL3:
   for `CNA::Devices` classes that need materially different behavior per platform
   (e.g. `SystemTray` simply doesn't exist as a concept on `Android`/`iOS`/`Web`).
 - **`NOXNA` macro is now compile-time enforced** (`include/CNA/CNAHelper.hpp`, closed by
-  `plan_devices.md` Task `VERIFY-003`/`DEV-API-002` in this same session): when
+  `plans/plan_devices.md` Task `VERIFY-003`/`DEV-API-002` in this same session): when
   `CNA_STRICT_XNA_API` is defined, `NOXNA` expands to `[[deprecated]]`, and a dedicated
   `cna_strict_xna_api_check` CMake target fails to build if it references any
   `NOXNA`-tagged member. **Open design question, addressed in Section 3.1:** should
@@ -156,7 +156,7 @@ unused-so-far surface area of a dependency already fully present.
 - **Do not put any of this under `Microsoft::Devices` or `Microsoft::Devices::Sensors`.**
   Those namespaces are reserved for the real, frozen XNA 4.0/WP7 API surface — mixing in
   CNA-only classes there, even `NOXNA`-tagged, would blur exactly the line
-  `plan_devices.md`'s entire effort (and the brand-new `VERIFY-003` strict-mode check)
+  `plans/plan_devices.md`'s entire effort (and the brand-new `VERIFY-003` strict-mode check)
   exists to keep sharp. A fresh `CNA::Devices` namespace makes the "this is not XNA"
   fact structural, not just a per-member comment.
 - **Gating mechanism — open question, two real options:**
@@ -496,7 +496,7 @@ design note supersedes it on every point where they'd otherwise duplicate.
 
 ### 4.10 Explicitly considered and recommended against (for now)
 
-- **Geolocation/GPS.** `plan_devices.md`'s own `docs/location-future-plan.md` already
+- **Geolocation/GPS.** `plans/plan_devices.md`'s own `docs/location-future-plans/plan.md` already
   gives a considered "not in `Microsoft::Devices::Sensors`, ever" answer for the
   strict-XNA layer, specifically because SDL3 itself has **no geolocation API at all**
   — this would require an entirely separate, per-platform native integration (Android
@@ -537,7 +537,7 @@ design note supersedes it on every point where they'd otherwise duplicate.
 | **Not recommended** | Geolocation, Storage/filesystem paths, Microphone, Bluetooth/NFC/biometric/etc. | See Section 4.10 for why each is out of scope. |
 
 If/when this roadmap is approved and implementation begins, each capability should be
-tracked the same way `plan_devices.md` tracked `Microsoft::Devices::Sensors` work: one
+tracked the same way `plans/plan_devices.md` tracked `Microsoft::Devices::Sensors` work: one
 task per capability (or per logical sub-piece for `Camera`), its own build+test
 verification, its own commit — not one large, unreviewable patch.
 
@@ -600,7 +600,7 @@ not assumption:
 
 Sections 1-7 above are the original analysis, written before any `CNA::Devices`
 implementation existed. All nine of that analysis's Phase 1-3 capabilities are now
-implemented (`plan_cna_devices.md`, tasks `DEVICES-CNA-000` through `-009`, all
+implemented (`plans/plan_cna_devices.md`, tasks `DEVICES-CNA-000` through `-009`, all
 CLOSED), and `Camera` (Phase 4) has its own dedicated design note
 (`docs/cna-devices-camera-design.md`). This section is a **second, independent sweep**
 of `third_party/SDL/include/SDL3/` looking specifically for capabilities the first
@@ -735,7 +735,7 @@ section.**
 ## 9. Current status (2026-07-07)
 
 Snapshot of where `CNA::Devices` stands right now, for anyone picking this document
-up cold — see `plan_cna_devices.md` for full task-level detail on every item below.
+up cold — see `plans/plan_cna_devices.md` for full task-level detail on every item below.
 
 **Implemented and closed:** `PowerInfo`, `Locale`, `Clipboard`, `UrlLauncher`,
 `SystemInfo` (Phase 1); `DisplayInfo` (Phase 2); `FileDialog`, `SystemTray` (Phase 3);
@@ -744,15 +744,15 @@ test coverage, and are clean under `devices-asan`/`devices-ubsan`.
 
 **Designed but not implemented:** `Camera` (Phase 4) — `docs/cna-devices-camera-design.md`
 has the full design note; implementing it is tracked as `DEVICES-CNA-012` in
-`plan_cna_devices.md`, not yet started.
+`plans/plan_cna_devices.md`, not yet started.
 
 **Not part of `CNA::Devices` at all, but worth knowing about if returning to this
 area:** this same session also closed three related items in the separate
-`Microsoft::Devices::Sensors` work (`plan_devices.md`, real XNA API, not a
+`Microsoft::Devices::Sensors` work (`plans/plan_devices.md`, real XNA API, not a
 `CNA::Devices` extension) — `ACCEL-008` (Android landscape-remap decision, kept +
 documented as `NOXNA` + opt-out), `COMPASS-009` (Android Compass tilt-mode axis
 switch), and a cross-repo `sharp-runtime` data race (`SDL-SENSOR-004`). One follow-up
 from that work remains open: `MOTION-012` (apply the same landscape remap to
 `Motion`'s `Gravity`/`DeviceAcceleration`/`DeviceRotationRate`, or explicitly decide
-not to) — tracked in `plan_devices.md`, not here, since it's real XNA API surface,
+not to) — tracked in `plans/plan_devices.md`, not here, since it's real XNA API surface,
 not a `CNA::Devices` capability.

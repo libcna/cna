@@ -63,7 +63,7 @@ session's empirical finding, not a fresh empirical re-verification.
   Check E (flip), Check F (scale), Check H (custom transform), Check I (SpriteSortMode), Check J
   (custom Effect rejection) all have straightforward, uncontroversial expected values matching
   standard XNA `SpriteBatch` semantics — no issues found in their own test logic.
-- The file's own top-of-file comment enumerates all 10 checks with their `plan_dx3.md` task IDs
+- The file's own top-of-file comment enumerates all 10 checks with their `plans/plan_dx3.md` task IDs
   (DX3-30 through DX3-39) — a clear, traceable per-check specification.
 
 ## Detailed Findings
@@ -86,7 +86,7 @@ build-level exclusion.
 
 ## Missing or Weak Tests
 Not applicable — this file's own checklist is thorough for its stated scope (10 checks covering
-the documented `plan_dx3.md` Phase X4 task range).
+the documented `plans/plan_dx3.md` Phase X4 task range).
 
 ## Positive Findings
 The test's own top-of-file per-check documentation (mapping each check to a specific task ID) is a

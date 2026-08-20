@@ -1567,7 +1567,7 @@ namespace CNA::Internal::Renderers::Llgl
             // byte layout -- the stride-48 PbrGpuVertex layout above with the stride-52 skinning
             // suffix (BlendWeight, BlendIndices) appended, matching
             // modules/renderers/vulkan/examples/vulkan_pbreffect_handderived_test.cpp's own SkinnedPbrGpuVertex.
-            // plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48
+            // plans/plan_gltf.md GLTF-462: stride 60 is the rigid PBR record with a second UV set at 48
             // and a packed COLOR_0 at 56; its first four fields are byte-identical to stride 48.
             // Without this case it fell to the empty default below and the mesh had no attributes at
             // all. The two trailing slots stay undeclared because this renderer's PBR shader samples
@@ -1578,7 +1578,7 @@ namespace CNA::Internal::Renderers::Llgl
                 addAttribute("tangent", LLGL::Format::RGBA32Float, 6, 24);
                 addAttribute("texCoord", LLGL::Format::RG32Float, 2, 40);
                 addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 48);
-                // plan_gltf.md GLTF-462/GLTF-465: the packed COLOR_0 glTF 3.9.2 makes a multiplier
+                // plans/plan_gltf.md GLTF-462/GLTF-465: the packed COLOR_0 glTF 3.9.2 makes a multiplier
                 // on base colour. Location 1 is this renderer's colour slot.
                 addAttribute("color", LLGL::Format::RGBA8UNorm, 1, 56);
                 break;
@@ -1600,7 +1600,7 @@ namespace CNA::Internal::Renderers::Llgl
                 addAttribute("aBoneIndices", LLGL::Format::RGBA8UInt, 5, 64);
                 addAttribute("texCoord1", LLGL::Format::RG32Float, 7, 68);
                 break;
-            // plan_gltf.md GLTF-463: stride 76's record with the packed COLOR_0 appended at 76.
+            // plans/plan_gltf.md GLTF-463: stride 76's record with the packed COLOR_0 appended at 76.
             case 80:
                 addAttribute("position", LLGL::Format::RGB32Float, 0, 0);
                 addAttribute("normal", LLGL::Format::RGB32Float, 3, 12);
@@ -1849,7 +1849,7 @@ namespace CNA::Internal::Renderers::Llgl
 
     LlglRenderer::~LlglRenderer()
     {
-        // plan_modern.md MOD-1612. A destructor must not throw, and every line below calls into
+        // plans/plan_modern.md MOD-1612. A destructor must not throw, and every line below calls into
         // LLGL. When a *second* LlglRenderer fails to construct, LLGL's global state is left
         // broken, and this teardown then throws "in 'Get': expression 'current_' must not be
         // null" -- out of a destructor, on an unwind path, which is std::terminate and takes the
@@ -2819,7 +2819,7 @@ namespace CNA::Internal::Renderers::Llgl
                 "texture coordinates, normals, and a tangent, and this one is missing at least one");
         }
 
-        // plan_gltf.md GLTF-465: the colour attribute used to be stripped here, because this shader
+        // plans/plan_gltf.md GLTF-465: the colour attribute used to be stripped here, because this shader
         // "never reads one". It does now -- glTF 3.9.2 makes COLOR_0 a multiplier on base colour --
         // and the dual-UV variant is exactly the one whose stride (60) always carries the slot, so
         // the attribute list is passed through unchanged.
@@ -2897,7 +2897,7 @@ namespace CNA::Internal::Renderers::Llgl
                 "missing at least one");
         }
 
-        // plan_gltf.md GLTF-463/GLTF-465: unlike the rigid family, the skinned one has a dual-UV
+        // plans/plan_gltf.md GLTF-463/GLTF-465: unlike the rigid family, the skinned one has a dual-UV
         // stride WITHOUT a colour (76) and one WITH (80), so the colour is a third variant rather
         // than a property of dual-UV -- and the attribute list is passed through either way, since a
         // shader input with no matching vertex attribute is invalid on the Vulkan module.
@@ -3503,7 +3503,7 @@ namespace CNA::Internal::Renderers::Llgl
                     params.pbrTextureTransformRows[row][component];
         uniforms[132] = static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
         uniforms[133] = params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
-        // plan_gltf.md GLTF-465: specularState.z is the effect's own VertexColorEnabledEXT -- the
+        // plans/plan_gltf.md GLTF-465: specularState.z is the effect's own VertexColorEnabledEXT -- the
         // gate the PBR fragment stage multiplies COLOR_0 under. It shares this vec4 with the
         // TEXCOORD_1 selector mask and the specular-colour decode flag, both already packed here.
         uniforms[134] = params.vertexColorEnabled ? 1.0f : 0.0f;
@@ -3615,7 +3615,7 @@ namespace CNA::Internal::Renderers::Llgl
             }
         }
 
-        // plan_gltf.md GLTF-474: not const any more -- an untextured PBR or skinned draw adopts
+        // plans/plan_gltf.md GLTF-474: not const any more -- an untextured PBR or skinned draw adopts
         // the neutral-white default below rather than being refused, which is what makes it a
         // textured draw from the pipeline's point of view.
         bool textured = (params != nullptr && params->textureEnabled && params->texture0 != nullptr);
@@ -3679,7 +3679,7 @@ namespace CNA::Internal::Renderers::Llgl
 
         const bool skinned = (params != nullptr && params->skinned);
         const bool pbr = (params != nullptr && params->pbr);
-        // plan_gltf.md GLTF-474. Both of these used to throw "needs Texture bound", on the reading
+        // plans/plan_gltf.md GLTF-474. Both of these used to throw "needs Texture bound", on the reading
         // that a base-colour map is mandatory for SkinnedEffect and PbrEffect the way it is for
         // DualTextureEffect and EnvironmentMapEffect. That reading does not survive contact with
         // what PbrEffect actually models: glTF 3.9.2 makes `baseColorTexture` OPTIONAL, and glTF's
@@ -6533,7 +6533,7 @@ namespace CNA::Internal::Renderers::Llgl
 #ifdef CNA_RENDERER_LLGL
 namespace CNA::Internal::Renderers
 {
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace Llgl { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

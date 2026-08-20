@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1009..MOD-1011: point and spot shadows as an application uses them.
+// plans/plan_modern.md MOD-1009..MOD-1011: point and spot shadows as an application uses them.
 //
 // A lamp inside a box, which is the scene a point light exists for: it casts in every direction at
 // once, so all six cube faces have to be right for the picture to be. A spot light on a plane

@@ -43,7 +43,7 @@ The `RasterizerState::CullNone` scoping decision and its rationale exactly match
 consistent test-isolation discipline across the shard.
 
 ## Missing or Weak Tests
-Not applicable — the 5-check scope matches the file's own stated `plan_software.md` Phase S4/S6
+Not applicable — the 5-check scope matches the file's own stated `plans/plan_software.md` Phase S4/S6
 task range.
 
 ## Positive Findings

@@ -2,7 +2,7 @@
 // Task 947 (Phase 78 rollout): HLSL->GLSL shader-conversion proof -- PostprocessEffect.Fx's 5
 // techniques (`EdgeDetect`/`EdgeDetectMonoSketch`/`EdgeDetectColorSketch`/`MonoSketch`/
 // `ColorSketch`). With this, `NonPhotoRealistic` sample's shader blocker (DEFERRED.md item #11)
-// is fully cleared -- `CartoonEffect.Fx`'s 3 techniques were already ported (see plan_graphics.md
+// is fully cleared -- `CartoonEffect.Fx`'s 3 techniques were already ported (see plans/plan_graphics.md
 // Task 947's own row).
 //
 // FNA reference (`NonPhotoRealisticSample_4_0/NonPhotoRealistic/Content/PostprocessEffect.Fx`):

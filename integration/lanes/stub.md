@@ -35,7 +35,7 @@ preparation.
 
 | # | Original | Adapted | `%G?` | Subject |
 |---|---|---|---|---|
-| 1 | `12fe5883` | `383931ce` | `U` | `docs(plan_stub.md): design doc for the new Stub (no-op) graphics backend` |
+| 1 | `12fe5883` | `383931ce` | `U` | `docs(plans/plan_stub.md): design doc for the new Stub (no-op) graphics backend` |
 | 2 | `ec7279dc` | `b51918ff` | `U` | `feat(STUB-2/STUB-3): add the Stub (no-op) graphics backend` |
 | 3 | `484d11ad` | `13f50353` | `U` | `test(STUB-4): add Stub_Smoke CTest for the Stub graphics backend` |
 | 4 | `441b3a5f` | `7383135c` | `U` | `docs(STUB-5): document the Stub backend, verified 5413/5423 CnaTests` |
@@ -175,7 +175,7 @@ deliberately not raised as a remediation ticket.
 | new | `cmake/Tests/StubTests.cmake` | `Stub_Smoke` registration |
 | new | `examples/stub_smoke_test.cpp` | the 7-check smoke harness |
 | new | `docs/stub-backend.md` | backend documentation |
-| new | `plan_stub.md` | design doc |
+| new | `plans/plan_stub.md` | design doc |
 | mod | `cmake/BackendSelection.cmake` | **the one conflict** — 5 registration sites |
 | mod | `include/CNA/GraphicsBackendType.hpp` | enum value, name, compile-time selector |
 | mod | `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp` | 2 window-skip guards |
@@ -238,7 +238,7 @@ never serialized — it is a `constexpr` compile-time identity, resolved per bui
 `git range-diff archive/preintegration/stub-20260804...adapt/stub`:
 
 ```
-1:  12fe5883 = 824:  383931ce docs(plan_stub.md): design doc ...
+1:  12fe5883 = 824:  383931ce docs(plans/plan_stub.md): design doc ...
 2:  ec7279dc ! 825:  b51918ff feat(STUB-2/STUB-3): add the Stub (no-op) graphics backend
 3:  484d11ad = 826:  13f50353 test(STUB-4): add Stub_Smoke CTest ...
 4:  441b3a5f = 827:  7383135c docs(STUB-5): document the Stub backend ...

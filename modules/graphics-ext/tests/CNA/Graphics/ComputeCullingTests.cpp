@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1551: frustum culling on the GPU, checked against the CPU implementation.
+// plans/plan_modern.md MOD-1551: frustum culling on the GPU, checked against the CPU implementation.
 //
 // The interesting property is not that a compute shader can cull -- it is that it culls *the same
 // objects*. A GPU culler that disagreed with FrustumCullerEXT by one object at a plane boundary

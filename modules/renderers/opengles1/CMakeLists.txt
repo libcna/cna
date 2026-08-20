@@ -1,4 +1,4 @@
-# plan_opengles1.md design decision 1: requires a REAL system OpenGL ES 1.1 (fixed-function
+# plans/plan_opengles1.md design decision 1: requires a REAL system OpenGL ES 1.1 (fixed-function
 # "Common", CM) library and Khronos headers -- e.g. Debian/Ubuntu's libgles1 + libgles-dev
 # (GLESv1_CM.so + GLES/gl.h + GLES/glext.h), or the equivalent on an embedded/Android SDK.
 # Same "hard system dependency, not vendored, FATAL_ERROR with install instructions if

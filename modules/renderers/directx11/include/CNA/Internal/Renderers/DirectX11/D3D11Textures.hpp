@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42): real D3D11 texture renderers.
+// plans/plan_dx.md Phase DIRECTX6 (DX-40/DX-41/DX-42): real D3D11 texture renderers.
 //
 // RGBA8 storage only (DXGI_FORMAT_R8G8B8A8_UNORM) -- matches this project's own established
 // simplification: EasyGL/Vulkan/Software all treat every ITextureRenderer/ITextureCubeRenderer/

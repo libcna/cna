@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-11: unit tests for ParseXnbHeader().
+// plans/plan_xnb.md XNB-11: unit tests for ParseXnbHeader().
 
 #include <gtest/gtest.h>
 #include <vector>
@@ -55,7 +55,7 @@ TEST(XnbHeaderTest, LzxCompressedFlagBitIsDetected)
 
 TEST(XnbHeaderTest, Lz4CompressedFlagBitIsDetected)
 {
-    // plan_xnb.md XNB-27: flags bit 0x40, confirmed against MonoGame's own ContentManager.cs
+    // plans/plan_xnb.md XNB-27: flags bit 0x40, confirmed against MonoGame's own ContentManager.cs
     // (ContentCompressedLz4 = 0x40) -- FNA itself never produces this, but MonoGame's content
     // pipeline can.
     const std::vector<uint8_t> bytes{
@@ -120,7 +120,7 @@ TEST(XnbHeaderTest, UnrecognizedPlatformThrowsContentLoadException)
     EXPECT_THROW(ParseBytes(bytes), ContentLoadException);
 }
 
-// plan_xnb.md XNB-44: 'b' (WebAssembly/Bridge.NET) is a real platform identifier MonoGame's own
+// plans/plan_xnb.md XNB-44: 'b' (WebAssembly/Bridge.NET) is a real platform identifier MonoGame's own
 // ContentWriter.targetPlatformIdentifiers accepts, added after FNA's fork point -- FNA's own
 // targetPlatformIdentifiers (src/Content/ContentManager.cs) never gained it. CNA's
 // XnbAcceptedPlatforms() deliberately matches FNA, not MonoGame's expanded list, so a real

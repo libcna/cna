@@ -2,7 +2,7 @@
 
 > Adaptation branch: `adapt/gdi` (integration base `677f4c59e066fc9a7ed79430d0fee5ffd69b531c`)
 > Historical source: `feature/gdi` at `adc9cc2a2e496d162202733b05ab659199a857b8`
-> Active plan: `plan_gdi.md`
+> Active plan: `plans/plan_gdi.md`
 > Started: 2026-08-01
 > This file is the GDI-specific continuity log. Per project-owner instruction, `NEXT.md` must not
 > be changed during this work.
@@ -276,7 +276,7 @@ baseline. All later tasks use one task per commit.
   i686-w64-mingw32 executable under Wine; CI installs `gcc-multilib`/`g++-multilib` and runs the same
   planner source at genuine 32-bit `size_t` width.
 - `Software_MsaaMipReadback` has a pre-existing stale expectation that SOFTWARE rejects nonzero
-  target mip levels. Current production code and `plan_software.md` say those levels are generated
+  target mip levels. Current production code and `plans/plan_software.md` say those levels are generated
   on unbind; the representative 4x level-zero oracle passes, but the full supervisor fails its
   obsolete refusal assertions. This is outside GDI-067 and should be reconciled in Software scope.
 - `SoftwareGraphicsBackend.cpp` still contains the shared 2D triangle raster helpers/bridge and all

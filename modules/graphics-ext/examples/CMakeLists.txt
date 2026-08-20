@@ -1,4 +1,4 @@
-# plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# plans/plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
 # wrong once:
 #
 #   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the
@@ -77,7 +77,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGL
 endif()
 
 # ---- AsciiPostProcessEffect oracles -----------------------------------------------------------
-# Migrated from the former ASCII graphics renderer (plan_ascii.md); unlike the CRTEffect/DepthEffect
+# Migrated from the former ASCII graphics renderer (plans/plan_ascii.md); unlike the CRTEffect/DepthEffect
 # demos above, AsciiPostProcessEffect's portable CPU quantizer needs no GLSL shader compilation, so
 # these run under every renderer (any CNA_GRAPHICS_RENDERER), not just OPENGLES3/OPENGL33 -- the
 # whole point of this migration is that the effect is no longer tied to one specific renderer.
@@ -114,7 +114,7 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT)
     endif()
 endif()
 
-# ---- Shadow mapping, end to end (plan_modern.md MOD-852/MOD-856) -------------------------------
+# ---- Shadow mapping, end to end (plans/plan_modern.md MOD-852/MOD-856) -------------------------------
 # Registered for every renderer, like the ASCII oracles above rather than like the GLSL demos:
 # nothing here is renderer-specific, and a renderer that cannot raster 3D or compile the caster's
 # shader SKIPs itself (exit 77) from inside, reporting which of the two it was.
@@ -147,7 +147,7 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_ComputeParticles COMMAND cna_test_cnaext_compute_particles
         TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-2048: clustered forward, end to end, with its cost per light count.
+    # plans/plan_modern.md MOD-2048: clustered forward, end to end, with its cost per light count.
     cna_graphics_ext_test(cna_test_cnaext_clustered_lights cnaext_clustered_lights_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_ClusteredLights COMMAND cna_test_cnaext_clustered_lights
         TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
@@ -156,30 +156,30 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_BloomInTenLines COMMAND cna_test_cnaext_bloom
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-743: 1000 frames + 50 resizes, for a leak checker to watch.
+    # plans/plan_modern.md MOD-743: 1000 frames + 50 resizes, for a leak checker to watch.
     cna_graphics_ext_test(cna_test_cnaext_leak_loop cnaext_leak_loop_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_LeakLoop COMMAND cna_test_cnaext_leak_loop
         TIMEOUT 600 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-738..MOD-742: the layer's showcase -- 2D and 3D through the full stack.
+    # plans/plan_modern.md MOD-738..MOD-742: the layer's showcase -- 2D and 3D through the full stack.
     cna_graphics_ext_test(cna_test_cnaext_render_pipeline cnaext_render_pipeline_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_RenderPipeline COMMAND cna_test_cnaext_render_pipeline
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-604/MOD-607/MOD-608: FXAA on and off, and its cost per image content.
+    # plans/plan_modern.md MOD-604/MOD-607/MOD-608: FXAA on and off, and its cost per image content.
     cna_graphics_ext_test(cna_test_cnaext_fxaa cnaext_fxaa_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Fxaa COMMAND cna_test_cnaext_fxaa
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-526/MOD-527/MOD-528: SSAO end to end, from the prepass to the frame.
-    # plan_modern.md MOD-1808/MOD-1811: every subsystem in one frame, each one A/B'd against the
+    # plans/plan_modern.md MOD-526/MOD-527/MOD-528: SSAO end to end, from the prepass to the frame.
+    # plans/plan_modern.md MOD-1808/MOD-1811: every subsystem in one frame, each one A/B'd against the
     # same frame with only itself switched off. Longer timeout than the single-subsystem examples
     # because it renders the scene seven times.
     cna_graphics_ext_test(cna_test_cnaext_showcase cnaext_showcase_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Showcase COMMAND cna_test_cnaext_showcase
         TIMEOUT 300 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-1810: a material that arrived through the runtime glTF importer, driven
+    # plans/plan_modern.md MOD-1810: a material that arrived through the runtime glTF importer, driven
     # by the engine layer's IBL and shadows. The corpus path is a compile definition so the program
     # does not depend on being launched from the repository root; --content overrides it.
     cna_graphics_ext_test(cna_test_cnaext_gltf_pbr cnaext_gltf_pbr_test.cpp)
@@ -188,31 +188,31 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_GltfPbr COMMAND cna_test_cnaext_gltf_pbr
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-2090..MOD-2095: section 20.10 end to end, and the only place its costs are
+    # plans/plan_modern.md MOD-2090..MOD-2095: section 20.10 end to end, and the only place its costs are
     # measured -- each new path against the one it claims to beat, in the same frame.
     cna_graphics_ext_test(cna_test_cnaext_gpu_driven cnaext_gpu_driven_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_GpuDriven COMMAND cna_test_cnaext_gpu_driven
         TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-2108: the two transparency paths measured against each other, and the
+    # plans/plan_modern.md MOD-2108: the two transparency paths measured against each other, and the
     # order-independence claim checked end to end.
     cna_graphics_ext_test(cna_test_cnaext_transparency cnaext_transparency_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Transparency COMMAND cna_test_cnaext_transparency
         TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-2123: what the contact shadow march costs, per step count and per
+    # plans/plan_modern.md MOD-2123: what the contact shadow march costs, per step count and per
     # resolution -- the two axes a caller can change, neither of which is the scene.
     cna_graphics_ext_test(cna_test_cnaext_contact_shadow cnaext_contact_shadow_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_ContactShadow COMMAND cna_test_cnaext_contact_shadow
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-2133: the .cube delivery path end to end, and what each grading and
+    # plans/plan_modern.md MOD-2133: the .cube delivery path end to end, and what each grading and
     # output dial costs.
     cna_graphics_ext_test(cna_test_cnaext_grading cnaext_grading_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Grading COMMAND cna_test_cnaext_grading
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-2165: the post-process table measured on the GPU, beside the CPU wall
+    # plans/plan_modern.md MOD-2165: the post-process table measured on the GPU, beside the CPU wall
     # clock the existing numbers were produced with.
     cna_graphics_ext_test(cna_test_cnaext_gpu_timing cnaext_gpu_timing_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_GpuTiming COMMAND cna_test_cnaext_gpu_timing
@@ -224,23 +224,23 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_Ssao COMMAND cna_test_cnaext_ssao
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-315/MOD-318/MOD-319: the five tonemapping operators, measured as curves.
+    # plans/plan_modern.md MOD-315/MOD-318/MOD-319: the five tonemapping operators, measured as curves.
     cna_graphics_ext_test(cna_test_cnaext_tonemap cnaext_tonemap_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_Tonemap COMMAND cna_test_cnaext_tonemap
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-229/MOD-230: three stacked passes, and what each pass costs.
+    # plans/plan_modern.md MOD-229/MOD-230: three stacked passes, and what each pass costs.
     cna_graphics_ext_test(cna_test_cnaext_postprocess_chain cnaext_postprocess_chain_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_PostProcessChain COMMAND cna_test_cnaext_postprocess_chain
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_modern.md MOD-132/MOD-138: what a float render target buys, on screen, and what it costs.
+    # plans/plan_modern.md MOD-132/MOD-138: what a float render target buys, on screen, and what it costs.
     cna_graphics_ext_test(cna_test_cnaext_hdr_target cnaext_hdr_target_test.cpp)
     cna_register_renderer_test(NAME CNAEXT_HdrRenderTarget COMMAND cna_test_cnaext_hdr_target
         TIMEOUT 90 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
-# ---- plan_modern.md MOD-1740: the guard script, as a test ---------------------------------------
+# ---- plans/plan_modern.md MOD-1740: the guard script, as a test ---------------------------------------
 # MOD-3's scripts/check_cnaext_guards.sh proves every engine-layer file is wrapped in
 # `#ifdef CNA_CNAEXT`, which is what makes the layer genuinely absent from a default build. A rule
 # nothing enforces is a rule that decays, so it runs as a ctest: pure text, no device, no display,
@@ -252,7 +252,7 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CNAEXT_GuardDiscipline PROPERTIES
         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
 
-    # plan_modern.md MOD-1698: and the matrix must name every renderer identity, derived from
+    # plans/plan_modern.md MOD-1698: and the matrix must name every renderer identity, derived from
     # CNA::GraphicsRendererType rather than hardcoded -- a renderer missing from a matrix reads as
     # "fine", which is exactly what an unexamined renderer is not.
     find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -265,7 +265,7 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
-    # plan_modern.md MOD-1902: the accessor conventions the API review settled -- every
+    # plans/plan_modern.md MOD-1902: the accessor conventions the API review settled -- every
     # value-returning get/is/has is [[nodiscard]], and is const when it takes no argument. A
     # one-time read of the headers decays with the next header, so the sweep runs as a test.
     if(Python3_Interpreter_FOUND)
@@ -277,7 +277,7 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
-    # plan_modern.md MOD-1900: MOD-6's naming rule -- verbs are lowerCamelCase here, because there
+    # plans/plan_modern.md MOD-1900: MOD-6's naming rule -- verbs are lowerCamelCase here, because there
     # is no XNA name to preserve. Every UpperCamelCase function must therefore be a named exception
     # with its reason (an XNA base-class override, a System.Object mirror, or a C ABI surface), and
     # the script fails on a stale exemption too, so the list cannot outlive what it excuses.
@@ -290,7 +290,7 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
-    # plan_modern.md Phase 16: every renderer descriptor must at least parse. Three of them
+    # plans/plan_modern.md Phase 16: every renderer descriptor must at least parse. Three of them
     # (OpenGL1, LLGL, bgfx) were left syntactically broken by one merge and nobody noticed, because
     # a renderer identity is only compiled when someone selects it -- each was found by building
     # that renderer, one at a time. This checks all 44 at once, in milliseconds, with no renderer
@@ -317,7 +317,7 @@ if(CNA_BUILD_TESTS)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}" LABELS "CnaExt")
     endif()
 
-    # plan_modern.md MOD-7: the layer builds one Doxygen module page and has no undocumented public
+    # plans/plan_modern.md MOD-7: the layer builds one Doxygen module page and has no undocumented public
     # member. SKIPs (77) where doxygen is not installed, since the check is about these headers and
     # not about the container.
     add_test(NAME CNAEXT_DoxygenGroup

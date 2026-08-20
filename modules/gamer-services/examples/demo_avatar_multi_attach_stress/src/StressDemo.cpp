@@ -31,13 +31,13 @@ namespace
     constexpr float kCameraHeight = 1.0f;
     constexpr float kTargetHeight = 0.9f;
 
-    // Post-plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
+    // Post-plans/plan_net.md remediation (2026-07-18): now uses the shared, real-bitmap-font
     // CNAExamplesEXT::MakeSimpleFontEXT() (examples/common/SimpleFontEXT.hpp) instead of a
     // per-demo uniform-rectangle "block font" - the old per-file copy (and this demo's own
     // Parts.size() counter text using it) was confirmed unreadable (every character rendered as
     // an identical rectangle) by an independent audit.
 
-    // Task 8.2 (plan_net.md Phase 8): decision 5a's default text block, adapted per this task's
+    // Task 8.2 (plans/plan_net.md Phase 8): decision 5a's default text block, adapted per this task's
     // own instruction (keep the F1/Esc lines identical across every demo, customize the rest).
     constexpr const char* kHelpLines[] = {
         "CNA Avatar Multi-Attach Stress Help",
@@ -273,7 +273,7 @@ void StressDemo::Draw(const GameTime& /*gameTime*/)
         spriteBatch_->End();
     }
 
-    // Task 8.5 (plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
+    // Task 8.5 (plans/plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
     // AvatarDemo - Game::Exit() suppresses Draw() on the frame Update() actually calls it.
     if (smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty())
     {

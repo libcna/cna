@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-054 / GLTF-069 / GLTF-079 / GLTF-109 / GLTF-110.
+// plans/plan_gltf.md GLTF-054 / GLTF-069 / GLTF-079 / GLTF-109 / GLTF-110.
 //
 // Two unrelated groups that share a property: each rule has a boundary, and the boundary is where
 // the wrong implementation still produces a model. A 16/32-bit index decision made one vertex early

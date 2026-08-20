@@ -31,7 +31,7 @@ namespace CNA::Internal::Renderers::PixiJs
         /**
          * @brief Direct CPU pixel upload into a bound PixiJS RenderTexture.
          *
-         * plan_pixijs.md PIXIJS-32: a `PIXI.RenderTexture` has no simple synchronous CPU-buffer
+         * plans/plan_pixijs.md PIXIJS-32: a `PIXI.RenderTexture` has no simple synchronous CPU-buffer
          * upload path the way a `PIXI.BufferResource`-backed plain texture does (Design decision
          * 8), so this paints a throwaway buffer-backed texture over the whole target with
          * `PIXI.BLEND_MODES.NONE` (a real unconditional overwrite, the same trick `REMED-PIXIJS-5`
@@ -64,7 +64,7 @@ namespace CNA::Internal::Renderers::PixiJs
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h,
                                    void* data, int dataLength) const override;
 
-        /// plan_pixijs.md PIXIJS-34: no PIXI.RenderTexture in this renderer's v1 scope carries a
+        /// plans/plan_pixijs.md PIXIJS-34: no PIXI.RenderTexture in this renderer's v1 scope carries a
         /// real depth/stencil attachment, regardless of what DepthFormat was requested at
         /// construction (same reasoning/precedent as CANVAS-23).
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override { return false; }

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Deterministic glTF 2.0 conformance-fixture generator for CNA (``plan_gltf.md`` GLTF-003).
+"""Deterministic glTF 2.0 conformance-fixture generator for CNA (``plans/plan_gltf.md`` GLTF-003).
 
 One source of truth per fixture emits **both** the asset and its expectation manifest, so a
 fixture and the values it is checked against cannot drift apart.

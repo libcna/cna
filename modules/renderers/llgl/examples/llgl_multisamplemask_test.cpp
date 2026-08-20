@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-33: BlendState.MultiSampleMask -- a real per-sample coverage bitmask, proven
+// plans/plan_llgl.md LLGL-33: BlendState.MultiSampleMask -- a real per-sample coverage bitmask, proven
 // against a genuinely multisampled RenderTarget2D (LLGL-26 MSAA follow-up), not just a bookkeeping
 // check. Mirrors examples/gfx077_colorwritechannels_3d_test.cpp's own MSAA sub-block technique
 // (full-screen Opaque-blended quad, differential dst/src baselines) but as a dedicated,

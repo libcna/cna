@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sokol.md SOKOL-21: textured and lit 3D proof for the sokol_gfx graphics renderer -- real
+// plans/plan_sokol.md SOKOL-21: textured and lit 3D proof for the sokol_gfx graphics renderer -- real
 // BasicEffect.TextureEnabled and BasicEffect.LightingEnabled draws, every result verified by
 // reading the rendered pixels back off the real back buffer.
 //

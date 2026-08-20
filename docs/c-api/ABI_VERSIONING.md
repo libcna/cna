@@ -11,7 +11,7 @@ patch to `0.7.0`.
 `0.7.0` added the six PBR and morph-target routes from `CBIND-078`; `0.6.0` standardized empty
 shader-source refusal in `CBIND-075`; `0.5.0` added the portable native-window handle routes from
 `CBIND-072`; and `0.4.0` added `cna_content_manager_register_cnj_loader_ext`. `0.1.0` was the
-initial version, while `0.2.0` added the routes recorded in `plan_binding.md` CBIND-054 through
+initial version, while `0.2.0` added the routes recorded in `plans/plan_binding.md` CBIND-054 through
 CBIND-058, every one of them additive. `0.3.0` was **not** additive and that is why the minor moved:
 `CBIND-067` made all 94 routes taking a `CNA_Bool` refuse a byte outside {0, 1}, where 66 of them
 used to accept one. A caller that passed only `CNA_FALSE` and `CNA_TRUE` -- what this document has

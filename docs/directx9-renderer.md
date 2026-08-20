@@ -81,7 +81,7 @@ configure time.
   not specific to D3D9.
 - **`EnvironmentMapEffect`'s specular variants, `PreferPerPixelLighting`**
   (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`): blocked on a confirmed, cross-cutting
-  `GpuDrawParams` gap present on **every** CNA renderer (Divergence 1/4 in `plan_dx9.md`'s own
+  `GpuDrawParams` gap present on **every** CNA renderer (Divergence 1/4 in `plans/plan_dx9.md`'s own
   "CNA's divergences from XNA 4.0" section) — out of this renderer's authority to fix; measured
   and reported, not silently worked around.
 - **`SpriteSortMode.Immediate`/`.Texture`**: `Immediate`'s only real behavioral difference from
@@ -107,7 +107,7 @@ that a real `HiDef`-class GPU exists in this loop (it doesn't). This renderer's 
 precisely: **indistinguishable from real XNA 4.0 running through the same DXVK
 Direct3D-9-over-Vulkan path, on this machine** — a real, strong, reproducible result, and a
 narrower one than "authentically indistinguishable from XNA on real hardware." That gap is
-`plan_dx9.md`'s own `D9-140`, `needs_human`, still open.
+`plans/plan_dx9.md`'s own `D9-140`, `needs_human`, still open.
 
 ## Development environment: Wine + DXVK dev-loop
 
@@ -172,7 +172,7 @@ Two established patterns, matching `D3D11`'s own precedent:
 Every check added to this renderer that claims to test something is expected to be
 **mutation-verified**: deliberately break the implementation it exercises, confirm the check (and
 only the checks that should be affected) goes red, then revert and reconfirm green. See
-`plan_dx9.md`'s own `D9-91`/`D9-93`/`D9-103`/`D9-122` closure notes for real examples of this
+`plans/plan_dx9.md`'s own `D9-91`/`D9-93`/`D9-103`/`D9-122` closure notes for real examples of this
 discipline catching genuine false-positive traps (a check that stays green even with its own
 target feature disabled is worse than no check at all).
 
@@ -188,10 +188,10 @@ target feature disabled is worse than no check at all).
   homogeneous mapping-table checks and a handful of `DirectX9_Smoke` checks (Clear/Clear* combo
   variants, resize) unverified this pass — documented, not silently assumed covered.
 - **Render targets cannot be sampled as textures at all** — see "What's not (yet)" above.
-- **`D9-11` (custom `ShaderEffect`)** is explicitly ask-first in `plan_dx9.md`'s own execution
+- **`D9-11` (custom `ShaderEffect`)** is explicitly ask-first in `plans/plan_dx9.md`'s own execution
   order and has not been started.
 
-See `plan_dx9.md` for the full task-by-task status (`D9-0` through `D9-140`) and design rationale,
+See `plans/plan_dx9.md` for the full task-by-task status (`D9-0` through `D9-140`) and design rationale,
 `docs/d3d9-divergence-report.md` for the current oracle measurement, and
 `docs/graphics-renderer-feature-matrix.md` for a row-by-row comparison against the other
 established renderers (with the caveat that D3D9's own goal — XNA-authenticity, not feature parity

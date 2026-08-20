@@ -8,7 +8,7 @@ namespace CNA
     /**
      * @brief The arguments of a non-indexed indirect draw, in the exact layout the GPU reads.
      *
-     * plan_modern.md `MOD-2090`. The whole point of an indirect draw is that these numbers are
+     * plans/plan_modern.md `MOD-2090`. The whole point of an indirect draw is that these numbers are
      * produced on the GPU and never come back to the CPU, so their memory layout is part of the
      * contract between a compute shader and a draw call rather than an implementation detail. This
      * struct is that layout written down once: a shader declares the same five words in the same
@@ -39,7 +39,7 @@ namespace CNA
     /**
      * @brief The arguments of an indexed indirect draw, in the exact layout the GPU reads.
      *
-     * plan_modern.md `MOD-2090`. Same contract as @ref IndirectDrawArguments, one word longer, and
+     * plans/plan_modern.md `MOD-2090`. Same contract as @ref IndirectDrawArguments, one word longer, and
      * matching `GLDrawElementsIndirectCommand` / `VkDrawIndexedIndirectCommand`.
      */
     struct IndirectDrawIndexedArguments

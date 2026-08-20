@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-041: lock the attribute decode path that the forensic audit VERIFIED CORRECT.
+// plans/plan_gltf.md GLTF-041: lock the attribute decode path that the forensic audit VERIFIED CORRECT.
 //
 // `UnpackAccessor()` -> `cgltf_accessor_unpack_floats` was proven right on the campaign baseline
 // for `bufferView.byteOffset`, `accessor.byteOffset`, `byteStride`/interleaving, normalized
@@ -39,7 +39,7 @@ namespace
 {
     constexpr double kTolerance = 1e-5;
 
-    /// The fixtures whose accessor behaviour plan_gltf.md §1.2 records as verified correct.
+    /// The fixtures whose accessor behaviour plans/plan_gltf.md §1.2 records as verified correct.
     const std::vector<std::string>& VerifiedFixtures()
     {
         static const std::vector<std::string> ids = {
@@ -84,7 +84,7 @@ namespace
             EXPECT_NEAR(expected[i], static_cast<double>(dump.values[i]), kTolerance)
                 << "component[" << i << "] -- this path was verified correct on the campaign "
                    "baseline; a failure here means remediation changed a decoder it should not "
-                   "have touched (plan_gltf.md GLTF-041)";
+                   "have touched (plans/plan_gltf.md GLTF-041)";
         }
     }
 }
@@ -93,7 +93,7 @@ namespace
 
 TEST(GltfAccessorDecodeLock, InterleavedByteStrideAndBothByteOffsetsDecodeExactly)
 {
-    // plan_gltf.md §1.2 / GLTF-045 / GLTF-046 / GLTF-047: one bufferView at byteOffset 16 with
+    // plans/plan_gltf.md §1.2 / GLTF-045 / GLTF-046 / GLTF-047: one bufferView at byteOffset 16 with
     // byteStride 24, POSITION at accessor byteOffset 0 and NORMAL at 12.
     const LoadedFixture fixture("interleaved-position-normal");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
@@ -146,7 +146,7 @@ TEST(GltfAccessorDecodeLock, InterleavedAccessorsAdvanceAtTheirOwnMixedComponent
 
 TEST(GltfAccessorDecodeLock, SparseAttributeAccessorWithNoBaseBufferViewDecodesExactly)
 {
-    // plan_gltf.md §1.2 / GLTF-041: the base array initialises to zeros and only the listed
+    // plans/plan_gltf.md §1.2 / GLTF-041: the base array initialises to zeros and only the listed
     // elements are displaced. This is also the evidence that D4 is an index-path defect: the very
     // same sparse machinery works correctly for an attribute.
     const LoadedFixture fixture("sparse-position");
@@ -163,7 +163,7 @@ TEST(GltfAccessorDecodeLock, SparseAttributeAccessorWithNoBaseBufferViewDecodesE
 
 TEST(GltfAccessorDecodeLock, NormalizedUnsignedByteColorDecodesPerSpecAndRepacksByteExactly)
 {
-    // plan_gltf.md §1.2 / GLTF-052 / GLTF-056: c/255 per specification §3.6.2.2, and CNA's own
+    // plans/plan_gltf.md §1.2 / GLTF-052 / GLTF-056: c/255 per specification §3.6.2.2, and CNA's own
     // repack back to a byte must round-trip.
     const LoadedFixture fixture("normalized-u8-color");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
@@ -193,7 +193,7 @@ TEST(GltfAccessorDecodeLock, NormalizedUnsignedByteColorDecodesPerSpecAndRepacks
 
 TEST(GltfAccessorDecodeLock, UnsignedByteIndicesDecodeExactly)
 {
-    // plan_gltf.md §1.2 / GLTF-052: the narrowest legal index component type.
+    // plans/plan_gltf.md §1.2 / GLTF-052: the narrowest legal index component type.
     const LoadedFixture fixture("u8-idx");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     ExpectDecodedEquals(fixture, "indices");
@@ -206,7 +206,7 @@ TEST(GltfAccessorDecodeLock, UnsignedByteIndicesDecodeExactly)
 
 TEST(GltfAccessorDecodeLock, Mat4InverseBindMatrixAccessorDecodesExactly)
 {
-    // plan_gltf.md GLTF-059: f9 proved MAT4 read correctness. The skin *composition* built on top
+    // plans/plan_gltf.md GLTF-059: f9 proved MAT4 read correctness. The skin *composition* built on top
     // of it is D8's problem; the accessor read itself is correct and stays locked here.
     const LoadedFixture fixture("skin-armature-ancestor");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
@@ -222,7 +222,7 @@ TEST(GltfAccessorDecodeLock, Mat4InverseBindMatrixAccessorDecodesExactly)
 
 TEST(GltfAccessorDecodeLock, UnsignedByteAndUnsignedShortJointIndicesDecodeAndPackExactly)
 {
-    // plan_gltf.md GLTF-057/GLTF-093. The old version of this test used
+    // plans/plan_gltf.md GLTF-057/GLTF-093. The old version of this test used
     // skin-armature-ancestor, whose every joint index is ZERO: both 0 and normalized 0/255 are
     // zero, so the test could not distinguish the exact bug its name claimed to lock. These two
     // fixtures carry non-zero values in both legal component widths, and their palettes already
@@ -307,7 +307,7 @@ TEST(GltfAccessorDecodeLock, UnsignedByteAndUnsignedShortJointIndicesDecodeAndPa
 
 TEST(GltfAccessorDecodeLock, SparseValuesAreTightlyPackedEvenWhenTheBaseBufferViewIsInterleaved)
 {
-    // plan_gltf.md GLTF-062. §3.6.2.3 gives a sparse accessor two independent strides: the base
+    // plans/plan_gltf.md GLTF-062. §3.6.2.3 gives a sparse accessor two independent strides: the base
     // array is addressed at the base bufferView's byteStride, while the `values` array is its own
     // bufferView and is always tightly packed. They differ only when the base is interleaved, so
     // this fixture is the only place in the corpus where confusing them is observable at all.
@@ -376,7 +376,7 @@ TEST(GltfAccessorDecodeLock, VendoredParserStillMisreadsSparseValuesAtTheBaseStr
     {
         EXPECT_NEAR(spec[9 + c], static_cast<double>(raw[6 + c]), kTolerance)
             << "expected the vendored reader to place override 2's value on vertex 2; if this "
-               "fails, check whether the vendored cgltf was upgraded -- see plan_gltf.md GLTF-062";
+               "fails, check whether the vendored cgltf was upgraded -- see plans/plan_gltf.md GLTF-062";
     }
 
     // Override 2 reads past the values bufferView entirely, into whatever follows it in the
@@ -476,7 +476,7 @@ TEST(GltfAccessorDecodeLock, EveryVerifiedFixtureStillCarriesNoKnownAccessorDefe
         {
             EXPECT_NE("L2", StringOr(defect, "firstDivergentLayer", ""))
                 << "fixture " << id << " now records defect " << StringOr(defect, "id", "?")
-                << " at L2, contradicting plan_gltf.md §1.2's verified-correct ledger. Stop and "
+                << " at L2, contradicting plans/plan_gltf.md §1.2's verified-correct ledger. Stop and "
                    "investigate the contradiction -- do not weaken the expectation.";
         }
     }

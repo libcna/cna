@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: parse a compiled Effect Framework binary
+// plans/plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: parse a compiled Effect Framework binary
 // through the pinned MojoShader while linking *only* MojoShader -- no FNA3D, no CNA, no graphics
 // device of any kind.
 //
@@ -57,7 +57,7 @@ namespace
     // outright, and it calls compileShader for every shader object in the container. So this is
     // both the existence gate and a statement of the surface a new renderer has to fill.
     //
-    // Worth recording for plan_fx.md FX-070: compileShader receives the raw D3D9 token buffer. A
+    // Worth recording for plans/plan_fx.md FX-070: compileShader receives the raw D3D9 token buffer. A
     // Direct3D 9 backend's implementation is therefore CreateVertexShader/CreatePixelShader on
     // that buffer, with nothing translated. This probe instead runs MOJOSHADER_parse over the
     // GLSL profile, because reflection has to come from somewhere and the pin disables the

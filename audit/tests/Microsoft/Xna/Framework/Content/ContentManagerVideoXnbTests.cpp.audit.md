@@ -6,7 +6,7 @@
 - Subsystem: `tests-xna-content` shard
 - File type: C++ test file (Google Test)
 - XNA/FNA relevance: Tests for real `.xnb` `Video` loading end-to-end through `ContentManager`
-  (plan_media.md MEDIA-73)
+  (plans/plan_media.md MEDIA-73)
 - Main related tests: N/A (this IS a test file)
 
 ## Purpose
@@ -20,7 +20,7 @@ via `VideoPlayer`.
 Correct, with an honestly disclosed methodological compromise. The file's own top comment (lines 3-16)
 explains clearly why this fixture is hand-built rather than vendored from MonoGame like `Song`'s: no
 MonoGame/dotnet content-pipeline tooling is available in this environment to produce a real `Video`
-`.xnb` the same way, and this is "documented as an honest gap in plan_media.md/NEXTmedia.md." The
+`.xnb` the same way, and this is "documented as an honest gap in plans/plan_media.md/NEXTmedia.md." The
 comment reasons soundly that the container-parsing machinery doesn't care whether the bytes came from
 mgcb or were hand-assembled to match the same real binary format, so the test still proves the full
 path end-to-end. This is a defensible, disclosed compromise, not a silently weaker test.

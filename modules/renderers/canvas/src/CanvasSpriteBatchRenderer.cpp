@@ -12,7 +12,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_canvas.md CANVAS-31/32/33/34: single shared drawImage-based draw path covering every
+// plans/plan_canvas.md CANVAS-31/32/33/34: single shared drawImage-based draw path covering every
 // SpriteBatch::Draw() overload (the simpler ones just pass identity rotation/origin/flip and
 // Color.White -- CANVAS-35/37's own conclusion is that no separate per-overload renderer code is
 // needed). Geometry: translate to (destX,destY), rotate, scale by (destW/sw, destH/sh), then draw
@@ -53,12 +53,12 @@
 // sourceRectangle exceeds the texture's own bounds (the only case they can ever visibly differ from
 // Clamp) -- ctx.createPattern(...,'repeat') for Wrap; for Mirror, a lazily-built 2x2 pre-tiled
 // mirrored canvas (createPattern has no native mirror-repeat mode) is used as the pattern source
-// instead, per plan_canvas.md CANVAS-44's own suggested "pre-composited 2x-tile" approach. Both
+// instead, per plans/plan_canvas.md CANVAS-44's own suggested "pre-composited 2x-tile" approach. Both
 // patterns are filled via ctx.fillRect() under the SAME rotate/scale/flip transform stack as the
 // plain drawImage path, so rotation/flip apply for free. Mixed per-axis modes, a tinted draw, and an
 // AlphaBlend draw needing un-premultiply are all validated and thrown for in C++ (DrawSprite, below)
 // BEFORE this function is ever called when combined with an out-of-bounds Wrap/Mirror
-// sourceRectangle -- narrow, honestly-documented gaps (plan_canvas.md CANVAS-44's notes), not
+// sourceRectangle -- narrow, honestly-documented gaps (plans/plan_canvas.md CANVAS-44's notes), not
 // silently-wrong output -- so this function can assume neither case reaches the pattern-fill branch.
 EM_JS(void, CNA_Canvas2D_DrawSprite, (
     int id, int sx, int sy, int sw, int sh,
@@ -249,7 +249,7 @@ EM_JS(void, CNA_Canvas2D_DrawSprites, (const void* commands, int count, int stri
     Module['cnaCanvasBulkSpriteCount'] = (Module['cnaCanvasBulkSpriteCount'] || 0) + count;
 });
 
-// plan_canvas.md CANVAS-36: sets the base transform every subsequent CNA_Canvas2D_DrawSprite call
+// plans/plan_canvas.md CANVAS-36: sets the base transform every subsequent CNA_Canvas2D_DrawSprite call
 // composes on top of (each Draw's own save()/restore() snapshots and restores this baseline) --
 // see this file's own header comment on SetTransformMatrix for the row-major-Matrix-to-setTransform
 // field mapping.

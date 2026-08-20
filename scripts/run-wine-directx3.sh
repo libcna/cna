@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# plan_dx3.md design decision 8: run a Windows cross-compiled .exe (DIRECTX3 renderer, CNA's real
-# DirectX 3 -- temporarily named DIRECTX3, see plan_dx3.md's own status note) under Wine against real
+# plans/plan_dx3.md design decision 8: run a Windows cross-compiled .exe (DIRECTX3 renderer, CNA's real
+# DirectX 3 -- temporarily named DIRECTX3, see plans/plan_dx3.md's own status note) under Wine against real
 # DirectDraw v2, using this project's own dedicated Wine prefix.
 #
 # Usage: scripts/run-wine-directx3.sh <path-to.exe> [args...]
@@ -12,7 +12,7 @@
 #
 # Set CNA_DX3_WINEPREFIX to point at a different prefix; defaults to ~/.wine-cna-dx1 -- DIRECTX3
 # deliberately REUSES DIRECTX1/DIRECTX2's own already-initialized prefix rather than creating a fresh one
-# (plan_dx3.md's own DX30-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works for
+# (plans/plan_dx3.md's own DX30-0 spike ran entirely against ~/.wine-cna-dx1 and confirmed it works for
 # DIRECTX3's IDirectDraw2 + Direct3D v2 needs, so there is nothing DX30-specific a separate prefix
 # would buy).
 #

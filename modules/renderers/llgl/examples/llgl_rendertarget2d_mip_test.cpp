@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-26 follow-up: mip-mapped render targets -- real, correctly downsampled mip
+// plans/plan_llgl.md LLGL-26 follow-up: mip-mapped render targets -- real, correctly downsampled mip
 // content in a RenderTarget2D's own colour texture, not just a declared LevelCount.
 //
 // Adapted from examples/vulkan_rendertarget2d_mip_test.cpp's own asymmetric-split technique, but

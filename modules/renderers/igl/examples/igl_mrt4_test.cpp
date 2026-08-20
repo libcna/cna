@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-22/IGL-55: MRT at the full 4-slot count (`igl::IGL_COLOR_ATTACHMENTS_MAX`),
+// plans/plan_igl.md IGL-22/IGL-55: MRT at the full 4-slot count (`igl::IGL_COLOR_ATTACHMENTS_MAX`),
 // closing the gap `igl_mrt_test.cpp`'s own 2-slot scene left open. IGL's generated fragment shader
 // declares one `out vec4 FragColorN` per bound colour attachment and assigns every one the same
 // expression (see `IglShaderLibraryTests.cpp`'s

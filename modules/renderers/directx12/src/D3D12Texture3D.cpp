@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX13 (DX-122).
+// plans/plan_dx.md Phase DX13 (DX-122).
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 

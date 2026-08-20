@@ -102,7 +102,7 @@ def main() -> int:
                 print(f"  {route}   ({routes[route]})")
         print(
             "\nAdd a test that calls them, or -- if that is genuinely impossible -- raise the "
-            "budget deliberately with --update and say why in plan_binding.md. A matrix row "
+            "budget deliberately with --update and say why in plans/plan_binding.md. A matrix row "
             "saying 'implemented' is not evidence that anything calls the route.")
         return 1
 

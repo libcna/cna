@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_sokol.md SOKOL-14: the Sokol renderer's built-in SpriteBatch program, written in
+// plans/plan_sokol.md SOKOL-14: the Sokol renderer's built-in SpriteBatch program, written in
 // sokol-shdc's annotated GLSL (Vulkan syntax -- separate texture and sampler uniforms).
 // Compiled offline by compile_shaders.py into sokol_shaders.hpp, which is checked in.
 //

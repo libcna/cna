@@ -489,7 +489,7 @@ previous inventory — which recorded `6cd6ad06`; exactly three further commits 
 `09411e77`, `9b17e783`, the D2D-85/86/87 sequence) landed after that snapshot and before the
 freeze.
 
-**Frozen is not complete, and the branch's own record says so.** `plan_direct2d.md` at
+**Frozen is not complete, and the branch's own record says so.** `plans/plan_direct2d.md` at
 `9b17e783` contains **128 `D2D-*` task rows: 32 `✅`, 35 `🟨`, and 61 `⬜`**. Because both yellow
 and blank are incomplete under the plan's own rule, the exact frozen count is **96 incomplete**,
 not the stale 88 previously repeated here. Its own banner reads:
@@ -498,7 +498,7 @@ nalezeno 100 konkrétních otevřených úkolů `D2D-34` až `D2D-133`."*
 
 | Question | Answer |
 |---|---|
-| Completion report on the branch? | **No.** `plan_direct2d.md` + `docs/direct2d-backend.md` record an explicitly open backlog |
+| Completion report on the branch? | **No.** `plans/plan_direct2d.md` + `docs/direct2d-backend.md` record an explicitly open backlog |
 | Build/test evidence? | **Partial.** `Direct2D_Smoke`, `Direct2D_2DParity`, `Direct2D_Lifetime` passed 3/3 in 21.56 s under Wine on Xvfb (2026-08-03, MinGW). The plan itself states this run does **not** cover the found defects, and that `CnaTests.exe` unit tests are not in the `Direct2D` label |
 | Known unrelated blocker | `CnaTests.exe` fails to link on missing `enet/enet.h` even with `CNA_ENABLE_NET=OFF` — recorded on the branch as not-Direct2D-owned |
 | Historical status before authorization | **Merely frozen.** Readiness **NOT READY** |
@@ -613,7 +613,7 @@ today.
 8. Build and test CNA `feature/gl`.
 9. Integrate CNA `feature/gl` into the integration branch.
 
-**None of these merges may be performed autonomously.** `plan_glbackends.md` records the same
+**None of these merges may be performed autonomously.** `plans/plan_glbackends.md` records the same
 constraint independently: *"`GLB-38` … Decided: leave to the project owner — do not attempt to
 merge/push between repos autonomously."*
 
@@ -643,7 +643,7 @@ What follows is that the missing archive tag is blocked on a **one-line cleanup*
 call: restore the committed `CMakeLists.txt` so the worktree is clean, then create the tag. Both are
 step 1 and step 2 of §7.4.
 
-The **owner-only** constraint remains exactly where `plan_glbackends.md` puts it — on the
+The **owner-only** constraint remains exactly where `plans/plan_glbackends.md` puts it — on the
 cross-repository *merges* (§7.4 steps 4–6) and on `GLB-38`. It was never about this file.
 
 ---
@@ -669,10 +669,10 @@ Both re-derived from the refreshed refs. **Both heads are unchanged** from the p
 | Ahead of `develop` | 768 (755 of them the campaign's own) | 765 (same 755) |
 | Contains `fc0dd2a2` | **yes** | **yes** |
 | Shared interfaces | `GraphicsDevice.cpp`, `IGraphicsBackend.hpp` | **none of the three** |
-| Tip | `docs(plan_magnum): record the verified baseline and the decisions behind it` | `feat(plan_wicked.md WICKED-32/31/58/28): buffer hazards, upload stalls, multi-stream, mips` |
+| Tip | `docs(plan_magnum): record the verified baseline and the decisions behind it` | `feat(plans/plan_wicked.md WICKED-32/31/58/28): buffer hazards, upload stalls, multi-stream, mips` |
 | Last commit (UTC) | 2026-08-04T09:40:54Z | 2026-08-04T09:18:36Z |
 | History class | **AUTHOR/TRAILER CLEANUP REQUIRED (total)** — 13/13 Claude-authored, 13/13 unsigned | **AUTHOR/TRAILER CLEANUP REQUIRED (total)** — 10/10 Claude-authored, 10/10 unsigned |
-| Plan file / namespace | `plan_magnum.md` / `MAGNUM-*` | `plan_wicked.md` / `WICKED-*` |
+| Plan file / namespace | `plans/plan_magnum.md` / `MAGNUM-*` | `plans/plan_wicked.md` / `WICKED-*` |
 | External dependency | `cmake/ThirdPartyMagnum.cmake` (Magnum/Corrade) | `cmake/ThirdPartyWicked.cmake` + `cmake/patches/wicked-sdl3-platform.patch` |
 | Archive tag | `archive/preintegration/magnum-20260804`, signed | `archive/preintegration/wicked-20260804`, signed |
 

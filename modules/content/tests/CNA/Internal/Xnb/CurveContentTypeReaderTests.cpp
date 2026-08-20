@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-20: unit tests for CurveReader.
+// plans/plan_xnb.md XNB-20: unit tests for CurveReader.
 
 #include <any>
 #include <gtest/gtest.h>

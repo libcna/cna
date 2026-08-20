@@ -118,7 +118,7 @@ single-tier "everything didn't throw" MRT smoke test.
 
 ## Cross-File Observations
 
-- `plan_sdlgpu.md`'s SDLGPU-37 row (consulted as secondary context per D-3) confirms this file's
+- `plans/plan_sdlgpu.md`'s SDLGPU-37 row (consulted as secondary context per D-3) confirms this file's
   own narrative is not just self-reported: the same real use-after-free this header describes was
   independently git-log-documented as fixed via a `shared_ptr`-owned GPU-state redesign, and the
   plan row states Checks D/E were verified by **temporarily reverting** the render pass back to 1

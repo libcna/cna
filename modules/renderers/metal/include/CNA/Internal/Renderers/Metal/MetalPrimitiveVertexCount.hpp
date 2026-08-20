@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 
-// plan_metal.md METAL-34-style extraction: this formula only reads a plain XNA framework enum
+// plans/plan_metal.md METAL-34-style extraction: this formula only reads a plain XNA framework enum
 // (Microsoft::Xna::Framework::Graphics::PrimitiveType) and plain ints -- zero Objective-C/Metal-
 // framework dependency, so it can be genuinely unit-tested on any platform without an Apple
 // toolchain, unlike the rest of the Metal renderer. MetalRenderer.mm includes this header

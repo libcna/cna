@@ -52,7 +52,7 @@ namespace CNA
          * (`cnaSampleCubeEXT`/`cnaSampleVolumeEXT`, `docs/skia-cube-volume-sampling-contract.md`)
          * that this flag does not represent and that does not imply general/stock 3D or effect
          * support. Headless has no real GPU resource of any kind by design; Software's Texture3D
-         * support is an explicit, documented v1 scope boundary (`plan_software.md` Boundaries) --
+         * support is an explicit, documented v1 scope boundary (`plans/plan_software.md` Boundaries) --
          * both currently leave `IGraphicsRenderer::CreateTexture3D()` at its shared default (returns
          * `nullptr`), which previously let `Texture3D::SetData()`/`GetData()` silently no-op
          * instead of failing cleanly (REMED-CONTENT-004).
@@ -103,7 +103,7 @@ namespace CNA
          * than silently degrading to normal alpha blending. This flag does not widen that
          * renderer's documented alpha-channel contract or imply arbitrary custom BlendState
          * support. HTML_DOM support is browser-version-dependent
-         * (plan_html_dom.md HTMLDOM-117):
+         * (plans/plan_html_dom.md HTMLDOM-117):
          * on an engine without `plus-lighter`, the CSS value is simply ignored before any CNA code
          * can observe it, and `Additive` silently renders as ordinary source-over blending instead
          * -- no exception, a different visual result. Query this before relying on genuine additive
@@ -128,7 +128,7 @@ namespace CNA
          * stores unclamped float values, instead of the 8-bit `Color` target every renderer creates
          * today regardless of the requested format.
          *
-         * This is the foundation of the CNAEXT engine layer's HDR pipeline (`plan_modern.md`
+         * This is the foundation of the CNAEXT engine layer's HDR pipeline (`plans/plan_modern.md`
          * Phase 1): without it a scene rendered to an off-screen target is clamped to [0,1] before
          * tonemapping ever runs, which defeats the purpose of tonemapping. It is reported separately
          * from `HalfFloatRenderTargets` because 16-bit float targets are far more widely available
@@ -141,7 +141,7 @@ namespace CNA
          * leave this false rather than let a caller believe values above 1.0 survive.
          *
          * @note This entry and `HalfFloatRenderTargets` are **derived**: a renderer opts in by
-         * reporting the individual formats it can really create (`plan_modern.md` MOD-104's
+         * reporting the individual formats it can really create (`plans/plan_modern.md` MOD-104's
          * `IGraphicsRenderer::SupportsRenderTargetFormat()`), not by adding a case to its own
          * `SupportsCapability()` override. Many renderer overrides end in `default: return true`,
          * so answering a brand-new capability there is opt-out rather than opt-in -- the wrong
@@ -188,7 +188,7 @@ namespace CNA
          * reason: it is answered by `IGraphicsRenderer::SupportsComputeShadersEXT()`, whose default
          * is false, never by a renderer's own capability switch -- many of those end in
          * `default: return true`, which would have every renderer claim compute it has never heard
-         * of. See `plan_modern.md` MOD-1500.
+         * of. See `plans/plan_modern.md` MOD-1500.
          */
         ComputeShaders,
 
@@ -197,7 +197,7 @@ namespace CNA
          * read out of a GPU buffer instead of being passed as arguments.
          *
          * This is the one piece of GPU-driven rendering the reference renderer's profile floor can
-         * actually reach (`plan_modern.md` MOD-2090): GL ES 3.1 and desktop GL 4.0 have
+         * actually reach (`plans/plan_modern.md` MOD-2090): GL ES 3.1 and desktop GL 4.0 have
          * `glDrawArraysIndirect`/`glDrawElementsIndirect`, and mesh shaders and the rest of that
          * family do not exist below GL 4.6. What it buys is the ability for a compute shader to
          * decide how much to draw without the answer travelling back through the CPU -- which is a

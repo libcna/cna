@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_software.md Phase S9 (SOFTWARE-83): near-plane polygon clipping, replacing the old
+// plans/plan_software.md Phase S9 (SOFTWARE-83): near-plane polygon clipping, replacing the old
 // whole-triangle culling (SOFTWARE-34's own acknowledged v1 gap).
 //
 // A real perspective projection is required to exercise this (with an identity World/View/

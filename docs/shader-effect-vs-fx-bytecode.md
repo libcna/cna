@@ -92,7 +92,7 @@ Future programmable backends should implement the renderer-neutral `ICompiledEff
 pass the same reflection, mutation, clone, draw, SpriteBatch, state, sampler, malformed-input, and
 lifecycle suite before enabling the capability. Fixed-function and CPU renderers can remain
 explicitly unsupported. The audited rollout and backend-specific feasibility work are tracked in
-[`plan_fx.md`](../plan_fx.md).
+[`plans/plan_fx.md`](../plans/plan_fx.md).
 
 ## `ShaderEffect` remains useful
 

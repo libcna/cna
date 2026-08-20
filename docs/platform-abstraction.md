@@ -2,7 +2,7 @@
 
 This is the implementer's guide to `CNA::Platform`. It describes the contract a platform backend
 must satisfy and the checks that keep the rest of CNA independent from its native host library.
-For migration history and task evidence, see `plan_platform.md`; for the SDL lifecycle derivation,
+For migration history and task evidence, see `plans/plan_platform.md`; for the SDL lifecycle derivation,
 see `docs/platform-sdl-lifecycle-audit.md`.
 
 ## What the boundary owns

@@ -12,7 +12,7 @@
   `dx3_logical_transform_test.cpp` (all 9 `examples-tests-dx3` shard files, each registered here)
 
 ## Purpose
-Registers all 9 DX3 backend CTest executables, each phase-tagged against `plan_dx3.md`.
+Registers all 9 DX3 backend CTest executables, each phase-tagged against `plans/plan_dx3.md`.
 
 ## Executive Verdict
 **High-value cross-check confirmed**: `Dx3_SpriteBatch` (line 30-32) IS registered as a genuine

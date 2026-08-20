@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-31: unit tests for SpriteFontReader's own behavior (registration, the
+// plans/plan_xnb.md XNB-31: unit tests for SpriteFontReader's own behavior (registration, the
 // existing-instance error path) -- see ContentManagerSpriteFontXnbTests.cpp for the full
 // end-to-end M3 milestone test through ContentManager.
 

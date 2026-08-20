@@ -39,7 +39,7 @@ struct VSInput
     float2 UV       : TEXCOORD0;
 };
 
-// plan_gltf.md GLTF-465: the stride-60 twin of VSInput. glTF 3.9.2 makes COLOR_0 an additional
+// plans/plan_gltf.md GLTF-465: the stride-60 twin of VSInput. glTF 3.9.2 makes COLOR_0 an additional
 // linear multiplier on base colour, and stride 60 is the rigid PBR record that carries it (offset
 // 56, packed as a normalized D3DCOLOR). It is a SEPARATE input struct rather than an optional field
 // because the stride-48 declaration has no colour element, and a vs_3_0 input D3D9 has no stream for
@@ -132,7 +132,7 @@ float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
 float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
-// plan_gltf.md GLTF-465: c13 was the one free register between FogColor and TextureTransformRows.
+// plans/plan_gltf.md GLTF-465: c13 was the one free register between FogColor and TextureTransformRows.
 // x is the effect's own VertexColorEnabledEXT, so an application can opt back into the opaque-white
 // identity on coloured geometry deliberately.
 float4 VertexColorFlags        : register(c13); // x = VertexColorEnabledEXT

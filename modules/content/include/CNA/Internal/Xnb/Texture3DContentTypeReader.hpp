@@ -5,7 +5,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 
-// plan_xnb.md XNB-25 (Phase D3): Texture3DReader -- see Texture2DContentTypeReader.hpp's own note
+// plans/plan_xnb.md XNB-25 (Phase D3): Texture3DReader -- see Texture2DContentTypeReader.hpp's own note
 // on why this lives in CNA::Internal::Xnb (FNA's Texture3DReader is `internal class`, never
 // subclassed by game code). Same shape as Texture2DReader (XNB-23/24), extra depth-slice handling.
 

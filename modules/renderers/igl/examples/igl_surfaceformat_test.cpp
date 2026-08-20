@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-65: the IGL renderer's surface-format transfers, against a real device.
+// plans/plan_igl.md IGL-65: the IGL renderer's surface-format transfers, against a real device.
 //
 // This test drives `IGraphicsRenderer` directly rather than `Texture2D`, and that is deliberate:
 // the shared `Texture::ValidateFormat` still admits only `SurfaceFormat::Color` for every renderer
@@ -125,7 +125,7 @@ class IglSurfaceFormatTest : public CNA::Examples::PixelTestGame
         if (!ExpectTrue((name + ": GetData read the whole region back").c_str(), readBack))
             return;
 
-        // plan_igl.md IGL-67, now closed: this expectation used to be flipped on Vulkan, because
+        // plans/plan_igl.md IGL-67, now closed: this expectation used to be flipped on Vulkan, because
         // igl::vulkan::Framebuffer::copyBytesColorAttachment reverses the rows of every rectangle
         // it copies while its OpenGL counterpart reverses none. The renderer now undoes exactly
         // that one flip (IglRenderTargetRenderer::UndoVulkanReadbackRowFlip), so both backends owe

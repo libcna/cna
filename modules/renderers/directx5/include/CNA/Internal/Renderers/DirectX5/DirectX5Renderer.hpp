@@ -1,11 +1,11 @@
 #pragma once
 
-// plan_dx5.md: real DirectX 5 graphics renderer -- DirectDraw v4 (IDirectDraw4/
+// plans/plan_dx5.md: real DirectX 5 graphics renderer -- DirectDraw v4 (IDirectDraw4/
 // IDirectDrawSurface4/DDSURFACEDESC2) + Direct3D v3 (IDirect3D3/IDirect3DDevice3/
 // IDirect3DViewport3), the first DirectX release where execute buffers are gone entirely
 // (DrawPrimitive/DrawIndexedPrimitive only, selected via a DWORD FVF bitmask -- D3DFVF_TLVERTEX --
 // instead of the old D3DVERTEXTYPE enum). Its 2D layer is a mechanical port of DIRECTX3's own
-// (plan_dx3.md, itself a port of DIRECTX2's, plan_dx2.md), upgraded further so EVERY surface is v4,
+// (plans/plan_dx3.md, itself a port of DIRECTX2's, plans/plan_dx2.md), upgraded further so EVERY surface is v4,
 // not just the top DirectDraw object; its 3D layer is a port of DIRECTX3's own already-proven one
 // (including Phase O9's CPU lighting), resubmitted through the new FVF parameter. Cross-compiled
 // via MinGW-w64 and run under Wine/Proton, the same Route B delivery mechanism
@@ -23,8 +23,8 @@
 namespace CNA::Internal::Renderers::DirectX5
 {
     /**
-     * DIRECTX5 graphics renderer (plan_dx5.md): a mechanical port of DirectX3Renderer (plan_dx3.md,
-     * itself a port of DirectX2Renderer, plan_dx2.md), upgraded to DirectDraw v4
+     * DIRECTX5 graphics renderer (plans/plan_dx5.md): a mechanical port of DirectX3Renderer (plans/plan_dx3.md,
+     * itself a port of DirectX2Renderer, plans/plan_dx2.md), upgraded to DirectDraw v4
      * (IDirectDraw4/IDirectDrawSurface4/DDSURFACEDESC2/DDSCAPS2 throughout -- every surface, not
      * just the top DirectDraw object) and Direct3D v3 (IDirect3D3/IDirect3DDevice3/
      * IDirect3DViewport3, DrawPrimitive/DrawIndexedPrimitive selected via the D3DFVF_TLVERTEX FVF
@@ -138,14 +138,14 @@ namespace CNA::Internal::Renderers::DirectX5
                                int maxAnisotropy) override;
 
         // ---- 3D pipeline: real, built on IDirect3D3/IDirect3DDevice3::DrawPrimitive (not execute
-        // buffers -- gone entirely as of this device revision; see plan_dx5.md section 1).
+        // buffers -- gone entirely as of this device revision; see plans/plan_dx5.md section 1).
         // Device/viewport/Z-buffer bring-up (Phase O3), VertexBuffer/IndexBuffer storage (Phase
         // O5), the CPU transform/clip -> D3DTLVERTEX draw path (Phase O4), and per-draw state
         // application (Phase O6) are all real and pixel-verified. Unlike DIRECTX1 (which throws
         // PERMANENTLY -- DirectX 1 shipped no Direct3D at all, so there is genuinely no COM
         // interface reachable from a real DirectX-1-era header pairing to even call), this is a
         // working 3D pipeline, not a stub. What remains out of scope is documented per-method
-        // below and in plan_dx2.md's own Boundaries section (lighting/fog/multitexture/envMap/
+        // below and in plans/plan_dx2.md's own Boundaries section (lighting/fog/multitexture/envMap/
         // skinning accepted-and-ignored; stencil/MRT/instancing/occlusion-query/volume-and-cube
         // textures/custom-effects either accepted-and-ignored or genuinely unavailable at this
         // DirectX era, not "not yet implemented"). ----
@@ -157,10 +157,10 @@ namespace CNA::Internal::Renderers::DirectX5
             // -- all real as of this phase, so ThreeD now reports true. DepthStencilBuffer also
             // reports true (a real, if depth-only, buffer exists -- SupportsDepthStencil() already
             // says so). MultiSampleAntiAliasing/MultipleRenderTargets/OcclusionQuery/CustomEffects
-            // report false -- genuinely unavailable at this DirectX era (plan_dx2.md's Boundaries
+            // report false -- genuinely unavailable at this DirectX era (plans/plan_dx2.md's Boundaries
             // section).
             //
-            // WireFrame (Phase O9, plan_dx2.md design decision 13): reports true. A follow-up
+            // WireFrame (Phase O9, plans/plan_dx2.md design decision 13): reports true. A follow-up
             // spike (dx2_spike10_specular_wireframe_aniso.cpp, Test D) empirically confirmed
             // D3DRENDERSTATE_FILLMODE=D3DFILL_WIREFRAME genuinely renders edge-only output on this
             // environment's software RGB device (a point inside a filled triangle reads back the

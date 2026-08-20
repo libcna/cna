@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengles1.md OPENGLES1-79: runtime coverage for the resource-side rows --
+// plans/plan_opengles1.md OPENGLES1-79: runtime coverage for the resource-side rows --
 // OPENGLES1-15/16/73 (real GPU vertex/index buffer objects), OPENGLES1-72 (RenderTarget2D via
 // GL_OES_framebuffer_object) and OPENGLES1-76 (wireframe emulation).
 //

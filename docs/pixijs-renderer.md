@@ -33,7 +33,7 @@ its draw path is built, run and pixel-checked in a real browser on every change.
   toolchain gap, not a PixiJS one, and `cna_test_pixijs_host` covers this renderer's
   browser-independent contracts without waiting on it.
 
-`plan_pixijs.md` carries the task-by-task breakdown and the full history, including the bugs found
+`plans/plan_pixijs.md` carries the task-by-task breakdown and the full history, including the bugs found
 along the way and how each was diagnosed.
 
 ## Building and running it
@@ -59,7 +59,7 @@ cmake --build cmake-build-debug --target cna_test_pixijs_host -j4
 ctest --test-dir cmake-build-debug -R PixiJsHostContracts
 ```
 
-CNA vendors a pinned **PixiJS v7.4.2** UMD build (`plan_pixijs.md` Design decisions 3–4,
+CNA vendors a pinned **PixiJS v7.4.2** UMD build (`plans/plan_pixijs.md` Design decisions 3–4,
 `cmake/ThirdPartyPixiJS.cmake`). `CNA_PIXIJS_SHA256` is pinned to the real
 `pixi.js@7.4.2` `dist/pixi.min.js`, and that pin was re-verified against a fresh `npm pack` download
 on 2026-08-17. `-DCNA_PIXIJS_AUTO_DOWNLOAD=ON` (the default) fetches it from jsDelivr; pass
@@ -85,7 +85,7 @@ This is what makes the renderer obey the contract rather than approximate it: ba
 submission order, a render-target switch cannot move another target's content (PixiJS re-parents on
 `addChild`), per-batch blend and sampler state cannot be rewritten after the fact, and readback sees
 everything submitted before it with no "force a render first" correction. Object pooling
-(`plan_pixijs.md` Design decision 7) is unaffected — the pool only has to cover the largest single
+(`plans/plan_pixijs.md` Design decision 7) is unaffected — the pool only has to cover the largest single
 flush.
 
 `Clear()` is the same whole-target unconditional overwrite for the back buffer and for a bound
@@ -170,7 +170,7 @@ exception.
 `SpriteBatch::Draw()` appends a 14-word (56-byte) POD `DrawCommand` to a C++ `std::vector`; `End()`
 hands the whole array to one `EM_JS` call that walks it via `HEAP32`/`HEAPF32`/`HEAPU32`. A
 2000-sprite batch costs one wasm→JS crossing, not 2000 — the same optimization
-`plan_html_dom.md` Design decision 5 established for its own pooled `<div>` elements. Per-draw
+`plans/plan_html_dom.md` Design decision 5 established for its own pooled `<div>` elements. Per-draw
 `PIXI.Texture` frame views are cached on their registry entry rather than allocated per draw.
 
 ### Why PixiJS rather than `WEBGL2` directly
@@ -181,11 +181,11 @@ renderer drives directly instead of hand-rolling vertex-buffer batching the way
 `EasyGLSpriteBatchRenderer.cpp` does, plus the full `BlendState`/wrap-mode fidelity
 `CANVAS`/`HTML_DOM` structurally cannot reach. It is **not** a lower-cost alternative to `WEBGL2`:
 PixiJS re-renders what it is asked to render, so a static frame is not free the way `HTML_DOM`'s is.
-See `plan_pixijs.md`'s comparison table.
+See `plans/plan_pixijs.md`'s comparison table.
 
 ## Important limitations
 
-Each is tracked by a `PIXIJS-N` task in `plan_pixijs.md`.
+Each is tracked by a `PIXIJS-N` task in `plans/plan_pixijs.md`.
 
 - **No 3D pipeline** (`PIXIJS-70`) — a deliberate v1 scope line, not (unlike `CANVAS`/`HTML_DOM`) a
   structural ceiling: PixiJS's `Mesh`/`Geometry` API could carry arbitrary vertex data. Reaching XNA

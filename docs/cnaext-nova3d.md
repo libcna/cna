@@ -1,6 +1,6 @@
 # What Nova-3D can rely on today
 
-`plan_modern.md` **MOD-1813**. `CNAEXT.md` §10 says Nova-3D will use the engine layer for the HDR
+`plans/plan_modern.md` **MOD-1813**. `CNAEXT.md` §10 says Nova-3D will use the engine layer for the HDR
 pipeline, shadows, IBL, post-processing and compute. That is the intent; this file is the *inventory*,
 written against what is implemented and measured on 2026-08-18, not against the backlog. Where a
 subsystem's answer depends on the renderer, the answer here is EasyGL's — see
@@ -46,7 +46,7 @@ every subsystem survives a `GraphicsDevice` reset and renders again.
 ## Do not rely on it yet
 
 - **Any renderer other than EasyGL (`OPENGLES3`/`OPENGL33`).** It is the reference and it is
-  complete; the rest of `plan_modern.md` Phase 16 is open. Vulkan and D3D11 are the committed next
+  complete; the rest of `plans/plan_modern.md` Phase 16 is open. Vulkan and D3D11 are the committed next
   two. Until a renderer's row in `docs/cnaext-engine-layer.md` says otherwise, assume a subsystem
   reports `false` there and takes its documented fallback.
 - **The API's spelling.** Engine revision 2 renamed six things. `CNAEXT.md` §9.1 lists what is

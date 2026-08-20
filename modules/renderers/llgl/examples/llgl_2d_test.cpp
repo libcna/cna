@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-10..LLGL-16: 2D vertical-slice proof for the LLGL graphics renderer, asserted
+// plans/plan_llgl.md LLGL-10..LLGL-16: 2D vertical-slice proof for the LLGL graphics renderer, asserted
 // against real pixels read back from the GPU rather than against "nothing threw".
 //
 // The texture is a 4x4 image of four solid 2x2 quadrants (red / green / blue / white), drawn

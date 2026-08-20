@@ -59,7 +59,7 @@ namespace CNA::Graphics {
           lightShaftPass_(std::make_unique<LightShaftPass>(device)),
           volumetricFogPass_(std::make_unique<VolumetricFogPass>(device))
     {
-        // plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
+        // plans/plan_modern.md MOD-715. After a context loss every GPU object this pipeline holds names
         // storage the driver has already destroyed; rendering into one is undefined rather than
         // merely wrong. The device announces the reset, so the pipeline does not have to be told.
         deviceResetToken_ = device_.DeviceReset.Add(

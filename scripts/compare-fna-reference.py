@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task 479 (plan_graphics.md Phase 53): compare CNA's reference-value JSON dump against FNA's.
+"""Task 479 (plans/plan_graphics.md Phase 53): compare CNA's reference-value JSON dump against FNA's.
 
 Diffs the JSON produced by the `cna_reference_dump` tool (tools/cna-reference/) against the JSON
 produced by the FNA-side reference harness (tools/fna-reference/), category by category. This is

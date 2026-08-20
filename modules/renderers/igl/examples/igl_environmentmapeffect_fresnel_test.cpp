@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-35/IGL-55: EnvironmentMapEffect's Fresnel edge-weighting, closing the gap
+// plans/plan_igl.md IGL-35/IGL-55: EnvironmentMapEffect's Fresnel edge-weighting, closing the gap
 // `igl_environmentmapeffect_test.cpp` left open (that test explicitly zeroed FresnelFactor to
 // isolate plain env-map replacement; this test turns Fresnel back on -- real XNA/FNA's own
 // default, FresnelFactor=1 -- and proves the view-angle-dependent blend it produces is correct).

@@ -93,7 +93,7 @@ case "$(basename "${PROTON_DIR}")" in
             exit 1
         fi
         echo "warning: running on the moving '$(basename "${PROTON_DIR}")' runtime; this result is NOT" >&2
-        echo "         reproducible evidence for plan_direct2d.md." >&2
+        echo "         reproducible evidence for plans/plan_direct2d.md." >&2
         ;;
 esac
 
@@ -103,7 +103,7 @@ if [ ! -x "${PROTON_DIR}/proton" ]; then
     exit 1
 fi
 
-# Publish the exact runtime identity. Without this a "Proton passed" line in plan_direct2d.md names
+# Publish the exact runtime identity. Without this a "Proton passed" line in plans/plan_direct2d.md names
 # nothing testable; with it the artifact records the Proton build id, the bundled Wine build and the
 # DXVK version that actually served the renderer's D3D11/DXGI presentation device.
 IDENTITY_FILE="${CNA_DIRECT2D_PROTON_IDENTITY_FILE:-}"

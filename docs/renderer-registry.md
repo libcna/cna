@@ -3,12 +3,12 @@
 Current as of the `IGL` and `PIXIJS` renderer integrations (2026-08-15/16, developed on parallel
 branches and merged together): CNA exposes exactly **49 public renderer identities**. `IGL`
 (facebook/igl) is CNA's second portable-abstraction identity after `LLGL` -- see
-`docs/igl-renderer.md` and `plan_igl.md`. `PIXIJS` renders `SpriteBatch` output through PixiJS's own
+`docs/igl-renderer.md` and `plans/plan_igl.md`. `PIXIJS` renders `SpriteBatch` output through PixiJS's own
 WebGL sprite batcher, Emscripten-only -- it drives PixiJS's scene graph but commits each
 `SpriteBatch` submission immediately rather than leaving it retained, which is what keeps XNA's
 ordering, per-batch state and texture-lifetime rules intact (`docs/pixijs-renderer.md`). Before these two, as of the TINYGL addition
 (2026-08-13), there were **47**; `TINYGL` (C-Chads/tinygl) is CNA's fixed-function CPU OpenGL
-renderer -- see `docs/tinygl-renderer.md` and `plan_tinygl.md`. Before that, as of the eleven-lane
+renderer -- see `docs/tinygl-renderer.md` and `plans/plan_tinygl.md`. Before that, as of the eleven-lane
 renderer integration (2026-08-11), there were **46**. `ASCII` was removed as a public renderer
 identity and its reusable
 quantization/glyph-atlas logic migrated to a renderer-neutral post-process effect,

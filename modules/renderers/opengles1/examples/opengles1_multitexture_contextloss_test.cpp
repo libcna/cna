@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengles1.md OPENGLES1-79: runtime coverage for the remaining feature rows --
+// plans/plan_opengles1.md OPENGLES1-79: runtime coverage for the remaining feature rows --
 // OPENGLES1-71 (DualTextureEffect via two GL_COMBINE stages), OPENGLES1-74 (EnvironmentMapEffect
 // via GL_OES_texture_cube_map reflection-map texgen) and OPENGLES1-11 (context loss/restore).
 //

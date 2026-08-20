@@ -159,7 +159,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
 #elif defined(CNA_RENDERER_SOKOL)
-    // plan_sokol.md SOKOL-38: real geometry is genuinely rasterized, and RenderTarget2D sampling
+    // plans/plan_sokol.md SOKOL-38: real geometry is genuinely rasterized, and RenderTarget2D sampling
     // orientation is now correct -- REMED-GFX-147 found (via this very file, once GetData() below
     // could finally observe a real comparison instead of always throwing) that it was NOT correct
     // before this task: a render target's colour image is written by GPU rasterization, whose

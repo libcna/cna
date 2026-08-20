@@ -412,7 +412,7 @@ namespace Microsoft::Devices::Sensors
         // first written (Start() always threw before setting started_ true,
         // so the Stop() call below was never actually reached) — fixed
         // uniformly with Accelerometer/Gyroscope anyway, anticipating a real
-        // backend (plan_devices_phase7.md's Audit finding B). That
+        // backend (plans/plan_devices_phase7.md's Audit finding B). That
         // anticipated backend now exists (Task DEVICES-0095): on Android,
         // Start() can genuinely succeed and set started_ true, so this path
         // is real, not just defensive, on that platform.

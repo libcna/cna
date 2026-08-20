@@ -79,7 +79,7 @@ files in this shard, which do assert absolute expected values.
   whether the resolved `SamplerState`'s `AddressU`/`AddressV` is `Clamp`, `Wrap`, or `Mirror`. This matches
   and corroborates the separate finding already on record in this shard
   (`sdlrenderer_samplerstate_filter_audit_test.cpp`'s own header, "Wrap/Mirror are BLOCKED pending a
-  project-owner decision, see plan_graphics.md rows 686/687" and "Clamp is correct by accident of
+  project-owner decision, see plans/plan_graphics.md rows 686/687" and "Clamp is correct by accident of
   `SDL_RenderTexture`'s fixed edge behavior").
 - Why it matters: this test's own header comment claims its 8-sample-point differential technique would catch
   a regression where the default incorrectly resolved to, for example, `SamplerState::LinearWrap` instead of

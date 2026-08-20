@@ -52,11 +52,11 @@ namespace CNA::Internal::Net
         constexpr uint16_t kEmscriptenHostPort = 61191;
 #endif
 
-        // Task 6.1-6.3 (plan_net.md Phase 6): injectable time source + seeded RNG backing
+        // Task 6.1-6.3 (plans/plan_net.md Phase 6): injectable time source + seeded RNG backing
         // SimulatedLatency/SimulatedPacketLoss below - both default to real behavior in
         // production (real steady_clock, a genuinely-seeded RNG) and are only ever overridden from
         // test code via ENetBackend's own ForTesting statics, so tests never depend on a real
-        // sleep or unseeded randomness (a hard determinism requirement - see plan_net.md's Task
+        // sleep or unseeded randomness (a hard determinism requirement - see plans/plan_net.md's Task
         // 6.3's own note).
         std::optional<std::chrono::steady_clock::time_point>& ClockOverrideForTesting()
         {
@@ -155,7 +155,7 @@ namespace CNA::Internal::Net
             // (TeardownSession erasing it from Sessions()), which already happens at the same time
             // NetworkSession::Dispose() frees everything *it* owns.
             std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;
-            // Task 5.3 (plan_net.md Phase 5): set by AttemptHostMigration right before issuing the
+            // Task 5.3 (plans/plan_net.md Phase 5): set by AttemptHostMigration right before issuing the
             // reconnect Connect() call, so the ServerWelcome that completes it (a genuine
             // migration, not a plain fresh join) knows to raise NetworkEventType::HostChange once
             // a real NetworkGamer* for the new host exists - see HandleServerWelcome.
@@ -167,7 +167,7 @@ namespace CNA::Internal::Net
             // reconnect to can't exist (see ENetBackendTests.cpp's own SystemLinkSessionFixture
             // comment on why). Not part of real XNA.
             std::string LastMigrationReconnectAttemptGamertagForTestingEXT;
-            // Task 6.2 (plan_net.md Phase 6): AppData bound for one of this session's own local
+            // Task 6.2 (plans/plan_net.md Phase 6): AppData bound for one of this session's own local
             // gamers, held here until its ReleaseTime by ReleaseDuePendingDeliveries - see
             // PendingDelayedDelivery's own comment.
             std::vector<PendingDelayedDelivery> PendingDeliveries;
@@ -588,7 +588,7 @@ namespace CNA::Internal::Net
 
             if (target->getIsLocalProperty())
             {
-                // Task 6.1/6.2 (plan_net.md Phase 6): SimulatedLatency/SimulatedPacketLoss are
+                // Task 6.1/6.2 (plans/plan_net.md Phase 6): SimulatedLatency/SimulatedPacketLoss are
                 // scoped to exactly this point - AppData about to be delivered to one of this
                 // session's own local gamers (real XNA's own documented meaning: what does *my*
                 // network connection do to data addressed to *me*) - not to the CNA-internal
@@ -701,7 +701,7 @@ namespace CNA::Internal::Net
             }
         }
 
-        // Task 5.1/5.2/5.3 (plan_net.md Phase 5): called from HandleDisconnect's host-lost branch
+        // Task 5.1/5.2/5.3 (plans/plan_net.md Phase 5): called from HandleDisconnect's host-lost branch
         // when AllowHostMigration is true, instead of ending the session outright. Every survivor
         // independently computes the same deterministic new host (lowest remaining wire id) from
         // its own already-cached roster - no extra negotiation round-trip is needed, since every
@@ -784,7 +784,7 @@ namespace CNA::Internal::Net
             // Shared cleanup for both outcomes below: every remote gamer this peer knew about is
             // really gone from its point of view now (real GamerLeave events - a reconnecting/
             // promoted peer's roster genuinely gets rebuilt from scratch, not preserved across the
-            // migration - see plan_net.md Task 5.1's own "simple, not seamless" scope note), and
+            // migration - see plans/plan_net.md Task 5.1's own "simple, not seamless" scope note), and
             // every wire-id bookkeeping structure is reset so the handshake that follows (either
             // accepting fresh reconnects as the new host, or this peer's own reconnect to whoever
             // else was promoted) starts from a clean slate - stale entries from the dead host's own

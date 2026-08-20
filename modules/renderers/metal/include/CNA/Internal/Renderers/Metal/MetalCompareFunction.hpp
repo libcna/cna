@@ -3,7 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 
-// plan_metal.md METAL-19: mirrors MetalSamplerFilter.hpp's own established pattern -- the previous
+// plans/plan_metal.md METAL-19: mirrors MetalSamplerFilter.hpp's own established pattern -- the previous
 // metalCompareFunction() in MetalRenderer.mm switched on raw `int` literals (case 1, 2, ...)
 // with only a comment recording the assumed CompareFunction ordinals, so a future reordering of
 // CompareFunction's declaration would silently desync from this table with no compiler error.

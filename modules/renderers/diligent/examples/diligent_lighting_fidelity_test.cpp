@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-59: real-device, hand-derived proof of the four lighting-fidelity
+// plans/plan_diligent.md DILIGENT-59: real-device, hand-derived proof of the four lighting-fidelity
 // defects fixed in this task's own BasicEffect/SkinnedEffect/EnvironmentMapEffect lit shader path
 // (kLitPixelHlsl and its per-vertex-lit sibling, shared with SkinnedEffect and, for the vertex
 // shader's normal transform, EnvironmentMapEffect too).

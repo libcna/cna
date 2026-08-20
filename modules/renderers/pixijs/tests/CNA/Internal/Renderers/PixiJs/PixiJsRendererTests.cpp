@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_pixijs.md PIXIJS-80: structural GTest coverage for everything on the PIXIJS renderer that
+// plans/plan_pixijs.md PIXIJS-80: structural GTest coverage for everything on the PIXIJS renderer that
 // doesn't need a real PIXI.Application -- ThrowNo3D coverage and the blend-state ->
 // PixiJsBlendMode pure-function mapping. Compiled either under the selected PIXIJS renderer or in
 // the opt-in native host-contract target (CNA_PIXIJS_HOST_TESTS, modules/renderers/CMakeLists.txt),
@@ -24,7 +24,7 @@ using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 
 namespace
 {
-    // plan_platform.md PLAT-58/PLAT-61: the renderer receives a platform-neutral surface snapshot,
+    // plans/plan_platform.md PLAT-58/PLAT-61: the renderer receives a platform-neutral surface snapshot,
     // never a windowing-library handle. Same fixture shape as CanvasRendererTests.cpp's TestArgs().
     GraphicsRendererCreateArgs TestArgs()
     {
@@ -59,7 +59,7 @@ TEST(PixiJsBlendStateMapping, StandardPresetsMapCorrectly)
     EXPECT_EQ(BlendStateToPixiJsBlendMode(4, 4, 0, 0, 0, 0), PixiJsBlendMode::Additive);
 }
 
-// plan_pixijs.md PIXIJS-52: any non-preset Blend/BlendFunction combination gets a real, generic
+// plans/plan_pixijs.md PIXIJS-52: any non-preset Blend/BlendFunction combination gets a real, generic
 // Custom classification instead of a throw. PIXIJS-87 then renders EVERY state -- preset or not --
 // from its literal factors, which the browser suite verifies with real pixels.
 TEST(PixiJsBlendStateMapping, AsymmetricColorAlphaFactorsMapToCustom)
@@ -77,7 +77,7 @@ TEST(PixiJsBlendStateMapping, ArbitraryCustomBlendFactorsMapToCustom)
     EXPECT_EQ(BlendStateToPixiJsBlendMode(2, 2, 3, 3, 0, 0), PixiJsBlendMode::Custom);
 }
 
-// plan_pixijs.md PIXIJS-52: XnaBlendToGlFactor/XnaBlendFunctionToGlEquation are the pure-function
+// plans/plan_pixijs.md PIXIJS-52: XnaBlendToGlFactor/XnaBlendFunctionToGlEquation are the pure-function
 // halves of the generic mapping -- every enumerator covered, matching real WebGL GL enum values
 // confirmed live against a real WebGL context (see PixiJsRenderer.cpp's own doc comments).
 TEST(PixiJsBlendStateMapping, XnaBlendToGlFactorCoversEveryEnumerator)
@@ -281,7 +281,7 @@ TEST(PixiJsSpriteBatchRendererTest, InvalidSamplerEnumeratorsAreRejected)
     EXPECT_THROW(batch.SetSamplerFilter(42), std::runtime_error);
 }
 
-// plan_pixijs.md PIXIJS-45: SetTransformMatrix no longer throws for a non-identity matrix -- it
+// plans/plan_pixijs.md PIXIJS-45: SetTransformMatrix no longer throws for a non-identity matrix -- it
 // applies the transform for real (verified in a real browser, cna_test_pixijs_smoke frame 10). This
 // test only checks the pure C++ setter doesn't throw; the real transform math is EM_JS/browser-only
 // and isn't exercised by this native-buildable test.
@@ -294,7 +294,7 @@ TEST(PixiJsSpriteBatchRendererTest, NonIdentityTransformDoesNotThrow)
     EXPECT_NO_THROW(batch.SetTransformMatrix(Matrix::getIdentityProperty()));
 }
 
-// --- platform-neutral creation contract (plan_platform.md PLAT-58/PLAT-61) -----------------------
+// --- platform-neutral creation contract (plans/plan_platform.md PLAT-58/PLAT-61) -----------------------
 //
 // PIXIJS was authored before the platform abstraction landed and took a raw windowing-library
 // window pointer plus two native-handle accessors on its public interface. These four cases pin

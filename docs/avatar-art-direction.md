@@ -1,6 +1,6 @@
 # Avatar art direction (Phase 7)
 
-## Acceptance criteria (verbatim, from `plan_net.md`'s User Decisions table)
+## Acceptance criteria (verbatim, from `plans/plan_net.md`'s User Decisions table)
 
 | # | Topic | Decision |
 |---|-------|----------|

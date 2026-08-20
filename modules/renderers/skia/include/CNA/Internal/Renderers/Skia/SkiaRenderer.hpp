@@ -32,7 +32,7 @@ namespace CNA::Internal::Renderers::Skia
      * First functional SKIA renderer slice: a platform-presented Skia raster backbuffer.
      *
      * This deliberately contains no EasyGL calls or GL context. Unsupported resource/draw paths
-     * throw clearly until their own Skia implementation tasks land; see plan_skia.md.
+     * throw clearly until their own Skia implementation tasks land; see plans/plan_skia.md.
      */
     class SkiaRenderer final : public IGraphicsRenderer
     {
@@ -111,7 +111,7 @@ namespace CNA::Internal::Renderers::Skia
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
-        // plan_runtimerenderer.md design decision 9: Skia stores each promoted format in its own
+        // plans/plan_runtimerenderer.md design decision 9: Skia stores each promoted format in its own
         // native layout, so unlike every other renderer it has real answers about which formats a
         // texture may use and which of them a Color* transfer can meaningfully read. These used to
         // live as #ifdef CNA_RENDERER_SKIA blocks inside Texture2D.cpp and RenderTarget2D.cpp.

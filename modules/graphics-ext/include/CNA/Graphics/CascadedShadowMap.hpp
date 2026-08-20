@@ -30,7 +30,7 @@ namespace CNA::Graphics {
      * @brief A directional shadow map split into several depth ranges, so that a large scene keeps
      *        usable shadow resolution near the camera.
      *
-     * plan_modern.md Phase 9. One map stretched over a whole outdoor view spends most of its texels
+     * plans/plan_modern.md Phase 9. One map stretched over a whole outdoor view spends most of its texels
      * on ground the player will never look at closely; splitting the view frustum by distance and
      * fitting a map to each slice spends them where they are seen. The cost is that the casting
      * geometry is drawn once per cascade, which is the contract the app has to accept.

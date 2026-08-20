@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_mirror_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_mirror_quad
 # The second D9-92 scene, proving TextureAddressMode.Mirror is genuinely DIFFERENT from Wrap
 # (sprite_wrap_quad.scene), not just "some non-Clamp behavior". Same 2x1 RED/GREEN texture and
 # sourceRectangle=(0,0,4,1) (double width) as sprite_wrap_quad.scene, only spritesampler changes

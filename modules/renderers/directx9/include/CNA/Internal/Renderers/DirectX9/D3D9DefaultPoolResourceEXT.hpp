@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx9.md D9-34/D9-40: CNAEXT internal machinery, D3D9-only. D3DPOOL_DEFAULT resources (dynamic
+// plans/plan_dx9.md D9-34/D9-40: CNAEXT internal machinery, D3D9-only. D3DPOOL_DEFAULT resources (dynamic
 // vertex/index buffers, D9-40/D9-41; later render targets, D9-53) do not survive a device Reset()
 // the way D3DPOOL_MANAGED resources do (D9-4's own spike already confirmed MANAGED survives
 // untouched) -- they must be explicitly released before Reset() and are recreated lazily on next

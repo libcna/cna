@@ -126,7 +126,7 @@ since its own code is a port with only the deltas described above.
 
 ## See also
 
-- `plan_dx7.md` — this renderer's own implementation plan.
-- `plan_dx6.md`, `docs/directx6-renderer.md` — the renderer this one ports.
+- `plans/plan_dx7.md` — this renderer's own implementation plan.
+- `plans/plan_dx6.md`, `docs/directx6-renderer.md` — the renderer this one ports.
 - `dx7-spike/README.md` — the full `DX7-0` spike record.
-- `plan_dxold.md` — the roadmap this renderer is row 7 of.
+- `plans/plan_dxold.md` — the roadmap this renderer is row 7 of.

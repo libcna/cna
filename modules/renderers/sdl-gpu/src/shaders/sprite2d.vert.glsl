@@ -7,7 +7,7 @@ layout(location = 2) in vec4 inColor;
 layout(location = 0) out vec2 fragUV;
 layout(location = 1) out vec4 fragColor;
 
-// plan_sdlgpu.md SDLGPU-13/16: SDL_gpu's SPIR-V graphics-pipeline convention reserves set 1 for
+// plans/plan_sdlgpu.md SDLGPU-13/16: SDL_gpu's SPIR-V graphics-pipeline convention reserves set 1 for
 // vertex-stage uniform buffers (set 0 is vertex-stage textures/storage, unused here) --
 // SDL_PushGPUVertexUniformData() delivers data into this binding, not a raw Vulkan push constant.
 layout(set = 1, binding = 0) uniform UBO {

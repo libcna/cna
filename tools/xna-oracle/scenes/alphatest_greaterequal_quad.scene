@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: alphatest_greaterequal_quad
+# plans/plan_dx9.md D9-A5 scene corpus: alphatest_greaterequal_quad
 # The first scene to exercise AlphaFunction=GreaterEqual, which shares the SAME PSAlphaTestLtGt
 # shader bucket as Greater/Less (confirmed against FNA's own AlphaTestEffect.cs) but differs from
 # plain Greater specifically at the EXACT boundary value: `alphaTest.X = reference - threshold`

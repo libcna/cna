@@ -5,7 +5,7 @@
 - Source file: `examples/d3d9_draw_test.cpp` (358 lines)
 - Audit status: AUDITED (STATIC/SOURCE-READING ONLY — see Environment Note below)
 - Subsystem: `examples-tests-d3d9` shard — this backend's first real 3D triangle
-  (`plan_dx9.md` D9-8 / D9-82): `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` and all 4
+  (`plans/plan_dx9.md` D9-8 / D9-82): `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` and all 4
   `PrimitiveType` values, through the real public `Game`/`GraphicsDeviceManager`/`GraphicsDevice`
   API.
 - File type: `Game`-subclass executable (`D3D9DrawTest : public Game`), CTest-registered as

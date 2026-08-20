@@ -16,7 +16,7 @@
 # fails makes the overall run fail (non-zero exit), so this composes cleanly
 # as a CI step if/when this project's CI is extended to call it.
 #
-# plan_runtimerenderer.md RTR-P9-22: a MULTI-RENDERER mode. Passing a semicolon-separated renderer
+# plans/plan_runtimerenderer.md RTR-P9-22: a MULTI-RENDERER mode. Passing a semicolon-separated renderer
 # list runs every one of them from ONE build directory, selecting each at runtime through
 # CNA_GRAPHICS_RENDERER rather than reconfiguring and rebuilding per renderer:
 #
@@ -40,7 +40,7 @@ if [ "${1:-}" = "--multi" ]; then
     fi
 fi
 
-# plan_runtimerenderer.md RTR-P2-8: two tiers, because checking every renderer on every change is
+# plans/plan_runtimerenderer.md RTR-P2-8: two tiers, because checking every renderer on every change is
 # not affordable -- each one is a separate configure and build, and this project treats repeated
 # clean rebuilds as real SSD wear.
 #
@@ -155,7 +155,7 @@ for renderer in "${RENDERERS[@]}"; do
     fi
 
     # `-k` keeps going past the one already-known, unrelated cna_demo_xact
-    # Content-copy build error (see NEXT.md/plan_graphics.md) -- that target
+    # Content-copy build error (see NEXT.md/plans/plan_graphics.md) -- that target
     # is irrelevant to the smoke tests below, so a non-zero exit here is not
     # by itself treated as "renderer unavailable"; ctest is the real signal.
     cmake --build "${dir}" -j4 -- -k

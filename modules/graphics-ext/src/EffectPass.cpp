@@ -50,7 +50,7 @@ namespace CNA::Graphics {
         // Deliberately *not* the base class's two-part question. The base asks whether the renderer
         // executes shader *source*, which is right for the passes that carry GLSL of their own; an
         // EffectPass runs whatever Effect it was handed, and a compiled or stock effect is real
-        // work on renderers that never compile source (plan_modern.md MOD-1699 draws that line).
+        // work on renderers that never compile source (plans/plan_modern.md MOD-1699 draws that line).
         return effect_ != nullptr && device.SupportsCapability(CNA::GraphicsCapability::CustomEffects);
     }
 

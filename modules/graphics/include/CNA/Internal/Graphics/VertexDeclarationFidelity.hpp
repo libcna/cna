@@ -23,7 +23,7 @@
  * and silently wrong.
  *
  * This file is NOT a translator. Complete per-renderer declaration translation stays in
- * `plan_postaudit.md`. What it provides is the boundary that makes the gap safe until then: a pure
+ * `plans/plan_postaudit.md`. What it provides is the boundary that makes the gap safe until then: a pure
  * predicate that decides whether a declaration can be represented faithfully by the layout a
  * renderer actually programs, so an unrepresentable one fails deterministically before any native
  * layout, pipeline, command or submission exists instead of rendering the wrong thing.
@@ -443,7 +443,7 @@ namespace CNA::Internal::Graphics
     /**
      * @brief Where the canonical layout for one stride puts one semantic.
      *
-     * plan_gltf.md `GLTF-473`. `InferredLayoutForStride` answers "what does this stride mean";
+     * plans/plan_gltf.md `GLTF-473`. `InferredLayoutForStride` answers "what does this stride mean";
      * this answers the narrower question a **fixed-function** renderer has to ask before it binds a
      * client array: *at which byte offset does this stride's canonical record carry Normal / Color /
      * TextureCoordinate 0?* A renderer that hard-codes that offset instead of asking is reading one

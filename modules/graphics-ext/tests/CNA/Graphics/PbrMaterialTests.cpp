@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1300..MOD-1314: PbrMaterial as a lossless description of PbrEffect.
+// plans/plan_modern.md MOD-1300..MOD-1314: PbrMaterial as a lossless description of PbrEffect.
 //
 // The interesting property is not that a setter round-trips -- it is that nothing falls off
 // between the material and the effect. So the centre of this file is a material with EVERY field
@@ -178,7 +178,7 @@ TEST_F(PbrMaterialTest, EveryFieldSurvivesTheRoundTripThroughSkinnedPbrEffect)
 
 TEST_F(PbrMaterialTest, TheExtensionLobesAreDeliberatelyOutsideThisRoundTrip)
 {
-    // plan_modern.md MOD-2070/MOD-2075. The lobes beyond glTF core -- clearcoat, sheen,
+    // plans/plan_modern.md MOD-2070/MOD-2075. The lobes beyond glTF core -- clearcoat, sheen,
     // transmission, iridescence, subsurface -- are carried by PbrMaterialExtensions and *not* by
     // this type, because PbrEffect has no state for them: a field here would be silently dropped by
     // the round trip above and two materials would compare unequal for a reason nothing in the type

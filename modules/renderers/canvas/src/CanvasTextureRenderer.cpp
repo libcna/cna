@@ -5,7 +5,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_canvas.md CANVAS-20/Design decision 3: creates a private off-screen canvas (OffscreenCanvas
+// plans/plan_canvas.md CANVAS-20/Design decision 3: creates a private off-screen canvas (OffscreenCanvas
 // where available, else a detached document.createElement('canvas')), uploads `rgba` via a single
 // synchronous putImageData(), and registers { canvas, ctx } under `id` in Module['cnaTextures'] --
 // CanvasSpriteBatchRenderer (Phase C4) sources ctx.drawImage() from this registry by id, and
@@ -42,7 +42,7 @@ EM_JS(void, CNA_Canvas2D_CreateBlankCanvas, (int id, int width, int height), {
     Module['cnaTextures'][id] = { canvas: canvas, ctx: ctx, isRenderTarget: false };
 });
 
-// plan_canvas.md CANVAS-20: full level-0 re-upload, same synchronous putImageData() path as
+// plans/plan_canvas.md CANVAS-20: full level-0 re-upload, same synchronous putImageData() path as
 // creation above. Also invalidates this texture's cached mirror-tile (Module['cnaMirrorTiles'][id],
 // built lazily by CanvasSpriteBatchRenderer.cpp's DrawSprite for Mirror addressing) -- without this,
 // a Texture2D::SetData() call after a Mirror-addressed draw had already built+cached the tile would

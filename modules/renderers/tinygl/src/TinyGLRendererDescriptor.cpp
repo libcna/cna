@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_runtimerenderer.md RTR-P1: the TinyGL family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1: the TinyGL family's pre-construction contract.
 //
-// MERGE (plan_platform.md x plan_runtimerenderer.md): TINYGL is the 47th public renderer identity
+// MERGE (plans/plan_platform.md x plans/plan_runtimerenderer.md): TINYGL is the 47th public renderer identity
 // and arrived on the platform branch, which has no descriptor concept -- so it was the one family
 // with no pre-construction contract. This file supplies it, which is what
 // scripts/check_runtime_renderer_discipline.py requires of every family.

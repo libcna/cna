@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX5 (DX-30/DX-31).
+// plans/plan_dx.md Phase DIRECTX5 (DX-30/DX-31).
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
 
 #include <cstdio>

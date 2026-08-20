@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_d3d10.md design decision 3/5: D3D10 genuinely supports MRT (unlike every DIRECTX1..DIRECTX8 renderer,
+// plans/plan_d3d10.md design decision 3/5: D3D10 genuinely supports MRT (unlike every DIRECTX1..DIRECTX8 renderer,
 // where DirectDraw/early-Direct3D has exactly one active render target) -- verifies
 // SetRenderTargets(count=2) does not throw AND that each bound target keeps its own genuinely
 // distinct buffer (not silently aliased to the same one): two render targets are each cleared to

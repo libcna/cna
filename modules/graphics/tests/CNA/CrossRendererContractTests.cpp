@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P9-23: cross-renderer contracts checked from ONE binary.
+// plans/plan_runtimerenderer.md RTR-P9-23: cross-renderer contracts checked from ONE binary.
 //
 // Until a build could hold several renderers, "do these two renderers agree about X?" could only be
 // answered by building twice and comparing artifacts out of band -- which is why this project's
@@ -192,7 +192,7 @@ TEST_F(CrossRendererContractTest, SelectingEveryRendererInTurnLeavesNoFallbackRe
     });
 }
 
-// plan_gltf.md GLTF-475. A renderer picks its shader program from the vertex stride; the effect the
+// plans/plan_gltf.md GLTF-475. A renderer picks its shader program from the vertex stride; the effect the
 // caller applied says what that program should COMPUTE. Where those two are conflated, the renderer
 // draws a wrong picture and reports success -- and no static inventory in this repository can see
 // it, because every declaration involved is correct.

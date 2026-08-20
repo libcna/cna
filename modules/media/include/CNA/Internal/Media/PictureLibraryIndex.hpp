@@ -34,7 +34,7 @@ namespace CNA::Internal::Media
 
     /// One-shot recursive scan of a Pictures root, building a real Picture/PictureAlbum tree.
     /// Reuses the already-existing CNA::Internal::Graphics::ImageLoader for picture dimensions
-    /// rather than reimplementing image decoding (plan_media.md MEDIA-56/D4).
+    /// rather than reimplementing image decoding (plans/plan_media.md MEDIA-56/D4).
     class PictureLibraryIndex
     {
     public:

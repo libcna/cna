@@ -1,6 +1,6 @@
-# PixiJS integration for the CNA PIXIJS graphics renderer (plan_pixijs.md).
+# PixiJS integration for the CNA PIXIJS graphics renderer (plans/plan_pixijs.md).
 #
-# The preferred input is a local, pinned PixiJS v7 UMD build (plan_pixijs.md Design decision 3):
+# The preferred input is a local, pinned PixiJS v7 UMD build (plans/plan_pixijs.md Design decision 3):
 #   cmake -DCNA_GRAPHICS_RENDERER=PIXIJS -DCNA_PIXIJS_ROOT=/path/to/pixi.min.js ...
 #
 # When CNA_PIXIJS_ROOT is empty and CNA_PIXIJS_AUTO_DOWNLOAD is ON, CMake downloads the pinned
@@ -19,7 +19,7 @@ option(CNA_PIXIJS_AUTO_DOWNLOAD "Download the pinned PixiJS UMD build when CNA_P
 # hash does not match, so a stale pin fails the configure loudly rather than silently linking an
 # unverified/unexpected build.
 #
-# plan_pixijs.md PIXIJS-1: computed from the real, official `pixi.js@7.4.2` npm package's
+# plans/plan_pixijs.md PIXIJS-1: computed from the real, official `pixi.js@7.4.2` npm package's
 # `dist/pixi.min.js` (`npm pack pixi.js@7.4.2`, then `sha256sum package/dist/pixi.min.js`), and
 # re-confirmed by an independent fresh `npm pack` on 2026-08-17 that reproduced it byte for byte.
 #

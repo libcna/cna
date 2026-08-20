@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent Engine renderer.
+# plans/plan_diligent.md DILIGENT-16: real-GPU pixel proof for the Diligent Engine renderer.
 # Skips (exit 77) rather than fails when no device can be created, since Diligent picks its
 # native API at runtime and a headless machine may have none of them.
 
@@ -17,7 +17,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGENT")
     enable_testing()
 
-    # plan_diligent.md DILIGENT-16. Same link shape as the other renderers' GPU test binaries; the
+    # plans/plan_diligent.md DILIGENT-16. Same link shape as the other renderers' GPU test binaries; the
     # extra cna_link_diligent() call is needed because cna_link_diligent() keeps DiligentCore
     # PRIVATE to the renderer target (mirroring how the WebGPU renderer keeps wgpu-native private).
     macro(cna_diligent_test target src)
@@ -34,7 +34,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
         endif()
     endmacro()
 
-    # plan_diligent.md DILIGENT-67: registers a Diligent CTest TWICE -- once under the default
+    # plans/plan_diligent.md DILIGENT-67: registers a Diligent CTest TWICE -- once under the default
     # preference order (today: Vulkan first, see GetDeviceTypePreferenceOrder()) and again with
     # CNA_DILIGENT_DEVICE=opengl forced. Without this, `ctest -R "^Diligent"` only ever exercises
     # whichever device type sorts first, silently never running the OpenGL device type at all
@@ -58,7 +58,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
     # Diligent's Linux native window is X11/XCB only (design decision 8), so these run under X11
     # even on a Wayland host. Exit code 77 / the "[SKIP]" line means "no usable device here",
     # which is a skip rather than a failure -- a headless build machine has no GPU to prove
-    # anything on, and pretending otherwise is exactly what plan_diligent.md's "Verification
+    # anything on, and pretending otherwise is exactly what plans/plan_diligent.md's "Verification
     # status" section forbids.
     cna_diligent_test(cna_test_diligent_clear_readback diligent_clear_readback_test.cpp)
     cna_register_diligent_test(Diligent_2D cna_test_diligent_clear_readback)
@@ -66,20 +66,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
     cna_diligent_test(cna_test_diligent_colored3d diligent_colored3d_test.cpp)
     cna_register_diligent_test(Diligent_3D cna_test_diligent_colored3d)
 
-    # plan_diligent.md DILIGENT-20/DILIGENT-21: off-screen rendering, target readback, sampling the
+    # plans/plan_diligent.md DILIGENT-20/DILIGENT-21: off-screen rendering, target readback, sampling the
     # unbound target, and the target's own depth buffer.
-    # plan_diligent.md DILIGENT-31/DILIGENT-32: per-pixel alpha-test discard and BasicEffect fog.
+    # plans/plan_diligent.md DILIGENT-31/DILIGENT-32: per-pixel alpha-test discard and BasicEffect fog.
     cna_diligent_test(cna_test_diligent_alphatest_fog diligent_alphatest_fog_test.cpp)
     cna_register_diligent_test(Diligent_AlphaTestFog cna_test_diligent_alphatest_fog)
 
-    # plan_diligent.md DILIGENT-33/DILIGENT-34: two-layer modulate and cube-map reflection.
+    # plans/plan_diligent.md DILIGENT-33/DILIGENT-34: two-layer modulate and cube-map reflection.
     cna_diligent_test(cna_test_diligent_dualtexture_envmap
                       diligent_dualtexture_envmap_test.cpp)
     cna_register_diligent_test(Diligent_DualTextureEnvMap cna_test_diligent_dualtexture_envmap)
 
-    # plan_diligent.md DILIGENT-35: the 72-bone palette and FNA's WeightsPerVertex semantics.
-    # plan_diligent.md DILIGENT-24: several simultaneous render targets and per-slot write masks.
-    # plan_diligent.md DILIGENT-22: per-face render-into and readback, plus EnvironmentMapEffect
+    # plans/plan_diligent.md DILIGENT-35: the 72-bone palette and FNA's WeightsPerVertex semantics.
+    # plans/plan_diligent.md DILIGENT-24: several simultaneous render targets and per-slot write masks.
+    # plans/plan_diligent.md DILIGENT-22: per-face render-into and readback, plus EnvironmentMapEffect
     # sampling the render target back (the real reason to make a cube render target).
     cna_diligent_test(cna_test_diligent_rendertargetcube diligent_rendertargetcube_test.cpp)
     cna_register_diligent_test(Diligent_RenderTargetCube cna_test_diligent_rendertargetcube)
@@ -93,15 +93,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
     cna_diligent_test(cna_test_diligent_rendertarget diligent_rendertarget_test.cpp)
     cna_register_diligent_test(Diligent_RenderTarget cna_test_diligent_rendertarget)
 
-    # plan_diligent.md DILIGENT-41: real IQuery/QUERY_TYPE_OCCLUSION-backed occlusion queries.
+    # plans/plan_diligent.md DILIGENT-41: real IQuery/QUERY_TYPE_OCCLUSION-backed occlusion queries.
     cna_diligent_test(cna_test_diligent_occlusionquery diligent_occlusionquery_test.cpp)
     cna_register_diligent_test(Diligent_OcclusionQuery cna_test_diligent_occlusionquery)
 
-    # plan_diligent.md DILIGENT-25: back buffer and RenderTarget2D MSAA, device-probed clamping.
+    # plans/plan_diligent.md DILIGENT-25: back buffer and RenderTarget2D MSAA, device-probed clamping.
     cna_diligent_test(cna_test_diligent_msaa diligent_msaa_test.cpp)
     cna_register_diligent_test(Diligent_MSAA cna_test_diligent_msaa)
 
-    # plan_diligent.md DILIGENT-43: hardware instancing (DrawInstancedPrimitivesEx).
+    # plans/plan_diligent.md DILIGENT-43: hardware instancing (DrawInstancedPrimitivesEx).
     cna_diligent_test(cna_test_diligent_instanced diligent_instanced_test.cpp)
     cna_register_diligent_test(Diligent_Instanced cna_test_diligent_instanced)
 
@@ -114,19 +114,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
     cna_register_diligent_test(Diligent_InstanceBindingOffsets
                                cna_test_diligent_instance_binding_offsets)
 
-    # plan_diligent.md DILIGENT-45: vertexStart/startIndex/baseVertex sub-range coverage.
+    # plans/plan_diligent.md DILIGENT-45: vertexStart/startIndex/baseVertex sub-range coverage.
     cna_diligent_test(cna_test_diligent_drawoffset diligent_drawoffset_test.cpp)
     cna_register_diligent_test(Diligent_DrawOffset cna_test_diligent_drawoffset)
 
-    # plan_diligent.md DILIGENT-44: SetDataOptions (Discard/NoOverwrite) streaming hints.
+    # plans/plan_diligent.md DILIGENT-44: SetDataOptions (Discard/NoOverwrite) streaming hints.
     cna_diligent_test(cna_test_diligent_setdataoptions diligent_setdataoptions_test.cpp)
     cna_register_diligent_test(Diligent_SetDataOptions cna_test_diligent_setdataoptions)
 
-    # plan_diligent.md DILIGENT-37: per-vertex lighting (PreferPerPixelLighting == false).
+    # plans/plan_diligent.md DILIGENT-37: per-vertex lighting (PreferPerPixelLighting == false).
     cna_diligent_test(cna_test_diligent_vertexlit diligent_vertexlit_test.cpp)
     cna_register_diligent_test(Diligent_VertexLit cna_test_diligent_vertexlit)
 
-    # plan_diligent.md DILIGENT-36: PbrEffect (glTF metallic-roughness BRDF).
+    # plans/plan_diligent.md DILIGENT-36: PbrEffect (glTF metallic-roughness BRDF).
     cna_diligent_test(cna_test_diligent_pbr diligent_pbr_test.cpp)
     cna_register_diligent_test(Diligent_Pbr cna_test_diligent_pbr)
 
@@ -140,81 +140,81 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
     cna_register_diligent_test(Diligent_Pbr_FresnelFactors cna_test_diligent_pbr_fresnel_factors)
 
-    # plan_gltf.md GLTF-182/183/224..227: the renderer-shared material-map test additionally
+    # plans/plan_gltf.md GLTF-182/183/224..227: the renderer-shared material-map test additionally
     # exercises Diligent's stride-60/76 UV0+UV1 vertex variants on rigid and skinned PBR paths.
     cna_diligent_test(cna_test_diligent_pbr_material_maps
                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_material_maps_test.cpp)
     cna_register_diligent_test(Diligent_Pbr_MaterialMaps cna_test_diligent_pbr_material_maps)
 
-    # plan_gltf.md GLTF-344/373: all seven PBR texture resources, including both
+    # plans/plan_gltf.md GLTF-344/373: all seven PBR texture resources, including both
     # KHR_materials_specular maps, must survive the generic public renderer boundary.
     cna_diligent_test(cna_test_diligent_pbr_texture_slots
                       ${CMAKE_SOURCE_DIR}/modules/graphics/examples/pbr_texture_slot_mapping_test.cpp)
     cna_register_diligent_test(Diligent_Pbr_TextureSlots cna_test_diligent_pbr_texture_slots)
 
-    # plan_diligent.md DILIGENT-49: RasterizerState.DepthBias/SlopeScaleDepthBias pixel verification.
+    # plans/plan_diligent.md DILIGENT-49: RasterizerState.DepthBias/SlopeScaleDepthBias pixel verification.
     cna_diligent_test(cna_test_diligent_depthbias diligent_depthbias_test.cpp)
     cna_register_diligent_test(Diligent_DepthBias cna_test_diligent_depthbias)
 
-    # plan_diligent.md DILIGENT-50: GraphicsDevice.ReferenceStencil pixel verification.
+    # plans/plan_diligent.md DILIGENT-50: GraphicsDevice.ReferenceStencil pixel verification.
     cna_diligent_test(cna_test_diligent_referencestencil diligent_referencestencil_test.cpp)
     cna_register_diligent_test(Diligent_ReferenceStencil cna_test_diligent_referencestencil)
 
-    # plan_diligent.md DILIGENT-51: RasterizerState.FillMode::WireFrame pixel verification.
+    # plans/plan_diligent.md DILIGENT-51: RasterizerState.FillMode::WireFrame pixel verification.
     cna_diligent_test(cna_test_diligent_fillmode diligent_fillmode_test.cpp)
     cna_register_diligent_test(Diligent_FillMode cna_test_diligent_fillmode)
 
-    # plan_diligent.md DILIGENT-52: anisotropic texture filtering pixel verification.
+    # plans/plan_diligent.md DILIGENT-52: anisotropic texture filtering pixel verification.
     cna_diligent_test(cna_test_diligent_anisotropic diligent_anisotropic_test.cpp)
     cna_register_diligent_test(Diligent_Anisotropic cna_test_diligent_anisotropic)
 
-    # plan_diligent.md DILIGENT-53: SpriteFont glyph placement/spacing/newline/flip pixel test.
+    # plans/plan_diligent.md DILIGENT-53: SpriteFont glyph placement/spacing/newline/flip pixel test.
     cna_diligent_test(cna_test_diligent_spritefont diligent_spritefont_test.cpp)
     cna_register_diligent_test(Diligent_SpriteFont cna_test_diligent_spritefont)
 
-    # plan_diligent.md DILIGENT-54: Model/ModelMesh/ModelMeshPart/ModelBone orchestration test.
+    # plans/plan_diligent.md DILIGENT-54: Model/ModelMesh/ModelMeshPart/ModelBone orchestration test.
     cna_diligent_test(cna_test_diligent_model diligent_model_test.cpp)
     cna_register_diligent_test(Diligent_Model cna_test_diligent_model)
 
-    # plan_diligent.md DILIGENT-55: Texture2D mip-level SetData/GetData round-trip test.
+    # plans/plan_diligent.md DILIGENT-55: Texture2D mip-level SetData/GetData round-trip test.
     cna_diligent_test(cna_test_diligent_mip diligent_mip_test.cpp)
     cna_register_diligent_test(Diligent_Mip cna_test_diligent_mip)
 
-    # plan_diligent.md DILIGENT-56: NPOT Texture2D real GPU round-trip test.
+    # plans/plan_diligent.md DILIGENT-56: NPOT Texture2D real GPU round-trip test.
     cna_diligent_test(cna_test_diligent_npot diligent_npot_test.cpp)
     cna_register_diligent_test(Diligent_Npot cna_test_diligent_npot)
 
-    # plan_diligent.md DILIGENT-26: RenderTarget2D mip generation content pixel verification.
+    # plans/plan_diligent.md DILIGENT-26: RenderTarget2D mip generation content pixel verification.
     cna_diligent_test(cna_test_diligent_rendertarget_mipgen
                       diligent_rendertarget_mipgen_test.cpp)
     cna_register_diligent_test(Diligent_RenderTargetMipGen cna_test_diligent_rendertarget_mipgen)
 
-    # plan_diligent.md DILIGENT-58: PipelineKey completeness -- ScissorTestEnable toggles must not
+    # plans/plan_diligent.md DILIGENT-58: PipelineKey completeness -- ScissorTestEnable toggles must not
     # be swallowed by the immutable-PSO cache across SpriteBatch/indexed-3D/instanced draws.
     cna_diligent_test(cna_test_diligent_scissor_pipelinecache
                       diligent_scissor_pipelinecache_test.cpp)
     cna_register_diligent_test(Diligent_ScissorPipelineCache cna_test_diligent_scissor_pipelinecache)
 
-    # plan_diligent.md DILIGENT-60: BlendState.MultiSampleMask reaches
+    # plans/plan_diligent.md DILIGENT-60: BlendState.MultiSampleMask reaches
     # Dg::GraphicsPipelineDesc::SampleMask instead of being silently discarded.
     cna_diligent_test(cna_test_diligent_multisamplemask
                       diligent_multisamplemask_test.cpp)
     cna_register_diligent_test(Diligent_MultiSampleMask cna_test_diligent_multisamplemask)
 
-    # plan_diligent.md DILIGENT-65: hardware instancing respects real vertex/instance stream
+    # plans/plan_diligent.md DILIGENT-65: hardware instancing respects real vertex/instance stream
     # strides instead of a hardcoded slot-0 stride 16 / AUTO_STRIDE-derived slot-1 stride 64.
     cna_diligent_test(cna_test_diligent_instanced_stride
                       diligent_instanced_stride_test.cpp)
     cna_register_diligent_test(Diligent_InstancedStride cna_test_diligent_instanced_stride)
 
-    # plan_diligent.md DILIGENT-61: SupportsCapability() must agree with what the corresponding
+    # plans/plan_diligent.md DILIGENT-61: SupportsCapability() must agree with what the corresponding
     # Create/Apply operation actually does on the live device.
     cna_diligent_test(cna_test_diligent_capability_consistency
                       diligent_capability_consistency_test.cpp)
     cna_register_diligent_test(Diligent_CapabilityConsistency
                                 cna_test_diligent_capability_consistency)
 
-    # plan_diligent.md DILIGENT-63: ReadBackbuffer() must be valid and bounded for every
+    # plans/plan_diligent.md DILIGENT-63: ReadBackbuffer() must be valid and bounded for every
     # CnaPresentationMode, constructed directly against IGraphicsRenderer (not through
     # GraphicsDeviceManager -- see the test file's own header for why). Unlike every other
     # Diligent test, this one includes DiligentRenderer.hpp directly (to construct the
@@ -228,7 +228,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
     cna_register_diligent_test(Diligent_BackbufferReadbackBounds
                                 cna_test_diligent_backbuffer_readback_bounds)
 
-    # plan_diligent.md DILIGENT-57: runtime device selection and SDL window API selection must
+    # plans/plan_diligent.md DILIGENT-57: runtime device selection and SDL window API selection must
     # resolve every CNA_DILIGENT_DEVICE alias through one shared parser. Public-API-only (through
     # GraphicsDeviceManager, unlike Diligent_BackbufferReadbackBounds), so no cna_link_diligent().
     # NOT registered through cna_register_diligent_test(): this binary's own fork+exec supervisor
@@ -243,7 +243,7 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
         TIMEOUT 120 LABELS "GraphicsSmoke;Diligent"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-    # plan_diligent.md DILIGENT-59: hand-derived proof of the four lighting-fidelity fixes
+    # plans/plan_diligent.md DILIGENT-59: hand-derived proof of the four lighting-fidelity fixes
     # (emissive isolation, specular*alpha, multi-light additive, non-uniform-world normal).
     cna_diligent_test(cna_test_diligent_lighting_fidelity
                       diligent_lighting_fidelity_test.cpp)

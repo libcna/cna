@@ -189,7 +189,7 @@ namespace
     using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
-    /// plan_runtimerenderer.md RTR-P9-5: which renderers accept a RenderTargetCube SetData upload,
+    /// plans/plan_runtimerenderer.md RTR-P9-5: which renderers accept a RenderTargetCube SetData upload,
     /// asked of the ACTIVE renderer. Each arm's reasoning is preserved with its renderer:
     ///
     ///   EasyGL / Magnum -- SetData is a real glTexSubImage2D upload into the shared cube texture
@@ -202,15 +202,15 @@ namespace
     ///     modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp.
     ///   OpenGL4 -- the same real upload shape, and unlike EasyGL it also implements the
     ///     per-face+level FBO readback, so the byte-exact round trip is asserted directly by its
-    ///     own OpenGL4_RenderTargetCube CTest (plan_opengl4.md GL4-15).
+    ///     own OpenGL4_RenderTargetCube CTest (plans/plan_opengl4.md GL4-15).
     ///   Wicked -- a real staged upload into the rendered cube's colour array (UploadTextureRegion,
-    ///     plan_wicked.md WICKED-55/79), with the per-face readback implemented, so the byte-exact
+    ///     plans/plan_wicked.md WICKED-55/79), with the per-face readback implemented, so the byte-exact
     ///     round trip is asserted by the shared TextureCube/RenderTargetCube suites. A
     ///     multisampled cube still refuses: resolving into one face needs a per-face resolve
     ///     subresource this renderer does not create.
     [[nodiscard]] inline bool RenderTargetCubeAcceptsSetData()
     {
-        // plan_igl.md IGL-21: IGL belongs here too. Its RenderTargetCube's colour attachment is an
+        // plans/plan_igl.md IGL-21: IGL belongs here too. Its RenderTargetCube's colour attachment is an
         // ordinary sampleable `igl::TextureType::Cube` image, so `IglRenderTargetCubeRenderer::
         // SetData` seeds a face with a real upload rather than accepting and discarding one --
         // which is what this test forbids. Without the entry an IGL build asserted a refusal the

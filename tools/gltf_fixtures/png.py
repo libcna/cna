@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""A minimal PNG encoder, and the corpus's reference texture (plan_gltf.md ``GLTF-190``).
+"""A minimal PNG encoder, and the corpus's reference texture (plans/plan_gltf.md ``GLTF-190``).
 
 The corpus had no textured fixture at all, because emitting one needs an image and the generator
 may not take a third-party dependency (see the README's rules). ``zlib`` and ``struct`` are the

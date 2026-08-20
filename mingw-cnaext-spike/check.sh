@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MS-PL
 #
-# plan_modern.md MOD-1719 -- cross-compile check for the engine layer as the D3D renderers see it.
+# plans/plan_modern.md MOD-1719 -- cross-compile check for the engine layer as the D3D renderers see it.
 #
 # Run from the repository root:
 #   ./mingw-cnaext-spike/check.sh

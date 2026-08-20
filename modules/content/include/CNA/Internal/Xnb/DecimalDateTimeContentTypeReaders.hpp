@@ -7,7 +7,7 @@
 #include "System/DateTime.hpp"
 #include "System/TimeSpan.hpp"
 
-// plan_xnb.md XNB-18B/18C: Decimal/DateTime/TimeSpan .xnb readers -- see
+// plans/plan_xnb.md XNB-18B/18C: Decimal/DateTime/TimeSpan .xnb readers -- see
 // PrimitiveContentTypeReaders.hpp's own note on why these live in CNA::Internal::Xnb.
 //
 // System::Decimal requires a native 128-bit integer. Keep its reader on sharp-runtime's public

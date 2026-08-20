@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX13 (DX-120): real D3D12 occlusion query renderer, mirroring D3D11's own
+// plans/plan_dx.md Phase DX13 (DX-120): real D3D12 occlusion query renderer, mirroring D3D11's own
 // D3D11OcclusionQueryRenderer (DX-47) XNA-level contract exactly.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"

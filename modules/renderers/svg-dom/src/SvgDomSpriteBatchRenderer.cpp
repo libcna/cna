@@ -10,7 +10,7 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 6 (revised): pooled sprite elements, reused and dirty-diffed
+// plans/plan_svg_dom.md design decision 6 (revised): pooled sprite elements, reused and dirty-diffed
 // across frames rather than rebuilt every flush -- the same "pool cursor reset at frame start,
 // reuse by index, hide the unused tail at Present()" shape HtmlDom's own DOM path uses,
 // independently applied here to SVG's own primitives. Each pool slot is a wrapping <g> (carrying

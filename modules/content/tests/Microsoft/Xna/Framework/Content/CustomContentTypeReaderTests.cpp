@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-42 (Phase G): proves the public extension point a real CNA game uses to load
+// plans/plan_xnb.md XNB-42 (Phase G): proves the public extension point a real CNA game uses to load
 // its own custom, non-built-in .xnb content. There is no separate wrapper API to add here --
 // `ContentTypeReaderManager::AddTypeCreator()` (XNB-14/14A) is already public/CNAEXT-callable and
 // generic over any `ContentTypeReader<T>` subclass a game defines outside CNA entirely, matching

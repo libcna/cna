@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Renderer-combination registry gate (plan_runtimerenderer.md RTR-P6-19).
+"""Renderer-combination registry gate (plans/plan_runtimerenderer.md RTR-P6-19).
 
 Not every pair of renderers can be linked into one binary. cmake/RendererCombinations.cmake rejects
 the impossible ones at configure time; docs/runtime-renderer-selection.md documents them for users.
@@ -26,7 +26,7 @@ IDENTITIES_SCRIPT = os.path.join(REPO, "scripts", "check_renderer_identities.py"
 RULES = {
     "PORTABLEGL": "PORTABLEGL",
     "GDI + SOFTWARE": "GDI",
-    # The "shared EasyGL" rule was REMOVED by plan_runtimerenderer.md phase P11, which made that
+    # The "shared EasyGL" rule was REMOVED by plans/plan_runtimerenderer.md phase P11, which made that
     # family's GL profile a runtime value. Its five identities now coexist, so there is no rule to
     # keep in step -- and listing one here would demand documentation for a restriction that no
     # longer exists.

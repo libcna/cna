@@ -8,14 +8,14 @@
 
 namespace CNA::Internal::Renderers::OpenGL2
 {
-    // plan_opengl2.md (context-loss recovery): mirrors EasyGL's own RecoverableResource/
+    // plans/plan_opengl2.md (context-loss recovery): mirrors EasyGL's own RecoverableResource/
     // ResourceRegistry design exactly (see easy-gl's ResourceRegistry.hpp/RecoverableResource.hpp),
     // deliberately reimplemented locally rather than depending on EasyGL/easy-gl -- consistent with
     // this renderer's own "deliberately independent of EasyGL" scope. Defined fully in the .cpp;
     // only forward-declared here so OpenGL2Renderer can hold a registry of them.
     class RecoverableResource;
 
-    // Native desktop OpenGL 2.1 (compatibility profile) renderer. See plan_opengl2.md for scope
+    // Native desktop OpenGL 2.1 (compatibility profile) renderer. See plans/plan_opengl2.md for scope
     // and known follow-up work. Deliberately independent of EasyGL/easy-gl.
     class OpenGL2Renderer final : public IGraphicsRenderer
     {
@@ -124,7 +124,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
         [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
 
-        // plan_opengl2.md (context-loss recovery): scope mirrors EasyGLRenderer's own real
+        // plans/plan_opengl2.md (context-loss recovery): scope mirrors EasyGLRenderer's own real
         // limitation exactly -- VertexBuffer/IndexBuffer/Texture2D content is restored from a CPU
         // shadow; RenderTarget2D/RenderTargetCube/OcclusionQuery recreate but their GPU-only
         // content is genuinely lost (not shadow-able); TextureCube/Texture3D/custom ShaderEffect
@@ -165,7 +165,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         // Declared before every GL resource-owning member so it outlives those resources.
         std::unique_ptr<PlatformGlContextOwner> platformContext_;
         PlatformGlSurfaceState surface_;
-        // plan_opengl2.md (context-loss recovery): the swap interval is per-context state --
+        // plans/plan_opengl2.md (context-loss recovery): the swap interval is per-context state --
         // remembered here so DebugSimulateContextLoss() can reapply the game's actual current
         // setting to the freshly-created context instead of silently reverting to the host's
         // context-creation default.
@@ -204,7 +204,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         // exactly mirroring RenderTarget::UnbindAsRenderTarget()'s own single-target equivalent.
         std::vector<IRenderTargetRenderer*> mrtTargets_;
 
-        // plan_opengl2.md (context-loss recovery): every currently-live recoverable resource
+        // plans/plan_opengl2.md (context-loss recovery): every currently-live recoverable resource
         // (VB/IB/Tex/RenderTarget/RenderTargetCubeRenderer/OcclusionQuery), registered/unregistered
         // by its own constructor/destructor -- mirrors EasyGL's own ResourceRegistry exactly,
         // reimplemented locally (see RecoverableResource's own forward-declaration comment).

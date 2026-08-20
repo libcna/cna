@@ -1,6 +1,6 @@
 # Model loading and content pipeline: support and limitations
 
-> **Update (plan_xnb.md Phase F, 2026-07-16):** a second, genuinely real binary `.xnb` `ModelReader`
+> **Update (plans/plan_xnb.md Phase F, 2026-07-16):** a second, genuinely real binary `.xnb` `ModelReader`
 > now exists (`CNA::Internal::Xnb::ModelReader`), wire-compatible with real XNA/MonoGame/FNA-produced
 > `Model` assets — full bone hierarchy, per-mesh `ParentBone`, `BoundingSphere`, shared-resource
 > (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution, all real. Per `cnj.md`'s "Core rule", `.xnb`
@@ -16,13 +16,13 @@ Covers `Microsoft::Xna::Framework::Graphics::Model` (and its `ModelMesh`/`ModelM
 `ModelBone`/collection types) plus its content-pipeline loader, `ModelTypeReader`
 (`src/Content/Xna/ContentManager.cpp`). Written as the closing documentation
 task for Phase 49 (Tasks 431-440), which line-by-line audited and unit/pixel-tested `Model`'s own
-runtime API against FNA (see `plan_graphics.md` rows 431-439). This doc covers the one piece those
+runtime API against FNA (see `plans/plan_graphics.md` rows 431-439). This doc covers the one piece those
 tasks didn't: how a `Model` actually gets **loaded from content**, and where that loader falls
 short of both FNA's real behavior and CNA's own runtime API surface.
 
 ## `Model`'s runtime API: fully audited, FNA-faithful
 
-Tasks 431-439 (see `plan_graphics.md` for full detail) confirmed `Model`/`ModelMesh`/
+Tasks 431-439 (see `plans/plan_graphics.md` for full detail) confirmed `Model`/`ModelMesh`/
 `ModelMeshPart`/`ModelBone` + all 4 collection types match FNA's property/method surface and
 behavior closely, real bugs found and fixed along the way:
 

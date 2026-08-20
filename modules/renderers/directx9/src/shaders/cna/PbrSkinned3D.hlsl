@@ -53,7 +53,7 @@ struct VSInput
     int4   BoneIndices : BLENDINDICES0;
 };
 
-// plan_gltf.md GLTF-465/GLTF-463: the stride-80 twin. Stride 80 is the stride-76 skinned PBR
+// plans/plan_gltf.md GLTF-465/GLTF-463: the stride-80 twin. Stride 80 is the stride-76 skinned PBR
 // record with a packed, normalized COLOR_0 appended at offset 76. A separate input struct for the
 // same reason as the rigid pair: the stride-68/76 declarations have no colour element.
 struct VSInputColor
@@ -182,7 +182,7 @@ float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
 float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
-// plan_gltf.md GLTF-465: same free register, same meaning, as Pbr3D.hlsl's own.
+// plans/plan_gltf.md GLTF-465: same free register, same meaning, as Pbr3D.hlsl's own.
 float4 VertexColorFlags        : register(c13); // x = VertexColorEnabledEXT
 float4 TextureTransformRows[10] : register(c14); // two affine UV rows per PBR map
 float4 SpecularFresnelInputs    : register(c24); // xyz=unclamped F0, w=specular factor

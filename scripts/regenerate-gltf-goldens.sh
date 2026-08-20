@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_gltf.md GLTF-020: the one command that regenerates the glTF conformance corpus.
+# plans/plan_gltf.md GLTF-020: the one command that regenerates the glTF conformance corpus.
 #
 # The corpus under tests/assets/gltf/ is GENERATED, never hand-edited: a fixture's .gltf, its .glb
 # twin, its .expected.json manifest and its L5 vertex/index goldens all come from one Python

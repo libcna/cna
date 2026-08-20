@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: virtual-resolution/presentation-mode scaling (plan_opengl1.md item 13,
+// OPENGL1 renderer: virtual-resolution/presentation-mode scaling (plans/plan_opengl1.md item 13,
 // EasyGL parity).
 //
 // Before this, EffectiveWidth()/EffectiveHeight() (OpenGL1SpriteBatchRenderer::Begin()'s own glOrtho
@@ -13,7 +13,7 @@
 // default) recomputes; every other mode keeps today's original (unrecomputed) behavior --
 // Stretch/NativeBackBuffer are honestly already correct that way, and true Letterbox/Overscan
 // (real bars/cropping) would need the actual glViewport sub-rectangle adjusted, not just this
-// SpriteBatch-facing logical size -- a documented, intentional gap (plan_opengl1.md item 13).
+// SpriteBatch-facing logical size -- a documented, intentional gap (plans/plan_opengl1.md item 13).
 //
 // Method: construct at 320x240 (4:3), draw a thin stripe at logical X=160 (half of 320) and
 // confirm it lands at physical X=~160 (baseline, unscaled). Resize the real SDL window to 480x480

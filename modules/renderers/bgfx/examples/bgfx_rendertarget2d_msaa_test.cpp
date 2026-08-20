@@ -14,7 +14,7 @@
 // backbuffer MSAA state — bgfx resolves an MSAA-flagged render target's color attachment
 // internally into the same sampleable texture handle, with no renderer-wide "did the game ask for
 // backbuffer MSAA" precondition the way Vulkan's piggyback-on-sampleCount_ scope decision
-// requires (see plan_graphics.md Task 878/879). No GraphicsDeviceManager.PreferMultiSampling is
+// requires (see plans/plan_graphics.md Task 878/879). No GraphicsDeviceManager.PreferMultiSampling is
 // needed here.
 //
 // This test's RT-then-backbuffer-sample path (via SpriteBatch::Draw sampling the unbound

@@ -168,7 +168,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
 #elif defined(CNA_RENDERER_SOKOL)
-    // plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `RequireReadable`'s
+    // plans/plan_sokol.md SOKOL-25/38: real geometry is genuinely rasterized, and `RequireReadable`'s
     // direct `ReadWholeTarget` (a RenderTarget2D::GetData) now round-trips real content via a
     // throwaway GL FBO around the raw texture handle `sg_gl_query_image_info()` exposes.
     constexpr bool kRasterizes = true;
@@ -203,10 +203,10 @@ namespace
     /**
      * @brief Whether a mipMap=true RenderTarget2D is implemented at all.
      *
-     * WEBGPU declares this unimplemented (plan_webgpu.md WEBGPU-53/54) and throws when the target's
+     * WEBGPU declares this unimplemented (plans/plan_webgpu.md WEBGPU-53/54) and throws when the target's
      * mip chain would have to be regenerated. That predates and is unrelated to first use, so leg I
      * asserts the deterministic rejection there instead of a value. SOKOL implements it as of
-     * plan_sokol.md SOKOL-39 (mip storage allocated via sokol_gfx's num_mipmaps, regenerated from
+     * plans/plan_sokol.md SOKOL-39 (mip storage allocated via sokol_gfx's num_mipmaps, regenerated from
      * level 0 via glGenerateMipmap on unbind).
      */
     constexpr bool kMipmappedRenderTargetSupported =

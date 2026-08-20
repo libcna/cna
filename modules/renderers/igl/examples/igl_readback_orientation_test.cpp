@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_igl.md IGL-60 / IGL-67: the row order and the row ORIGIN of every readback this renderer
+// plans/plan_igl.md IGL-60 / IGL-67: the row order and the row ORIGIN of every readback this renderer
 // performs, isolated from rendering entirely.
 //
 // `igl::IFramebuffer::copyBytesColorAttachment()` takes a `TextureRangeDesc` whose `y` its two

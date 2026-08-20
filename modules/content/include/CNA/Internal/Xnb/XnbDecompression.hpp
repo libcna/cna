@@ -10,7 +10,7 @@
 namespace CNA::Internal::Xnb
 {
     /**
-     * @brief Decompresses a `.xnb` file's LZX-compressed payload (plan_xnb.md XNB-29), matching
+     * @brief Decompresses a `.xnb` file's LZX-compressed payload (plans/plan_xnb.md XNB-29), matching
      *        FNA's own block-framing loop in `ContentManager.GetContentReaderFromXnb`
      *        byte-for-byte.
      *
@@ -20,14 +20,14 @@ namespace CNA::Internal::Xnb
      * fed to a single `LzxDecoder` instance in turn -- the decoder's sliding window and
      * repeated-offset state persist across blocks within one file, matching FNA/LZX's own
      * stateful, sequential-only decompression model (there is no way to "jump to an offset" in
-     * an LZX-compressed stream; see plan_xnb.md XNB-61b's own note on this).
+     * an LZX-compressed stream; see plans/plan_xnb.md XNB-61b's own note on this).
      *
      * @param compressedData Pointer to the compressed payload bytes (immediately following the
      *                       10-byte container header and the 4-byte decompressed-size field).
      * @param compressedSize Number of compressed bytes available at @p compressedData.
      * @param decompressedSize Expected decompressed size, as recorded in the `.xnb` header.
      * @param path           File path, used only to build exception messages.
-     * @param limits         Bounds applied to @p compressedSize/@p decompressedSize (plan_xnb.md XNB-10A).
+     * @param limits         Bounds applied to @p compressedSize/@p decompressedSize (plans/plan_xnb.md XNB-10A).
      * @return The decompressed bytes, exactly @p decompressedSize long.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if decompression fails,
      *         produces the wrong number of bytes, or either size exceeds @p limits.

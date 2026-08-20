@@ -1,4 +1,4 @@
-// plan_dx.md Phase DIRECTX3 (DX-16-vtx).
+// plans/plan_dx.md Phase DIRECTX3 (DX-16-vtx).
 #include "CNA/Internal/Renderers/D3DCommon/D3DVertexFormatHelper.hpp"
 
 #include <iterator>
@@ -42,7 +42,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
-        // plan_cnj.md CNB-58 follow-up: stride 48, VertexPositionNormalTangentTexture -- the
+        // plans/plan_cnj.md CNB-58 follow-up: stride 48, VertexPositionNormalTangentTexture -- the
         // layout PbrEffect's normal mapping needs to build a per-pixel TBN basis. Matches
         // EasyGLRenderer::ApplyLayout's own case 48 byte-for-byte.
         const D3D11_INPUT_ELEMENT_DESC kStride48[] = {
@@ -65,7 +65,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "COLOR",    0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, 56, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
-        // plan_cnj.md CNB-67 follow-up: stride 56, the stride-52 SkinnedVertex layout above with a
+        // plans/plan_cnj.md CNB-67 follow-up: stride 56, the stride-52 SkinnedVertex layout above with a
         // per-vertex Color (normalized ubyte4) appended at the end (offset 52), rather than
         // inserted mid-layout -- keeps locations 0-4 byte-identical to kStride52, matching
         // EasyGLRenderer::ApplyLayout's own case 56 byte-for-byte.
@@ -78,7 +78,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "COLOR",        0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, 52, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
-        // plan_cnj.md CNB-58 follow-up: stride 68, VertexPositionNormalTangentTextureSkinned
+        // plans/plan_cnj.md CNB-58 follow-up: stride 68, VertexPositionNormalTangentTextureSkinned
         // (SkinnedPbrEffect) -- the stride-48 layout above with the stride-52 skinning suffix
         // (BlendWeight, BlendIndices) appended. Matches EasyGLRenderer::ApplyLayout's own
         // case 68 byte-for-byte.
@@ -91,7 +91,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 64, D3D11_INPUT_PER_VERTEX_DATA, 0 },
         };
 
-        // plan_gltf.md GLTF-463: stride 80 is stride 76's record with a packed COLOR_0 appended --
+        // plans/plan_gltf.md GLTF-463: stride 80 is stride 76's record with a packed COLOR_0 appended --
         // the skinned counterpart of stride 60's own colour slot.
         const D3D11_INPUT_ELEMENT_DESC kStride80[] = {
             { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
@@ -137,7 +137,7 @@ namespace CNA::Internal::Renderers::D3DCommon
 
     namespace
     {
-        // plan_dx.md Phase DX12 (DX-107): D3D12 counterparts of kStride16/20/24/32/52 above -- same
+        // plans/plan_dx.md Phase DX12 (DX-107): D3D12 counterparts of kStride16/20/24/32/52 above -- same
         // semantic names/byte offsets, just D3D12_INPUT_ELEMENT_DESC/D3D12_INPUT_PER_VERTEX_DATA
         // typed. Kept as separate arrays rather than a reinterpret_cast between the two structs --
         // the two types are verified field-for-field identical today (see this function's own
@@ -233,7 +233,7 @@ namespace CNA::Internal::Renderers::D3DCommon
             { "TEXCOORD",     1, DXGI_FORMAT_R32G32_FLOAT,       0, 68, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
-        // plan_gltf.md GLTF-463: stride 80, matching kStride80 exactly.
+        // plans/plan_gltf.md GLTF-463: stride 80, matching kStride80 exactly.
         const D3D12_INPUT_ELEMENT_DESC kStride80D3D12[] = {
             { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },

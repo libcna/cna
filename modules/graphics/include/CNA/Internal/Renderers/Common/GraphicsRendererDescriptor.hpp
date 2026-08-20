@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_runtimerenderer.md design decision 2: everything GraphicsDevice needs to know about a
+// plans/plan_runtimerenderer.md design decision 2: everything GraphicsDevice needs to know about a
 // renderer BEFORE an IGraphicsRenderer instance exists lives here, in one value type per renderer
 // family, instead of in #ifdef chains inside GraphicsDevice.cpp.
 //
@@ -32,7 +32,7 @@ namespace CNA::Internal::Renderers
      * prepareWindowFlags() returns: this is the granularity at which two renderers can be compared
      * for window compatibility. A windowing backend refuses to create one window carrying both an
      * OpenGL and a Vulkan intent, so a fallback crossing from one kind to another cannot reuse the
-     * existing window and must recreate it (plan_runtimerenderer.md design decision 8).
+     * existing window and must recreate it (plans/plan_runtimerenderer.md design decision 8).
      */
     enum class RendererWindowKind
     {
@@ -135,7 +135,7 @@ namespace CNA::Internal::Renderers
     /**
      * @brief A renderer's answer about a GraphicsAdapter-level query, or a deferral.
      *
-     * plan_runtimerenderer.md design decision 9, with a correction the implementation forced:
+     * plans/plan_runtimerenderer.md design decision 9, with a correction the implementation forced:
      * GraphicsAdapter's profile/format queries are ADAPTER-level and run before any GraphicsDevice
      * exists, so they cannot be routed through an IGraphicsRenderer virtual the way the texture and
      * render-target queries are. They go through these static descriptor hooks instead -- which is
@@ -214,7 +214,7 @@ namespace CNA::Internal::Renderers
          */
         bool needsVideoSubsystem = false;
 
-        // MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md P2): this used to be
+        // MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P2): this used to be
         // `std::uint32_t (*prepareWindowFlags)()`, returning a raw windowing-library flag bitmask,
         // which put that library in all 15 renderer descriptors and broke next's decoupling ratchet
         // (19 files, 94 references over a budget of 0).
@@ -228,7 +228,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Framebuffer attributes that must be fixed before the window exists.
          *
-         * MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md P2): this replaces
+         * MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md P2): this replaces
          * `void (*applyPreWindowAttributes)(const RendererPreWindowRequest&)`, whose every
          * implementation called into the windowing library directly. The platform contract already
          * carries these as data on WindowDescription::openGlFramebuffer, so a hook bought nothing
@@ -247,7 +247,7 @@ namespace CNA::Internal::Renderers
         /**
          * @brief Whether this family is handed a platform surface presenter.
          *
-         * MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md design decision 2): next chose
+         * MERGE (plans/plan_platform.md PLAT-8 x plans/plan_runtimerenderer.md design decision 2): next chose
          * the platform services a renderer receives with `#if defined(CNA_RENDERER_<X>)` chains in
          * GraphicsDevice::createRenderer(). In a multi-renderer binary those chains answer for
          * whichever macros are defined rather than for the family being constructed, so the
@@ -286,7 +286,7 @@ namespace CNA::Internal::Renderers
          * @brief Creates the renderer instance.
          *
          * The family's own CreateGraphicsRenderer, reached through a pointer so that several
-         * families can be linked into one binary (plan_runtimerenderer.md design decision 4).
+         * families can be linked into one binary (plans/plan_runtimerenderer.md design decision 4).
          *
          * @param args Construction arguments, already populated by GraphicsDevice.
          * @return The new renderer; never nullptr on success. Throws on failure.

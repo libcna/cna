@@ -26,7 +26,7 @@ namespace CNA::Graphics {
      * Owned by a `RenderPipeline` (`getSettings()`), or constructed standalone and handed to a
      * pass through `PostProcessContext::settings`.
      *
-     * plan_modern.md `MOD-728`/`MOD-729`: this used to say "construct via
+     * plans/plan_modern.md `MOD-728`/`MOD-729`: this used to say "construct via
      * `GraphicsDevice::GetRenderPipelineSettings()`", which never existed and is not going to.
      * Exposing this type from `GraphicsDevice` would give an XNA type a member whose type only
      * exists under a compile option.
@@ -101,7 +101,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns how the pipeline draws the transparent half of a scene.
          *
-         * plan_modern.md `MOD-2104`. `None` by default: a game that registers no transparent draw
+         * plans/plan_modern.md `MOD-2104`. `None` by default: a game that registers no transparent draw
          * renders exactly the frame it rendered before this existed.
          *
          * @return The mode.
@@ -294,7 +294,7 @@ namespace CNA::Graphics {
         /**
          * @brief Returns the minimum local contrast FXAA treats as an edge.
          *
-         * plan_modern.md `MOD-604`. Lives here rather than only on the pass so a quality preset can
+         * plans/plan_modern.md `MOD-604`. Lives here rather than only on the pass so a quality preset can
          * set it: `applyRenderQualityPresetEXT()` writes it, and `FxaaPass` reads it whenever a
          * settings bag is supplied.
          *
@@ -320,7 +320,7 @@ namespace CNA::Graphics {
         /**
          * @brief Writes the current quality preset's derived values into this settings bag.
          *
-         * plan_modern.md `MOD-409`. `setRenderQuality` stores a preference and changes nothing
+         * plans/plan_modern.md `MOD-409`. `setRenderQuality` stores a preference and changes nothing
          * else; this is the explicit step that turns it into numbers. The two are separate on
          * purpose — a game that has tuned `bloomIterations` by hand should not have that value
          * rewritten because something set the quality, and a settings menu that *wants* the preset
@@ -335,7 +335,7 @@ namespace CNA::Graphics {
         /**
          * @brief The smallest gamma this bag will store.
          *
-         * plan_modern.md `MOD-730`. Gamma is applied as `pow(colour, 1/gamma)`, so zero is a
+         * plans/plan_modern.md `MOD-730`. Gamma is applied as `pow(colour, 1/gamma)`, so zero is a
          * division by zero and the frame comes back as infinities. Clamped rather than rejected,
          * because a settings file with a stale zero in it should still produce a picture.
          */
@@ -347,7 +347,7 @@ namespace CNA::Graphics {
         /**
          * @brief Writes every field as `key=value;` text.
          *
-         * plan_modern.md `MOD-731`. For demos, for tests that need a scene's look pinned in one
+         * plans/plan_modern.md `MOD-731`. For demos, for tests that need a scene's look pinned in one
          * line, and for a settings file. Deliberately the simplest format that round-trips: no
          * quoting, no nesting, no escapes — a value here is a number or an enum name, and adding a
          * parser that could fail in interesting ways would be a worse trade than the format's

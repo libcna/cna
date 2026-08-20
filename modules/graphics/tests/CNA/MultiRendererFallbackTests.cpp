@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md RTR-P8-5..P8-8: fallback between renderers that both really work.
+// plans/plan_runtimerenderer.md RTR-P8-5..P8-8: fallback between renderers that both really work.
 //
 // The P5 suite proves fallback with a candidate that is not compiled in. That covers the policy but
 // not the interesting half: a renderer that IS present, IS linked, and is nonetheless passed over.
@@ -103,7 +103,7 @@ namespace
             return nullptr;
         }
 
-        /// plan_runtimerenderer.md RTR-P6-8 follow-up: EVERY renderer whose window kind differs
+        /// plans/plan_runtimerenderer.md RTR-P6-8 follow-up: EVERY renderer whose window kind differs
         /// from @p from, in registry order. A fallback chain is a list, and handing the test only
         /// the first candidate made it depend on that one candidate being usable in this
         /// environment -- which LLGL is not under Wayland, where it refuses for want of X11
@@ -415,7 +415,7 @@ TEST_F(MultiRendererFallbackTest, FallingBackAcrossWindowKindsRecreatesTheWindow
     EXPECT_NO_THROW(device->Clear(Microsoft::Xna::Framework::Color::CornflowerBlue));
 }
 
-// plan_runtimerenderer.md RTR-P5-13 / design decision 8: the same cross-kind fallback, but with the
+// plans/plan_runtimerenderer.md RTR-P5-13 / design decision 8: the same cross-kind fallback, but with the
 // window supplied by the CALLER through PresentationParameters.DeviceWindowHandle.
 //
 // The difference is what CNA is allowed to do about it. When CNA owns the window it destroys and

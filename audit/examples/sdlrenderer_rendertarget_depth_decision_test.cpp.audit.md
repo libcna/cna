@@ -39,7 +39,7 @@ the active target has no real depth-stencil support — including the bare backb
 the scenario this test's last check exercises. This means `dev.Clear(ClearOptions::Target |
 ClearOptions::DepthBuffer, ...)` (line 111) now silently degrades to a color-only clear instead of throwing,
 directly contradicting `check(clearDepthThrew, ...)` (line 117). This is **not a new discovery** — the project's
-own `NEXT.md`/`plan_graphics.md` (Task 1113, still `⬜` open) already documents this exact regression, including
+own `NEXT.md`/`plans/plan_graphics.md` (Task 1113, still `⬜` open) already documents this exact regression, including
 that `SDL_Renderer_RenderTarget_DepthDecision` (this file's own registered CTest name) currently fails — see F1.
 
 ## Checklist Results
@@ -144,7 +144,7 @@ unrelated reason.
   4. Therefore `dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer, Color(0,0,0,255), 1.0f, 0)`
      (line 111, called on the unbound backbuffer) no longer throws, so `clearDepthThrew` stays `false` and
      `check(clearDepthThrew, ...)` (line 117) fails.
-  5. **Independent corroboration, not just this audit's own trace**: `NEXT.md` (line 75) and `plan_graphics.md`
+  5. **Independent corroboration, not just this audit's own trace**: `NEXT.md` (line 75) and `plans/plan_graphics.md`
      (line 1021, Task 1113, status `⬜` open) already document this exact regression by name: *"`SDL_Renderer_
      RenderTarget_DepthDecision` ... fail[s] ... `GraphicsDevice.cpp`'s own masking (`options &= ClearOptions::
      Target` when `!hasRealDepthBuffer`) strips the `DepthBuffer`/`Stencil` bits out first, so `Clear()` returns
@@ -170,7 +170,7 @@ unrelated reason.
   every backend without real depth support, not SDL_Renderer-specific — Task 1113's own scope note says this
   affects "EVERY backend without a real depth buffer, not just SDL_Renderer"); `examples/
   sdlrenderer_clearoptions_audit_test.cpp` (the sibling test Task 1113 names as *also* affected, out of this
-  batch's 8 files); `NEXT.md` line 75, `plan_graphics.md` line 1021 (Task 1113, still open).
+  batch's 8 files); `NEXT.md` line 75, `plans/plan_graphics.md` line 1021 (Task 1113, still open).
 - Suggested future action (not implemented by this audit, and already tracked as Task 1113 for whoever picks it
   up): resolve the design question Task 1113 poses (should `SDL_Renderer_RenderTarget_DepthDecision`'s fourth
   check be updated to expect a graceful no-op, mirroring how DX3's `examples/dx3_no3d_test.cpp` Check D already
@@ -210,7 +210,7 @@ Until one of those happens, this file's CTest registration is a known-red case i
 ## Final Assessment
 
 **Needs attention.** Three of four checks are solid and pass. The fourth is a confirmed, currently-failing
-assertion — independently traced by this audit and corroborated by the project's own `NEXT.md`/`plan_graphics.md`
+assertion — independently traced by this audit and corroborated by the project's own `NEXT.md`/`plans/plan_graphics.md`
 Task 1113 (still open) — caused by a later, unrelated commit that intentionally changed the exact behavior this
 check depends on, without this test file (or its header comment) being updated to match. Not a new discovery,
 but confirmed as real and still open as of this audit pass.

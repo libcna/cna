@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX13 (DX-117): real D3D12 offscreen render-target renderers -- the real, public
+// plans/plan_dx.md Phase DX13 (DX-117): real D3D12 offscreen render-target renderers -- the real, public
 // XNA-facing RenderTarget2D/RenderTargetCube path, replacing DX-116's test-only
 // BindOffscreenColorTargetEXT() scaffolding as the thing games actually construct through
 // GraphicsDevice::SetRenderTarget2D()/CreateRenderTarget2D(). Same explicit-resource-management
@@ -9,7 +9,7 @@
 // RTV(s)/DSV via the device's own descriptor heaps (DX-103), and registration with the shared
 // D3D12ResourceStateTracker (DX-106).
 //
-// plan_dx.md DX-144: full mip-chain generation is now real. D3D12 has no single-call
+// plans/plan_dx.md DX-144: full mip-chain generation is now real. D3D12 has no single-call
 // GenerateMips() equivalent the way D3D11 does; rather than a manual compute/pixel-shader mip
 // cascade (real additional pipeline/shader infrastructure), this uses a synchronous CPU box-filter
 // downsample cascade -- read a level back via a READBACK-heap CopyTextureRegion, box-filter it on
@@ -18,7 +18,7 @@
 // D3D12Buffers.cpp already establish for every other real upload/readback path. Triggered from
 // UnbindAsRenderTarget(), mirroring D3D11RenderTargetRenderer's own GenerateMips()-on-unbind timing.
 //
-// plan_dx.md DX-117 MSAA follow-up: real, device-queried MSAA is now supported for
+// plans/plan_dx.md DX-117 MSAA follow-up: real, device-queried MSAA is now supported for
 // D3D12RenderTargetRenderer (2D), mirroring D3D11RenderTargetRenderer's own DX-45 design exactly --
 // never assumes a requested sample count is supported (ID3D12Device::CheckFeatureSupport with
 // D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS), MSAA and a full mip chain are mutually exclusive on
@@ -28,7 +28,7 @@
 // ID3D11DeviceContext::ResolveSubresource() call (D3D12's own version additionally needs explicit
 // RESOLVE_SOURCE/RESOLVE_DEST resource-state transitions, which D3D11 doesn't).
 //
-// plan_dx.md DX-152: MSAA is now also real for D3D12RenderTargetCubeRenderer (reopening what was
+// plans/plan_dx.md DX-152: MSAA is now also real for D3D12RenderTargetCubeRenderer (reopening what was
 // originally a deliberate, matched scope exclusion on both D3D renderers), same design as the 2D
 // leg above -- D3D12_SRV_DIMENSION_TEXTURECUBE has no multisampled variant (same restriction that
 // keeps D3D11's own TextureCube SRV from ever being MSAA), so colorResource_ becomes the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): smoke test for the DIRECTX2 (real DirectDraw v1, run under
+// plans/plan_dx2.md Phase O2 (DX2-10, 2D layer ported from DX1-10..DX1-18): smoke test for the DIRECTX2 (real DirectDraw v1, run under
 // Wine -- no ../free-direct anywhere in this renderer) graphics renderer's foundation -- real
 // DirectDrawCreate/SetCooperativeLevel(DDSCL_NORMAL)/CreateSurface device bring-up, real
 // Clear()/Present(), real pixel readback. SpriteBatch/Texture2D draws are covered by
@@ -79,7 +79,7 @@ protected:
         // Check D: Clear() honors a non-opaque requested alpha exactly. Uses FillSurfaceColor
         // (direct Lock()/Unlock() writes of all 4 channels), not DDBLT_COLORFILL, proactively
         // avoiding the class of bug DIRECTX3 found and fixed for its own DDBLT_COLORFILL-based Clear()
-        // (plan_freedirect.md DX3-14, free-direct's FillColor() hardcoding alpha to 255).
+        // (plans/plan_freedirect.md DX3-14, free-direct's FillColor() hardcoding alpha to 255).
         {
             dev.Clear(Color(10, 20, 30, 128));
             const Rectangle region(0, 0, 4, 4);

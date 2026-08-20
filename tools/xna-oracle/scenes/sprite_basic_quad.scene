@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: sprite_basic_quad
+# plans/plan_dx9.md D9-A5 scene corpus: sprite_basic_quad
 # The first scene to exercise SpriteBatch (Phase D9-9, D9-90/D9-91/D9-92/D9-93), a genuinely
 # different draw model from every prior scene in this corpus: no Effect, no vertex declaration,
 # no explicit World/View/Projection -- just SpriteBatch.Begin()/Draw(texture, destRect,
@@ -8,7 +8,7 @@
 # This is also the FIRST empirical measurement of D9-91's own half-pixel offset (design
 # decision 10): real XNA 4.0's D3D9-era SpriteBatch bakes a half-texel correction into its own
 # MatrixTransform to compensate for Direct3D 9's texel-center-at-integer-coordinate convention
-# (a convention D3D10+/modern APIs do not share -- see plan_dx9.md's own "Divergence 4"). A 1x1
+# (a convention D3D10+/modern APIs do not share -- see plans/plan_dx9.md's own "Divergence 4"). A 1x1
 # solid-color texture stretched into a clean, easily-verified integer destination rectangle
 # (x=50,y=60,w=80,h=40 on a 256x256 canvas) sidesteps any point-filter texel-boundary ambiguity
 # (the same trick this corpus already established for envmap_quad.scene/dualtexture_quad.scene) --

@@ -15,7 +15,7 @@ namespace CNA::Internal::Renderers::HtmlDom
     /**
      * @brief Texture backed by a private off-screen canvas plus a cache of CSS-usable data URLs.
      *
-     * plan_html_dom.md design decision 6. CSS `background-image` needs a URL, and the only
+     * plans/plan_html_dom.md design decision 6. CSS `background-image` needs a URL, and the only
      * synchronous canvas-to-URL route a browser offers is `canvas.toDataURL()` -- `toBlob`/
      * `convertToBlob` are asynchronous and would let draws reorder. Each instance therefore owns
      * one JS-side canvas registered under a unique integer id in `Module['cnaDomTextures']`, and

@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX12 (DX-108).
+// plans/plan_dx.md Phase DX12 (DX-108).
 #include "CNA/Internal/Renderers/DirectX12/D3D12RootSignatureCache.hpp"
 
 #include <d3dcommon.h>

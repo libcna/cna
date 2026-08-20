@@ -3,7 +3,7 @@
 `CANVAS` is CNA's HTML Canvas 2D graphics renderer: Emscripten-only, 2D-only (no 3D pipeline, no
 programmable shader stage, no depth/stencil buffer, no MSAA) — the same scope as `SDL_RENDERER`,
 just running through `CanvasRenderingContext2D`'s `drawImage`/`putImageData`/`fillRect` API instead
-of SDL3's 2D blit pipeline. See `plan_canvas.md` for the full task breakdown, design decisions, and
+of SDL3's 2D blit pipeline. See `plans/plan_canvas.md` for the full task breakdown, design decisions, and
 per-task notes this document summarizes.
 
 **Status legend** (matches this project's own convention): ✅ implemented *and verified against its
@@ -170,6 +170,6 @@ Phase C1). None of this has been checked yet.
 
 ## See also
 
-- `plan_canvas.md` — full task breakdown, design decisions, per-task implementation notes.
+- `plans/plan_canvas.md` — full task breakdown, design decisions, per-task implementation notes.
 - `docs/sdl-renderer-2d-completeness.md` — the 2D-only sibling renderer this one's scope mirrors.
 - `docs/web-emscripten-graphics-limitations.md` — general Emscripten/Web platform constraints.

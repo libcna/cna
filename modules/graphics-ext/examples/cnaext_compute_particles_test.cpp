@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1550: a GPU particle system, and the honest shape of one on CNA today.
+// plans/plan_modern.md MOD-1550: a GPU particle system, and the honest shape of one on CNA today.
 //
 // 100 000 particles are integrated by a compute shader into a storage buffer. What CNA cannot yet
 // do is DRAW from that buffer: a storage buffer and a vertex buffer are separate objects with no

@@ -30,7 +30,7 @@
 // class of gap Task 766 already flagged as an adjacent, out-of-scope discovery ("`BgfxRenderer`
 // never overrides `DrawIndexedPrimitivesEx`... losing all `GpuDrawParams`-driven shader features")
 // -- Task 927's own Content.Load<Model> test is simply the first one to demonstrate its real,
-// concrete rendering impact. Tracked as a new, separately-scoped Task 948 (see plan_graphics.md) --
+// concrete rendering impact. Tracked as a new, separately-scoped Task 948 (see plans/plan_graphics.md) --
 // not fixed here, since fixing it is unrelated in scope to Task 927's own vertex-stride bug.
 //
 // Exit code 0 = both PASS, 1 = either FAIL (the "centre" check is EXPECTED to currently fail on

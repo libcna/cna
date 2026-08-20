@@ -10,7 +10,7 @@ namespace CNA::Internal::Renderers::Wicked
      *
      * `wi::shadercompiler::Compile()` reads its input from a file path, so this source is written
      * into a per-process temporary directory at device creation and compiled from there
-     * (plan_wicked.md design decision 4). Keeping it here rather than in a deployed asset file means
+     * (plans/plan_wicked.md design decision 4). Keeping it here rather than in a deployed asset file means
      * a CNA game needs no shader-asset deployment step at all, and the compiled output matches
      * whatever binary format `GraphicsDevice::GetShaderFormat()` reports -- SPIR-V for the Vulkan
      * device, DXIL for D3D12 -- from one source.
@@ -160,7 +160,7 @@ VSOut Basic32VS(float3 position : POSITION, float3 normal : NORMAL, float2 uv : 
 // SkinnedEffect can be drawn with the ordinary shading above. The tangent, blend-weight and
 // blend-index attributes are DECLARED but not consumed: declaring them is what makes the input
 // layout match the buffer, and consuming them is the job of the PbrEffect/SkinnedEffect programs
-// that plan_wicked.md WICKED-56b adds. A draw that actually asks for skinning is refused by the
+// that plans/plan_wicked.md WICKED-56b adds. A draw that actually asks for skinning is refused by the
 // renderer rather than silently rendered in bind pose here.
 // ---------------------------------------------------------------------------------------------
 

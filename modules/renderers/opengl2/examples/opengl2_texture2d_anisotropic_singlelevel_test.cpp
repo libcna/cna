@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: verify that an ordinary, non-mipmapped Texture2D (Texture2D::CreateFromPixels,
+// plans/plan_opengl2.md: verify that an ordinary, non-mipmapped Texture2D (Texture2D::CreateFromPixels,
 // the overwhelmingly common case for real game textures) renders correctly when sampled with a
 // mipmap-requiring TextureFilter (Anisotropic), instead of solid black -- reuses
 // examples/easygl_texture2d_anisotropic_singlelevel_test.cpp's own scene and reasoning verbatim.

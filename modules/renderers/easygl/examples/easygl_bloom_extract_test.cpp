@@ -18,7 +18,7 @@
 // Also proves the .cnj (Effect type) + GLSL descriptor round-trip via
 // ContentManager::Load<Effect>() (EffectTypeReader,
 // src/Microsoft/Xna/Framework/Content/ContentManager.cpp) -- implemented in CNA but, before this
-// test, never exercised anywhere in the repo. Migrated from .shader.json to .cnj per plan_cnj.md
+// test, never exercised anywhere in the repo. Migrated from .shader.json to .cnj per plans/plan_cnj.md
 // CNB-14/CNB-15.
 //
 // Check A — bright input (1,1,1,1), BloomThreshold=0.5: saturate((1-0.5)/0.5) = 1 on every

@@ -64,7 +64,7 @@ TEST(VideoDecoderTest, OpenReportsCorrectDimensionsAndFps)
     EXPECT_NEAR(decoder.GetFPS(), 25.0f, 0.5f);
 }
 
-// plan_media.md MEDIA-35: 4:2:0 baseline + 4:2:2/4:4:4 chroma subsampling now decode to correct
+// plans/plan_media.md MEDIA-35: 4:2:0 baseline + 4:2:2/4:4:4 chroma subsampling now decode to correct
 // colors instead of the magenta fallback.
 TEST(VideoDecoderTest, Decodes420ChromaToCorrectColors)
 {
@@ -96,7 +96,7 @@ TEST(VideoDecoderTest, Decodes444ChromaToCorrectColors)
     ExpectBarsMatch(rgba, decoder.GetWidth(), decoder.GetHeight());
 }
 
-// plan_media.md MEDIA-36: 10-/12-bit content now decodes to correct, non-clipped, non-magenta
+// plans/plan_media.md MEDIA-36: 10-/12-bit content now decodes to correct, non-clipped, non-magenta
 // color instead of falling through to the unsupported-format fallback.
 TEST(VideoDecoderTest, Decodes10BitToCorrectColors)
 {
@@ -118,7 +118,7 @@ TEST(VideoDecoderTest, Decodes12BitToCorrectColors)
     ExpectBarsMatch(rgba, decoder.GetWidth(), decoder.GetHeight());
 }
 
-// plan_media.md MEDIA-37: AV1 content keeps its audio track (a deliberate improvement over FNA's
+// plans/plan_media.md MEDIA-37: AV1 content keeps its audio track (a deliberate improvement over FNA's
 // own AV1-is-video-only limitation) -- exercised generically here since these fixtures aren't AV1
 // specifically, but HasAudio()/DrainAudio() must work uniformly regardless of video codec.
 TEST(VideoDecoderTest, AudioTailFixtureHasAudio)
@@ -130,7 +130,7 @@ TEST(VideoDecoderTest, AudioTailFixtureHasAudio)
     EXPECT_GT(decoder.GetChannels(), 0);
 }
 
-// plan_media.md MEDIA-93: DrainAudio() itself, not exercised by any other test above (only
+// plans/plan_media.md MEDIA-93: DrainAudio() itself, not exercised by any other test above (only
 // HasAudio()/GetSampleRate()/GetChannels() presence were checked) -- confirms real decoded audio
 // samples are actually produced and returned, not just that the stream metadata is present.
 TEST(VideoDecoderTest, DrainAudioProducesRealSamplesAfterDecodingFrames)
@@ -158,7 +158,7 @@ TEST(VideoDecoderTest, DrainAudioProducesRealSamplesAfterDecodingFrames)
     EXPECT_TRUE(secondDrain.empty());
 }
 
-// plan_media.md MEDIA-89/MEDIA-37: real AV1-coded content (not just the generic ffv1 fixtures)
+// plans/plan_media.md MEDIA-89/MEDIA-37: real AV1-coded content (not just the generic ffv1 fixtures)
 // keeps its audio track through the same unified decode path -- a deliberate improvement beyond
 // FNA's own dav1dfile-based AV1 handling, which is video-only.
 TEST(VideoDecoderTest, Av1ContentDecodesVideoAndKeepsItsAudioTrack)
@@ -189,7 +189,7 @@ TEST(VideoDecoderTest, Av1ContentDecodesVideoAndKeepsItsAudioTrack)
     EXPECT_GT(samples.size(), 0u);
 }
 
-// plan_media.md MEDIA-90/MEDIA-95: SetAudioStream() by index, against a real 2-track fixture --
+// plans/plan_media.md MEDIA-90/MEDIA-95: SetAudioStream() by index, against a real 2-track fixture --
 // the two tracks deliberately use different sample rates (48000 vs 44100) so GetSampleRate()
 // actually changing after the switch proves the track really changed, not just that the call
 // didn't crash.
@@ -207,10 +207,10 @@ TEST(VideoDecoderTest, SetAudioStreamSwitchesToTheRequestedTrack)
     EXPECT_EQ(decoder.GetSampleRate(), 48000); // back to track 0
 }
 
-// plan_media.md MEDIA-95: SetVideoStream() -- the multi-track fixture has only one video stream
+// plans/plan_media.md MEDIA-95: SetVideoStream() -- the multi-track fixture has only one video stream
 // (index 0), so this confirms re-selecting the same, already-active video stream by index is a
 // safe, correctness-preserving no-op rather than confirming an actual switch (no second video
-// stream fixture exists to test that with -- see plan_media.md's own honest-gap note).
+// stream fixture exists to test that with -- see plans/plan_media.md's own honest-gap note).
 TEST(VideoDecoderTest, SetVideoStreamReselectingTheSameStreamPreservesDimensions)
 {
     VideoDecoder decoder;
@@ -228,7 +228,7 @@ TEST(VideoDecoderTest, SetVideoStreamReselectingTheSameStreamPreservesDimensions
     EXPECT_TRUE(decoder.NextFrame(rgba, pts));
 }
 
-// plan_media.md MEDIA-38: fault injection -- Open() must not crash on a truncated/corrupted file,
+// plans/plan_media.md MEDIA-38: fault injection -- Open() must not crash on a truncated/corrupted file,
 // even though the failure mode here is "Open returns false", not an exception (a genuinely
 // malformed container is typically rejected during avformat_open_input/find_stream_info, before
 // any of the hardened alloc sites are even reached).
@@ -253,7 +253,7 @@ TEST(VideoDecoderTest, OpenDoesNotCrashOnTruncatedFile)
     std::remove(truncatedPath.c_str());
 }
 
-// plan_media.md MEDIA-40 (corrected -- found by external code review): the previous version of
+// plans/plan_media.md MEDIA-40 (corrected -- found by external code review): the previous version of
 // this test truncated the trailing bytes off a real Matroska file and asserted success on EITHER
 // a thrown exception OR a clean EOF, making it a tautology that could never fail and provided zero
 // real coverage. Empirically, trailing-byte truncation of a Matroska/EBML file makes libavformat's
@@ -289,7 +289,7 @@ TEST(VideoDecoderTest, TruncatedFileEndsAtCleanEOFRatherThanThrowing)
     std::remove(truncatedPath.c_str());
 }
 
-// plan_media.md MEDIA-40: the real "genuine mid-stream error, not EOF" case. Empirically verified
+// plans/plan_media.md MEDIA-40: the real "genuine mid-stream error, not EOF" case. Empirically verified
 // (via direct ffmpeg CLI experimentation across a dozen+ corruption strategies) that this repo's
 // ffv1/Matroska fixtures cannot exercise this path: Matroska's demuxer is deliberately
 // streaming-tolerant and treats a truncated/malformed tail as clean EOF (see the test above) no
@@ -365,7 +365,7 @@ TEST(VideoDecoderTest, CloseResetsState)
     EXPECT_EQ(decoder.GetHeight(), 0);
 }
 
-// plan_media.md MEDIA-146 (found by external code review): NextFrame()'s EAGAIN packet-retention
+// plans/plan_media.md MEDIA-146 (found by external code review): NextFrame()'s EAGAIN packet-retention
 // flag used to be a function-local variable, so a packet retained after avcodec_send_packet()
 // returned EAGAIN was silently lost the moment the very next avcodec_receive_frame() call (almost
 // always the next thing that happens, since EAGAIN on send means "drain output first") returned a
@@ -394,7 +394,7 @@ TEST(VideoDecoderTest, DecodesTheFullFileWithoutSilentlyDroppingAnyFrame)
     EXPECT_EQ(frameCount, 50);
 }
 
-// plan_media.md MEDIA-155 (found by external code review): Close() reset every other decode-state
+// plans/plan_media.md MEDIA-155 (found by external code review): Close() reset every other decode-state
 // member but left pendingAudio_ untouched. A caller that reuses the same VideoDecoder instance
 // (Close() then Open() again, rather than allocating a fresh instance every time -- VideoPlayer
 // itself always allocates fresh, but the class's own contract should not depend on that) would have
@@ -423,7 +423,7 @@ TEST(VideoDecoderTest, CloseClearsAnyUndrainedPendingAudioFromThePreviousFile)
                                   << " stale samples left over from the previous file";
 }
 
-// plan_media.md MEDIA-159 (found by external code review): SeekToStart() flushed both codec
+// plans/plan_media.md MEDIA-159 (found by external code review): SeekToStart() flushed both codec
 // contexts and reset the EAGAIN pending-packet state (MEDIA-155), but never cleared pendingAudio_
 // itself. A direct SeekToStart() call (not routed through VideoPlayer, whose own GetTexture() loop
 // happens to drain right before it calls SeekToStart() on loop -- masking this for that one caller)
@@ -451,7 +451,7 @@ TEST(VideoDecoderTest, SeekToStartClearsAnyUndrainedPendingAudioFromBeforeTheSee
                                   << " stale samples left over from before SeekToStart()";
 }
 
-// plan_media.md MEDIA-171 (found by external code review): MEDIA-167 replaced SeekToStart()'s
+// plans/plan_media.md MEDIA-171 (found by external code review): MEDIA-167 replaced SeekToStart()'s
 // manual resampler-delay drain with a swr_free() + CreateResampler() recreation, and claimed
 // regression coverage from two existing tests -- but NEITHER actually covered it.
 // LoopedVideoKeepsPlayingPastItsDuration uses chroma_420.mkv, which has no audio stream at all

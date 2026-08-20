@@ -78,7 +78,7 @@ a 3D draw. `CreateOffscreenSurface` now requests both caps unconditionally.
 ## Original result before the v2 breakthrough: 2D layer proven; 3D execute-buffer rendering NOT achieved
 
 **2D (DirectDraw v1):** not re-spiked here — DX1's spike and full backend already prove this
-API surface works end-to-end (`plan_dx1.md` `DX1-0`), and DX2's roadmap (`plan_dxold.md`) calls
+API surface works end-to-end (`plans/plan_dx1.md` `DX1-0`), and DX2's roadmap (`plans/plan_dxold.md`) calls
 DirectDraw v1 unchanged between DX1 and DX2. No new risk here.
 
 **3D (Direct3D v1 execute buffer):** every API call in the pipeline succeeds
@@ -121,7 +121,7 @@ fragments.
 
 The underlying GL/Xvfb stack itself is not broken — DX1's DirectDraw `Blt`-based 2D rendering
 in this exact sandbox is proven correct and was visually confirmed by the project owner
-(`plan_dx1.md`). The failure is isolated to Direct3D v1's execute-buffer rasterization path
+(`plans/plan_dx1.md`). The failure is isolated to Direct3D v1's execute-buffer rasterization path
 specifically (or possibly Wine's `wined3d` fixed-function shader emulation as invoked through
 this specific, rarely-exercised 30-year-old API surface).
 
@@ -135,7 +135,7 @@ not an actual Proton install. Testing against Proton's bundled (often Valve-patc
 ## Phase O9 follow-up spike (2026-07-21): specular/wireframe/anisotropic re-verification
 
 `dx2_spike10_specular_wireframe_aniso.cpp`, run against the same `~/.wine-cna-dx1` prefix, three
-questions Phase O9 (`plan_dx2.md` design decision 13) needed answered before writing any CPU
+questions Phase O9 (`plans/plan_dx2.md` design decision 13) needed answered before writing any CPU
 lighting code or flipping any `SupportsCapability` bit:
 
 - **Test C — `D3DRENDERSTATE_SPECULARENABLE` + `D3DTLVERTEX::specular`**: a full-viewport quad with

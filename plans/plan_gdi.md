@@ -119,9 +119,9 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 
 ### Build integration
 
-- [`cmake/BackendSelection.cmake`](cmake/BackendSelection.cmake) hard-gates `GDI` to a Windows
+- [`cmake/BackendSelection.cmake`](../cmake/BackendSelection.cmake) hard-gates `GDI` to a Windows
   target and selects `cna_backend_graphics_gdi`.
-- [`cmake/BackendLibraries.cmake`](cmake/BackendLibraries.cmake) puts the three GDI translation
+- [`cmake/BackendLibraries.cmake`](../cmake/BackendLibraries.cmake) puts the three GDI translation
   units and an explicit, reviewed eight-file CPU-2D dependency list in one GDI backend archive.
   No Software glob or intermediate `software_core` archive remains. `SoftwareFramebuffer.cpp`,
   `SoftwareTexture2D.cpp`, and `SoftwareRenderTarget2D.cpp` are independently compiled shared
@@ -131,17 +131,17 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
   deliberately excluding Software cube/resources and 3D draw bodies. The full SOFTWARE backend
   compiles those shared units plus `SoftwareGraphicsBackend.cpp`; its remaining source-text
   monolith is tracked by GDI-074.
-- [`cmake/CnaLibrary.cmake`](cmake/CnaLibrary.cmake) declares the real `CNA` ↔ GDI and `CNA` ↔
+- [`cmake/CnaLibrary.cmake`](../cmake/CnaLibrary.cmake) declares the real `CNA` ↔ GDI and `CNA` ↔
   SOFTWARE static-library cycles needed by GNU/MinGW archive scanning. Software tests no longer
   carry their own GNU-only `--start-group` workaround.
 
 ### Raster and resource path
 
-- [`GdiGraphicsBackend`](include/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp) derives directly
+- [`GdiGraphicsBackend`](../include/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.hpp) derives directly
   from `IGraphicsBackend` and owns a private `GdiSoftware2DCore`. Only reviewed texture,
   SpriteBatch, render-target, state, and framebuffer operations are forwarded; the complete
   resource/3D boundary is implemented explicitly on GDI.
-- [`SoftwareFramebuffer`](include/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp) owns
+- [`SoftwareFramebuffer`](../include/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp) owns
   the resolved RGBA8 image plus independently selected float-depth, 8-bit-stencil, and four-sample
   RGBA planes. GDI selects RGBA8 plus stencil and therefore pays no depth allocation.
 - GDI render targets deliberately force depth and MSAA to zero and explicitly expose their
@@ -185,7 +185,7 @@ ResolveColor -> GdiPresentation planner -> scoped GetDC
 
 ### Existing tests
 
-[`cmake/Tests/GdiTests.cmake`](cmake/Tests/GdiTests.cmake) builds smoke, CPU 2D regression,
+[`cmake/Tests/GdiTests.cmake`](../cmake/Tests/GdiTests.cmake) builds smoke, CPU 2D regression,
 ColorMatrix integration, public-stencil, complete public-API, applied-state, unsupported-feature,
 dirty-damage, repaint/failure, presentation-oracle, presentation-configuration, window-metrics,
 framebuffer-allocation, MSAA-contract, presentation-mode transaction, DC-release transaction,
@@ -316,7 +316,7 @@ Windows lifecycle/DPI, or physical-Windows kernel-object-leak proof.
 ### F1 — public stencil clears are dropped (P0, resolved by GDI-050)
 
 GDI reports `SupportsDepthStencil() == false`, which is correct for depth. However,
-[`GraphicsDevice::Clear`](src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp) uses that one
+[`GraphicsDevice::Clear`](../src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp) uses that one
 combined result to mask **both** `DepthBuffer` and `Stencil` down to `Target`. Render targets use the
 same conflated `HasRealDepthBuffer()` decision. Therefore public
 `GraphicsDevice::Clear(ClearOptions::Stencil, ...)` never reaches GDI's real `ClearStencil()`, on
@@ -334,7 +334,7 @@ the backbuffer and a depthless `RenderTarget2D`.
 
 ### F2 — dirty bounds can be smaller than the pixels actually written (P0, resolved by GDI-051)
 
-[`GdiSpriteBatchBackend::MarkDraw`](src/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.cpp) records
+[`GdiSpriteBatchBackend::MarkDraw`](../src/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.cpp) records
 the raw destination rectangle when rotation is zero and the batch transform is identity. The shared
 rasterizer subsequently:
 
@@ -342,7 +342,7 @@ rasterizer subsequently:
 - adds `Viewport.X/Y` after transforming viewport-local sprite coordinates.
 
 Those effects are visible in the actual quad construction in
-[`SoftwareGraphicsBackend.cpp`](src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp),
+[`SoftwareGraphicsBackend.cpp`](../src/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.cpp),
 but absent from the damage rectangle. With `CNA_GDI_DIRTY_PRESENTATION=1`, valid pixels can remain
 stale. Rectangle addition also uses signed `int` without overflow-safe widening.
 
@@ -360,7 +360,7 @@ listed in GDI-051, including huge and fully off-screen coordinates.
 Dirty presentation treats a non-empty `GetUpdateRect()` as the signal to repaint the full frame.
 Microsoft documents that `BeginPaint` validates the update region, after which `GetUpdateRect()` is
 empty. More directly, the [vendored SDL Win32 `WM_PAINT`
-handler](third_party/SDL/src/video/windows/SDL_windowsevents.c) explicitly calls `ValidateRect()`
+handler](../third_party/SDL/src/video/windows/SDL_windowsevents.c) explicitly calls `ValidateRect()`
 before sending `SDL_EVENT_WINDOW_EXPOSED`. CNA polls that event before rendering, but its game loop
 does not turn exposed or restored into graphics invalidation. GDI's later `GetUpdateRect()` can
 therefore be empty even though the client needs its retained frame redrawn.
@@ -543,7 +543,7 @@ triangle raster helpers and the `RasterizeSpriteQuad` bridge remain centralized 
 ### F9 — a valid presentation-mode change can leave the backend in a failed half-state (P1,
 resolved by GDI-075)
 
-[`GdiGraphicsBackend::SetPresentationMode`](src/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.cpp)
+[`GdiGraphicsBackend::SetPresentationMode`](../src/CNA/Internal/Backends/Gdi/GdiGraphicsBackend.cpp)
 assigns `presentationMode_` before calling the fallible `SynchronizeBackbufferSize()`. Validation of
 ordinals is transactional, and `SoftwareFramebuffer::Resize` itself is transactional, but the
 surrounding mode change is not. A valid switch to `FixedHeightDynamicWidth` can derive a width above
@@ -575,7 +575,7 @@ resolved by GDI-076)
 GDI reports a 16,384 maximum texture dimension, while the ordinary public `Texture2D` constructors
 check only that upper per-axis value and then allocate `width * height * 4` bytes. A square RGBA8
 level at the advertised limit is 1 GiB before transient copies or mip storage. The composed
-[`SoftwareTextureBackend`](src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp) copies the
+[`SoftwareTextureBackend`](../src/CNA/Internal/Backends/Software/SoftwareTexture2D.cpp) copies the
 provided vector without using GDI-067's checked layout/budget planner, without translating
 `std::bad_alloc`/`std::length_error`, and without validating that direct `ImageData` dimensions and
 pixel count agree. Decoded/asset paths also need the same backend-boundary guard rather than relying

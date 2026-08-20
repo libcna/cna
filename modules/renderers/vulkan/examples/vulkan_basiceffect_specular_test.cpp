@@ -63,7 +63,7 @@ static const Vector3 kNormal(0.0f, 0.0f, 1.0f);
 static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
 static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 
-// Task 1103 (plan_graphics.md Phase 80): PreferPerPixelLighting now really defaults to false
+// Task 1103 (plans/plan_graphics.md Phase 80): PreferPerPixelLighting now really defaults to false
 // (XNA's own default, per-vertex/Gouraud lighting) instead of always rendering per-pixel. This
 // scene never sets PreferPerPixelLighting=true, so it now genuinely exercises the vertex-lit
 // path -- Gouraud-interpolating the Blinn-Phong specular term across the quad's two triangles

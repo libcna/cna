@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O9 (DX2-95, DX2-97): SupportsCapability(WireFrame)/AnisotropicFiltering()
+// plans/plan_dx2.md Phase O9 (DX2-95, DX2-97): SupportsCapability(WireFrame)/AnisotropicFiltering()
 // re-verification, mirroring dx2_spike10_specular_wireframe_aniso.cpp's Test D through the full
 // XNA public API instead of a standalone spike.
 //

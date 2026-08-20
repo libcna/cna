@@ -1,6 +1,6 @@
 # --- FNA3D (3D graphics library for FNA, https://github.com/FNA-XNA/FNA3D) ---
 #
-# plan_fna3d.md FNA3D-1 / design decision 1: FNA3D is fetched at configure time from the upstream
+# plans/plan_fna3d.md FNA3D-1 / design decision 1: FNA3D is fetched at configure time from the upstream
 # repository at a pinned tag, in the same spirit as the SOKOL/BGFX/WEBGPU integrations. FNA3D is a
 # real multi-file C library (not a single-header drop-in), so unlike sokol this actually builds a
 # static archive; it carries MojoShader as a git submodule, which the fetch must recurse into
@@ -27,7 +27,7 @@ set(CNA_FNA3D_GIT_REPOSITORY "https://github.com/FNA-XNA/FNA3D.git"
 set(CNA_FNA3D_GIT_TAG "3240147"
     CACHE STRING "Pinned FNA3D revision used by the FNA3D graphics renderer")
 
-# plan_fx.md FX-061/FX-062/FX-063/FX-065: fetches the pin and publishes `cna_mojoshader` alone --
+# plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: fetches the pin and publishes `cna_mojoshader` alone --
 # the Effect Framework parser plus the OpenGL, SDL_GPU and D3D11 adapters, with no FNA3D linked.
 # A renderer other than FNA3D calls this directly, so it can read a compiled effect without
 # depending on a second graphics API it does not use. `cna_configure_fna3d()` builds on top of it.
@@ -120,7 +120,7 @@ function(cna_configure_mojoshader)
         endif()
     endforeach()
 
-    # plan_fx.md FX-061/FX-062/FX-063/FX-065: the Effect Framework parser is not FNA3D's. FNA3D
+    # plans/plan_fx.md FX-061/FX-062/FX-063/FX-065: the Effect Framework parser is not FNA3D's. FNA3D
     # merely happens to be how CNA obtains it, because MojoShader ships as FNA3D's submodule and
     # FNA3D's own CMakeLists.txt already builds it as a separate `mojoshader` archive carrying the
     # OpenGL, SDL_GPU and D3D11 adapters. Publishing it as its own interface target is what lets a

@@ -34,7 +34,7 @@ in genuinely separate rendered frames while the two fills under test do **not**.
 **Mostly healthy** — this audit independently traced the entire production fix
 (`Detail::AllocateRtViewId`/`ReleaseRtViewId`'s free-list pool, each `RenderTarget2D`'s own distinct,
 stable `viewId_`, and `SetRenderTarget2D`'s use of it) and confirmed it is real, present, and matches
-both the test's own expectations and `plan_graphics.md` row 910's documented `git stash`
+both the test's own expectations and `plans/plan_graphics.md` row 910's documented `git stash`
 revert-and-rebuild verification. One minor test-coverage gap was found (F1: the priming check omits a
 blue-channel bound), which does not affect the test's actual bug-catching power for the real defect
 under test.
@@ -147,7 +147,7 @@ concurrently-bound-and-filled render targets within one frame do not clobber eac
   and by tracing the actual frame-boundary sequencing (see Logic section above).
 - The header comment's stated root cause (`bgfx::setViewFrameBuffer` being a per-view-per-*frame*,
   not per-submit, setting) was independently verified against the actual fix
-  (`Detail::AllocateRtViewId`) and against `plan_graphics.md` row 910's own description — both
+  (`Detail::AllocateRtViewId`) and against `plans/plan_graphics.md` row 910's own description — both
   consistent, not just asserted.
 - `[INFO]` diagnostic (lines 128-131) correctly and specifically names the exact regression class a
   failure would indicate.

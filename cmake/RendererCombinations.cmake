@@ -1,4 +1,4 @@
-# --- Renderer combination rules (plan_runtimerenderer.md design decision 11) ---
+# --- Renderer combination rules (plans/plan_runtimerenderer.md design decision 11) ---
 #
 # Not every pair of renderers can be linked into one binary. Where they cannot, the build must say
 # so AT CONFIGURE TIME with a reason -- never leave it to surface as a duplicate-symbol link error
@@ -23,7 +23,7 @@ set(CNA_RENDERER_REAL_GL_FAMILIES
 
 # Identities served by one implementation family. Two of them in one binary would mean compiling
 # that family twice with different profile defines -- an ODR violation, not merely a name clash.
-# Lifting this is plan_runtimerenderer.md phase P11 (EasyGL's profile becomes a runtime choice).
+# Lifting this is plans/plan_runtimerenderer.md phase P11 (EasyGL's profile becomes a runtime choice).
 set(CNA_RENDERER_SHARED_EASYGL OPENGLES2 OPENGLES3 OPENGL33 WEBGL1 WEBGL2)
 
 # Platform partitions. A combination spanning two of these can never build: the toolchain targets
@@ -110,7 +110,7 @@ function(cna_validate_renderer_combination)
                     "functions twice with different bodies -- an ODR violation, not just a clash.")
             endif()
 
-            # plan_runtimerenderer.md phase P11 REMOVED the rule that used to sit here: two
+            # plans/plan_runtimerenderer.md phase P11 REMOVED the rule that used to sit here: two
             # identities served by the shared EasyGL implementation could not coexist, because its
             # GL profile was a compile definition and the same translation units would have had to
             # be compiled twice. The profile is now a runtime value, so OPENGLES2, OPENGLES3,

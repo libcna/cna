@@ -19,7 +19,7 @@ namespace
         "tests/assets/media/music/Artist One/Album Beta/01 - Twilight.mp3";
 }
 
-// plan_media.md MEDIA-10: the ctor's missing-file path now throws the same typed exception FNA
+// plans/plan_media.md MEDIA-10: the ctor's missing-file path now throws the same typed exception FNA
 // throws (FileNotFoundException(fileName)) instead of a bare std::runtime_error.
 TEST(SongTest, ConstructorThrowsFileNotFoundExceptionForMissingFile)
 {
@@ -40,10 +40,10 @@ TEST(SongTest, NameAndDurationFromThreeArgConstructor)
     EXPECT_EQ(song.getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
 }
 
-// plan_media.md MEDIA-13: these four getters are FNA-faithful hardcoded constants, not
+// plans/plan_media.md MEDIA-13: these four getters are FNA-faithful hardcoded constants, not
 // unfinished stubs -- asserted explicitly so a future audit doesn't "fix" correct behavior.
 // Correct for every indexable file, not a stub -- DRM-wrapped containers are not
-// indexable at all (plan_media.md MEDIA-185).
+// indexable at all (plans/plan_media.md MEDIA-185).
 TEST(SongTest, IsProtectedIsAlwaysFalse)
 {
     Song song(kRealFixture);
@@ -52,7 +52,7 @@ TEST(SongTest, IsProtectedIsAlwaysFalse)
 
 // A standalone Song has no scanned tag data, so "not rated" is correct here. Library songs DO
 // carry a real rating -- see MediaLibraryTests' LibrarySongsCarryTheirRealRatingFromTags
-// (plan_media.md MEDIA-184).
+// (plans/plan_media.md MEDIA-184).
 TEST(SongTest, IsRatedIsFalseForAStandaloneSong)
 {
     Song song(kRealFixture);
@@ -67,14 +67,14 @@ TEST(SongTest, RatingIsZeroForAStandaloneSong)
 
 // A standalone Song has no scanned tag data, so 0 ("unknown") is correct here. Library
 // songs DO carry their real track number -- see MediaLibraryTests'
-// LibrarySongsCarryTheirRealTrackNumberFromTags (plan_media.md MEDIA-181).
+// LibrarySongsCarryTheirRealTrackNumberFromTags (plans/plan_media.md MEDIA-181).
 TEST(SongTest, TrackNumberIsZeroForAStandaloneSong)
 {
     Song song(kRealFixture);
     EXPECT_EQ(song.getTrackNumberProperty(), 0);
 }
 
-// plan_media.md MEDIA-14: GetHashCode() is deliberately content-based (hash of the resolved
+// plans/plan_media.md MEDIA-14: GetHashCode() is deliberately content-based (hash of the resolved
 // handle), unlike FNA's identity-based base.GetHashCode() -- locks in the improved behavior.
 TEST(SongTest, GetHashCodeIsContentBasedNotIdentityBased)
 {
@@ -94,7 +94,7 @@ TEST(SongTest, EqualsAndOperatorsCompareByHandle)
     EXPECT_FALSE(a != b);
 }
 
-// plan_media.md MEDIA-76: the unequal case -- two different handles must NOT compare equal, even
+// plans/plan_media.md MEDIA-76: the unequal case -- two different handles must NOT compare equal, even
 // with the same display Name, confirming Equals()/operator==/operator!= genuinely compare by
 // handle rather than always returning true.
 TEST(SongTest, EqualsAndOperatorsCompareUnequalForDifferentHandles)
@@ -127,7 +127,7 @@ namespace
     // Builds an RFC 8089 file URI from a real path, correctly on BOTH platforms.
     //
     // Hand-concatenating "file://" + path.string() is NOT portable, which is how an earlier version
-    // of these tests got it wrong (plan_media.md MEDIA-228):
+    // of these tests got it wrong (plans/plan_media.md MEDIA-228):
     //   * on Windows, string() yields backslashes ("C:\\x"), which are not valid in a URI at all;
     //   * even after converting to forward slashes, "file://C:/x" parses "C:" as the AUTHORITY,
     //     making it look like a remote host rather than a local drive.
@@ -163,7 +163,7 @@ TEST(SongTest, GetTypeNameIsFullyQualified)
     EXPECT_EQ(song.GetTypeName(), "Microsoft.Xna.Framework.Media.Song");
 }
 
-// plan_media.md MEDIA-217 (found by external code review): FromUri's own header promised "File URI
+// plans/plan_media.md MEDIA-217 (found by external code review): FromUri's own header promised "File URI
 // or local path", but the raw string went straight to the Song constructor, which then asked
 // std::filesystem::exists about a literal "file:///..." -- so a real file:// URI ALWAYS failed.
 // FNA resolves this via Uri.LocalPath and rejects non-file schemes (Song.cs).
@@ -218,7 +218,7 @@ TEST(SongTest, FromUriStillAcceptsAPlainPath)
     delete song;
 }
 
-// plan_media.md MEDIA-219: the three genuinely distinct spellings RFC 8089 permits for a local
+// plans/plan_media.md MEDIA-219: the three genuinely distinct spellings RFC 8089 permits for a local
 // file, all of which .NET's Uri.LocalPath resolves to the same path. The first version of this fix
 // only handled one of them.
 TEST(SongTest, FromUriAcceptsEveryLocalFileUriSpelling)
@@ -250,7 +250,7 @@ TEST(SongTest, FromUriAcceptsEveryLocalFileUriSpelling)
 // A non-empty, non-localhost authority is a REMOTE host. Silently dropping it (as the first version
 // of this fix did) would resolve a remote path to a local one -- a genuinely wrong file. It becomes
 // a UNC path instead, matching Uri.LocalPath, so an unreachable share fails as not-found rather
-// than quietly succeeding against the wrong file (plan_media.md MEDIA-219).
+// than quietly succeeding against the wrong file (plans/plan_media.md MEDIA-219).
 TEST(SongTest, FromUriTreatsARemoteAuthorityAsUncRatherThanSilentlyDroppingIt)
 {
     // Constructed so that the CORRECT and the BUGGY behaviours give OPPOSITE results, which a
@@ -277,7 +277,7 @@ TEST(SongTest, FromUriDoesNotMistakeAWindowsDriveLetterForAScheme)
                  System::IO::FileNotFoundException);
 }
 
-// plan_media.md MEDIA-223: System.Uri.LocalPath returns ONLY the path component, so a query or
+// plans/plan_media.md MEDIA-223: System.Uri.LocalPath returns ONLY the path component, so a query or
 // fragment must not end up in the filename. Previously everything after "file:" was treated as
 // path, so this failed with a FileNotFoundException naming a file nobody asked for.
 TEST(SongTest, FromUriIgnoresQueryAndFragment)
@@ -307,7 +307,7 @@ TEST(SongTest, FromUriIgnoresQueryAndFragment)
 //
 // Uses '#' (%23) rather than '?' (%3F) deliberately: '?' is an ILLEGAL filename character on
 // Windows, so creating the fixture would fail there before FromUri was ever exercised, making this
-// test non-portable (found by external code review, plan_media.md MEDIA-225). '#' is legal on both
+// test non-portable (found by external code review, plans/plan_media.md MEDIA-225). '#' is legal on both
 // Windows and POSIX and exercises exactly the same code path, since fragment stripping runs first.
 TEST(SongTest, FromUriTreatsPercentEncodedDelimitersAsLiteralFilenameCharacters)
 {

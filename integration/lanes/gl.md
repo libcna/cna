@@ -25,7 +25,7 @@
 | Tip subject | `docs(Task GLB-40): confirm final 236/241 count from full-suite run` |
 | Subsystem | GL-family public backends (OPENGLES / OPENGL33 desktop) via EasyGL |
 | Shared interfaces | `GraphicsDevice.cpp`, `IGraphicsBackend.hpp` — **not** `GraphicsCapability.hpp` |
-| Plan file / namespace | `plan_glbackends.md` / `GLB-*` |
+| Plan file / namespace | `plans/plan_glbackends.md` / `GLB-*` |
 | Conflict class | **CROSS-REPOSITORY** (MEDIUM within CNA) |
 | Development status | DEVELOPMENT COMPLETE |
 | Integration readiness | **INTEGRATED 2026-08-07 — merge `0a51f8647`, Batch 4 checkpoint taken** |
@@ -90,7 +90,7 @@ because that working configuration is what `feature/gl` is actually built agains
 8. Build and test CNA `feature/gl`.
 9. Integrate CNA `feature/gl` into `integration/post-audit-phase1`.
 
-**None of these merges may be performed autonomously.** `plan_glbackends.md` records the same
+**None of these merges may be performed autonomously.** `plans/plan_glbackends.md` records the same
 constraint independently: *"`GLB-38` … Decided: leave to the project owner — do not attempt to
 merge/push between repos autonomously."*
 
@@ -155,7 +155,7 @@ that `GLB-38` remains open — while dropping the process narration.
 ## INTEGRATED 2026-08-07 — Batch 4 · merge `0a51f8647` · checkpoint `integration/checkpoint-batch4-20260807`
 
 **All nine §7.4 steps executed in order, under direct project-owner instruction of 2026-08-07**
-(discharging the plan_glbackends.md owner-only constraint for this session; nothing was pushed).
+(discharging the plans/plan_glbackends.md owner-only constraint for this session; nothing was pushed).
 
 ### The external repositories — and the classification this lane corrects
 

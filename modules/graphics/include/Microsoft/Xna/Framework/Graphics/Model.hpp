@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief One camera imported from a source asset, with its projection and its placement apart.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-317` … `GLTF-321`). glTF §3.10
+     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-317` … `GLTF-321`). glTF §3.10
      * puts the projection on the camera and the placement on the node, and the two are kept apart
      * here for the same reason: an application animating the camera's node needs to recompute the
      * view without touching the projection.
@@ -43,7 +43,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief Builds the projection glTF's infinite perspective camera describes (§3.10.3).
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-319`). A glTF perspective
+     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-319`). A glTF perspective
      * camera may omit `zfar`, which means the far plane is at infinity. XNA has no overload for
      * that, and substituting a large finite `zfar` is not equivalent: it changes every depth value,
      * not just the ones near the horizon, so a depth comparison that was exact becomes approximate.
@@ -64,7 +64,7 @@ namespace Microsoft::Xna::Framework::Graphics
         float fieldOfView, float aspectRatio, float nearPlaneDistance);
 
     /**
-     * @brief One camera placement imported from a glTF scene (plan_gltf.md `GLTF-317`).
+     * @brief One camera placement imported from a glTF scene (plans/plan_gltf.md `GLTF-317`).
      *
      * @note CNAEXT — not part of the XNA 4.0 API. XNA's `Model` has no cameras at all. A placement
      * rather than a camera: one glTF camera instanced by several nodes is several placements, and
@@ -80,7 +80,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief The scene-node index this camera is attached to, or -1 when it has no node.
          *
-         * Indexes `Model::Bones`, like every other scene-node index (plan_gltf.md §15.1.2), so the
+         * Indexes `Model::Bones`, like every other scene-node index (plans/plan_gltf.md §15.1.2), so the
          * camera follows its bone when the model is posed.
          */
         int SceneNodeIndex = -1;
@@ -98,7 +98,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * The **view** matrix is its inverse (`GLTF-321`): a glTF camera looks down its own −Z with
          * +Y up, which is exactly XNA's own convention, so no basis change is involved.
          *
-         * @warning This is a snapshot, not a live value (plan_gltf.md `GLTF-296`). A camera node is
+         * @warning This is a snapshot, not a live value (plans/plan_gltf.md `GLTF-296`). A camera node is
          * an ordinary node and can be animated like any other, and posing the model updates
          * `Model::Bones` — not this. A camera's **live** placement is the absolute transform of the
          * bone @ref SceneNodeIndex names, which `Model::CopyAbsoluteBoneTransformsTo` produces. A
@@ -118,7 +118,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief The aspect ratio @ref Projection was built with (perspective cameras only).
          *
-         * plan_gltf.md `GLTF-322`. Equal to @ref AspectRatio's authored value when the file
+         * plans/plan_gltf.md `GLTF-322`. Equal to @ref AspectRatio's authored value when the file
          * declared one, and `1` when it did not.
          */
         float AspectRatio = 1.0f;
@@ -156,7 +156,7 @@ namespace Microsoft::Xna::Framework::Graphics
     /**
      * @brief One independently posed skin imported into a Model.
      *
-     * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-265`). A glTF file may
+     * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-265`). A glTF file may
      * contain several skins, while the conventional XNA `Model::Tag` carrier can hold only one
      * `SkinningData`. The first imported skin remains on `Model::Tag` for compatibility; this
      * collection is the complete, unambiguous mapping from every skin to the meshes its palette
@@ -251,7 +251,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Cameras the source asset declared, in scene-node order.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-317`). glTF files ship
+         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-317`). glTF files ship
          * their own cameras and CNA dropped every one of them, so an asset that had been framed by
          * its author arrived with no framing at all and each viewer had to invent one.
          *
@@ -311,7 +311,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Gets one sphere containing every mesh at its current parent-bone placement.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-128`). XNA exposes a
+         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-128`). XNA exposes a
          * sphere on each `ModelMesh`, but no whole-model union; consumers otherwise have to walk
          * private vertex sidecars and duplicate `Model::Draw`'s bone composition just to frame or
          * cull an imported scene.
@@ -339,7 +339,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Names of the material variants declared by the imported asset, in source order.
          *
-         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-341`/`GLTF-342`). The
+         * @note CNAEXT — not part of the XNA 4.0 API (plans/plan_gltf.md `GLTF-341`/`GLTF-342`). The
          * index in this vector is the value accepted by @ref setMaterialVariantEXTProperty. An
          * index is used rather than a name because the glTF extension defines variant identity by
          * array position and does not make a display name a safe unique key.
@@ -416,7 +416,7 @@ namespace Microsoft::Xna::Framework::Graphics
         System::Object* tag_ = nullptr;
         std::shared_ptr<void> ownedResources_;
 
-        // Deviation from FNA, deliberate and behaviour-preserving (plan_gltf.md GLTF-444).
+        // Deviation from FNA, deliberate and behaviour-preserving (plans/plan_gltf.md GLTF-444).
         // FNA's Model.Draw shares one static Matrix[] across every Model in the process. It is
         // pure scratch -- CopyAbsoluteBoneTransformsTo overwrites it in full at the top of every
         // Draw and nothing reads it afterwards -- so no state is carried between calls and one

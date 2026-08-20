@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnj.md CNB-48/CNB-49: a Model's "animations" entry may now name either a raw .clip.bin
+// plans/plan_cnj.md CNB-48/CNB-49: a Model's "animations" entry may now name either a raw .clip.bin
 // binary blob (the original, still-supported shape) or a standalone, shareable .cnj
 // AnimationClip asset (Phase 10), loaded/cached through the normal ContentManager path
 // (ReadAnimationClipRefEXT, dispatched by extension). This file covers the Model side; the

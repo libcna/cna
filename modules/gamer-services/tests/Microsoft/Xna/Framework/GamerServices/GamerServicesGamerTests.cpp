@@ -23,7 +23,7 @@
 #include "SignedInGamerTestAccess.hpp"
 
 namespace {
-    // Task 4.7 (plan_net.md Phase 4): achievement/leaderboard persistence now touches a real
+    // Task 4.7 (plans/plan_net.md Phase 4): achievement/leaderboard persistence now touches a real
     // local store on disk, keyed only by gamertag - many unrelated tests in this file reuse
     // gamertags like "tag1", so without isolation a persistence test could see leftover state
     // from an earlier test (or leak state into a later one). Redirects the store to a dedicated,
@@ -100,7 +100,7 @@ TEST(GamerTest, TagGetSet) {
     EXPECT_EQ(42, std::any_cast<int>(g.getTagProperty()));
 }
 
-// Task 4.3 (plan_net.md Phase 4): GetLeaderboard() is now a real implementation - see the
+// Task 4.3 (plans/plan_net.md Phase 4): GetLeaderboard() is now a real implementation - see the
 // dedicated LeaderboardWriterTest suite below for full coverage; this confirms it's reachable and
 // non-throwing through any Gamer-derived type, not just SignedInGamer.
 TEST(GamerTest, LeaderboardWriterGetLeaderboardReturnsRealEntry) {
@@ -290,7 +290,7 @@ TEST(LeaderboardEntryTest, GamerPointerRoundTrips) {
     EXPECT_EQ(&g, e.getGamerProperty());
 }
 
-// --- LeaderboardWriter (Task 4.3, plan_net.md Phase 4) ---
+// --- LeaderboardWriter (Task 4.3, plans/plan_net.md Phase 4) ---
 //
 // LeaderboardWriter has no public constructor (matching real XNA - it's only ever obtained via
 // Gamer.LeaderboardWriter), so these are exercised through a real Gamer, not standalone.
@@ -372,7 +372,7 @@ TEST(LeaderboardReaderTest, PropertiesFromCtor) {
     cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 30, 3));
     auto reader = LeaderboardReader::CreateInternal(id, 0, 2, cache, false);
     EXPECT_EQ(0, reader.getPageStartProperty());
-    // Task 4.4 fix-up (plan_net.md Phase 4): totalLeaderboardSize_ used to be left at its default
+    // Task 4.4 fix-up (plans/plan_net.md Phase 4): totalLeaderboardSize_ used to be left at its default
     // 0 forever (a real bug - getTotalLeaderboardSizeProperty() always lied); it now reflects
     // entryCache_'s own size, since entryCache_ always holds this reader's complete board.
     EXPECT_EQ(3, reader.getTotalLeaderboardSizeProperty());
@@ -416,7 +416,7 @@ TEST(LeaderboardReaderTest, CanPageDownFriendBoard) {
 }
 
 TEST(LeaderboardReaderTest, CanPageUpFriendBoard) {
-    // Task 4.4 fix-up (plan_net.md Phase 4): friend and non-friend boards now share the exact same
+    // Task 4.4 fix-up (plans/plan_net.md Phase 4): friend and non-friend boards now share the exact same
     // bounded-array paging math - entryCache_ always holds this reader's complete board either
     // way (full local board, or the gamer-restricted subset), so friends=true no longer selects a
     // different rule (the old "(pageStart - pageSize) >= 0" full-page-only rule this test used to
@@ -432,7 +432,7 @@ TEST(LeaderboardReaderTest, CanPageUpFriendBoard) {
 }
 
 TEST(LeaderboardReaderTest, CanPageDownNonFriendBoardByPageStart) {
-    // Task 4.4 fix-up (plan_net.md Phase 4): this test used to assert the exact off-by-one bug it
+    // Task 4.4 fix-up (plans/plan_net.md Phase 4): this test used to assert the exact off-by-one bug it
     // is now named for catching - the old non-friend branch was `pageStart_ < entryCache_.size()`,
     // true for almost the entire board (e.g. pageStart=0, a 1-entry, 1-per-page board: 0 < 1 was
     // true, wrongly claiming a nonexistent second page existed). The correct bounded-array check
@@ -447,7 +447,7 @@ TEST(LeaderboardReaderTest, CanPageDownNonFriendBoardByPageStart) {
 }
 
 TEST(LeaderboardReaderTest, CanPageDownReflectsTotalLeaderboardSize) {
-    // Task 4.4 fix-up (plan_net.md Phase 4): getTotalLeaderboardSizeProperty() used to always
+    // Task 4.4 fix-up (plans/plan_net.md Phase 4): getTotalLeaderboardSizeProperty() used to always
     // return 0 (never assigned); it now equals entryCache_'s own size, matching a single-page
     // local board where the whole board is always cached.
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
@@ -489,7 +489,7 @@ TEST(LeaderboardReaderTest, Dispose) {
     EXPECT_TRUE(reader.getIsDisposedProperty());
 }
 
-// Task 4.4 (plan_net.md Phase 4): PageDown/PageUp are real now - throw InvalidOperationException
+// Task 4.4 (plans/plan_net.md Phase 4): PageDown/PageUp are real now - throw InvalidOperationException
 // (not NotSupportedException) only when getCanPageDownProperty()/getCanPageUpProperty() is false,
 // matching the Begin/End-pair convention used elsewhere in this codebase.
 TEST(LeaderboardReaderTest, PageDownThrowsWhenCannotPageDown) {
@@ -571,7 +571,7 @@ TEST(LeaderboardReaderTest, PageUpMovesToThePreviousPage) {
 
 namespace {
     // LeaderboardReader::Read matches persisted records against Gamer::getSignedInGamersProperty()
-    // (a real, live Gamer* is required - see plan_net.md Task 4.4's own documented limitation),
+    // (a real, live Gamer* is required - see plans/plan_net.md Task 4.4's own documented limitation),
     // which SignedInGamer::CreateInternal alone does not populate - callers must publish their
     // test gamers into it explicitly. Restores the previous (empty) list afterward so this doesn't
     // leak into unrelated tests.
@@ -606,7 +606,7 @@ TEST(LeaderboardReaderTest, ReadReturnsEntriesSortedByRatingDescending) {
     EXPECT_EQ(2, entries[1].getRankingEXTProperty());
 }
 
-// Documented limitation (plan_net.md Task 4.4): a persisted gamertag with no currently
+// Documented limitation (plans/plan_net.md Task 4.4): a persisted gamertag with no currently
 // signed-in Gamer* match is skipped, since LeaderboardEntry needs a real, live Gamer*.
 TEST(LeaderboardReaderTest, ReadSkipsPersistedEntriesWithNoCurrentlySignedInGamer) {
     GamerServicesStoreGuard guard;
@@ -847,7 +847,7 @@ TEST(SignedInGamerTest, GetAchievementsReturnsEmptyCollectionWhenNoneEarned) {
     EXPECT_EQ(0, achievements.getCountProperty());
 }
 
-// Task 4.5/4.7 (plan_net.md Phase 4): AwardAchievement now persists to a real local store, and
+// Task 4.5/4.7 (plans/plan_net.md Phase 4): AwardAchievement now persists to a real local store, and
 // GetAchievements() loads it back - confirms the earned key/IsEarned/EarnedDateTime round-trip
 // through disk, not just in-memory state that happens to survive within one test. Name/
 // Description/GamerScore have no local source of truth (see AwardAchievement's own doc comment)

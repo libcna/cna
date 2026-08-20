@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-298 / GLTF-300 / GLTF-301 / GLTF-302 / GLTF-303 / GLTF-304 / GLTF-306 /
+// plans/plan_gltf.md GLTF-298 / GLTF-300 / GLTF-301 / GLTF-302 / GLTF-303 / GLTF-304 / GLTF-306 /
 // GLTF-309 / GLTF-311: how a channel's samples become keyframes.
 //
 // glTF gives an animation sampler three interpolation modes and lets each of a node's three
@@ -178,7 +178,7 @@ namespace
 
 namespace
 {
-    // plan_gltf.md GLTF-470. Both of this animation's sampler accessors are **sparse with no base
+    // plans/plan_gltf.md GLTF-470. Both of this animation's sampler accessors are **sparse with no base
     // bufferView**, which §3.6.2.3 defines as a zero-filled base with the sparse entries applied over
     // it. The corpus has sparse fixtures and animation fixtures and nothing that crosses them, so
     // this legal core combination had no coverage at all.

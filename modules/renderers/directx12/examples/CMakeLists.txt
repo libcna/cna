@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
+# plans/plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
 # exactly, including the CMAKE_CROSSCOMPILING-aware command selection above (native MSVC runs the
 # .exe directly; a Linux-hosted cross-compile wraps it with scripts/run-wine-vkd3d.sh, DX-100's own
 # Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
@@ -44,7 +44,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     cna_register_renderer_test(NAME DirectX12_Smoke COMMAND ${_directx12_smoke_cmd}
         TIMEOUT 60 LABELS "DIRECTX12")
 
-    # plan_dx.md DX-102: real (window-attached) swap-chain diagnostic -- deliberately NOT
+    # plans/plan_dx.md DX-102: real (window-attached) swap-chain diagnostic -- deliberately NOT
     # registered as a CTest (mirrors cna_diag_software's own "real executable, not a ctest"
     # precedent above), since DX-100's own spike already found this crashes under vanilla Wine's
     # dxgi.dll; a permanently-registered, always-crashing CTest would just be noise. Built so a

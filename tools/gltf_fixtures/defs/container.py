@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Container and external-resource fixtures -- owning group ``container`` (plan_gltf.md §24.2).
+"""Container and external-resource fixtures -- owning group ``container`` (plans/plan_gltf.md §24.2).
 
 The first seven assets pin the source shapes in §4.4 and §3.6.1: ordinary and padded GLB BIN
 chunks, inline and external buffers, inline and external images, and a percent-decoded filename.

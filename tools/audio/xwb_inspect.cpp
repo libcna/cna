@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_audio.md AUD-11-028: standalone tool that lists a .xwb wave bank's parsed metadata as
+// plans/plan_audio.md AUD-11-028: standalone tool that lists a .xwb wave bank's parsed metadata as
 // stable JSON and, optionally, exports every entry's raw payload as a real, playable .wav file
 // (via the same shared CNA::Internal::Audio::WavWrapper technique WaveBank.cpp itself uses to
 // reach SDL3's native PCM8/MS-ADPCM decoder) for offline diagnosis -- listening to or hex-dumping

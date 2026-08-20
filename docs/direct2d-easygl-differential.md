@@ -1,6 +1,6 @@
 # Direct2D vs EasyGL 2D differential corpus
 
-plan_direct2d.md D2D-129. The same public 2D commands, issued by one renderer-agnostic source, must
+plans/plan_direct2d.md D2D-129. The same public 2D commands, issued by one renderer-agnostic source, must
 produce the same framebuffer under Direct2D and under EasyGL. Where they legitimately cannot, the
 difference is named here rather than absorbed into a wide tolerance.
 

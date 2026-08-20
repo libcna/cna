@@ -1683,7 +1683,7 @@ namespace CNA::Internal::Renderers::Igl
         /**
          * @brief Reports whether a `Texture2D` may be created with the given surface format.
          *
-         * plan_runtimerenderer.md design decision 9's tri-state, used here to NARROW rather than
+         * plans/plan_runtimerenderer.md design decision 9's tri-state, used here to NARROW rather than
          * to widen. `Unsupported` is returned only for the formats IGL v1.1.1 genuinely cannot
          * store with XNA's own texel semantics (`IglSurfaceFormats.hpp` records why, per format);
          * every other format defers to the framework's own rule, which is the honest answer for a

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2070: KHR_materials_clearcoat, carried beside a PbrMaterial rather than inside
+// plans/plan_modern.md MOD-2070: KHR_materials_clearcoat, carried beside a PbrMaterial rather than inside
 // one.
 //
 // The placement is the decision worth testing around. PbrMaterial's defining property is that it is

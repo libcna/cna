@@ -26,7 +26,7 @@
 // DirectionalLight0.DiffuseColor=(0.5,0.5,0.5), DirectionalLight0.SpecularColor=(1,1,1),
 // SpecularPower=32, white 1x1 texture (isolates the lighting formula).
 //
-// Task 1102 correction (plan_graphics.md Phase 80): this quad's single shared normal (0,0,1)
+// Task 1102 correction (plans/plan_graphics.md Phase 80): this quad's single shared normal (0,0,1)
 // makes diffuse identical between per-vertex and per-pixel lighting (NdotL is spatially
 // constant for a flat surface + directional light), but specular is NOT — it depends on the
 // view vector, which varies across the quad even with one shared normal. Once EasyGL's

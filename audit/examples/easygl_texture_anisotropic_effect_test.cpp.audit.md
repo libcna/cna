@@ -75,10 +75,10 @@ behavior, not FNA parity.
 
 - Severity: MEDIUM
 - Confidence: HIGH (both claims independently re-checked against live production source, and
-  against `plan_graphics.md`'s own task-tracking rows)
+  against `plans/plan_graphics.md`'s own task-tracking rows)
 - Category: maintainability / documentation-accuracy
 - Location/symbol: file header comment, lines 5-31
-- Evidence: `plan_graphics.md` row 918 records **Task 918 (✅ CLOSED)** — "EasyGL has NO real
+- Evidence: `plans/plan_graphics.md` row 918 records **Task 918 (✅ CLOSED)** — "EasyGL has NO real
   anisotropic filtering support at all ... `TextureFilter::Anisotropic` silently falls back to plain
   trilinear filtering ... (Task 456 finding)" — the *exact* claim this test's comment still makes —
   fixed by adding real `GL_EXT_texture_filter_anisotropic` support. Row 924 records **Task 924
@@ -95,7 +95,7 @@ behavior, not FNA parity.
   an `[INFO]` line either way, correctly anticipating both outcomes at lines 148-157), this staleness
   is invisible to CI and would persist indefinitely without a source read like this one.
 - Related files: `src/CNA/Internal/Backends/EasyGL/EasyGLGraphicsBackend.cpp` (real fixes, see
-  above); `plan_graphics.md` rows 918/924 (closure records).
+  above); `plans/plan_graphics.md` rows 918/924 (closure records).
 - Suggested future action (not implemented by this audit): update the header comment to reflect that
   both Task 918 and Task 924 have landed; if desired, the `[INFO]`-only branches could be promoted to
   a real assertion now that the "solid black" outcome is a regression signal rather than an
@@ -112,7 +112,7 @@ behavior, not FNA parity.
   that reached the GPU sampler.
 - Why it matters: this is explicitly acknowledged as out of scope by the file's own stated goal
   ("the primary, load-bearing assertion" is non-crash), and real value-level verification does exist
-  elsewhere (`easygl_anisotropic_gl_state_test.cpp`, Task 918's own follow-up, per `plan_graphics.md`
+  elsewhere (`easygl_anisotropic_gl_state_test.cpp`, Task 918's own follow-up, per `plans/plan_graphics.md`
   row 918) — not a gap in overall coverage, just worth noting this specific file doesn't itself close
   the loop.
 

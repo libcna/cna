@@ -15,7 +15,7 @@
   `ClearStencil`/etc., lines 785-793, all `ThrowNo3D`), `include/CNA/Internal/Backends/SdlRenderer/
   SdlGraphicsBackend.hpp` (`SupportsDepthStencil()`/`HasRealDepthBuffer()`, both hardcoded `false`).
 - Cross-referenced planning doc (read as context per `AUDIT_SCOPE.md`'s explicit instruction to corroborate/refute
-  tracked defects, not as an audited file itself): `plan_graphics.md`, Task 1113 (open, ⬜) — already documents
+  tracked defects, not as an audited file itself): `plans/plan_graphics.md`, Task 1113 (open, ⬜) — already documents
   the exact defect this report independently re-derives below.
 
 ## Purpose
@@ -41,7 +41,7 @@ consulted, whenever the active target has no real depth/stencil buffer — which
 reach `SdlGraphicsBackend::ClearDepth`/`ClearColorAndDepth`/etc. (whose `ThrowNo3D` throws are the entire basis
 for this test's 4 "must throw" assertions) — they are masked down to a `Target`-only or empty request beforehand,
 so **no throw occurs**, and these 4 checks would fail if the test were actually run today. This is independently,
-concretely corroborated by this project's own `plan_graphics.md` (Task 1113, still open/⬜ as of this audit),
+concretely corroborated by this project's own `plans/plan_graphics.md` (Task 1113, still open/⬜ as of this audit),
 which documents this exact test failing for this exact reason. **Separately and more importantly**, this audit
 traced FNA's own `GraphicsDevice.Clear(ClearOptions, ...)` (`GraphicsDevice.cs` lines 811-841) and found FNA
 performs the **identical** masking (`if (dsFormat == DepthFormat.None) { options &= ClearOptions.Target; }`) —
@@ -112,7 +112,7 @@ with code 1 if actually run against the current codebase.** This was not indepen
 build directory existed in this sandbox and a full CNA rebuild was judged too costly for one file in an 8-file
 batch), but the conclusion rests on two independent, mutually-reinforcing lines of evidence: (1) direct source
 tracing of `GraphicsDevice::Clear`'s current masking logic against this test's literal assertions, both quoted
-above; and (2) this project's own `plan_graphics.md` Task 1113 entry, which states verbatim that it found
+above; and (2) this project's own `plans/plan_graphics.md` Task 1113 entry, which states verbatim that it found
 `SDL_Renderer_ClearOptions_Audit` failing for exactly this reason via a live `ctest` run, confirmed via `git
 stash` to reproduce against the unmodified baseline (not a flake).
 
@@ -148,7 +148,7 @@ would fail today, and its own expectation was never real-XNA-compliant to begin 
 - Severity: HIGH
 - Confidence: HIGH (independently traced through current `GraphicsDevice.cpp` source, cross-checked against
   FNA's own `GraphicsDevice.cs` masking algorithm, and corroborated by this project's own tracked, still-open
-  `plan_graphics.md` Task 1113 entry describing a live `ctest` failure for this exact test)
+  `plans/plan_graphics.md` Task 1113 entry describing a live `ctest` failure for this exact test)
 - Category: correctness-of-test / stale-assumption / FNA-parity
 - Location/symbol: `check(ClearThrows(dev, ClearOptions::DepthBuffer), ...)` (line 93),
   `check(ClearThrows(dev, ClearOptions::Target | ClearOptions::DepthBuffer), ...)` (line 94),
@@ -164,7 +164,7 @@ would fail today, and its own expectation was never real-XNA-compliant to begin 
   `ClearDepthAndStencil`/`ClearColorDepthAndStencil` (whose unconditional `ThrowNo3D` calls are this test's entire
   basis for expecting a throw). FNA's own `GraphicsDevice.Clear` (`GraphicsDevice.cs` lines 826-829) performs the
   textually near-identical masking (`if (dsFormat == DepthFormat.None) { options &= ClearOptions.Target; }`),
-  confirming CNA's July 13 fix is the *correct* XNA-parity behavior. `plan_graphics.md`'s own Task 1113 entry
+  confirming CNA's July 13 fix is the *correct* XNA-parity behavior. `plans/plan_graphics.md`'s own Task 1113 entry
   (still `⬜` open) independently confirms via a real `ctest` run that `SDL_Renderer_ClearOptions_Audit` fails
   today for exactly this reason, and that the failure reproduces against a `git stash`-restored baseline (i.e.,
   not a flake or an artifact of unrelated local changes).
@@ -179,22 +179,22 @@ would fail today, and its own expectation was never real-XNA-compliant to begin 
   comment describes.
 - FNA/XNA comparison: FNA's `GraphicsDevice.Clear(ClearOptions, ...)` (`GraphicsDevice.cs` lines 811-841)
   confirmed to perform equivalent format-based masking, never throwing for an unsupported combination — the
-  authoritative answer to the open question `plan_graphics.md` Task 1113 itself poses ("is
+  authoritative answer to the open question `plans/plan_graphics.md` Task 1113 itself poses ("is
   `SDL_Renderer_ClearOptions_Audit`'s own expectation simply wrong... or does `GraphicsDevice::Clear()`'s masking
   itself need to [change]?") is: **the test's expectation is the one that needs to change; the masking is
   correct.**
 - Related files: `src/Microsoft/Xna/Framework/Graphics/GraphicsDevice.cpp` (masking logic, lines 291-323),
   `include/CNA/Internal/Backends/SdlRenderer/SdlGraphicsBackend.hpp` (`SupportsDepthStencil()`, line 145),
-  `plan_graphics.md` (Task 1113, Task 871).
+  `plans/plan_graphics.md` (Task 1113, Task 871).
 - Suggested future action (not implemented by this audit-only pass): update this test's 4 `DepthBuffer`-involving
   checks to assert the FNA-correct outcome (no throw; the color target still clears when `Target` is also
   requested, otherwise a genuine no-op) instead of a throw, and correct the header comment's now-inaccurate
-  account of why the `Stencil`/`Target|Stencil` checks pass. Close `plan_graphics.md` Task 1113 accordingly once
+  account of why the `Stencil`/`Target|Stencil` checks pass. Close `plans/plan_graphics.md` Task 1113 accordingly once
   done.
 
 ## Cross-File Observations
 
-- `plan_graphics.md` (a root-level, `EXEMPT` planning-tracking doc per `AUDIT_SCOPE.md`, not itself
+- `plans/plan_graphics.md` (a root-level, `EXEMPT` planning-tracking doc per `AUDIT_SCOPE.md`, not itself
   audit-reported) already contains an accurate, detailed account of this exact defect (Task 1113) — this audit's
   independent source-level re-derivation corroborates that entry rather than discovering something new, and
   additionally resolves the open question that entry itself poses by checking the FNA reference directly (which
@@ -204,7 +204,7 @@ would fail today, and its own expectation was never real-XNA-compliant to begin 
   citation is technically accurate as a historical fact (Task 871 was real and is correctly described) but is
   presented as still explaining *current* behavior for the `Stencil`-alone check, which it no longer fully does
   once the July 13 masking fix is accounted for.
-- Cross-reference for a future fix: `dx9-spike`/`plan_graphics.md`'s own note that `DX3`'s
+- Cross-reference for a future fix: `dx9-spike`/`plans/plan_graphics.md`'s own note that `DX3`'s
   `examples/dx3_no3d_test.cpp` (Check D) already designs around this exact masking behavior correctly, by testing
   the backend's `ClearColorAndDepth`/etc. methods directly rather than through the public `Clear()` API — a
   workable template for how this file's own checks could be restructured if direct-backend-method testing is
@@ -234,6 +234,6 @@ Given F1, the more accurate framing is not "missing" tests but "the existing tes
 This test file's central claim (4 specific `ClearOptions` combinations throw on `SDL_Renderer`) is stale: a later,
 independently-motivated fix for a real reported crash (`90f5db2c`) changed `GraphicsDevice::Clear`'s masking
 behavior to match FNA's own graceful-degradation semantics, which this test predates and does not reflect. This
-project's own `plan_graphics.md` already tracks the resulting test failure as an open item (Task 1113); this audit
+project's own `plans/plan_graphics.md` already tracks the resulting test failure as an open item (Task 1113); this audit
 additionally resolves that item's own open question by confirming against the FNA source that the current,
 non-throwing masking behavior is the XNA-correct one, and the test itself is what needs updating.

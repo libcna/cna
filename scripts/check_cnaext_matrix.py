@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plan_modern.md MOD-1698: every renderer identity must appear in the engine layer's matrix.
+"""plans/plan_modern.md MOD-1698: every renderer identity must appear in the engine layer's matrix.
 
 The matrix in ``docs/cnaext-engine-layer.md`` is only useful if it is complete: a renderer missing
 from it reads as "nobody has thought about this one", which is indistinguishable from "this one is

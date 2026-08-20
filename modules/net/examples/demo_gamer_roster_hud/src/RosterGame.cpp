@@ -101,7 +101,7 @@ void RosterGame::Initialize()
         session_ = NetworkSession::Join(&constAvailable[0]);
         std::printf("[Roster] Joined the host's session as \"%s\".\n", localGamer_->getGamertagProperty().c_str());
 
-        // Task 5.1-5.4 (plan_net.md Phase 5): real host migration now exists - opting in here (as
+        // Task 5.1-5.4 (plans/plan_net.md Phase 5): real host migration now exists - opting in here (as
         // the joining/client role, the only side that ever actually loses a host connection) means
         // OnHostChanged below is no longer permanently dead: if the host process is killed while
         // this one keeps running, this client either really becomes the new host itself (the only
@@ -144,7 +144,7 @@ void RosterGame::OnGamerLeft(System::Object* /*sender*/, const GamerLeftEventArg
 
 void RosterGame::OnHostChanged(System::Object* /*sender*/, const HostChangedEventArgs& e)
 {
-    // Task 5.1-5.4 (plan_net.md Phase 5): real host migration - this client session opted in via
+    // Task 5.1-5.4 (plans/plan_net.md Phase 5): real host migration - this client session opted in via
     // setAllowHostMigrationProperty(true) in Initialize() above, so this really can fire now: kill
     // the host process while this one keeps running and watch it happen live (this client
     // deterministically becomes the new host itself, or reconnects to whichever other client did -

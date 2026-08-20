@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""``KHR_lights_punctual`` fixtures -- owning group ``lights`` (plan_gltf.md §24.2).
+"""``KHR_lights_punctual`` fixtures -- owning group ``lights`` (plans/plan_gltf.md §24.2).
 
 Importing a glTF light rig into XNA is **lossy by construction**, and every fixture here exists to
 pin one of the losses rather than to prove a mapping. XNA's stock effects light with exactly three

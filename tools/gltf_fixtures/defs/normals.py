@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MS-PL
-"""Normal / tangent fixtures -- owning group ``normals`` (plan_gltf.md §24.2's "Normals / tangents").
+"""Normal / tangent fixtures -- owning group ``normals`` (plans/plan_gltf.md §24.2's "Normals / tangents").
 
 Specification: §3.7.2.1 ``meshes-overview`` -- "When normals are not specified, client
 implementations MUST calculate flat normals and the provided tangents are ignored."

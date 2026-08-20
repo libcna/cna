@@ -1,6 +1,6 @@
 # `tools/gltf_fixtures` — the CNA glTF 2.0 conformance fixture generator
 
-`plan_gltf.md` **GLTF-003**. Emits every synthetic asset in the glTF conformance corpus **and** its
+`plans/plan_gltf.md` **GLTF-003**. Emits every synthetic asset in the glTF conformance corpus **and** its
 expectation manifest, from one source of truth, so a fixture and the values it is checked against
 cannot drift apart.
 
@@ -147,7 +147,7 @@ tools/gltf_fixtures/
    that module's `FIXTURES` list.
 2. State the authored values once. `add_packed_accessor` records the decoded L2 expectation from
    the same values it packs; `world_positions` composes the L4 expectation from the node graph.
-3. Give it a canonical id from `plan_gltf.md` §24.2. Do not invent a name for an asset the plan
+3. Give it a canonical id from `plans/plan_gltf.md` §24.2. Do not invent a name for an asset the plan
    already names.
 4. Regenerate and commit the generator change together with its output.
 
@@ -157,7 +157,7 @@ fails on a missing, unreferenced, nested or colliding sidecar instead of committ
 
 ## Regenerating the L5 goldens
 
-`plan_gltf.md` **GLTF-149**/**GLTF-167**. The `<id>.vb.bin` / `<id>.ib.bin` sidecars are the
+`plans/plan_gltf.md` **GLTF-149**/**GLTF-167**. The `<id>.vb.bin` / `<id>.ib.bin` sidecars are the
 byte-exact vertex and index buffers CNA must produce, packed by `l5.py` from the manifest's
 independent L3 values plus its explicit `importPolicy` transformations. For example, a strip's
 indices are expanded and a non-topological skin's authored `JOINTS_0` indices are replaced by the

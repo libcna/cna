@@ -71,7 +71,7 @@ static void testPbrMaterial()
     assert(mat.getEmissiveTexture()          == nullptr);
     assert(mat.getSpecularTexture()          == nullptr);
     assert(mat.getSpecularColorTexture()     == nullptr);
-    // plan_modern.md MOD-1301: glTF's own default material, which is also PbrEffect's default --
+    // plans/plan_modern.md MOD-1301: glTF's own default material, which is also PbrEffect's default --
     // metallic 1 and roughness 1, not the 0/0.5 this bag used before Phase 13.
     assert(mat.getMetallicFactor()           == 1.0f);
     assert(mat.getRoughnessFactor()          == 1.0f);

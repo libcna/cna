@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_headless.md: closes the "not yet exercised by a dedicated test" gap left open on
+// plans/plan_headless.md: closes the "not yet exercised by a dedicated test" gap left open on
 // HEADLESS-13/14/15/16 and Phase N5 (HeadlessTrace) after the first Headless renderer commit --
 // TextureCube, Texture3D, RenderTarget2D, RenderTargetCube, custom ShaderEffect, and HeadlessTrace
 // mode were all implemented and reachable, but only exercised by code inspection, not a real test.

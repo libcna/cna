@@ -129,7 +129,7 @@ Recomputed from refs this session:
 Those 19 therefore each carry the **old** `GpuDrawParams` shape with the four fields `REMED-GFX-202`
 removed (`instanceVb`, `instanceVertexOffset`, `instanceFrequency`, `vertexBufferOffset`). That is a
 **mechanical adaptation cost**, not a defect and not a ticket. Per-branch checklist:
-`plan_postaudit.md` §10.
+`plans/plan_postaudit.md` §10.
 
 **Magnum and Wicked do not carry that cost.** They already build against the unified representation.
 
@@ -174,9 +174,9 @@ misleading**, so it is corrected here.
 | Files changed from fork point | 45 | 16 |
 | Touches `GraphicsDevice.cpp` / `IGraphicsBackend.hpp` / `GraphicsCapability.hpp` | ✔ / ✔ / — | — / — / — |
 | Contains `fc0dd2a2` | **yes** | **yes** |
-| Tip subject | `docs(plan_magnum): record the verified baseline and the decisions behind it` | `feat(plan_wicked.md WICKED-32/31/58/28): buffer hazards, upload stalls, multi-stream, mips` |
+| Tip subject | `docs(plan_magnum): record the verified baseline and the decisions behind it` | `feat(plans/plan_wicked.md WICKED-32/31/58/28): buffer hazards, upload stalls, multi-stream, mips` |
 | Last commit (UTC) | 2026-08-04T09:40:54Z | 2026-08-04T09:18:36Z |
-| Plan file | `plan_magnum.md` | `plan_wicked.md` |
+| Plan file | `plans/plan_magnum.md` | `plans/plan_wicked.md` |
 | Task namespace | `MAGNUM-*` | `WICKED-*` |
 | External dependency | `cmake/ThirdPartyMagnum.cmake` (Magnum/Corrade) | `cmake/ThirdPartyWicked.cmake` + `cmake/patches/wicked-sdl3-platform.patch` |
 
@@ -213,7 +213,7 @@ factual ref name, not a contributor attribution, and it stays.
 | Ahead / behind `develop` | **752 / 0** |
 | Tip subject | `test(Task D2D-83/84): verify CPU-fallback sampling against the D2D-81 oracle` |
 | Last commit (UTC) | **2026-08-04T11:27:08Z** |
-| Plan file | `plan_direct2d.md` (also touches `plan_sdlgpu.md`) |
+| Plan file | `plans/plan_direct2d.md` (also touches `plans/plan_sdlgpu.md`) |
 | Shared interfaces | `GraphicsDevice.cpp`, `IGraphicsBackend.hpp`, `GraphicsCapability.hpp` — all three |
 
 **Git evidence that it is still moving, recorded rather than assumed.** The head observed at the
@@ -291,7 +291,7 @@ because that working configuration is what `feature/gl` is actually built agains
 11. Integrate CNA `feature/gl` into the CNA integration branch.
 
 **None of these merges was performed in this session, and none may be performed autonomously.**
-`plan_glbackends.md` records the same constraint independently: *"`GLB-38` … **Decided: leave to the
+`plans/plan_glbackends.md` records the same constraint independently: *"`GLB-38` … **Decided: leave to the
 project owner — do not attempt to merge/push between repos autonomously.** (Reconfirmed 2026-07-20
 morning.)"*
 
@@ -355,7 +355,7 @@ provenance identifiers.** A ref name is not a contributor attribution; do not co
 1. The signed phase-1 checkpoint tag exists (`REMEDIATION_EXIT.md` §8).
 2. `feature/direct2d` is **frozen at a known head** confirmed by the project owner (§5).
 3. The archive tag for the lane being adapted has been created and pushed.
-4. The lane's `GpuDrawParams` adaptation (§3.1) is planned per `plan_postaudit.md` §10.
+4. The lane's `GpuDrawParams` adaptation (§3.1) is planned per `plans/plan_postaudit.md` §10.
 
 **No branch merge, rebase, cherry-pick, history rewrite or archive-tag creation was performed during
 this reconciliation, and none is authorized by it.**

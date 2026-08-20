@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Task 471 (plan_graphics.md Phase 53): small FNA reference-app generator.
+  Task 471 (plans/plan_graphics.md Phase 53): small FNA reference-app generator.
 
   A minimal console app referencing the real FNA.dll (built from the local FNA source tree,
   /rv/data/library/github.com/FNA-XNA/FNA, via `xbuild FNA.csproj /p:Configuration=Debug`) so

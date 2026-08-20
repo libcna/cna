@@ -3,7 +3,7 @@
 `-DCNA_GRAPHICS_RENDERER=OPENGL2` · enum `CNA::GraphicsRendererType::OpenGL2` · target
 `cna_renderer_opengl2` · sources `src/Graphics/Renderers/OpenGL2/`.
 
-Plan and per-session history: `plan_opengl2.md`.
+Plan and per-session history: `plans/plan_opengl2.md`.
 
 ## Identity
 

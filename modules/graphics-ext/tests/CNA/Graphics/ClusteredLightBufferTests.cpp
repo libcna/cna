@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2044: the light list as three textures, and a GPU round-trip that proves the
+// plans/plan_modern.md MOD-2044: the light list as three textures, and a GPU round-trip that proves the
 // bytes survive.
 //
 // The interesting risk here is not the C++ -- it is whether a float written as four bytes of an

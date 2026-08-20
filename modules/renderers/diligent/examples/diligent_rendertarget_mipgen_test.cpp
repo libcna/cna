@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_diligent.md DILIGENT-26: dedicated real-device pixel test for RenderTarget2D mip generation
+// plans/plan_diligent.md DILIGENT-26: dedicated real-device pixel test for RenderTarget2D mip generation
 // content, closing the gap that row's own notes left open (mip regeneration was implemented and
 // reachable, but nothing asserted on what the generated levels actually contain).
 //

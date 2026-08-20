@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// Minimal-link probe for CNA::Media (MODULARIZATION_PLAN.md §4/§11): the media value types
+// Minimal-link probe for CNA::Media (plans/MODULARIZATION_PLAN.md §4/§11): the media value types
 // must be usable without content, runtime, devices, extensions or networking. Media
 // legitimately pulls audio (the declared audio<->media cycle), graphics-core, input (the
 // FrameworkDispatcher pump surface it compiles), math and core -- the paired

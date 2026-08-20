@@ -124,7 +124,7 @@ file's own reach, and (as of this audit pass) not covered by any other file in t
   `easygl_skinnedeffect_preferperpixellighting_test.cpp.audit.md` F1 for the full analysis of that
   sibling defect. Not verified whether Vulkan/Bgfx/D3D9/D3D11/D3D12/SdlGpu's own
   `SkinnedPbrEffect`/`PbrEffect` shader pairs have the equivalent divergence (out of this shard's scope;
-  flagged for those backends' own audits, per `plan_cnj.md` CNB-103..109's cross-backend PBR+skinning
+  flagged for those backends' own audits, per `plans/plan_cnj.md` CNB-103..109's cross-backend PBR+skinning
   port).
 - Suggested future action (not implemented by this audit): give `EnsurePbrSkinnedProgram()` its own
   `uNormalMatrix` uniform (mirroring `EnsurePbrProgram()`'s), bind it in `BindDrawParams()` the same way,

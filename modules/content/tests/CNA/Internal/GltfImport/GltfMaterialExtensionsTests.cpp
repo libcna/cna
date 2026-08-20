@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_modern.md MOD-2076: the material extensions beyond glTF core, carried out of the importer.
+// plans/plan_modern.md MOD-2076: the material extensions beyond glTF core, carried out of the importer.
 //
 // cgltf has parsed clearcoat, sheen, transmission, volume and iridescence for a long time; what was
 // missing was anyone copying the values into MaterialOut, so an application could not see them at

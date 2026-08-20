@@ -162,7 +162,7 @@ namespace
     constexpr bool kRasterizes = true;
     constexpr const char* kRendererName = "CANVAS";
 #elif defined(CNA_RENDERER_SOKOL)
-    // plan_sokol.md SOKOL-25/38: real geometry really is rasterized into a RenderTarget2D here, and
+    // plans/plan_sokol.md SOKOL-25/38: real geometry really is rasterized into a RenderTarget2D here, and
     // `SokolRenderTargetRenderer::GetData` now round-trips real content via a throwaway GL FBO
     // (docs/sokol-renderer.md), so `kRasterizes = true` is accurate for this file's contract too.
     constexpr bool kRasterizes = true;
@@ -225,7 +225,7 @@ namespace
      * @brief Whether `DualTextureEffect` accepts this fixture's `VertexPositionTexture` geometry.
      *
      * D3D9 rejects it outright -- "stride 20 with vertexColor=false has no matching CNA vertex
-     * layout (plan_dx9.md D9-82d)" -- which is a documented, pre-existing vertex-layout boundary of
+     * layout (plans/plan_dx9.md D9-82d)" -- which is a documented, pre-existing vertex-layout boundary of
      * that renderer and nothing to do with render-to-texture. The other three stock-effect cases
      * (BasicEffect indexed and non-indexed, AlphaTestEffect) still run there and are what carry the
      * "not SpriteBatch-only" claim on D3D9.
@@ -235,7 +235,7 @@ namespace
         false;
 #elif defined(CNA_RENDERER_SOKOL)
         // Not a vertex-layout rejection: SokolRenderer::DrawColored3D refuses ANY
-        // `params.dualTexture` draw outright (plan_sokol.md -- dual-texture 3D is not implemented
+        // `params.dualTexture` draw outright (plans/plan_sokol.md -- dual-texture 3D is not implemented
         // yet, unlike the single-texture Textured/Lit paths SOKOL-21 landed), so C4 would throw
         // uncaught here rather than reject cleanly. Reusing this flag to skip it is the same
         // "documented boundary, unrelated to render-to-texture" carve-out D3D9 already uses.
@@ -622,7 +622,7 @@ class RenderTargetProducerConsumerTest : public Game
             if (c.kind == 3 && !kDualTextureAcceptsPositionTexture)
             {
                 std::printf("[INFO] %s skipped on %s: DualTextureEffect rejects this fixture's "
-                            "VertexPositionTexture stride (plan_dx9.md D9-82d) -- a documented "
+                            "VertexPositionTexture stride (plans/plan_dx9.md D9-82d) -- a documented "
                             "vertex-layout boundary, unrelated to render-to-texture\n",
                             c.name, kRendererName);
                 std::fflush(stdout);
@@ -971,7 +971,7 @@ class RenderTargetProducerConsumerTest : public Game
     {
         // Whether a renderer supports a mipmapped render target AT ALL is measured, not assumed:
         // WebGPU documents the chain regeneration unimplemented and throws from the constructor
-        // (plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not this finding.
+        // (plans/plan_webgpu.md WEBGPU-53/54). That is a declared capability boundary, not this finding.
         std::unique_ptr<RenderTarget2D> owner;
         try
         {

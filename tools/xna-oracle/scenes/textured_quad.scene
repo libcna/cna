@@ -1,4 +1,4 @@
-# plan_dx9.md D9-A5 scene corpus: textured_quad
+# plans/plan_dx9.md D9-A5 scene corpus: textured_quad
 # A single BasicEffect (TextureEnabled=true, VertexColorEnabled=false, LightingEnabled=false) quad
 # (2 triangles) over a CornflowerBlue clear, sampling a tiny procedural 2x2 checkerboard texture
 # with point filtering (deterministic across implementations -- no filtering interpolation to

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-2041: the frustum cut into clusters, checked against trigonometry rather than
+// plans/plan_modern.md MOD-2041: the frustum cut into clusters, checked against trigonometry rather than
 // against itself.
 //
 // The implementation gets a cluster's shape by unprojecting tile corners through the inverse of the

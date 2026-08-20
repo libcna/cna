@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_blend2d.md: end-to-end smoke test for the Blend2D (CPU 2D vector rasterizer) graphics
+// plans/plan_blend2d.md: end-to-end smoke test for the Blend2D (CPU 2D vector rasterizer) graphics
 // renderer. Constructs a real Game/GraphicsDeviceManager under CNA_GRAPHICS_RENDERER=BLEND2D,
 // runs a few frames, and asserts genuine rasterized pixel output rather than merely "did not
 // throw":

@@ -123,7 +123,7 @@ void main() {
         const Color white = Color::White;
         dummySource_->SetData(&white, 1);
 
-        // Two questions, not one (plan_modern.md `MOD-1699`): `CustomEffects` only means the
+        // Two questions, not one (plans/plan_modern.md `MOD-1699`): `CustomEffects` only means the
         // renderer *accepts* an effect. SOFTWARE and HEADLESS accept the sky shader and then draw
         // the fullscreen quad with their own fixed path, which fills the frame with the placeholder
         // texture's white -- a sky that is "supported" and shows no environment at all.

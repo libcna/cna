@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DX12 (DX-108): D3D12 root signatures -- the binding-layout declaration a
+// plans/plan_dx.md Phase DX12 (DX-108): D3D12 root signatures -- the binding-layout declaration a
 // D3D12_GRAPHICS_PIPELINE_STATE_DESC needs before a PSO can be created (DX-107). Reuses D3D11's own
 // D3DPerDrawConstants/D3DFogConstants/D3DLightingConstants/etc. struct layouts from D3DCommon
 // (DX-60/DX-60a) as-is -- this class only declares the *binding shape* (how many CBVs/SRVs/samplers,

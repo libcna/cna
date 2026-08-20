@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx2.md Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives produces the same pixel result as
+// plans/plan_dx2.md Phase O4 (DX2-33, DX2-36): DrawIndexedPrimitives produces the same pixel result as
 // the equivalent DrawPrimitives call, through the real Direct3D v2 device.
 //
 // Check A -- DrawIndexedPrimitives (16-bit indices) produces the identical center-pixel color as

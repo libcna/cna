@@ -15,7 +15,7 @@ Implements the constructor, `getHasArtProperty()`, `GetAlbumArt()`/`GetThumbnail
 ## Executive Verdict
 Correct, and confirms a genuine, previously-fixed defect. The `GetThumbnail()` comment explicitly
 states: "This used to just call `GetAlbumArt()`, making `GetThumbnail` a synonym that returned the
-full-size image -- not a thumbnail at all (plan_media.md MEDIA-209). Now genuinely downscaled and
+full-size image -- not a thumbnail at all (plans/plan_media.md MEDIA-209). Now genuinely downscaled and
 re-encoded as PNG in memory" via `CNA::Internal::Media::ThumbnailGenerator::CreatePngThumbnail()`
 (audited under `cna-internal-core`). `getHasArtProperty()`'s comment correctly emphasizes it "must
 agree EXACTLY with what `GetAlbumArt()` can actually produce," citing a real prior defect class

@@ -13,7 +13,7 @@ namespace CNA::Internal::Media
     /// PictureAlbumCollection/PlaylistCollection), which are structurally identical in FNA except
     /// for their element type. Public class names, constructors, and exception contracts stay
     /// fully distinct and XNA-faithful in Phase 4 -- only the private implementation is shared
-    /// here (plan_media.md MEDIA-55/D9).
+    /// here (plans/plan_media.md MEDIA-55/D9).
     template <typename T>
     class MediaCollectionBase
     {

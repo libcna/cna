@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_audio.md AUD-11-026: deterministic fuzz test for ParseXwb()/ParseXsb(). Unlike LZX-
+// plans/plan_audio.md AUD-11-026: deterministic fuzz test for ParseXwb()/ParseXsb(). Unlike LZX-
 // compressed streams (which can't be hand-authored -- see LzxDecoderFuzzTests.cpp's own comment),
 // valid XACT container bytes can be, so this mutates a small set of hand-built, well-formed seed
 // files (a compact XWB, a non-compact XWB with real names/loop fields, and a minimal XSB) instead

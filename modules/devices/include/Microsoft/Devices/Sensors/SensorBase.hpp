@@ -171,7 +171,7 @@ namespace Microsoft::Devices::Sensors
          * still running, causing the winner's own Stop() call to observe
          * disposed_ == true and throw ObjectDisposedException mid-cleanup —
          * a real bug found by re-auditing this exact interaction (see
-         * plan_devices_phase7.md's Audit finding B). The loser must instead
+         * plans/plan_devices_phase7.md's Audit finding B). The loser must instead
          * call WaitForDisposalToComplete() and then simply return.
          *
          * @return True if this call is the first to claim disposal (the

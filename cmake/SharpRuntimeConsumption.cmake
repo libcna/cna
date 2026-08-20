@@ -1,4 +1,4 @@
-# sharp-runtime consumption seam (MODULARIZATION_PLAN.md §3).
+# sharp-runtime consumption seam (plans/MODULARIZATION_PLAN.md §3).
 #
 # sharp-runtime exists in two shapes:
 #
@@ -15,7 +15,7 @@
 # single archive.
 
 # The complete component closure CNA needs anywhere (derived from CNA's System/... and
-# SharpRuntime/... includes; MODULARIZATION_PLAN.md §1.6): used when a target does not name
+# SharpRuntime/... includes; plans/MODULARIZATION_PLAN.md §1.6): used when a target does not name
 # its own narrower set. Transitive PUBLIC component dependencies (Uri, TimeZone,
 # ComponentModel, Buffers, ...) arrive through these.
 set(CNA_SHARP_RUNTIME_DEFAULT_COMPONENTS

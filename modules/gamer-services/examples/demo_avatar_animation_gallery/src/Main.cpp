@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
         const std::string arg = argv[i];
         if (arg == "--smoke" && i + 1 < argc) { smokeFrames = std::atoi(argv[++i]); }
         else if (arg == "--smoke") { smokeFrames = 180; }
-        // Task 8.5 (plan_net.md Phase 8): verifies the overlay renders via a non-interactive
+        // Task 8.5 (plans/plan_net.md Phase 8): verifies the overlay renders via a non-interactive
         // smoke/screenshot run, without needing simulated keyboard input.
         else if (arg == "--show-help") { showHelp = true; }
         else if (arg == "--screenshot" && i + 1 < argc) { screenshotPath = argv[++i]; }

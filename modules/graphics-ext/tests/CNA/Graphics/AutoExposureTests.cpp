@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-1552: auto-exposure, the compute reduction that MOD-308 was waiting for.
+// plans/plan_modern.md MOD-1552: auto-exposure, the compute reduction that MOD-308 was waiting for.
 //
 // The reduction is checkable exactly: a texture of one uniform colour has a known log-average
 // luminance, and a texture of two halves has the geometric mean of the two. Everything above that

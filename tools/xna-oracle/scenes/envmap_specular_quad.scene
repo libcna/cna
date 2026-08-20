@@ -1,6 +1,6 @@
-# plan_dx9.md D9-A5 scene corpus: envmap_specular_quad
+# plans/plan_dx9.md D9-A5 scene corpus: envmap_specular_quad
 # First scene to exercise EnvironmentMapEffect.EnvironmentMapSpecular with a genuinely non-zero
-# value (plan_dx9.md D9-81 item 4, resolved 2026-07-16 -- GpuDrawParams now carries a real
+# value (plans/plan_dx9.md D9-81 item 4, resolved 2026-07-16 -- GpuDrawParams now carries a real
 # specularEnabled field, derived from EnvironmentMapSpecular being non-black, matching CNA's own
 # EnvironmentMapEffect.cpp setter logic and real XNA's identical behavior). Otherwise identical to
 # envmap_quad.scene (same lit-white-texture + env-map lerp setup, fresnelfactor=0) -- only

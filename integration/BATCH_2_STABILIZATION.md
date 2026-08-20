@@ -261,7 +261,7 @@ sources, the sibling project, or — before this session — `GraphicsDevice.cpp
   a second in-tree test encoding the same over-reach surfaced in the post-fix corpus and was
   corrected within scope (§6.1); the focused validation suite re-run green under the WICKED and
   MAGNUM configurations (§6.1); full corpus deltas in §6.1. Recorded as **DISCOVERED AND
-  RESOLVED**; full ticket: `plan_postaudit.md` §19.
+  RESOLVED**; full ticket: `plans/plan_postaudit.md` §19.
 
 ### 5.2 `EasyGL_GraphicsDevice_ReferenceStencil` — **B: latent pre-existing CNA defect, already documented and tracked (Task 872) — carried visible residual**
 
@@ -442,7 +442,7 @@ precisely recorded, and deliberately left open — it is this checkpoint's block
 
 | ID | Severity | Status |
 |---|---|---|
-| **REMED-GFX-222** | MEDIUM | **DISCOVERED AND RESOLVED** — `SetVertexBuffers` rejected FNA-legal null vertex-buffer bindings (GFX-039 over-reach, 2026-07-25); §5.1, `plan_postaudit.md` §19 |
+| **REMED-GFX-222** | MEDIUM | **DISCOVERED AND RESOLVED** — `SetVertexBuffers` rejected FNA-legal null vertex-buffer bindings (GFX-039 over-reach, 2026-07-25); §5.1, `plans/plan_postaudit.md` §19 |
 | **WICKED-80** | **HIGH** | **OPEN** — `Texture3D` staged transfers corrupt dimension-dependent tail rows (§9.1) |
 
 ### 9.1 `WICKED-80` — Texture3D staged transfers corrupt dimension-dependent tail rows
@@ -473,7 +473,7 @@ a plausible-but-wrong fix lands. The reproducer, its build instructions, the ASa
 log and the measured evidence are preserved in
 `cnaintegration/cmake-build-wicked/wicked-repro/`; the raw-probe infrastructure that settled
 `WICKED-78`'s CNA-versus-upstream boundary is the named first step. Recorded as an OPEN row in
-`plan_wicked.md` (`cbdab0c5`).
+`plans/plan_wicked.md` (`cbdab0c5`).
 
 No ticket was raised for: the registration/instrument bookkeeping (§4 — expected-correction
 class), the ReferenceStencil failure (the precise finding already exists as **Task 872**, in-tree
@@ -558,7 +558,7 @@ session on this host.
 | Stashes | the four user stashes present, untouched ✅ |
 | GPG | signatures on both heads verify Good; signing proven non-interactively on this host before any work ✅ |
 | Dependency pins | `~/deps/WickedEngine` at `27c0df16` with exactly the six SDL3/teardown-patched files modified ✅; corrade `783e4e48` + magnum `5a742464` exact ✅ |
-| **Deviation** | **No CNA build tree survived the migration** — including `cmake-build-wicked/wicked-repro/` (the preserved WICKED-80 reproducer + raw ThinkPad evidence) and `cmake-build-noxna/preserved-logs-pre-batch2/`. The probe source was never git-tracked, so it was rebuilt from §9.1's documented specification; the ThinkPad raw measurements survive only as the figures quoted in §9.1/`plan_wicked.md`. Recorded as a migration deviation, not a blocker: every git-integrity item passed and the lost artifacts are regenerable (this session regenerated them). Fresh trees live on the owner-designated build partition `/media/robertvokac/claude/tmp/cna/`; the in-repo `.sdl-prebuilt-Linux-x86_64` prebuilt survived and is reused |
+| **Deviation** | **No CNA build tree survived the migration** — including `cmake-build-wicked/wicked-repro/` (the preserved WICKED-80 reproducer + raw ThinkPad evidence) and `cmake-build-noxna/preserved-logs-pre-batch2/`. The probe source was never git-tracked, so it was rebuilt from §9.1's documented specification; the ThinkPad raw measurements survive only as the figures quoted in §9.1/`plans/plan_wicked.md`. Recorded as a migration deviation, not a blocker: every git-integrity item passed and the lost artifacts are regenerable (this session regenerated them). Fresh trees live on the owner-designated build partition `/media/robertvokac/claude/tmp/cna/`; the in-repo `.sdl-prebuilt-Linux-x86_64` prebuilt survived and is reused |
 
 ### 12.2 Reproduction at the unchanged HEAD
 
@@ -745,12 +745,12 @@ Classes: **A** committed and intact · **B** reconstructable exactly from commit
 |---|---|---|
 | Original ThinkPad probe sources (`probe_texture3d_staged_transfer.cpp`, `probe_raw_wicked_texture3d.cpp`) | **D** as byte-exact files (never git-tracked, `.gitignore`d build-tree scaffolding) / **B** functionally — the EliteBook rebuilds reproduced §9.1's documented signature exactly (5×5×3, first wrong texel 50 at the slice-2 start, stray = `in[0]`), which is the evidence the reconstruction was faithful. Both reconstructed sources are retained | lane card §13.3; `wicked-repro/README.md` |
 | Exact pre-migration commands | **B** | run methodology committed in §6.1/§9.1 (display `:101`, `SDL_VIDEODRIVER`, `VK_ICD_FILENAMES`, CWD-relative `libdxcompiler.so`, quota containment); one-TU compile/link recipe in lane card §13.3 — demonstrably sufficient, it was executed successfully on this host |
-| ThinkPad failure dimensions (5×5×3; 4×5×3 and 6×5×3) | **A** as recorded figures / **C** for the underlying run log | committed in `plan_wicked.md` (`cbdab0c5`) and §9.1 |
+| ThinkPad failure dimensions (5×5×3; 4×5×3 and 6×5×3) | **A** as recorded figures / **C** for the underlying run log | committed in `plans/plan_wicked.md` (`cbdab0c5`) and §9.1 |
 | Expected and actual bytes (strays `in[5]`, `in[52]`, `in[0]`; first wrong texel at a row/slice tail) | **A** as recorded figures / **C** for the raw log | committed in §9.1; independently re-measured on this host (`in[0]`, `in[25]`, `in[40]`), logs retained |
 | ThinkPad raw run logs and `preserved-logs-pre-batch2/` | **C** | the quoted observations survive in committed prose; the artifacts themselves are gone. **This is the only genuinely lost evidence class** |
 | Wicked pin `27c0df16` | **A** | `cmake/ThirdPartyWicked.cmake`; `~/deps/WickedEngine` verified at the pin |
-| Staging layout values (5×5×3: 300 tight vs 1920 addressed; `row_pitch = align(w·4,128)`, `slice_pitch = row_pitch·h`; 5×5 2D: 100 vs 640) | **A** | committed in `plan_wicked.md` and §12.3 — **and re-measured post-migration**, printed per shape in the retained raw logs |
-| `WICKED-79` evidence that led to `WICKED-80` | **A** | fix `4449daaa`, committed narrative in `plan_wicked.md`, 13 committed corpus transfer carriers. The "two staged copies interfere" raw device measurement is **C** |
+| Staging layout values (5×5×3: 300 tight vs 1920 addressed; `row_pitch = align(w·4,128)`, `slice_pitch = row_pitch·h`; 5×5 2D: 100 vs 640) | **A** | committed in `plans/plan_wicked.md` and §12.3 — **and re-measured post-migration**, printed per shape in the retained raw logs |
+| `WICKED-79` evidence that led to `WICKED-80` | **A** | fix `4449daaa`, committed narrative in `plans/plan_wicked.md`, 13 committed corpus transfer carriers. The "two staged copies interfere" raw device measurement is **C** |
 | Original lane / blocker decision | **A** | §11 (`OUTCOME B — BLOCKED`) committed at `7dc2be5b`; the `WICKED-80` OPEN row at `cbdab0c5`; both preserved verbatim |
 
 **No unique source was lost.** Nothing that defines the checkpoint's code identity was derived

@@ -11,7 +11,7 @@ Delivered via **Wine's own builtin `d3d10.dll`/`d3d10_1.dll`** (thin wrappers; D
 `dxgi.dll` (native override — D3D10, unlike D3D8, genuinely needs a real DXGI swap chain).
 
 **This document covers a genuinely new v1 renderer, not a port.** Scope is deliberately bounded
-(plan_d3d10.md design decision 3, mirroring `DIRECTX1`'s own "baseline first, richness later" precedent
+(plans/plan_d3d10.md design decision 3, mirroring `DIRECTX1`'s own "baseline first, richness later" precedent
 and `DIRECTX8`'s own "fixed-function only" scope-bounding) — see §3 below for exactly what's in and out.
 
 ---
@@ -80,7 +80,7 @@ Wine+DXVK testing.
   A render target that must survive being bound alongside others needs
   `RenderTargetUsage::PreserveContents` explicitly.
 
-## 3. MVP scope — explicitly bounded (plan_d3d10.md design decision 3)
+## 3. MVP scope — explicitly bounded (plans/plan_d3d10.md design decision 3)
 
 - `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (**required** by `IGraphicsRenderer`): real
   `vs_4_0`/`ps_4_0` shader — `world*view*projection` transform + vertex-color passthrough (matches
@@ -110,7 +110,7 @@ of this v1's scope, not a hardware limitation).
 
 Cross-renderer regression: `GraphicsRendererCompileDefinitionsTest.ExactlyOneGraphicsRendererIsSelected`,
 `GraphicsDeviceValidationTest.SetRenderTargets_*`, and `GraphicsDeviceCapabilityTest.*` — see
-`plan_d3d10.md`'s own task table for the run record (same pre-existing `DX2-84` ungated-test-class
+`plans/plan_d3d10.md`'s own task table for the run record (same pre-existing `DX2-84` ungated-test-class
 gap every prior legacy-scope renderer in this family shows expected, not a new regression).
 
 The legacy-interface-discipline check (`scripts/check-directx10-legacy-interface-discipline.sh`) forbids
@@ -125,8 +125,8 @@ v1 is a scope decision (§3), not a hardware limit, and all have safe base-class
 
 ## See also
 
-- `plan_d3d10.md` — this renderer's own implementation plan and design-decision record.
+- `plans/plan_d3d10.md` — this renderer's own implementation plan and design-decision record.
 - `dx10-spike/README.md` — the full `DX10-0` spike record plus the environment-bug investigations.
 - `docs/directx8-renderer.md` — the last renderer in the `DIRECTX1`..`DIRECTX8` legacy family; `D3D10` diverges from
   it architecturally rather than porting it.
-- `plan_dxold.md` — the roadmap this renderer is row 10 of.
+- `plans/plan_dxold.md` — the roadmap this renderer is row 10 of.

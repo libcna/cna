@@ -7,14 +7,14 @@
 
 #include "System/IO/Stream.hpp"
 
-// plan_xnb.md XNB-28: a from-scratch C++ port of FNA's LzxDecoder.cs (itself a C# port of
+// plans/plan_xnb.md XNB-28: a from-scratch C++ port of FNA's LzxDecoder.cs (itself a C# port of
 // libmspack's lzxd.c, Copyright 2003-2004 Stuart Caie / 2011 Ali Scissons, dual MSPL/LGPL --
 // used here under CNA's own MS-PL license, matching FNA's own use). This is a line-by-line
 // port, not a reimplementation from the algorithm description -- preserves FNA's own variable
 // names, control flow (including its `goto case ALIGNED -> VERBATIM` fallthrough, translated to
 // C++'s native switch-fallthrough), and error-as-return-code style (0 = success, negative =
 // error) so it can be verified against the original source directly. Malformed/adversarial-input
-// hardening beyond FNA's own bounds checks is plan_xnb.md XNB-30, a deliberately separate,
+// hardening beyond FNA's own bounds checks is plans/plan_xnb.md XNB-30, a deliberately separate,
 // subsequent pass -- not folded into this initial port.
 
 namespace CNA::Internal::Xnb
@@ -27,13 +27,13 @@ namespace CNA::Internal::Xnb
     };
 
     /**
-     * @brief LZX decompressor for `.xnb` container payloads (plan_xnb.md XNB-28/29), matching
+     * @brief LZX decompressor for `.xnb` container payloads (plans/plan_xnb.md XNB-28/29), matching
      *        FNA's `LzxDecoder` (`src/Content/LzxDecoder.cs`) exactly.
      *
      * One instance holds decoder *state* across multiple Decompress() calls within the same
      * `.xnb` file's block stream (the sliding window, repeated-offset LRU queue, and Huffman
      * tables all persist between blocks) -- construct a fresh instance per file, never share one
-     * across files (matching plan_xnb.md XNB-17G's no-cross-file-state requirement).
+     * across files (matching plans/plan_xnb.md XNB-17G's no-cross-file-state requirement).
      */
     class LzxDecoder
     {

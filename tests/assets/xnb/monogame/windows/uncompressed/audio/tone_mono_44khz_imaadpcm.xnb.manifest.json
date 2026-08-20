@@ -16,5 +16,5 @@
     "wBitsPerSample": 4
   },
   "supportMatrixStatus": "rejected",
-  "notes": "plan_xnb.md XNB-33 support-matrix entry: IMA-ADPCM parses correctly but is rejected -- CNA has no IMA-ADPCM decoder yet."
+  "notes": "plans/plan_xnb.md XNB-33 support-matrix entry: IMA-ADPCM parses correctly but is rejected -- CNA has no IMA-ADPCM decoder yet."
 }

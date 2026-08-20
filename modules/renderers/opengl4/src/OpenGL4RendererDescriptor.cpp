@@ -1,7 +1,7 @@
-// plan_runtimerenderer.md RTR-P1-D31: the OpenGL4 family's pre-construction contract.
+// plans/plan_runtimerenderer.md RTR-P1-D31: the OpenGL4 family's pre-construction contract.
 //
 // Real desktop OpenGL 4.x core profile, deliberately independent of the EasyGL-backed GL identities
-// (plan_opengl4.md GL4-1). Same the platform window intent requirement.
+// (plans/plan_opengl4.md GL4-1). Same the platform window intent requirement.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::OpenGL4
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

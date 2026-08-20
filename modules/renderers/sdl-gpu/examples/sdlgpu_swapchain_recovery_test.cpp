@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_sdlgpu.md SDLGPU-11: proves the hard-swapchain-acquisition-failure path is genuinely
+// plans/plan_sdlgpu.md SDLGPU-11: proves the hard-swapchain-acquisition-failure path is genuinely
 // recoverable, not just "throws and leaves the renderer in an unknown state" -- a real gap this
 // row's own Notes column flagged as "not yet proven recoverable in practice".
 //

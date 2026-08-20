@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not only the identity macro. This suite is
+// plans/plan_runtimerenderer.md RTR-P9-9: PRESENT_, not only the identity macro. This suite is
 // device-free policy coverage for its own renderer, so it is worth compiling and running whenever
 // that renderer is COMPILED IN -- in a multi-renderer build it need not be the selected one.
 #if defined(CNA_RENDERER_IGL) || defined(CNA_RENDERER_PRESENT_IGL)

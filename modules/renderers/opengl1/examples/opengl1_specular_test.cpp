@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: BasicEffect specular highlights (plan_opengl1.md item 15, EasyGL parity).
+// OPENGL1 renderer: BasicEffect specular highlights (plans/plan_opengl1.md item 15, EasyGL parity).
 //
 // Before this, GpuDrawParams::specularColor/specularPower/light0-2Specular were carried by every
 // draw but never read by DrawInternal at all -- a game setting BasicEffect.SpecularColor got

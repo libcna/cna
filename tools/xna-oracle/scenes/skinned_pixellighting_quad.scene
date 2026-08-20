@@ -1,5 +1,5 @@
-# plan_dx9.md D9-A5 scene corpus: skinned_pixellighting_quad
-# First scene to exercise SkinnedEffect.PreferPerPixelLighting=true (plan_dx9.md D9-81 item 1,
+# plans/plan_dx9.md D9-A5 scene corpus: skinned_pixellighting_quad
+# First scene to exercise SkinnedEffect.PreferPerPixelLighting=true (plans/plan_dx9.md D9-81 item 1,
 # resolved 2026-07-16). Same left/right split-normal discriminator as
 # lit_textured_quad_pixellighting.scene's own header comment explains in full (a flat,
 # single-normal quad cannot tell vertex-lit and pixel-lit apart at all -- see that scene's own

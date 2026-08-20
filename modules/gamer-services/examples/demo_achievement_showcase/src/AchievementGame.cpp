@@ -100,7 +100,7 @@ void AchievementGame::AwardTile(std::size_t index)
         return;
     }
 
-    // Task 4.5 (plan_net.md Phase 4): real API call - persists to the local GamerServices store,
+    // Task 4.5 (plans/plan_net.md Phase 4): real API call - persists to the local GamerServices store,
     // keyed by gamertag. Real XNA's AwardAchievement only ever takes a key, no name/description/
     // score, so GetAchievements() below reflects only key+earned+earnedDateTime for real; this
     // demo's own tiles_ grid (with the real name/description/displayBeforeEarned this local store

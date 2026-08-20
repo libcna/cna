@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx.md Phase DIRECTX8 (DX-58): custom ShaderEffect -- runtime D3DCompile() of arbitrary HLSL
+// plans/plan_dx.md Phase DIRECTX8 (DX-58): custom ShaderEffect -- runtime D3DCompile() of arbitrary HLSL
 // vertex+fragment source, separate from the offline stock-shader pipeline (design decision 5).
 //
 // Mirrors VulkanEffectRenderer's own established contract as closely as D3D11's model allows (same

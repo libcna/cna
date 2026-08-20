@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl4.md GL4-22: SkinnedEffect for the OpenGL4 graphics renderer -- adds a dedicated
+// plans/plan_opengl4.md GL4-22: SkinnedEffect for the OpenGL4 graphics renderer -- adds a dedicated
 // skinned3d GLSL 410 core program (new stride 52/56, VertexPositionNormalTextureSkinned +
 // optional trailing Color), selected by BindProgramForStride for those two strides. Also adds
 // OpenGL4VertexBufferRenderer::ApplyLayout's stride-52/56 vertex attribute cases (BlendWeight as a

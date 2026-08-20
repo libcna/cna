@@ -33,7 +33,7 @@ non-zero overall exit) is a sound, useful design for a script meant to compose i
 
 ## Detailed Findings
 None in this file. The `cna_demo_xact` Content-copy build error it references is a known,
-already-tracked issue per its own comment (pointing to `NEXT.md`/`plan_graphics.md`), not a new
+already-tracked issue per its own comment (pointing to `NEXT.md`/`plans/plan_graphics.md`), not a new
 finding.
 
 ## Cross-File Observations

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengl2.md: pixel-exact SpriteBatch::Begin(..., Effect*) proof for the native OpenGL 2.1
+// plans/plan_opengl2.md: pixel-exact SpriteBatch::Begin(..., Effect*) proof for the native OpenGL 2.1
 // graphics renderer -- a user-authored ShaderEffect driving the 2D sprite-batch pipeline instead
 // of the built-in sprite shader. Unlike the built-in shader (which pre-transforms every vertex
 // to clip space on the CPU), a custom sprite effect receives RAW screen-space vertex positions

@@ -287,7 +287,7 @@ The five adaptation commits: `fix(integration): complete the DILIGENT registrati
 `test(REMED-GFX-209): measure the Diligent WireFrame report against the shared oracle`,
 `refactor(REMED-GFX-201/202): read the Diligent draw routes from the vertex-stream array`,
 `test(REMED-GFX-202): pixel-prove the Diligent instanced route's per-binding offsets and frequency`,
-and `docs(plan_diligent.md): record the integration, its obligations and DILIGENT-69`.
+and `docs(plans/plan_diligent.md): record the integration, its obligations and DILIGENT-69`.
 
 ## 10. Residuals
 
@@ -309,7 +309,7 @@ the **296 `(Not Run)` EasyGL dedicated harnesses** (control-proven pre-existing,
 which belongs to `magnum`'s record. **`SOKOL`'s absence from the in-repo `CLAUDE.md` backend list
 was a Batch 3 lane's own gap and was corrected here** (§4.4).
 
-**New findings: one — `DILIGENT-69`**, recorded on `plan_diligent.md`. It is not a CNA defect: the
+**New findings: one — `DILIGENT-69`**, recorded on `plans/plan_diligent.md`. It is not a CNA defect: the
 session's own new test fails under the OpenGL device type for the identical, already-root-caused
 Mesa/llvmpipe per-instance-divisor limitation as `DILIGENT-66`'s two existing GL instancing
 failures, and passes 12/12 on Vulkan. It is filed so the new test's GL red is attributable rather

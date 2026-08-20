@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_modern.md MOD-501..MOD-507: the depth/normal prepass SSAO reads.
+// plans/plan_modern.md MOD-501..MOD-507: the depth/normal prepass SSAO reads.
 //
 // Two encodings have to agree with their inverses here, and neither failure is visible: a depth
 // packing whose halves drift reads back as noise, and a normal encoding off by a sign produces
@@ -145,7 +145,7 @@ TEST(DepthNormalPrepassTest, ItValidatesItsSizeAndItsCameraRange)
 
 TEST(DepthNormalPrepassTest, ThePassCountFollowsWhatTheRendererWillActuallyBind)
 {
-    // plan_modern.md MOD-1623. This used to compare against the MultipleRenderTargets *capability*,
+    // plans/plan_modern.md MOD-1623. This used to compare against the MultipleRenderTargets *capability*,
     // and WebGPU is the renderer that proved the difference: it reports the capability and then
     // throws from SetRenderTargets. The prepass now probes the bind once at construction and falls
     // back to two passes, so what this must check is the *binding*, not the promise -- and checking

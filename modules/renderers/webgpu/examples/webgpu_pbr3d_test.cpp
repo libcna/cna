@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_cnj.md CNB-58 WebGPU counterpart: verify WebGPURenderer's pbr3d.wgsl /
+// plans/plan_cnj.md CNB-58 WebGPU counterpart: verify WebGPURenderer's pbr3d.wgsl /
 // GetOrCreatePipelinePbr3D() / DrawPrimitivesEx() dispatch for stride-48
 // (VertexPositionNormalTangentTexture) PbrEffect draws -- the WebGPU renderer's real glTF 2.0
 // metallic-roughness BRDF shader (GGX distribution + Smith-Schlick-GGX visibility + Schlick

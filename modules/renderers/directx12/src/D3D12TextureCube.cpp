@@ -1,4 +1,4 @@
-// plan_dx.md Phase DX12 (DX-111, closing env_map3d).
+// plans/plan_dx.md Phase DX12 (DX-111, closing env_map3d).
 #include "CNA/Internal/Renderers/DirectX12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 

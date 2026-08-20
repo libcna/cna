@@ -6,7 +6,7 @@
 - Subsystem: `tests-xna-content` shard
 - File type: C++ test file (Google Test)
 - XNA/FNA relevance: Tests for real `.xnb` `Song` loading end-to-end through `ContentManager`
-  (plan_xnb.md XNB-34), plus a regression re-verification for plan_media.md MEDIA-75/MEDIA-10
+  (plans/plan_xnb.md XNB-34), plus a regression re-verification for plans/plan_media.md MEDIA-75/MEDIA-10
 - Main related tests: N/A (this IS a test file)
 
 ## Purpose

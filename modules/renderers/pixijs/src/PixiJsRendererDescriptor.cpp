@@ -1,4 +1,4 @@
-// plan_runtimerenderer.md design decision 2 / plan_pixijs.md Design decision 2: the PixiJs
+// plans/plan_runtimerenderer.md design decision 2 / plans/plan_pixijs.md Design decision 2: the PixiJs
 // family's pre-construction contract.
 //
 // Emscripten-only. The browser platform already creates and sizes the <canvas>; this renderer
@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::PixiJs
      * @brief Creates this family's renderer instance.
      *
      * Defined in the family's own renderer translation unit. Declared here because the descriptor
-     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * below takes its address, and because plans/plan_runtimerenderer.md design decision 4 moved it out
      * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
      * into one binary.
      *

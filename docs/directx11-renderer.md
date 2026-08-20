@@ -19,7 +19,7 @@ cmake --build cmake-build-d3d11 -j
 Linux/macOS configure fails fast with `FATAL_ERROR`, pointing at the MinGW-w64 toolchain file above.
 No extra CMake dependency is fetched: `d3d11`/`dxgi`/`d3dcompiler` are all provided by the Windows
 SDK (MSVC) or MinGW-w64's own headers/import libraries (this dev machine's actual path — see
-`plan_dx.md` `DX-1`).
+`plans/plan_dx.md` `DX-1`).
 
 ## What this renderer is for (and isn't)
 
@@ -43,7 +43,7 @@ Debian machine's real GPU (an AMD Radeon 780M/RADV, translated by DXVK 2.6.0) �
 renderer's *logic* (call sequencing, resource lifetime, HLSL correctness, pixel math), the same
 "Wine proves the logic, not real-hardware parity" bar this project already established for
 `SDL_RENDERER`. Real DXGI present/tearing behavior, real device-lost recovery, WARP fallback, and
-MSVC-vs-MinGW ABI parity are still open — see `plan_dx.md` `DX-90`/`DX-91`.
+MSVC-vs-MinGW ABI parity are still open — see `plans/plan_dx.md` `DX-90`/`DX-91`.
 
 ## Development environment: Wine + DXVK dev-loop
 
@@ -73,7 +73,7 @@ To reproduce this locally:
 5. Run any built `.exe` through `scripts/run-wine-dxvk.sh` — this wrapper sets `WINEPREFIX`
    (override with `CNA_D3D11_WINEPREFIX`), execs `wine "$@"` (**not** `wine64` — this Debian's Wine
    10.0 packaging has no separate `wine64` binary; `wine` auto-detects PE32 vs. PE32+), and — as of
-   `plan_dx.md` `DX-85` — automatically asserts a `DXVK: <version>` marker actually appeared in the
+   `plans/plan_dx.md` `DX-85` — automatically asserts a `DXVK: <version>` marker actually appeared in the
    run's log output, failing loudly (exit 3) if the run silently fell back to `WineD3D` instead of
    DXVK. A binary that legitimately never opens a D3D11 device (e.g. a pure-mapping-table unit test)
    should set `CNA_D3D11_SKIP_DXVK_GATE=1` to opt out of this check.
@@ -120,7 +120,7 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
 
 ## Known limitations (2026-07-14)
 
-- **Not verified on real Windows hardware** — `plan_dx.md` `DX-90` (MSVC build, real DXGI
+- **Not verified on real Windows hardware** — `plans/plan_dx.md` `DX-90` (MSVC build, real DXGI
   present/tearing, full device-lost recovery, WARP fallback, debug-layer-missing fallback on a
   machine that should have it) and `DX-91` (Intel/AMD/NVIDIA driver-specific spot checks) are both
   explicitly `needs_human`/best-effort — no such machine is available in this dev environment. Every
@@ -151,7 +151,7 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
   they build on already-tested `Texture2D`/`SpriteBatch`/`VertexBuffer` primitives, but have no
   D3D11-specific test coverage yet.
 - **`cna_reference_dump`'s `undefined reference to Effect::Apply()` link failure is fixed** (found
-  during `plan_dx.md` `DX-81`'s coverage audit; root cause was a genuine, honest circular
+  during `plans/plan_dx.md` `DX-81`'s coverage audit; root cause was a genuine, honest circular
   dependency — `D3D11SpriteBatch.cpp` (in `cna_renderer_directx11`) calls back into
   `Effect::Apply()` (defined in `CNA` itself), and MinGW's single-pass archive resolution never
   revisited `libCNA.a` once `libcna_renderer_directx11.a` created the need. Fixed by declaring
@@ -167,10 +167,10 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
   `<SDL3/SDL.h>` at all. Verified via real `cna_reference_dump.exe`/`cna_demo_2d.exe` links under
   both D3D11 and D3D12, the full `D3D11`/`D3D12` CTest suites, and the EasyGL `GameWindowTest.*`
   suite (14/14, including 3 new cases) — no regression anywhere.
-- **Direct3D 12 does not exist as a renderer.** `plan_dx.md` Phase DX12 is written up in full but
+- **Direct3D 12 does not exist as a renderer.** `plans/plan_dx.md` Phase DX12 is written up in full but
   requires its own separate authorization (design decision 9) — `CNA_GRAPHICS_RENDERER=D3D12` is not
   a recognized CMake value.
 
-See `plan_dx.md` for the full task-by-task status (`DX-1` through `DX-98`) and design rationale, and
+See `plans/plan_dx.md` for the full task-by-task status (`DX-1` through `DX-98`) and design rationale, and
 `docs/graphics-renderer-feature-matrix.md` for a row-by-row comparison against the other established
 renderers.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-23/24/26: end-to-end milestone test -- content.Load<Texture2D>("fixture")
+// plans/plan_xnb.md XNB-23/24/26: end-to-end milestone test -- content.Load<Texture2D>("fixture")
 // against a real, externally-produced .xnb fixture, going through ContentManager (not a
 // standalone parser call). This is the M2 milestone goal line.
 
@@ -51,7 +51,7 @@ namespace
     void CopyRealFixture(const std::filesystem::path& destDir, const std::string& destName)
     {
         // Real, externally-produced fixture (MonoGame's own Tests/Assets/Textures/white-1.xnb),
-        // vendored at tests/assets/xnb/monogame/windows/uncompressed/ (plan_xnb.md XNB-17A).
+        // vendored at tests/assets/xnb/monogame/windows/uncompressed/ (plans/plan_xnb.md XNB-17A).
         std::error_code ec;
         std::filesystem::copy_file(
             "tests/assets/xnb/monogame/windows/uncompressed/white-1.xnb",
@@ -98,7 +98,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealMonoGameFixtureEndToEnd)
 
 TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
 {
-    // plan_xnb.md XNB-30B: re-runs the same end-to-end milestone as
+    // plans/plan_xnb.md XNB-30B: re-runs the same end-to-end milestone as
     // LoadRealMonoGameFixtureEndToEnd, but against a real, externally-produced *LZX-compressed*
     // fixture (MonoGame's own Tests/Interactive/MacOS/SoundTest/Content/Explosion.xnb -- despite
     // the name, its root type-reader is Texture2DReader, confirmed by direct inspection).
@@ -144,7 +144,7 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadCachesTheXnbTextureLikeAnyOtherTextur
     EXPECT_EQ(first.GetRendererWeak().lock(), second.GetRendererWeak().lock());
 }
 
-// plan_xnb.md XNB-47: Texture2D uses its own weak-cache mechanism (textureCache_), a genuinely
+// plans/plan_xnb.md XNB-47: Texture2D uses its own weak-cache mechanism (textureCache_), a genuinely
 // different code path from the generic std::any-based loadedAssets_ cache Unload() also clears --
 // confirm Unload() actively evicts it too, not just relying on natural weak-pointer expiry (kept
 // `first` alive throughout, specifically so a passing result can't be explained by the old entry

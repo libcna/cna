@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx.md DX-102/DX-114: run a Windows cross-compiled .exe (D3D12 renderer) through a REAL,
+# plans/plan_dx.md DX-102/DX-114: run a Windows cross-compiled .exe (D3D12 renderer) through a REAL,
 # properly Steam/Proton-managed launch -- distinct from run-wine-vkd3d.sh, which runs vkd3d-proton's
 # d3d12.dll/d3d12core.dll natively-overridden inside a hand-built *system* Wine prefix.
 #

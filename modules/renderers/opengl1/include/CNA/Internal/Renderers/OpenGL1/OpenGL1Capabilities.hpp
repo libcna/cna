@@ -8,11 +8,11 @@ namespace CNA::Internal::Renderers::OpenGL1
      * Computed once, right after the GL context is made current (in
      * OpenGL1Renderer's constructor), from glGetString(GL_VERSION)/
      * glGetString(GL_EXTENSIONS) directly -- no GL/GLES loader library and no EasyGL
-     * dependency (plan_opengl1.md's own scope rule: OPENGL1 "MUST NOT depend on EasyGL").
+     * dependency (plans/plan_opengl1.md's own scope rule: OPENGL1 "MUST NOT depend on EasyGL").
      * Consulted by later OPENGL1 phases (RenderTarget2D via FBO, DualTextureEffect via
      * multitexture, cube maps, mipmap generation) instead of assuming a fixed OpenGL 1.1
      * baseline; a strict 1.1 driver simply reports every flag here as false and those
-     * features stay unavailable, matching plan_opengl1.md's documented "Intentional OpenGL
+     * features stay unavailable, matching plans/plan_opengl1.md's documented "Intentional OpenGL
      * 1.x limitations".
      */
     struct OpenGL1Capabilities

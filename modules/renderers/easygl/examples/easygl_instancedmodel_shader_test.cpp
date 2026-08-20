@@ -29,7 +29,7 @@
 // the exact public InstanceFrequency divisor.
 //
 // Packing derivation (this test controls both the upload and the shader, so it is free to choose
-// any packing that reproduces the correct math -- see plan_graphics.md Task 1082 for the full
+// any packing that reproduces the correct math -- see plans/plan_graphics.md Task 1082 for the full
 // derivation): let C = mul(World, transpose(instanceTransform)) be the HLSL-side combined matrix
 // used for both position and normal. Working the row/column algebra through this session's
 // established `mul(v,M)[row-vector] == M^T * v[GLSL column-vector]` identity gives:

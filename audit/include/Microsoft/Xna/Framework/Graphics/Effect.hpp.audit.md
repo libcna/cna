@@ -26,7 +26,7 @@ runtime-interpreted shader-parameter blob. The public XNA-facing surface (`Curre
 ## Checklist Results
 - The compiled-bytecode constructor (`Effect(GraphicsDevice&, const std::vector<bytecs>&)`)
   correctly and explicitly throws `System::NotImplementedException` with a clear, actionable
-  message (naming the tracked follow-up, `docs/fx-bytecode-support-plan.md` Phase 74) rather than
+  message (naming the tracked follow-up, `docs/fx-bytecode-support-plans/plan.md` Phase 74) rather than
   silently no-op'ing or crashing — a well-handled, honestly-disclosed real gap (compiled `.fx`
   bytecode support genuinely doesn't exist yet), not a silent one.
 - `Clone()` is correctly pure virtual (`= 0`), forcing every concrete subclass to implement it —

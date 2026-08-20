@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# plan_dx9.md Phase D9-12 (D9-120): promotes the D9-A oracle scene corpus into a real CTest.
+# plans/plan_dx9.md Phase D9-12 (D9-120): promotes the D9-A oracle scene corpus into a real CTest.
 #
 # Renders every checked-in scene (tools/xna-oracle/scenes/*.scene) through CNA's own real D3D9
 # renderer (cna_oracle_render.exe) and diffs each result against the checked-in real XNA 4.0

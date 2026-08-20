@@ -5,7 +5,7 @@
 - Audit status: AUDITED (full read, 27 lines)
 - Subsystem: `cna-internal-core` shard
 - File type: C++ header
-- XNA/FNA relevance: N/A -- NOXNA support for real Song/Album/Playlist `Duration` (plan_media.md MEDIA-65/68)
+- XNA/FNA relevance: N/A -- NOXNA support for real Song/Album/Playlist `Duration` (plans/plan_media.md MEDIA-65/68)
 - Main related tests: not independently located in this pass
 
 ## Purpose

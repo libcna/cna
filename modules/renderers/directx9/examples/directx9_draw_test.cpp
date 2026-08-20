@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-8 (D9-82): this renderer's first real 3D triangle. Proves
+// plans/plan_dx9.md Phase D9-8 (D9-82): this renderer's first real 3D triangle. Proves
 // DrawColoredPrimitives()/DrawIndexedColoredPrimitives() -- the real BasicEffect
 // VertexColorEnabled-only path (ShaderIndex 3, "BasicEffect_VSBasicVcNoFog"/
 // "BasicEffect_PSBasicNoFog") -- through the real public Game/GraphicsDeviceManager/
@@ -38,7 +38,7 @@
 //   degenerate single segment. Confirmed pixel-for-pixel identical to real XNA 4.0 via
 //   tools/xna-oracle/scenes/colored_linestrip_quad.scene.
 //
-// Real finding (verified empirically, not assumed -- see plan_dx9.md D9-82's own closure note):
+// Real finding (verified empirically, not assumed -- see plans/plan_dx9.md D9-82's own closure note):
 // D9-22's original D3D9VertexDeclarations.hpp chose D3DDECLTYPE_D3DCOLOR for the COLOR0 element,
 // mirroring D3D11's own DXGI_FORMAT_R8G8B8A8_UNORM choice by "same semantic meaning" -- but
 // D3DDECLTYPE_D3DCOLOR's real contract (MSDN D3DDECLTYPE enumeration: "Input is a D3DCOLOR and is

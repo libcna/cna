@@ -31,7 +31,7 @@ namespace
     PFNGLFRAMEBUFFERRENDERBUFFERPROC glFramebufferRenderbuffer_ = nullptr;
     bool loaded_ = false;
 
-    // plan_opengl1.md item 21 (EasyGL parity): loaded alongside the required FBO entry points
+    // plans/plan_opengl1.md item 21 (EasyGL parity): loaded alongside the required FBO entry points
     // above, but NOT required for `loaded_` to become true -- RenderTarget2D itself must keep
     // working even on the (expected-unreachable-in-practice) driver that has ARB_framebuffer_object
     // but genuinely lacks glGenerateMipmap; mipMap-requesting render targets on such a driver just
@@ -40,7 +40,7 @@ namespace
     // tier, which needs a CPU-side pixel buffer this GPU-only surface never has).
     PFNGLGENERATEMIPMAPPROC glGenerateMipmap_ = nullptr;
 
-    // plan_opengl1.md item 25: unlike glGenerateMipmap (a separate, older extension family that
+    // plans/plan_opengl1.md item 25: unlike glGenerateMipmap (a separate, older extension family that
     // can exist independently), glRenderbufferStorageMultisample/glBlitFramebuffer are part of
     // the SAME ARB_framebuffer_object/core-3.0 entry-point family the required FBO functions
     // above already are -- loaded here alongside them (still not required for `loaded_`, so a
@@ -96,7 +96,7 @@ OpenGL1RenderTargetRenderer::OpenGL1RenderTargetRenderer(int width, int height, 
     if (registry_) registry_->Add(this);
 }
 
-// plan_opengl1.md phase 8: shared by the constructor and RecreateGLResource() -- a render
+// plans/plan_opengl1.md phase 8: shared by the constructor and RecreateGLResource() -- a render
 // target's content is GPU-produced (nothing to restore from), so both paths build an identical
 // empty FBO/color-texture/depth-renderbuffer from width_/height_/depthFormat_ alone.
 void OpenGL1RenderTargetRenderer::Build()
@@ -145,7 +145,7 @@ void OpenGL1RenderTargetRenderer::Build()
     }
 }
 
-// plan_opengl1.md item 25: builds the separate multisample draw FBO -- best-effort, NOT fatal on
+// plans/plan_opengl1.md item 25: builds the separate multisample draw FBO -- best-effort, NOT fatal on
 // failure (see the header's own doc comment). Deliberately does not throw: an incomplete/
 // unsupported MSAA framebuffer just means multiSampleCount_ stays 0 and every draw/resolve call
 // below correctly falls back to the plain single-sample fbo_ path, matching FNA3D's own
@@ -234,11 +234,11 @@ void OpenGL1RenderTargetRenderer::RecreateGLResource()
 
 void OpenGL1RenderTargetRenderer::BindGL(int /*unit*/) const { glBindTexture(GL_TEXTURE_2D, colorTex_); }
 
-// plan_opengl1.md item 25: targets the multisample draw FBO when active, so all rendering goes
+// plans/plan_opengl1.md item 25: targets the multisample draw FBO when active, so all rendering goes
 // to the multisample buffers -- UnbindAsRenderTarget() below resolves it into fbo_/colorTex_.
 void OpenGL1RenderTargetRenderer::BindAsRenderTarget() { glBindFramebuffer_(GL_FRAMEBUFFER, multiSampleCount_ > 1 ? msaaFbo_ : fbo_); }
 
-// plan_opengl1.md item 21 (EasyGL parity): following FNA3D's own OPENGL_ResolveTarget mechanism
+// plans/plan_opengl1.md item 21 (EasyGL parity): following FNA3D's own OPENGL_ResolveTarget mechanism
 // -- the whole mip chain is unconditionally regenerated from level 0 every time the target stops
 // being active, matching how EasyGL's own Task 336 fix (docs/rendertarget-support.md) works.
 // Must run before glBindFramebuffer_(GL_FRAMEBUFFER, 0): glGenerateMipmap reads the CURRENTLY
@@ -246,7 +246,7 @@ void OpenGL1RenderTargetRenderer::BindAsRenderTarget() { glBindFramebuffer_(GL_F
 // actually matter for correctness here, but is kept FBO-bound-first to mirror BindAsRenderTarget's
 // own ordering and avoid a redundant glBindTexture while some other texture might be active.
 //
-// plan_opengl1.md item 25: when the multisample path is active, resolves msaaFbo_ into
+// plans/plan_opengl1.md item 25: when the multisample path is active, resolves msaaFbo_ into
 // fbo_/colorTex_ via glBlitFramebuffer FIRST -- mips must be generated from the just-resolved
 // single-sample image, not stale prior content. A multisample->single-sample blit is the
 // standard, only-legal way to resolve MSAA content (src/dst dimensions must match exactly, which
@@ -304,7 +304,7 @@ bool OpenGL1RenderTargetRenderer::GetData(int /*level*/, int x, int y, int w, in
     return true;
 }
 
-// plan_opengl1.md item 24 (EasyGL parity): shared by the constructor and RecreateGLResource(),
+// plans/plan_opengl1.md item 24 (EasyGL parity): shared by the constructor and RecreateGLResource(),
 // same "GPU-produced, nothing to restore" reasoning as OpenGL1RenderTargetRenderer::Build(). Every
 // face is pre-allocated with an empty (nullptr) level-0 image up front -- glFramebufferTexture2D
 // (in BindAsRenderTargetFace()) requires the target level to already have a defined image, the

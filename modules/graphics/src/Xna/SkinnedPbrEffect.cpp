@@ -396,7 +396,7 @@ namespace Microsoft::Xna::Framework::Graphics
     bool    SkinnedPbrEffect::getEncodeOutputToSrgbEXTProperty() const { return encodeOutputToSrgb_; }
     void    SkinnedPbrEffect::setEncodeOutputToSrgbEXTProperty(bool v) { encodeOutputToSrgb_ = v; }
 
-    // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
+    // plans/plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Plain carried state: nothing here touches the
     // device, and the renderer reads it through FillGpuDrawParams like every other material value.
     AlphaModeEXT SkinnedPbrEffect::getAlphaModeEXTProperty() const { return alphaMode_; }
     void SkinnedPbrEffect::setAlphaModeEXTProperty(AlphaModeEXT v) { alphaMode_ = v; }
@@ -561,7 +561,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.skinned         = true;
         p.textureEnabled  = true;
         p.lightingEnabled = true;
-        // plan_gltf.md GLTF-462: see PbrEffect::FillGpuDrawParams. Stride 80 is the skinned
+        // plans/plan_gltf.md GLTF-462: see PbrEffect::FillGpuDrawParams. Stride 80 is the skinned
         // counterpart of stride 60's colour slot, and this is what says whether it means anything.
         p.vertexColorEnabled = VertexColorEnabledEXT;
 
@@ -605,7 +605,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.emissiveColor[1] = emissiveFactor_.Y;
         p.emissiveColor[2] = emissiveFactor_.Z;
 
-        // plan_gltf.md GLTF-210/GLTF-212: which bound textures are sRGB-encoded, and whether the
+        // plans/plan_gltf.md GLTF-210/GLTF-212: which bound textures are sRGB-encoded, and whether the
         // lit result is encoded back. Carried as three separate facts because they are three
         // separate decisions -- two about what a texture contains, one about where the fragment
         // is going.
@@ -674,7 +674,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.pbrDielectricF0Unclamped[2] = dielectricFresnel.unclampedF0[2];
         p.pbrSpecularFactor = dielectricFresnel.specularFactor;
 
-        // plan_gltf.md GLTF-372: identical to PbrEffect's -- a skinned surface masks on the same
+        // plans/plan_gltf.md GLTF-372: identical to PbrEffect's -- a skinned surface masks on the same
         // rule, and the pbr_skinned shader reads the same uAlphaTest uniform.
         const std::array<float, 4> alphaTest =
             CNA::Internal::Graphics::AlphaTestVectorForAlphaModeEXT(alphaMode_, alphaCutoff_);

@@ -16,7 +16,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     class OpenGL4Renderer;
 
     /**
-     * @brief plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics renderer.
+     * @brief plans/plan_opengl4.md GL4-1: real desktop OpenGL 4.x core-profile graphics renderer.
      *
      * Deliberately independent of the EasyGL renderer/`easy-gl` sibling repository -- EasyGL
      * requests an OpenGL ES 3.0 context (see
@@ -69,7 +69,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         [[nodiscard]] int GetHeight() const override { return height_; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override;
-        /// plan_opengl4.md GL4-18: uploads mip level @p level (allocating its storage via
+        /// plans/plan_opengl4.md GL4-18: uploads mip level @p level (allocating its storage via
         /// glTexImage2D, since only level 0 is allocated at construction -- matches
         /// EasyGLTextureRenderer::UpdatePixelsLevel's identical "caller supplies every level
         /// explicitly" contract; this renderer does not auto-generate mips for plain textures).
@@ -82,7 +82,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         unsigned int texture_ = 0;
         int width_ = 0;
         int height_ = 0;
-        /// plan_opengl4.md GL4-18: real ImageData::mipLevels count this texture was created
+        /// plans/plan_opengl4.md GL4-18: real ImageData::mipLevels count this texture was created
         /// with -- GL_TEXTURE_MAX_LEVEL is clamped to levelCount_-1 so a mipmap-requiring
         /// TextureFilter (e.g. Anisotropic) doesn't treat this as an incomplete mipmap chain
         /// (GL's own default max level is 1000), even for an ordinary single-level texture that
@@ -95,7 +95,7 @@ namespace CNA::Internal::Renderers::OpenGL4
      * an optional depth/stencil renderbuffer, an optional multisampled colour renderbuffer
      * resolved into the colour texture on unbind, and an optional mip chain regenerated from
      * level 0 on unbind -- modeled directly on `EasyGLRenderTargetRenderer`'s own resource shape
-     * (plan_opengl4.md GL4-14), using raw `GL4Loader` calls instead of the `easygl::` wrapper
+     * (plans/plan_opengl4.md GL4-14), using raw `GL4Loader` calls instead of the `easygl::` wrapper
      * types this renderer deliberately avoids depending on.
      *
      * Doubles as both the render target AND the texture later sampled from it (same object,
@@ -142,7 +142,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     /**
      * @brief `OpenGL4`-backed `RenderTargetCube`: one FBO shared across all 6 faces of a single
      * cube-map texture, re-attaching the requested face on `BindAsRenderTargetFace` -- modeled
-     * directly on `EasyGLRenderTargetCubeRenderer`'s own resource shape (plan_opengl4.md
+     * directly on `EasyGLRenderTargetCubeRenderer`'s own resource shape (plans/plan_opengl4.md
      * `GL4-15`), using raw `GL4Loader` calls instead of the `easygl::` wrapper types.
      */
     class OpenGL4RenderTargetCubeRenderer final : public IRenderTargetCubeRenderer
@@ -185,7 +185,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     /**
      * @brief `OpenGL4`-backed plain (non-render-target) `Texture3D` (volume texture) --
-     * modeled on `EasyGLTexture3DRenderer`'s own resource shape (plan_opengl4.md `GL4-20`), using
+     * modeled on `EasyGLTexture3DRenderer`'s own resource shape (plans/plan_opengl4.md `GL4-20`), using
      * raw `GL4Loader` calls (`gl4_glTexImage3D`/`gl4_glTexSubImage3D`) instead of the `easygl::`
      * wrapper types this renderer deliberately avoids depending on.
      */
@@ -214,7 +214,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     /**
      * @brief `OpenGL4`-backed plain (non-render-target) `TextureCube` -- modeled on
-     * `EasyGLTextureCubeRenderer`'s own resource shape (plan_opengl4.md `GL4-20`). Unlike
+     * `EasyGLTextureCubeRenderer`'s own resource shape (plans/plan_opengl4.md `GL4-20`). Unlike
      * `OpenGL4RenderTargetCubeRenderer::GetData` (which Y-flips because it reads back a
      * framebuffer-origin render target), this plain texture's `GetData` does not flip Y --
      * matches `EasyGLTextureCubeRenderer::GetData`'s own non-render-target convention, verified by
@@ -242,7 +242,7 @@ namespace CNA::Internal::Renderers::OpenGL4
     };
 
     /**
-     * @brief `OpenGL4`-backed custom `ShaderEffect` program (plan_opengl4.md `GL4-30`) -- wraps a
+     * @brief `OpenGL4`-backed custom `ShaderEffect` program (plans/plan_opengl4.md `GL4-30`) -- wraps a
      * caller-supplied GLSL 410 core vertex+fragment source pair, modeled on
      * `EasyGLEffectRenderer`'s own shape (a thin `IEffectRenderer` wrapper around one compiled
      * program). Uses `OpenGL4RawProgram` internally, the same compiled-program type every
@@ -284,7 +284,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     /**
      * @brief `OpenGL4`-backed occlusion query -- a real GL 1.5 core `GL_SAMPLES_PASSED` query
-     * object (plan_opengl4.md `GL4-24`), unlike `EasyGLOcclusionQueryRenderer`'s `GLES3`
+     * object (plans/plan_opengl4.md `GL4-24`), unlike `EasyGLOcclusionQueryRenderer`'s `GLES3`
      * `GL_ANY_SAMPLES_PASSED` (0/1-only) query -- desktop GL reports an exact passed-sample
      * count, matching real XNA's own desktop `OcclusionQuery.PixelCount()` semantics (see
      * `IOcclusionQueryRenderer`'s own doc comment contrasting the two).
@@ -323,7 +323,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
-        /// plan_opengl4.md GL4-33: supplies a caller-owned VertexDeclaration so ApplyLayout() can
+        /// plans/plan_opengl4.md GL4-33: supplies a caller-owned VertexDeclaration so ApplyLayout() can
         /// bind genuinely custom vertex layouts generically (attribute location = the element's
         /// own index within the declaration), instead of only the fixed byte-strides the switch
         /// in ApplyLayout() otherwise recognizes -- needed by hardware instancing's per-instance
@@ -336,7 +336,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         CNAEXT [[nodiscard]] unsigned int VaoHandle() const { return vao_; }
         CNAEXT [[nodiscard]] unsigned int VboHandle() const { return vbo_; }
         CNAEXT [[nodiscard]] std::size_t GetStrideInBytes() const { return strideInBytes_; }
-        /// plan_opengl4.md GL4-33: the declaration set via SetVertexDeclaration(), or empty if
+        /// plans/plan_opengl4.md GL4-33: the declaration set via SetVertexDeclaration(), or empty if
         /// none was ever supplied (this buffer uses the fixed stride-keyed layout instead).
         CNAEXT [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const
         {
@@ -384,7 +384,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     /**
      * @brief `OpenGL4`-backed index buffer -- 16-bit by default, real 32-bit support
-     * (plan_opengl4.md `GL4-31`) when constructed with `thirtyTwoBit=true` (`GL_UNSIGNED_INT`
+     * (plans/plan_opengl4.md `GL4-31`) when constructed with `thirtyTwoBit=true` (`GL_UNSIGNED_INT`
      * storage/draw-call index type instead of `GL_UNSIGNED_SHORT`).
      */
     class OpenGL4IndexBufferRenderer final : public IIndexBufferRenderer
@@ -398,7 +398,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         void SetData16(const void* data, int index_count) override;
         void SetData16WithOptions(const void* data, int index_count, SetDataOptions options) override;
-        /// plan_opengl4.md GL4-31: real 32-bit index upload (GL_UNSIGNED_INT storage).
+        /// plans/plan_opengl4.md GL4-31: real 32-bit index upload (GL_UNSIGNED_INT storage).
         void SetData32(const void* data, int index_count) override;
         void SetData32WithOptions(const void* data, int index_count, SetDataOptions options) override;
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
@@ -428,7 +428,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         void Begin() override;
         void End() override;
         void SetTransformMatrix(const Matrix& m) override { transform_ = m; }
-        /// plan_opengl4.md GL4-32: lets a custom Microsoft::Xna::Framework::Graphics::ShaderEffect
+        /// plans/plan_opengl4.md GL4-32: lets a custom Microsoft::Xna::Framework::Graphics::ShaderEffect
         /// (CNAEXT) drive 2D SpriteBatch rendering instead of the built-in sprite program, mirroring
         /// EasyGLRenderer::SetCustomEffect's own shape.
         void SetCustomEffect(Effect* effect) override;
@@ -471,7 +471,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         int pendingFilter_ = 0;
         int pendingAddressU_ = 1; // TextureAddressMode::Clamp
         int pendingAddressV_ = 1;
-        /// plan_opengl4.md GL4-32: non-owning; set via SetCustomEffect(), matching
+        /// plans/plan_opengl4.md GL4-32: non-owning; set via SetCustomEffect(), matching
         /// EasyGLRenderer::customEffect_'s own lifetime convention (caller-owned).
         Effect* customEffect_ = nullptr;
         const ITextureRenderer* currentTexture_ = nullptr;
@@ -479,7 +479,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         std::vector<uint16_t> pendingIndices_;
     };
 
-    // plan_runtimerenderer.md: a stray forward declaration of GraphicsRendererCreateArgs used to
+    // plans/plan_runtimerenderer.md: a stray forward declaration of GraphicsRendererCreateArgs used to
     // sit here, inside namespace ...::OpenGL4. It declared a DIFFERENT, never-defined type that
     // shadowed the real CNA::Internal::Renderers::GraphicsRendererCreateArgs for anything declared
     // in this namespace. Harmless while nothing here named that type; it broke the moment this
@@ -503,7 +503,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
 
-        /// plan_opengl4.md GL4-28: real physical<->logical coordinate mapping for
+        /// plans/plan_opengl4.md GL4-28: real physical<->logical coordinate mapping for
         /// Mouse/touch, matching EasyGLRenderer's own pure-uniform-scale (no offset)
         /// formula -- exact for this renderer's own default FixedHeightDynamicWidth presentation,
         /// where the logical viewport always fills the whole physical window (no letterbox bars).
@@ -512,7 +512,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        /// plan_opengl4.md GL4-17: real window/backbuffer MSAA -- a manually-managed multisample
+        /// plans/plan_opengl4.md GL4-17: real window/backbuffer MSAA -- a manually-managed multisample
         /// FBO (mirroring EasyGLRenderer's own msaaFbo_/CreateMsaaBuffers/ResolveMsaa
         /// approach) rather than a multisampled window pixel format
         /// pixel format, since the latter can't be resolved through our own controlled
@@ -536,16 +536,16 @@ namespace CNA::Internal::Renderers::OpenGL4
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
 
-        /// plan_opengl4.md GL4-20: plain (non-render-target) Texture3D/TextureCube.
+        /// plans/plan_opengl4.md GL4-20: plain (non-render-target) Texture3D/TextureCube.
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap,
                                                             int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap,
                                                                 int surfaceFormat) override;
 
-        /// plan_opengl4.md GL4-24: real GL_SAMPLES_PASSED occlusion queries.
+        /// plans/plan_opengl4.md GL4-24: real GL_SAMPLES_PASSED occlusion queries.
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
-        /// plan_opengl4.md GL4-30: compiles a caller-supplied GLSL 410 core vertex+fragment
+        /// plans/plan_opengl4.md GL4-30: compiles a caller-supplied GLSL 410 core vertex+fragment
         /// source pair for a custom Microsoft::Xna::Framework::Graphics::ShaderEffect (CNAEXT).
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
@@ -565,7 +565,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
         std::unique_ptr<IVertexBufferRenderer> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer16(int index_capacity) override;
-        /// plan_opengl4.md GL4-31: real 32-bit index buffer support (GL_UNSIGNED_INT).
+        /// plans/plan_opengl4.md GL4-31: real 32-bit index buffer support (GL_UNSIGNED_INT).
         std::unique_ptr<IIndexBufferRenderer> CreateIndexBuffer32(int index_capacity) override;
 
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb,
@@ -575,7 +575,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
 
-        /// plan_opengl4.md GL4-13: dispatches by vertex stride to the colored/textured/
+        /// plans/plan_opengl4.md GL4-13: dispatches by vertex stride to the colored/textured/
         /// colored-textured/lit-textured shader family, matching VulkanRenderer's/
         /// SdlGpuRenderer's own stride-keyed pipeline dispatch pattern.
         void DrawPrimitivesEx(const IVertexBufferRenderer& vb,
@@ -586,7 +586,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
-        /// plan_opengl4.md GL4-33: real hardware instancing (glDrawElementsInstanced). With a
+        /// plans/plan_opengl4.md GL4-33: real hardware instancing (glDrawElementsInstanced). With a
         /// custom ShaderEffect (params.customEffectRenderer), also binds params.instanceVb's own
         /// attributes generically (via its VertexDeclaration) at locations continuing right after
         /// the mesh buffer's own, each with glVertexAttribDivisor(location, 1) -- matches
@@ -599,7 +599,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
-        /// plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState
+        /// plans/plan_opengl4.md GL4-16: real dynamic BlendState/DepthStencilState/RasterizerState
         /// mapping. REMED-GFX-077: the appended BlendWriteState carries the four per-MRT-slot
         /// ColorWriteChannels masks (applied via the GL 3.0+ core glColorMaski) and the
         /// MultiSampleMask (a documented capability gap on the GL profile, same as EasyGL's).
@@ -622,14 +622,14 @@ namespace CNA::Internal::Renderers::OpenGL4
         void SetBlendFactor(float r, float g, float b, float a) override;
         void SetScissorRect(int x, int y, int w, int h) override;
 
-        /// plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D.
+        /// plans/plan_opengl4.md GL4-14: real FBO-backed RenderTarget2D.
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat,
                                                                     bool preserveContents = false,
                                                                     bool mipMap = false,
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
 
-        /// plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube + real MRT.
+        /// plans/plan_opengl4.md GL4-15: real per-face FBO-backed RenderTargetCube + real MRT.
         /// REMED-GFX-136: preserveContents is consumed by being deliberately unused for the
         /// single-sample case -- a GL FBO's colour attachment IS the cube texture and binding an
         /// FBO never touches its contents, so a face is preserved by construction; the only thing
@@ -659,7 +659,7 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     private:
         void EnsureColored3DProgram();
-        /// plan_opengl4.md GL4-25: GpuDrawParams-aware stride-16 program (DiffuseColor/
+        /// plans/plan_opengl4.md GL4-25: GpuDrawParams-aware stride-16 program (DiffuseColor/
         /// VertexColorEnabled/AlphaTest/fog), a real BindProgramForStride case -- separate from
         /// the params-free colored3DProgram_ above, which stays reserved for
         /// DrawColoredPrimitives/DrawIndexedColoredPrimitives's own fast path.
@@ -667,35 +667,35 @@ namespace CNA::Internal::Renderers::OpenGL4
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
         void EnsureLitTextured3DProgram();
-        /// plan_opengl4.md GL4-29: real XNA's BasicEffect defaults PreferPerPixelLighting=false --
+        /// plans/plan_opengl4.md GL4-29: real XNA's BasicEffect defaults PreferPerPixelLighting=false --
         /// per-vertex/Gouraud-shaded lighting, the opposite of litTextured3DProgram_ above (which
         /// is the PreferPerPixelLighting=true family). Selected by BindProgramForStride instead of
         /// litTextured3DProgram_ when params.lightingEnabled && !params.preferPerPixelLighting.
         void EnsureLitTextured3DVertexLitProgram();
-        /// plan_opengl4.md GL4-21: EnvironmentMapEffect's own dedicated stride-32 program,
+        /// plans/plan_opengl4.md GL4-21: EnvironmentMapEffect's own dedicated stride-32 program,
         /// selected instead of litTextured3DProgram_ when GpuDrawParams::envMapping is set.
         void EnsureEnvMap3DProgram();
-        /// plan_opengl4.md GL4-22: SkinnedEffect's own dedicated stride-52/56 program.
+        /// plans/plan_opengl4.md GL4-22: SkinnedEffect's own dedicated stride-52/56 program.
         void EnsureSkinned3DProgram();
-        /// plan_opengl4.md GL4-29: SkinnedEffect's own per-vertex-lit sibling of
+        /// plans/plan_opengl4.md GL4-29: SkinnedEffect's own per-vertex-lit sibling of
         /// skinned3DProgram_ above -- real XNA's SkinnedEffect also defaults
         /// PreferPerPixelLighting=false. Selected instead of skinned3DProgram_ when
         /// params.lightingEnabled && !params.preferPerPixelLighting.
         void EnsureSkinned3DVertexLitProgram();
-        /// plan_opengl4.md GL4-23: PbrEffect's own dedicated stride-48 program (glTF
+        /// plans/plan_opengl4.md GL4-23: PbrEffect's own dedicated stride-48 program (glTF
         /// metallic-roughness BRDF).
         void EnsurePbr3DProgram();
-        /// plan_opengl4.md GL4-23: SkinnedPbrEffect's own dedicated stride-68 program (PBR BRDF +
+        /// plans/plan_opengl4.md GL4-23: SkinnedPbrEffect's own dedicated stride-68 program (PBR BRDF +
         /// bone skinning combined).
         void EnsurePbrSkinned3DProgram();
-        /// plan_opengl4.md GL4-23: lazily-created 1x1 opaque white fallback, bound to
+        /// plans/plan_opengl4.md GL4-23: lazily-created 1x1 opaque white fallback, bound to
         /// PbrEffect's MetallicRoughnessMap/EmissiveMap/OcclusionMap texture units whenever the
         /// corresponding GpuDrawParams::pbr*Map pointer is null (the PBR fragment shader samples
         /// all 5 texture units unconditionally, unlike DualTextureEffect/EnvironmentMapEffect's
         /// uniform-gated optional samplers -- an unbound/stale unit would otherwise sample
         /// whatever GL texture a previous, unrelated draw last left bound to that unit).
         void EnsureDefaultWhiteTexture();
-        /// plan_opengl4.md GL4-23: lazily-created 1x1 tangent-space "flat" normal (128,128,255 ->
+        /// plans/plan_opengl4.md GL4-23: lazily-created 1x1 tangent-space "flat" normal (128,128,255 ->
         /// decodes to (0,0,1)) fallback for PbrEffect's NormalMap when unset.
         void EnsureDefaultFlatNormalTexture();
 
@@ -706,7 +706,7 @@ namespace CNA::Internal::Renderers::OpenGL4
         bool BindProgramForStride(std::size_t strideInBytes, const Matrix& world, const Matrix& view,
                                   const Matrix& projection, const GpuDrawParams& params);
 
-        /// plan_opengl4.md GL4-17: (re)allocates the manual backbuffer MSAA FBO's colour+depth
+        /// plans/plan_opengl4.md GL4-17: (re)allocates the manual backbuffer MSAA FBO's colour+depth
         /// renderbuffers at the given physical size, mirroring
         /// EasyGLRenderer::CreateMsaaBuffers.
         void CreateMsaaBuffers(int w, int h);
@@ -729,20 +729,20 @@ namespace CNA::Internal::Renderers::OpenGL4
         int swapInterval_ = 1;
         bool depthWriteEnabled_ = true;
 
-        /// plan_opengl4.md GL4-14: currently-bound RenderTarget2D (nullptr = default back
+        /// plans/plan_opengl4.md GL4-14: currently-bound RenderTarget2D (nullptr = default back
         /// buffer). currentRtHeight_ is the render target's own height when one is bound, 0
         /// otherwise -- SetViewport's bottom-left-to-top-left Y flip is computed from this
         /// instead of the window's physical height whenever a target is bound (mirrors
         /// EasyGLRenderer::currentRtHeight_'s identical role).
         IRenderTargetRenderer* currentRt2D_ = nullptr;
         int currentRtHeight_ = 0;
-        /// plan_opengl4.md GL4-15: currently-bound RenderTargetCube face (nullptr = none).
+        /// plans/plan_opengl4.md GL4-15: currently-bound RenderTargetCube face (nullptr = none).
         IRenderTargetCubeRenderer* currentRtCube_ = nullptr;
-        /// plan_opengl4.md GL4-15: lazily-created, persistent FBO reused across every
+        /// plans/plan_opengl4.md GL4-15: lazily-created, persistent FBO reused across every
         /// SetRenderTargets(count > 1) MRT call (mirrors EasyGLRenderer::mrtFbo_).
         unsigned int mrtFbo_ = 0;
 
-        /// plan_opengl4.md GL4-17: manual backbuffer MSAA FBO (0 = disabled). Sized to the
+        /// plans/plan_opengl4.md GL4-17: manual backbuffer MSAA FBO (0 = disabled). Sized to the
         /// window's physical size; recreated on resize by BindDefaultFramebufferOrMsaa.
         unsigned int msaaFbo_ = 0;
         unsigned int msaaColorRbo_ = 0;
@@ -771,7 +771,7 @@ namespace CNA::Internal::Renderers::OpenGL4
                                                      const char* routeName,
                                                      const GpuDrawParams* params);
         int colored3DWvpLoc_ = -1;
-        /// plan_gltf.md GLTF-475: the effect's own DiffuseColor and VertexColorEnabled, so this
+        /// plans/plan_gltf.md GLTF-475: the effect's own DiffuseColor and VertexColorEnabled, so this
         /// program stops painting whatever attribute location 1 happens to hold.
         int colored3DDiffuseLoc_ = -1;
         int colored3DVertexColorLoc_ = -1;
@@ -779,11 +779,11 @@ namespace CNA::Internal::Renderers::OpenGL4
         OpenGL4RawProgram textured3DProgram_;
         OpenGL4RawProgram coloredTextured3DProgram_;
         OpenGL4RawProgram litTextured3DProgram_;
-        /// plan_opengl4.md GL4-29: per-vertex-lit sibling of litTextured3DProgram_ above.
+        /// plans/plan_opengl4.md GL4-29: per-vertex-lit sibling of litTextured3DProgram_ above.
         OpenGL4RawProgram litTextured3DVertexLitProgram_;
         OpenGL4RawProgram envMap3DProgram_;
         OpenGL4RawProgram skinned3DProgram_;
-        /// plan_opengl4.md GL4-29: per-vertex-lit sibling of skinned3DProgram_ above.
+        /// plans/plan_opengl4.md GL4-29: per-vertex-lit sibling of skinned3DProgram_ above.
         OpenGL4RawProgram skinned3DVertexLitProgram_;
         OpenGL4RawProgram pbr3DProgram_;
         OpenGL4RawProgram pbrSkinned3DProgram_;

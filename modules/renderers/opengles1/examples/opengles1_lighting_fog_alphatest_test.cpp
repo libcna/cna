@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_opengles1.md OPENGLES1-79: runtime coverage for the fixed-function shading rows --
+// plans/plan_opengles1.md OPENGLES1-79: runtime coverage for the fixed-function shading rows --
 // OPENGLES1-22 (directional lighting), OPENGLES1-23 (linear fog) and OPENGLES1-24 (alpha test).
 // These are the parts of the renderer with no shader to fall back on: everything here is real
 // glLight*/glFog*/glAlphaFunc state, asserted with GetBackBufferData() pixel readback.

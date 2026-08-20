@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx3.md Phase P2 (DX30-10, ported from plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
+// plans/plan_dx3.md Phase P2 (DX30-10, ported from plans/plan_dx2.md's DX2-10/DX1-10..DX1-18): smoke test for
 // the DIRECTX5 (real DirectDraw v4, run under Wine -- no ../free-direct anywhere in this renderer)
 // graphics renderer's foundation -- real DirectDrawCreate -> QueryInterface(IID_IDirectDraw2) ->
 // SetCooperativeLevel(DDSCL_NORMAL) -> CreateSurface device bring-up, real Clear()/Present(), real
 // pixel readback. SpriteBatch/Texture2D draws are covered by directx3_spritebatch_test.cpp (Phase P4).
 //
-// This test's own success IS the proof the IDirectDraw2 upgrade (plan_dx3.md design decision 2)
+// This test's own success IS the proof the IDirectDraw2 upgrade (plans/plan_dx3.md design decision 2)
 // actually happened: DirectX5Renderer's constructor unconditionally throws if
 // QueryInterface(IID_IDirectDraw2) fails, so every check below only ever runs against a genuine
 // v2 object -- no separate "did the upgrade happen" CTest is needed on top of that.
@@ -84,7 +84,7 @@ protected:
         // Check D: Clear() honors a non-opaque requested alpha exactly. Uses FillSurfaceColor
         // (direct Lock()/Unlock() writes of all 4 channels), not DDBLT_COLORFILL, proactively
         // avoiding the class of bug DIRECTX3 found and fixed for its own DDBLT_COLORFILL-based Clear()
-        // (plan_freedirect.md DX3-14, free-direct's FillColor() hardcoding alpha to 255).
+        // (plans/plan_freedirect.md DX3-14, free-direct's FillColor() hardcoding alpha to 255).
         {
             dev.Clear(Color(10, 20, 30, 128));
             const Rectangle region(0, 0, 4, 4);

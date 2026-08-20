@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-407: opt-in acceptance for the exact real-world watch that exposed D1-D3.
+// plans/plan_gltf.md GLTF-407: opt-in acceptance for the exact real-world watch that exposed D1-D3.
 // The asset remains outside the repository; point CNA_GLTF_CHRONOGRAPH_WATCH at its pinned GLB.
 
 #include <algorithm>
@@ -109,7 +109,7 @@ TEST(GltfRealWorldAcceptanceL4, ChronographWatchMatchesItsRecordedGeometryMateri
     }
 
     ASSERT_EQ("8e875fcd83efb433afed9ef1c18b2c2b2e075e2bf48371cadfd2a3cf529f1aef",
-              Sha256(assetPath)) << "this is not plan_gltf.md §4.4's exact asset";
+              Sha256(assetPath)) << "this is not plans/plan_gltf.md §4.4's exact asset";
 
     ParsedGltf parsed;
     cgltf_options options{};

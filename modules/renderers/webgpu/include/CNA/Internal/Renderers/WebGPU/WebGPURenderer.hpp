@@ -349,7 +349,7 @@ namespace CNA::Internal::Renderers::WebGPU
     /// this class does not attempt to mirror the renderer's global `sampleCount_`, since a
     /// multisampled array texture resolved per-layer is meaningfully more machinery (a per-face
     /// MSAA colour view/resolve target, still only one live at a time) than this task's time
-    /// budget affords landing well-tested; see `plan_webgpu.md`'s `WEBGPU-114` row.
+    /// budget affords landing well-tested; see `plans/plan_webgpu.md`'s `WEBGPU-114` row.
     class WebGPURenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public IWebGPUCubeSamplable
     {
     public:
@@ -963,7 +963,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // the exact same colored3d.wgsl/GetOrCreatePipelineColored3D() infrastructure as
         // DrawColoredPrimitives(), but fills the uniform buffer from the caller's real
         // DiffuseColor/VertexColorEnabled instead of hardcoded white/true. Other strides (20/24/32,
-        // needing textured3d/lit_textured3d -- not yet written, see plan_webgpu.md Phase 58) and
+        // needing textured3d/lit_textured3d -- not yet written, see plans/plan_webgpu.md Phase 58) and
         // other effects (alpha test/dual texture/env map/skinned) fall back to
         // DrawColoredPrimitives()/DrawIndexedColoredPrimitives(), replicating exactly what
         // IGraphicsRenderer's own default implementation already did before this override existed.
@@ -1509,7 +1509,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // plain-texture mip behaviour genuinely BETTER (never garbage/undefined content at
         // level>0) but ALSO genuinely DIFFERENT from FNA and every sibling CNA renderer for the
         // identical public Texture2D/TextureCube(mipMap=true) constructor call -- see
-        // plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full investigation
+        // plans/plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full investigation
         // this finding is based on. Explicit per-level SetData(level>0, ...) calls made AFTER
         // construction are, as before, never auto-regenerated (matches every other renderer).
         void EnsureMipBlitPipeline();
@@ -1701,7 +1701,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // real, empirically-discovered front/back-winding quirk it had to work around on that
         // renderer, and baking stencil ops into this renderer's 10 pipeline families without an
         // equivalent WebGPU-side differential test risks the same silent-wrongness class this
-        // project explicitly avoids -- see plan_webgpu.md's WEBGPU-83 row for the scope cut.
+        // project explicitly avoids -- see plans/plan_webgpu.md's WEBGPU-83 row for the scope cut.
         bool stencilEnable_ = false;
         int stencilFunc_ = 0;
         int stencilPass_ = 0;
@@ -1757,7 +1757,7 @@ namespace CNA::Internal::Renderers::WebGPU
         int currentRenderTargetCubeFaceIndex_ = -1;
 
         // Phase 57/63 vertical slice: DrawColoredPrimitives()/DrawIndexedColoredPrimitives() only
-        // (VertexPositionColor, stride 16 -- see plan_webgpu.md's Phase 57 entry-point note). The
+        // (VertexPositionColor, stride 16 -- see plans/plan_webgpu.md's Phase 57 entry-point note). The
         // 128-float uniform layout matches VulkanRenderer::FillExtPushConst() byte-for-byte
         // so the same shader/uniform shape can be reused once DrawPrimitivesEx (full BasicEffect
         // dispatch) lands -- IGraphicsRenderer::DrawPrimitivesEx's own default implementation
@@ -1942,7 +1942,7 @@ namespace CNA::Internal::Renderers::WebGPU
             int addressU = 1;
             int addressV = 1;
             int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
-            /// Task 1105 (plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
+            /// Task 1105 (plans/plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
             /// pipeline/shader (XNA's real BasicEffect.PreferPerPixelLighting==false default);
             /// false keeps the existing per-pixel-lit one. Computed once at queue time from
             /// GpuDrawParams::lightingEnabled/preferPerPixelLighting -- irrelevant when lighting
@@ -2351,7 +2351,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
-            /// plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
+            /// plans/plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
             bool colored = false;
             bool indexed = false;
             bool index32 = false;
@@ -2362,7 +2362,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            /// plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
+            /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
             std::array<float, 76> pbrFactors{};
             bool depthTest = false;
@@ -2389,7 +2389,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
-            /// plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            /// plans/plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
             WebGPUSampledTextureEXT specularMap;
             WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
@@ -2418,20 +2418,20 @@ namespace CNA::Internal::Renderers::WebGPU
                               ReplayState& state);
 
         WGPUShaderModule pbrShader_ = nullptr;
-        /// plan_gltf.md GLTF-465: the stride-60 twin, whose vertex input declares COLOR_0.
+        /// plans/plan_gltf.md GLTF-465: the stride-60 twin, whose vertex input declares COLOR_0.
         WGPUShaderModule pbrColorShader_ = nullptr;
         WGPUBindGroupLayout pbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors UBOs
         WGPUBindGroupLayout pbrBindGroupLayout1_ = nullptr;  ///< group 1: sampler + 5 textures
         WGPUPipelineLayout pbrPipelineLayout_ = nullptr;
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrPipelines_;
-        /// plan_gltf.md GLTF-465: the stride-60 pipelines; a separate cache because the vertex
+        /// plans/plan_gltf.md GLTF-465: the stride-60 pipelines; a separate cache because the vertex
         /// layout and the shader module both differ, so the key alone cannot separate them.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrColorPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultWhiteTexture_;
         std::unique_ptr<WebGPUTextureRenderer> pbrDefaultFlatNormalTexture_;
 
-        // plan_cnj.md Phase 14J: closing this renderer's pre-existing "no skinning shader at all"
+        // plans/plan_cnj.md Phase 14J: closing this renderer's pre-existing "no skinning shader at all"
         // gap for SkinnedEffect -- both PreferPerPixelLighting lighting variants (matching every
         // other renderer's own established "two skinned shader variants" convention) plus
         // SkinnedEffect.VertexColorEnabled (stride-56 vertex colour on skinned meshes). Ported
@@ -2537,7 +2537,7 @@ namespace CNA::Internal::Renderers::WebGPU
         {
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
-            /// plan_gltf.md GLTF-463/GLTF-465: true for stride 80.
+            /// plans/plan_gltf.md GLTF-463/GLTF-465: true for stride 80.
             bool colored = false;
             bool indexed = false;
             bool index32 = false;
@@ -2548,7 +2548,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            /// plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
+            /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
             std::array<float, 76> pbrFactors{};
             std::array<float, 4 + 72 * 16> skinningParams{};
@@ -2576,7 +2576,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WebGPUSampledTextureEXT metallicRoughnessMap;
             WebGPUSampledTextureEXT emissiveMap;
             WebGPUSampledTextureEXT occlusionMap;
-            /// plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
+            /// plans/plan_gltf.md GLTF-344: KHR_materials_specular's strength and colour maps.
             WebGPUSampledTextureEXT specularMap;
             WebGPUSampledTextureEXT specularColorMap;
             int textureFilter = 0;
@@ -2601,12 +2601,12 @@ namespace CNA::Internal::Renderers::WebGPU
                               ReplayState& state);
 
         WGPUShaderModule skinnedPbrShader_ = nullptr;
-        /// plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin.
+        /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 twin.
         WGPUShaderModule skinnedPbrColorShader_ = nullptr;
         WGPUBindGroupLayout skinnedPbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors + SkinningParams UBOs
         WGPUPipelineLayout skinnedPbrPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (pbrBindGroupLayout1_ reused)
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrPipelines_;
-        /// plan_gltf.md GLTF-463/GLTF-465: the stride-80 pipelines.
+        /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 pipelines.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorPipelines_;
         std::vector<SkinnedPbrDrawCommand> skinnedPbrDrawCommands_;
     };

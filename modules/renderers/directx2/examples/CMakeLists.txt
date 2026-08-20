@@ -3,7 +3,7 @@
 # physical modules).
 #
 # From the root CMakeLists.txt include site:
-# plan_dx2.md Phase O1/O2: DIRECTX2 (real DirectDraw v1 2D layer ported from DIRECTX1 + Direct3D v2
+# plans/plan_dx2.md Phase O1/O2: DIRECTX2 (real DirectDraw v1 2D layer ported from DIRECTX1 + Direct3D v2
 # DrawPrimitive 3D layer, landing in a later phase) CTest registration, mirroring DirectX1Tests.cmake's
 # own shape (Windows-only, MinGW cross-compile + Wine wrapper).
 
@@ -31,7 +31,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2")
         endif()
     endmacro()
 
-    # plan_dx2.md design decision 11: when cross-compiled from Linux (DIRECTX2 is Windows-only, design
+    # plans/plan_dx2.md design decision 11: when cross-compiled from Linux (DIRECTX2 is Windows-only, design
     # decision 1), CTest itself still runs on the Linux host, so the test COMMAND wraps the real
     # .exe with scripts/run-wine-directx2.sh -- a real, native Windows/MSVC configure needs no Wine
     # wrapper at all and runs the .exe directly, mirroring DirectX1Tests.cmake's own
@@ -44,7 +44,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2")
         endif()
     endmacro()
 
-    # plan_dx2.md design decision 12: a real, automated proof this renderer never quietly reaches
+    # plans/plan_dx2.md design decision 12: a real, automated proof this renderer never quietly reaches
     # for the proven-broken execute-buffer Direct3D path instead of the working
     # IDirect3DDevice2::DrawPrimitive one -- pure text check via
     # scripts/check-directx2-execute-buffer-discipline.sh, no compiled binary, no Wine needed, runs
@@ -108,7 +108,7 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX2")
     cna_register_renderer_test(NAME DirectX2_LogicalTransform COMMAND ${_directx2_logical_transform_cmd}
         TIMEOUT 60 LABELS "DIRECTX2")
 
-    # NOTE: DirectX1_No3D has no DIRECTX2 equivalent here by design (plan_dx2.md task instructions) -- DIRECTX2's
+    # NOTE: DirectX1_No3D has no DIRECTX2 equivalent here by design (plans/plan_dx2.md task instructions) -- DIRECTX2's
     # 3D layer is real (not a permanent throw like DIRECTX1's), so its own 3D CTest suite grows across
     # Phase O3/O4/O5 instead of a single "throws" test that would need replacing almost immediately.
 

@@ -61,7 +61,7 @@ namespace
 
 int main(int argc, char* argv[])
 {
-    // Task 7.1 (plan_net.md Phase 7): --smoke N / --yaw <degrees> / --screenshot <path> together
+    // Task 7.1 (plans/plan_net.md Phase 7): --smoke N / --yaw <degrees> / --screenshot <path> together
     // give a reproducible, non-interactive way to capture baseline/after documentation
     // screenshots - --yaw fixes the orbiting camera instead of requiring live keyboard input, and
     // --screenshot saves the final smoke frame's backbuffer as a PNG before exiting.
@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
         }
         else if (std::strcmp(argv[i], "--show-help") == 0)
         {
-            // Task 8.5 (plan_net.md Phase 8): verifies the overlay actually renders via a
+            // Task 8.5 (plans/plan_net.md Phase 8): verifies the overlay actually renders via a
             // non-interactive smoke/screenshot run, without needing simulated keyboard input.
             showHelp = true;
         }

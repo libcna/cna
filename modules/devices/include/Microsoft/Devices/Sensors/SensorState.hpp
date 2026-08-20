@@ -35,7 +35,7 @@ namespace Microsoft::Devices::Sensors
      * unreachable on this project's supported platforms specifically, but
      * this has not been independently confirmed against Android's official
      * documentation the way other platform-contract claims in this codebase
-     * have been). See `plan_devices.md`'s `BASE2-003`/`DEVPERF-002`/`003`
+     * have been). See `plans/plan_devices.md`'s `BASE2-003`/`DEVPERF-002`/`003`
      * entries for the full reasoning and what remains open.
      */
     enum class SensorState

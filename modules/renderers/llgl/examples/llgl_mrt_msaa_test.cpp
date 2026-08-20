@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_llgl.md LLGL-54: preserve the effective MSAA sample count across a multi-render-target
+// plans/plan_llgl.md LLGL-54: preserve the effective MSAA sample count across a multi-render-target
 // bind, and resolve EVERY attachment independently -- not just slot 0. Mirrors
 // llgl_msaa_rendertarget_test.cpp's own diagonal-edge technique and llgl_mrt_test.cpp's own
 // 2-output custom-effect MRT proof, combined: the SAME single draw writes a diagonal-edged

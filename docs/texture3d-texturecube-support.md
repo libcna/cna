@@ -11,7 +11,7 @@
 > API — `Texture3D`/`TextureCube` construction goes through `GraphicsDevice::GetRenderer()`,
 > and SDL_Renderer's 3D-facing factory methods throw `ThrowNo3D` the same way vertex buffers do).
 >
-> Metal column added later (`plan_metal.md METAL-129`, Phase 11: `METAL-120`–`129`). The historical
+> Metal column added later (`plans/plan_metal.md METAL-129`, Phase 11: `METAL-120`–`129`). The historical
 > predecessor compiled on Apple Clang, but the post-audit adaptation changes the interfaces and has
 > no fresh Apple compile. Metal remains marked 🔍 where only source inspection and portable helper
 > tests exist; there is still no dedicated native TextureCube/Texture3D round-trip test.
@@ -83,7 +83,7 @@ is why this went unnoticed until this task cross-checked the Vulkan/Bgfx rendere
 
 Not fixed here — this is a real feature gap (Vulkan needs a staging-buffer-based
 `vkCmdCopyImageToBuffer` readback path; Bgfx has no such API in this project by design), tracked as
-new `plan_graphics.md` Task 865.
+new `plans/plan_graphics.md` Task 865.
 
 ---
 
@@ -101,7 +101,7 @@ allocates GPU storage past level 0, so a sub-image write to `level>0` silently g
 is real for `EasyGLTextureCubeRenderer`. Every other cell in this table has the **identical code
 shape** (mip level count/flag hardcoded to "1 level only", `mipMap` parameter unused), so the same
 failure is highly likely everywhere else, but only the one cell was actually reproduced with a
-test and fixed. Tracked as new `plan_graphics.md` Task 862 (EasyGL `Texture3D`, already tracked)
+test and fixed. Tracked as new `plans/plan_graphics.md` Task 862 (EasyGL `Texture3D`, already tracked)
 and Task 864 (Vulkan + Bgfx, both types — new).
 
 ---
@@ -122,7 +122,7 @@ Task 279; the fix only changes silent-no-op into a clear exception. Applies to M
 
 | Use case | EasyGL | Vulkan | Bgfx | Metal |
 |---|:---:|:---:|:---:|:---:|
-| `TextureCube` in `EnvironmentMapEffect` | ✅ (pre-existing, reconfirmed) | ✅ (pre-existing, reconfirmed) | ✅ (Task 278 — was a silent no-reflection fallback, now fixed) | 🔍 real, world-space cube-map reflection (flat + Fresnel-weighted blend, lit+fogged), landed and source-complete (`plan_metal.md` Phase 6, `METAL-64`–`71`) — not independently pixel-verified against a known-reflective scene |
+| `TextureCube` in `EnvironmentMapEffect` | ✅ (pre-existing, reconfirmed) | ✅ (pre-existing, reconfirmed) | ✅ (Task 278 — was a silent no-reflection fallback, now fixed) | 🔍 real, world-space cube-map reflection (flat + Fresnel-weighted blend, lit+fogged), landed and source-complete (`plans/plan_metal.md` Phase 6, `METAL-64`–`71`) — not independently pixel-verified against a known-reflective scene |
 | `Texture3D` in any effect, stock or custom | ❌ | ❌ | ❌ | ❌ same structural gap |
 
 `Texture3D` sampling is not implemented on any renderer for a structural reason, not a per-renderer
@@ -141,7 +141,7 @@ they provide no alternate binding route.
 
 Confirmed non-functional stub on all renderers (it's implemented once, in the shared XNA-layer
 `TextureCube.cpp`, not per-renderer): ignores the `stream` argument entirely and always returns a
-blank 1×1 `Color` cube map. Task 272 finding, tracked as `plan_graphics.md` Task 663. Applies to
+blank 1×1 `Color` cube map. Task 272 finding, tracked as `plans/plan_graphics.md` Task 663. Applies to
 Metal too, same shared code, no per-renderer work possible until Task 663 lands.
 
 ---
@@ -156,4 +156,4 @@ Metal too, same shared code, no per-renderer work possible until Task 663 lands.
 | Implement real GPU readback for `Texture3D`/`TextureCube::GetData` on Vulkan (staging-buffer `vkCmdCopyImageToBuffer`); document Bgfx's as an accepted no-readback limitation | Task 865 (new) |
 | Implement `TextureCube::DDSFromStreamEXT` for real (DDS header parsing + per-face/per-level DXT decode) | Task 663 |
 
-Metal's own remaining `Texture3D`/`TextureCube` work (real `CTest`s for `SetData`/`GetData` round-trips and cube-face sampling) is tracked directly in `plan_metal.md` Phase 11 (`METAL-126`–`129`), not duplicated here as a separate task list.
+Metal's own remaining `Texture3D`/`TextureCube` work (real `CTest`s for `SetData`/`GetData` round-trips and cube-face sampling) is tracked directly in `plans/plan_metal.md` Phase 11 (`METAL-126`–`129`), not duplicated here as a separate task list.

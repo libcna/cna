@@ -12,7 +12,7 @@
   Cross-File Observations)
 
 ## Purpose
-An independently-produced (deliberately not reading the pre-existing `plan_audio.md`) deep audit of
+An independently-produced (deliberately not reading the pre-existing `plans/plan_audio.md`) deep audit of
 CNA's Audio/Media subsystem, ranking 20 findings (A-01 through A-20) by severity and proposing a
 remediation plan, dated 2026-07-17 — two days before this audit session's current date (2026-07-19).
 
@@ -28,7 +28,7 @@ apparently did not find. Git history resolves the discrepancy conclusively: `git
 `aa6bc7b1 fix(AUD-06): expand XNB SoundEffectReader beyond 16-bit PCM` and 79 further `AUD-XX`-tagged
 commits (spanning `AUD-06` through `AUD-15`, closed 2026-07-17 through the present) that trace directly
 back to this document's own findings — this audit correctly triggered a large, still-partially-active
-remediation effort (`plan_audio.md`'s replacement, per this document's own closing line), and A-01
+remediation effort (`plans/plan_audio.md`'s replacement, per this document's own closing line), and A-01
 specifically has been fixed.
 
 ## Checklist Results
@@ -100,7 +100,7 @@ valuable independence technique that this audit session's own approach shares in
 
 ## Final Assessment
 One MEDIUM finding: this document should carry a status banner noting it has been adopted as
-`plan_audio.md`'s replacement and substantially actioned (A-01 confirmed fixed; A-03/A-11/A-15 have
+`plans/plan_audio.md`'s replacement and substantially actioned (A-01 confirmed fixed; A-03/A-11/A-15 have
 dedicated, apparently-closed or in-progress remediation task series) — without one, a reader risks
 treating fixed findings as still-open. The document's own analysis and methodology remain high
 quality and were not found to be wrong at the time they were written.

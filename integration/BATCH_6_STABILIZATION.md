@@ -119,7 +119,7 @@ The adaptation reflog proves **10 sequencer conflict stops**; deterministic thre
 reconstruction yields **15 file-conflict events across 11 unique paths** (per-stop counts
 5, 1, 1, 2, 1, 1, 1, 1, 1, 1). The affected paths are the root/backend/test Metal CMake files,
 backend identity and shared `GraphicsDevice` registration, the Metal implementation, compile-
-definition test, `README.md`, and `plan_metal.md`; the exact path list and adapted stop SHAs are in
+definition test, `README.md`, and `plans/plan_metal.md`; the exact path list and adapted stop SHAs are in
 the lane card. The reconstruction is explicit because resolved index stages are not retained.
 Two of the 12 range-diff `!` pairs applied cleanly, so `!` is context/semantic difference rather
 than a conflict count; the lane card also records the one heuristic pairing for which the curated
@@ -140,7 +140,7 @@ was inspected ref-only; no historical Metal worktree was created or checked out 
 
 No known defect remains reachable through Metal's conservative supported contract. All
 `METAL-258` through `METAL-281` have explicit dispositions in `integration/lanes/metal.md` and
-`plan_metal.md`; native proof remains external where stated. Carried group/campaign residuals stay
+`plans/plan_metal.md`; native proof remains external where stated. Carried group/campaign residuals stay
 truthful:
 
 - `REMED-GFX-224` remains MEDIUM/OPEN for the pre-existing EasyGL-only render-target `SetData`

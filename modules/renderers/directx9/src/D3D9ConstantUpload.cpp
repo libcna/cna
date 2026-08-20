@@ -30,7 +30,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             throw std::runtime_error(
                 std::string("UploadVertexShaderConstantEXT: constant '") + name +
-                "' not present in this shader's register table (plan_dx9.md D9-82)");
+                "' not present in this shader's register table (plans/plan_dx9.md D9-82)");
         }
         device->SetVertexShaderConstantF(slot->registerIndex, data, slot->registerCount);
     }
@@ -45,7 +45,7 @@ namespace CNA::Internal::Renderers::DirectX9
         {
             throw std::runtime_error(
                 std::string("UploadPixelShaderConstantEXT: constant '") + name +
-                "' not present in this shader's register table (plan_dx9.md D9-82)");
+                "' not present in this shader's register table (plans/plan_dx9.md D9-82)");
         }
         device->SetPixelShaderConstantF(slot->registerIndex, data, slot->registerCount);
     }

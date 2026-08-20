@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-43 (Phase G): deterministic, whole-container fuzz test -- unlike XNB-30A's
+// plans/plan_xnb.md XNB-43 (Phase G): deterministic, whole-container fuzz test -- unlike XNB-30A's
 // LzxDecoderFuzzTests.cpp (which only exercised the LZX decompressor in isolation), this mutates
 // a real, externally-produced, uncompressed .xnb file's ENTIRE byte stream (10-byte header, the
 // type-reader table, the shared-resource region, and the root object body) and loads it through

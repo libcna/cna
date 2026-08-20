@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-2: unit checks for D3D9's own format/state/vertex-layout mapping tables
+// plans/plan_dx9.md Phase D9-2: unit checks for D3D9's own format/state/vertex-layout mapping tables
 // (D9-20/D9-21/D9-22). No device/window/GPU needed -- these are pure functions.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.

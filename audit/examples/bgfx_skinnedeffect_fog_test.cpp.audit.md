@@ -141,7 +141,7 @@ purpose.
 - Related files: `bgfx_skinnedeffect_combined_test.cpp` (audited separately in this batch) sidesteps
   this entirely by calling `EnableDefaultLighting()`, giving `Direction` a real non-zero value.
 - Suggested follow-up (not implemented by this audit, per the audit-only mandate): none required
-  immediately given no confirmed reproduction; worth a note in `plan_graphics.md`/`known_bugs.md` as a
+  immediately given no confirmed reproduction; worth a note in `plans/plan_graphics.md`/`known_bugs.md` as a
   "watch for" item if any future SkinnedEffect/BasicEffect/EnvironmentMapEffect pixel test starts
   showing unexplained black/NaN-like output on a light left `Enabled` with a default-zero `Direction`.
 

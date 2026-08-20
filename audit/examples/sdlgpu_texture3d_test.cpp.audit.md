@@ -5,7 +5,7 @@
 - Source file: `examples/sdlgpu_texture3d_test.cpp`
 - Audit status: AUDITED
 - Subsystem: `examples-tests-sdlgpu` shard — `Texture3D` + mipmap proof for the SDL_GPU backend
-  (plan_sdlgpu.md SDLGPU-40/41)
+  (plans/plan_sdlgpu.md SDLGPU-40/41)
 - File type: standalone `Game`-subclass executable, CTest-registered
   (`cna_sdlgpu_test(cna_test_sdlgpu_texture3d …)` / `cna_register_backend_test(NAME
   SdlGpu_Texture3D …)`, `cmake/Tests/SdlGpuTests.cmake:60-63`, `TIMEOUT 60`).

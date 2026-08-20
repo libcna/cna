@@ -2,7 +2,7 @@
 #include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 
-// plan_freedirect.md Design decision 9: <ddraw.h> (and the <windows.h> compatibility shim it pulls in
+// plans/plan_freedirect.md Design decision 9: <ddraw.h> (and the <windows.h> compatibility shim it pulls in
 // from free-api) is contained to this .cpp only -- see FreeDirectRenderer.hpp's own comment for
 // why this renderer goes further than D3D11/D3D12's precedent and keeps it out of its own header
 // too (the fopen -> free_api_fopen macro leak risk).
@@ -1360,7 +1360,7 @@ namespace CNA::Internal::Renderers::FreeDirect
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_FREEDIRECT
-    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // plans/plan_runtimerenderer.md design decision 4: declared in this family's own
     // namespace so several renderer archives can link into one binary, then defined
     // below with a qualified name -- the body keeps its place unchanged.
     namespace FreeDirect { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }

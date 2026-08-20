@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MS-PL */
 /*
- * FNA3D existence-gate spike (plan_fna3d.md FNA3D-0).
+ * FNA3D existence-gate spike (plans/plan_fna3d.md FNA3D-0).
  *
  * Proves, before a single line of CNA renderer code is written, that the FNA3D
  * library actually initializes, clears, presents and reads pixels back in this

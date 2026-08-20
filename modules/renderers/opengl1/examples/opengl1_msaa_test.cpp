@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// OPENGL1 renderer: backbuffer MSAA (plan_opengl1.md item 22, EasyGL parity).
+// OPENGL1 renderer: backbuffer MSAA (plans/plan_opengl1.md item 22, EasyGL parity).
 //
 // Before this, GraphicsRendererCreateArgs::multiSampleCount was read by nothing --
 // SDL_GL_MULTISAMPLEBUFFERS/SAMPLES were never requested, GetMultiSampleCount() always returned
@@ -20,7 +20,7 @@
 // without a multisample buffer -- a window-visual-based mechanism cannot be reconfigured in place
 // (RecreateRendererForMultiSampleCount() only recreates the GL context, not the window itself).
 // This is a pre-existing Game/GraphicsDeviceManager construction-order constraint, not something
-// introduced by or fixable within this OPENGL1-scoped change -- see plan_opengl1.md item 22.
+// introduced by or fixable within this OPENGL1-scoped change -- see plans/plan_opengl1.md item 22.
 //
 // What DOES work (and is what this test exercises, following the direct-construction pattern
 // examples/directx12_smoke_test.cpp's own windowless-device test already established): a

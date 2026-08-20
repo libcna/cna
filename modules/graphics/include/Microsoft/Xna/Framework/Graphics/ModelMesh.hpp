@@ -50,7 +50,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * Real XNA's `ModelMesh.BoundingSphere` is a public read-write property (the content
          * pipeline's `ModelReader` is the only realistic caller, but the property itself has no
          * `internal`/access restriction to preserve) -- this was a pre-existing gap (getter only)
-         * until plan_xnb.md XNB-39 needed a real caller.
+         * until plans/plan_xnb.md XNB-39 needed a real caller.
          * @param value The new bounding sphere.
          */
         void setBoundingSphereProperty(const BoundingSphere& value);

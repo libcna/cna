@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-447: `docs/gltf-limitations.md`, held to the code it describes.
+// plans/plan_gltf.md GLTF-447: `docs/gltf-limitations.md`, held to the code it describes.
 //
 // A limitations document that drifts is worse than none: it reads as a promise about what a caller
 // will be told, and a caller who believes it stops looking. Two things keep it true, and both are
@@ -9,7 +9,7 @@
 //   * Its extension table is GENERATED from `GltfExtensionRegistryEXT()` -- the same registry the
 //     `extensionsRequired` gate reads -- and compared row by row here, with the corrected table
 //     printed on failure so fixing the document is a paste rather than a reading exercise. This is
-//     the same rule plan_gltf.md §19 lives under (`GLTF-334`), for the same reason.
+//     the same rule plans/plan_gltf.md §19 lives under (`GLTF-334`), for the same reason.
 //   * Every report field the document names must still be DECLARED in `GltfImportCore.hpp`. The
 //     document's whole organising claim is "each loss names the field that reports it", so a
 //     renamed field must break the document that promised it instead of leaving a dead name behind.
@@ -266,7 +266,7 @@ TEST(GltfLimitationsDoc, EveryApproximatedOrUnsupportedExtensionIsInTheApproxima
 
 // --- CNAEXT.md §3.2 may not claim more than the registry does -----------------------------------
 
-// plan_gltf.md GLTF-448. `CNAEXT.md` is the document a reader consults when *choosing* CNA, and its
+// plans/plan_gltf.md GLTF-448. `CNAEXT.md` is the document a reader consults when *choosing* CNA, and its
 // glTF section used to be a bullet list of what imports -- which reads as a completeness claim. It
 // is now a status table, and this is what stops it drifting back: an extension it marks implemented
 // (✅) must be one the registry classifies as implemented, and every extension it names at all must

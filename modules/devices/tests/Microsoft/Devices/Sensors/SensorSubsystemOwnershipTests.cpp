@@ -26,7 +26,7 @@ using Microsoft::Devices::Sensors::SensorState;
 // ref-count directly (headless, no real sensors — Start() always throws
 // here before reaching the subsystem calls), so this only proves the
 // cross-class construct/dispose code path doesn't crash or corrupt either
-// class's own state, per plan_devices_phase4.md Task P4-8's test guidance.
+// class's own state, per plans/plan_devices_phase4.md Task P4-8's test guidance.
 TEST(SensorSubsystemOwnershipTests, DisposingAccelerometerDoesNotAffectGyroscopeState)
 {
     Accelerometer accelerometer;
@@ -99,7 +99,7 @@ TEST(SensorSubsystemOwnershipTests, DisposingGyroscopeDoesNotAffectAccelerometer
 // SdlSensorSubsystem<T>::mutex_ around its real SDL sensor-subsystem calls —
 // two different mutexes for Accelerometer and Gyroscope, so nothing actually
 // serialized their real subsystem/enumerate/open/type/close/release calls against each
-// other. Unlike plan_devices_phase6.md's P6-1 addendum test (which only
+// other. Unlike plans/plan_devices_phase6.md's P6-1 addendum test (which only
 // stressed one class at a time and still reliably reproduced heap
 // corruption), this test constructs/destroys/probes *both* classes
 // concurrently, from separate thread pools, in the same test — the scenario

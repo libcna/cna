@@ -863,7 +863,7 @@ on a module that honours it -- module-dependent, `[SKIP]` on the OpenGL module r
 since its sample-mask application is permanently disabled in vendored LLGL (see "Render targets"
 above).
 Eight more shared, cross-renderer tests (already registered on EasyGL and usually several other
-renderers) were newly wired up here (`plan_llgl.md` Phase LLGL-7, `LLGL-39`):
+renderers) were newly wired up here (`plans/plan_llgl.md` Phase LLGL-7, `LLGL-39`):
 `Llgl_RenderTarget2D_DepthBuffer` (a `RenderTarget2D`'s own depth buffer really gates draws, not
 just stores a property), `Llgl_RenderTarget_ViewportScissorReset` (binding/unbinding a render
 target resets `Viewport`/`ScissorRectangle` to the new target's/back buffer's size),

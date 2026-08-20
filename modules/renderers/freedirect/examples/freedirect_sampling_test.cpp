@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MS-PL
-// plan_freedirect.md Phase X5 (DX3-45/DX3-46): TextureFilter (nearest vs. bilinear) and
+// plans/plan_freedirect.md Phase X5 (DX3-45/DX3-46): TextureFilter (nearest vs. bilinear) and
 // TextureAddressMode (Wrap/Mirror/Clamp) sampling tests for the DIRECTX3 (DirectDraw, via the
 // ../free-direct sibling) graphics renderer.
 //

@@ -15,7 +15,7 @@ resetting.
 
 ## Executive Verdict
 Correct and exceptionally thoroughly documented. Nearly every non-trivial member's doc comment
-cites a specific `plan_dx9.md` task ID explaining a real, concrete behavioral gap this port closes
+cites a specific `plans/plan_dx9.md` task ID explaining a real, concrete behavioral gap this port closes
 or a deliberate, disclosed simplification. See the paired `.cpp` report for the full behavioral
 verification (this header declares the full real XNA `GraphicsDevice` surface plus several
 well-justified `NOXNA` extensions; no header-level defect found).

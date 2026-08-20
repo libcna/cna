@@ -1,4 +1,4 @@
-// Task 479 (plan_graphics.md Phase 53): minimal hand-rolled JSON writer for the CNA-side
+// Task 479 (plans/plan_graphics.md Phase 53): minimal hand-rolled JSON writer for the CNA-side
 // reference-value dump tool, mirroring tools/fna-reference/JsonWriter.cs exactly (same Add()
 // overload shape, same nested-object support) so the two languages produce structurally
 // comparable JSON without either side depending on a vendored JSON library.
