@@ -232,6 +232,41 @@ each pass touches, which no GPU changes.
 | Spot shadow generation | **0.04 ms** | same |
 | Point shadow generation (6 cube faces) | **5.42 ms** | same — the number that justifies one shadowed punctual light per draw |
 
+### Contact shadows, per step count
+
+`plan_modern.md` `MOD-2123`. Reproduce:
+`./cmake-build-cnaext/cna_test_cnaext_contact_shadow --benchmark`. Two runs; the spread between them
+is under 5%. Square frames rather than 16:9, because the two axes being separated here are step count
+and pixel count and a square makes the second one easy to read.
+
+| Steps | 720×720 | 1080×1080 |
+|---|---|---|
+| 4 | 15.9 – 16.6 ms | 35.2 – 36.6 ms |
+| 8 | 25.0 – 25.9 ms | 57.2 – 58.2 ms |
+| 16 | 44.0 – 44.1 ms | 98.4 – 100.7 ms |
+| 32 | 80.8 – 83.7 ms | 182.1 – 184.4 ms |
+| 64 | 151.3 – 158.9 ms | 344.3 – 345.9 ms |
+
+**The cost is pixels times steps and nothing else.** Fitting a line through each column gives ≈2.3 ms
+per step at 720² and ≈5.2 ms per step at 1080² — a ratio of 2.24 against a pixel-count ratio of 2.25.
+There is no scene in this measurement and there would be none in a real one either: unlike a shadow
+map, which re-renders geometry and therefore costs whatever the scene costs, this pass runs the same
+march over the same number of pixels in an empty room and in a crowded one. That is the argument for
+it and also the warning: it is not cheaper for simple scenes.
+
+Each column also carries a fixed ≈7 ms (720²) or ≈15 ms (1080²) that is not the march. Part of it is
+the full-screen sample and blend the pass would pay at zero steps; part of it is the one-texel
+`GetData` this benchmark uses to force the driver to actually run the pass inside the timed region,
+the same convention the SSAO figures above use. Read the *slope*, not the intercept.
+
+**Against the pass it most resembles**: SSAO at 16 samples costs 86.96 ms over 1920×1080, which is
+2.07 Mpx; contact shadows at 16 steps cost ≈99 ms over 1.17 Mpx, or ≈175 ms scaled to the same
+frame — **about twice SSAO per sample**. Both loop a dependent texture read per texel, but each step
+of this march also multiplies a position by the projection matrix, divides by `w` and snaps to a
+texel centre before it can read anything. Sixteen steps is a reasonable default; sixty-four is a
+research setting on a software rasteriser.
+
+
 ## Sky and image-based lighting
 
 | What | Measurement | Source |

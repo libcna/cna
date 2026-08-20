@@ -56,6 +56,7 @@ orchestration that pulls in extra render targets and GPU memory lives in the gat
 | `ShadowMap`, `DirectionalLightEXT` | `CNA/Graphics/ShadowMap.hpp` | Directional shadow-map generation: fits the light's volume to the scene, opens a pass the app draws its casters into. |
 | `CascadedShadowMap` | `CNA/Graphics/CascadedShadowMap.hpp` | The same, split into 2-4 depth ranges so a large scene keeps resolution near the camera. |
 | `CubeShadowMap`, `SpotShadowMap`, `PointLightEXT`, `SpotLightEXT` | `CNA/Graphics/CubeShadowMap.hpp`, `SpotShadowMap.hpp` | Punctual-light shadows: six cube faces for a point light, one perspective map for a spot. |
+| `ContactShadowPass` | `CNA/Graphics/ContactShadowPass.hpp` | The short screen-space ray march that supplies the contact a shadow map filters away, at any resolution. |
 | `ComputeShader`, `StorageBuffer`, `StorageBufferT<T>` | `CNA/Graphics/ComputeShader.hpp`, `StorageBuffer.hpp` | Compute programs and the buffers they read and write. |
 | `AutoExposureEXT` | `CNA/Graphics/AutoExposureEXT.hpp` | Compute log-average luminance reduction, and the adaptation that turns it into an exposure. |
 | `InstancedRendererEXT` | `CNA/Graphics/InstancedRendererEXT.hpp` | Draws one mesh part many times in a single call, owning the per-instance transform stream. |
@@ -200,6 +201,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | `RenderPipeline` + post-process passes | ✅ | 🟨 runs and copies through — measured, frame identical to no pipeline | ⬜ | The passes need `GraphicsCapability::CustomEffects`; without it each copies its input and the frame still renders |
 | Shadow maps (directional, PCF) | ✅ generation + reception on all four lit effects | ⬜ `SupportsShadowSamplingEXT()` false | ⬜ | ⬜ — an effect accepts the shadow state and a renderer without the shader ignores it, so the frame renders unshadowed rather than failing |
 | Cascaded shadow maps (2-4, atlas) | ✅ same four programs, one shared shader path | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
+| Contact shadows | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `ContactShadowPass::isSupported()` is false and the pass copies its input through, so the frame keeps the shadow map it already had |
 | Point / spot lights + shadows | ✅ punctual lighting and its cube/spot lookup on all four lit programs | ⬜ | ⬜ | ⬜ — same accepted-and-ignored convention |
 | Skybox | ✅ one fullscreen pass; needs `CustomEffects` | ⬜ | ⬜ | ⬜ — where the shader will not compile the sky is skipped and logged once |
 | Image-based lighting | ✅ CPU precompute (works on every renderer) + split-sum shading | 🟨 precompute works; `SupportsImageBasedLightingEXT()` false | ⬜ | ⬜ — the precompute runs anywhere; the shading needs the renderer's own shader path |
@@ -1377,6 +1379,73 @@ Worth knowing:
   0.12 ms, two cascades 0.20 ms, three 0.49 ms, four 0.43 ms per frame. Software-rasterizer
   figures, so a recording rather than a budget — the shape, roughly linear in cascade count with
   the per-pass overhead dominating at this triangle count, is what transfers.
+
+### Contact shadows: the detail no shadow-map resolution reaches
+
+A shadow map answers "is this point visible from the light" at the resolution of its texture, and
+`ShadowQuality::Ultra` is 4096² for a reason — more texels is the obvious answer to a shadow that
+looks coarse. It is not the answer to the artefact where an object meets the floor it stands on.
+There, visibility changes over a distance smaller than the map's *filter width*, so PCF averages the
+contact into a soft grey and the object appears to hover. Doubling the map does not fix it, because
+the error is in the filter rather than in the content, and the frame time doubles for nothing.
+
+`ContactShadowPass` fills exactly that gap and nothing wider. For each pixel it reconstructs a
+view-space position from the depth/normal prepass, walks a short ray toward the light, and darkens
+the pixel where the depth image crosses it.
+
+```cpp
+CNA::Graphics::ContactShadowPass contact(device);
+contact.setLightDirection(sun.Direction);   // the same value DirectionalLightEXT takes
+contact.setMaxDistance(0.25f);              // world units -- centimetres, not texels
+contact.setStepCount(16);
+contact.setThickness(0.15f);
+contact.apply(context);                     // context.sourceDepth and inverseView required
+```
+
+**It is a complement, never a replacement.** It sees only what the camera sees, so an occluder off
+screen or hidden behind the surface casts nothing at all, and the shadow it produces stops where the
+march does. A scene rendered with contact shadows and no shadow map has short dark contacts and an
+otherwise unshadowed world. The two combine by **multiplying** their visibility, which is what the
+pass does implicitly: it modulates an image that already carries the shadow map's term. The
+alternative — adding the two occlusions — is what gives screen-space shadows their reputation, since
+over a real contact both terms fire and the shadow gains a black core with a visible edge around it.
+`ContactShadowPass::combineVisibility` states the rule for code that needs to combine them itself.
+
+**The ray length is the shadow's length.** `setMaxDistance` is in world units, and shortening it does
+not make the shadow softer or dimmer — it makes it *end sooner*. Long is the wrong instinct: a
+metre-long ray is a bad shadow map, noisier and more expensive and wrong wherever the occluder
+leaves the frame, and it walks over thin geometry between samples because each step covers more
+screen distance. The default is 25 cm.
+
+**Thickness is the one thing the depth image cannot tell you, and it has no right answer.** A depth
+image records where a surface *is* and nothing about how far back the object behind it goes. When a
+ray has fallen 15 cm behind the stored surface, it is either inside a solid object or past a thin
+one, and no reading of the image distinguishes the two. `setThickness` picks which of the two wrong
+answers the pass gives:
+
+| Setting | What it gets wrong |
+|---|---|
+| Too small | the shadow disappears at the far end of every real occluder — the ray is judged to have passed behind something it is actually inside |
+| Too large | a railing, a leaf, a window frame shadows everything behind it as though it were a solid wall |
+
+Both directions are asserted in the tests rather than tuned away, on the same 15 cm gap: at 30 cm of
+assumed thickness the floor beside the object goes fully dark, at 5 cm it is untouched to within
+1/255.
+
+**Four things must be present or the pass copies its input through**, naming which one was missing in
+`getFallbackReason()`: the prepass depth image, a far plane (without it the stored depth has no world
+scale), the inverse view matrix (without it the light direction cannot be brought into view space),
+and a non-degenerate light direction. The fallback is silent by construction — a frame with no
+contact shadows in it looks exactly like a frame nobody asked for them in — which is why the reason
+is a string rather than a bool.
+
+**Cost is pixels times steps, and completely independent of the scene** — see
+[`cnaext-perf.md`](cnaext-perf.md). Unlike a shadow map, which re-renders geometry and therefore
+costs what the scene costs, this pass runs the same march in an empty room and in a crowded one.
+That is both the argument for it and the warning that comes with it. At sixteen steps it costs
+roughly twice SSAO per sample, because each step projects a position and snaps to a texel centre
+before it can read anything.
+
 
 ### Point and spot lights
 

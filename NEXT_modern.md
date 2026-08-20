@@ -39,6 +39,27 @@ virtual shadow maps (the sparse-texture hardware `MOD-2099` already refused) and
 that last one **refused as redundant rather than unreachable**, since its diffuse answer is what
 `LightProbeVolumeEXT` already gives without screen space's failure modes.
 
+**Phase 21 progress.** §21.1 transparency (`MOD-2101`–`MOD-2110`) and §21.2 contact shadows
+(`MOD-2120`–`MOD-2123`) are done; §21.3 grading and output, §21.4 aerial perspective and §21.5 debug
+drawing and GPU timing remain.
+
+Two things §21.1 settled that were not in the row when it was written. The published weighted-blended
+technique needs a **different blend function per draw buffer** — `glBlendFunci`, GL ES 3.2, above
+this layer's floor and absent from CNA's `BlendState` besides — so revealage is accumulated as the
+**sum of `log(1 - alpha)`** instead, which is additive and shares one blend state with the colour
+target, and the resolve exponentiates it back. That kept the technique to one geometry pass rather
+than two. And the approximation was **measured against the exact sorted frame** rather than described:
+35/255 mean and 142/255 worst over 40 708 covered pixels, on a scene close to the worst case for it.
+That number is what makes the choice between the two paths a real one rather than a preference.
+
+§21.2's lesson was about the measurement, not the code. The first contact-shadow benchmark reported
+**0.04 ms at every step count and every resolution** — a plausible-looking figure that meant the
+driver had not run the march at all, because `apply()` only submits it. A one-texel `GetData` inside
+the timed loop, the convention `cnaext_ssao_test` already used, turned that into 16–346 ms with a
+slope that tracks pixels times steps to within 1%. **A benchmark whose numbers do not move with the
+dial being measured is reporting submission, not work** — and it is the second time in two phases
+that a measurement, not a test, was the thing that was wrong.
+
 **Phase 20 (`MOD-2000`–`MOD-2100`) is complete** (2026-08-20) — the modern-renderer scope the first nineteen
 phases never covered: screen-space reflections, depth of field, the lens and grading passes, motion
 blur, clustered lighting for many lights, volumetrics, area lights, the glTF material extensions
@@ -519,6 +540,8 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | **`cmake-build-cnaext-release`** — the same tree at `-DCMAKE_BUILD_TYPE=Release`, re-verified after all of Phase 20 (this is where `MOD-2035`'s regression was first seen) | Xvfb :99 | 8294 ran · 8229 pass · 65 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after `MOD-2035` | Xvfb :99 | 7567 ran · 7505 pass · 62 skip · **0 fail** (the networking test that timed out under load earlier passes here) |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after all of §20.10 touched `GraphicsDevice`, `IGraphicsRenderer`, `GraphicsCapability` and the EasyGL renderer | Xvfb :99 | 7567 ran · 7504 pass · 62 skip · **1 fail** — `TwoProcessLoopbackTest.HostMigration…`, which passes on its own in 715 ms and times out at 30 s under full-suite load: the fourth instance of the load-induced failures §3 already describes, and nothing to do with this work (it spawns two processes and speaks UDP) |
+| 2026-08-20 | `cmake-build-cnaext`, after **Phase 21 §21.1 complete** (transparency: the sorted list, the transparent phase, weighted-blended OIT and soft particles) | Xvfb :99 | 8317 ran · 8252 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **27/27** |
+| 2026-08-20 | same, after **Phase 21 §21.2 complete** (contact shadows) | Xvfb :99 | 8340 ran · 8275 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **28/28** |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
 which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after

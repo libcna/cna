@@ -200,6 +200,12 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_Transparency COMMAND cna_test_cnaext_transparency
         TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-2123: what the contact shadow march costs, per step count and per
+    # resolution -- the two axes a caller can change, neither of which is the scene.
+    cna_graphics_ext_test(cna_test_cnaext_contact_shadow cnaext_contact_shadow_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_ContactShadow COMMAND cna_test_cnaext_contact_shadow
+        TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_caps cnaext_caps_probe.cpp)
 
     cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)
