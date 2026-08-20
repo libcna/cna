@@ -581,6 +581,8 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | same, after **Phase 21 §21.3 complete** (`.cube` grading, the interpolation decision, debanding dither) | Xvfb :99 | 8367 ran · 8301 pass · 66 skip · **0 fail**; `ctest -R 'CNAEXT_'` **29/29** |
 | 2026-08-20 | same, after **Phase 21 §21.4 complete** (aerial perspective) | Xvfb :99 | 8381 ran · 8316 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **29/29** |
 | 2026-08-20 | same, after **Phase 21 §21.5 complete** (`DebugDraw`, gizmos, `GpuTimer`, per-pass timings, the GPU-timed perf table) — **Phase 21 complete** | Xvfb :99 | 8419 ran · 8351 pass · 68 skip · **0 fail**; `ctest -R 'CNAEXT_'` **30/30** |
+| 2026-08-20 | **`cmake-build-cnaext-release`** — the same tree at `-DCMAKE_BUILD_TYPE=Release`, at the Phase 21 boundary | Xvfb :99 | 8419 ran · 8351 pass · 68 skip · **0 fail** |
+| 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, at the Phase 21 boundary: the layer compiles out and nothing it touched (`IGraphicsRenderer`, the EasyGL renderer, `TonemapPass`, `ColorGradePass`, `AtmosphericSky`) broke the build without it | Xvfb :99 | 7567 ran · 7505 pass · 62 skip · **0 fail** |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
 which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after
