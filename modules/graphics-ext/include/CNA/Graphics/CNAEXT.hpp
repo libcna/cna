@@ -46,6 +46,8 @@
 #include "CNA/Graphics/AtmosphericSky.hpp"
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/ColorGradePass.hpp"
+#include "CNA/Graphics/CubeLut.hpp"
+#include "CNA/Graphics/LutInterpolation.hpp"
 #include "CNA/Graphics/ChromaticAberrationPass.hpp"
 #include "CNA/Graphics/FilmGrainPass.hpp"
 #include "CNA/Graphics/HeightFogPass.hpp"

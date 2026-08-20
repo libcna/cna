@@ -4,6 +4,7 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/FullscreenPass.hpp"
+#include "CNA/Graphics/LutInterpolation.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 
 #include <memory>
@@ -12,6 +13,7 @@
 namespace Microsoft::Xna::Framework::Graphics {
     class ShaderEffect;
     class Texture2D;
+    class Texture3D;
 }
 
 namespace CNA::Graphics {
@@ -80,6 +82,40 @@ namespace CNA::Graphics {
          */
         void setLut(Microsoft::Xna::Framework::Graphics::Texture2D* lut);
 
+        /** @brief Returns the volume lookup table, or null when none is set. */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture3D* getVolumeLut() const;
+
+        /**
+         * @brief Sets a real volume lookup table, borrowed rather than owned.
+         *
+         * plan_modern.md `MOD-2130`. The same table the strip carries, in the layout the hardware
+         * understands: one fetch replaces the strip's two fetches and the hand-written blend
+         * between slices, and there is no half-texel arithmetic to get wrong because there are no
+         * slice boundaries to stay off. It is not the default because it needs
+         * `GraphicsCapability::Texture3D`, which the strip does not.
+         *
+         * A volume table takes precedence over a strip while both are set.
+         *
+         * @param lut A cubic volume texture, or null to stop using one.
+         * @throws EngineException When the renderer has no `GraphicsCapability::Texture3D`.
+         * @throws std::invalid_argument When the texture is not a cube of an accepted size.
+         */
+        void setVolumeLut(Microsoft::Xna::Framework::Graphics::Texture3D* lut);
+
+        /** @brief Returns how colours between the table's entries are worked out. */
+        [[nodiscard]] LutInterpolation getInterpolation() const;
+
+        /**
+         * @brief Sets how colours between the table's entries are worked out.
+         *
+         * plan_modern.md `MOD-2131`. See @ref LutInterpolation for what separates them; the short
+         * version is that @ref LutInterpolation::Tetrahedral keeps neutrals neutral and
+         * @ref LutInterpolation::Trilinear does not.
+         *
+         * @param value The interpolation to use.
+         */
+        void setInterpolation(LutInterpolation value);
+
         /** @brief Returns how strongly the graded colour replaces the original. */
         [[nodiscard]] float getStrength() const;
         /**
@@ -118,10 +154,15 @@ namespace CNA::Graphics {
     private:
         std::unique_ptr<FullscreenPass> fullscreen_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> effect_;
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> tetrahedralStripEffect_;
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect> volumeEffect_;
 
         Microsoft::Xna::Framework::Graphics::Texture2D* lut_ = nullptr;
-        int   lutSize_  = 0;
-        float strength_ = 1.0f;
+        Microsoft::Xna::Framework::Graphics::Texture3D* volumeLut_ = nullptr;
+        int   lutSize_       = 0;
+        int   volumeLutSize_ = 0;
+        float strength_      = 1.0f;
+        LutInterpolation interpolation_ = LutInterpolation::Trilinear;
     };
 
 /** @} */
