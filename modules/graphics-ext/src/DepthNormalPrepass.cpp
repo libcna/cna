@@ -38,6 +38,8 @@ namespace CNA::Graphics {
         /// depth and pass 1 writes normals.
         constexpr int kDepthPass  = 0;
         constexpr int kNormalPass = 1;
+        /// MOD-2033: only ever reached without MRT, where velocity is a third pass over the geometry.
+        constexpr int kVelocityPass = 2;
 
         /// The packing MOD-507 uses where a float target is unavailable. Written once here as GLSL
         /// and once in C++ below, and a test asserts the two agree -- the usual failure of a packed
@@ -81,13 +83,22 @@ layout(location = 1) in vec3 aNormal;
 uniform mat4 uWorld;
 uniform mat4 uView;
 uniform mat4 uProjection;
+uniform mat4 uPreviousWorld;
+uniform mat4 uPreviousViewProjection;
 out vec3 vViewNormal;
 out float vViewDepth;
+out vec4 vCurrentClip;
+out vec4 vPreviousClip;
 uniform float uFarPlane;
 void main() {
     vec4 world = uWorld * vec4(aPosition, 1.0);
     vec4 view  = uView * world;
     gl_Position = uProjection * view;
+    // MOD-2033. Both clip positions go to the fragment stage undivided: the perspective divide is
+    // not an affine operation, so interpolating the divided values would put the velocity of a
+    // large triangle in the wrong place everywhere except at its vertices.
+    vCurrentClip  = gl_Position;
+    vPreviousClip = uPreviousViewProjection * (uPreviousWorld * vec4(aPosition, 1.0));
     // The normal matrix would be the inverse transpose; a uniformly-scaled world matrix makes the
     // upper 3x3 sufficient, which is what CNA's own model transforms are. Non-uniform scale skews
     // the normal here, and is documented rather than corrected -- correcting it needs an inverse
@@ -110,8 +121,12 @@ uniform mat4 uProjection;
 uniform mat4 uBones[72];
 uniform int uWeightsPerVertex;
 uniform float uFarPlane;
+uniform mat4 uPreviousWorld;
+uniform mat4 uPreviousViewProjection;
 out vec3 vViewNormal;
 out float vViewDepth;
+out vec4 vCurrentClip;
+out vec4 vPreviousClip;
 void main() {
     mat4 skin = uBones[aBoneIndices.x] * aBoneWeights.x;
     if (uWeightsPerVertex >= 2) skin += uBones[aBoneIndices.y] * aBoneWeights.y;
@@ -120,6 +135,12 @@ void main() {
     vec4 world = uWorld * skin * vec4(aPosition, 1.0);
     vec4 view  = uView * world;
     gl_Position = uProjection * view;
+    vCurrentClip  = gl_Position;
+    // The previous pose is deliberately NOT reconstructed here: the bones are this frame's, so a
+    // skinned mesh's velocity is its object's motion and not its deformation. Recording the latter
+    // needs the previous frame's bone set as a second array, which is an obligation on the app an
+    // order of magnitude larger than one matrix; it is stated in the header rather than faked.
+    vPreviousClip = uPreviousViewProjection * (uPreviousWorld * skin * vec4(aPosition, 1.0));
     vViewNormal = normalize(mat3(uView) * mat3(uWorld) * mat3(skin) * aNormal);
     vViewDepth  = clamp(-view.z / uFarPlane, 0.0, 1.0);
 }
@@ -134,14 +155,29 @@ void main() {
 precision highp float;
 in vec3 vViewNormal;
 in float vViewDepth;
+in vec4 vCurrentClip;
+in vec4 vPreviousClip;
 uniform int uPackDepth;
-uniform int uOutputMode;   // 0 = both (MRT), 1 = depth only, 2 = normals only
+uniform int uOutputMode;   // 0 = every target (MRT), 1 = depth, 2 = normals, 3 = velocity
 uniform float uRoughness;  // rides in the normal target's alpha; see setRoughness
 layout(location = 0) out vec4 FragTarget0;
 layout(location = 1) out vec4 FragTarget1;
+layout(location = 2) out vec4 FragTarget2;
 )";
             source += kPackGlsl;
             source += R"(
+vec4 cnaVelocityOut(vec4 currentClip, vec4 previousClip) {
+    // Behind the previous camera: there is no screen position to have come from, so the pixel is
+    // marked as carrying no velocity rather than given a reprojection through a negative w.
+    if (currentClip.w <= 0.0 || previousClip.w <= 0.0) return vec4(0.5, 0.5, 0.0, 1.0);
+    vec2 currentUv  = (currentClip.xy / currentClip.w) * 0.5 + 0.5;
+    vec2 previousUv = (previousClip.xy / previousClip.w) * 0.5 + 0.5;
+    // Alpha 0 means "this texel has a velocity". Inverted on purpose -- see getVelocityTextureEXT:
+    // the MRT path issues one clear for the whole bound set and depth must clear to white, so the
+    // shared clear already writes the "nothing here" value.
+    return vec4(clamp((currentUv - previousUv) * 0.5 + 0.5, 0.0, 1.0), 0.0, 0.0);
+}
+
 void main() {
     vec4 depthOut  = (uPackDepth != 0) ? cnaPackDepth(vViewDepth)
                                        : vec4(vViewDepth, vViewDepth, vViewDepth, 1.0);
@@ -149,15 +185,23 @@ void main() {
     // than in a third target: MRT is capped and this pass already falls back to two passes without
     // it, so a third output would make that fallback three passes for one scalar.
     vec4 normalOut = vec4(vViewNormal * 0.5 + 0.5, uRoughness);
+    vec4 velocityOut = cnaVelocityOut(vCurrentClip, vPreviousClip);
     if (uOutputMode == 1) {
         FragTarget0 = depthOut;
         FragTarget1 = depthOut;
+        FragTarget2 = depthOut;
     } else if (uOutputMode == 2) {
         FragTarget0 = normalOut;
         FragTarget1 = normalOut;
+        FragTarget2 = normalOut;
+    } else if (uOutputMode == 3) {
+        FragTarget0 = velocityOut;
+        FragTarget1 = velocityOut;
+        FragTarget2 = velocityOut;
     } else {
         FragTarget0 = depthOut;
         FragTarget1 = normalOut;
+        FragTarget2 = velocityOut;
     }
 }
 )";
@@ -175,6 +219,10 @@ void main() {
                 "CNA::Graphics::DepthNormalPrepass: the target size must be positive");
         width_  = width;
         height_ = height;
+        // Identity rather than a zeroed Matrix: a zero matrix collapses every previous position to
+        // the origin, which is a full-screen smear rather than "no motion".
+        previousWorld_ = Matrix::getIdentityProperty();
+        previousViewProjection_ = Matrix::getIdentityProperty();
 
         useMrt_ = device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets);
         // MOD-507: a half-float target holds linear depth directly; without one it is packed across
@@ -201,22 +249,32 @@ void main() {
         // the two-pass path would have worked perfectly. So the answer is probed by doing, once,
         // here: bind the pair this class will actually bind, and fall back to two passes if the
         // renderer refuses. One bind at construction is cheap; a throw on every frame is not.
-        if (useMrt_)
+        probeMultipleRenderTargets();
+    }
+
+    void DepthNormalPrepass::probeMultipleRenderTargets()
+    {
+        if (!device_.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets))
         {
-            try
-            {
-                const std::vector<RenderTargetBinding> bindings = {
-                    RenderTargetBinding(depthTarget_.get()),
-                    RenderTargetBinding(normalTarget_.get()),
-                };
-                device_.SetRenderTargets(bindings);
-                device_.SetRenderTarget(nullptr);
-            }
-            catch (...)
-            {
-                useMrt_ = false;
-                try { device_.SetRenderTarget(nullptr); } catch (...) { /* best-effort cleanup */ }
-            }
+            useMrt_ = false;
+            return;
+        }
+        useMrt_ = true;
+        try
+        {
+            std::vector<RenderTargetBinding> bindings = {
+                RenderTargetBinding(depthTarget_.get()),
+                RenderTargetBinding(normalTarget_.get()),
+            };
+            if (velocity_ && velocityTarget_ != nullptr)
+                bindings.emplace_back(velocityTarget_.get());
+            device_.SetRenderTargets(bindings);
+            device_.SetRenderTarget(nullptr);
+        }
+        catch (...)
+        {
+            useMrt_ = false;
+            try { device_.SetRenderTarget(nullptr); } catch (...) { /* best-effort cleanup */ }
         }
     }
 
@@ -231,6 +289,14 @@ void main() {
         normalTarget_ = std::make_unique<RenderTarget2D>(device_, width_, height_, false,
                                                           SurfaceFormat::Color,
                                                           DepthFormat::Depth24);
+        // MOD-2033. `Color` rather than a float format: the velocity stored here is a UV delta,
+        // and one screen's worth in a frame is already an absurd speed, so eight bits over the
+        // whole range is finer than the blur can act on. A float target would also make this the
+        // one prepass output that needs a capability the others do not.
+        velocityTarget_ = velocity_
+            ? std::make_unique<RenderTarget2D>(device_, width_, height_, false,
+                                               SurfaceFormat::Color, DepthFormat::Depth24)
+            : nullptr;
     }
 
     void DepthNormalPrepass::resize(const int width, const int height)
@@ -249,7 +315,50 @@ void main() {
         allocateTargets();
     }
 
-    int DepthNormalPrepass::getPassCount() const { return useMrt_ ? 1 : 2; }
+    int DepthNormalPrepass::getPassCount() const
+    {
+        if (useMrt_) return 1;
+        return velocity_ ? 3 : 2;
+    }
+
+    bool DepthNormalPrepass::isVelocityEnabledEXT() const { return velocity_; }
+
+    Texture2D* DepthNormalPrepass::getVelocityTextureEXT() const { return velocityTarget_.get(); }
+
+    void DepthNormalPrepass::setVelocityEnabledEXT(const bool value)
+    {
+        if (passOpen_)
+            throw std::logic_error(
+                "CNA::Graphics::DepthNormalPrepass::setVelocityEnabledEXT: a pass is open");
+        if (velocity_ == value) return;
+        velocity_ = value;
+        allocateTargets();
+        // The MRT verdict has to be re-taken, not assumed: a renderer that binds two targets is not
+        // promising three, and MRT counts are capped. Same probe as the constructor's, and the same
+        // reason -- one bind now instead of a throw on every frame.
+        probeMultipleRenderTargets();
+    }
+
+    void DepthNormalPrepass::setPreviousWorldEXT(const Matrix& value)
+    {
+        previousWorld_ = value;
+        // Applied immediately when a pass is open, for the reason setRoughness is: the prepass draws
+        // whatever the app hands it and cannot tell one object from the next.
+        if (passOpen_ && supported_)
+            for (ShaderEffect* effect : {effect_.get(), skinnedEffect_.get()})
+                if (effect != nullptr && effect->IsEffectValid())
+                {
+                    effect->Apply();
+                    effect->SetUniformMat4("uPreviousWorld", &previousWorld_.M11);
+                }
+    }
+
+    void DepthNormalPrepass::setPreviousCameraEXT(const Matrix& previousView,
+                                                  const Matrix& previousProjection)
+    {
+        previousViewProjection_ = previousView * previousProjection;
+        hasPreviousCamera_ = true;
+    }
 
     void DepthNormalPrepass::begin(const int passIndex, const Matrix& view,
                                    const Matrix& projection, const float nearPlane,
@@ -279,13 +388,17 @@ void main() {
         {
             if (useMrt_)
             {
-                const std::vector<RenderTargetBinding> bindings = {
+                std::vector<RenderTargetBinding> bindings = {
                     RenderTargetBinding(depthTarget_.get()),
                     RenderTargetBinding(normalTarget_.get()),
                 };
+                if (velocity_ && velocityTarget_ != nullptr)
+                    bindings.emplace_back(velocityTarget_.get());
                 device_.SetRenderTargets(bindings);
                 // One clear for a bound set: the depth convention wins, because an unwritten normal
-                // texel is only read where depth says something is there.
+                // texel is only read where depth says something is there -- and MOD-2033's velocity
+                // target reads a white clear as "no velocity here", which is why its flag is the
+                // alpha inverted rather than the alpha.
                 device_.Clear(kFarDepth);
             }
             else if (passIndex == kDepthPass)
@@ -293,15 +406,27 @@ void main() {
                 device_.SetRenderTarget(depthTarget_.get());
                 device_.Clear(kFarDepth);
             }
-            else
+            else if (passIndex == kNormalPass)
             {
                 device_.SetRenderTarget(normalTarget_.get());
                 device_.Clear(kFacingView);
             }
+            else
+            {
+                device_.SetRenderTarget(velocityTarget_.get());
+                device_.Clear(kFarDepth);
+            }
 
             if (supported_)
             {
-                const int outputMode = useMrt_ ? 0 : (passIndex == kNormalPass ? 2 : 1);
+                const int outputMode = useMrt_ ? 0
+                                               : (passIndex == kVelocityPass ? 3
+                                                  : (passIndex == kNormalPass ? 2 : 1));
+                // With no previous camera supplied the current one stands in, which reads as "the
+                // camera did not move" -- the honest answer for a first frame, and better than the
+                // identity, which would smear the whole image from the world origin.
+                const Matrix previousViewProjection =
+                    hasPreviousCamera_ ? previousViewProjection_ : (view * projection);
                 for (ShaderEffect* effect : {effect_.get(), skinnedEffect_.get()})
                 {
                     if (effect == nullptr || !effect->IsEffectValid()) continue;
@@ -314,6 +439,8 @@ void main() {
                     effect->SetUniformInt("uPackDepth", packDepth_ ? 1 : 0);
                     effect->SetUniformInt("uOutputMode", outputMode);
                     effect->SetUniformFloat("uRoughness", roughness_);
+                    effect->SetUniformMat4("uPreviousWorld", &previousWorld_.M11);
+                    effect->SetUniformMat4("uPreviousViewProjection", &previousViewProjection.M11);
                 }
             }
         }

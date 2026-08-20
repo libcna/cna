@@ -156,6 +156,18 @@ namespace CNA::Graphics {
                                   Microsoft::Xna::Framework::Graphics::Texture2D* normals);
 
         /**
+         * @brief Supplies the prepass's per-object velocity image, where one was produced.
+         *
+         * plan_modern.md `MOD-2033`. Optional, and null is the normal case: `DepthNormalPrepass`
+         * produces this only when a game has opted in with `setVelocityEnabledEXT` **and** supplies
+         * a previous world matrix per draw. With it, motion blur smears a moving object in a static
+         * shot; without it, motion blur is the camera's alone, exactly as before.
+         *
+         * @param velocity The velocity texture, or null.
+         */
+        void setVelocityInputEXT(Microsoft::Xna::Framework::Graphics::Texture2D* velocity);
+
+        /**
          * @brief Supplies the shadow pass `begin` should run before the frame.
          *
          * plan_modern.md MOD-858/MOD-859. The pipeline cannot draw the scene by itself, for the
@@ -398,6 +410,7 @@ namespace CNA::Graphics {
         bool shadowPassRan_ = false;
         Microsoft::Xna::Framework::Graphics::Texture2D* sceneDepth_   = nullptr;
         Microsoft::Xna::Framework::Graphics::Texture2D* sceneNormals_ = nullptr;
+        Microsoft::Xna::Framework::Graphics::Texture2D* sceneVelocity_ = nullptr;
         std::vector<PostProcessPass*> userPasses_;
 
         int  width_  = 0;

@@ -676,11 +676,44 @@ pipeline.setCamera(view, projection, nearPlane, farPlane);   // every frame, bef
 pipeline.getSettings().setMotionBlurStrength(0.5f);
 ```
 
-**It is camera motion only, and that is a boundary rather than an approximation.** A turning or
-advancing camera blurs correctly. A car crossing a static shot does not blur at all, because nothing
-in a depth image says the car moved rather than the world — the two are indistinguishable from one
-frame. Per-object velocity needs a third prepass output and a previous world matrix per draw, which
-is a contract change on the application; it is `MOD-2033`, left open deliberately.
+**Camera motion works with no extra effort; object motion is opt-in and has a price.** A turning or
+advancing camera blurs correctly out of the box — nothing more is needed than `setCamera` each frame.
+A car crossing a static shot does *not* blur unless you ask for it, because nothing in a depth image
+says the car moved rather than the world; the two are indistinguishable from one frame.
+
+```cpp
+prepass.setVelocityEnabledEXT(true);                 // MOD-2033; off by default
+prepass.setPreviousCameraEXT(lastView, lastProjection);
+for (int pass = 0; pass < prepass.getPassCount(); ++pass) {
+    prepass.begin(pass, view, projection, nearPlane, farPlane);
+    for (const auto& object : scene) {
+        prepass.setPreviousWorldEXT(object.lastFrameWorld);   // the obligation, per draw
+        DrawWith(prepass.getPrepassEffect(), object);
+    }
+    prepass.end();
+}
+pipeline.setVelocityInputEXT(prepass.getVelocityTextureEXT());
+```
+
+**The obligation is the whole of the cost, and it is on the application.** Every object has to carry
+last frame's world matrix, because the prepass draws whatever it is handed and cannot tell one object
+from the next. An object that has not moved passes the same matrix twice; a newly spawned one should
+pass its *current* matrix, since the identity would give it a one-frame smear from the world origin.
+Turn the feature on and supply nothing and the image says everything is stationary — which is exactly
+what you had before, so nothing breaks and nothing is gained either.
+
+**With MRT it is a third target in the same pass; without MRT it is a third pass over the geometry.**
+That is why it is off by default: on a renderer with no MRT this doubles-and-a-half the prepass's
+geometry cost for an effect many games do not need.
+
+**Motion blur treats it as a per-pixel upgrade, not a second mode.** The stored velocity already
+contains the camera's contribution, so where it is present it replaces the reconstruction; where the
+velocity image has no coverage — the sky, an object drawn without a previous world — the camera path
+still runs. Mixing the two per pixel is what stops the sky from acquiring a hole.
+
+**A skinned mesh's velocity is its object's motion, not its deformation.** The previous *pose* is not
+reconstructed: doing so needs the previous frame's entire bone set as a second uniform array, which
+is an obligation an order of magnitude larger than one matrix per draw.
 
 **Strength is a shutter angle in disguise.** 1 smears the whole distance travelled since the last
 frame, which is what a 360-degree shutter records; a real shutter is open for part of the frame, so

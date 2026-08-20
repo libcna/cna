@@ -13,7 +13,7 @@ done, 🟨 done-but-bounded with the bound stated, or ⛔ refused with the reaso
 are complete; **Phase 16 is measured rather than implemented**, which is the honest description of
 what a per-renderer rollout turned into once every renderer was actually run.
 
-**Phase 20 (`MOD-2000`–`MOD-2099`) is new and open** — the modern-renderer scope the first nineteen
+**Phase 20 (`MOD-2000`–`MOD-2099`) is complete** (2026-08-20) — the modern-renderer scope the first nineteen
 phases never covered: screen-space reflections, depth of field, the lens and grading passes, motion
 blur, clustered lighting for many lights, volumetrics, area lights, the glTF material extensions
 beyond core, probe-based GI, and indirect draw. **EasyGL only, by owner decision**, with no
@@ -126,8 +126,24 @@ is not the same as a cause. The format comparison was real and repeatable, and i
 consequence — a depth image that was never depth in the first place makes *every* downstream
 difference look like the variable you happened to vary.
 
-One row stays deliberately open rather than closed: `MOD-2033` (per-object velocity — an obligation
-on the application, not something the layer can supply).
+**`MOD-2033` is closed too, which makes Phase 20 complete and every `MOD-*` row from `MOD-1` to
+`MOD-2099` carry a verdict.** The row was right that per-object velocity is an obligation on the
+application rather than a pass — so what was built is the *expression* of that obligation, not a
+switch that improves motion blur on its own. `DepthNormalPrepass::setVelocityEnabledEXT` is off by
+default; with it on, the app supplies a previous world matrix per draw and a previous camera per
+frame, and `docs/cnaext-engine-layer.md` no longer has to say that a car crossing a static shot does
+not blur. The cost `MOD-2030` declined to pay is paid explicitly and asserted: with MRT it is a third
+target in one pass, and without MRT the two-pass fallback really does become three.
+
+Two decisions there are worth carrying forward because both are the kind that produce a plausible
+wrong frame. The velocity target's **alpha flag is inverted** — below 0.5 means "written" — because
+the MRT path issues a single clear for the whole bound set and depth must clear to white; a second
+clear would mean re-binding a discard-contents target, which is not safe. And both clip positions
+reach the fragment stage **undivided**, because the perspective divide is not affine and
+interpolating divided values puts a large triangle's velocity in the wrong place everywhere except
+at its vertices. The tests hold the camera identical in both frames throughout, which removes the
+camera-reprojection path from every answer and is asserted in both directions: the object smear
+appears, *and* the camera-only run is pixel-for-pixel the unblurred source.
 A third bound is recorded in `MOD-2090`'s row rather than left as a surprise: CNA's only indirect
 argument buffer is a `StorageBuffer`, which is an SSBO and needs ES 3.1 / GL 4.3, while the indirect
 draw itself needs only GL 4.0 — so on a desktop context between 4.0 and 4.2 the capability
@@ -449,6 +465,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | same, after `MOD-2094` (decals) and `MOD-2095` (particles) | Xvfb :99 | 8275 ran · 8210 pass · 65 skip · **0 fail** |
 | 2026-08-20 | same, after `MOD-2092` (HDR display output) — **§20.10 complete** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-cnaext`, after closing `MOD-2035` — **every `CNAEXT_` gate green for the first time (25/25)** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
+| 2026-08-20 | same, after `MOD-2033` (per-object velocity) — **Phase 20 complete**, 25/25 gates | Xvfb :99 | 8293 ran · 8228 pass · 65 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after all of §20.10 touched `GraphicsDevice`, `IGraphicsRenderer`, `GraphicsCapability` and the EasyGL renderer | Xvfb :99 | 7567 ran · 7504 pass · 62 skip · **1 fail** — `TwoProcessLoopbackTest.HostMigration…`, which passes on its own in 715 ms and times out at 30 s under full-suite load: the fourth instance of the load-induced failures §3 already describes, and nothing to do with this work (it spawns two processes and speaks UDP) |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,

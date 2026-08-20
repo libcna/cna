@@ -30,6 +30,8 @@ in vec2 TexCoord;
 out vec4 FragColor;
 uniform sampler2D texture1;
 uniform sampler2D uDepthSampler;
+uniform sampler2D uVelocitySampler;
+uniform float uHasVelocity;
 uniform mat4  uInverseProjection;
 uniform mat4  uInverseView;
 uniform mat4  uPreviousViewProjection;
@@ -40,6 +42,34 @@ uniform int   uSampleCount;
 
 void main() {
     vec4 source = texture(texture1, TexCoord);
+
+    // MOD-2033. A per-object velocity, where the prepass produced one, already contains the
+    // camera's contribution as well -- it is the difference between where this surface is now and
+    // where it was, through both cameras -- so it replaces the reconstruction below rather than
+    // adding to it. Alpha BELOW 0.5 is the "written" flag; see
+    // DepthNormalPrepass::getVelocityTextureEXT for why it is inverted.
+    if (uHasVelocity > 0.5) {
+        vec4 stored = texture(uVelocitySampler, TexCoord);
+        if (stored.a < 0.5) {
+            vec2 objectVelocity = (stored.xy - 0.5) * 2.0 * uStrength;
+            float objectDistance = length(objectVelocity);
+            if (objectDistance > uMaxDistance) objectVelocity *= uMaxDistance / objectDistance;
+            vec3 objectSum = source.rgb;
+            float objectWeight = 1.0;
+            for (int i = 1; i <= 16; ++i) {
+                if (i >= uSampleCount) break;
+                vec2 uv = TexCoord - objectVelocity * (float(i) / float(uSampleCount - 1));
+                if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) continue;
+                objectSum += texture(texture1, uv).rgb;
+                objectWeight += 1.0;
+            }
+            FragColor = vec4(objectSum / objectWeight, source.a);
+            return;
+        }
+        // Nothing was written here: fall through to the camera-only reconstruction rather than
+        // leaving a hole where the velocity image has no coverage.
+    }
+
     float depth = cnaDecodeLinearDepth(texture(uDepthSampler, TexCoord));
 
     // The sky has no position to reproject: it is infinitely far, so it does not move with the
@@ -119,6 +149,10 @@ void main() {
                         && context.sourceDepth != nullptr
                         && context.hasPreviousFrame
                         && context.farPlane > 0.0f;
+        // MOD-2033: the velocity image is a per-pixel *upgrade*, not a second mode. Everything
+        // above still has to hold, because a pixel the velocity image does not cover -- the sky,
+        // any object drawn without a previous world -- still gets the camera reconstruction.
+        const bool hasVelocity = context.sourceVelocity != nullptr;
         if (!ready || strength <= 0.0f)
         {
             fullscreen_->draw(context.source, context.destination, nullptr,
@@ -129,6 +163,12 @@ void main() {
         effect_->Apply();
         effect_->SetUniformInt("uDepthSampler", 1);
         effect_->SetTexture(1, *context.sourceDepth);
+        effect_->SetUniformFloat("uHasVelocity", hasVelocity ? 1.0f : 0.0f);
+        if (hasVelocity)
+        {
+            effect_->SetUniformInt("uVelocitySampler", 2);
+            effect_->SetTexture(2, *context.sourceVelocity);
+        }
         effect_->SetUniformMat4("uInverseProjection", &context.inverseProjection.M11);
         effect_->SetUniformMat4("uInverseView", &context.inverseView.M11);
         effect_->SetUniformMat4("uPreviousViewProjection", &context.previousViewProjection.M11);

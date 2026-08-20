@@ -332,6 +332,7 @@ namespace CNA::Graphics {
         context.settings      = &settings_;
         context.sourceDepth   = sceneDepth_;
         context.sourceNormals = sceneNormals_;
+        context.sourceVelocity = sceneVelocity_;
         context.projection        = skyboxProjection_;
         context.inverseProjection = cameraInverseProjection_;
         context.nearPlane         = cameraNearPlane_;
@@ -366,6 +367,12 @@ namespace CNA::Graphics {
     {
         sceneDepth_   = depth;
         sceneNormals_ = normals;
+    }
+
+    void RenderPipeline::setVelocityInputEXT(
+        Microsoft::Xna::Framework::Graphics::Texture2D* velocity)
+    {
+        sceneVelocity_ = velocity;
     }
 
     void RenderPipeline::setShadowScene(ShadowMap* shadowMap, const DirectionalLightEXT& light,

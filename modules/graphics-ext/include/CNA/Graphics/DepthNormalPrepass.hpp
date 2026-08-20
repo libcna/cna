@@ -182,6 +182,72 @@ namespace CNA::Graphics {
         void setRoughness(float value);
 
         /**
+         * @brief Returns whether a third image, per-pixel screen velocity, is being produced.
+         *
+         * @return True when the velocity target exists and is written.
+         */
+        [[nodiscard]] bool isVelocityEnabledEXT() const;
+
+        /**
+         * @brief Turns the per-object velocity target on or off.
+         *
+         * plan_modern.md `MOD-2033`. Off by default, and the default is the point: this is **an
+         * obligation on the application**, not a switch that makes motion blur better on its own.
+         * With it on, every draw inside a pass must be preceded by @ref setPreviousWorldEXT with
+         * that object's world matrix *from the previous frame*, and @ref setPreviousCameraEXT must
+         * carry the previous frame's camera. An app that turns this on and supplies nothing gets a
+         * velocity image that says everything is stationary — which is exactly what it gets today
+         * with the feature off, so nothing breaks; it simply gains nothing either.
+         *
+         * The cost is honest and worth stating: with MRT the prepass writes three targets in one
+         * pass instead of two. **Without MRT its existing two-pass fallback becomes three passes**
+         * over the geometry, which is why this is not on by default.
+         *
+         * @param value True to produce velocity.
+         * @throws std::logic_error If a pass is open.
+         */
+        void setVelocityEnabledEXT(bool value);
+
+        /**
+         * @brief Per-pixel screen-space velocity, in UV units, encoded as `v * 0.5 + 0.5`.
+         *
+         * **Alpha is inverted, and deliberately.** A texel whose alpha is *below* 0.5 carries a
+         * velocity; one at 1.0 does not. The MRT path issues a single clear for the whole bound set
+         * and the depth target must clear to white, so "no velocity here" is the colour a shared
+         * white clear already produces. Inverting the flag costs one comparison; a second clear
+         * would cost a bind of a discard-contents target, which is not safe.
+         *
+         * @return The texture, or null when velocity is off.
+         */
+        [[nodiscard]] Microsoft::Xna::Framework::Graphics::Texture2D* getVelocityTextureEXT() const;
+
+        /**
+         * @brief Supplies the world matrix the next draw's object had in the previous frame.
+         *
+         * Set it between draws inside an open pass, exactly as @ref setRoughness is set: the
+         * prepass draws whatever the app hands it and cannot know which object is which. An object
+         * that has not moved passes the same matrix it passes this frame, and a newly spawned one
+         * should pass its current matrix rather than the identity — the identity would give it a
+         * one-frame smear from the world origin.
+         *
+         * @param value The previous frame's world matrix.
+         */
+        void setPreviousWorldEXT(const Microsoft::Xna::Framework::Matrix& value);
+
+        /**
+         * @brief Supplies the previous frame's camera, for the half of the velocity the camera owns.
+         *
+         * Call it before @ref begin. Passing this frame's camera is correct and means "the camera
+         * did not move"; the first frame after a start or a resize has no history and should pass
+         * the current camera rather than the identity.
+         *
+         * @param previousView       Last frame's view matrix.
+         * @param previousProjection Last frame's projection matrix.
+         */
+        void setPreviousCameraEXT(const Microsoft::Xna::Framework::Matrix& previousView,
+                                  const Microsoft::Xna::Framework::Matrix& previousProjection);
+
+        /**
          * @brief The GLSL a consumer includes to read this prepass's depth.
          *
          * plan_modern.md `MOD-504`. One shared function rather than a copy per effect: the depth
@@ -218,6 +284,7 @@ namespace CNA::Graphics {
 
     private:
         void allocateTargets();
+        void probeMultipleRenderTargets();
 
         Microsoft::Xna::Framework::Graphics::GraphicsDevice& device_;
         int  width_  = 0;
@@ -228,9 +295,14 @@ namespace CNA::Graphics {
         bool packDepth_ = false;
         float roughness_ = 0.0f;
         bool supported_ = false;
+        bool velocity_  = false;
+        Microsoft::Xna::Framework::Matrix previousWorld_{};
+        Microsoft::Xna::Framework::Matrix previousViewProjection_{};
+        bool hasPreviousCamera_ = false;
 
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> depthTarget_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> normalTarget_;
+        std::unique_ptr<Microsoft::Xna::Framework::Graphics::RenderTarget2D> velocityTarget_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect>   effect_;
         std::unique_ptr<Microsoft::Xna::Framework::Graphics::ShaderEffect>   skinnedEffect_;
     };
