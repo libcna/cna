@@ -114,6 +114,20 @@ namespace CNA::Graphics {
         [[nodiscard]] const std::vector<Microsoft::Xna::Framework::Vector3>& getKernel() const;
 
         /**
+         * @brief The occlusion shader's complete fragment source, for a given depth encoding.
+         *
+         * plan_modern.md `MOD-2035`. Emitted rather than duplicated, for the reason `MOD-2141`
+         * settled for the atmosphere: two copies of one shader agree until somebody edits one of
+         * them. The investigation into why a half-float depth target defeated this pass needs to run
+         * *this* estimator against a depth image the pass itself cannot be pointed at, and a
+         * transcribed copy would be answering a question about a different shader.
+         *
+         * @param packed Whether the depth image is packed across four channels.
+         * @return The fragment shader source, `#version` line and all.
+         */
+        [[nodiscard]] static std::string getOcclusionGlsl(bool packed);
+
+        /**
          * @brief Returns the hemisphere sample count a quality preset asks for.
          *
          * plan_modern.md `MOD-522`. A function rather than a side effect, for the reason

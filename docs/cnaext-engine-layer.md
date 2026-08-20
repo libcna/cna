@@ -427,6 +427,50 @@ surface, inverting the most common value in the buffer. And the normal is transf
 3×3 of the world matrix rather than by its inverse transpose, so **non-uniform scale skews it**;
 correcting that needs an inverse per draw that nothing else in this layer pays for.
 
+### Why depth is packed into eight bits rather than stored as a float
+
+`plan_modern.md` `MOD-2035`. `DepthNormalPrepass` writes linear depth as **32 bits packed across an
+RGBA8 target**, everywhere, even on renderers that offer half-float render targets. That looks like a
+workaround and it is not one — packing is the more precise of the two encodings and needs no
+capability — but the reason it is unconditional is worth knowing, because it is a defect in somebody
+else's code that this layer walked into.
+
+**The symptom.** With depth in a half-float target, *every* screen-space effect here produced
+nothing. Not a wrong image — a blank contribution: SSAO occluded 0 pixels of a frame where the packed
+path occludes 644.
+
+**The cause is not the format.** Measured, one variable at a time, against the real prepass over real
+geometry:
+
+| Suspect | Verdict |
+|---|---|
+| the stored values | identical: both encodings hold 50 distinct depths spanning the same range |
+| precision | the half-float image's *own values*, repacked into the packed layout, occlude normally |
+| the binding | sound — the shader reports the right texture, checked with different-sized prepasses |
+| filtering, `textureLod`, the sampling loop | all agree between the two |
+
+**The cause is the sky early-out.** Every screen-space pass in this layer opens the same way:
+
+```glsl
+float centerDepth = cnaDecodeLinearDepth(texture(texture1, TexCoord));
+if (centerDepth <= 0.0) {          // nothing was drawn here; the sky is not occluded
+    FragColor = vec4(1.0);
+    return;
+}
+```
+
+On this renderer that early return is taken **on every pixel** of a half-float depth image, although
+every value in the image is positive and the identical comparison evaluates correctly in a shader
+without the rest of the estimator around it. Removing that one block from the shipped shader's
+emitted source — and nothing else — takes the half-float path from 0 darkened pixels to 669.
+
+**So the policy stays and is not negotiable per renderer.** The layer cannot work around a
+mis-compiled branch without deleting a guard every pass needs, and packing costs nothing. Where a
+renderer one day proves it does not have the defect, `DepthEncoding::HalfFloat` is reachable through
+`DepthNormalPrepass`'s diagnostic constructor and the bisection is a test that already runs —
+`HalfFloatDepthMechanismTests` asserts the invariant rather than the defect, so a renderer without it
+passes for the right reason.
+
 ### FXAA, and when to prefer MSAA instead
 
 `plan_modern.md` `MOD-604`, `MOD-609`.

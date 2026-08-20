@@ -159,13 +159,19 @@ void main() {
 
     } // namespace
 
+    std::string SsaoPass::getOcclusionGlsl(const bool packed)
+    {
+        std::string source = "#version 300 es\nprecision highp float;\n";
+        source += DepthNormalPrepass::getDepthDecodeGlsl(packed);
+        source += kOcclusionBody;
+        return source;
+    }
+
     SsaoPass::SsaoPass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device)), pool_(device)
     {
-        std::string occlusionSource = "#version 300 es\nprecision highp float;\n";
-        occlusionSource += DepthNormalPrepass::getDepthDecodeGlsl(
-            DepthNormalPrepass::usesPackedDepthEXT(device));
-        occlusionSource += kOcclusionBody;
+        const std::string occlusionSource =
+            getOcclusionGlsl(DepthNormalPrepass::usesPackedDepthEXT(device));
         occlusionEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, occlusionSource);
         composeEffect_   = std::make_unique<ShaderEffect>(device, kVertexSource, kComposeSource);
 

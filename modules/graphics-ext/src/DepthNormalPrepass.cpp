@@ -211,6 +211,12 @@ void main() {
 
     DepthNormalPrepass::DepthNormalPrepass(GraphicsDevice& device, const int width,
                                            const int height)
+        : DepthNormalPrepass(device, width, height, DepthEncoding::Automatic)
+    {
+    }
+
+    DepthNormalPrepass::DepthNormalPrepass(GraphicsDevice& device, const int width,
+                                           const int height, const DepthEncoding encoding)
         : device_(device)
     {
         if (width <= 0 || height <= 0)
@@ -224,7 +230,13 @@ void main() {
         previousViewProjection_ = Matrix::getIdentityProperty();
 
         useMrt_ = device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets);
-        packDepth_ = usesPackedDepthEXT(device);
+        switch (encoding)
+        {
+        case DepthEncoding::Packed:    packDepth_ = true;  break;
+        case DepthEncoding::HalfFloat: packDepth_ = false; break;
+        case DepthEncoding::Automatic:
+        default:                       packDepth_ = usesPackedDepthEXT(device); break;
+        }
 
         const std::string fragment = MakeFragmentSource();
         effect_        = std::make_unique<ShaderEffect>(device, kVertexCommon, fragment);
@@ -501,6 +513,18 @@ void main() {
         // depth target, SSAO driven from the prepass occludes **nothing** -- 0 pixels of 16384 --
         // and with a packed one it occludes 2101. `CNAEXT_Showcase`'s check E goes from 0
         // strongly-occluded pixels to 1022 on the same frame.
+        //
+        // **And the mechanism is no longer a mystery** (`HalfFloatDepthMechanismTests`). It is not
+        // the storage, the filtering, the binding or the loop -- every one of those was measured and
+        // is sound. It is the *sky early-out* every screen-space pass in this layer opens with:
+        // `if (centerDepth <= 0.0) { …; return; }` is taken on every pixel of a half-float depth
+        // image, although every value in that image is positive and the identical comparison passes
+        // when the rest of the shader is not around it. Removing that one block from the shipped
+        // estimator's emitted source takes it from 0 darkened pixels to 669 on the same image.
+        //
+        // So this stays true here, and for a reason that is now stated rather than assumed: the
+        // defect belongs to the shader compiler, the layer cannot work around it without deleting a
+        // guard every pass needs, and packing costs nothing.
         //
         // **The mechanism is not established, and this comment does not claim one.** A minimal
         // reproducer -- two textures proven to hold identical values, one half-float and one 8-bit,

@@ -14,15 +14,17 @@
 // `Depth24` the prepass actually allocates, because a reduction that does not build the failing
 // shape is not a reduction.
 //
-// **On this project's reference renderer both shapes agree**, so the reduction still does not
-// capture whatever the real pass hit, and this test says so rather than pretending otherwise.
-// Three attributes have now been ruled out as the variable -- the format alone, the depth
-// attachment, and the loop itself -- which leaves the difference somewhere in what the real pass
-// does that this does not: perspective geometry through an MRT prepass, a sample coordinate
-// computed from two other texture reads, and a 64-entry uniform array. That is written down so the
-// next attempt starts where this one stopped instead of repeating it.
+// **On this project's reference renderer both shapes agree**, and that stayed true: this reduction
+// never did capture the real failure. It ruled out three attributes -- the format alone, the depth
+// attachment, and the loop itself -- and none of them was the answer.
 //
-// The test is kept for what it can still do: if a renderer ever *does* fail this comparison, the
+// **The mechanism was found from the other direction** and lives in
+// `HalfFloatDepthMechanismTests`: the real estimator's *sky early-out*,
+// `if (centerDepth <= 0.0) { …; return; }`, is taken on every pixel of a half-float depth image
+// although every value in it is positive. That is why this reduction could not find it -- it has no
+// early-out, and building upwards from a fill would only have reached one by accident.
+//
+// This test is kept for what it can still do: if a renderer ever *does* fail this comparison, the
 // layer must not be storing depth in the format that fails it.
 
 #ifdef CNA_CNAEXT

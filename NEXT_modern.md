@@ -209,10 +209,36 @@ depth and 2101 with packed**, and check E goes from **0 strongly-occluded pixels
 is not settling for a workaround — this class's own documentation already called it the *more*
 precise encoding, and it needs no capability, so it removes a per-renderer branch.
 
-**The mechanism is still open, and the code says so rather than inventing one.**
-`HalfFloatDepthSamplingTests` reduces the question to one shader — two textures proven to hold
-identical values, one loop inlined over each — and on this renderer the two agree. The reduction
-does not capture what the real pass hit. It is kept as a guard, not as an explanation.
+**The mechanism is no longer open** (2026-08-20, `HalfFloatDepthMechanismTests`). It was found by
+building the failing shape instead of reducing towards it — the real `DepthNormalPrepass` over real
+perspective geometry — and then removing one thing at a time:
+
+| Ruled out | Measurement |
+|---|---|
+| the stored values | both encodings hold 50 distinct depths spanning 24..255, identical |
+| the format's precision | the half-float image's **own values**, repacked into the packed layout, darken 644 pixels |
+| the binding | `textureSize` names the right texture; the two prepasses are different sizes on purpose |
+| the comparison itself | the identical `<= 0.0` test passes on all 1024 texels in a shader without the rest of the estimator around it |
+
+What is left is the **sky early-out every screen-space pass in this layer opens with**. Cut
+`if (centerDepth <= 0.0) { …; return; }` out of the *shipped* estimator's emitted source and change
+nothing else, and the half-float image goes from **0 darkened pixels to 669**; the packed one is 644
+either way. The early-out is taken on every pixel although every value in the image is positive.
+
+It is a shader-compiler defect, not a CNA logic error, and it explains the original symptom exactly:
+every screen-space pass here begins with that guard on that read, so they all went blank at once.
+The packing policy stays, now for a stated reason rather than an unexplained measurement — the layer
+cannot work around this without deleting a guard every pass needs.
+
+**One more thing worth keeping, because it nearly produced a second wrong closure.** A hand-written
+replica of the estimator reproduced the collapse, and then *stopped* reproducing it when unrelated
+arithmetic was simplified out of the same shader. Had the write-up been done at that moment it would
+have claimed a clean one-line cause. The final experiment therefore operates on the production
+string — `SsaoPass::getOcclusionGlsl` with one block erased — rather than on a copy, and the test
+asserts the *invariant* (where the defect is present, the layer must be packing) rather than the
+defect. `HalfFloatDepthSamplingTests` is kept, and its header now says why it could never have found
+this: it has no early-out, and building upwards from a fullscreen fill would only have reached one
+by accident.
 
 Two real bugs surfaced on the way, both fixed, and both of the kind this phase keeps producing —
 they made plausible frames. **`SsaoPass` read the depth channel raw** instead of decoding it, so on
@@ -583,6 +609,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | same, after **Phase 21 §21.5 complete** (`DebugDraw`, gizmos, `GpuTimer`, per-pass timings, the GPU-timed perf table) — **Phase 21 complete** | Xvfb :99 | 8419 ran · 8351 pass · 68 skip · **0 fail**; `ctest -R 'CNAEXT_'` **30/30** |
 | 2026-08-20 | **`cmake-build-cnaext-release`** — the same tree at `-DCMAKE_BUILD_TYPE=Release`, at the Phase 21 boundary | Xvfb :99 | 8419 ran · 8351 pass · 68 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, at the Phase 21 boundary: the layer compiles out and nothing it touched (`IGraphicsRenderer`, the EasyGL renderer, `TonemapPass`, `ColorGradePass`, `AtmosphericSky`) broke the build without it | Xvfb :99 | 7567 ran · 7505 pass · 62 skip · **0 fail** |
+| 2026-08-20 | `cmake-build-cnaext`, after **`MOD-2035`'s mechanism was found** — `DepthEncoding`, the diagnostic prepass constructor, `SsaoPass::getOcclusionGlsl`, and the four-case bisection | Xvfb :99 | 8423 ran · 8355 pass · 68 skip · **0 fail**; `ctest -R 'CNAEXT_'` **30/30** |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
 which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after

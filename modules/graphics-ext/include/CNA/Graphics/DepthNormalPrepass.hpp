@@ -3,6 +3,7 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Graphics/DepthEncoding.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
@@ -66,6 +67,26 @@ namespace CNA::Graphics {
          */
         DepthNormalPrepass(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, int width,
                            int height);
+
+        /**
+         * @brief Creates the prepass with a chosen depth encoding.
+         *
+         * plan_modern.md `MOD-2035`. The encoding is normally not a caller's business — the layer
+         * packs everywhere, because a half-float depth target defeated every screen-space effect on
+         * the reference renderer and the reason for that is still open. This overload exists so the
+         * failing shape can still be *built*: a policy whose alternative cannot be constructed can
+         * never be re-examined, and the investigation that closes `MOD-2035` needs to reproduce the
+         * failure before it can bisect it.
+         *
+         * @param device   The device to render on.
+         * @param width    Target width in pixels; must be positive.
+         * @param height   Target height in pixels; must be positive.
+         * @param encoding How to store depth. @ref DepthEncoding::HalfFloat is known to break this
+         *                 layer's screen-space passes and is not a supported configuration.
+         * @throws std::invalid_argument If a dimension is not positive.
+         */
+        DepthNormalPrepass(Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, int width,
+                           int height, DepthEncoding encoding);
 
         /** @brief Destroys the prepass, its effects and its targets. */
         ~DepthNormalPrepass();
