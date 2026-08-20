@@ -219,7 +219,7 @@ namespace CNA::Graphics {
         /**
          * @brief Lights the following draws from a volume, sampled at the object's own position.
          *
-         * A convenience over @ref setLightProbe: `begin` samples the volume at the world matrix's
+         * A convenience over @ref setLightProbe -- `begin` samples the volume at the world matrix's
          * translation, which is the object's origin. An object whose origin is not inside its own
          * geometry -- a level chunk authored around the world origin, say -- wants
          * @ref setLightProbe with a position it chooses.
