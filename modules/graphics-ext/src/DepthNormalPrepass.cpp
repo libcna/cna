@@ -24,6 +24,7 @@ namespace CNA::Graphics {
 
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Vector2;
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
@@ -165,17 +166,15 @@ layout(location = 1) out vec4 FragTarget1;
 layout(location = 2) out vec4 FragTarget2;
 )";
             source += kPackGlsl;
+            source += DepthNormalPrepass::getVelocityDecodeGlsl();
             source += R"(
 vec4 cnaVelocityOut(vec4 currentClip, vec4 previousClip) {
     // Behind the previous camera: there is no screen position to have come from, so the pixel is
     // marked as carrying no velocity rather than given a reprojection through a negative w.
-    if (currentClip.w <= 0.0 || previousClip.w <= 0.0) return vec4(0.5, 0.5, 0.0, 1.0);
+    if (currentClip.w <= 0.0 || previousClip.w <= 0.0) return cnaNoVelocity();
     vec2 currentUv  = (currentClip.xy / currentClip.w) * 0.5 + 0.5;
     vec2 previousUv = (previousClip.xy / previousClip.w) * 0.5 + 0.5;
-    // Alpha 0 means "this texel has a velocity". Inverted on purpose -- see getVelocityTextureEXT:
-    // the MRT path issues one clear for the whole bound set and depth must clear to white, so the
-    // shared clear already writes the "nothing here" value.
-    return vec4(clamp((currentUv - previousUv) * 0.5 + 0.5, 0.0, 1.0), 0.0, 0.0);
+    return cnaEncodeVelocity(currentUv - previousUv);
 }
 
 void main() {
@@ -552,6 +551,33 @@ vec3 cnaViewPositionFromDepth(vec2 uv, float linearDepth, mat4 inverseProjection
 }
 )";
         return source;
+    }
+
+    std::string DepthNormalPrepass::getVelocityDecodeGlsl()
+    {
+        return R"(
+vec4 cnaEncodeVelocity(vec2 velocityUv) {
+    // Alpha 0 means "this texel has a velocity". Inverted on purpose -- see getVelocityTextureEXT:
+    // the MRT path issues one clear for the whole bound set and depth must clear to white, so the
+    // shared clear already writes the "nothing here" value.
+    return vec4(clamp(velocityUv * 0.5 + 0.5, 0.0, 1.0), 0.0, 0.0);
+}
+vec4 cnaNoVelocity() { return vec4(0.5, 0.5, 0.0, 1.0); }
+bool cnaHasVelocity(vec4 texel) { return texel.a < 0.5; }
+vec2 cnaDecodeVelocity(vec4 texel) { return (texel.xy - 0.5) * 2.0; }
+)";
+    }
+
+    bool DepthNormalPrepass::hasVelocityEXT(const Color& texel)
+    {
+        return texel.getAProperty() < 128;
+    }
+
+    Vector2 DepthNormalPrepass::decodeVelocityEXT(const Color& texel)
+    {
+        if (!hasVelocityEXT(texel)) return Vector2(0.0f, 0.0f);
+        return Vector2((static_cast<float>(texel.getRProperty()) / 255.0f - 0.5f) * 2.0f,
+                       (static_cast<float>(texel.getGProperty()) / 255.0f - 0.5f) * 2.0f);
     }
 
     void DepthNormalPrepass::packDepth(const float value, float& r, float& g, float& b, float& a)

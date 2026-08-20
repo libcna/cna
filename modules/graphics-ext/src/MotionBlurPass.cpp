@@ -50,8 +50,8 @@ void main() {
     // DepthNormalPrepass::getVelocityTextureEXT for why it is inverted.
     if (uHasVelocity > 0.5) {
         vec4 stored = texture(uVelocitySampler, TexCoord);
-        if (stored.a < 0.5) {
-            vec2 objectVelocity = (stored.xy - 0.5) * 2.0 * uStrength;
+        if (cnaHasVelocity(stored)) {
+            vec2 objectVelocity = cnaDecodeVelocity(stored) * uStrength;
             float objectDistance = length(objectVelocity);
             if (objectDistance > uMaxDistance) objectVelocity *= uMaxDistance / objectDistance;
             vec3 objectSum = source.rgb;
@@ -118,6 +118,9 @@ void main() {
         {
             std::string source = "#version 300 es\nprecision highp float;\n";
             source += DepthNormalPrepass::getDepthDecodeGlsl(packedDepth);
+            // MOD-2035's lesson applied where it was earned: the velocity encoding is written and
+            // read from one string, not copied into this shader.
+            source += DepthNormalPrepass::getVelocityDecodeGlsl();
             source += kFragmentBody;
             return source;
         }

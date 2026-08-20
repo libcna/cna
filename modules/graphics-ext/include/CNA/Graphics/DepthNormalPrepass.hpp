@@ -3,7 +3,9 @@
 
 #ifdef CNA_CNAEXT
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 
 #include <memory>
 #include <string>
@@ -273,6 +275,44 @@ namespace CNA::Graphics {
          * @return GLSL source, to be concatenated ahead of a consumer's own `main`.
          */
         [[nodiscard]] static std::string getDepthDecodeGlsl(bool packed);
+
+        /**
+         * @brief The GLSL that both writes and reads this prepass's velocity image.
+         *
+         * plan_modern.md `MOD-2033`/`MOD-2035`. One string rather than a copy at each end, for the
+         * reason @ref getDepthDecodeGlsl gives and which `MOD-2035` then demonstrated the hard way:
+         * a consumer that decodes an encoded image by hand is one edit away from decoding an
+         * encoding nothing writes any more, and the frame it produces looks plausible. The velocity
+         * encoding is exactly the kind that invites the mistake -- a scaled UV delta with an
+         * **inverted** alpha flag.
+         *
+         * Declares `cnaEncodeVelocity(vec2)`, `cnaNoVelocity()`, `cnaHasVelocity(vec4)` and
+         * `cnaDecodeVelocity(vec4)`. The prepass uses the first two and a consumer the last two.
+         *
+         * @return GLSL source, to be concatenated ahead of a shader's own `main`.
+         */
+        [[nodiscard]] static std::string getVelocityDecodeGlsl();
+
+        /**
+         * @brief Whether a velocity texel carries a velocity at all.
+         *
+         * The CPU twin of `cnaHasVelocity`, for tests and tools.
+         *
+         * @param texel A texel of the velocity image.
+         * @return True when something wrote it.
+         */
+        [[nodiscard]] static bool hasVelocityEXT(const Microsoft::Xna::Framework::Color& texel);
+
+        /**
+         * @brief The screen-space velocity a texel carries, in UV units.
+         *
+         * The CPU twin of `cnaDecodeVelocity`. A texel nothing wrote decodes to zero.
+         *
+         * @param texel A texel of the velocity image.
+         * @return The velocity, where 1 is a whole screen in one frame.
+         */
+        [[nodiscard]] static Microsoft::Xna::Framework::Vector2 decodeVelocityEXT(
+            const Microsoft::Xna::Framework::Color& texel);
 
         /**
          * @brief The CPU twin of the packed-depth encoding, for verification.

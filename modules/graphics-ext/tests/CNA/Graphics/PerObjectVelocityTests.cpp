@@ -180,13 +180,18 @@ TEST(PerObjectVelocityTest, AStationaryObjectUnderAStationaryCameraHasNoVelocity
 
     auto* velocity = static_cast<RenderTarget2D*>(prepass.getVelocityTextureEXT());
     const std::vector<Color> pixels = Read(*velocity);
+    // Decoded through the CPU twin rather than by hand: reading the bytes here would be a third
+    // copy of the encoding, which is the mistake MOD-2035 charged the layer for. It also makes
+    // these assertions an agreement test -- the image was written by the shader and is being read
+    // by the C++, so a twin that disagreed would fail here.
     int covered = 0;
     for (const Color& texel : pixels)
     {
-        if (texel.getAProperty() >= 128) continue;   // alpha is inverted: >=128 means "not written"
+        if (!DepthNormalPrepass::hasVelocityEXT(texel)) continue;
         ++covered;
-        EXPECT_NEAR(texel.getRProperty(), 128, 2);
-        EXPECT_NEAR(texel.getGProperty(), 128, 2);
+        const Vector2 velocity = DepthNormalPrepass::decodeVelocityEXT(texel);
+        EXPECT_NEAR(velocity.X, 0.0f, 0.02f);
+        EXPECT_NEAR(velocity.Y, 0.0f, 0.02f);
     }
     EXPECT_GT(covered, kSize * kSize / 8) << "the slab did not reach the velocity image at all";
 }
@@ -208,12 +213,13 @@ TEST(PerObjectVelocityTest, AnObjectThatMovedRightRecordsAVelocityToTheRight)
     int rightwards = 0;
     for (const Color& texel : pixels)
     {
-        if (texel.getAProperty() >= 128) continue;
+        if (!DepthNormalPrepass::hasVelocityEXT(texel)) continue;
         ++covered;
-        if (texel.getRProperty() > 132) ++rightwards;
+        const Vector2 velocity = DepthNormalPrepass::decodeVelocityEXT(texel);
+        if (velocity.X > 0.03f) ++rightwards;
         // Nothing moved vertically, and a velocity that leaked into Y would be a transposed matrix
         // or a swapped component -- exactly the kind of error a smear still looks plausible with.
-        EXPECT_NEAR(texel.getGProperty(), 128, 3);
+        EXPECT_NEAR(velocity.Y, 0.0f, 0.03f);
     }
     ASSERT_GT(covered, kSize * kSize / 8);
     EXPECT_GT(rightwards, covered * 3 / 4)
@@ -228,24 +234,24 @@ TEST(PerObjectVelocityTest, TheVelocityGrowsWithTheDistanceTravelled)
     if (!prepass.isSupported(device)) GTEST_SKIP() << "no prepass on this renderer";
     prepass.setVelocityEnabledEXT(true);
 
-    const auto averageRed = [&](const float previousX) {
+    const auto averageVelocityX = [&](const float previousX) {
         RunPrepass(device, prepass, Matrix::CreateTranslation(previousX, 0.0f, 0.0f));
         auto* velocity = static_cast<RenderTarget2D*>(prepass.getVelocityTextureEXT());
         double sum = 0.0;
         int covered = 0;
         for (const Color& texel : Read(*velocity))
         {
-            if (texel.getAProperty() >= 128) continue;
-            sum += texel.getRProperty();
+            if (!DepthNormalPrepass::hasVelocityEXT(texel)) continue;
+            sum += DepthNormalPrepass::decodeVelocityEXT(texel).X;
             ++covered;
         }
         return covered > 0 ? sum / covered : 0.0;
     };
 
-    const double small = averageRed(-0.5f);
-    const double large = averageRed(-2.0f);
-    EXPECT_GT(small, 128.0);
-    EXPECT_GT(large, small + 4.0) << "four times the displacement produced the same velocity";
+    const double small = averageVelocityX(-0.5f);
+    const double large = averageVelocityX(-2.0f);
+    EXPECT_GT(small, 0.0);
+    EXPECT_GT(large, small * 2.0) << "four times the displacement produced the same velocity";
 }
 
 TEST(PerObjectVelocityTest, MotionBlurSmearsAMovingObjectUnderAStationaryCamera)
