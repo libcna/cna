@@ -1253,6 +1253,65 @@ pbrEffect.setImageBasedLightEXT(environment);   // SkinnedPbrEffect has the same
 - **Cost** (`cnaext_ibl_test --benchmark`, 96×96, Mesa llvmpipe): flat ambient **0.064 ms/frame**,
   image-based **0.066 ms/frame** — three per-fragment texture reads more, and it shows as about 3 %.
 
+### Probe-based indirect light
+
+`plan_modern.md` `MOD-2080`–`MOD-2087`. `ImageBasedLightEXT` lights a whole scene from one
+environment, applied uniformly: every surface gets the same ambient whether it stands in the doorway
+or at the back of the cellar. A probe grid is the answer to *where*.
+
+```cpp
+CNA::Graphics::LightProbeVolumeEXT volume(roomBounds, 8, 4, 8);
+
+CNA::Graphics::LightProbeBaker baker(device);
+baker.bakeLight(volume, [&](const Matrix& view, const Matrix& projection) {
+    drawEverythingStatic(view, projection);          // the app draws; the layer captures
+});
+baker.bakeVisibility(volume, [&](const Matrix& view, const Matrix& projection) {
+    drawDistanceFromCamera(view, projection);        // a second pass, a different shader
+});
+
+effect.setLightProbeVolume(&volume);                 // replaces the flat ambient term
+```
+
+- **Nine coefficients per probe, and that is what makes a grid affordable.** An irradiance cube per
+  probe would be kilobytes and could not be blended with its neighbours; second-order spherical
+  harmonics can be averaged directly, because the projection onto them is linear — the average of
+  two probes' coefficients *is* the projection of the average of their light. Nothing else about the
+  storage would allow trilinear blending at all.
+- **A probe carries irradiance, not outgoing radiance.** A Lambertian surface reflects `albedo / π`
+  of it, and the effect applies that. Baking the albedo in would put a surface's colour into a probe
+  that has nothing to do with any surface.
+- **Light does not leak through walls.** Each probe records how far the geometry is along six axis
+  directions as two moments, and a corner's blend weight is multiplied by a Chebyshev test against
+  that — a variance shadow map applied to a probe. A flat wall cuts off sharply, a cluttered
+  direction fades. Rejecting a corner *renormalises* rather than darkens; a point rejected by every
+  corner falls back to the plain blend, so it leaks rather than going black, because a hole in the
+  lighting is the more visible mistake. A probe with nothing recorded is trusted completely.
+- **The ambient is per-draw, not per-pixel.** Evaluating a volume per fragment means fetching eight
+  probes' twenty-seven coefficients each — over two hundred texture reads for the smoothest term in
+  the frame. What one probe per object costs is that a large object crossing a lighting boundary
+  shows no gradient across itself; split it, or fall back to the flat ambient.
+- **The baker's directions come from its own view matrices**, not from a cube-map face layout, so
+  there is no convention to agree with and no handedness to get wrong. The visibility capture clears
+  to *white*, because an unwritten pixel has to read as the far plane — clearing to black would
+  record a wall at the camera in every uncovered direction and reject every probe in the volume.
+
+**What it costs.** A probe is **168 bytes** — nine `Vector3` coefficients, six visibility directions
+with two moments each, and a position — so an 8×4×8 grid of 256 probes is **42 KB**. Capture and
+projection cost **3.5 ms per probe** at 32×32 per face on Mesa llvmpipe, with a draw that renders
+nothing; a real bake adds six scene draws per probe on top, which is what makes baking an offline
+operation. (`CnaTests --gtest_filter=LightProbeBakerTest.TheCostOfAProbeGridIsAStatedNumber`.)
+
+**Two things this is not, and both were refused with their reasons.** *Lightmaps* need a UV
+unwrapper, an atlas packer and a bake that rasterises into UV space — three mesh-processing problems
+a runtime does not gain by adding code, and glTF assets in the wild almost never ship a lightmap UV
+to read. *Voxel cone tracing* needs image stores into a 3D texture, which GL ES refuses for CNA's
+mutable textures (`MOD-1514`); the slice-atlas workaround that saved froxel fog does not scale here,
+since a usable 128³ volume is a 128×16384 atlas and cone tracing needs mipmapped 3D filtering a
+slice atlas cannot provide. What the probe volume gives up against either is a glossy bounce and a
+sharp indirect shadow; what it gives back is that it lights *moving* objects, which a lightmap never
+could.
+
 ### Materials: `PbrMaterial` and the effect it describes
 
 `PbrMaterial` is a value: storable, comparable, hashable, and — the point of Phase 13 — a

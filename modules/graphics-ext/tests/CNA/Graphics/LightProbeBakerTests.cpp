@@ -20,7 +20,9 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <stdexcept>
 #include <vector>
 
@@ -246,6 +248,46 @@ TEST(LightProbeBakerTest, BakingLightKeepsVisibilityAndTheOtherWayRound)
     EXPECT_NEAR(volume.getProbe(0, 0, 0).getVisibilityMean(0), recorded, 1e-3f)
         << "baking the light threw away the visibility";
     EXPECT_GT(volume.getProbe(0, 0, 0).irradiance(Vector3(0.0f, 1.0f, 0.0f)).X, 1.0f);
+}
+
+// ── What a probe grid costs (MOD-2087) ───────────────────────────────────────
+
+TEST(LightProbeBakerTest, TheCostOfAProbeGridIsAStatedNumber)
+{
+    // A grid is only worth having if its price is known, and both halves of the price are here:
+    // the memory a probe occupies, and the time the *layer* spends capturing one. The second is
+    // measured with a draw that does nothing, so what it reports is the capture and the projection
+    // rather than somebody's scene -- a real bake adds six scene draws per probe on top.
+    GraphicsDevice gd;
+    LightProbeBaker baker(gd, LightProbeBaker::kDefaultFaceSize);
+
+    const std::size_t probeBytes = sizeof(LightProbeEXT);
+    RecordProperty("bytesPerProbe", static_cast<int>(probeBytes));
+    std::printf("--- MOD-2087: a probe is %zu bytes; an 8x4x8 grid is %zu probes, %.1f KB ---\n",
+                probeBytes, static_cast<std::size_t>(8 * 4 * 8),
+                static_cast<double>(probeBytes * 8 * 4 * 8) / 1024.0);
+
+    // Nine coefficients, six visibility directions with two moments each, and a position: the
+    // struct must not have quietly grown past what those account for.
+    const std::size_t accounted = sizeof(float) * (9 * 3 + 6 * 2 + 3);
+    EXPECT_GE(probeBytes, accounted);
+    EXPECT_LE(probeBytes, accounted + 16)
+        << "a probe carries more than its coefficients, visibility and position";
+
+    CNA_SKIP_WITHOUT_CAPTURE(baker);
+
+    constexpr int kRepeats = 4;
+    const auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kRepeats; ++i)
+        (void)baker.bakeProbe(Vector3::Zero, [&](const Matrix&, const Matrix&) {});
+    const auto end = std::chrono::steady_clock::now();
+    const double perProbe =
+        std::chrono::duration<double, std::milli>(end - start).count() / kRepeats;
+
+    RecordProperty("millisecondsPerProbeCapture", static_cast<int>(perProbe * 1000.0));
+    std::printf("    capture and projection: %.3f ms per probe at %d x %d per face\n", perProbe,
+                baker.getFaceSize(), baker.getFaceSize());
+    EXPECT_GT(perProbe, 0.0);
 }
 
 } // namespace

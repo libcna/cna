@@ -332,6 +332,21 @@ nothing in this measurement can see.
   bounds once per light, so the frame's most expensive arithmetic was multiplied by the light count;
   caching the bounds lazily inside one `assign` took it to 3.2 ms. The measurement is what found it.
 
+## Probe-based indirect light
+
+`plan_modern.md` `MOD-2087`.
+
+| What | Measurement | Source |
+|---|---|---|
+| One probe: coefficients, visibility and position | **168 bytes** | `LightProbeBakerTest.TheCostOfAProbeGridIsAStatedNumber` |
+| An 8×4×8 grid (256 probes) | **42 KB** | derived from the row above |
+| Capture and projection, per probe, 32×32 per face | **3.512 ms** | same test, with a draw that renders nothing |
+
+The last row is the *layer's* share only: it is the six render-target binds, the six read-backs and
+the spherical-harmonic projection, measured with a scene draw that does nothing. A real bake adds
+six scene draws per probe on top, which is the whole reason baking is an offline operation — an
+8×4×8 grid is 1536 scene draws before anything the layer does.
+
 ## Not measured yet
 
 **Corrected 2026-08-19 (`MOD-1906`).** This section used to say bloom, tonemapping, SSAO and FXAA
