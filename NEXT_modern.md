@@ -25,8 +25,8 @@ upscalers and virtual texturing — each with the specific reason rather than si
 **Phase 20 progress** (updated as sections close): 20.1 render-target coordinates, 20.2
 screen-space reflections, 20.3 the lens and grade passes, 20.4 motion blur and depth of field,
 20.5 clustered forward lighting (`MOD-2040`–`MOD-2048`), 20.6 volumetrics (`MOD-2050`–`MOD-2054`),
-20.7 area lights (`MOD-2060`–`MOD-2063`) and 20.8 the material extensions (`MOD-2070`–`MOD-2077`)
-are done. Still open: 20.9 probe-based GI, 20.10 GPU-driven and display.
+20.7 area lights (`MOD-2060`–`MOD-2063`), 20.8 the material extensions (`MOD-2070`–`MOD-2077`) and
+20.9 probe-based GI (`MOD-2080`–`MOD-2087`) are done. Still open: 20.10 GPU-driven and display.
 
 Two rows in the closed sections carry a bound rather than a tick, and both bounds are the same
 shape — **the engine layer cannot put code in `PbrEffect`**. `PbrEffect` owns no shader source: it
@@ -43,6 +43,16 @@ by design (Phase 13), so a field for a lobe `PbrEffect` cannot shade would be si
 its round trip. The extensions therefore live in a **separate** `PbrMaterialExtensions` carried
 beside a material rather than inside one, and `ClusteredForwardEffect` — which owns its shader —
 consumes them. `MOD-2082` will want the same shape for probe lighting.
+
+**Section 20.9 refused two of its own rows, and both refusals are arithmetic rather than
+preference.** Lightmaps need a UV unwrapper, an atlas packer and a bake that rasterises into UV
+space — three mesh-processing problems a runtime does not gain by adding code, and glTF assets in
+the wild almost never ship a lightmap UV to read. Voxel cone tracing needs image stores into a 3D
+texture, which `MOD-1514` established GL ES refuses; the slice-atlas workaround that saved froxel
+fog does not scale, because a usable 128³ volume is a 128×16384 atlas and cone tracing needs
+mipmapped 3D filtering a slice atlas cannot provide. The probe volume stands in their place and the
+difference is stated: it cannot produce a glossy bounce or a sharp indirect shadow, and it *can*
+light moving objects, which a lightmap never could.
 
 **A pattern worth naming, because six rows in a row hit it.** Every lobe added in 20.7 and 20.8 was
 written twice — once in GLSL and once in C++ — and every one was compared against the other on the
