@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/IndirectDrawArguments.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -1237,6 +1238,118 @@ namespace Microsoft::Xna::Framework::Graphics
         );
     }
 
+    namespace {
+
+        /// MOD-2090: the one check an indirect draw can still make on the CPU -- that the words the
+        /// GPU is about to fetch are inside the buffer, and aligned as every API requires.
+        void ValidateIndirectArgumentRange(
+            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+            const int argumentByteOffset, const std::size_t argumentSize, const char* route)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(argumentByteOffset,
+                                                                 "argumentByteOffset");
+            if (argumentByteOffset % 4 != 0)
+                throw System::ArgumentOutOfRangeException(
+                    "argumentByteOffset", std::to_string(argumentByteOffset),
+                    "Indirect draw arguments must start on a 4-byte boundary.");
+            const std::size_t offset = static_cast<std::size_t>(argumentByteOffset);
+            const std::size_t capacity = argumentBuffer.GetByteSize();
+            if (offset > capacity || argumentSize > capacity - offset)
+                throw System::ArgumentOutOfRangeException(
+                    "argumentByteOffset", std::to_string(argumentByteOffset),
+                    std::string(route) + ": the arguments do not fit in the buffer.");
+        }
+
+    } // namespace
+
+    void GraphicsDevice::DrawPrimitivesIndirectEXT(
+        const PrimitiveType primitiveType,
+        const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+        const int argumentByteOffset)
+    {
+        if (renderer_ == nullptr)
+            return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitivesIndirectEXT");
+
+        if (!SupportsCapability(CNA::GraphicsCapability::IndirectDraw))
+            throw System::NotSupportedException(
+                std::string("GraphicsDevice::DrawPrimitivesIndirectEXT: the ") +
+                std::string(GetGraphicsRendererName()) +
+                " renderer does not support indirect drawing.");
+
+        if (currentVertexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitivesIndirectEXT: no vertex buffer is bound.");
+        if (currentEffect_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitivesIndirectEXT: no effect has been applied.");
+
+        ValidateIndirectArgumentRange(argumentBuffer, argumentByteOffset,
+                                      sizeof(CNA::IndirectDrawArguments),
+                                      "GraphicsDevice::DrawPrimitivesIndirectEXT");
+
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams p;
+        currentEffect_->FillGpuDrawParams(p);
+        // The binding offset is folded exactly as DrawPrimitives folds it, and for the same reason.
+        // What is deliberately NOT set is vertexStart: the argument buffer's `FirstVertex` is that,
+        // and setting both would apply the offset twice -- once from the CPU and once from the GPU.
+        const int foldedOffset = FoldedVertexStreamOffset();
+        p.vertexStart = foldedOffset;
+        FillVertexStreamBindings(p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
+        ValidateVertexStreamCapability(p);
+        applySamplerStatesToRenderer();
+        renderer_->DrawPrimitivesIndirectEXT(
+            currentVertexBuffer_->GetRenderer(), world, view, proj, primitiveType,
+            argumentBuffer, argumentByteOffset, p);
+    }
+
+    void GraphicsDevice::DrawIndexedPrimitivesIndirectEXT(
+        const PrimitiveType primitiveType,
+        const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+        const int argumentByteOffset)
+    {
+        if (renderer_ == nullptr)
+            return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitivesIndirectEXT");
+
+        if (!SupportsCapability(CNA::GraphicsCapability::IndirectDraw))
+            throw System::NotSupportedException(
+                std::string("GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: the ") +
+                std::string(GetGraphicsRendererName()) +
+                " renderer does not support indirect drawing.");
+
+        if (currentVertexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no vertex buffer is bound.");
+        if (currentIndexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no index buffer is bound.");
+        if (currentEffect_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no effect has been applied.");
+
+        ValidateIndirectArgumentRange(argumentBuffer, argumentByteOffset,
+                                      sizeof(CNA::IndirectDrawIndexedArguments),
+                                      "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT");
+
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams p;
+        currentEffect_->FillGpuDrawParams(p);
+        // startIndex and baseVertex stay 0 here: the argument buffer carries `FirstIndex` and
+        // `BaseVertex` itself, and a CPU copy of either would be added on top of the GPU's.
+        const int foldedOffset = FoldedVertexStreamOffset();
+        p.baseVertex = foldedOffset;
+        FillVertexStreamBindings(p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
+        ValidateVertexStreamCapability(p);
+        applySamplerStatesToRenderer();
+        renderer_->DrawIndexedPrimitivesIndirectEXT(
+            currentVertexBuffer_->GetRenderer(), currentIndexBuffer_->GetRenderer(),
+            world, view, proj, primitiveType, argumentBuffer, argumentByteOffset, p);
+    }
+
     void GraphicsDevice::DrawUserPrimitives(
         PrimitiveType primitiveType,
         const void* vertexData,
@@ -2155,6 +2268,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // MOD-1500: compute is derived for exactly the same reason.
         if (capability == CNA::GraphicsCapability::ComputeShaders)
             return GetRenderer().SupportsComputeShadersEXT();
+        // MOD-2090: and so is the indirect draw, for the same reason again.
+        if (capability == CNA::GraphicsCapability::IndirectDraw)
+            return GetRenderer().SupportsIndirectDrawEXT();
         return GetRenderer().SupportsCapability(capability);
     }
 

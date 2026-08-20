@@ -2051,6 +2051,13 @@ namespace CNA::Internal::Renderers
         /// `default: return true`.
         [[nodiscard]] virtual bool SupportsComputeShadersEXT() const { return false; }
 
+        /// plan_modern.md MOD-2090: whether this renderer really issues indirect draws --
+        /// `DrawPrimitivesIndirectEXT` and `DrawIndexedPrimitivesIndirectEXT` below. False by
+        /// default, and consulted by GraphicsDevice for GraphicsCapability::IndirectDraw rather
+        /// than that capability being answered by a renderer's own switch, for the reason
+        /// SupportsComputeShadersEXT states.
+        [[nodiscard]] virtual bool SupportsIndirectDrawEXT() const { return false; }
+
         /// plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
         /// image. Separate from `SupportsComputeShadersEXT` because the two genuinely differ: GL ES
         /// 3.1 requires an *immutable* texture (`glTexStorage2D`) for `glBindImageTexture`, and
@@ -2376,6 +2383,75 @@ namespace CNA::Internal::Renderers
             }
             throw std::runtime_error(
                 "DrawInstancedPrimitives is not supported on this graphics renderer.");
+        }
+
+        /**
+         * @brief Draws with the count and offsets read out of a GPU buffer instead of passed in.
+         *
+         * plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
+         * @p argumentByteOffset, and the renderer never looks at it: the numbers are fetched by
+         * the GPU as the command is issued, which is the whole point -- a compute shader can
+         * decide how much to draw without the answer travelling back through the CPU.
+         *
+         * The consequence is that **none of the range validation the ordinary routes perform is
+         * possible here.** `GraphicsDevice` checks that a requested primitive range fits the bound
+         * buffers before every other draw; that check cannot exist for this one, because the range
+         * is in GPU memory. A wrong count is undefined behaviour rather than an exception, and the
+         * shader that wrote it owns the obligation. Everything the CPU *can* still check --
+         * that a buffer is bound, an effect applied, and the argument offset inside the buffer --
+         * is checked in `GraphicsDevice` exactly as it is for the other routes.
+         *
+         * @param vb                 The bound vertex buffer, as for `DrawPrimitivesEx`.
+         * @param world              The world matrix.
+         * @param view               The view matrix.
+         * @param projection         The projection matrix.
+         * @param primitive          The topology; the argument buffer supplies only counts, never this.
+         * @param argumentBuffer     The buffer holding the arguments. Never null.
+         * @param argumentByteOffset Where in it they start, in bytes.
+         * @param params             The same complete draw description the ordinary routes take.
+         */
+        virtual void DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                               const Matrix& world,
+                                               const Matrix& view,
+                                               const Matrix& projection,
+                                               PrimitiveType primitive,
+                                               const IStorageBufferRenderer& argumentBuffer,
+                                               int argumentByteOffset,
+                                               const GpuDrawParams& params)
+        {
+            (void)vb; (void)world; (void)view; (void)projection; (void)primitive;
+            (void)argumentBuffer; (void)argumentByteOffset; (void)params;
+            throw std::runtime_error(
+                "Indirect drawing is not supported on this graphics renderer.");
+        }
+
+        /**
+         * @brief Indexed counterpart of @ref DrawPrimitivesIndirectEXT.
+         *
+         * @param vb                 The bound vertex buffer.
+         * @param ib                 The bound index buffer.
+         * @param world              The world matrix.
+         * @param view               The view matrix.
+         * @param projection         The projection matrix.
+         * @param primitive          The topology.
+         * @param argumentBuffer     The buffer holding a `CNA::IndirectDrawIndexedArguments`.
+         * @param argumentByteOffset Where in it they start, in bytes.
+         * @param params             The same complete draw description the ordinary routes take.
+         */
+        virtual void DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                                      const IIndexBufferRenderer& ib,
+                                                      const Matrix& world,
+                                                      const Matrix& view,
+                                                      const Matrix& projection,
+                                                      PrimitiveType primitive,
+                                                      const IStorageBufferRenderer& argumentBuffer,
+                                                      int argumentByteOffset,
+                                                      const GpuDrawParams& params)
+        {
+            (void)vb; (void)ib; (void)world; (void)view; (void)projection; (void)primitive;
+            (void)argumentBuffer; (void)argumentByteOffset; (void)params;
+            throw std::runtime_error(
+                "Indirect drawing is not supported on this graphics renderer.");
         }
 
         /// Disables context-loss recovery on the running renderer.

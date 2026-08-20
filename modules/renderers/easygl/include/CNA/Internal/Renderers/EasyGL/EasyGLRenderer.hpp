@@ -498,6 +498,12 @@ namespace CNA::Internal::Renderers::EasyGL
         /// Binds this buffer to a shader storage binding point.
         void BindBase(int binding) const;
 
+        /// plan_modern.md MOD-2090: binds this buffer as the source of an indirect draw's
+        /// arguments. The same buffer object in a second role -- which is exactly what makes an
+        /// indirect draw worth having, since a compute shader can write the arguments through the
+        /// storage binding and the draw fetches them here without a readback in between.
+        void BindAsDrawIndirect() const;
+
     private:
         mutable ::easygl::Buffer buffer_;
         std::size_t byteSize_ = 0;
@@ -1144,6 +1150,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
         [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
         [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        /// plan_modern.md MOD-2090: glDrawArraysIndirect/glDrawElementsIndirect, which arrive in
+        /// the same API generation as compute (GL ES 3.1, desktop GL 4.0) -- so the probe is the
+        /// same runtime version question, asked separately because the two are separate promises.
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
         [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
         [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
         [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
@@ -1229,6 +1239,32 @@ namespace CNA::Internal::Renderers::EasyGL
                                        PrimitiveType primitive, int primitiveCount,
                                        int instanceCount,
                                        const GpuDrawParams& params) override;
+        void DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                       const Matrix& world, const Matrix& view,
+                                       const Matrix& projection, PrimitiveType primitive,
+                                       const IStorageBufferRenderer& argumentBuffer,
+                                       int argumentByteOffset,
+                                       const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                              const IIndexBufferRenderer& ib,
+                                              const Matrix& world, const Matrix& view,
+                                              const Matrix& projection, PrimitiveType primitive,
+                                              const IStorageBufferRenderer& argumentBuffer,
+                                              int argumentByteOffset,
+                                              const GpuDrawParams& params) override;
+
+    private:
+        /// MOD-2090: both indirect routes, which differ only in whether an index buffer is bound
+        /// and therefore in which GL entry point issues the command. Everything around that -- the
+        /// declaration guard, the per-vertex and per-instance stream configuration, the program and
+        /// its uniforms, and the teardown that stops a later draw inheriting a stale divisor -- is
+        /// identical to the ordinary routes' and is written once here.
+        /// @param ib The bound index buffer, or null for the non-indexed route.
+        void IssueIndirectDrawEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                  const Matrix& world, const Matrix& view,
+                                  const Matrix& projection, PrimitiveType primitive,
+                                  const IStorageBufferRenderer& argumentBuffer,
+                                  int argumentByteOffset, const GpuDrawParams& params);
     };
 
     /**

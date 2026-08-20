@@ -1916,6 +1916,11 @@ if (!ProfileIsEs2ApiGeneration())
                           static_cast<unsigned int>(binding));
     }
 
+    void EasyGLStorageBufferRenderer::BindAsDrawIndirect() const
+    {
+        buffer_.bind(::easygl::BufferTarget::DrawIndirect);
+    }
+
     void EasyGLComputeShaderRenderer::BindTexture(const int unit, ITextureRenderer* texture)
     {
         if (texture == nullptr) return;
@@ -4281,6 +4286,21 @@ if (!ProfileIsEs2ApiGeneration())
         return false;
     }
 
+    bool EasyGLRenderer::SupportsIndirectDrawEXT() const
+    {
+        // Same API generation as compute, asked as its own question: ES 3.1 and desktop GL 4.0 both
+        // have glDrawArraysIndirect, and WebGL has it in no version -- WebGL 2 is ES 3.0 and
+        // WebGL 2 compute never shipped. The desktop floor is 4.0 rather than compute's 4.3,
+        // because indirect draws arrived three versions earlier than compute shaders did; a context
+        // between the two really can draw indirectly and not dispatch, and reporting the truth
+        // there costs nothing.
+        const auto& capabilities = device.capabilities();
+        if (capabilities.is_webgl()) return false;
+        if (capabilities.is_opengles()) return capabilities.is_at_least(3, 1);
+        if (capabilities.is_opengl()) return capabilities.is_at_least(4, 0);
+        return false;
+    }
+
     bool EasyGLRenderer::SupportsComputeImageBindingEXT() const
     {
         // Desktop GL only, and not because ES lacks the entry point: ES 3.1 requires the texture
@@ -4365,6 +4385,7 @@ if (!ProfileIsEs2ApiGeneration())
         add(GraphicsMemoryBarrier::ShaderStorage, ::metagl::MemoryBarrierMask::ShaderStorage);
         add(GraphicsMemoryBarrier::BufferUpdate, ::metagl::MemoryBarrierMask::BufferUpdate);
         add(GraphicsMemoryBarrier::Framebuffer, ::metagl::MemoryBarrierMask::Framebuffer);
+        add(GraphicsMemoryBarrier::IndirectCommand, ::metagl::MemoryBarrierMask::Command);
         if (native == 0) return;
         device.memory_barrier(static_cast<::metagl::MemoryBarrierMask>(native));
     }
@@ -9087,6 +9108,174 @@ else
         }
         vao.unbind();
 }
+    }
+
+    void EasyGLRenderer::IssueIndirectDrawEXT(const IVertexBufferRenderer& vb_in,
+                                              const IIndexBufferRenderer* ib_in,
+                                              const Matrix& world,
+                                              const Matrix& view,
+                                              const Matrix& projection,
+                                              PrimitiveType primitive,
+                                              const IStorageBufferRenderer& argumentBuffer,
+                                              int argumentByteOffset,
+                                              const GpuDrawParams& params)
+    {
+        if (metagl::IsContextLost()) return;
+        if (!SupportsIndirectDrawEXT())
+            throw System::NotSupportedException(
+                "CNA EasyGL: this GL context has no indirect draw (GL ES 3.1 / desktop GL 4.0 and "
+                "later have it; WebGL has it in no version).");
+        if (params.compiledEffectRuntime != nullptr)
+            throw System::NotSupportedException(
+                "CNA EasyGL: an indirect draw does not accept a compiled (FX) effect; the effect "
+                "framework's own draw routes carry the primitive count this route reads from GPU "
+                "memory instead.");
+
+        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        // selected and before any draw is issued -- exactly as on the three ordinary routes.
+        if (params.customEffectRenderer == nullptr)
+            RequireDeclarationFitsStockProgramEXT(
+                static_cast<const EasyGLVertexBufferRenderer&>(vb_in).GetDeclarationElements(),
+                CombinedVertexStrideOr(
+                    params, static_cast<const EasyGLVertexBufferRenderer&>(vb_in).GetStride()),
+                params);
+
+        const auto& vb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+        const auto* ib = static_cast<const EasyGLIndexBufferRenderer*>(ib_in);
+        const auto& meshDecl = vb.GetDeclarationElements();
+
+        // REMED-GFX-201/202: the stream configuration is the instanced route's, not the simple
+        // one's, because an indirect draw always carries an instance count -- the argument buffer
+        // has a word for it whether or not anything ever sets it above 1.
+        const bool multiStream = HasMultipleVertexStreams(params);
+        const GpuVertexStreamBinding* firstPerVertex = FirstPerVertexStream(params);
+        const bool reconfigurePerVertex =
+            multiStream || (firstPerVertex != nullptr && firstPerVertex->vertexOffset != 0);
+        if (reconfigurePerVertex && meshDecl.empty())
+            throw System::InvalidOperationException(
+                "EasyGL indirect drawing cannot apply a nonzero vertex-buffer offset without a "
+                "VertexDeclaration.");
+
+        InstanceStreamPlacements instancePlacements;
+        const unsigned int instanceBaseLocation = params.customEffectRenderer != nullptr
+            ? PerVertexLocationCount(params)
+            : kStockInstanceBaseLocation;
+        if (FirstInstanceStream(params) != nullptr)
+        {
+            if ((params.customEffectRenderer == nullptr &&
+                 instanceBaseLocation < PerVertexLocationCount(params)) ||
+                !PlaceInstanceStreams(params, instanceBaseLocation, instancePlacements))
+            {
+                throw System::InvalidOperationException(
+                    "EasyGL indirect drawing requires a complete per-instance declaration within "
+                    "the 16-attribute XNA profile limit.");
+            }
+        }
+
+        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        vao.bind();
+        if (reconfigurePerVertex && !ConfigureMultiStreamAttributes(vao, params))
+        {
+            vao.unbind();
+            throw System::InvalidOperationException(
+                "EasyGL multi-stream drawing requires every bound VertexBuffer to carry a "
+                "VertexDeclaration.");
+        }
+        {
+            std::size_t placementIndex = 0;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const InstanceStreamPlacement& placement =
+                    instancePlacements.entries[placementIndex++];
+                ConfigureDeclarationAttributes(
+                    vao, *static_cast<const EasyGLVertexBufferRenderer*>(stream.buffer),
+                    placement.firstLocation, stream.vertexOffset,
+                    static_cast<unsigned int>(stream.instanceFrequency),
+                    placement.elementCount);
+            }
+        }
+
+        if (params.customEffectRenderer)
+        {
+            BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
+        }
+        else
+        {
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            p.prog.use();
+            BindDrawParams(p, world, view, projection, params);
+        }
+        if (ib != nullptr)
+            ib->ibo.bind(::easygl::BufferTarget::ElementArray);
+
+        // The arguments are fetched from this buffer by the GPU as the command is issued. Binding
+        // it is the whole difference from an ordinary draw: nothing here reads the numbers, and
+        // nothing waits for them.
+        static_cast<const EasyGLStorageBufferRenderer&>(argumentBuffer).BindAsDrawIndirect();
+        const void* argumentAddress = reinterpret_cast<const void*>(
+            static_cast<std::uintptr_t>(argumentByteOffset));
+
+        // The wireframe fallback the ordinary routes take is deliberately absent: it rebuilds a
+        // line-list from the primitive count, and this route does not have one to rebuild from.
+        // A wireframe indirect draw renders filled rather than pretending otherwise.
+        if (ib != nullptr)
+        {
+            const auto idxType = ib->thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                                  : ::easygl::DataType::UnsignedShort;
+            ::metagl::glDrawElementsIndirect(ToEasyGl(primitive), idxType, argumentAddress);
+        }
+        else
+        {
+            ::metagl::glDrawArraysIndirect(ToEasyGl(primitive), argumentAddress);
+        }
+
+        // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later
+        // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.
+        for (int i = instancePlacements.count; i-- > 0;)
+        {
+            const InstanceStreamPlacement& placement =
+                instancePlacements.entries[static_cast<std::size_t>(i)];
+            DisableDeclarationAttributes(vao, placement.firstLocation, placement.elementCount);
+        }
+        if (reconfigurePerVertex)
+            RestoreSingleStreamAttributes(vao, params);
+        if (params.customEffectRenderer == nullptr)
+        {
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            if (p.loc_instanced >= 0)
+                p.prog.set_uniform(p.loc_instanced, 0.0f);
+        }
+        vao.unbind();
+    }
+
+    void EasyGLRenderer::DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                                   const Matrix& world,
+                                                   const Matrix& view,
+                                                   const Matrix& projection,
+                                                   PrimitiveType primitive,
+                                                   const IStorageBufferRenderer& argumentBuffer,
+                                                   int argumentByteOffset,
+                                                   const GpuDrawParams& params)
+    {
+        IssueIndirectDrawEXT(vb, nullptr, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
+    }
+
+    void EasyGLRenderer::DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                                          const IIndexBufferRenderer& ib,
+                                                          const Matrix& world,
+                                                          const Matrix& view,
+                                                          const Matrix& projection,
+                                                          PrimitiveType primitive,
+                                                          const IStorageBufferRenderer& argumentBuffer,
+                                                          int argumentByteOffset,
+                                                          const GpuDrawParams& params)
+    {
+        IssueIndirectDrawEXT(vb, &ib, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
     }
 }
 

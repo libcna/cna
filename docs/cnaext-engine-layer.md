@@ -206,6 +206,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Materials (`PbrMaterial` ↔ `PbrEffect`) | ✅ | ✅ | ✅ | ✅ — no renderer code at all: it moves values between two existing objects |
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
 | Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ not implemented; reports false and both wrappers refuse | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
+| Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ⬜ | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
 
 **Asking a renderer what it will actually do.** Three questions, and they are not the same question:
 
@@ -766,6 +767,58 @@ touch every pixel of the frame it is display-encoding. Its measured cost is clos
 (`docs/cnaext-perf.md`), so there would be little to win. And the operator is an **artistic**
 choice, not a performance one: silently changing the curve because a player selected "Low" would
 change how the game looks, which is not what a quality preset is for.
+
+### Letting the GPU decide how much to draw: indirect draws
+
+`plan_modern.md` `MOD-2090`. An indirect draw takes its vertex count, instance count and offsets out
+of a GPU buffer instead of from its arguments. That is the one piece of GPU-driven rendering the
+reference renderer's profile floor can actually reach — mesh shaders and the rest of that family do
+not exist below GL 4.6 — and what it buys is that a compute shader can decide how much to draw
+without the answer travelling back through the CPU, which is a pipeline stall rather than a copy.
+
+```cpp
+if (device.SupportsCapability(CNA::GraphicsCapability::IndirectDraw)) {
+    CNA::Graphics::StorageBuffer commands(device, sizeof(CNA::IndirectDrawArguments));
+    // ... a compute shader writes the counts into `commands` ...
+    device.GetRenderer().MemoryBarrierEXT(
+        static_cast<int>(CNA::GraphicsMemoryBarrier::IndirectCommand));
+    device.SetVertexBuffer(&mesh);
+    effect.Apply();
+    device.DrawPrimitivesIndirectEXT(PrimitiveType::TriangleList, *commands.getRendererEXT(), 0);
+}
+```
+
+**The argument layout is the contract, not an implementation detail.** `CNA::IndirectDrawArguments`
+(four words) and `CNA::IndirectDrawIndexedArguments` (five) are the exact bytes the GPU reads, in the
+order GL, D3D12 and Vulkan all agree on. A compute shader declaring the same words in the same order
+lands on the same memory. `BaseInstance` **must be 0 on GL ES**, which has no base-instance
+parameter; that cannot be diagnosed anywhere, because by the time the draw runs the value is in GPU
+memory.
+
+**The range checks every other draw performs are impossible here.** `GraphicsDevice` rejects a
+primitive range that leaves the bound buffers before every other draw route; for this one the range
+*is* the GPU's, so a wrong count is undefined behaviour rather than an exception. The shader that
+wrote it owns that obligation. What is still checked: a bound vertex buffer, a bound index buffer,
+an applied effect, and an argument offset that is 4-byte aligned and leaves room for the command.
+
+**One buffer can hold a frame's worth of commands.** The byte offset selects which one this draw
+runs, which is the shape a GPU-driven pass wants.
+
+**Order the command fetch explicitly.** `GraphicsMemoryBarrier::IndirectCommand` is a separate bit
+from `ShaderStorage` because writing a count through a storage binding and fetching it as a command
+are two different accesses; ordering only the first can let the fetch read the previous frame's
+numbers.
+
+**A wrinkle worth knowing before you plan around it.** The only argument buffer CNA has is
+`CNA::Graphics::StorageBuffer`, which is an SSBO and needs GL ES 3.1 / desktop GL 4.3. The indirect
+draw itself needs only GL 4.0, so on a desktop context between 4.0 and 4.2 the capability truthfully
+reports `true` and there is still nothing in CNA able to hold the arguments. Check both capabilities
+if you intend to run there.
+
+**Wireframe is ignored on this route.** The fill-mode fallback the ordinary routes take rebuilds a
+line list from the primitive count, and this route has no primitive count to rebuild from; an
+indirect draw renders filled rather than pretending otherwise. A compiled (FX) effect is refused
+outright for the same kind of reason.
 
 ### Rendering small and showing big: spatial upscaling
 
