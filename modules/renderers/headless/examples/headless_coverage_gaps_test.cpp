@@ -102,7 +102,17 @@ namespace
                   "an unrecognized CNA_HEADLESS_MODE value defaults to HeadlessMode::Validation");
         }
 
-        System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "");
+        System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", {});
+        // sharp-runtime #2313 (downstream ticket #2366): "" STOPPED meaning "remove". It now
+        // stores an empty value, which is what .NET does; only a null value removes. This site
+        // wants REMOVAL -- the check below is "an UNSET CNA_HEADLESS_MODE defaults to
+        // Validation" -- so it must not pass "".
+        //
+        // `{}` rather than `std::nullopt` DELIBERATELY: it means "remove" under BOTH the current
+        // sharp-runtime on develop, where the parameter is `const std::string&` and `{}` is the
+        // empty string that deletes, and the one on next, where it is
+        // `const std::optional<std::string>&` and `{}` is nullopt. `std::nullopt` does not
+        // compile against develop at all. Verified both ways.
         {
             HeadlessRenderer renderer(64, 64);
             Check(renderer.GetMode() == HeadlessMode::Validation,

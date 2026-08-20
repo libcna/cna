@@ -1444,7 +1444,12 @@ TEST_F(SaveAsJpegTest, QualityEnvVarIsHonoredWithoutThrowing)
     EXPECT_NO_THROW(src.SaveAsJpeg(&writeStream, 2, 2));
     auto bytes = writeStream.GetBuffer();
 
-    System::Environment::SetEnvironmentVariable("FNA_GRAPHICS_JPEG_SAVE_QUALITY", ""); // empty value deletes it
+    System::Environment::SetEnvironmentVariable("FNA_GRAPHICS_JPEG_SAVE_QUALITY", {});
+    // sharp-runtime #2313 (downstream ticket #2366): the old comment here said "empty value
+    // deletes it", which stopped being true -- "" now STORES an empty value and only a null value
+    // removes. `{}` is used rather than `std::nullopt` because it means "remove" under both the
+    // sharp-runtime on develop (parameter `const std::string&`) and the one on next
+    // (`const std::optional<std::string>&`); `std::nullopt` does not compile against develop.
 
     ASSERT_FALSE(bytes.empty());
     MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
