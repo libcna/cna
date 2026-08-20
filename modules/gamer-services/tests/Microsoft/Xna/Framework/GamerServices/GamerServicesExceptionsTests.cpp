@@ -15,13 +15,23 @@ using namespace Microsoft::Xna::Framework::GamerServices;
 
 // Task 9.10: confirmed against FNA's own real default constructor (`: base()`, no hardcoded
 // message in any of the 6 GamerServices exception types) that the default ctor's message is
-// simply whatever System::Exception()'s own default produces - an empty string. Asserting this
-// explicitly guards against a future regression silently blanking (or unexpectedly populating)
-// the default message with nothing else to catch it.
+// simply whatever System::Exception()'s own default produces.
+//
+// UPDATED for sharp-runtime #2323 (downstream ticket #2377, 2026-08-19): that default STOPPED
+// being an empty string. It is now .NET's documented fallback, "Exception of type '{0}' was
+// thrown." (Exception.cs:61, Strings.resx:2333). Inheriting it would make every type here report
+// 'System.Exception' -- or, for NetworkNotAvailableException, its BASE -- so each supplies its own
+// message naming itself, which is the repair sharp-runtime applied to HttpRequestException and
+// JsonException. Asserting the exact text still guards against a regression silently blanking or
+// changing the default with nothing else to catch it.
 TEST(NetworkExceptionTest, DefaultCtor) {
     NetworkException ex;
     EXPECT_NE(nullptr, dynamic_cast<System::Exception*>(&ex));
-    EXPECT_STREQ("", ex.what());
+    // INVERTED by sharp-runtime #2323 (downstream ticket #2377): System::Exception()
+    // no longer produces an empty message -- it produces .NET's fallback,
+    // "Exception of type '{0}' was thrown.". Each type here now supplies its OWN,
+    // naming ITSELF, because inheriting the base's would name the WRONG type.
+    EXPECT_STREQ("Exception of type 'Microsoft.Xna.Framework.GamerServices.NetworkException' was thrown.", ex.what());
 }
 
 TEST(NetworkExceptionTest, MessageCtor) {
@@ -49,7 +59,11 @@ TEST(NetworkExceptionTest, IsCatchableAsSystemException) {
 TEST(NetworkNotAvailableExceptionTest, DefaultCtor) {
     NetworkNotAvailableException ex;
     EXPECT_NE(nullptr, dynamic_cast<NetworkException*>(&ex));
-    EXPECT_STREQ("", ex.what());
+    // INVERTED by sharp-runtime #2323 (downstream ticket #2377): System::Exception()
+    // no longer produces an empty message -- it produces .NET's fallback,
+    // "Exception of type '{0}' was thrown.". Each type here now supplies its OWN,
+    // naming ITSELF, because inheriting the base's would name the WRONG type.
+    EXPECT_STREQ("Exception of type 'Microsoft.Xna.Framework.GamerServices.NetworkNotAvailableException' was thrown.", ex.what());
 }
 
 TEST(NetworkNotAvailableExceptionTest, MessageCtor) {
@@ -77,7 +91,11 @@ TEST(NetworkNotAvailableExceptionTest, IsCatchableAsNetworkException) {
 TEST(GamerPrivilegeExceptionTest, DefaultCtor) {
     GamerPrivilegeException ex;
     EXPECT_NE(nullptr, dynamic_cast<System::Exception*>(&ex));
-    EXPECT_STREQ("", ex.what());
+    // INVERTED by sharp-runtime #2323 (downstream ticket #2377): System::Exception()
+    // no longer produces an empty message -- it produces .NET's fallback,
+    // "Exception of type '{0}' was thrown.". Each type here now supplies its OWN,
+    // naming ITSELF, because inheriting the base's would name the WRONG type.
+    EXPECT_STREQ("Exception of type 'Microsoft.Xna.Framework.GamerServices.GamerPrivilegeException' was thrown.", ex.what());
 }
 
 TEST(GamerPrivilegeExceptionTest, MessageCtor) {
@@ -97,7 +115,11 @@ TEST(GamerPrivilegeExceptionTest, MessageAndInnerCtor) {
 TEST(GamerServicesNotAvailableExceptionTest, DefaultCtor) {
     GamerServicesNotAvailableException ex;
     EXPECT_NE(nullptr, dynamic_cast<System::Exception*>(&ex));
-    EXPECT_STREQ("", ex.what());
+    // INVERTED by sharp-runtime #2323 (downstream ticket #2377): System::Exception()
+    // no longer produces an empty message -- it produces .NET's fallback,
+    // "Exception of type '{0}' was thrown.". Each type here now supplies its OWN,
+    // naming ITSELF, because inheriting the base's would name the WRONG type.
+    EXPECT_STREQ("Exception of type 'Microsoft.Xna.Framework.GamerServices.GamerServicesNotAvailableException' was thrown.", ex.what());
 }
 
 TEST(GamerServicesNotAvailableExceptionTest, MessageCtor) {
@@ -117,7 +139,11 @@ TEST(GamerServicesNotAvailableExceptionTest, MessageAndInnerCtor) {
 TEST(GameUpdateRequiredExceptionTest, DefaultCtor) {
     GameUpdateRequiredException ex;
     EXPECT_NE(nullptr, dynamic_cast<System::Exception*>(&ex));
-    EXPECT_STREQ("", ex.what());
+    // INVERTED by sharp-runtime #2323 (downstream ticket #2377): System::Exception()
+    // no longer produces an empty message -- it produces .NET's fallback,
+    // "Exception of type '{0}' was thrown.". Each type here now supplies its OWN,
+    // naming ITSELF, because inheriting the base's would name the WRONG type.
+    EXPECT_STREQ("Exception of type 'Microsoft.Xna.Framework.GamerServices.GameUpdateRequiredException' was thrown.", ex.what());
 }
 
 TEST(GameUpdateRequiredExceptionTest, MessageCtor) {
@@ -137,7 +163,11 @@ TEST(GameUpdateRequiredExceptionTest, MessageAndInnerCtor) {
 TEST(GuideAlreadyVisibleExceptionTest, DefaultCtor) {
     GuideAlreadyVisibleException ex;
     EXPECT_NE(nullptr, dynamic_cast<System::Exception*>(&ex));
-    EXPECT_STREQ("", ex.what());
+    // INVERTED by sharp-runtime #2323 (downstream ticket #2377): System::Exception()
+    // no longer produces an empty message -- it produces .NET's fallback,
+    // "Exception of type '{0}' was thrown.". Each type here now supplies its OWN,
+    // naming ITSELF, because inheriting the base's would name the WRONG type.
+    EXPECT_STREQ("Exception of type 'Microsoft.Xna.Framework.GamerServices.GuideAlreadyVisibleException' was thrown.", ex.what());
 }
 
 TEST(GuideAlreadyVisibleExceptionTest, MessageCtor) {
