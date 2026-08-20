@@ -767,6 +767,50 @@ touch every pixel of the frame it is display-encoding. Its measured cost is clos
 choice, not a performance one: silently changing the curve because a player selected "Low" would
 change how the game looks, which is not what a quality preset is for.
 
+### Rendering small and showing big: spatial upscaling
+
+`plan_modern.md` `MOD-2093`. `SpatialUpscalePass` is the cheapest performance dial the layer has:
+render the scene at a fraction of the output size, and let one pass — the only one that touches
+every output pixel — put it on screen at full size.
+
+```cpp
+CNA::Graphics::SpatialUpscalePass upscale(device);
+device.SetRenderTarget(nullptr);                       // the full-size target
+upscale.draw(&lowResScene, 1280, 720, 1920, 1080);
+```
+
+**What it is over the hardware's bilinear stretch is edge awareness.** It reads the luma gradient of
+the four taps it is already fetching, works out which way the edge runs, and filters *along* that
+direction rather than across it — which turns a staircase back into a line. Then a contrast-adaptive
+sharpen recovers what any resample softens.
+
+**This is FSR 1's shape, written from the published description of it, not from a vendor SDK.** It
+is pure shader arithmetic with nothing to link, which is the reason it can live in this layer at
+all, and it is not bit-identical to AMD's reference implementation. Temporal upscalers — DLSS, XeSS,
+FSR 2 and above — are a different thing entirely and are out of scope for the same reason TAA is:
+they need motion vectors and a history buffer (`MOD-2098`).
+
+**The sharpen is clamped to the neighbourhood it sharpened from**, so it cannot produce a value
+brighter or darker than anything around it. That clamp is what separates a sharpener from a ringing
+artefact at a hard edge, and it is asserted directly: an image containing only two tones comes out
+containing only values between them.
+
+**At a 1:1 scale the pass copies through, pixel for pixel** — exactly, not within a tolerance, and
+with sharpening left at whatever the game configured. A pass with nothing to do that changed the
+image anyway would make the resolution dial impossible to calibrate: "100%" has to mean the frame
+you would have got without the pass in the chain. A 1:1 draw therefore also suppresses the sharpen,
+because the pass was asked to change nothing and a sharpen is a change. Sharpen separately, before
+the upscale, if that is what you want at full resolution.
+
+**`setEdgeAdaptive(false)` leaves a plain bilinear stretch.** It is there because it is the
+comparison a game actually wants to offer, and because a claim that the adaptive path helps is only
+worth making if the path it beats can be run beside it.
+
+**The pass reports `isSupported()` false where the renderer does not execute effect source.** Ask it
+before building a low-resolution scene target: on a renderer that accepts an effect and ignores it,
+the frame would come out stretched by the fixed path with no edge awareness at all, and nothing on
+screen would say why.
+
 ### Writing your own pass
 
 `plan_modern.md` `MOD-233`. There are two routes, and the shorter one is right more often than it

@@ -67,6 +67,7 @@
 #include "CNA/Graphics/ScopedRenderTarget.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
+#include "CNA/Graphics/SpatialUpscalePass.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
 #include "CNA/Graphics/ThinFilmIridescence.hpp"
