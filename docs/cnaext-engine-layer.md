@@ -821,6 +821,44 @@ line list from the primitive count, and this route has no primitive count to reb
 indirect draw renders filled rather than pretending otherwise. A compiled (FX) effect is refused
 outright for the same kind of reason.
 
+### Decals: gluing an image onto geometry that knows nothing about it
+
+`plan_modern.md` `MOD-2094`. Bullet holes, scorch marks, puddles, tyre tracks. `DecalPass` projects a
+texture onto whatever the depth prepass says is already there: for each pixel the depth gives a
+position, the decal's inverse transform puts that position in the decal's own space, and the pixel is
+painted only if it lands **inside the decal's unit box**. No geometry is generated, and the receiving
+mesh is not modified or even consulted.
+
+```cpp
+CNA::Graphics::DecalPass decals(device);
+decals.setPrepassInputs(prepass.getDepthTexture(), prepass.getNormalTexture());
+decals.setCamera(view, projection, farPlane);
+// ... the scene target is bound ...
+decals.draw(&bulletHole, Matrix::CreateScale(0.4f) * hitTransform, width, height);
+```
+
+**The box is the contract.** The decal occupies the local cube from -0.5 to +0.5 on every axis, the
+texture maps to its local X and Y, and it projects along local **+Z**. So the box's *depth* extent is
+what keeps a decal off the wall behind the crate it was meant for: a surface further away than the
+box's far face is outside it and is not painted. Scale the Z axis to how far in front of and behind
+the target surface the decal should reach.
+
+**Give it the prepass normals.** Without them a decal projected at a glancing angle smears across a
+surface nearly parallel to its own axis. With them, `setMaxSlopeAngle` rejects those pixels outright;
+the default accepts a good deal of tilt, so a decal still wraps a curved surface.
+
+**A pixel with no surface is not painted.** Where the prepass depth is at the far plane there is
+nothing to glue anything to, and painting it is how a decal ends up floating in the sky.
+
+**It composites, and it is the only pass here that does.** Every post-process pass replaces its
+destination; a decal blends onto the frame, so it uses `BlendState::NonPremultiplied` and the decal
+image's own alpha is the mask. Draw decals after the scene and before the post-process chain, so
+they are tonemapped and graded with everything else.
+
+**Cost is one fullscreen pass per decal**, which is what a screen-space projection costs when it is
+not batched. `DecalPass::isInsideDecalBox` is offered as a plain static so a game can decide whether
+a decal is worth drawing at all before spending one.
+
 ### Culling that becomes the draw: `GpuInstanceCuller`
 
 `plan_modern.md` `MOD-2091`. A compute shader tests every instance against the frustum, compacts the
