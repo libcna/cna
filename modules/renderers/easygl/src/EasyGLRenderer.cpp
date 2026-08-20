@@ -4337,6 +4337,27 @@ if (!ProfileIsEs2ApiGeneration())
         return static_cast<int>(value);
     }
 
+    int EasyGLRenderer::GetMaxVertexShaderStorageBlocksEXT() const
+    {
+        // Asked of the driver rather than inferred: ES 3.1's own minimum for this limit is zero, so
+        // a context can implement compute in full and still be unable to read a storage buffer from
+        // a vertex shader. Desktop GL 4.3 guarantees at least 8, but the query costs nothing and
+        // answering it the same way everywhere is one fewer profile branch.
+        if (!SupportsComputeShadersEXT()) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxVertexShaderStorageBlocks, &value);
+        return static_cast<int>(value);
+    }
+
+    void EasyGLRenderer::BindStorageBufferForDrawEXT(const int binding,
+                                                     const IStorageBufferRenderer& buffer)
+    {
+        if (!SupportsComputeShadersEXT() || binding < 0) return;
+        // glBindBufferBase's shader-storage binding points are context state shared by every stage,
+        // so the same call that feeds a dispatch feeds a draw; nothing about the buffer changes.
+        static_cast<const EasyGLStorageBufferRenderer&>(buffer).BindBase(binding);
+    }
+
     std::unique_ptr<IComputeShaderRenderer> EasyGLRenderer::CreateComputeShader(
         const std::string& computeSrc)
     {

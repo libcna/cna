@@ -207,6 +207,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Instancing / LOD / culling | ✅ | ✅ measured — `cnaext_instancing_lod_test` passes 5/5 on a real Vulkan device | ⬜ | ⬜ — `LodGroupEXT` and `FrustumCullerEXT` are renderer-free and run everywhere; `InstancedRendererEXT` needs `GraphicsCapability::Instancing` and otherwise refuses (or falls back, on request) |
 | Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ not implemented; reports false and both wrappers refuse | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
 | Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ⬜ | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
+| GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | ⬜ | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
 
 **Asking a renderer what it will actually do.** Three questions, and they are not the same question:
 
@@ -819,6 +820,50 @@ if you intend to run there.
 line list from the primitive count, and this route has no primitive count to rebuild from; an
 indirect draw renders filled rather than pretending otherwise. A compiled (FX) effect is refused
 outright for the same kind of reason.
+
+### Culling that becomes the draw: `GpuInstanceCuller`
+
+`plan_modern.md` `MOD-2091`. A compute shader tests every instance against the frustum, compacts the
+survivors, and writes the surviving count straight into an indirect draw command. One call then
+draws them. **Nothing about the result is read back to submit the frame** — which is the whole point,
+because reading a cull verdict back is the CPU waiting on work it has only just submitted.
+
+```cpp
+CNA::Graphics::GpuInstanceCuller culler(device);
+if (!culler.isSupported()) { /* culler.getUnsupportedReason() says which requirement is missing */ }
+
+culler.setInstances(instances);                       // world matrix + world-space bounds each
+culler.cull(view, projection, indexCountPerInstance); // leaves the answer on the GPU
+device.SetVertexBuffer(&mesh);  device.SetIndexBuffer(&meshIndices);
+effect.Apply();
+culler.draw(PrimitiveType::TriangleList);
+```
+
+**Your vertex shader reads its own transform from a storage buffer**, not from a per-instance vertex
+stream, because a compute shader cannot write a vertex buffer in this profile. Paste
+`GpuInstanceCuller::getInstanceLookupGlsl()` after a `#version 310 es` line and call
+`cnaInstanceWorld()`; the matrix arrives in the same layout the `World` uniform does, so it
+multiplies the same way.
+
+```glsl
+#version 310 es
+// ... getInstanceLookupGlsl() ...
+void main() { gl_Position = Projection * View * cnaInstanceWorld() * vec4(aPos, 1.0); }
+```
+
+**Four requirements, and the fourth is the one that surprises people.** Compute shaders, indirect
+draws, an effect source the renderer really executes — and at least one storage buffer readable from
+a *vertex* shader. GL ES 3.1 allows `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` to be **zero**, so a
+context can implement compute completely and still refuse this.
+
+**It refuses rather than falling back**, which is the opposite of what `ClusteredLightCompute` does,
+deliberately. That class has a CPU path that is a correct if slower answer; there is no CPU
+equivalent of "the draw call itself came from the GPU", so a silent fallback would report success
+for a frame that never removed the stall.
+
+**`readVisibleCountEXT()` is a stall.** It is there for tests and tools and is named so it is not
+reached for by accident: it waits for the GPU to finish. A frame never needs it — the count's only
+consumer is the draw, and that consumer is the GPU.
 
 ### Rendering small and showing big: spatial upscaling
 

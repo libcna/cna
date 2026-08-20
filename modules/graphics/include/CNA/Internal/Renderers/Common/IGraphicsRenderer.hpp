@@ -2066,6 +2066,20 @@ namespace CNA::Internal::Renderers
         /// default, like every other promise here.
         [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
 
+        /// plan_modern.md MOD-2091: how many storage buffers a VERTEX shader on this context may
+        /// read. GL ES 3.1 permits this to be zero -- a context can support compute completely and
+        /// still refuse an SSBO in a vertex stage -- so it is a separate number rather than
+        /// something derivable from `SupportsComputeShadersEXT()`. Zero means "not there", which is
+        /// what every renderer without compute returns.
+        [[nodiscard]] virtual int GetMaxVertexShaderStorageBlocksEXT() const { return 0; }
+
+        /// plan_modern.md MOD-2091: binds a storage buffer to a binding point a following DRAW's
+        /// shaders read, rather than a following dispatch's. The binding points are the same set
+        /// `IComputeShaderRenderer::BindStorageBuffer` uses; what differs is only which stage reads
+        /// them, which is why this is on the renderer rather than on a program.
+        virtual void BindStorageBufferForDrawEXT(int /*binding*/,
+                                                 const IStorageBufferRenderer& /*buffer*/) {}
+
         /// plan_modern.md MOD-1505: the dispatch limits this context guarantees, per axis
         /// (0 = x, 1 = y, 2 = z). Zero means "unknown or unsupported", which is what every
         /// renderer without compute returns.

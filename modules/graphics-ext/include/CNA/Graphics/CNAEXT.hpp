@@ -103,6 +103,7 @@
 // ---- Instancing, LOD and culling -------------------------------------------------------------
 #include "CNA/Graphics/FrustumCullerEXT.hpp"
 #include "CNA/Graphics/InstancedRendererEXT.hpp"
+#include "CNA/Graphics/GpuInstanceCuller.hpp"
 #include "CNA/Graphics/LightProbeBaker.hpp"
 #include "CNA/Graphics/LightProbeEXT.hpp"
 #include "CNA/Graphics/LightProbeVolumeEXT.hpp"

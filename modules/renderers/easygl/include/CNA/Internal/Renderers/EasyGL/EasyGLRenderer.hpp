@@ -1158,6 +1158,9 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
         [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
         [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+        void BindStorageBufferForDrawEXT(int binding,
+                                         const IStorageBufferRenderer& buffer) override;
         std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
             const std::string& computeSrc) override;
         std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
