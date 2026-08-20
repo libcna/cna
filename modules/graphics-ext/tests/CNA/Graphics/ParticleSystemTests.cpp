@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+#include "EngineTestSupport.hpp"
+
 #include "CNA/Graphics/ParticleSystem.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/MathHelper.hpp"
@@ -24,8 +26,10 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -296,6 +300,96 @@ TEST(ParticleSystemTest, TheCpuPathDrawsTheSameParticlesTheGpuPathWouldHave)
     int lit = 0;
     for (const Color& texel : pixels) if (texel.getRProperty() > 32) ++lit;
     EXPECT_GT(lit, 0) << "the CPU draw path put nothing on screen";
+}
+
+TEST(ParticleSystemTest, SoftnessDefaultsToOffAndIsClamped)
+{
+    GraphicsDevice device;
+    ParticleSystem system(device, 32);
+    EXPECT_FLOAT_EQ(system.getSoftnessEXT(), 0.0f)
+        << "a game that never asked for soft particles must get the hard edges it had";
+    system.setSoftnessEXT(2.5f);
+    EXPECT_FLOAT_EQ(system.getSoftnessEXT(), 2.5f);
+    system.setSoftnessEXT(-1.0f);
+    EXPECT_FLOAT_EQ(system.getSoftnessEXT(), 0.0f);
+}
+
+TEST(ParticleSystemTest, AParticleTouchingGeometryFadesAndOneInFrontOfItDoesNot)
+{
+    // MOD-2109. The whole point of the feature is a *difference*, so the test measures one: the
+    // same particles, the same camera, the same texture, and only the distance between them and
+    // the surface behind them changes. A draw that ignored the depth image would produce the same
+    // brightness twice.
+    GraphicsDevice device;
+    ParticleSystem system(device, 64);
+    if (!system.getUnsupportedReason().empty()) GTEST_SKIP() << system.getUnsupportedReason();
+
+    ParticleEmitterSettings settings = QuietSettings();
+    settings.Gravity = Vector3(0.0f, 0.0f, 0.0f);
+    settings.Speed = 0.0f;
+    settings.SpeedVariance = 0.0f;
+    settings.Drag = 0.0f;
+    settings.StartSize = 2.0f;
+    settings.EndSize = 2.0f;
+    // ONE particle. Sixty-four of them land on the same eight-by-eight patch of screen, and alpha
+    // compounds: a 2% contribution repeated sixty-four times is `1 - 0.98^64`, which is 47% and
+    // looks exactly like a fade that is not working. The first version of this test stacked them
+    // and read 45% where it expected zero; the shader was right and the scene was wrong.
+    settings.EmissionRate = 0.5f;
+    settings.Lifetime = 2.0f;
+    settings.LifetimeVariance = 0.0f;
+
+    constexpr float kFar = 100.0f;
+    const Matrix view = Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 20.0f), Vector3::Zero,
+                                             Vector3(0.0f, 1.0f, 0.0f));
+    const Matrix projection =
+        Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, kFar);
+
+    const auto texture = WhiteTexture(device);
+    system.setSoftnessEXT(4.0f);
+    settings.Position = Vector3(0.0f, 0.0f, 0.0f);   // 20 units from the eye, and it stays there
+    system.setSettings(settings);
+    system.reset();
+
+    // Only the WALL moves. Moving the particles instead would change how much of the screen they
+    // cover -- a nearer billboard is a bigger one -- and the test would be measuring perspective
+    // rather than the fade. The first version of this test did exactly that and passed anyway.
+    const auto brightnessBehindWallAt = [&](const float wallDepth) {
+        std::vector<Color> depthTexels(static_cast<std::size_t>(kSize) * kSize,
+                                       CnaTest::EngineLayer::DepthTexel(device, wallDepth / kFar));
+        Texture2D wall(device, kSize, kSize);
+        wall.SetData(depthTexels.data(), static_cast<int>(depthTexels.size()));
+        system.setDepthInputEXT(&wall, kFar);
+
+        RenderTarget2D target(device, kSize, kSize);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+        device.setDepthStencilStateProperty(DepthStencilState::None);
+        // Alpha blending over black, because the fade is *in the alpha*: with opaque blending the
+        // colour is written whatever the alpha says, and the whole effect would be invisible.
+        device.setBlendStateProperty(BlendState::NonPremultiplied);
+        device.SetRenderTarget(&target);
+        device.Clear(Color::Black);
+        system.draw(view, projection, texture.get());
+        device.SetRenderTarget(nullptr);
+        device.setBlendStateProperty(BlendState::Opaque);
+
+        std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
+        target.GetData(pixels.data(), static_cast<int>(pixels.size()));
+        long sum = 0;
+        for (const Color& texel : pixels) sum += texel.getRProperty();
+        return sum;
+    };
+
+    // The wall exactly where the particles are, and then well behind them. Same particles, same
+    // coverage, same everything else.
+    const long touching = brightnessBehindWallAt(20.0f);
+    const long inFront  = brightnessBehindWallAt(40.0f);
+
+    std::printf("[ MOD-2109 ] brightness with the wall touching %ld, well behind %ld\n",
+                touching, inFront);
+    EXPECT_GT(inFront, 0) << "the particles never reached the frame at all";
+    EXPECT_LT(touching * 8, inFront)
+        << "a particle sitting on the surface behind it was not faded";
 }
 
 TEST(ParticleSystemTest, DrawingRefusesWithoutATexture)

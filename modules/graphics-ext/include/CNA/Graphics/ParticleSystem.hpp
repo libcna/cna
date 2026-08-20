@@ -173,6 +173,39 @@ namespace CNA::Graphics {
                   const Microsoft::Xna::Framework::Matrix& projection,
                   Microsoft::Xna::Framework::Graphics::Texture2D* texture);
 
+        /**
+         * @brief Supplies the depth image particles fade against, and the camera it was drawn with.
+         *
+         * plan_modern.md `MOD-2109`. A billboard that intersects geometry shows a hard cut line
+         * where the two meet, and nothing else in a frame has a straight edge like it — it is the
+         * clearest tell that a smoke plume is a set of quads. With a depth image the shader fades
+         * each pixel out as it approaches whatever is behind it.
+         *
+         * **The GPU draw path only.** The CPU fallback builds billboards on the CPU and draws them
+         * through the stock effect, which has no depth input and no shader of its own to add one
+         * to; there, particles keep their hard edges. That is the fallback's price, stated rather
+         * than hidden.
+         *
+         * @param depth    The prepass depth image, or null to stop fading.
+         * @param farPlane The far plane it was normalised by; must be positive to take effect.
+         */
+        void setDepthInputEXT(Microsoft::Xna::Framework::Graphics::Texture2D* depth,
+                              float farPlane);
+
+        /** @brief Returns how far in front of geometry a particle is fully opaque, in world units. */
+        [[nodiscard]] float getSoftnessEXT() const;
+
+        /**
+         * @brief Sets how far in front of geometry a particle is fully opaque, in world units.
+         *
+         * A particle exactly on the surface behind it disappears; one this far in front is at full
+         * strength; between the two it fades linearly. Zero disables the fade even with a depth
+         * image supplied.
+         *
+         * @param value The distance; negative values are clamped to zero.
+         */
+        void setSoftnessEXT(float value);
+
         /** @brief Returns whether the last @ref update ran on the GPU. */
         [[nodiscard]] bool usesCompute() const;
 
@@ -263,6 +296,9 @@ namespace CNA::Graphics {
         int  capacity_     = 0;
         bool usesCompute_  = false;
         bool forceCpu_     = false;
+        Microsoft::Xna::Framework::Graphics::Texture2D* sceneDepth_ = nullptr;
+        float depthFarPlane_ = 0.0f;
+        float softness_      = 0.0f;
         bool gpuStateValid_ = false;
     };
 

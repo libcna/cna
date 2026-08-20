@@ -5,6 +5,7 @@
 #ifdef CNA_CNAEXT
 
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
@@ -12,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
@@ -138,6 +140,7 @@ void main() {
 layout(location = 0) in vec3 aPos;
 out vec2 vTexCoord;
 out vec4 vColor;
+out float vViewDepth;
 uniform mat4 View;
 uniform mat4 Projection;
 uniform vec4 uStartColor;
@@ -161,17 +164,38 @@ void main() {
     gl_Position = Projection * vec4(viewPosition, 1.0);
     vTexCoord = aPos.xy + 0.5;
     vColor = mix(uStartColor, uEndColor, t);
+    // MOD-2109: the billboard's own distance along the view, which the fragment compares against
+    // whatever the depth image says is behind it.
+    vViewDepth = -viewPosition.z;
 }
 )";
 
-        constexpr const char* kDrawFragmentSource = R"(#version 310 es
-precision highp float;
+        constexpr const char* kDrawFragmentBody = R"(
 in vec2 vTexCoord;
 in vec4 vColor;
+in float vViewDepth;
 out vec4 FragColor;
 uniform sampler2D texture1;
+uniform sampler2D uSceneDepth;
+uniform vec2  uViewport;
+uniform float uHasDepth;
+uniform float uSoftness;
+uniform float uDepthFarPlane;
+
 void main() {
-    FragColor = texture(texture1, vTexCoord) * vColor;
+    vec4 colour = texture(texture1, vTexCoord) * vColor;
+    if (uHasDepth > 0.5 && uSoftness > 0.0) {
+        // The depth image is screen-sized, so the sample point is this fragment's own position in
+        // it. Both images are render targets in every path that supplies one, which is what makes
+        // gl_FragCoord the right coordinate rather than an orientation gamble.
+        vec2 uv = gl_FragCoord.xy / max(uViewport, vec2(1.0));
+        float behind = cnaDecodeLinearDepth(texture(uSceneDepth, uv)) * uDepthFarPlane;
+        // A particle touching the surface behind it vanishes; one a full softness in front of it is
+        // untouched. Linear between, which is what makes an intersecting billboard read as volume
+        // rather than as a cut.
+        colour.a *= clamp((behind - vViewDepth) / uSoftness, 0.0, 1.0);
+    }
+    FragColor = colour;
 }
 )";
 
@@ -297,7 +321,11 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
             std::string vertex = "#version 310 es\nprecision highp float;\n";
             vertex += getParticleLookupGlsl();
             vertex += kDrawVertexBody;
-            effect_ = std::make_unique<ShaderEffect>(device, vertex, kDrawFragmentSource);
+            std::string fragment = "#version 310 es\nprecision highp float;\n";
+            fragment += DepthNormalPrepass::getDepthDecodeGlsl(
+                DepthNormalPrepass::usesPackedDepthEXT(device));
+            fragment += kDrawFragmentBody;
+            effect_ = std::make_unique<ShaderEffect>(device, vertex, fragment);
             bool logged = false;
             detail::reportShaderCompileFailure(device, "ParticleSystem", effect_.get(), logged);
 
@@ -345,6 +373,18 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
     void ParticleSystem::setSettings(const ParticleEmitterSettings& value) { settings_ = value; }
 
     bool ParticleSystem::usesCompute() const { return usesCompute_; }
+
+    void ParticleSystem::setDepthInputEXT(Texture2D* depth, const float farPlane)
+    {
+        sceneDepth_ = depth;
+        depthFarPlane_ = farPlane;
+    }
+
+    float ParticleSystem::getSoftnessEXT() const { return softness_; }
+    void  ParticleSystem::setSoftnessEXT(const float value)
+    {
+        softness_ = std::max(value, 0.0f);
+    }
 
     bool ParticleSystem::isSimulationOnCpuEXT() const { return forceCpu_; }
 
@@ -478,6 +518,18 @@ layout(std430, binding = 7) readonly buffer CnaParticleBuffer { vec4 cnaParticle
             effect_->SetUniformInt("uActiveCount", active);
             effect_->SetUniformInt("texture1", 0);
             effect_->SetTexture(0, *texture);
+            const bool fading = sceneDepth_ != nullptr && depthFarPlane_ > 0.0f && softness_ > 0.0f;
+            effect_->SetUniformFloat("uHasDepth", fading ? 1.0f : 0.0f);
+            effect_->SetUniformFloat("uSoftness", softness_);
+            effect_->SetUniformFloat("uDepthFarPlane", depthFarPlane_);
+            effect_->SetUniformVec2("uViewport",
+                                    static_cast<float>(device_.getViewportProperty().getWidthProperty()),
+                                    static_cast<float>(device_.getViewportProperty().getHeightProperty()));
+            if (fading)
+            {
+                effect_->SetUniformInt("uSceneDepth", 1);
+                effect_->SetTexture(1, *sceneDepth_);
+            }
 
             device_.GetRenderer().BindStorageBufferForDrawEXT(kParticleBinding,
                                                               *buffer_->getRendererEXT());
