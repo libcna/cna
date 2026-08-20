@@ -216,6 +216,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | `.cube` grading tables | ✅ parse is renderer-free; the strip needs only a 2D texture | ✅ | ✅ | ✅ — `CubeLut` is plain arithmetic and the strip layout runs everywhere |
 | Tetrahedral LUT interpolation, volume LUTs | ✅ needs executed effect source; the volume layout also needs `GraphicsCapability::Texture3D` | ⬜ | ⬜ | ⬜ — where the shader is not run the grade copies its input through, exactly as it did before |
 | Debanding dither | ✅ needs executed effect source | ⬜ | ⬜ | ⬜ — off by default everywhere, and a renderer that does not run the tonemap shader was not dithering before either |
+| Aerial perspective | ✅ needs the prepass depth and executed effect source | ⬜ | ⬜ | ⬜ — `AerialPerspectivePass::isSupported()` is false and the frame keeps the unaltered geometry it had |
 | Decals | ✅ needs the prepass and `CustomEffects` | ⬜ | ⬜ | ⬜ — `DecalPass` reports `isSupported()` false and draws nothing rather than washing the frame |
 | Spatial upscaling | ✅ | ⬜ | ⬜ | ⬜ — without executed effect source the pass copies its input through at the target size, which is the hardware stretch it was replacing |
 | Display colour space | 🟨 `Srgb` only — the encoding is complete, the swap chain is not | 🟨 same | 🟨 same | 🟨 — no CNA platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses the rest |
@@ -1632,6 +1633,74 @@ sky.draw(view, projection, width, height);           // before the scene's geome
   test that wants "the zenith is blue" or "the horizon is brighter than the zenith" has to put the
   sun somewhere other than directly overhead, or it is asking the model to disagree with every
   photograph.
+
+### Aerial perspective: the air between the camera and the mountain
+
+`plan_modern.md` `MOD-2140`–`MOD-2142`. `AtmosphericSky` has drawn a physically-derived sky since
+`MOD-1100`, and everything in front of that sky was drawn as though the air between it and the camera
+were not there. A ridge twenty kilometres away arriving at full contrast and full saturation against
+a visibly atmospheric sky is the single clearest tell that the sky is a backdrop rather than a place.
+
+`AerialPerspectivePass` runs **the same integral over a shorter path**:
+
+```cpp
+CNA::Graphics::AerialPerspectivePass air(device);
+air.setSunDirection(sun.Direction);    // the same vector AtmosphericSky and the light take
+air.setTurbidity(2.5f);
+air.setIntensity(skyIntensity);        // match AtmosphericSky, or the two disagree about the sun
+air.setScaleHeight(8400.0f);           // the one number tied to the game's world scale
+air.apply(context);                    // needs sourceDepth, farPlane and the camera matrices
+```
+
+**One model, not two.** `AtmosphericSky::getModelGlsl()` emits the scattering functions and both
+passes compile the same string. The sky is `cnaScatteringAlongPath` with the path set to the whole
+atmosphere; aerial perspective is the same call with the path set to however far the geometry is.
+Two copies of one model agree until somebody edits one of them, and the symptom is a frame that looks
+slightly wrong with nothing to point at — `MOD-2035` charged this layer for exactly that.
+
+**Scale height is where a game's world scale enters, and it is the only dial worth touching.** The
+model's coefficients are optical depth through one *vertical column* of atmosphere, so a distance
+divided by the scale height is already in the model's own units. The default 8400 is the real
+atmosphere's, in metres:
+
+| World unit | `setScaleHeight` | Otherwise |
+|---|---|---|
+| a metre | 8400 (default) | — |
+| a centimetre | 840000 | the whole visible world sits in one air mass and the frame goes to the sky colour |
+| an arbitrary unit, world a few hundred across | a few hundred | nothing happens at all: 500 units of 8400 is 6% of one column |
+
+Two properties are worth knowing before reaching for it:
+
+- **The air mass is capped at the whole atmosphere along that direction.** Without the cap a distant
+  enough object accumulates more air than the entire sky behind it has and comes back hazier than
+  the horizon, which cannot happen.
+- **Red survives and blue does not, and that asymmetry is the effect.** Rayleigh's red coefficient
+  is 0.0464 against blue's 0.2650, so even the horizon's ~38 air masses leave **17% of a surface's
+  red** while its blue is gone to four decimal places. A black surface and a white one at the
+  horizon converge exactly in blue — measured, against `AtmosphericSky::radiance` itself — and stay
+  27/255 apart in red. That is why a distant mountain goes *blue-grey* rather than sky-coloured, and
+  why aerial perspective is classically described as losing contrast and shifting blue rather than
+  as fading into the sky.
+
+**Do not stack it with fog.** Three passes in this layer put something in the air between the camera
+and the geometry, and each makes a different physical claim about it. Running two is double-counting
+the same air:
+
+| Pass | Claims the air is | Reach for it when |
+|---|---|---|
+| `AerialPerspectivePass` | clear atmosphere, lit by the sun the sky is lit by | the scene is outdoors and the distances are kilometres — it is the *sky's* air and it needs no parameters of its own beyond world scale |
+| `HeightFogPass` | a medium whose density falls off with height, with a colour of its own | there is a valley, a lake, a ground mist — anything whose density is about *height* rather than about the atmosphere |
+| `VolumetricFogPass` | a lit, shadowed medium marched in 3D | the air itself must receive shadows and show light shafts through them; the only one of the three that costs a march |
+
+Aerial perspective and height fog can be combined deliberately — atmosphere for the distance and a
+low-lying mist for the valley — but their densities then have to be set together, because a viewer
+cannot tell which pass took the contrast out of a hillside. Aerial perspective and volumetric fog on
+the same outdoor scene are two answers to one question and should not both be on.
+
+**The sky itself is left alone**, by an explicit depth test rather than by the numbers working out:
+a pixel the prepass never wrote already carries the whole atmosphere, and adding more would double
+it. The seam where geometry meets sky is where that error shows first, and it shows as a visible
+edge along every silhouette rather than as a wrong colour.
 
 ### Area lights, and the two things they do not do
 

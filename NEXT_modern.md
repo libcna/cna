@@ -40,8 +40,18 @@ that last one **refused as redundant rather than unreachable**, since its diffus
 `LightProbeVolumeEXT` already gives without screen space's failure modes.
 
 **Phase 21 progress.** §21.1 transparency (`MOD-2101`–`MOD-2110`), §21.2 contact shadows
-(`MOD-2120`–`MOD-2123`) and §21.3 grading and output (`MOD-2130`–`MOD-2133`) are done; §21.4 aerial
-perspective and §21.5 debug drawing and GPU timing remain.
+(`MOD-2120`–`MOD-2123`), §21.3 grading and output (`MOD-2130`–`MOD-2133`) and §21.4 aerial
+perspective (`MOD-2140`–`MOD-2142`) are done; §21.5 debug drawing and GPU timing remains.
+
+**§21.4's test found the physics rather than a bug.** The far-end claim — that a surface distant
+enough is *replaced* by the sky the same model draws — was written as "a black surface and a white
+one converge", and it failed. They converge in blue and they do not in red: Rayleigh's red
+coefficient is 0.0464 against blue's 0.2650, so the horizon's ~38 air masses still pass 17% of a
+surface's red while its blue is gone to four decimal places. The right response was not a wider
+tolerance but a second case stating the asymmetry, because that asymmetry *is* the effect — it is why
+a distant mountain goes blue-grey rather than sky-coloured. A first version of the same test was also
+wrong for a duller reason: its far plane was 100 km and the horizon cap needs 38 × 8400 ≈ 319 km, so
+nothing was ever at the cap.
 
 **§21.3 opened with a wrong premise in its own row and the correction is the useful part.**
 `MOD-2130` said `ColorGradePass` has lift/gamma/gain a lookup table could not express. It does not —
@@ -555,6 +565,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | `cmake-build-cnaext`, after **Phase 21 §21.1 complete** (transparency: the sorted list, the transparent phase, weighted-blended OIT and soft particles) | Xvfb :99 | 8317 ran · 8252 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **27/27** |
 | 2026-08-20 | same, after **Phase 21 §21.2 complete** (contact shadows) | Xvfb :99 | 8340 ran · 8275 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **28/28** |
 | 2026-08-20 | same, after **Phase 21 §21.3 complete** (`.cube` grading, the interpolation decision, debanding dither) | Xvfb :99 | 8367 ran · 8301 pass · 66 skip · **0 fail**; `ctest -R 'CNAEXT_'` **29/29** |
+| 2026-08-20 | same, after **Phase 21 §21.4 complete** (aerial perspective) | Xvfb :99 | 8381 ran · 8316 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **29/29** |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
 which was `MOD-2035` and had been red since long before this section began. It is **25 of 25** after

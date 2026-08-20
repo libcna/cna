@@ -60,13 +60,17 @@ float cnaAirMass(float upwards) {
     return 1.0 / max(up + 0.50572 * pow(max(96.07995 - zenithDegrees, 1e-3), -1.6364), 1e-4);
 }
 
-vec3 cnaSkyRadiance(vec3 viewDirection, vec3 sunDirection, float turbidity) {
+// The scattering integral with the view path supplied rather than assumed. MOD-2141: the sky is
+// this function with the path set to the whole atmosphere, and aerial perspective is the same
+// function with the path set to however far the geometry is -- one model, called twice, rather than
+// two models that agree until someone edits one of them.
+vec3 cnaScatteringAlongPath(vec3 viewDirection, vec3 sunDirection, float turbidity,
+                            float viewMass) {
     vec3 view  = normalize(viewDirection);
     vec3 toSun = -normalize(sunDirection);
     float cosAngle = dot(view, toSun);
 
-    float viewMass = cnaAirMass(view.y);
-    float sunMass  = cnaAirMass(toSun.y);
+    float sunMass = cnaAirMass(toSun.y);
 
     // Turbidity is the ratio of the whole atmosphere's optical thickness to the molecular part
     // alone, so 1 means air with no aerosol in it at all and the Mie term has to vanish there.
@@ -81,6 +85,35 @@ vec3 cnaSkyRadiance(vec3 viewDirection, vec3 sunDirection, float turbidity) {
     vec3 alongView = vec3(1.0) - exp(-total * viewMass);
     vec3 sunlight  = exp(-total * sunMass);
     return scattered / total * alongView * sunlight * kSkyScale;
+}
+
+vec3 cnaSkyRadiance(vec3 viewDirection, vec3 sunDirection, float turbidity) {
+    return cnaScatteringAlongPath(viewDirection, sunDirection, turbidity,
+                                  cnaAirMass(normalize(viewDirection).y));
+}
+
+/// What survives of a colour after this much air, per channel.
+vec3 cnaAtmosphereTransmittance(float turbidity, float viewMass) {
+    float mie = kMiePerTurbidity * max(turbidity - 1.0, 0.0);
+    return exp(-(kRayleigh + vec3(mie)) * viewMass);
+}
+
+/// The air masses a ray of this length looking this way passes through.
+///
+/// The model's coefficients are optical depth through **one vertical column**, so a length divided
+/// by the scale height is already in the right units and no conversion is needed. The cap is not
+/// cosmetic: without it a distant enough object accumulates more air than the whole sky behind it
+/// has, and comes back hazier than the horizon -- which cannot happen.
+float cnaAerialAirMass(vec3 viewDirection, float distance, float scaleHeight) {
+    float full = cnaAirMass(normalize(viewDirection).y);
+    return min(max(distance, 0.0) / max(scaleHeight, 1e-3), full);
+}
+
+/// Geometry seen through this much air: what is left of its own colour, plus what the air adds.
+vec3 cnaAerialPerspective(vec3 colour, vec3 viewDirection, vec3 sunDirection, float turbidity,
+                          float viewMass) {
+    return colour * cnaAtmosphereTransmittance(turbidity, viewMass)
+         + cnaScatteringAlongPath(viewDirection, sunDirection, turbidity, viewMass);
 }
 )";
 
@@ -148,6 +181,11 @@ void main() {
     AtmosphericSky::~AtmosphericSky() = default;
 
     bool AtmosphericSky::isSupported() const { return supported_; }
+
+    std::string AtmosphericSky::getModelGlsl()
+    {
+        return std::string(kModelGlsl);
+    }
 
     Vector3 AtmosphericSky::radiance(const Vector3& viewDirection, const Vector3& sunDirection,
                                      const float turbidity)

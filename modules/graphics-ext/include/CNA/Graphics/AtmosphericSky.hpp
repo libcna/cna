@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
 #include <memory>
+#include <string>
 
 namespace Microsoft::Xna::Framework::Graphics {
     class GraphicsDevice;
@@ -99,6 +100,24 @@ namespace CNA::Graphics {
         [[nodiscard]] float getIntensity() const;
         /** @brief Sets the overall brightness multiplier. @param value The multiplier; negatives are ignored. */
         void setIntensity(float value);
+
+        /**
+         * @brief The scattering model as GLSL, for a pass that needs the same air on geometry.
+         *
+         * plan_modern.md `MOD-2141`. Emitted rather than duplicated, for the reason `MOD-2035`
+         * charged this layer for: two copies of one model agree until somebody edits one of them,
+         * and the symptom is a frame that looks slightly wrong with nothing to point at.
+         *
+         * The fragment declares `cnaSkyRadiance(vec3, vec3, float)`,
+         * `cnaScatteringAlongPath(vec3, vec3, float, float)` — the same integral with the view path
+         * supplied instead of assumed — `cnaAtmosphereTransmittance(float, float)`,
+         * `cnaAerialAirMass(vec3, float, float)` and `cnaAerialPerspective(vec3, vec3, vec3, float,
+         * float)`. The sky is the integral over the whole atmosphere; aerial perspective is the
+         * same integral over however far the geometry is.
+         *
+         * @return A GLSL fragment declaring the model's functions.
+         */
+        [[nodiscard]] static std::string getModelGlsl();
 
         /**
          * @brief The sky's radiance along one direction, computed on the CPU.
