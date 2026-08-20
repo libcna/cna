@@ -62,6 +62,7 @@
 #include "CNA/Graphics/FxaaPass.hpp"
 #include "CNA/Graphics/HdrDisplayOutput.hpp"
 #include "CNA/Graphics/TransparentDrawList.hpp"
+#include "CNA/Graphics/WeightedBlendedTransparency.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
