@@ -3,6 +3,8 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Graphics/LightProbeEXT.hpp"
+
 #include <memory>
 #include <vector>
 
@@ -108,6 +110,27 @@ namespace CNA::Graphics {
         [[nodiscard]] std::unique_ptr<Microsoft::Xna::Framework::Graphics::TextureCube>
         generatePrefilteredSpecular(Microsoft::Xna::Framework::Graphics::TextureCube* environment,
                                     int baseSize = 128, int mipCount = 5, int sampleCount = 64);
+
+        /**
+         * @brief Projects an environment onto a light probe's nine coefficients.
+         *
+         * plan_modern.md `MOD-2080`. The same cube-reading path the irradiance convolution above
+         * uses, and deliberately not a second one -- but a *cheaper* integral: projecting onto
+         * spherical harmonics visits each texel of the environment once, where the convolution
+         * visits each texel of the *output* and integrates a hemisphere for it.
+         *
+         * The texel's solid angle is computed rather than assumed, because a cube's texels do not
+         * subtend equal angles: the ones at a face's corner are foreshortened, and weighting them
+         * equally tilts every probe towards its cube's corners.
+         *
+         * @param environment The environment to project; must not be null.
+         * @param position    The world-space position to record on the probe.
+         * @return The probe.
+         * @throws std::invalid_argument If the environment is null.
+         */
+        [[nodiscard]] LightProbeEXT generateProbe(
+            Microsoft::Xna::Framework::Graphics::TextureCube* environment,
+            const Microsoft::Xna::Framework::Vector3& position = {});
 
         /**
          * @brief Generates the split-sum BRDF lookup table.

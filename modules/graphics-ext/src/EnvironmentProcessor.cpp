@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
@@ -377,6 +378,65 @@ namespace CNA::Graphics {
         }
 
         return result;
+    }
+
+    LightProbeEXT EnvironmentProcessor::generateProbe(TextureCube* environment,
+                                                      const Vector3& position)
+    {
+        if (environment == nullptr)
+            throw std::invalid_argument(
+                "CNA::Graphics::EnvironmentProcessor::generateProbe: the environment must not be "
+                "null");
+
+        const CubeSampler source = ReadCube(*environment);
+        const float size = static_cast<float>(source.size);
+
+        LightProbeEXT probe(position);
+        std::array<Vector3, LightProbeEXT::kCoefficientCount> sums{};
+
+        for (int faceIndex = 0; faceIndex < 6; ++faceIndex)
+            for (int y = 0; y < source.size; ++y)
+                for (int x = 0; x < source.size; ++x)
+                {
+                    const float u = (static_cast<float>(x) + 0.5f) / size;
+                    const float v = (static_cast<float>(y) + 0.5f) / size;
+                    const Vector3 direction = faceDirection(faceIndex, u, v);
+
+                    // A cube's texels do not subtend equal solid angles: at a face's corner the
+                    // texel is both further away and seen edge-on. Weighting them equally tilts
+                    // every probe towards the eight corners of its own cube, which is a bias with
+                    // no physical cause at all.
+                    const float su = 2.0f * u - 1.0f;
+                    const float sv = 2.0f * v - 1.0f;
+                    const float lengthSquared = su * su + sv * sv + 1.0f;
+                    const float solidAngle = (4.0f / (size * size)) /
+                                             (lengthSquared * std::sqrt(lengthSquared));
+
+                    const Vector3 radiance = source.sample(direction);
+                    const float basis[LightProbeEXT::kCoefficientCount] = {
+                        0.282095f,
+                        0.488603f * direction.Y,
+                        0.488603f * direction.Z,
+                        0.488603f * direction.X,
+                        1.092548f * direction.X * direction.Y,
+                        1.092548f * direction.Y * direction.Z,
+                        0.315392f * (3.0f * direction.Z * direction.Z - 1.0f),
+                        1.092548f * direction.X * direction.Z,
+                        0.546274f * (direction.X * direction.X - direction.Y * direction.Y),
+                    };
+
+                    for (int index = 0; index < LightProbeEXT::kCoefficientCount; ++index)
+                    {
+                        const float weight = basis[index] * solidAngle;
+                        Vector3& sum = sums[static_cast<std::size_t>(index)];
+                        sum = Vector3(sum.X + radiance.X * weight, sum.Y + radiance.Y * weight,
+                                      sum.Z + radiance.Z * weight);
+                    }
+                }
+
+        for (int index = 0; index < LightProbeEXT::kCoefficientCount; ++index)
+            probe.setCoefficient(index, sums[static_cast<std::size_t>(index)]);
+        return probe;
     }
 
     std::unique_ptr<Texture2D> EnvironmentProcessor::generateBrdfLut(const int size,
