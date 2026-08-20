@@ -79,6 +79,7 @@
 
 // ---- Shadows ---------------------------------------------------------------------------------
 #include "CNA/Graphics/CascadedShadowMap.hpp"
+#include "CNA/Graphics/ContactShadowPass.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/ClusteredLightAssignment.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
