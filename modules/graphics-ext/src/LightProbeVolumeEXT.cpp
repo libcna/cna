@@ -130,6 +130,53 @@ namespace CNA::Graphics {
                                       std::clamp(position.Y, bounds_.Min.Y, bounds_.Max.Y),
                                       std::clamp(position.Z, bounds_.Min.Z, bounds_.Max.Z)));
 
+        // The trilinear weight of each corner, and then the visibility each corner has of the point
+        // being lit (MOD-2083). A probe that recorded a wall closer than the point cannot be
+        // lighting it, and multiplying its weight by that test is what stops a lit room from
+        // leaking into the dark one next door.
+        const Vector3 target = blended.getPosition();
+        float weights[8] = {};
+        float total = 0.0f;
+        float trilinearTotal = 0.0f;
+        for (int corner = 0; corner < 8; ++corner)
+        {
+            const bool useX1 = (corner & 1) != 0;
+            const bool useY1 = (corner & 2) != 0;
+            const bool useZ1 = (corner & 4) != 0;
+            const float trilinear = (useX1 ? tx : 1.0f - tx) * (useY1 ? ty : 1.0f - ty) *
+                                    (useZ1 ? tz : 1.0f - tz);
+            trilinearTotal += trilinear;
+            if (trilinear <= 0.0f) continue;
+
+            const LightProbeEXT& probe =
+                probes_[static_cast<std::size_t>(
+                    indexOf(useX1 ? x1 : x0, useY1 ? y1 : y0, useZ1 ? z1 : z0))];
+            const Vector3 toTarget(target.X - probe.getPosition().X,
+                                   target.Y - probe.getPosition().Y,
+                                   target.Z - probe.getPosition().Z);
+            const float distance = std::sqrt(toTarget.X * toTarget.X + toTarget.Y * toTarget.Y +
+                                             toTarget.Z * toTarget.Z);
+            weights[corner] = trilinear * probe.visibilityWeight(toTarget, distance);
+            total += weights[corner];
+        }
+
+        // Every visible corner was rejected, which happens where a point is enclosed by geometry on
+        // all sides. Falling back to the plain trilinear blend is a leak; returning black is a hole
+        // in the lighting, and a hole is the more visible mistake -- so the leak is chosen, and
+        // said out loud rather than left to be discovered.
+        if (!(total > 0.0f))
+        {
+            for (int corner = 0; corner < 8; ++corner)
+            {
+                const bool useX1 = (corner & 1) != 0;
+                const bool useY1 = (corner & 2) != 0;
+                const bool useZ1 = (corner & 4) != 0;
+                weights[corner] = (useX1 ? tx : 1.0f - tx) * (useY1 ? ty : 1.0f - ty) *
+                                  (useZ1 ? tz : 1.0f - tz);
+            }
+            total = trilinearTotal;
+        }
+
         // Trilinear on the coefficients themselves, which is only meaningful because the projection
         // onto them is linear: the blend of eight probes' coefficients is the projection of the
         // blend of their light, so the result is a valid probe rather than an approximation of one.
@@ -138,12 +185,14 @@ namespace CNA::Graphics {
             Vector3 sum(0.0f, 0.0f, 0.0f);
             for (int corner = 0; corner < 8; ++corner)
             {
+                if (weights[corner] <= 0.0f) continue;
                 const bool useX1 = (corner & 1) != 0;
                 const bool useY1 = (corner & 2) != 0;
                 const bool useZ1 = (corner & 4) != 0;
-                const float weight = (useX1 ? tx : 1.0f - tx) * (useY1 ? ty : 1.0f - ty) *
-                                     (useZ1 ? tz : 1.0f - tz);
-                if (weight <= 0.0f) continue;
+                // Renormalised, so rejecting a corner redistributes its share rather than darkening
+                // the result: a surface beside a wall should be lit by the probes that can see it,
+                // not by a fraction of the ones that cannot.
+                const float weight = weights[corner] / total;
 
                 const Vector3 value =
                     probes_[static_cast<std::size_t>(

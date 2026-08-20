@@ -87,6 +87,86 @@ namespace CNA::Graphics {
         return result;
     }
 
+    void LightProbeEXT::setVisibility(const int direction, const float meanDistance,
+                                      const float meanSquaredDistance)
+    {
+        if (direction < 0 || direction >= kVisibilityDirections)
+            throw std::out_of_range(
+                "CNA::Graphics::LightProbeEXT::setVisibility: a probe records six directions");
+
+        const std::size_t index = static_cast<std::size_t>(direction);
+        const float mean = std::max(meanDistance, 0.0f);
+        visibilityMean_[index] = mean;
+        // No distribution has negative variance, and one that appeared to would make the Chebyshev
+        // test answer a number outside [0, 1] -- which is a probe contributing negatively.
+        visibilityMeanSquared_[index] = std::max(meanSquaredDistance, mean * mean);
+    }
+
+    float LightProbeEXT::getVisibilityMean(const int direction) const
+    {
+        if (direction < 0 || direction >= kVisibilityDirections)
+            throw std::out_of_range(
+                "CNA::Graphics::LightProbeEXT::getVisibilityMean: a probe records six directions");
+        return visibilityMean_[static_cast<std::size_t>(direction)];
+    }
+
+    float LightProbeEXT::getVisibilityMeanSquared(const int direction) const
+    {
+        if (direction < 0 || direction >= kVisibilityDirections)
+            throw std::out_of_range(
+                "CNA::Graphics::LightProbeEXT::getVisibilityMeanSquared: a probe records six "
+                "directions");
+        return visibilityMeanSquared_[static_cast<std::size_t>(direction)];
+    }
+
+    bool LightProbeEXT::hasVisibility() const
+    {
+        for (const float mean : visibilityMean_)
+            if (mean > 0.0f) return true;
+        return false;
+    }
+
+    float LightProbeEXT::visibilityWeight(const Vector3& direction, const float distance) const
+    {
+        if (!hasVisibility()) return 1.0f;
+        if (!(distance > 0.0f)) return 1.0f;
+
+        const Vector3 d = Normalized(direction, Vector3(0.0f, 1.0f, 0.0f));
+        // Blended across the up-to-three axes the direction actually points along, rather than
+        // snapped to the nearest one: snapping makes the weight jump as a surface turns, and a
+        // discontinuity in an ambient term is more visible than the leak it was fixing.
+        const float components[kVisibilityDirections] = {
+            std::max(d.X, 0.0f), std::max(-d.X, 0.0f), std::max(d.Y, 0.0f),
+            std::max(-d.Y, 0.0f), std::max(d.Z, 0.0f), std::max(-d.Z, 0.0f)};
+
+        float total = 0.0f;
+        float mean = 0.0f;
+        float meanSquared = 0.0f;
+        for (int index = 0; index < kVisibilityDirections; ++index)
+        {
+            const std::size_t at = static_cast<std::size_t>(index);
+            if (visibilityMean_[at] <= 0.0f) continue;
+            const float weight = components[index] * components[index];
+            if (weight <= 0.0f) continue;
+            total += weight;
+            mean += visibilityMean_[at] * weight;
+            meanSquared += visibilityMeanSquared_[at] * weight;
+        }
+        // Every direction that points anywhere useful was left unrecorded, so there is nothing to
+        // test against and the probe is trusted rather than discarded.
+        if (!(total > 0.0f)) return 1.0f;
+
+        mean /= total;
+        meanSquared /= total;
+        if (distance <= mean) return 1.0f;
+
+        // Chebyshev, exactly as a variance shadow map uses it: a flat wall has almost no variance
+        // and cuts off sharply, a cluttered direction has a lot and fades.
+        const float variance = std::max(meanSquared - mean * mean, 0.0f);
+        const float gap = distance - mean;
+        return std::clamp(variance / (variance + gap * gap), 0.0f, 1.0f);
+    }
+
     bool LightProbeEXT::isZero() const
     {
         for (const Vector3& coefficient : coefficients_)

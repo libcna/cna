@@ -190,6 +190,137 @@ TEST(LightProbeVolumeEXTTest, AnIndexOutsideTheGridIsRefused)
     EXPECT_THROW(volume.setProbe(0, 0, 2, LightProbeEXT()), std::out_of_range);
 }
 
+// ── Leak reduction (MOD-2083) ────────────────────────────────────────────────
+
+TEST(LightProbeVolumeEXTTest, ALitProbeBehindAWallDoesNotLightWhatIsOnTheOtherSide)
+{
+    // The defect that makes a naive probe grid unusable indoors. Two probes ten units apart with a
+    // wall between them: the lit one has recorded geometry one unit away in the direction of the
+    // dark room, so it cannot be lighting anything three units into it.
+    LightProbeVolumeEXT volume(BoundingBox(Vector3(0.0f, 0.0f, 0.0f), Vector3(10.0f, 0.0f, 0.0f)),
+                               2, 1, 1);
+
+    LightProbeEXT lit = Ambient(10.0f);
+    // A flat wall: almost no variance, so the cut-off is sharp. Recorded along +X, which is the
+    // direction the dark room lies in.
+    lit.setVisibility(0, 1.0f, 1.0f);
+    volume.setProbe(0, 0, 0, lit);
+    volume.setProbe(1, 0, 0, Ambient(0.0f));
+
+    // Just past the wall, most of the trilinear weight still belongs to the lit probe.
+    const float justPast = volume.sampleProbe(Vector3(2.0f, 0.0f, 0.0f)).getCoefficient(0).X;
+    EXPECT_LT(justPast, 0.5f)
+        << "the lit room leaked through the wall: " << justPast << " of a possible 10";
+
+    // And with the wall removed -- the same probe with nothing recorded -- it leaks, which is what
+    // makes the test above about the visibility test rather than about the geometry.
+    LightProbeVolumeEXT leaky(BoundingBox(Vector3(0.0f, 0.0f, 0.0f), Vector3(10.0f, 0.0f, 0.0f)),
+                              2, 1, 1);
+    leaky.setProbe(0, 0, 0, Ambient(10.0f));
+    leaky.setProbe(1, 0, 0, Ambient(0.0f));
+    EXPECT_GT(leaky.sampleProbe(Vector3(2.0f, 0.0f, 0.0f)).getCoefficient(0).X, 7.0f);
+}
+
+TEST(LightProbeVolumeEXTTest, RejectingACornerRedistributesRatherThanDarkens)
+{
+    // A surface beside a wall should be lit by the probes that *can* see it, not by a fraction of
+    // the ones that cannot. Both probes are equally bright, so if the weights were not
+    // renormalised the result would fall below their common value.
+    LightProbeVolumeEXT volume(BoundingBox(Vector3(0.0f, 0.0f, 0.0f), Vector3(10.0f, 0.0f, 0.0f)),
+                               2, 1, 1);
+
+    LightProbeEXT blocked = Ambient(4.0f);
+    blocked.setVisibility(0, 0.5f, 0.25f);
+    volume.setProbe(0, 0, 0, blocked);
+    volume.setProbe(1, 0, 0, Ambient(4.0f));
+
+    EXPECT_NEAR(volume.sampleProbe(Vector3(3.0f, 0.0f, 0.0f)).getCoefficient(0).X, 4.0f, 1e-3f)
+        << "rejecting a corner darkened the result instead of redistributing its share";
+}
+
+TEST(LightProbeVolumeEXTTest, APointEnclosedOnEverySideLeaksRatherThanGoesBlack)
+{
+    // Every corner rejected. A leak is wrong; a hole in the lighting is *more* visible, so the leak
+    // is the deliberate choice -- and it is asserted rather than left as an accident of the code.
+    LightProbeVolumeEXT volume(BoundingBox(Vector3(0.0f, 0.0f, 0.0f), Vector3(10.0f, 0.0f, 0.0f)),
+                               2, 1, 1);
+
+    LightProbeEXT walled = Ambient(6.0f);
+    for (int direction = 0; direction < LightProbeEXT::kVisibilityDirections; ++direction)
+        walled.setVisibility(direction, 0.01f, 0.0001f);
+    volume.setProbe(0, 0, 0, walled);
+    volume.setProbe(1, 0, 0, walled);
+
+    EXPECT_NEAR(volume.sampleProbe(Vector3(5.0f, 0.0f, 0.0f)).getCoefficient(0).X, 6.0f, 1e-3f)
+        << "a point walled in on every side went black instead of falling back to the blend";
+}
+
+TEST(LightProbeVolumeEXTTest, AProbeWithNoRecordedVisibilityIsTrustedCompletely)
+{
+    // Every probe in every volume built before MOD-2083 has no visibility recorded. They must keep
+    // behaving exactly as they did, or the fix would darken every existing scene.
+    LightProbeVolumeEXT volume(BoundingBox(Vector3(0.0f, 0.0f, 0.0f), Vector3(10.0f, 0.0f, 0.0f)),
+                               2, 1, 1);
+    volume.setProbe(0, 0, 0, Ambient(2.0f));
+    volume.setProbe(1, 0, 0, Ambient(6.0f));
+
+    EXPECT_FALSE(volume.getProbe(0, 0, 0).hasVisibility());
+    EXPECT_NEAR(volume.sampleProbe(Vector3(5.0f, 0.0f, 0.0f)).getCoefficient(0).X, 4.0f, 1e-3f);
+}
+
+TEST(LightProbeEXTTest, TheVisibilityTestFadesWithVarianceAndIsBoundedAtBothEnds)
+{
+    LightProbeEXT probe;
+    EXPECT_FLOAT_EQ(probe.visibilityWeight(Vector3(1.0f, 0.0f, 0.0f), 5.0f), 1.0f)
+        << "a probe told nothing about its surroundings must not become useless";
+
+    // A flat wall two units away: everything nearer is seen, everything past it is not.
+    probe.setVisibility(0, 2.0f, 4.0f);
+    EXPECT_FLOAT_EQ(probe.visibilityWeight(Vector3(1.0f, 0.0f, 0.0f), 1.0f), 1.0f);
+    EXPECT_FLOAT_EQ(probe.visibilityWeight(Vector3(1.0f, 0.0f, 0.0f), 2.0f), 1.0f);
+    EXPECT_LT(probe.visibilityWeight(Vector3(1.0f, 0.0f, 0.0f), 4.0f), 0.01f);
+
+    // A cluttered direction -- the same mean, far more variance -- fades instead of cutting off.
+    LightProbeEXT cluttered;
+    cluttered.setVisibility(0, 2.0f, 20.0f);
+    EXPECT_GT(cluttered.visibilityWeight(Vector3(1.0f, 0.0f, 0.0f), 4.0f), 0.5f);
+
+    // The opposite direction was never recorded, so it is not tested against.
+    EXPECT_FLOAT_EQ(probe.visibilityWeight(Vector3(-1.0f, 0.0f, 0.0f), 9.0f), 1.0f);
+
+    // No distribution has negative variance, and one that appeared to would push the test outside
+    // [0, 1] -- which is a probe contributing negatively.
+    LightProbeEXT impossible;
+    impossible.setVisibility(0, 3.0f, 1.0f);
+    EXPECT_GE(impossible.getVisibilityMeanSquared(0), 9.0f);
+    const float weight = impossible.visibilityWeight(Vector3(1.0f, 0.0f, 0.0f), 10.0f);
+    EXPECT_GE(weight, 0.0f);
+    EXPECT_LE(weight, 1.0f);
+
+    EXPECT_THROW(probe.setVisibility(6, 1.0f, 1.0f), std::out_of_range);
+    EXPECT_THROW((void)probe.getVisibilityMean(-1), std::out_of_range);
+    EXPECT_THROW((void)probe.getVisibilityMeanSquared(6), std::out_of_range);
+}
+
+TEST(LightProbeVolumeEXTTest, TheVisibilityWeightBlendsAcrossAxesRatherThanSnapping)
+{
+    // Snapping the direction to its nearest axis makes the weight jump as a surface turns, and a
+    // discontinuity in an ambient term is more visible than the leak it was fixing. A direction
+    // between two axes has to give an answer between their two.
+    LightProbeEXT probe;
+    probe.setVisibility(0, 1.0f, 1.0f);        // +X blocked close
+    probe.setVisibility(4, 100.0f, 10000.0f);  // +Z wide open
+
+    const float alongX = probe.visibilityWeight(Vector3(1.0f, 0.0f, 0.0f), 5.0f);
+    const float alongZ = probe.visibilityWeight(Vector3(0.0f, 0.0f, 1.0f), 5.0f);
+    const float between = probe.visibilityWeight(Vector3(1.0f, 0.0f, 1.0f), 5.0f);
+
+    EXPECT_LT(alongX, 0.05f);
+    EXPECT_FLOAT_EQ(alongZ, 1.0f);
+    EXPECT_GT(between, alongX);
+    EXPECT_LE(between, alongZ);
+}
+
 } // namespace
 
 #endif // CNA_CNAEXT
