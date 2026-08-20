@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MS-PL
 """Renderer-descriptor integrity gate.
 
 Every renderer family owns one `GraphicsRendererDescriptor` translation unit -- the
@@ -184,9 +185,15 @@ def compile_check(cxx: str, path: Path, defines: list[str], roots: list[str]):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("repo_root", nargs="?", type=Path,
+                        help="repository root (defaults to the script's parent repository)")
     parser.add_argument("--cxx", default=os.environ.get("CXX", "g++"))
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+
+    global REPO
+    if args.repo_root is not None:
+        REPO = args.repo_root.resolve()
 
     files = descriptor_files()
     defines_by_dir = identity_defines()

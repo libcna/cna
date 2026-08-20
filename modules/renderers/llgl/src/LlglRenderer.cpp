@@ -1849,192 +1849,207 @@ namespace CNA::Internal::Renderers::Llgl
 
     LlglRenderer::~LlglRenderer()
     {
-        if (surface_)
-            IGraphicsRenderer::UnregisterForWindow(surface_->GetWindowId());
-
-        if (!renderer_)
-            return;
-
-        // Any still-live MRT bind's combined LLGL::RenderTarget must be released too -- ordinarily
-        // torn down by a later SetRenderTarget2D()/SetRenderTargets() call, which never happens if
-        // the game disposes its GraphicsDevice while one is still bound.
-        ReleaseCurrentMrtBindingEXT();
-
-        // Drains pendingBufferReleases_/pendingRenderTargetReleases_/pendingTextureReleases_/
-        // pendingQueryHeapReleases_ -- a RenderTarget2D/OcclusionQuery destroyed mid-frame defers
-        // its actual release until the frame that may reference it is submitted (see
-        // ScheduleRenderTargetReleaseEXT/ScheduleQueryHeapReleaseEXT), and the renderer itself can
-        // be destroyed before that submit ever happens (e.g. the game disposes its GraphicsDevice
-        // without presenting again). Without this, those resources would simply leak.
-        ReleasePendingBuffers();
-
-        for (const auto& entry : pipelineCache_)
+        // plan_modern.md MOD-1612. A destructor must not throw, and every line below calls into
+        // LLGL. When a *second* LlglRenderer fails to construct, LLGL's global state is left
+        // broken, and this teardown then throws "in 'Get': expression 'current_' must not be
+        // null" -- out of a destructor, on an unwind path, which is std::terminate and takes the
+        // whole process with it. Found by Phase 16's second-device probe, which aborted CnaTests
+        // here. Swallowing is the correct behaviour for a destructor: the objects being released
+        // are going away regardless, and turning a diagnosable exception into a crash helps
+        // nobody.
+        try
         {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        pipelineCache_.clear();
+            if (surface_)
+                IGraphicsRenderer::UnregisterForWindow(surface_->GetWindowId());
 
-        for (const auto& entry : loadRenderPassCache_)
+            if (!renderer_)
+                return;
+
+            // Any still-live MRT bind's combined LLGL::RenderTarget must be released too -- ordinarily
+            // torn down by a later SetRenderTarget2D()/SetRenderTargets() call, which never happens if
+            // the game disposes its GraphicsDevice while one is still bound.
+            ReleaseCurrentMrtBindingEXT();
+
+            // Drains pendingBufferReleases_/pendingRenderTargetReleases_/pendingTextureReleases_/
+            // pendingQueryHeapReleases_ -- a RenderTarget2D/OcclusionQuery destroyed mid-frame defers
+            // its actual release until the frame that may reference it is submitted (see
+            // ScheduleRenderTargetReleaseEXT/ScheduleQueryHeapReleaseEXT), and the renderer itself can
+            // be destroyed before that submit ever happens (e.g. the game disposes its GraphicsDevice
+            // without presenting again). Without this, those resources would simply leak.
+            ReleasePendingBuffers();
+
+            for (const auto& entry : pipelineCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            pipelineCache_.clear();
+
+            for (const auto& entry : loadRenderPassCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            loadRenderPassCache_.clear();
+
+            for (const auto& entry : samplerCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            samplerCache_.clear();
+
+            for (const auto& entry : primitivePipelineCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            primitivePipelineCache_.clear();
+
+            for (const auto& entry : primitiveVertexShaderCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            primitiveVertexShaderCache_.clear();
+
+            for (const auto& entry : primitiveEnvMapVertexShaderCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            primitiveEnvMapVertexShaderCache_.clear();
+
+            for (const auto& entry : primitiveSkinnedVertexShaderCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            primitiveSkinnedVertexShaderCache_.clear();
+
+            for (const auto& entry : primitivePbrVertexShaderCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            primitivePbrVertexShaderCache_.clear();
+
+            for (const auto& entry : primitivePbrSkinnedVertexShaderCache_)
+            {
+                if (entry.second != nullptr)
+                    renderer_->Release(*entry.second);
+            }
+            primitivePbrSkinnedVertexShaderCache_.clear();
+
+            for (LLGL::Buffer* buffer : pendingBufferReleases_)
+            {
+                if (buffer != nullptr)
+                    renderer_->Release(*buffer);
+            }
+            pendingBufferReleases_.clear();
+
+            for (LLGL::Buffer* buffer : transformBuffers_)
+            {
+                if (buffer != nullptr)
+                    renderer_->Release(*buffer);
+            }
+            transformBuffers_.clear();
+
+            for (LLGL::Buffer* buffer : customEffectUniformBuffers_)
+            {
+                if (buffer != nullptr)
+                    renderer_->Release(*buffer);
+            }
+            customEffectUniformBuffers_.clear();
+
+            for (LLGL::Buffer* buffer : envMapUniformBuffers_)
+            {
+                if (buffer != nullptr)
+                    renderer_->Release(*buffer);
+            }
+            envMapUniformBuffers_.clear();
+
+            for (LLGL::Buffer* buffer : skinnedUniformBuffers_)
+            {
+                if (buffer != nullptr)
+                    renderer_->Release(*buffer);
+            }
+            skinnedUniformBuffers_.clear();
+
+            for (LLGL::Buffer* buffer : skinnedBoneBuffers_)
+            {
+                if (buffer != nullptr)
+                    renderer_->Release(*buffer);
+            }
+            skinnedBoneBuffers_.clear();
+
+            for (LLGL::Buffer* buffer : pbrUniformBuffers_)
+            {
+                if (buffer != nullptr)
+                    renderer_->Release(*buffer);
+            }
+            pbrUniformBuffers_.clear();
+
+            if (defaultWhitePbrTexture_ != nullptr)
+                renderer_->Release(*defaultWhitePbrTexture_);
+            if (defaultFlatNormalPbrTexture_ != nullptr)
+                renderer_->Release(*defaultFlatNormalPbrTexture_);
+
+            if (customEffectLayout_ != nullptr)
+                renderer_->Release(*customEffectLayout_);
+
+            if (primitiveFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveFragmentShader_);
+            if (primitiveTexturedFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveTexturedFragmentShader_);
+            if (primitiveLitFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveLitFragmentShader_);
+            if (primitiveLitUntexturedFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveLitUntexturedFragmentShader_);
+            if (primitiveDualTextureFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveDualTextureFragmentShader_);
+            if (primitiveEnvMapFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveEnvMapFragmentShader_);
+            if (primitiveSkinnedFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveSkinnedFragmentShader_);
+            if (primitiveSkinnedColorFragmentShader_ != nullptr)
+                renderer_->Release(*primitiveSkinnedColorFragmentShader_);
+            if (primitivePbrFragmentShader_ != nullptr)
+                renderer_->Release(*primitivePbrFragmentShader_);
+            if (primitiveLayout_ != nullptr)
+                renderer_->Release(*primitiveLayout_);
+            if (primitiveTexturedLayout_ != nullptr)
+                renderer_->Release(*primitiveTexturedLayout_);
+            if (primitiveDualTextureLayout_ != nullptr)
+                renderer_->Release(*primitiveDualTextureLayout_);
+            if (primitiveEnvMapLayout_ != nullptr)
+                renderer_->Release(*primitiveEnvMapLayout_);
+            if (primitiveSkinnedLayout_ != nullptr)
+                renderer_->Release(*primitiveSkinnedLayout_);
+            if (primitivePbrLayout_ != nullptr)
+                renderer_->Release(*primitivePbrLayout_);
+            if (primitivePbrSkinnedLayout_ != nullptr)
+                renderer_->Release(*primitivePbrSkinnedLayout_);
+
+            if (spriteVertexBuffer_ != nullptr)
+                renderer_->Release(*spriteVertexBuffer_);
+            if (spriteProjectionBuffer_ != nullptr)
+                renderer_->Release(*spriteProjectionBuffer_);
+            if (spriteLayout_ != nullptr)
+                renderer_->Release(*spriteLayout_);
+            if (spriteVertexShader_ != nullptr)
+                renderer_->Release(*spriteVertexShader_);
+            if (spriteFragmentShader_ != nullptr)
+                renderer_->Release(*spriteFragmentShader_);
+            if (commands_ != nullptr)
+                renderer_->Release(*commands_);
+            if (swapChain_ != nullptr)
+                renderer_->Release(*swapChain_);
+        }
+        catch (...)
         {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
+            // Deliberately swallowed; see above.
         }
-        loadRenderPassCache_.clear();
-
-        for (const auto& entry : samplerCache_)
-        {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        samplerCache_.clear();
-
-        for (const auto& entry : primitivePipelineCache_)
-        {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        primitivePipelineCache_.clear();
-
-        for (const auto& entry : primitiveVertexShaderCache_)
-        {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        primitiveVertexShaderCache_.clear();
-
-        for (const auto& entry : primitiveEnvMapVertexShaderCache_)
-        {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        primitiveEnvMapVertexShaderCache_.clear();
-
-        for (const auto& entry : primitiveSkinnedVertexShaderCache_)
-        {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        primitiveSkinnedVertexShaderCache_.clear();
-
-        for (const auto& entry : primitivePbrVertexShaderCache_)
-        {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        primitivePbrVertexShaderCache_.clear();
-
-        for (const auto& entry : primitivePbrSkinnedVertexShaderCache_)
-        {
-            if (entry.second != nullptr)
-                renderer_->Release(*entry.second);
-        }
-        primitivePbrSkinnedVertexShaderCache_.clear();
-
-        for (LLGL::Buffer* buffer : pendingBufferReleases_)
-        {
-            if (buffer != nullptr)
-                renderer_->Release(*buffer);
-        }
-        pendingBufferReleases_.clear();
-
-        for (LLGL::Buffer* buffer : transformBuffers_)
-        {
-            if (buffer != nullptr)
-                renderer_->Release(*buffer);
-        }
-        transformBuffers_.clear();
-
-        for (LLGL::Buffer* buffer : customEffectUniformBuffers_)
-        {
-            if (buffer != nullptr)
-                renderer_->Release(*buffer);
-        }
-        customEffectUniformBuffers_.clear();
-
-        for (LLGL::Buffer* buffer : envMapUniformBuffers_)
-        {
-            if (buffer != nullptr)
-                renderer_->Release(*buffer);
-        }
-        envMapUniformBuffers_.clear();
-
-        for (LLGL::Buffer* buffer : skinnedUniformBuffers_)
-        {
-            if (buffer != nullptr)
-                renderer_->Release(*buffer);
-        }
-        skinnedUniformBuffers_.clear();
-
-        for (LLGL::Buffer* buffer : skinnedBoneBuffers_)
-        {
-            if (buffer != nullptr)
-                renderer_->Release(*buffer);
-        }
-        skinnedBoneBuffers_.clear();
-
-        for (LLGL::Buffer* buffer : pbrUniformBuffers_)
-        {
-            if (buffer != nullptr)
-                renderer_->Release(*buffer);
-        }
-        pbrUniformBuffers_.clear();
-
-        if (defaultWhitePbrTexture_ != nullptr)
-            renderer_->Release(*defaultWhitePbrTexture_);
-        if (defaultFlatNormalPbrTexture_ != nullptr)
-            renderer_->Release(*defaultFlatNormalPbrTexture_);
-
-        if (customEffectLayout_ != nullptr)
-            renderer_->Release(*customEffectLayout_);
-
-        if (primitiveFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveFragmentShader_);
-        if (primitiveTexturedFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveTexturedFragmentShader_);
-        if (primitiveLitFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveLitFragmentShader_);
-        if (primitiveLitUntexturedFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveLitUntexturedFragmentShader_);
-        if (primitiveDualTextureFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveDualTextureFragmentShader_);
-        if (primitiveEnvMapFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveEnvMapFragmentShader_);
-        if (primitiveSkinnedFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveSkinnedFragmentShader_);
-        if (primitiveSkinnedColorFragmentShader_ != nullptr)
-            renderer_->Release(*primitiveSkinnedColorFragmentShader_);
-        if (primitivePbrFragmentShader_ != nullptr)
-            renderer_->Release(*primitivePbrFragmentShader_);
-        if (primitiveLayout_ != nullptr)
-            renderer_->Release(*primitiveLayout_);
-        if (primitiveTexturedLayout_ != nullptr)
-            renderer_->Release(*primitiveTexturedLayout_);
-        if (primitiveDualTextureLayout_ != nullptr)
-            renderer_->Release(*primitiveDualTextureLayout_);
-        if (primitiveEnvMapLayout_ != nullptr)
-            renderer_->Release(*primitiveEnvMapLayout_);
-        if (primitiveSkinnedLayout_ != nullptr)
-            renderer_->Release(*primitiveSkinnedLayout_);
-        if (primitivePbrLayout_ != nullptr)
-            renderer_->Release(*primitivePbrLayout_);
-        if (primitivePbrSkinnedLayout_ != nullptr)
-            renderer_->Release(*primitivePbrSkinnedLayout_);
-
-        if (spriteVertexBuffer_ != nullptr)
-            renderer_->Release(*spriteVertexBuffer_);
-        if (spriteProjectionBuffer_ != nullptr)
-            renderer_->Release(*spriteProjectionBuffer_);
-        if (spriteLayout_ != nullptr)
-            renderer_->Release(*spriteLayout_);
-        if (spriteVertexShader_ != nullptr)
-            renderer_->Release(*spriteVertexShader_);
-        if (spriteFragmentShader_ != nullptr)
-            renderer_->Release(*spriteFragmentShader_);
-        if (commands_ != nullptr)
-            renderer_->Release(*commands_);
-        if (swapChain_ != nullptr)
-            renderer_->Release(*swapChain_);
     }
 
     const char* LlglRenderer::GetRendererNameEXT() const

@@ -110,7 +110,15 @@ pending `xna-graphics`/`tests-*` evidence), and the mechanical `examples-tests-*
 
 ### Task #3 (CNA core shards) — STARTED
 
-`cna-graphics` (7/7, **AUDITED**) — the smallest of the 5 Task #3 shards. This is CNA's own NOXNA extended
+`cna-graphics` (**7 of 75**, was 7/7) — the smallest of the 5 Task #3 shards *at the time it was
+audited*, and no longer small. `plan_modern.md` `MOD-12` grew the shard to 75 files: the engine layer
+described below as a "settings scaffold" has since become the plan's main body of work (HDR pipeline,
+post-process chain, shadows, sky, IBL, materials, instancing, compute). The 68 new rows are `PENDING`
+work-queue entries, not audits. Three of the findings recorded below are now stale in ways worth
+naming rather than deleting: the CMake option is `CNA_CNAEXT`, not `CNA_NOXNA`; there are no longer
+zero production consumers, since `RenderPipeline` drives the whole layer; and there is no longer zero
+GTest coverage — `modules/graphics-ext/tests/CNA/Graphics/` is where an audit of any of these files
+should start. The original assessment, for the five files it actually covered: This is CNA's own NOXNA extended
 render-pipeline settings scaffold (`PbrMaterial`/`RenderPipelineSettings`/`RenderQuality`/`ShadowQuality`/
 `TonemappingMode`), entirely gated behind the `CNA_NOXNA` CMake option (default OFF). Found a 9th
 documentation-rot instance (`RenderPipelineSettings.hpp` references a nonexistent

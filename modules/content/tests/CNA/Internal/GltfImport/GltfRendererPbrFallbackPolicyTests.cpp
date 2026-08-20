@@ -3336,16 +3336,16 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     // PIXIJS overrides CreateIndexBuffer16 locally to name itself in the refusal but does NOT
     // override CreateIndexBuffer32, so its 32-bit path is the shared throwing default -- which is
     // what puts it here rather than among the explicit rejecters (plan_pixijs.md).
-    constexpr std::array<const char*, 10> inheritedRejecters{{
+    constexpr std::array<const char*, 11> inheritedRejecters{{
         "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
-        "openvg", "pixijs", "sdl-renderer", "svg-dom",
+        "nanovg", "openvg", "pixijs", "sdl-renderer", "svg-dom",
     }};
 
     std::set<std::string> expected;
     for (const char* name : providers) { expected.insert(name); }
     for (const char* name : explicitRejecters) { expected.insert(name); }
     for (const char* name : inheritedRejecters) { expected.insert(name); }
-    ASSERT_EQ(45u, expected.size()) << "the policy sets must be disjoint";
+    ASSERT_EQ(46u, expected.size()) << "the policy sets must be disjoint";
 
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
@@ -3375,9 +3375,9 @@ TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFa
     // PIXIJS overrides CreateIndexBuffer16 locally to name itself in the refusal but does NOT
     // override CreateIndexBuffer32, so its 32-bit path is the shared throwing default -- which is
     // what puts it here rather than among the explicit rejecters (plan_pixijs.md).
-    constexpr std::array<const char*, 10> inheritedRejecters{{
+    constexpr std::array<const char*, 11> inheritedRejecters{{
         "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",
-        "openvg", "pixijs", "sdl-renderer", "svg-dom",
+        "nanovg", "openvg", "pixijs", "sdl-renderer", "svg-dom",
     }};
 
     const std::filesystem::path root = RepositoryRoot();

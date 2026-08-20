@@ -37,6 +37,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
+#include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
@@ -60,12 +61,12 @@ namespace Microsoft::Xna::Framework::Graphics
     class Effect;
     class RenderTarget2D;
     class RenderTargetCube;
-    class RenderTargetCube;
 }
 
 namespace CNA::Internal::Renderers
 {
     class IGraphicsRenderer;
+    class IStorageBufferRenderer;
 
     // Mirrors the definition in CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp. Declared here
     // rather than including that header, which this one deliberately does not pull into every
@@ -416,6 +417,51 @@ namespace Microsoft::Xna::Framework::Graphics
                                      int baseVertex, int minVertexIndex,
                                      int numVertices, int startIndex,
                                      int primitiveCount, int instanceCount);
+
+        /**
+         * @brief Draws with the counts and offsets read out of a GPU buffer rather than passed in.
+         *
+         * plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
+         * @p argumentByteOffset, written by whatever produced it -- usually a compute shader, in
+         * which case the numbers never reach the CPU at all. That is the point: reading them back
+         * to pass them as arguments is a pipeline stall, not merely a copy.
+         *
+         * **The range checks every other draw route performs are impossible here**, because the
+         * range is in GPU memory when the draw is issued. A count that leaves the bound buffer is
+         * undefined behaviour rather than an exception, and the shader that wrote it owns that
+         * obligation. What can still be checked is: a vertex buffer is bound, an effect is applied,
+         * the argument buffer is real, and the arguments lie inside it.
+         *
+         * @param primitiveType      The topology; the buffer supplies counts, never this.
+         * @param argumentBuffer     The buffer holding the arguments.
+         * @param argumentByteOffset Where in it they start, in bytes. Must be a multiple of 4.
+         * @throws System::NotSupportedException If the renderer does not report
+         *         `CNA::GraphicsCapability::IndirectDraw`, naming it.
+         * @throws std::runtime_error If no vertex buffer or no effect is bound.
+         * @throws System::ArgumentOutOfRangeException If @p argumentByteOffset is negative, not a
+         *         multiple of 4, or leaves no room for the arguments in @p argumentBuffer.
+         */
+        CNAEXT void DrawPrimitivesIndirectEXT(
+            PrimitiveType primitiveType,
+            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset);
+
+        /**
+         * @brief Indexed counterpart of @ref DrawPrimitivesIndirectEXT.
+         *
+         * @param primitiveType      The topology.
+         * @param argumentBuffer     The buffer holding a `CNA::IndirectDrawIndexedArguments`.
+         * @param argumentByteOffset Where in it they start, in bytes. Must be a multiple of 4.
+         * @throws System::NotSupportedException If the renderer does not report
+         *         `CNA::GraphicsCapability::IndirectDraw`, naming it.
+         * @throws std::runtime_error If no vertex buffer, index buffer or effect is bound.
+         * @throws System::ArgumentOutOfRangeException If @p argumentByteOffset is negative, not a
+         *         multiple of 4, or leaves no room for the arguments in @p argumentBuffer.
+         */
+        CNAEXT void DrawIndexedPrimitivesIndirectEXT(
+            PrimitiveType primitiveType,
+            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+            int argumentByteOffset);
         /**
          * @brief Draws non-indexed primitives from a user-supplied raw vertex buffer.
          *
@@ -1047,6 +1093,117 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return True if supported by the active renderer/device.
          */
         CNAEXT [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
+
+        /**
+         * @brief Returns whether the active renderer really creates a render target of the given
+         *        surface format, instead of substituting an 8-bit Color target for it.
+         *
+         * `RenderTarget2D` has always accepted a `SurfaceFormat`, but every renderer that has not
+         * implemented additional formats quietly produces a `Color` target regardless -- so a
+         * caller that needs an HDR target (`HdrBlendable`, `HalfVector4`, `Vector4`, ...) has no way
+         * to tell whether values above 1.0 will survive. This is that way, per format;
+         * `GraphicsCapability::FloatRenderTargets` and `HalfFloatRenderTargets` are the coarse
+         * summaries derived from it.
+         *
+         * @param format The surface format to ask about.
+         * @return True when a render target of that format is created faithfully.
+         */
+        CNAEXT [[nodiscard]] bool SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const;
+
+        /**
+         * @brief Returns the largest number of compute work groups a dispatch may request.
+         *
+         * plan_modern.md `MOD-1505`. Zero on every renderer without compute, which is also what a
+         * renderer that supports it but has not been asked yet reports -- so a caller checks
+         * `GraphicsCapability::ComputeShaders` first and reads these to size its dispatch.
+         *
+         * @param axis 0 for x, 1 for y, 2 for z.
+         * @return The limit, or 0 where compute is unsupported or the axis is out of range.
+         */
+        /**
+         * @brief Returns whether a `ShaderEffect`'s source text really determines the pixels.
+         *
+         * plan_modern.md `MOD-1699`. `GraphicsCapability::CustomEffects` says a renderer accepts a
+         * custom effect; this says the shader you wrote is what runs. They differ on real
+         * renderers: SOFTWARE and HEADLESS accept any source and render with their own fixed path,
+         * and Vulkan takes SPIR-V bytecode rather than GLSL text. A pass that assumes the first
+         * answer covers the second copies its input through and reports success.
+         *
+         * @return True when the supplied shader source is executed.
+         */
+        CNAEXT [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const;
+
+        /**
+         * @brief Returns whether this renderer's lit shaders really sample the shadow state.
+         *
+         * plan_modern.md `MOD-1699`. An effect accepts `IShadowReceiverEXT`'s state on every
+         * renderer -- that is what keeps a shadow-configured draw working where there is no shadow
+         * shader -- but only some renderers *use* it. This is the difference, asked of the
+         * renderer rather than inferred from a frame that came out unshadowed.
+         *
+         * @return True when a shadow-configured draw will actually be shadowed.
+         */
+        CNAEXT [[nodiscard]] bool SupportsShadowSamplingEXT() const;
+
+        /**
+         * @brief Returns whether this renderer's PBR shader honours an `ImageBasedLightEXT`.
+         *
+         * plan_modern.md `MOD-1699`. Same distinction as @ref SupportsShadowSamplingEXT: the
+         * bundle is carried everywhere and shaded with in some places.
+         *
+         * @return True when a bound environment will actually light the surface.
+         */
+        CNAEXT [[nodiscard]] bool SupportsImageBasedLightingEXT() const;
+
+        /**
+         * @brief Returns the colour space the swap chain is presenting in.
+         *
+         * plan_modern.md `MOD-2092`. `Srgb` on every CNA renderer today; see
+         * @ref SetDisplayColorSpaceEXT for why that is an answer rather than a gap.
+         *
+         * @return The current display colour space.
+         */
+        CNAEXT [[nodiscard]] CNA::DisplayColorSpace GetDisplayColorSpaceEXT() const;
+
+        /**
+         * @brief Asks the swap chain to present in a different colour space.
+         *
+         * An HDR swap chain is a property of the presentation path -- DXGI, a Vulkan surface
+         * format, a platform's own HDR opt-in -- rather than of a drawing API, and no CNA platform
+         * back end offers one yet. So this returns false for anything but `Srgb` today, which is
+         * the truth: a renderer that accepted the request without reconfiguring anything would have
+         * its caller encode for a display that is not there, and PQ pixels shown as sRGB are washed
+         * out and grey.
+         *
+         * @param space The space to present in.
+         * @return True when the swap chain now presents in that space.
+         */
+        CNAEXT bool SetDisplayColorSpaceEXT(CNA::DisplayColorSpace space);
+
+        /**
+         * @brief Returns whether the swap chain can present in a given colour space.
+         *
+         * @param space The space to ask about.
+         * @return True when @ref SetDisplayColorSpaceEXT would accept it.
+         */
+        CNAEXT [[nodiscard]] bool SupportsDisplayColorSpaceEXT(CNA::DisplayColorSpace space) const;
+
+        CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const;
+
+        /**
+         * @brief Returns the largest local size a compute shader may declare on one axis.
+         *
+         * @param axis 0 for x, 1 for y, 2 for z.
+         * @return The limit, or 0 where compute is unsupported or the axis is out of range.
+         */
+        CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const;
+
+        /**
+         * @brief Returns the largest product of a compute shader's declared local sizes.
+         *
+         * @return The limit, or 0 where compute is unsupported.
+         */
+        CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const;
 
         /**
          * @brief Returns the active renderer's real maximum single-axis texture dimension.

@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IShadowReceiverEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -21,7 +22,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * @brief Built-in effect for rendering skinned character models with bone transforms,
      *        lighting, optional fog, and a diffuse texture.
      */
-    class SkinnedEffect : public Effect, public IEffectMatrices, public IEffectLights, public IEffectFog
+    class SkinnedEffect : public Effect, public IEffectMatrices, public IEffectLights, public IEffectFog, public IShadowReceiverEXT
     {
     public:
         /** @brief Maximum number of bone transform matrices supported. */
@@ -371,7 +372,49 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void OnApply() override;
 
+
+    public:
+        // ---- CNAEXT: shadow reception (plan_modern.md MOD-820) ----------------------------
+
+        /** @brief Sets the shadow map this effect samples. @param shadowMap The map, or null. */
+        CNAEXT void setShadowMapEXT(Texture2D* shadowMap) override;
+        /** @brief Returns the attached shadow map, or null. */
+        CNAEXT [[nodiscard]] Texture2D* getShadowMapEXT() const override;
+        /** @brief Sets the light's view-projection matrix. @param lightViewProjection The matrix. */
+        CNAEXT void setLightViewProjectionEXT(const Matrix& lightViewProjection) override;
+        /** @brief Returns the light's view-projection matrix. */
+        CNAEXT [[nodiscard]] Matrix getLightViewProjectionEXT() const override;
+        /** @brief Enables or disables shadow sampling. @param enabled True to sample. */
+        CNAEXT void setShadowsEnabledEXT(bool enabled) override;
+        /** @brief Returns whether shadow sampling is enabled. */
+        CNAEXT [[nodiscard]] bool isShadowsEnabledEXT() const override;
+        /** @brief Sets the shadow comparison bias. @param bias The bias. */
+        CNAEXT void setShadowDepthBiasEXT(float bias) override;
+        /** @brief Returns the shadow comparison bias. */
+        CNAEXT [[nodiscard]] float getShadowDepthBiasEXT() const override;
+        /** @brief Sets the PCF radius in shadow-map texels. @param radius 0, 1 or 2. */
+        CNAEXT void setShadowFilterRadiusEXT(int radius) override;
+        /** @brief Returns the PCF radius in shadow-map texels. */
+        CNAEXT [[nodiscard]] int getShadowFilterRadiusEXT() const override;
+        /** @brief Supplies a cascaded shadow set. @param state The cascades. */
+        CNAEXT void setShadowCascadesEXT(const ShadowCascadeStateEXT& state) override;
+        /** @brief Returns the cascade set in use; `Count == 0` means a single map. */
+        CNAEXT [[nodiscard]] const ShadowCascadeStateEXT& getShadowCascadesEXT() const override;
+        /** @brief Supplies one punctual light and its shadow. @param light The light. */
+        CNAEXT void setPunctualLightEXT(const PunctualLightEXT& light) override;
+        /** @brief Returns the punctual light in use; `Kind == None` means there is none. */
+        CNAEXT [[nodiscard]] const PunctualLightEXT& getPunctualLightEXT() const override;
+
     private:
+
+        // CNAEXT shadow reception (MOD-820). Inert by default.
+        Texture2D* shadowMapEXT_ = nullptr;
+        Matrix lightViewProjectionEXT_{};
+        bool  shadowsEnabledEXT_ = false;
+        float shadowDepthBiasEXT_ = 0.0015f;
+        int   shadowFilterRadiusEXT_ = 1;   // 3x3, the default ShadowQuality::Medium asks for
+        ShadowCascadeStateEXT shadowCascadesEXT_{};
+        PunctualLightEXT punctualLightEXT_{};
         explicit SkinnedEffect(const SkinnedEffect& cloneSource);
 
         void CacheEffectParameters();

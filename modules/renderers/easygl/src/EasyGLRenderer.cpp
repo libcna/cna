@@ -26,16 +26,20 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 }
 
+#include "CNA/GraphicsImageAccess.hpp"
+#include "CNA/GraphicsMemoryBarrier.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/NotSupportedException.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <cstdlib>
 #include <iostream>
 #include <span>
@@ -63,6 +67,7 @@ namespace CNA::Internal::Renderers::EasyGL
 #include <stdexcept>
 #include "System/InvalidOperationException.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <iomanip>
 #include <memory>
 #include <sstream>
@@ -170,6 +175,236 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "mat4 cnaInstanceMatrix(){return mat4(cnaInstanceCol0,cnaInstanceCol1,cnaInstanceCol2,cnaInstanceCol3);}\n" \
 "vec4 cnaInstancePosition(vec4 p){return (uCnaInstanced>0.5)?cnaInstanceMatrix()*p:p;}\n" \
 "vec3 cnaInstanceDirection(vec3 d){return (uCnaInstanced>0.5)?mat3(cnaInstanceMatrix())*d:d;}\n"
+
+// plan_modern.md MOD-836..MOD-841: shadow reception, shared by every lit fragment shader so the
+// four of them cannot drift into four subtly different shadows.
+//
+// The map holds light-space distance rather than a depth buffer: CNA cannot sample a depth
+// attachment as a texture on every renderer, so CNA::Graphics::ShadowMap writes distance into an
+// ordinary colour target and this reads it back like any other texture.
+//
+// uShadowTexel carries 1/size rather than the shader calling textureSize(): that function is GLSL
+// ES 3.00 only, and these shaders are also transformed to ES 1.00 for the WebGL1/GLES2 profiles
+// (TransformGlslEs300BodyToEs100), which would reject it. The loop bounds are literal for the same
+// reason -- ES 1.00 requires a statically countable loop -- so the kernel is always 5x5 and
+// uShadowPcfRadius decides how much of it counts. Radius 0 is a single tap.
+//
+// Returns 1 where the surface is lit and 0 where a caster is fully in front of it, with the
+// fraction in between coming from the kernel: a single tap gives a hard, stair-stepped edge at
+// every shadow-map resolution.
+// Cascades (MOD-905/906/909/910) share the same code path: a single map is simply the case where
+// uCascadeCount is 0, and everything below it is skipped. Two shapes of restriction shape the
+// code more than taste does -- the ES 1.00 form these shaders are also compiled in forbids
+// dynamically indexing a uniform array in a fragment shader, so the cascade's matrix is selected
+// by four constant-index comparisons rather than by uCascadeMatrices[index]; and the cascades
+// share one atlas, so every lookup is clamped to its own slice or a PCF tap at the seam would
+// read the neighbouring cascade's texels.
+//
+// The cross-fade near a split (MOD-906) is not cosmetic either: without it the two cascades
+// disagree about where an edge is, and the disagreement draws a straight line across the ground at
+// the split distance -- more obviously wrong than the resolution change it is hiding.
+#define CNA_GL_SHADOW_DECL \
+"uniform sampler2D uShadowMap;\n" \
+"uniform mat4 uLightViewProj;\n" \
+"uniform float uShadowsEnabled;\n" \
+"uniform float uShadowBias;\n" \
+"uniform vec2 uShadowTexel;\n" \
+"uniform float uShadowPcfRadius;\n" \
+"uniform float uCascadeCount;\n" \
+"uniform mat4 uCascadeMatrices[4];\n" \
+"uniform vec4 uCascadeSplits;\n" \
+"uniform vec4 uCascadeViewZ;\n" \
+"uniform float uCascadeBlend;\n" \
+"uniform float uCascadeDebug;\n" \
+"float cnaShadowTap(vec3 uv,vec2 uvMin,vec2 uvMax){\n" \
+"    if(uv.z>1.0) return 1.0;\n" \
+"    float lit=0.0;\n" \
+"    float taps=0.0;\n" \
+"    for(int y=-2;y<=2;++y){\n" \
+"        for(int x=-2;x<=2;++x){\n" \
+"            float ring=max(abs(float(x)),abs(float(y)));\n" \
+"            if(ring>uShadowPcfRadius+0.5) continue;\n" \
+"            vec2 at=clamp(uv.xy+vec2(float(x),float(y))*uShadowTexel,uvMin,uvMax);\n" \
+"            float occluder=texture(uShadowMap,at).r;\n" \
+"            lit+=(uv.z-uShadowBias<=occluder)?1.0:0.0;\n" \
+"            taps+=1.0;\n" \
+"        }\n" \
+"    }\n" \
+"    return lit/max(taps,1.0);\n" \
+"}\n" \
+"mat4 cnaCascadeMatrix(int index){\n" \
+"    mat4 m=uCascadeMatrices[0];\n" \
+"    if(index==1) m=uCascadeMatrices[1];\n" \
+"    if(index==2) m=uCascadeMatrices[2];\n" \
+"    if(index==3) m=uCascadeMatrices[3];\n" \
+"    return m;\n" \
+"}\n" \
+"float cnaCascadeSplit(int index){\n" \
+"    float s=uCascadeSplits.x;\n" \
+"    if(index==1) s=uCascadeSplits.y;\n" \
+"    if(index==2) s=uCascadeSplits.z;\n" \
+"    if(index==3) s=uCascadeSplits.w;\n" \
+"    return s;\n" \
+"}\n" \
+"float cnaCascadeLookup(vec3 worldPos,int index,float count){\n" \
+"    vec4 atlas=cnaCascadeMatrix(index)*vec4(worldPos,1.0);\n" \
+"    vec3 uv=atlas.xyz/atlas.w;\n" \
+"    float slice=1.0/count;\n" \
+"    float x0=float(index)*slice;\n" \
+"    if(uv.x<x0||uv.x>x0+slice||uv.y<0.0||uv.y>1.0) return 1.0;\n" \
+"    vec2 uvMin=vec2(x0+uShadowTexel.x,uShadowTexel.y);\n" \
+"    vec2 uvMax=vec2(x0+slice-uShadowTexel.x,1.0-uShadowTexel.y);\n" \
+"    return cnaShadowTap(uv,uvMin,uvMax);\n" \
+"}\n" \
+"int cnaSelectCascade(float viewDepth,float count){\n" \
+"    int chosen=int(count)-1;\n" \
+"    for(int i=0;i<4;++i){\n" \
+"        if(float(i)>=count) break;\n" \
+"        if(viewDepth<=cnaCascadeSplit(i)){ chosen=i; break; }\n" \
+"    }\n" \
+"    return chosen;\n" \
+"}\n" \
+"float cnaShadowFactor(vec3 worldPos){\n" \
+"    if(uShadowsEnabled<0.5) return 1.0;\n" \
+"    if(uCascadeCount<0.5){\n" \
+"        vec4 lightSpace=uLightViewProj*vec4(worldPos,1.0);\n" \
+"        vec3 uv=lightSpace.xyz/lightSpace.w*0.5+0.5;\n" \
+"        if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) return 1.0;\n" \
+"        return cnaShadowTap(uv,vec2(0.0),vec2(1.0));\n" \
+"    }\n" \
+"    float viewDepth=-dot(vec4(worldPos,1.0),uCascadeViewZ);\n" \
+"    int index=cnaSelectCascade(viewDepth,uCascadeCount);\n" \
+"    float factor=cnaCascadeLookup(worldPos,index,uCascadeCount);\n" \
+"    float split=cnaCascadeSplit(index);\n" \
+"    if(uCascadeBlend>0.0&&float(index+1)<uCascadeCount&&viewDepth>split-uCascadeBlend){\n" \
+"        float t=clamp((viewDepth-(split-uCascadeBlend))/uCascadeBlend,0.0,1.0);\n" \
+"        factor=mix(factor,cnaCascadeLookup(worldPos,index+1,uCascadeCount),t);\n" \
+"    }\n" \
+"    return factor;\n" \
+"}\n" \
+"vec3 cnaCascadeDebugTint(vec3 worldPos){\n" \
+"    if(uCascadeDebug<0.5||uShadowsEnabled<0.5||uCascadeCount<0.5) return vec3(1.0);\n" \
+"    float viewDepth=-dot(vec4(worldPos,1.0),uCascadeViewZ);\n" \
+"    int index=cnaSelectCascade(viewDepth,uCascadeCount);\n" \
+"    if(index==0) return vec3(1.0,0.6,0.6);\n" \
+"    if(index==1) return vec3(0.6,1.0,0.6);\n" \
+"    if(index==2) return vec3(0.6,0.6,1.0);\n" \
+"    return vec3(1.0,1.0,0.6);\n" \
+"}\n"
+
+// plan_modern.md MOD-1005/MOD-1006: one punctual light -- point or spot -- with its own shadow.
+// Kept beside the directional lookup rather than folded into it because the two shadow different
+// lights: one answers "is the sun blocked here", the other "is that lamp blocked here", and
+// multiplying one light's contribution by the other's visibility produces a plausible image and no
+// clue that anything is wrong.
+//
+// Both maps store *distance from the light over its range*, so the comparison is the same
+// arithmetic for a cube face and a spot map, and the cube is sampled by direction -- which is the
+// whole reason distance is stored instead of projected depth.
+//
+// Three choices inside it are worth stating. A cube face is chosen by the sampled direction alone,
+// so a point light needs no per-face bookkeeping in the lookup -- the six faces are one texture
+// here. The cube path takes a single tap while the spot path filters 3x3: filtering across a cube
+// face's edge needs seamless sampling, which is not available on every profile these shaders
+// compile in, and a tap that silently wrapped to the wrong face would draw a stripe of shadow
+// along every cube seam. And the inverse-square falloff is windowed to zero at the range, so the
+// light ends exactly where its shadow map ends -- an unwindowed one never reaches zero and leaves
+// a visible step at the boundary, which is precisely where the shadow stops being available.
+#define CNA_GL_PUNCTUAL_DECL \
+"uniform float uPunctualKind;\n" \
+"uniform vec3 uPunctualPosition;\n" \
+"uniform vec3 uPunctualDirection;\n" \
+"uniform vec3 uPunctualDiffuse;\n" \
+"uniform float uPunctualRange;\n" \
+"uniform float uPunctualCosInner;\n" \
+"uniform float uPunctualCosOuter;\n" \
+"uniform float uPunctualBias;\n" \
+"uniform float uPunctualHasShadow;\n" \
+"uniform vec2 uPunctualTexel;\n" \
+"uniform samplerCube uPunctualCube;\n" \
+"uniform sampler2D uPunctualMap;\n" \
+"uniform mat4 uPunctualViewProj;\n" \
+"float cnaPunctualShadow(vec3 worldPos,vec3 toLight,float distanceToLight){\n" \
+"    if(uPunctualHasShadow<0.5) return 1.0;\n" \
+"    float here=clamp(distanceToLight/uPunctualRange,0.0,1.0);\n" \
+"    if(uPunctualKind<1.5){\n" \
+"        float occluder=texture(uPunctualCube,-toLight).r;\n" \
+"        return (here-uPunctualBias<=occluder)?1.0:0.0;\n" \
+"    }\n" \
+"    vec4 clip=uPunctualViewProj*vec4(worldPos,1.0);\n" \
+"    if(clip.w<=0.0) return 1.0;\n" \
+"    vec3 uv=clip.xyz/clip.w*0.5+0.5;\n" \
+"    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0) return 1.0;\n" \
+"    float lit=0.0;\n" \
+"    for(int y=-1;y<=1;++y){\n" \
+"        for(int x=-1;x<=1;++x){\n" \
+"            vec2 at=clamp(uv.xy+vec2(float(x),float(y))*uPunctualTexel,vec2(0.0),vec2(1.0));\n" \
+"            float occluder=texture(uPunctualMap,at).r;\n" \
+"            lit+=(here-uPunctualBias<=occluder)?1.0:0.0;\n" \
+"        }\n" \
+"    }\n" \
+"    return lit/9.0;\n" \
+"}\n" \
+"vec3 cnaPunctualLight(vec3 worldPos,vec3 normal){\n" \
+"    if(uPunctualKind<0.5) return vec3(0.0);\n" \
+"    vec3 offset=uPunctualPosition-worldPos;\n" \
+"    float distanceToLight=length(offset);\n" \
+"    if(distanceToLight>uPunctualRange||distanceToLight<1e-5) return vec3(0.0);\n" \
+"    vec3 toLight=offset/distanceToLight;\n" \
+"    float t=distanceToLight/uPunctualRange;\n" \
+"    float window=clamp(1.0-t*t*t*t,0.0,1.0);\n" \
+"    float attenuation=window*window/(1.0+distanceToLight*distanceToLight);\n" \
+"    if(uPunctualKind>1.5){\n" \
+"        float cosAngle=dot(normalize(uPunctualDirection),-toLight);\n" \
+"        float cone=clamp((cosAngle-uPunctualCosOuter)/max(uPunctualCosInner-uPunctualCosOuter,1e-4),0.0,1.0);\n" \
+"        attenuation*=cone*cone;\n" \
+"    }\n" \
+"    float ndotl=max(dot(normal,toLight),0.0);\n" \
+"    return uPunctualDiffuse*ndotl*attenuation*cnaPunctualShadow(worldPos,toLight,distanceToLight);\n" \
+"}\n"
+
+// plan_modern.md MOD-1225: the split-sum ambient term, replacing the flat uAmbientColor when an
+// environment is bound. Three inputs that were generated together (CNA::Graphics::
+// EnvironmentProcessor): the irradiance cube read by the normal, the prefiltered specular cube
+// whose mip IS the roughness, and the BRDF table that says how much of the reflection survives at
+// this angle and roughness.
+//
+// A function rather than another CNA_GL_*_DECL macro, because one line of it depends on the
+// profile: selecting a mip explicitly needs textureLod, which GLSL ES 1.00 fragment shaders do not
+// have. Those profiles read the cube's base level instead, so a rough surface reflects a sharp
+// environment -- wrong, visibly so on a rough metal, and the honest alternative to silently
+// compiling nothing at all. Every other profile gets the real roughness ramp.
+//
+// The Fresnel term uses max(1-roughness, F0) rather than plain F0: at grazing angles a rough
+// surface must not reflect as hard as a mirror, and the plain Schlick form makes it do exactly
+// that. Diffuse and specular are then weighted so they do not both claim the same energy, and
+// metals get no diffuse at all.
+inline std::string CnaGlIblDecl(const bool explicitLodAvailable)
+{
+    const char* const prefilteredSample = explicitLodAvailable
+        ? "textureLod(uIblSpecular,R,lod)"
+        : "texture(uIblSpecular,R)";
+    return std::string(
+"uniform samplerCube uIblIrradiance;\n"
+"uniform samplerCube uIblSpecular;\n"
+"uniform sampler2D uIblBrdfLut;\n"
+"uniform float uIblEnabled;\n"
+"uniform float uIblMipCount;\n"
+"uniform float uIblIntensity;\n"
+"vec3 cnaIblAmbient(vec3 N,vec3 V,vec3 albedo,vec3 F0,float roughness,float metallic,float occlusion){\n"
+"    if(uIblEnabled<0.5) return vec3(0.0);\n"
+"    float NdotV=clamp(dot(N,V),1e-4,1.0);\n"
+"    vec3 kS=F0+(max(vec3(1.0-roughness),F0)-F0)*pow(1.0-NdotV,5.0);\n"
+"    vec3 kD=(1.0-kS)*(1.0-metallic);\n"
+"    vec3 diffuse=texture(uIblIrradiance,N).rgb*albedo*kD;\n"
+"    vec3 R=reflect(-V,N);\n"
+"    float lod=roughness*max(uIblMipCount-1.0,0.0);\n"
+"    vec3 prefiltered=") + prefilteredSample + std::string(".rgb;\n"
+"    vec2 ab=texture(uIblBrdfLut,vec2(NdotV,roughness)).rg;\n"
+"    vec3 specular=prefiltered*(kS*ab.x+ab.y);\n"
+"    return (diffuse+specular)*uIblIntensity*occlusion;\n"
+"}\n");
+}
 
 namespace CNA::Internal::Renderers::EasyGL
 {
@@ -1604,16 +1839,165 @@ if (!ProfileIsEs2ApiGeneration())
         if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
     }
 
+    int EasyGLEffectRenderer::ArrayUniformLocation(const char* name)
+    {
+        // GLSL names an array uniform by its first element, and whether a driver also accepts the
+        // bare array name is a driver decision rather than a specified one. Looking for both is
+        // the difference between an SSAO kernel that occludes and one that silently stays at the
+        // origin -- there is no error either way, only a black-and-white image where an ambient
+        // occlusion pass should be.
+        const int direct = program_.uniform_location(name);
+        if (direct >= 0)
+            return direct;
+        return program_.uniform_location((std::string(name) + "[0]").c_str());
+    }
+
     void EasyGLEffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
     {
-        const int loc = program_.uniform_location(name);
+        const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count)), 1);
     }
 
     void EasyGLEffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
     {
-        const int loc = program_.uniform_location(name);
+        const int loc = ArrayUniformLocation(name);
         if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
+    }
+
+    void EasyGLEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
+    {
+        const int loc = ArrayUniformLocation(name);
+        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 3), 3);
+    }
+
+    void EasyGLEffectRenderer::SetUniformMat4Array(const char* name, const float* matrices,
+                                                  int count)
+    {
+        const int loc = ArrayUniformLocation(name);
+        if (loc >= 0 && count > 0)
+            ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{loc}, count, 0, matrices);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // plan_modern.md MOD-1511..MOD-1515: compute shaders and shader storage buffers.
+
+    EasyGLStorageBufferRenderer::EasyGLStorageBufferRenderer(const std::size_t byteSize)
+        : byteSize_(byteSize)
+    {
+        buffer_.create();
+        // Allocated once with no initial data; DynamicDraw because the whole point of a storage
+        // buffer is that something writes it repeatedly -- usually the GPU itself.
+        buffer_.set_data(::easygl::BufferTarget::ShaderStorage, nullptr, byteSize_,
+                         ::easygl::BufferUsage::DynamicDraw);
+    }
+
+    EasyGLStorageBufferRenderer::~EasyGLStorageBufferRenderer() = default;
+
+    void EasyGLStorageBufferRenderer::SetData(const void* data, const std::size_t byteSize)
+    {
+        if (data == nullptr || byteSize == 0) return;
+        buffer_.set_sub_data(::easygl::BufferTarget::ShaderStorage, data,
+                             byteSize > byteSize_ ? byteSize_ : byteSize, 0);
+    }
+
+    void EasyGLStorageBufferRenderer::GetData(void* out, const std::size_t byteSize) const
+    {
+        if (out == nullptr || byteSize == 0) return;
+        const std::size_t bytes = byteSize > byteSize_ ? byteSize_ : byteSize;
+        // glGetBufferSubData is desktop-only; mapping for read is the portable form and is what
+        // the GL ES 3.1 contexts this renderer usually holds actually provide.
+        void* mapped = buffer_.map_range(::easygl::BufferTarget::ShaderStorage, 0,
+                                         static_cast<std::ptrdiff_t>(bytes),
+                                         ::metagl::MapBufferAccessMask::Read);
+        if (mapped == nullptr) return;
+        std::memcpy(out, mapped, bytes);
+        buffer_.unmap(::easygl::BufferTarget::ShaderStorage);
+    }
+
+    void EasyGLStorageBufferRenderer::BindBase(const int binding) const
+    {
+        buffer_.bind_base(::easygl::BufferTarget::ShaderStorage,
+                          static_cast<unsigned int>(binding));
+    }
+
+    void EasyGLStorageBufferRenderer::BindAsDrawIndirect() const
+    {
+        buffer_.bind(::easygl::BufferTarget::DrawIndirect);
+    }
+
+    void EasyGLComputeShaderRenderer::BindTexture(const int unit, ITextureRenderer* texture)
+    {
+        if (texture == nullptr) return;
+        texture->BindGL(unit);
+        ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+    }
+
+    bool EasyGLComputeShaderRenderer::CompileProgram(const std::string& computeSrc)
+    {
+        compileError_.clear();
+        valid_ = false;
+        ::easygl::Shader cs(::easygl::ShaderType::Compute);
+        cs.create();
+        cs.compile_from_source(computeSrc.c_str());
+        if (!cs.is_compiled())
+        {
+            compileError_ = "CS: " + cs.info_log();
+            return false;
+        }
+        program_.create();
+        program_.attach(cs);
+        program_.link();
+        if (!program_.is_linked())
+        {
+            compileError_ = "Link: " + program_.info_log();
+            return false;
+        }
+        valid_ = true;
+        return true;
+    }
+
+    void EasyGLComputeShaderRenderer::Bind()
+    {
+        if (valid_) program_.use();
+    }
+
+    void EasyGLComputeShaderRenderer::SetUniformInt(const char* name, const int value)
+    {
+        if (!valid_) return;
+        const int location = program_.uniform_location(name);
+        if (location >= 0) program_.set_uniform(location, value);
+    }
+
+    void EasyGLComputeShaderRenderer::SetUniformFloat(const char* name, const float value)
+    {
+        if (!valid_) return;
+        const int location = program_.uniform_location(name);
+        if (location >= 0) program_.set_uniform(location, value);
+    }
+
+    void EasyGLComputeShaderRenderer::BindStorageBuffer(const int binding,
+                                                        IStorageBufferRenderer* buffer)
+    {
+        if (buffer == nullptr) return;
+        static_cast<EasyGLStorageBufferRenderer*>(buffer)->BindBase(binding);
+    }
+
+    void EasyGLComputeShaderRenderer::BindImageTexture(const int unit, ITextureRenderer* texture,
+                                                        const int accessMode)
+    {
+        if (texture == nullptr) return;
+        auto access = ::metagl::ImageAccess::ReadWrite;
+        if (accessMode == static_cast<int>(CNA::GraphicsImageAccess::ReadOnly))
+            access = ::metagl::ImageAccess::ReadOnly;
+        else if (accessMode == static_cast<int>(CNA::GraphicsImageAccess::WriteOnly))
+            access = ::metagl::ImageAccess::WriteOnly;
+
+        // RGBA8 because every CNA texture is SurfaceFormat::Color (Texture::ValidateFormat admits
+        // nothing else), so the image format is not a choice the caller could make differently.
+        ::metagl::glBindImageTexture(
+            static_cast<::metagl::ImageUnit>(unit),
+            ::metagl::TextureId{static_cast<EasyGLTextureRenderer*>(texture)->texture.native_handle()},
+            0, GL_FALSE, 0, access, ::metagl::InternalFormat::Rgba8);
     }
 
     void EasyGLEffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
@@ -1735,6 +2119,83 @@ if (!ProfileIsEs2ApiGeneration())
         // See the constructor -- no GL query objects exist under the OPENGLES2 profile.
         query_.create();
 }
+    }
+
+    // --- EasyGLGpuTimerRenderer ---
+
+    namespace {
+        // GL_TIME_ELAPSED. Not in metagl's QueryTarget, which is written to the ES 3.0 core set
+        // where the timer query is an extension rather than core. Cast once, here.
+        constexpr ::metagl::QueryTarget kTimeElapsed = static_cast<::metagl::QueryTarget>(0x88BF);
+    }
+
+    EasyGLGpuTimerRenderer::EasyGLGpuTimerRenderer(::easygl::ResourceRegistry* registry)
+        : registry_(registry)
+    {
+        create();
+        if (registry_) registry_->add(this);
+    }
+
+    EasyGLGpuTimerRenderer::~EasyGLGpuTimerRenderer()
+    {
+        if (registry_) registry_->remove(this);
+        if (created_ && !metagl::IsContextLost())
+        {
+            ::metagl::glDeleteQueries(1, &id_);
+        }
+    }
+
+    void EasyGLGpuTimerRenderer::create()
+    {
+        if (metagl::IsContextLost()) return;
+        ::metagl::glGenQueries(1, &id_);
+        created_ = id_.value != 0;
+    }
+
+    void EasyGLGpuTimerRenderer::Begin()
+    {
+        if (metagl::IsContextLost() || !created_ || open_) return;
+        ::metagl::glBeginQuery(kTimeElapsed, id_);
+        open_ = true;
+    }
+
+    void EasyGLGpuTimerRenderer::End()
+    {
+        if (metagl::IsContextLost() || !created_ || !open_) return;
+        ::metagl::glEndQuery(kTimeElapsed);
+        open_ = false;
+    }
+
+    bool EasyGLGpuTimerRenderer::IsResultAvailable() const
+    {
+        if (metagl::IsContextLost() || !created_ || open_) return false;
+        ::metagl::GLuint available = 0;
+        ::metagl::glGetQueryObjectuiv(id_, ::metagl::QueryObjectParameter::ResultAvailable,
+                                      &available);
+        return available != 0;
+    }
+
+    std::uint64_t EasyGLGpuTimerRenderer::ElapsedNanoseconds() const
+    {
+        if (!IsResultAvailable()) return 0;
+        ::metagl::GLuint nanoseconds = 0;
+        // 32-bit, because that is what metagl exposes: it saturates a little over 4.29 seconds.
+        // No pass this layer measures is within three orders of magnitude of that, and a caller
+        // that hits it has a hang rather than a measurement.
+        ::metagl::glGetQueryObjectuiv(id_, ::metagl::QueryObjectParameter::Result, &nanoseconds);
+        return static_cast<std::uint64_t>(nanoseconds);
+    }
+
+    void EasyGLGpuTimerRenderer::release_gl_handle_only()
+    {
+        id_ = ::metagl::QueryId{};
+        created_ = false;
+        open_ = false;
+    }
+
+    void EasyGLGpuTimerRenderer::recreate_gl_resource()
+    {
+        create();
     }
 
     // --- EasyGLTextureRenderer ---
@@ -1904,12 +2365,75 @@ else
         }
     }
 
+    // plan_modern.md MOD-116: maps a Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal to
+    // the GL colour storage a render target of that format needs. Data, not a switch chain buried in
+    // the allocation code, because the identical triple is needed in three places: the texture's
+    // per-level storage, the multisample colour renderbuffer, and the probe that decides whether
+    // this GL context can render to the format at all.
+    //
+    // Only the formats CNA's HDR pipeline actually allocates are listed. Everything else is
+    // deliberately absent and refused rather than silently substituted -- a caller who asks for
+    // Rgba64 and is handed 8-bit Color has no way to find out, which is the exact failure mode
+    // MOD-100 exists to end.
+    struct RenderTargetColorStorage
+    {
+        ::metagl::InternalFormat internalFormat;
+        ::metagl::PixelFormat    pixelFormat;
+        ::metagl::PixelType      pixelType;
+        bool                     isFloat;      ///< Needs a float-renderable colour buffer.
+        bool                     isFullFloat;  ///< 32-bit per channel (vs 16-bit half float).
+        int                      bytesPerPixel;///< Readback stride per texel, for GetData.
+    };
+
+    static bool MapRenderTargetColorFormat(int surfaceFormat, RenderTargetColorStorage& out)
+    {
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Color:
+            out = {RgbaTexImageInternalFormat(), ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::UnsignedByte, false, false, 4};
+            return true;
+        case SurfaceFormat::Single:
+            out = {::metagl::InternalFormat::R32F, ::metagl::PixelFormat::Red,
+                   ::metagl::PixelType::Float, true, true, 4};
+            return true;
+        case SurfaceFormat::Vector2:
+            out = {::metagl::InternalFormat::Rg32F, ::metagl::PixelFormat::Rg,
+                   ::metagl::PixelType::Float, true, true, 8};
+            return true;
+        case SurfaceFormat::Vector4:
+            out = {::metagl::InternalFormat::Rgba32F, ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::Float, true, true, 16};
+            return true;
+        case SurfaceFormat::HalfSingle:
+            out = {::metagl::InternalFormat::R16F, ::metagl::PixelFormat::Red,
+                   ::metagl::PixelType::HalfFloat, true, false, 2};
+            return true;
+        case SurfaceFormat::HalfVector2:
+            out = {::metagl::InternalFormat::Rg16F, ::metagl::PixelFormat::Rg,
+                   ::metagl::PixelType::HalfFloat, true, false, 4};
+            return true;
+        case SurfaceFormat::HalfVector4:
+        case SurfaceFormat::HdrBlendable:
+            // HdrBlendable is XNA's "float format for HDR data"; on Windows it was RGBA16F, and CNA
+            // makes that equivalence explicit rather than inventing a third meaning for it.
+            out = {::metagl::InternalFormat::Rgba16F, ::metagl::PixelFormat::Rgba,
+                   ::metagl::PixelType::HalfFloat, true, false, 8};
+            return true;
+        default:
+            return false;
+        }
+    }
+
     EasyGLRenderTargetRenderer::EasyGLRenderTargetRenderer(int w, int h, int depthFormat,
                                                           ::easygl::ResourceRegistry* registry,
                                                           std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                                          bool mipMap, int multiSampleCount)
-        : width_(w), height_(h), depthFormat_(depthFormat), mipMap_(mipMap),
-          multiSampleCount_(multiSampleCount), registry_(registry), binding_(std::move(binding))
+                                                          bool mipMap, int multiSampleCount,
+                                                          int surfaceFormat)
+        : width_(w), height_(h), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat),
+          mipMap_(mipMap), multiSampleCount_(multiSampleCount), registry_(registry),
+          binding_(std::move(binding))
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
         CreateResources();
@@ -2001,6 +2525,17 @@ if (ProfileIsEs2ApiGeneration())
         // GetMultiSampleCount() then reports 0, keeping the public applied count truthful.
         multiSampleCount_ = 0;
 }
+        // plan_modern.md MOD-115: the colour storage this target's SurfaceFormat calls for. The
+        // request is validated before construction (EasyGLRenderer::CreateRenderTarget2DEXT refuses
+        // a format this context cannot render to), so an unmapped ordinal here would be a caller
+        // bypassing that route; fall back to Color rather than leaving the storage undefined.
+        RenderTargetColorStorage colorStorage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, colorStorage))
+        {
+            MapRenderTargetColorFormat(0, colorStorage);
+            surfaceFormat_ = 0;
+        }
+
         colorTex_.create();
         // The 6-parameter set_image_2d overload does not call glBindTexture first;
         // bind the texture explicitly so glTexImage2D targets our handle.
@@ -2015,10 +2550,10 @@ if (ProfileIsEs2ApiGeneration())
             for (int level = 0; level < levelCount_; ++level)
             {
                 colorTex_.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                       RgbaTexImageInternalFormat(),
+                                       colorStorage.internalFormat,
                                        levelW, levelH,
-                                       ::metagl::PixelFormat::Rgba,
-                                       ::metagl::PixelType::UnsignedByte,
+                                       colorStorage.pixelFormat,
+                                       colorStorage.pixelType,
                                        nullptr);
                 levelW = std::max(1, levelW / 2);
                 levelH = std::max(1, levelH / 2);
@@ -2090,8 +2625,11 @@ else
             // target, written by UnbindAsRenderTarget()'s blit, never rendered into directly.
             msaaColorRbo_.create();
             msaaColorRbo_.bind();
+            // MOD-115: the multisample buffer must carry the same colour format as the resolve
+            // texture -- glBlitFramebuffer requires compatible formats, and a float target whose
+            // multisample side stayed Rgba8 would clamp exactly the values HDR exists to keep.
             msaaColorRbo_.set_storage_multisample(multiSampleCount_,
-                                                   ::metagl::InternalFormat::Rgba8,
+                                                   colorStorage.internalFormat,
                                                    width_, height_);
             fbo_.attach_renderbuffer(::easygl::FramebufferTarget::Framebuffer,
                                      ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
@@ -2126,6 +2664,26 @@ else
                     depthRbo_.set_storage(depthGlFormat, width_, height_);
                 AttachDepthRenderbufferToBoundFbo(fbo_, depthAttachment, depthRbo_);
             }
+        }
+
+        // plan_modern.md MOD-119: ask GL whether the combination it was just handed is actually
+        // renderable, and say so if it is not. A driver can accept every individual call above and
+        // still refuse the assembled framebuffer -- a colour format that is sampleable but not
+        // renderable, a sample count the depth attachment cannot match, a size beyond a limit. All
+        // of that used to surface as a target that silently rendered nowhere, which is the hardest
+        // shape of bug to trace back to its cause; the format and the GL status make it a
+        // one-glance diagnosis instead.
+        const ::metagl::FramebufferStatus status =
+            fbo_.check_status(::easygl::FramebufferTarget::Framebuffer);
+        if (status != ::metagl::FramebufferStatus::Complete)
+        {
+            ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
+            throw std::runtime_error(
+                "EasyGL: render target " + std::to_string(width_) + "x" + std::to_string(height_) +
+                " (SurfaceFormat ordinal " + std::to_string(surfaceFormat_) +
+                ", DepthFormat ordinal " + std::to_string(depthFormat_) +
+                ", samples " + std::to_string(multiSampleCount_) +
+                ") is not framebuffer-complete: " + std::string(::metagl::to_string(status)));
         }
 
         ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::Framebuffer);
@@ -2171,9 +2729,16 @@ else
     bool EasyGLRenderTargetRenderer::GetData(
         int level, int x, int y, int w, int h, void* data, int dataLength) const
     {
+        // plan_modern.md MOD-108: a float target's texels are 2, 4, 8 or 16 bytes wide, not always
+        // 4. Reading one back as RGBA8 would silently clamp exactly the above-1.0 values the format
+        // was chosen to keep -- the readback has to speak the target's own format.
+        RenderTargetColorStorage colorStorage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, colorStorage))
+            MapRenderTargetColorFormat(0, colorStorage);
+
         if (!data || level < 0 || w <= 0 || h <= 0
             || static_cast<std::int64_t>(dataLength)
-                < static_cast<std::int64_t>(w) * h * 4)
+                < static_cast<std::int64_t>(w) * h * colorStorage.bytesPerPixel)
             throw std::invalid_argument(
                 "EasyGLRenderTargetRenderer::GetData: invalid destination or range.");
         if (level >= levelCount_)
@@ -2251,10 +2816,10 @@ if (!ProfileIsEs2ApiGeneration())
 }
         ::metagl::glReadPixels(
             x, levelHeight - y - h, w, h,
-            ::metagl::PixelFormat::Rgba,
-            ::metagl::PixelType::UnsignedByte, data);
+            colorStorage.pixelFormat,
+            colorStorage.pixelType, data);
 
-        const int rowBytes = w * 4;
+        const int rowBytes = w * colorStorage.bytesPerPixel;
         auto* pixels = static_cast<std::uint8_t*>(data);
         std::vector<std::uint8_t> row(static_cast<std::size_t>(rowBytes));
         for (int topRow = 0; topRow < h / 2; ++topRow)
@@ -2341,11 +2906,11 @@ if (ProfileIsEs2ApiGeneration())
 
     // --- EasyGLRenderTargetCubeRenderer ---
 
-    EasyGLRenderTargetCubeRenderer::EasyGLRenderTargetCubeRenderer(int size, int depthFormat,
-                                                                    ::easygl::ResourceRegistry* registry,
-                                                                    std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                                                    bool mipMap, int multiSampleCount)
-        : size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
+    EasyGLRenderTargetCubeRenderer::EasyGLRenderTargetCubeRenderer(
+        int size, int depthFormat, ::easygl::ResourceRegistry* registry,
+        std::weak_ptr<EasyGLBoundTargetEXT> binding, bool mipMap, int multiSampleCount,
+        int surfaceFormat)
+        : size_(size), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat), mipMap_(mipMap),
           multiSampleCount_(multiSampleCount), registry_(registry), binding_(std::move(binding))
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
@@ -2408,6 +2973,15 @@ if (ProfileIsEs2ApiGeneration())
         // renderbuffers/blit, so the requested preference degrades to single-sample.
         multiSampleCount_ = 0;
 }
+        // plan_modern.md MOD-107: the same storage description the 2D targets use, so a float cube
+        // face and a float 2D target cannot end up with different GL formats.
+        RenderTargetColorStorage cubeStorage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat_, cubeStorage))
+        {
+            MapRenderTargetColorFormat(0, cubeStorage);
+            surfaceFormat_ = 0;
+        }
+
         cubeTex_.create();
         cubeTex_.bind(::easygl::TextureTarget::TextureCubeMap);
         // Allocate storage for all 6 faces, all mip levels (see EasyGLRenderTargetRenderer's
@@ -2426,10 +3000,10 @@ if (ProfileIsEs2ApiGeneration())
             for (int level = 0; level < levelCount_; ++level)
             {
                 cubeTex_.set_image_2d(faceTarget, level,
-                                       RgbaTexImageInternalFormat(),
+                                       cubeStorage.internalFormat,
                                        levelSize, levelSize,
-                                       ::metagl::PixelFormat::Rgba,
-                                       ::metagl::PixelType::UnsignedByte,
+                                       cubeStorage.pixelFormat,
+                                       cubeStorage.pixelType,
                                        nullptr);
                 levelSize = std::max(1, levelSize / 2);
             }
@@ -2485,8 +3059,10 @@ else
             {
                 rbo.create();
                 rbo.bind();
+                // MOD-107: same reason as the 2D target's multisample storage -- the resolve blit
+                // needs compatible formats, and an RGBA8 multisample side would clamp a float face.
                 rbo.set_storage_multisample(multiSampleCount_,
-                                             ::metagl::InternalFormat::Rgba8,
+                                             cubeStorage.internalFormat,
                                              size_, size_);
             }
             // Face 0 is attached here only so this FBO is complete the moment it exists;
@@ -3354,7 +3930,12 @@ if (ProfileUsesGlslEs100())
                          "anisotropic filtering: "
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
-                      << "; SurfaceFormat: Color only (Task 176)";
+                      << "; texture SurfaceFormat: Color only (Task 176)"
+                      // plan_modern.md MOD-117: render targets are no longer Color-only, and the
+                      // answer is driver-dependent, so it is probed rather than asserted.
+                      << "; render-target SurfaceFormat: Color"
+                      << (ProbeFloatRenderTargetSupportEXT(false) ? " + half-float (RGBA16F)" : "")
+                      << (ProbeFloatRenderTargetSupportEXT(true) ? " + float (RGBA32F)" : "");
             CNA::Logger::Info(capabilityMessage.str(), CNA::LogCategory::RENDER);
         }
 
@@ -3852,6 +4433,274 @@ if (!ProfileIsEs2ApiGeneration())
                                                            mipMap, multiSampleCount);
     }
 
+    std::unique_ptr<IRenderTargetRenderer> EasyGLRenderer::CreateRenderTarget2DEXT(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        // plan_modern.md MOD-115: refuse rather than substitute. The shared default of this factory
+        // drops the format and hands back a Color target, which is invisible to the caller; a
+        // renderer that has genuinely implemented formats owes an honest answer instead, and
+        // GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() is the way to ask in advance.
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
+        {
+            throw std::runtime_error(
+                "EasyGL: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as a render target on this GL context. Query "
+                "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
+        }
+        return std::make_unique<EasyGLRenderTargetRenderer>(w, h, depthFormat, RegistryPtr(), bound_,
+                                                           mipMap, multiSampleCount, surfaceFormat);
+    }
+
+    RendererFormatVerdict EasyGLRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+    {
+        // plan_modern.md MOD-104/MOD-117. Color and the float formats are this renderer's own
+        // answer; everything else defers to the framework rule, exactly as before this change --
+        // widening the verdict beyond what CreateResources can actually allocate would put the
+        // caller back in the "asked for one format, silently got another" position.
+        RenderTargetColorStorage storage{};
+        if (!MapRenderTargetColorFormat(surfaceFormat, storage))
+            return RendererFormatVerdict::Defer;
+        if (!storage.isFloat)
+            return RendererFormatVerdict::Supported;   // Color: every profile, always.
+        return ProbeFloatRenderTargetSupportEXT(storage.isFullFloat)
+            ? RendererFormatVerdict::Supported
+            : RendererFormatVerdict::Unsupported;
+    }
+
+    bool EasyGLRenderer::SupportsComputeShadersEXT() const
+    {
+        // The runtime context decides, not the compile-time profile: this renderer asks for ES 3.0
+        // and Mesa routinely hands it 3.2. WebGL has no compute in any version, so it is excluded
+        // by name rather than by version comparison.
+        const auto& capabilities = device.capabilities();
+        if (capabilities.is_webgl()) return false;
+        if (capabilities.is_opengles()) return capabilities.is_at_least(3, 1);
+        if (capabilities.is_opengl()) return capabilities.is_at_least(4, 3);
+        return false;
+    }
+
+    bool EasyGLRenderer::SupportsIndirectDrawEXT() const
+    {
+        // Same API generation as compute, asked as its own question: ES 3.1 and desktop GL 4.0 both
+        // have glDrawArraysIndirect, and WebGL has it in no version -- WebGL 2 is ES 3.0 and
+        // WebGL 2 compute never shipped. The desktop floor is 4.0 rather than compute's 4.3,
+        // because indirect draws arrived three versions earlier than compute shaders did; a context
+        // between the two really can draw indirectly and not dispatch, and reporting the truth
+        // there costs nothing.
+        const auto& capabilities = device.capabilities();
+        if (capabilities.is_webgl()) return false;
+        if (capabilities.is_opengles()) return capabilities.is_at_least(3, 1);
+        if (capabilities.is_opengl()) return capabilities.is_at_least(4, 0);
+        return false;
+    }
+
+    bool EasyGLRenderer::SupportsGpuTimerEXT() const
+    {
+        // Two different answers for two different APIs. Desktop GL has GL_TIME_ELAPSED in core from
+        // 3.3 (ARB_timer_query); ES has it only through GL_EXT_disjoint_timer_query, which many
+        // drivers -- software rasterisers in particular -- simply do not ship. Where it is absent
+        // the answer is false, and CNA::Graphics::GpuTimer refuses rather than handing back a CPU
+        // clock reading: the whole reason to measure on the GPU is that the CPU number is the time
+        // the driver took to *accept* the work.
+        const auto& capabilities = device.capabilities();
+        if (capabilities.is_webgl()) return false;
+        if (capabilities.is_opengles())
+            return ::metagl::HasExtension("GL_EXT_disjoint_timer_query");
+        if (capabilities.is_opengl())
+            return capabilities.is_at_least(3, 3)
+                || ::metagl::HasExtension("GL_ARB_timer_query")
+                || ::metagl::HasExtension("GL_EXT_timer_query");
+        return false;
+    }
+
+    std::unique_ptr<IGpuTimerRenderer> EasyGLRenderer::CreateGpuTimerEXT()
+    {
+        if (!SupportsGpuTimerEXT()) return nullptr;
+        return std::make_unique<EasyGLGpuTimerRenderer>(RegistryPtr());
+    }
+
+    bool EasyGLRenderer::SupportsComputeImageBindingEXT() const
+    {
+        // Desktop GL only, and not because ES lacks the entry point: ES 3.1 requires the texture
+        // bound as an image to be immutable (glTexStorage2D), and every CNA texture is allocated
+        // with glTexImage2D. Changing that is a change to the texture path every draw in the engine
+        // goes through, so this reports the truth instead -- and CNA::Graphics::ComputeShader
+        // refuses the binding rather than issuing one the driver will reject silently.
+        return SupportsComputeShadersEXT() && device.capabilities().is_opengl();
+    }
+
+    int EasyGLRenderer::GetMaxComputeWorkGroupCountEXT(const int axis) const
+    {
+        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegeri_v(::metagl::GetParameter::MaxComputeWorkGroupCount,
+                                  static_cast<GLuint>(axis), &value);
+        return static_cast<int>(value);
+    }
+
+    int EasyGLRenderer::GetMaxComputeWorkGroupSizeEXT(const int axis) const
+    {
+        if (!SupportsComputeShadersEXT() || axis < 0 || axis > 2) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegeri_v(::metagl::GetParameter::MaxComputeWorkGroupSize,
+                                  static_cast<GLuint>(axis), &value);
+        return static_cast<int>(value);
+    }
+
+    int EasyGLRenderer::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        if (!SupportsComputeShadersEXT()) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxComputeWorkGroupInvocations, &value);
+        return static_cast<int>(value);
+    }
+
+    int EasyGLRenderer::GetMaxVertexShaderStorageBlocksEXT() const
+    {
+        // Asked of the driver rather than inferred: ES 3.1's own minimum for this limit is zero, so
+        // a context can implement compute in full and still be unable to read a storage buffer from
+        // a vertex shader. Desktop GL 4.3 guarantees at least 8, but the query costs nothing and
+        // answering it the same way everywhere is one fewer profile branch.
+        if (!SupportsComputeShadersEXT()) return 0;
+        GLint value = 0;
+        ::metagl::glGetIntegerv(::metagl::GetParameter::MaxVertexShaderStorageBlocks, &value);
+        return static_cast<int>(value);
+    }
+
+    void EasyGLRenderer::BindStorageBufferForDrawEXT(const int binding,
+                                                     const IStorageBufferRenderer& buffer)
+    {
+        if (!SupportsComputeShadersEXT() || binding < 0) return;
+        // glBindBufferBase's shader-storage binding points are context state shared by every stage,
+        // so the same call that feeds a dispatch feeds a draw; nothing about the buffer changes.
+        static_cast<const EasyGLStorageBufferRenderer&>(buffer).BindBase(binding);
+    }
+
+    std::unique_ptr<IComputeShaderRenderer> EasyGLRenderer::CreateComputeShader(
+        const std::string& computeSrc)
+    {
+        if (!SupportsComputeShadersEXT()) return nullptr;
+        auto shader = std::make_unique<EasyGLComputeShaderRenderer>();
+        // A failed compile still returns the object: its GetCompileError() is the diagnostic the
+        // caller needs, and returning null here would throw that log away.
+        (void)shader->CompileProgram(computeSrc);
+        return shader;
+    }
+
+    std::unique_ptr<IStorageBufferRenderer> EasyGLRenderer::CreateStorageBuffer(
+        const std::size_t byteSize)
+    {
+        if (!SupportsComputeShadersEXT() || byteSize == 0) return nullptr;
+        return std::make_unique<EasyGLStorageBufferRenderer>(byteSize);
+    }
+
+    void EasyGLRenderer::DispatchCompute(IComputeShaderRenderer* shader, const int groupsX,
+                                         const int groupsY, const int groupsZ)
+    {
+        if (shader == nullptr || !shader->IsValid()) return;
+        if (groupsX <= 0 || groupsY <= 0 || groupsZ <= 0) return;
+        shader->Bind();
+        device.dispatch_compute(static_cast<unsigned int>(groupsX),
+                                static_cast<unsigned int>(groupsY),
+                                static_cast<unsigned int>(groupsZ));
+    }
+
+    void EasyGLRenderer::MemoryBarrierEXT(const int barrierBits)
+    {
+        if (!SupportsComputeShadersEXT() || barrierBits == 0) return;
+        using CNA::GraphicsMemoryBarrier;
+        const auto requested = static_cast<GraphicsMemoryBarrier>(barrierBits);
+        // Translated bit by bit rather than passed through: the ordinals are CNA's own, and a
+        // renderer that forwarded them raw would be depending on them happening to match GL's.
+        GLbitfield native = 0;
+        const auto add = [&](const GraphicsMemoryBarrier bit, const ::metagl::MemoryBarrierMask gl) {
+            if (CNA::HasBarrier(requested, bit)) native |= static_cast<GLbitfield>(gl);
+        };
+        add(GraphicsMemoryBarrier::VertexAttribArray, ::metagl::MemoryBarrierMask::VertexAttribArray);
+        add(GraphicsMemoryBarrier::ElementArray, ::metagl::MemoryBarrierMask::ElementArray);
+        add(GraphicsMemoryBarrier::Uniform, ::metagl::MemoryBarrierMask::Uniform);
+        add(GraphicsMemoryBarrier::TextureFetch, ::metagl::MemoryBarrierMask::TextureFetch);
+        add(GraphicsMemoryBarrier::ShaderImageAccess, ::metagl::MemoryBarrierMask::ShaderImageAccess);
+        add(GraphicsMemoryBarrier::ShaderStorage, ::metagl::MemoryBarrierMask::ShaderStorage);
+        add(GraphicsMemoryBarrier::BufferUpdate, ::metagl::MemoryBarrierMask::BufferUpdate);
+        add(GraphicsMemoryBarrier::Framebuffer, ::metagl::MemoryBarrierMask::Framebuffer);
+        add(GraphicsMemoryBarrier::IndirectCommand, ::metagl::MemoryBarrierMask::Command);
+        if (native == 0) return;
+        device.memory_barrier(static_cast<::metagl::MemoryBarrierMask>(native));
+    }
+
+    bool EasyGLRenderer::SupportsHalfFloatTextureLinearFilteringEXT() const
+    {
+        // Half-float texture filtering is core in the ES 3.0 API generation and in desktop GL 3.0+,
+        // which is every profile this renderer builds for except the ES 2.0 generation. There it
+        // would need GL_OES_texture_half_float_linear, and nothing in CNA asks for it, so the
+        // honest answer is no rather than a probe for a path that is never taken.
+        if (ProfileIsEs2ApiGeneration())
+            return metagl::HasExtension("GL_OES_texture_half_float_linear");
+        return true;
+    }
+
+    bool EasyGLRenderer::ProbeFloatRenderTargetSupportEXT(bool fullFloat) const
+    {
+        // MOD-117: probed, not inferred. Whether a float colour buffer is renderable depends on the
+        // runtime context, not on the compile-time profile: ES 3.0 needs GL_EXT_color_buffer_float
+        // (or _half_float for the 16-bit case), ES 3.2 has half-float in core, desktop GL has had
+        // both since 3.0, and WebGL 2 gates them behind an extension the browser may not expose.
+        // Rather than encode that matrix -- and be wrong on the driver that disagrees with it --
+        // this creates a 1x1 attachment of the real format and asks GL whether the framebuffer is
+        // complete. That is the same question CreateResources will ask for real, so the probe cannot
+        // be optimistic about something that then fails.
+        //
+        // Cached because SupportsRenderTargetFormat() is a query a caller may make per frame.
+        auto& cache = fullFloat ? probedFullFloatRenderable_ : probedHalfFloatRenderable_;
+        if (cache.has_value())
+            return *cache;
+
+        if (ProfileIsEs2ApiGeneration())
+        {
+            // The float internal formats used here (R/RG/RGBA 16F/32F) are sized formats that do
+            // not exist in the ES 2.0 / WebGL 1 API generation at all.
+            cache = false;
+            return false;
+        }
+
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        RenderTargetColorStorage storage{};
+        MapRenderTargetColorFormat(static_cast<int>(fullFloat ? SurfaceFormat::Vector4
+                                                              : SurfaceFormat::HdrBlendable),
+                                   storage);
+
+        int previousFbo = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::FramebufferBinding, &previousFbo);
+
+        ::easygl::Texture     probeTex;
+        ::easygl::Framebuffer probeFbo;
+        probeTex.create();
+        probeTex.bind(::easygl::TextureTarget::Texture2D);
+        probeTex.set_image_2d(::easygl::TextureTarget::Texture2D, 0, storage.internalFormat,
+                              1, 1, storage.pixelFormat, storage.pixelType, nullptr);
+        probeFbo.create();
+        probeFbo.bind(::easygl::FramebufferTarget::Framebuffer);
+        probeFbo.attach_texture_2d(::easygl::FramebufferTarget::Framebuffer,
+                                   ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
+                                   ::easygl::TextureTarget::Texture2D, probeTex, 0);
+        const bool complete =
+            probeFbo.check_status(::easygl::FramebufferTarget::Framebuffer) ==
+            ::metagl::FramebufferStatus::Complete;
+
+        // Leave GL exactly as the probe found it -- this runs on demand, possibly mid-frame with a
+        // render target bound, so restoring the previous binding is not optional.
+        metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
+                                  ::metagl::FramebufferId{static_cast<unsigned int>(previousFbo)});
+        // A refused format leaves a GL error queued behind it; drain it so the next real call is not
+        // blamed for this one.
+        DrainGlErrors();
+
+        cache = complete;
+        return complete;
+    }
+
     std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCube(int size, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         // REMED-GFX-136: consumed by being deliberately unused, exactly like this renderer's own
@@ -3867,6 +4716,22 @@ if (!ProfileIsEs2ApiGeneration())
         // REMED-GFX-168: see CreateRenderTarget2D above for why the binding record is passed weakly.
         return std::make_unique<EasyGLRenderTargetCubeRenderer>(size, depthFormat, RegistryPtr(),
                                                                bound_, mipMap, multiSampleCount);
+    }
+
+    std::unique_ptr<IRenderTargetCubeRenderer> EasyGLRenderer::CreateRenderTargetCubeEXT(
+        int size, int depthFormat, bool preserveContents, bool mipMap,
+        int multiSampleCount, int surfaceFormat)
+    {
+        (void)preserveContents;   // REMED-GFX-136: deliberately unused, see CreateRenderTargetCube.
+        if (ClassifyRenderTargetFormatEXT(surfaceFormat) == RendererFormatVerdict::Unsupported)
+        {
+            throw std::runtime_error(
+                "EasyGL: SurfaceFormat ordinal " + std::to_string(surfaceFormat) +
+                " is not supported as a cube render target on this GL context. Query "
+                "GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT() first.");
+        }
+        return std::make_unique<EasyGLRenderTargetCubeRenderer>(
+            size, depthFormat, RegistryPtr(), bound_, mipMap, multiSampleCount, surfaceFormat);
     }
 
     std::unique_ptr<ITexture3DRenderer> EasyGLRenderer::CreateTexture3D(
@@ -5870,6 +6735,8 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
+CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
 "void main(){\n"
 // XNA uses a separate unlit shader variant. Do not merely zero the light colours and continue
 // through the lit math here: an unlit vertex at the default eye position makes normalize(0)
@@ -5882,14 +6749,18 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "        float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "        float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "        float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
-"        vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+// MOD-838: the shadow attenuates direct light only. Ambient is light arriving from every
+// direction, and darkening it here would make a shadowed surface black rather than shaded.
+"        float shadow=cnaShadowFactor(vWorldPos);\n"
+"        vec3 lightSum=uAmbientColor+(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*shadow+cnaPunctualLight(vWorldPos,N);\n"
 "        litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "        vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "        vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "        vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor*shadow;\n"
 "    }\n"
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
@@ -5898,6 +6769,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
         ResolveRenderTargetOrientationUniforms(prog_lit_textured_);
+        ResolveShadowUniforms(prog_lit_textured_);
         prog_lit_textured_.loc_wvp         = prog_lit_textured_.prog.uniform_location("uWVP");
         prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
@@ -6405,13 +7277,19 @@ CNA_GL_SKIN_NORMAL_DECL
 "uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
+CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
 "    vec3 E=normalize(uEyePosition-vWorldPos);\n"
 "    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
-"    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+// MOD-837: direct light only. This shader has no uAmbientColor of its own -- FillGpuDrawParams
+// folds ambient into uEmissiveColor, which is added below and therefore already outside the
+// attenuated term.
+"    float cnaShadow=cnaShadowFactor(vWorldPos);\n"
+"    vec3 lightSum=(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*cnaShadow+cnaPunctualLight(vWorldPos,N);\n"
 // audit_net.md remediation (2026-07-18, fourth round): EmissiveColor is ADDED after the
 // diffuse multiply, never multiplied by it - matches FNA's own Lighting.fxh ComputeLights()
 // verbatim (`mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor`), and matches what
@@ -6428,10 +7306,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor*cnaShadow;\n"
 "    vec4 texColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
 "    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 // Vertex color modulates the whole combined diffuse+specular output, not just diffuse -- applied
 // after the specular add so VertexColorEnabled=true with a black vertex color genuinely zeroes
@@ -6444,6 +7323,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
         ResolveRenderTargetOrientationUniforms(prog_skinned_);
+        ResolveShadowUniforms(prog_skinned_);
         auto& p = prog_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
         p.loc_world     = p.prog.uniform_location("uWorld");
@@ -6786,6 +7666,9 @@ CNA_GL_SRGB_TRANSFER_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
+CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
++ CnaGlIblDecl(!ProfileUsesGlslEs100()) +
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -6833,17 +7716,29 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+// plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// touch. The ambient/occlusion term below stands for light arriving from the rest of the
+// environment, which an occluder between the surface and this one light does not block.
+"    Lo*=cnaShadowFactor(vWorldPos);\n"
+"    Lo+=cnaPunctualLight(vWorldPos,finalNormal)*albedo;\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
-"    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
+// MOD-1226/MOD-1227: the two ambient terms are exclusive, and the map's occlusion multiplies
+// whichever one is in force -- never the direct light, which is one light whose visibility the
+// shadow map already answers. uAmbientColor arrives zeroed when an environment is bound (see
+// PbrEffect::FillGpuDrawParams), so this is a sum of two terms only one of which is ever
+// non-zero, rather than a branch that would cost every fragment.
+"    vec3 ambient=uAmbientColor*albedo*occlusion\n"
+"               +cnaIblAmbient(finalNormal,V,albedo,F0,roughness,metallic,occlusion);\n"
 "    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 // Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
@@ -6858,6 +7753,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
                        dualUv ? "pbr_dual_uv" : "pbr");
         ResolveRenderTargetOrientationUniforms(program);
+        ResolveShadowUniforms(program);
+        ResolveIblUniforms(program);
         auto& p = program;
         // GLTF-462: -1 on the single-UV program, which has no colour slot to gate; BindDrawParams
         // skips a negative location like every other optional uniform in Prog3D.
@@ -7060,6 +7957,9 @@ CNA_GL_SRGB_TRANSFER_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
+CNA_GL_SHADOW_DECL
+CNA_GL_PUNCTUAL_DECL
++ CnaGlIblDecl(!ProfileUsesGlslEs100()) +
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
 "vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
 "    vec3 value=vec3(uv,1.0);\n"
@@ -7106,17 +8006,29 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
+// plan_modern.md MOD-838/MOD-839: Lo is the direct-lighting term and the only one a shadow may
+// touch. The ambient/occlusion term below stands for light arriving from the rest of the
+// environment, which an occluder between the surface and this one light does not block.
+"    Lo*=cnaShadowFactor(vWorldPos);\n"
+"    Lo+=cnaPunctualLight(vWorldPos,finalNormal)*albedo;\n"
 "    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
-"    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
+// MOD-1226/MOD-1227: the two ambient terms are exclusive, and the map's occlusion multiplies
+// whichever one is in force -- never the direct light, which is one light whose visibility the
+// shadow map already answers. uAmbientColor arrives zeroed when an environment is bound (see
+// PbrEffect::FillGpuDrawParams), so this is a sum of two terms only one of which is ever
+// non-zero, rather than a branch that would cost every fragment.
+"    vec3 ambient=uAmbientColor*albedo*occlusion\n"
+"               +cnaIblAmbient(finalNormal,V,albedo,F0,roughness,metallic,occlusion);\n"
 "    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
 "    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
+"    FragColor.rgb*=cnaCascadeDebugTint(vWorldPos);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 // Fog is mixed in LINEAR space, so uFogColor -- an ordinary application-supplied sRGB
@@ -7131,6 +8043,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         CompileAndLink(program.prog, vsrc.c_str(), fsrc.c_str(),
                        dualUv ? "pbr_skinned_dual_uv" : "pbr_skinned");
         ResolveRenderTargetOrientationUniforms(program);
+        ResolveShadowUniforms(program);
+        ResolveIblUniforms(program);
         auto& p = program;
         // GLTF-463: -1 on the single-UV skinned program, which has no colour slot to gate;
         // BindDrawParams skips a negative location like every other optional uniform in Prog3D.
@@ -7219,13 +8133,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
     {
         if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
         if (params.pbr) return StockProgramShape::Pbr;
+        // plan_modern.md MOD-840. A receiving draw is forced onto the per-pixel family whatever
+        // PreferPerPixelLighting says. Per-vertex lighting evaluates the shadow lookup at the
+        // corners and interpolates the result across the triangle, so a ground plane drawn as two
+        // large triangles would carry one shadow value per corner -- a gradient, not a shadow.
+        // The property is not a request for a particular quality of shadow, it is a request for
+        // Gouraud shading, and reception is a CNAEXT extension that the property predates.
+        const bool receivesShadow = params.shadowsEnabled && params.shadowMap != nullptr;
         if (params.skinned)
         {
             // Task 1102b (plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
             // PreferPerPixelLighting=false too, same as BasicEffect (Task 1102). Only
             // meaningfully distinct while lighting is actually on, same reasoning as Task 1102's
             // own stride-32 gate.
-            return (params.lightingEnabled && !params.preferPerPixelLighting)
+            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
                        ? StockProgramShape::SkinnedVertexLit
                        : StockProgramShape::Skinned;
         }
@@ -7249,7 +8170,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
             // degenerate to the identical trivial ambient=(1,1,1) case (see BindDrawParams()'s
             // own else-branch), so the existing pixel-lit program stays selected there to avoid
             // an unnecessary program switch.
-            return (params.lightingEnabled && !params.preferPerPixelLighting)
+            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
                        ? StockProgramShape::LitVertexLit
                        : StockProgramShape::Lit;
         default: return StockProgramShape::Colored;
@@ -7401,6 +8322,45 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_rt_flip_v    = p.prog.uniform_location("uRtFlipV");
         p.loc_rt_flip_v_hi = p.prog.uniform_location("uRtFlipVHi");
         p.loc_instanced    = p.prog.uniform_location("uCnaInstanced");
+    }
+
+    void EasyGLRenderer::ResolveShadowUniforms(Prog3D& p)
+    {
+        p.loc_shadowmap      = p.prog.uniform_location("uShadowMap");
+        p.loc_lightviewproj  = p.prog.uniform_location("uLightViewProj");
+        p.loc_shadows_on     = p.prog.uniform_location("uShadowsEnabled");
+        p.loc_shadow_bias    = p.prog.uniform_location("uShadowBias");
+        p.loc_shadow_texel   = p.prog.uniform_location("uShadowTexel");
+        p.loc_shadow_pcf     = p.prog.uniform_location("uShadowPcfRadius");
+        p.loc_cascade_count  = p.prog.uniform_location("uCascadeCount");
+        p.loc_cascade_mats   = p.prog.uniform_location("uCascadeMatrices[0]");
+        p.loc_cascade_splits = p.prog.uniform_location("uCascadeSplits");
+        p.loc_cascade_viewz  = p.prog.uniform_location("uCascadeViewZ");
+        p.loc_cascade_blend  = p.prog.uniform_location("uCascadeBlend");
+        p.loc_cascade_debug  = p.prog.uniform_location("uCascadeDebug");
+        p.loc_punctual_kind   = p.prog.uniform_location("uPunctualKind");
+        p.loc_punctual_pos    = p.prog.uniform_location("uPunctualPosition");
+        p.loc_punctual_dir    = p.prog.uniform_location("uPunctualDirection");
+        p.loc_punctual_diff   = p.prog.uniform_location("uPunctualDiffuse");
+        p.loc_punctual_range  = p.prog.uniform_location("uPunctualRange");
+        p.loc_punctual_cosin  = p.prog.uniform_location("uPunctualCosInner");
+        p.loc_punctual_cosout = p.prog.uniform_location("uPunctualCosOuter");
+        p.loc_punctual_bias   = p.prog.uniform_location("uPunctualBias");
+        p.loc_punctual_hasmap = p.prog.uniform_location("uPunctualHasShadow");
+        p.loc_punctual_cube   = p.prog.uniform_location("uPunctualCube");
+        p.loc_punctual_map    = p.prog.uniform_location("uPunctualMap");
+        p.loc_punctual_vp     = p.prog.uniform_location("uPunctualViewProj");
+        p.loc_punctual_texel  = p.prog.uniform_location("uPunctualTexel");
+    }
+
+    void EasyGLRenderer::ResolveIblUniforms(Prog3D& p)
+    {
+        p.loc_ibl_enabled    = p.prog.uniform_location("uIblEnabled");
+        p.loc_ibl_irradiance = p.prog.uniform_location("uIblIrradiance");
+        p.loc_ibl_specular   = p.prog.uniform_location("uIblSpecular");
+        p.loc_ibl_brdf       = p.prog.uniform_location("uIblBrdfLut");
+        p.loc_ibl_mipcount   = p.prog.uniform_location("uIblMipCount");
+        p.loc_ibl_intensity  = p.prog.uniform_location("uIblIntensity");
     }
 
     void EasyGLRenderer::BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
@@ -7788,6 +8748,184 @@ if (ProfileIsEs2ApiGeneration())
         for (int unit = 0; unit < 7; ++unit)
             Es2ApplyPendingSamplerToUnit(unit);
 }
+
+        // Shadow map (MOD-835). Unit 7, past the stock effects' 0-6 range, so attaching one
+        // cannot displace a texture an effect is already sampling. Every uniform is uploaded even
+        // when shadows are off: leaving a stale uLightViewProj behind would make the first
+        // shadowed draw after an unshadowed one sample with the previous light's matrix.
+        if (p.loc_shadows_on >= 0)
+        {
+            const bool haveShadow = params.shadowsEnabled && params.shadowMap != nullptr;
+            p.prog.set_uniform(p.loc_shadows_on, haveShadow ? 1.0f : 0.0f);
+            if (p.loc_shadow_bias >= 0)
+                p.prog.set_uniform(p.loc_shadow_bias, params.shadowDepthBias);
+            if (p.loc_lightviewproj >= 0)
+                p.prog.set_uniform_matrix4(p.loc_lightviewproj, params.lightViewProjColMajor);
+            if (p.loc_shadow_pcf >= 0)
+            {
+                const int radius = params.shadowPcfRadius < 0 ? 0
+                                 : (params.shadowPcfRadius > 2 ? 2 : params.shadowPcfRadius);
+                p.prog.set_uniform(p.loc_shadow_pcf, static_cast<float>(radius));
+            }
+            if (p.loc_shadow_texel >= 0)
+            {
+                // 1/size per axis, because textureSize() does not exist in the ES 1.00 form these
+                // shaders are also compiled in. Two components rather than one because a cascade
+                // atlas is N times wider than it is tall, and a single scalar would step the PCF
+                // taps N times too far in X and smear each cascade into its neighbour.
+                const int width  = haveShadow ? params.shadowMap->GetWidth() : 1;
+                const int height = haveShadow ? params.shadowMap->GetHeight() : 1;
+                p.prog.set_uniform(p.loc_shadow_texel,
+                                   width > 0 ? 1.0f / static_cast<float>(width) : 0.0f,
+                                   height > 0 ? 1.0f / static_cast<float>(height) : 0.0f);
+            }
+            // Cascades (MOD-908). Count 0 is the single-map path, and every draw that has never
+            // heard of cascades takes it -- which is what keeps this addition free.
+            if (p.loc_cascade_count >= 0)
+            {
+                const int count = (haveShadow && params.cascadeCount > 0)
+                                      ? (params.cascadeCount > 4 ? 4 : params.cascadeCount)
+                                      : 0;
+                p.prog.set_uniform(p.loc_cascade_count, static_cast<float>(count));
+                if (p.loc_cascade_mats >= 0)
+                    ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{p.loc_cascade_mats}, 4,
+                                                 0, params.cascadeMatricesColMajor);
+                if (p.loc_cascade_splits >= 0)
+                    p.prog.set_uniform(p.loc_cascade_splits, params.cascadeSplits[0],
+                                       params.cascadeSplits[1], params.cascadeSplits[2],
+                                       params.cascadeSplits[3]);
+                if (p.loc_cascade_viewz >= 0)
+                    p.prog.set_uniform(p.loc_cascade_viewz, params.cascadeViewZRow[0],
+                                       params.cascadeViewZRow[1], params.cascadeViewZRow[2],
+                                       params.cascadeViewZRow[3]);
+                if (p.loc_cascade_blend >= 0)
+                    p.prog.set_uniform(p.loc_cascade_blend, params.cascadeBlendBand);
+                if (p.loc_cascade_debug >= 0)
+                    p.prog.set_uniform(p.loc_cascade_debug, params.cascadeDebugTint ? 1.0f : 0.0f);
+            }
+
+            // Punctual light (MOD-1005). Units 8 and 9, past the shadow map's unit 7, so a lamp
+            // and the sun can be shadowed in the same draw without displacing each other.
+            if (p.loc_punctual_kind >= 0)
+            {
+                const int kind = params.punctualKind < 0 ? 0
+                               : (params.punctualKind > 2 ? 0 : params.punctualKind);
+                const bool haveCube = kind == 1 && params.punctualShadowCube != nullptr;
+                const bool haveMap  = kind == 2 && params.punctualShadowMap != nullptr;
+                p.prog.set_uniform(p.loc_punctual_kind, static_cast<float>(kind));
+                if (p.loc_punctual_pos >= 0)
+                    p.prog.set_uniform(p.loc_punctual_pos, params.punctualPosition[0],
+                                       params.punctualPosition[1], params.punctualPosition[2]);
+                if (p.loc_punctual_dir >= 0)
+                    p.prog.set_uniform(p.loc_punctual_dir, params.punctualDirection[0],
+                                       params.punctualDirection[1], params.punctualDirection[2]);
+                if (p.loc_punctual_diff >= 0)
+                    p.prog.set_uniform(p.loc_punctual_diff, params.punctualDiffuse[0],
+                                       params.punctualDiffuse[1], params.punctualDiffuse[2]);
+                if (p.loc_punctual_range >= 0)
+                    p.prog.set_uniform(p.loc_punctual_range,
+                                       params.punctualRange > 0.0f ? params.punctualRange : 1.0f);
+                if (p.loc_punctual_cosin >= 0)
+                    p.prog.set_uniform(p.loc_punctual_cosin, params.punctualCosInner);
+                if (p.loc_punctual_cosout >= 0)
+                    p.prog.set_uniform(p.loc_punctual_cosout, params.punctualCosOuter);
+                if (p.loc_punctual_bias >= 0)
+                    p.prog.set_uniform(p.loc_punctual_bias, params.punctualShadowBias);
+                if (p.loc_punctual_hasmap >= 0)
+                    p.prog.set_uniform(p.loc_punctual_hasmap,
+                                       (haveCube || haveMap) ? 1.0f : 0.0f);
+                if (p.loc_punctual_vp >= 0)
+                    p.prog.set_uniform_matrix4(p.loc_punctual_vp, params.punctualViewProjColMajor);
+                if (p.loc_punctual_texel >= 0)
+                {
+                    // Its own texel size, not the directional map's. Borrowing that one means a
+                    // draw with no sun attached filters the spot map with a texel of 1.0 -- every
+                    // tap clamped to a corner of the map, every corner white, and a spot shadow
+                    // that silently never appears.
+                    const int width  = haveMap ? params.punctualShadowMap->GetWidth() : 1;
+                    const int height = haveMap ? params.punctualShadowMap->GetHeight() : 1;
+                    p.prog.set_uniform(p.loc_punctual_texel,
+                                       width > 0 ? 1.0f / static_cast<float>(width) : 0.0f,
+                                       height > 0 ? 1.0f / static_cast<float>(height) : 0.0f);
+                }
+                if (p.loc_punctual_cube >= 0)
+                {
+                    p.prog.set_uniform(p.loc_punctual_cube, 8);
+                    if (haveCube)
+                        params.punctualShadowCube->BindGL(8);
+                }
+                if (p.loc_punctual_map >= 0)
+                {
+                    p.prog.set_uniform(p.loc_punctual_map, 9);
+                    if (haveMap)
+                        params.punctualShadowMap->BindGL(9);
+                    else
+                    {
+                        EnsureDefaultWhiteTexture();
+                        default_white_texture_.active_bind(::easygl::TextureUnit::Texture9,
+                                                           ::easygl::TextureTarget::Texture2D);
+                    }
+                }
+                ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+            }
+            if (p.loc_shadowmap >= 0)
+            {
+                p.prog.set_uniform(p.loc_shadowmap, 7);
+                if (haveShadow)
+                    params.shadowMap->BindGL(7);
+                else
+                {
+                    EnsureDefaultWhiteTexture();
+                    // White means "infinitely far", so an unbound unit reads as nothing occluding
+                    // -- the same convention ShadowMap clears its target to.
+                    default_white_texture_.active_bind(::easygl::TextureUnit::Texture7,
+                                                       ::easygl::TextureTarget::Texture2D);
+                }
+            }
+        }
+
+        // plan_modern.md MOD-1225: image-based lighting, units 10-12. Bound only when the
+        // program has the uniforms at all, and each unit falls back to a texture whose sampled
+        // value is the "no environment" constant -- but with uIblEnabled at 0 the shader never
+        // reads them, so the fallbacks exist to keep the units complete rather than to be seen.
+        if (p.loc_ibl_enabled >= 0)
+        {
+            const bool haveIbl = params.iblEnabled && params.iblIrradiance != nullptr
+                              && params.iblPrefilteredSpecular != nullptr
+                              && params.iblBrdfLut != nullptr;
+            p.prog.set_uniform(p.loc_ibl_enabled, haveIbl ? 1.0f : 0.0f);
+            if (p.loc_ibl_mipcount >= 0)
+                p.prog.set_uniform(p.loc_ibl_mipcount,
+                                   static_cast<float>(params.iblPrefilteredMipCount > 0
+                                                          ? params.iblPrefilteredMipCount : 1));
+            if (p.loc_ibl_intensity >= 0)
+                p.prog.set_uniform(p.loc_ibl_intensity, params.iblIntensity);
+            if (p.loc_ibl_irradiance >= 0)
+            {
+                p.prog.set_uniform(p.loc_ibl_irradiance, 10);
+                if (haveIbl) params.iblIrradiance->BindGL(10);
+            }
+            if (p.loc_ibl_specular >= 0)
+            {
+                p.prog.set_uniform(p.loc_ibl_specular, 11);
+                if (haveIbl) params.iblPrefilteredSpecular->BindGL(11);
+            }
+            if (p.loc_ibl_brdf >= 0)
+            {
+                p.prog.set_uniform(p.loc_ibl_brdf, 12);
+                if (haveIbl)
+                {
+                    params.iblBrdfLut->BindGL(12);
+                }
+                else
+                {
+                    EnsureDefaultWhiteTexture();
+                    default_white_texture_.active_bind(::easygl::TextureUnit::Texture12,
+                                                       ::easygl::TextureTarget::Texture2D);
+                }
+            }
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
 
         // Alpha test (always uploaded; default {0,0,1,1} = Always pass)
         if (p.loc_alphatest >= 0)
@@ -8624,6 +9762,174 @@ else
         }
         vao.unbind();
 }
+    }
+
+    void EasyGLRenderer::IssueIndirectDrawEXT(const IVertexBufferRenderer& vb_in,
+                                              const IIndexBufferRenderer* ib_in,
+                                              const Matrix& world,
+                                              const Matrix& view,
+                                              const Matrix& projection,
+                                              PrimitiveType primitive,
+                                              const IStorageBufferRenderer& argumentBuffer,
+                                              int argumentByteOffset,
+                                              const GpuDrawParams& params)
+    {
+        if (metagl::IsContextLost()) return;
+        if (!SupportsIndirectDrawEXT())
+            throw System::NotSupportedException(
+                "CNA EasyGL: this GL context has no indirect draw (GL ES 3.1 / desktop GL 4.0 and "
+                "later have it; WebGL has it in no version).");
+        if (params.compiledEffectRuntime != nullptr)
+            throw System::NotSupportedException(
+                "CNA EasyGL: an indirect draw does not accept a compiled (FX) effect; the effect "
+                "framework's own draw routes carry the primitive count this route reads from GPU "
+                "memory instead.");
+
+        // REMED-GFX-DECL-GUARD (REMED-GFX-218): before the VAO is touched, before a program is
+        // selected and before any draw is issued -- exactly as on the three ordinary routes.
+        if (params.customEffectRenderer == nullptr)
+            RequireDeclarationFitsStockProgramEXT(
+                static_cast<const EasyGLVertexBufferRenderer&>(vb_in).GetDeclarationElements(),
+                CombinedVertexStrideOr(
+                    params, static_cast<const EasyGLVertexBufferRenderer&>(vb_in).GetStride()),
+                params);
+
+        const auto& vb = static_cast<const EasyGLVertexBufferRenderer&>(vb_in);
+        const auto* ib = static_cast<const EasyGLIndexBufferRenderer*>(ib_in);
+        const auto& meshDecl = vb.GetDeclarationElements();
+
+        // REMED-GFX-201/202: the stream configuration is the instanced route's, not the simple
+        // one's, because an indirect draw always carries an instance count -- the argument buffer
+        // has a word for it whether or not anything ever sets it above 1.
+        const bool multiStream = HasMultipleVertexStreams(params);
+        const GpuVertexStreamBinding* firstPerVertex = FirstPerVertexStream(params);
+        const bool reconfigurePerVertex =
+            multiStream || (firstPerVertex != nullptr && firstPerVertex->vertexOffset != 0);
+        if (reconfigurePerVertex && meshDecl.empty())
+            throw System::InvalidOperationException(
+                "EasyGL indirect drawing cannot apply a nonzero vertex-buffer offset without a "
+                "VertexDeclaration.");
+
+        InstanceStreamPlacements instancePlacements;
+        const unsigned int instanceBaseLocation = params.customEffectRenderer != nullptr
+            ? PerVertexLocationCount(params)
+            : kStockInstanceBaseLocation;
+        if (FirstInstanceStream(params) != nullptr)
+        {
+            if ((params.customEffectRenderer == nullptr &&
+                 instanceBaseLocation < PerVertexLocationCount(params)) ||
+                !PlaceInstanceStreams(params, instanceBaseLocation, instancePlacements))
+            {
+                throw System::InvalidOperationException(
+                    "EasyGL indirect drawing requires a complete per-instance declaration within "
+                    "the 16-attribute XNA profile limit.");
+            }
+        }
+
+        auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        vao.bind();
+        if (reconfigurePerVertex && !ConfigureMultiStreamAttributes(vao, params))
+        {
+            vao.unbind();
+            throw System::InvalidOperationException(
+                "EasyGL multi-stream drawing requires every bound VertexBuffer to carry a "
+                "VertexDeclaration.");
+        }
+        {
+            std::size_t placementIndex = 0;
+            for (int i = 0; i < params.vertexStreamCount; ++i)
+            {
+                const auto& stream = params.vertexStreams[static_cast<std::size_t>(i)];
+                if (stream.instanceFrequency <= 0)
+                    continue;
+                const InstanceStreamPlacement& placement =
+                    instancePlacements.entries[placementIndex++];
+                ConfigureDeclarationAttributes(
+                    vao, *static_cast<const EasyGLVertexBufferRenderer*>(stream.buffer),
+                    placement.firstLocation, stream.vertexOffset,
+                    static_cast<unsigned int>(stream.instanceFrequency),
+                    placement.elementCount);
+            }
+        }
+
+        if (params.customEffectRenderer)
+        {
+            BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
+        }
+        else
+        {
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            p.prog.use();
+            BindDrawParams(p, world, view, projection, params);
+        }
+        if (ib != nullptr)
+            ib->ibo.bind(::easygl::BufferTarget::ElementArray);
+
+        // The arguments are fetched from this buffer by the GPU as the command is issued. Binding
+        // it is the whole difference from an ordinary draw: nothing here reads the numbers, and
+        // nothing waits for them.
+        static_cast<const EasyGLStorageBufferRenderer&>(argumentBuffer).BindAsDrawIndirect();
+        const void* argumentAddress = reinterpret_cast<const void*>(
+            static_cast<std::uintptr_t>(argumentByteOffset));
+
+        // The wireframe fallback the ordinary routes take is deliberately absent: it rebuilds a
+        // line-list from the primitive count, and this route does not have one to rebuild from.
+        // A wireframe indirect draw renders filled rather than pretending otherwise.
+        if (ib != nullptr)
+        {
+            const auto idxType = ib->thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                                  : ::easygl::DataType::UnsignedShort;
+            ::metagl::glDrawElementsIndirect(ToEasyGl(primitive), idxType, argumentAddress);
+        }
+        else
+        {
+            ::metagl::glDrawArraysIndirect(ToEasyGl(primitive), argumentAddress);
+        }
+
+        // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later
+        // draw through the same VAO never inherits a stale divisor or a pointer into a foreign VBO.
+        for (int i = instancePlacements.count; i-- > 0;)
+        {
+            const InstanceStreamPlacement& placement =
+                instancePlacements.entries[static_cast<std::size_t>(i)];
+            DisableDeclarationAttributes(vao, placement.firstLocation, placement.elementCount);
+        }
+        if (reconfigurePerVertex)
+            RestoreSingleStreamAttributes(vao, params);
+        if (params.customEffectRenderer == nullptr)
+        {
+            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            if (p.loc_instanced >= 0)
+                p.prog.set_uniform(p.loc_instanced, 0.0f);
+        }
+        vao.unbind();
+    }
+
+    void EasyGLRenderer::DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                                   const Matrix& world,
+                                                   const Matrix& view,
+                                                   const Matrix& projection,
+                                                   PrimitiveType primitive,
+                                                   const IStorageBufferRenderer& argumentBuffer,
+                                                   int argumentByteOffset,
+                                                   const GpuDrawParams& params)
+    {
+        IssueIndirectDrawEXT(vb, nullptr, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
+    }
+
+    void EasyGLRenderer::DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                                          const IIndexBufferRenderer& ib,
+                                                          const Matrix& world,
+                                                          const Matrix& view,
+                                                          const Matrix& projection,
+                                                          PrimitiveType primitive,
+                                                          const IStorageBufferRenderer& argumentBuffer,
+                                                          int argumentByteOffset,
+                                                          const GpuDrawParams& params)
+    {
+        IssueIndirectDrawEXT(vb, &ib, world, view, projection, primitive, argumentBuffer,
+                             argumentByteOffset, params);
     }
 }
 

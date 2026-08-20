@@ -131,6 +131,20 @@
         "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
         "CMAKE_C_COMPILER_LAUNCHER": "ccache"
       }
+    },
+    {
+      "name": "cnaext",
+      "displayName": "CNAEXT engine layer (OpenGL ES renderer, Debug)",
+      "description": "plan_modern.md MOD-2: native debug build with the CNA::Graphics extended engine layer enabled (CNA_CNAEXT=ON) plus tests -- the build every plan_modern.md task is verified in. Without CNA_CNAEXT the whole CNA::Graphics layer (RenderPipelineSettings, PbrMaterial, DepthEffect, CRTEffect, AsciiPostProcessEffect, and everything plan_modern.md adds on top) compiles to nothing, so the default build cannot verify it. Same submodule/SDL prerequisites as the 'tests' preset above. Run: cmake --preset cnaext && cmake --build --preset cnaext --target CnaTests && SDL_AUDIODRIVER=dummy ./cmake-build-cnaext/CnaTests --gtest_filter='CnaExt*:DepthEffect*:CRTEffect*:AsciiPostProcess*'",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/cmake-build-cnaext",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_GRAPHICS_RENDERER": "OPENGLES3",
+        "CNA_CNAEXT": "ON",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_BUILD_EXAMPLES": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -170,6 +184,14 @@
       "name": "tests",
       "displayName": "Build CnaTests (native desktop, OpenGL ES)",
       "configurePreset": "tests",
+      "targets": [
+        "CnaTests"
+      ]
+    },
+    {
+      "name": "cnaext",
+      "displayName": "Build CnaTests with the CNAEXT engine layer enabled",
+      "configurePreset": "cnaext",
       "targets": [
         "CnaTests"
       ]

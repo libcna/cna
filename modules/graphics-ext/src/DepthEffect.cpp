@@ -211,7 +211,7 @@ namespace CNA::Graphics {
         return name;
     }
 
-    void DepthEffect::EnsurePaletteTextures()
+    void DepthEffect::ensurePaletteTextures()
     {
         if (paletteTexturesBuilt_ || !IsEffectValid()) return;
 
@@ -229,7 +229,7 @@ namespace CNA::Graphics {
 
         if (mode_ == DepthEffectMode::Palette256 || mode_ == DepthEffectMode::Palette16)
         {
-            EnsurePaletteTextures();
+            ensurePaletteTextures();
             if (paletteTexturesBuilt_)
             {
                 const bool is256 = mode_ == DepthEffectMode::Palette256;

@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
+#include "CNA/IndirectDrawArguments.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
@@ -1230,6 +1231,118 @@ namespace Microsoft::Xna::Framework::Graphics
         );
     }
 
+    namespace {
+
+        /// MOD-2090: the one check an indirect draw can still make on the CPU -- that the words the
+        /// GPU is about to fetch are inside the buffer, and aligned as every API requires.
+        void ValidateIndirectArgumentRange(
+            const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+            const int argumentByteOffset, const std::size_t argumentSize, const char* route)
+        {
+            System::ArgumentOutOfRangeException::ThrowIfNegative(argumentByteOffset,
+                                                                 "argumentByteOffset");
+            if (argumentByteOffset % 4 != 0)
+                throw System::ArgumentOutOfRangeException(
+                    "argumentByteOffset", std::to_string(argumentByteOffset),
+                    "Indirect draw arguments must start on a 4-byte boundary.");
+            const std::size_t offset = static_cast<std::size_t>(argumentByteOffset);
+            const std::size_t capacity = argumentBuffer.GetByteSize();
+            if (offset > capacity || argumentSize > capacity - offset)
+                throw System::ArgumentOutOfRangeException(
+                    "argumentByteOffset", std::to_string(argumentByteOffset),
+                    std::string(route) + ": the arguments do not fit in the buffer.");
+        }
+
+    } // namespace
+
+    void GraphicsDevice::DrawPrimitivesIndirectEXT(
+        const PrimitiveType primitiveType,
+        const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+        const int argumentByteOffset)
+    {
+        if (renderer_ == nullptr)
+            return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawPrimitivesIndirectEXT");
+
+        if (!SupportsCapability(CNA::GraphicsCapability::IndirectDraw))
+            throw System::NotSupportedException(
+                std::string("GraphicsDevice::DrawPrimitivesIndirectEXT: the ") +
+                std::string(GetGraphicsRendererName()) +
+                " renderer does not support indirect drawing.");
+
+        if (currentVertexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitivesIndirectEXT: no vertex buffer is bound.");
+        if (currentEffect_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawPrimitivesIndirectEXT: no effect has been applied.");
+
+        ValidateIndirectArgumentRange(argumentBuffer, argumentByteOffset,
+                                      sizeof(CNA::IndirectDrawArguments),
+                                      "GraphicsDevice::DrawPrimitivesIndirectEXT");
+
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams p;
+        currentEffect_->FillGpuDrawParams(p);
+        // The binding offset is folded exactly as DrawPrimitives folds it, and for the same reason.
+        // What is deliberately NOT set is vertexStart: the argument buffer's `FirstVertex` is that,
+        // and setting both would apply the offset twice -- once from the CPU and once from the GPU.
+        const int foldedOffset = FoldedVertexStreamOffset();
+        p.vertexStart = foldedOffset;
+        FillVertexStreamBindings(p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
+        ValidateVertexStreamCapability(p);
+        applySamplerStatesToRenderer();
+        renderer_->DrawPrimitivesIndirectEXT(
+            currentVertexBuffer_->GetRenderer(), world, view, proj, primitiveType,
+            argumentBuffer, argumentByteOffset, p);
+    }
+
+    void GraphicsDevice::DrawIndexedPrimitivesIndirectEXT(
+        const PrimitiveType primitiveType,
+        const CNA::Internal::Renderers::IStorageBufferRenderer& argumentBuffer,
+        const int argumentByteOffset)
+    {
+        if (renderer_ == nullptr)
+            return;
+        renderer_->Ensure3DSupported("GraphicsDevice::DrawIndexedPrimitivesIndirectEXT");
+
+        if (!SupportsCapability(CNA::GraphicsCapability::IndirectDraw))
+            throw System::NotSupportedException(
+                std::string("GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: the ") +
+                std::string(GetGraphicsRendererName()) +
+                " renderer does not support indirect drawing.");
+
+        if (currentVertexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no vertex buffer is bound.");
+        if (currentIndexBuffer_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no index buffer is bound.");
+        if (currentEffect_ == nullptr)
+            throw std::runtime_error(
+                "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT: no effect has been applied.");
+
+        ValidateIndirectArgumentRange(argumentBuffer, argumentByteOffset,
+                                      sizeof(CNA::IndirectDrawIndexedArguments),
+                                      "GraphicsDevice::DrawIndexedPrimitivesIndirectEXT");
+
+        Matrix world, view, proj;
+        ExtractMatrices(currentEffect_, world, view, proj);
+        CNA::Internal::Renderers::GpuDrawParams p;
+        currentEffect_->FillGpuDrawParams(p);
+        // startIndex and baseVertex stay 0 here: the argument buffer carries `FirstIndex` and
+        // `BaseVertex` itself, and a CPU copy of either would be added on top of the GPU's.
+        const int foldedOffset = FoldedVertexStreamOffset();
+        p.baseVertex = foldedOffset;
+        FillVertexStreamBindings(p, foldedOffset, /*allowLegacyEmptyDeclarationFallback=*/true);
+        ValidateVertexStreamCapability(p);
+        applySamplerStatesToRenderer();
+        renderer_->DrawIndexedPrimitivesIndirectEXT(
+            currentVertexBuffer_->GetRenderer(), currentIndexBuffer_->GetRenderer(),
+            world, view, proj, primitiveType, argumentBuffer, argumentByteOffset, p);
+    }
+
     void GraphicsDevice::DrawUserPrimitives(
         PrimitiveType primitiveType,
         const void* vertexData,
@@ -2163,7 +2276,102 @@ namespace Microsoft::Xna::Framework::Graphics
         // security/compatibility boundary requires a separate explicit renderer opt-in.
         if (capability == CNA::GraphicsCapability::CompiledEffects)
             return GetRenderer().SupportsCompiledEffects();
+        // plan_modern.md MOD-100/MOD-101: the float render-target entries are derived, for the same
+        // reason CompiledEffects is -- a renderer whose capability switch ends in
+        // `default: return true` would otherwise claim that values above 1.0 survive a
+        // render-to-target purely because it has never heard of the enumerator. Each is answered by
+        // the format the CNAEXT engine layer's HDR pipeline would actually allocate: RGBA32F for
+        // the 32-bit entry, and HdrBlendable (CNA's RGBA16F) for the half-float one.
+        if (capability == CNA::GraphicsCapability::FloatRenderTargets)
+            return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::Vector4);
+        if (capability == CNA::GraphicsCapability::HalfFloatRenderTargets)
+            return SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HdrBlendable);
+        // Derived for the same reason (MOD-123): answered by a renderer virtual whose default is
+        // false, never by a capability switch whose default is true.
+        if (capability == CNA::GraphicsCapability::HalfFloatTextureLinearFiltering)
+            return GetRenderer().SupportsHalfFloatTextureLinearFilteringEXT();
+        // MOD-1500: compute is derived for exactly the same reason.
+        if (capability == CNA::GraphicsCapability::ComputeShaders)
+            return GetRenderer().SupportsComputeShadersEXT();
+        // MOD-2090: and so is the indirect draw, for the same reason again.
+        if (capability == CNA::GraphicsCapability::IndirectDraw)
+            return GetRenderer().SupportsIndirectDrawEXT();
         return GetRenderer().SupportsCapability(capability);
+    }
+
+    bool GraphicsDevice::ExecutesShaderEffectSourceEXT() const
+    {
+        return GetRenderer().ExecutesShaderEffectSourceEXT();
+    }
+
+    bool GraphicsDevice::SupportsShadowSamplingEXT() const
+    {
+        return GetRenderer().SupportsShadowSamplingEXT();
+    }
+
+    bool GraphicsDevice::SupportsImageBasedLightingEXT() const
+    {
+        return GetRenderer().SupportsImageBasedLightingEXT();
+    }
+
+    CNA::DisplayColorSpace GraphicsDevice::GetDisplayColorSpaceEXT() const
+    {
+        return GetRenderer().GetDisplayColorSpaceEXT();
+    }
+
+    bool GraphicsDevice::SetDisplayColorSpaceEXT(const CNA::DisplayColorSpace space)
+    {
+        return GetRenderer().SetDisplayColorSpaceEXT(space);
+    }
+
+    bool GraphicsDevice::SupportsDisplayColorSpaceEXT(const CNA::DisplayColorSpace space) const
+    {
+        // Asked by trying it and putting it back, because there is no separate query on the
+        // renderer boundary and inventing one would let the two answers drift apart.
+        const CNA::DisplayColorSpace current = GetRenderer().GetDisplayColorSpaceEXT();
+        if (space == current) return true;
+        if (!const_cast<GraphicsDevice*>(this)->GetRenderer().SetDisplayColorSpaceEXT(space))
+            return false;
+        const_cast<GraphicsDevice*>(this)->GetRenderer().SetDisplayColorSpaceEXT(current);
+        return true;
+    }
+
+    int GraphicsDevice::GetMaxComputeWorkGroupCountEXT(const int axis) const
+    {
+        if (axis < 0 || axis > 2) return 0;
+        return GetRenderer().GetMaxComputeWorkGroupCountEXT(axis);
+    }
+
+    int GraphicsDevice::GetMaxComputeWorkGroupSizeEXT(const int axis) const
+    {
+        if (axis < 0 || axis > 2) return 0;
+        return GetRenderer().GetMaxComputeWorkGroupSizeEXT(axis);
+    }
+
+    int GraphicsDevice::GetMaxComputeWorkGroupInvocationsEXT() const
+    {
+        return GetRenderer().GetMaxComputeWorkGroupInvocationsEXT();
+    }
+
+    bool GraphicsDevice::SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat format) const
+    {
+        // plan_modern.md MOD-103/MOD-104: asks the same question RenderTarget2D's constructor asks
+        // (plan_runtimerenderer.md design decision 9's tri-state verdict), so the two can never
+        // disagree -- a format this returns true for is a format RenderTarget2D will accept, and one
+        // it returns false for is one the constructor refuses.
+        switch (GetRenderer().ClassifyRenderTargetFormatEXT(static_cast<int>(format)))
+        {
+            case CNA::Internal::Renderers::RendererFormatVerdict::Supported:
+                return true;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported:
+                return false;
+            case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                break;
+        }
+        // Defer means "the framework's own rule applies", and that rule (Texture::ValidateFormat)
+        // admits Color alone -- which is the literal truth for a renderer that has not implemented
+        // any other render-target format.
+        return format == SurfaceFormat::Color;
     }
 
     int GraphicsDevice::GetMaxTextureDimension() const

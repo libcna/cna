@@ -2,15 +2,22 @@
 
 ## ABI identity
 
-The ABI is `0.4.0`, which adds `cna_content_manager_register_cnj_loader_ext` and is otherwise
-`0.3.0`. `0.1.0` was the initial one; `0.2.0` added the routes recorded in
-`plan_binding.md` CBIND-054 through CBIND-058, every one of them additive. `0.3.0` is **not**
-additive and that is why the minor moved again: `CBIND-067` made all 94 routes taking a `CNA_Bool`
-refuse a byte outside {0, 1}, where 66 of them used to accept one. A caller that passed only
-`CNA_FALSE` and `CNA_TRUE` -- what this document has always required -- is unaffected. A caller
-that passed anything else was already getting a value read as true in some routes and false in
-others, so there was no consistent behaviour to preserve. Its packed representation is
-a `uint32_t`:
+The ABI is `0.8.0`. It adds the NanoVG renderer identity and the five engine-layer capability
+identities for float and half-float render targets, half-float texture filtering, compute shaders,
+and indirect drawing. Appending those identities moves the two public `MAXIMUM` sentinels, so this
+is a reviewed incompatible change under the experimental `0.x` policy rather than an additive
+patch to `0.7.0`.
+
+`0.7.0` added the six PBR and morph-target routes from `CBIND-078`; `0.6.0` standardized empty
+shader-source refusal in `CBIND-075`; `0.5.0` added the portable native-window handle routes from
+`CBIND-072`; and `0.4.0` added `cna_content_manager_register_cnj_loader_ext`. `0.1.0` was the
+initial version, while `0.2.0` added the routes recorded in `plan_binding.md` CBIND-054 through
+CBIND-058, every one of them additive. `0.3.0` was **not** additive and that is why the minor moved:
+`CBIND-067` made all 94 routes taking a `CNA_Bool` refuse a byte outside {0, 1}, where 66 of them
+used to accept one. A caller that passed only `CNA_FALSE` and `CNA_TRUE` -- what this document has
+always required -- is unaffected. A caller that passed anything else was already getting a value
+read as true in some routes and false in others, so there was no consistent behaviour to preserve.
+The packed representation is a `uint32_t`:
 
 ```text
 bits 31..16  major
@@ -155,6 +162,6 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 2,861 symbols. That is itself part of the contract:
+All four build configurations export the same 2,862 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer or with `CNA_DEVICES` — only the answers do. A
 route whose backend is absent exists and refuses, rather than disappearing from the library.

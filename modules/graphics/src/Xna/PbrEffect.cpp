@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
@@ -95,6 +96,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ownedOcclusionMap_          = src.ownedOcclusionMap_;
         ownedSpecularMapEXT_         = src.ownedSpecularMapEXT_;
         ownedSpecularColorMapEXT_    = src.ownedSpecularColorMapEXT_;
+        imageBasedLightEXT_          = src.imageBasedLightEXT_;
     }
 
     Effect* PbrEffect::Clone()
@@ -431,6 +433,71 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void PbrEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
+        // MOD-821: accepted-and-ignored on renderers without a shadow-sampling variant, exactly
+        // like the PBR fields beside them.
+        p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
+        p.shadowDepthBias = shadowDepthBiasEXT_;
+        p.shadowPcfRadius = shadowFilterRadiusEXT_;
+        if (punctualLightEXT_.Kind != PunctualLightKindEXT::None)
+        {
+            // MOD-1005. The cosines are precomputed here rather than in the shader: a cone test
+            // needs cos(angle), and six transcendental calls per fragment to recover what the CPU
+            // already knows is a poor trade.
+            p.punctualKind = punctualLightEXT_.Kind == PunctualLightKindEXT::Point ? 1 : 2;
+            p.punctualPosition[0] = punctualLightEXT_.Position.X;
+            p.punctualPosition[1] = punctualLightEXT_.Position.Y;
+            p.punctualPosition[2] = punctualLightEXT_.Position.Z;
+            p.punctualDirection[0] = punctualLightEXT_.Direction.X;
+            p.punctualDirection[1] = punctualLightEXT_.Direction.Y;
+            p.punctualDirection[2] = punctualLightEXT_.Direction.Z;
+            p.punctualDiffuse[0] = punctualLightEXT_.DiffuseColor.X;
+            p.punctualDiffuse[1] = punctualLightEXT_.DiffuseColor.Y;
+            p.punctualDiffuse[2] = punctualLightEXT_.DiffuseColor.Z;
+            p.punctualRange      = punctualLightEXT_.Range;
+            p.punctualCosInner   = std::cos(punctualLightEXT_.InnerAngle);
+            p.punctualCosOuter   = std::cos(punctualLightEXT_.OuterAngle);
+            p.punctualShadowBias = punctualLightEXT_.ShadowDepthBias;
+            if (punctualLightEXT_.Kind == PunctualLightKindEXT::Point &&
+                punctualLightEXT_.ShadowCube != nullptr)
+            {
+                p.punctualShadowCube = &punctualLightEXT_.ShadowCube->GetRenderer();
+            }
+            else if (punctualLightEXT_.Kind == PunctualLightKindEXT::Spot &&
+                     punctualLightEXT_.ShadowMap != nullptr)
+            {
+                p.punctualShadowMap = &punctualLightEXT_.ShadowMap->GetRenderer();
+                const float* m = &punctualLightEXT_.ShadowViewProjection.M11;
+                for (int i = 0; i < 16; ++i) p.punctualViewProjColMajor[i] = m[i];
+            }
+        }
+        if (p.shadowsEnabled && shadowCascadesEXT_.Count > 0)
+        {
+            // MOD-908: the cascade matrices replace the single light matrix rather than joining
+            // it -- a receiver reads one or the other, never both, so leaving a stale
+            // lightViewProjColMajor behind would be harmless but misleading to anyone reading it.
+            p.cascadeCount = shadowCascadesEXT_.Count;
+            for (int c = 0; c < shadowCascadesEXT_.Count; ++c)
+            {
+                const float* m = &shadowCascadesEXT_.WorldToAtlas[c].M11;
+                for (int i = 0; i < 16; ++i) p.cascadeMatricesColMajor[c * 16 + i] = m[i];
+                p.cascadeSplits[c] = shadowCascadesEXT_.SplitDistance[c];
+            }
+            // The view matrix's third column: dotting a world position with it gives view-space Z,
+            // whose negation is the depth the splits are expressed in.
+            p.cascadeViewZRow[0] = shadowCascadesEXT_.CameraView.M13;
+            p.cascadeViewZRow[1] = shadowCascadesEXT_.CameraView.M23;
+            p.cascadeViewZRow[2] = shadowCascadesEXT_.CameraView.M33;
+            p.cascadeViewZRow[3] = shadowCascadesEXT_.CameraView.M43;
+            p.cascadeBlendBand = shadowCascadesEXT_.BlendBand;
+            p.cascadeDebugTint = shadowCascadesEXT_.DebugTint;
+        }
+        if (p.shadowsEnabled)
+        {
+            p.shadowMap = &shadowMapEXT_->GetRenderer();
+            const float* lightMatrix = &lightViewProjectionEXT_.M11;
+            for (int i = 0; i < 16; ++i) p.lightViewProjColMajor[i] = lightMatrix[i];
+        }
+
         using namespace CNA::Internal::Renderers;
 
         p.pbr             = true;
@@ -464,6 +531,25 @@ namespace Microsoft::Xna::Framework::Graphics
         p.ambientColor[0] = ambientLightColor_.X;
         p.ambientColor[1] = ambientLightColor_.Y;
         p.ambientColor[2] = ambientLightColor_.Z;
+
+        // MOD-1224/MOD-1226: an environment replaces the flat ambient term rather than adding to
+        // it -- both stand for the same light, so summing them counts it twice. Zeroing the flat
+        // colour here rather than leaving the choice to each renderer is what makes that true
+        // everywhere, including on a renderer that accepts the IBL fields and ignores them: it
+        // gets an unlit ambient rather than a double-lit one, which is the safer of the two
+        // wrong pictures and the one a reader can recognise.
+        if (imageBasedLightEXT_.IsValidEXT())
+        {
+            p.iblEnabled = true;
+            p.iblIrradiance = &imageBasedLightEXT_.Irradiance->GetRenderer();
+            p.iblPrefilteredSpecular = &imageBasedLightEXT_.PrefilteredSpecular->GetRenderer();
+            p.iblBrdfLut = &imageBasedLightEXT_.BrdfLut->GetRenderer();
+            p.iblPrefilteredMipCount = imageBasedLightEXT_.PrefilteredMipCount;
+            p.iblIntensity = imageBasedLightEXT_.Intensity;
+            p.ambientColor[0] = 0.0f;
+            p.ambientColor[1] = 0.0f;
+            p.ambientColor[2] = 0.0f;
+        }
 
         p.emissiveColor[0] = emissiveFactor_.X;
         p.emissiveColor[1] = emissiveFactor_.Y;
@@ -605,5 +691,58 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         static const std::string name = "Microsoft.Xna.Framework.Graphics.PbrEffect";
         return name;
+    }
+
+    void PbrEffect::setShadowMapEXT(Texture2D* shadowMap) { shadowMapEXT_ = shadowMap; }
+
+    Texture2D* PbrEffect::getShadowMapEXT() const { return shadowMapEXT_; }
+
+    void PbrEffect::setLightViewProjectionEXT(const Matrix& lightViewProjection)
+    {
+        lightViewProjectionEXT_ = lightViewProjection;
+    }
+
+    Matrix PbrEffect::getLightViewProjectionEXT() const { return lightViewProjectionEXT_; }
+
+    void PbrEffect::setShadowsEnabledEXT(bool enabled) { shadowsEnabledEXT_ = enabled; }
+
+    bool PbrEffect::isShadowsEnabledEXT() const { return shadowsEnabledEXT_; }
+
+    void PbrEffect::setShadowDepthBiasEXT(float bias) { shadowDepthBiasEXT_ = bias; }
+
+    float PbrEffect::getShadowDepthBiasEXT() const { return shadowDepthBiasEXT_; }
+
+    void PbrEffect::setShadowFilterRadiusEXT(int radius) { shadowFilterRadiusEXT_ = radius; }
+
+    int PbrEffect::getShadowFilterRadiusEXT() const { return shadowFilterRadiusEXT_; }
+
+    void PbrEffect::setShadowCascadesEXT(const ShadowCascadeStateEXT& state)
+    {
+        shadowCascadesEXT_ = state;
+    }
+
+    const ShadowCascadeStateEXT& PbrEffect::getShadowCascadesEXT() const
+    {
+        return shadowCascadesEXT_;
+    }
+
+    void PbrEffect::setPunctualLightEXT(const PunctualLightEXT& light)
+    {
+        punctualLightEXT_ = light;
+    }
+
+    const PunctualLightEXT& PbrEffect::getPunctualLightEXT() const
+    {
+        return punctualLightEXT_;
+    }
+
+    void PbrEffect::setImageBasedLightEXT(const ImageBasedLightEXT& light)
+    {
+        imageBasedLightEXT_ = light;
+    }
+
+    const ImageBasedLightEXT& PbrEffect::getImageBasedLightEXT() const
+    {
+        return imageBasedLightEXT_;
     }
 }

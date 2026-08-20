@@ -5,6 +5,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /** @brief RGB sub-pixel mask pattern applied by CRTEffect. */
     enum class CRTMaskType
     {
@@ -15,6 +19,8 @@ namespace CNA::Graphics {
         /** @brief Row-offset RGB dot pattern (classic shadow-mask CRT). */
         ShadowMask,
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

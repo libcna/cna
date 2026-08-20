@@ -5,6 +5,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Selects how AsciiPostProcessEffect quantizes a source image into a glyph/color grid.
      *
@@ -19,6 +23,8 @@ namespace CNA::Graphics {
         /** @brief Glyph chosen by luminance rank, plus the cell's own averaged color as foreground tint and (at quarter brightness) background fill. */
         Color
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MS-PL
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include <cmath>
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -51,6 +53,71 @@ namespace Microsoft::Xna::Framework::Graphics
     void BasicEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& p) const
     {
         using namespace CNA::Internal::Renderers;
+
+        // MOD-821: carried to the renderer whether or not it has a shadow-sampling variant --
+        // the same accepted-and-ignored convention the PBR fields use.
+        p.shadowsEnabled  = shadowsEnabledEXT_ && shadowMapEXT_ != nullptr;
+        p.shadowDepthBias = shadowDepthBiasEXT_;
+        p.shadowPcfRadius = shadowFilterRadiusEXT_;
+        if (punctualLightEXT_.Kind != PunctualLightKindEXT::None)
+        {
+            // MOD-1005. The cosines are precomputed here rather than in the shader: a cone test
+            // needs cos(angle), and six transcendental calls per fragment to recover what the CPU
+            // already knows is a poor trade.
+            p.punctualKind = punctualLightEXT_.Kind == PunctualLightKindEXT::Point ? 1 : 2;
+            p.punctualPosition[0] = punctualLightEXT_.Position.X;
+            p.punctualPosition[1] = punctualLightEXT_.Position.Y;
+            p.punctualPosition[2] = punctualLightEXT_.Position.Z;
+            p.punctualDirection[0] = punctualLightEXT_.Direction.X;
+            p.punctualDirection[1] = punctualLightEXT_.Direction.Y;
+            p.punctualDirection[2] = punctualLightEXT_.Direction.Z;
+            p.punctualDiffuse[0] = punctualLightEXT_.DiffuseColor.X;
+            p.punctualDiffuse[1] = punctualLightEXT_.DiffuseColor.Y;
+            p.punctualDiffuse[2] = punctualLightEXT_.DiffuseColor.Z;
+            p.punctualRange      = punctualLightEXT_.Range;
+            p.punctualCosInner   = std::cos(punctualLightEXT_.InnerAngle);
+            p.punctualCosOuter   = std::cos(punctualLightEXT_.OuterAngle);
+            p.punctualShadowBias = punctualLightEXT_.ShadowDepthBias;
+            if (punctualLightEXT_.Kind == PunctualLightKindEXT::Point &&
+                punctualLightEXT_.ShadowCube != nullptr)
+            {
+                p.punctualShadowCube = &punctualLightEXT_.ShadowCube->GetRenderer();
+            }
+            else if (punctualLightEXT_.Kind == PunctualLightKindEXT::Spot &&
+                     punctualLightEXT_.ShadowMap != nullptr)
+            {
+                p.punctualShadowMap = &punctualLightEXT_.ShadowMap->GetRenderer();
+                const float* m = &punctualLightEXT_.ShadowViewProjection.M11;
+                for (int i = 0; i < 16; ++i) p.punctualViewProjColMajor[i] = m[i];
+            }
+        }
+        if (p.shadowsEnabled && shadowCascadesEXT_.Count > 0)
+        {
+            // MOD-908: the cascade matrices replace the single light matrix rather than joining
+            // it -- a receiver reads one or the other, never both, so leaving a stale
+            // lightViewProjColMajor behind would be harmless but misleading to anyone reading it.
+            p.cascadeCount = shadowCascadesEXT_.Count;
+            for (int c = 0; c < shadowCascadesEXT_.Count; ++c)
+            {
+                const float* m = &shadowCascadesEXT_.WorldToAtlas[c].M11;
+                for (int i = 0; i < 16; ++i) p.cascadeMatricesColMajor[c * 16 + i] = m[i];
+                p.cascadeSplits[c] = shadowCascadesEXT_.SplitDistance[c];
+            }
+            // The view matrix's third column: dotting a world position with it gives view-space Z,
+            // whose negation is the depth the splits are expressed in.
+            p.cascadeViewZRow[0] = shadowCascadesEXT_.CameraView.M13;
+            p.cascadeViewZRow[1] = shadowCascadesEXT_.CameraView.M23;
+            p.cascadeViewZRow[2] = shadowCascadesEXT_.CameraView.M33;
+            p.cascadeViewZRow[3] = shadowCascadesEXT_.CameraView.M43;
+            p.cascadeBlendBand = shadowCascadesEXT_.BlendBand;
+            p.cascadeDebugTint = shadowCascadesEXT_.DebugTint;
+        }
+        if (p.shadowsEnabled)
+        {
+            p.shadowMap = &shadowMapEXT_->GetRenderer();
+            const float* m = &lightViewProjectionEXT_.M11;
+            for (int i = 0; i < 16; ++i) p.lightViewProjColMajor[i] = m[i];
+        }
 
         p.textureEnabled     = textureEnabled_;
         p.vertexColorEnabled = VertexColorEnabled;
@@ -228,5 +295,48 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         static const std::string name = "Microsoft.Xna.Framework.Graphics.BasicEffect";
         return name;
+    }
+
+    void BasicEffect::setShadowMapEXT(Texture2D* shadowMap) { shadowMapEXT_ = shadowMap; }
+
+    Texture2D* BasicEffect::getShadowMapEXT() const { return shadowMapEXT_; }
+
+    void BasicEffect::setLightViewProjectionEXT(const Matrix& lightViewProjection)
+    {
+        lightViewProjectionEXT_ = lightViewProjection;
+    }
+
+    Matrix BasicEffect::getLightViewProjectionEXT() const { return lightViewProjectionEXT_; }
+
+    void BasicEffect::setShadowsEnabledEXT(bool enabled) { shadowsEnabledEXT_ = enabled; }
+
+    bool BasicEffect::isShadowsEnabledEXT() const { return shadowsEnabledEXT_; }
+
+    void BasicEffect::setShadowDepthBiasEXT(float bias) { shadowDepthBiasEXT_ = bias; }
+
+    float BasicEffect::getShadowDepthBiasEXT() const { return shadowDepthBiasEXT_; }
+
+    void BasicEffect::setShadowFilterRadiusEXT(int radius) { shadowFilterRadiusEXT_ = radius; }
+
+    int BasicEffect::getShadowFilterRadiusEXT() const { return shadowFilterRadiusEXT_; }
+
+    void BasicEffect::setShadowCascadesEXT(const ShadowCascadeStateEXT& state)
+    {
+        shadowCascadesEXT_ = state;
+    }
+
+    const ShadowCascadeStateEXT& BasicEffect::getShadowCascadesEXT() const
+    {
+        return shadowCascadesEXT_;
+    }
+
+    void BasicEffect::setPunctualLightEXT(const PunctualLightEXT& light)
+    {
+        punctualLightEXT_ = light;
+    }
+
+    const PunctualLightEXT& BasicEffect::getPunctualLightEXT() const
+    {
+        return punctualLightEXT_;
     }
 }

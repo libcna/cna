@@ -5,6 +5,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /** @brief Shadow map quality preset. */
     enum class ShadowQuality
     {
@@ -19,6 +23,8 @@ namespace CNA::Graphics {
         /** @brief 4096×4096 shadow map, PCF 5×5. */
         Ultra,
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

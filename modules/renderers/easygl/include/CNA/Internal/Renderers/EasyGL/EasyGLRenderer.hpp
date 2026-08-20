@@ -14,6 +14,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -185,10 +186,17 @@ namespace CNA::Internal::Renderers::EasyGL
          *                         from nothing instead of touching freed storage.
          * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
          * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
+         * @param surfaceFormat    plan_modern.md MOD-115: raw
+         *                         `Microsoft::Xna::Framework::Graphics::SurfaceFormat` ordinal for
+         *                         the colour attachment. `Color` (the default) keeps the historical
+         *                         8-bit RGBA storage exactly as it was; the float formats allocate
+         *                         real R/RG/RGBA 16F/32F storage, which is what lets an HDR scene
+         *                         keep values above 1.0 instead of clamping them at draw time.
          */
         EasyGLRenderTargetRenderer(int w, int h, int depthFormat, ::easygl::ResourceRegistry* registry,
                                    std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                   bool mipMap = false, int multiSampleCount = 0);
+                                   bool mipMap = false, int multiSampleCount = 0,
+                                   int surfaceFormat = 0);
         ~EasyGLRenderTargetRenderer() override;
 
         int GetWidth()  const override { return width_; }
@@ -206,6 +214,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] unsigned int GetColorGLHandle() const override;
         [[nodiscard]] const ::easygl::Texture& GetEasyGLColorTexture() const { return colorTex_; }
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
+        /// plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
+        /// actually created with. Equal to what was requested -- an unsupported format is refused at
+        /// creation rather than substituted, so this can never disagree with the caller's request.
+        [[nodiscard]] int GetSurfaceFormatEXT() const { return surfaceFormat_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && depthFormat_ != 0;
@@ -237,6 +249,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int  width_            = 0;
         int  height_           = 0;
         int  depthFormat_      = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
+        int  surfaceFormat_    = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal.
         bool mipMap_           = false;
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
@@ -263,7 +276,8 @@ namespace CNA::Internal::Renderers::EasyGL
          */
         EasyGLRenderTargetCubeRenderer(int size, int depthFormat, ::easygl::ResourceRegistry* registry,
                                        std::weak_ptr<EasyGLBoundTargetEXT> binding,
-                                       bool mipMap = false, int multiSampleCount = 0);
+                                       bool mipMap = false, int multiSampleCount = 0,
+                                       int surfaceFormat = 0);
         ~EasyGLRenderTargetCubeRenderer() override;
 
         [[nodiscard]] int GetSize() const override { return size_; }
@@ -345,6 +359,7 @@ namespace CNA::Internal::Renderers::EasyGL
         std::array<::easygl::Renderbuffer, 6> msaaColorRbos_;
         int  size_             = 0;
         int  depthFormat_      = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::DepthFormat ordinal.
+        int  surfaceFormat_    = 0;  ///< Raw Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal.
         bool mipMap_           = false;
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
@@ -441,6 +456,11 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetUniformMat4(const char* name, const float* matrix) override;
         void SetUniformFloatArray(const char* name, const float* values, int count) override;
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        /// Resolves an array uniform by its bare name or by GLSL's `name[0]` spelling, because
+        /// which of the two a driver accepts is not specified.
+        int ArrayUniformLocation(const char* name);
+        void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
         void BindTexture(int unit, ITextureRenderer* texture) override;
         void BindTextureCube(int unit, ITextureCubeRenderer* texture) override;
         void BindTexture3D(int unit, ITexture3DRenderer* texture) override;
@@ -456,6 +476,62 @@ namespace CNA::Internal::Renderers::EasyGL
         /// into this effect's own `uRtFlipV` when its GLSL opts in by declaring that uniform.
         float rtFlipV_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
         bool  rtFlipVUploaded_ = false;
+    };
+
+    /**
+     * @brief plan_modern.md MOD-1512: a shader storage buffer.
+     *
+     * Read-back goes through `glMapBufferRange` rather than `glGetBufferSubData`, which is desktop
+     * GL only -- the same code then works on the GL ES 3.1 contexts this renderer mostly runs on.
+     */
+    class EasyGLStorageBufferRenderer : public IStorageBufferRenderer
+    {
+    public:
+        /** @brief Allocates @p byteSize bytes of storage. */
+        explicit EasyGLStorageBufferRenderer(std::size_t byteSize);
+        ~EasyGLStorageBufferRenderer() override;
+
+        void SetData(const void* data, std::size_t byteSize) override;
+        void GetData(void* out, std::size_t byteSize) const override;
+        [[nodiscard]] std::size_t GetByteSize() const override { return byteSize_; }
+
+        /// Binds this buffer to a shader storage binding point.
+        void BindBase(int binding) const;
+
+        /// plan_modern.md MOD-2090: binds this buffer as the source of an indirect draw's
+        /// arguments. The same buffer object in a second role -- which is exactly what makes an
+        /// indirect draw worth having, since a compute shader can write the arguments through the
+        /// storage binding and the draw fetches them here without a readback in between.
+        void BindAsDrawIndirect() const;
+
+    private:
+        mutable ::easygl::Buffer buffer_;
+        std::size_t byteSize_ = 0;
+    };
+
+    /**
+     * @brief plan_modern.md MOD-1511: one compiled compute program.
+     */
+    class EasyGLComputeShaderRenderer : public IComputeShaderRenderer
+    {
+    public:
+        EasyGLComputeShaderRenderer() = default;
+        ~EasyGLComputeShaderRenderer() override = default;
+
+        bool CompileProgram(const std::string& computeSrc) override;
+        void Bind() override;
+        void SetUniformInt(const char* name, int value) override;
+        void SetUniformFloat(const char* name, float value) override;
+        void BindStorageBuffer(int binding, IStorageBufferRenderer* buffer) override;
+        void BindImageTexture(int unit, ITextureRenderer* texture, int accessMode) override;
+        void BindTexture(int unit, ITextureRenderer* texture) override;
+        [[nodiscard]] bool IsValid() const override { return valid_; }
+        [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+
+    private:
+        ::easygl::Program program_;
+        std::string compileError_;
+        bool valid_ = false;
     };
 
     class EasyGLOcclusionQueryRenderer : public IOcclusionQueryRenderer, public ::easygl::RecoverableResource
@@ -474,6 +550,33 @@ namespace CNA::Internal::Renderers::EasyGL
 
     private:
         ::easygl::Query query_;
+        ::easygl::ResourceRegistry* registry_ = nullptr;
+    };
+
+    /// plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
+    /// because that enum is written to the ES 3.0 core set and the timer query is an extension
+    /// there. The target is therefore cast in one place, here, rather than the whole query object
+    /// being written against raw GL.
+    class EasyGLGpuTimerRenderer : public IGpuTimerRenderer, public ::easygl::RecoverableResource
+    {
+    public:
+        explicit EasyGLGpuTimerRenderer(::easygl::ResourceRegistry* registry);
+        ~EasyGLGpuTimerRenderer() override;
+
+        void Begin() override;
+        void End()   override;
+        [[nodiscard]] bool IsResultAvailable() const override;
+        [[nodiscard]] std::uint64_t ElapsedNanoseconds() const override;
+
+        void release_gl_handle_only() override;
+        void recreate_gl_resource()   override;
+
+    private:
+        void create();
+
+        ::metagl::QueryId id_{};
+        bool created_ = false;
+        bool open_    = false;
         ::easygl::ResourceRegistry* registry_ = nullptr;
     };
 
@@ -744,6 +847,47 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_specularpower = -1;  ///< BasicEffect.SpecularPower (Blinn-Phong exponent)
             int loc_texture       = -1;
             int loc_texture2      = -1;  ///< second sampler (DualTextureEffect only)
+            /// plan_modern.md MOD-835: shadow reception. Present only on the lit variants; every
+            /// other program leaves them at -1 and BindDrawParams skips them, exactly like the
+            /// other optional locations here.
+            int loc_shadowmap      = -1;  ///< sampler2D holding light-space distance
+            int loc_lightviewproj  = -1;  ///< mat4 world -> shadow-map space
+            int loc_shadows_on     = -1;  ///< float 0/1
+            int loc_shadow_bias    = -1;  ///< float
+            int loc_shadow_texel   = -1;  ///< vec2 1/size (textureSize() is ES 3.00 only)
+            int loc_shadow_pcf     = -1;  ///< float PCF radius in texels, 0..2
+            /// plan_modern.md MOD-908: cascades. uCascadeCount 0 means a single map and the rest
+            /// are left alone, which is why an existing draw is byte-for-byte unchanged.
+            int loc_cascade_count  = -1;  ///< float, 0 = single map
+            int loc_cascade_mats   = -1;  ///< mat4[4], world -> atlas, sub-rectangle baked in
+            int loc_cascade_splits = -1;  ///< vec4 of view-depth boundaries
+            int loc_cascade_viewz  = -1;  ///< vec4, the view matrix's third column
+            int loc_cascade_blend  = -1;  ///< float cross-fade width in view-depth units
+            int loc_cascade_debug  = -1;  ///< float 0/1
+            /// plan_modern.md MOD-1005: one punctual light. uPunctualKind 0 means none and the
+            /// rest are left alone, which is why an existing draw is unchanged.
+            int loc_punctual_kind   = -1;  ///< float 0 none, 1 point, 2 spot
+            int loc_punctual_pos    = -1;
+            int loc_punctual_dir    = -1;
+            int loc_punctual_diff   = -1;
+            int loc_punctual_range  = -1;
+            int loc_punctual_cosin  = -1;
+            int loc_punctual_cosout = -1;
+            int loc_punctual_bias   = -1;
+            int loc_punctual_hasmap = -1;
+            int loc_punctual_cube   = -1;  ///< samplerCube, unit 8
+            int loc_punctual_map    = -1;  ///< sampler2D, unit 9
+            int loc_punctual_vp     = -1;
+            int loc_punctual_texel  = -1;  ///< vec2 1/size of the spot map
+            /// plan_modern.md MOD-1225: image-based lighting. uIblEnabled 0 means the flat
+            /// uAmbientColor term is in charge and every other field here is untouched -- which
+            /// is why a draw that has never heard of IBL renders exactly as it did.
+            int loc_ibl_enabled    = -1;  ///< float 0/1
+            int loc_ibl_irradiance = -1;  ///< samplerCube, unit 10
+            int loc_ibl_specular   = -1;  ///< samplerCube, unit 11 (mips are the roughness ramp)
+            int loc_ibl_brdf       = -1;  ///< sampler2D, unit 12 (N.V across, roughness down)
+            int loc_ibl_mipcount   = -1;  ///< float, mips the prefiltered cube was generated with
+            int loc_ibl_intensity  = -1;  ///< float, multiplies the whole environment term
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint
@@ -838,6 +982,17 @@ namespace CNA::Internal::Renderers::EasyGL
         /// which is precisely what the trace exists to record.
         [[nodiscard]] std::string TraceBindingDetailEXT() const;
 
+        /// plan_modern.md MOD-117: asks GL, once per kind, whether a colour attachment of the
+        /// 32-bit (@p fullFloat) or 16-bit float format is framebuffer-complete on this context.
+        /// Restores the previously bound framebuffer and drains the error queue before returning.
+        [[nodiscard]] bool ProbeFloatRenderTargetSupportEXT(bool fullFloat) const;
+
+        /// Cached results of that probe. Mutable because the query is const and a caller may make
+        /// it per frame; the answer cannot change without a new GL context, and a new context means
+        /// a new renderer.
+        mutable std::optional<bool> probedFullFloatRenderable_;
+        mutable std::optional<bool> probedHalfFloatRenderable_;
+
         // FillMode::WireFrame emulation (OpenGL ES has no glPolygonMode):
         // when active, triangle draws are re-expanded into GL_LINES.
         bool wireframe_ = false;
@@ -890,6 +1045,13 @@ namespace CNA::Internal::Renderers::EasyGL
                             const Matrix& projection, const GpuDrawParams& params);
         /// REMED-GFX-147: resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
+        /// plan_modern.md MOD-836..MOD-839: resolves CNA_GL_SHADOW_DECL's uniforms for a freshly
+        /// linked lit program. Every other program leaves them at -1, and BindDrawParams skips
+        /// them exactly as it skips the other optional locations.
+        static void ResolveShadowUniforms(Prog3D& p);
+        /// plan_modern.md MOD-1225: resolves the image-based-lighting uniforms, which exist only
+        /// on the two PBR programs; every other program leaves them at -1.
+        static void ResolveIblUniforms(Prog3D& p);
 
     public:
         /**
@@ -1136,7 +1298,62 @@ namespace CNA::Internal::Renderers::EasyGL
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2D(int w, int h, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /// plan_modern.md MOD-115: creates the colour attachment in the requested SurfaceFormat --
+        /// real R/RG/RGBA 16F/32F storage for the float formats, unchanged 8-bit RGBA for Color.
+        /// Throws for a format this GL context cannot render to, rather than substituting Color the
+        /// way the shared default does; ask SupportsRenderTargetFormat() first.
+        std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
+            int w, int h, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
+        /// plan_modern.md MOD-104/MOD-117: this renderer's own verdict on a render-target
+        /// SurfaceFormat. Color is Supported unconditionally; the float formats are answered by a
+        /// cached runtime framebuffer-completeness probe, because their availability is a property
+        /// of the driver and its extensions rather than of the compile-time GL profile. Every other
+        /// format defers to the framework rule, unchanged.
+        [[nodiscard]] RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const override;
+        /// plan_modern.md MOD-123: half-float texture filtering. Core from OpenGL ES 3.0 and
+        /// desktop GL 3.0 onward; on the ES 2.0 API generation it needs an extension that this
+        /// renderer does not rely on, so it is reported false there.
+        [[nodiscard]] bool SupportsHalfFloatTextureLinearFilteringEXT() const override;
+
+        /// plan_modern.md MOD-1510: compute shaders, which need GL ES 3.1 or desktop GL 4.3. The
+        /// answer is the *runtime* context's version, not the compile-time profile: this renderer
+        /// asks for ES 3.0 and routinely receives 3.2, and refusing compute on a context that has
+        /// it would be as wrong as claiming it on one that does not.
+        /// plan_modern.md MOD-1699: this renderer's four lit programs really do sample the shadow
+        /// state, and its two PBR programs really do shade from an image-based light -- Phases 8-12
+        /// implemented both here first.
+        /// This renderer compiles the GLSL it is given and runs it; that is the whole EasyGL
+        /// ShaderEffect path.
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+        [[nodiscard]] bool SupportsShadowSamplingEXT() const override { return true; }
+        [[nodiscard]] bool SupportsImageBasedLightingEXT() const override { return true; }
+        [[nodiscard]] bool SupportsComputeShadersEXT() const override;
+        /// plan_modern.md MOD-2090: glDrawArraysIndirect/glDrawElementsIndirect, which arrive in
+        /// the same API generation as compute (GL ES 3.1, desktop GL 4.0) -- so the probe is the
+        /// same runtime version question, asked separately because the two are separate promises.
+        [[nodiscard]] bool SupportsIndirectDrawEXT() const override;
+        [[nodiscard]] bool SupportsGpuTimerEXT() const override;
+        std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() override;
+        [[nodiscard]] bool SupportsComputeImageBindingEXT() const override;
+        [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const override;
+        [[nodiscard]] int GetMaxComputeWorkGroupSizeEXT(int axis) const override;
+        [[nodiscard]] int GetMaxComputeWorkGroupInvocationsEXT() const override;
+        [[nodiscard]] int GetMaxVertexShaderStorageBlocksEXT() const override;
+        void BindStorageBufferForDrawEXT(int binding,
+                                         const IStorageBufferRenderer& buffer) override;
+        std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& computeSrc) override;
+        std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(std::size_t byteSize) override;
+        void DispatchCompute(IComputeShaderRenderer* shader, int groupsX, int groupsY,
+                             int groupsZ) override;
+        void MemoryBarrierEXT(int barrierBits) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) override;
+        /// plan_modern.md MOD-107: the cube counterpart of CreateRenderTarget2DEXT -- real float
+        /// storage for the formats this context can render to, and a refusal for the rest.
+        std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int surfaceFormat) override;
         std::unique_ptr<ITexture3DRenderer> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
@@ -1245,6 +1462,32 @@ namespace CNA::Internal::Renderers::EasyGL
                                        PrimitiveType primitive, int primitiveCount,
                                        int instanceCount,
                                        const GpuDrawParams& params) override;
+        void DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                       const Matrix& world, const Matrix& view,
+                                       const Matrix& projection, PrimitiveType primitive,
+                                       const IStorageBufferRenderer& argumentBuffer,
+                                       int argumentByteOffset,
+                                       const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                              const IIndexBufferRenderer& ib,
+                                              const Matrix& world, const Matrix& view,
+                                              const Matrix& projection, PrimitiveType primitive,
+                                              const IStorageBufferRenderer& argumentBuffer,
+                                              int argumentByteOffset,
+                                              const GpuDrawParams& params) override;
+
+    private:
+        /// MOD-2090: both indirect routes, which differ only in whether an index buffer is bound
+        /// and therefore in which GL entry point issues the command. Everything around that -- the
+        /// declaration guard, the per-vertex and per-instance stream configuration, the program and
+        /// its uniforms, and the teardown that stops a later draw inheriting a stale divisor -- is
+        /// identical to the ordinary routes' and is written once here.
+        /// @param ib The bound index buffer, or null for the non-indexed route.
+        void IssueIndirectDrawEXT(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                  const Matrix& world, const Matrix& view,
+                                  const Matrix& projection, PrimitiveType primitive,
+                                  const IStorageBufferRenderer& argumentBuffer,
+                                  int argumentByteOffset, const GpuDrawParams& params);
     };
 
     /**

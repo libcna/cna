@@ -5,6 +5,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Ordered-dithering pattern applied by DepthEffect before colour quantization.
      *
@@ -24,6 +28,8 @@ namespace CNA::Graphics {
         /** @brief 8x8 ordered (Bayer) dithering — finer dither cell pattern. */
         Bayer8x8,
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

@@ -5557,6 +5557,24 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> Sokol::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
+        // sokol_gfx keeps its state in one process-wide context: sg_setup() asserts `!_sg.valid`
+        // and aborts the process if one already exists, with no way for a caller to recover or even
+        // to ask first. Refuse by name instead, the same way TinyGLRenderer does for the same
+        // reason -- a library assert killing the process is strictly worse than an exception the
+        // caller can catch, and under NDEBUG the assert is not there at all.
+        //
+        // The check belongs here rather than in SetupSokol(): the constructor creates a platform GL
+        // context in its initializer list, and doing that *first* makes the new context current, so
+        // the existing renderer's sokol objects are then torn down against the wrong context and
+        // sokol asserts again on the way out. Refusing before anything is constructed is the only
+        // point at which nothing has been disturbed. Found by plan_modern.md Phase 16's
+        // second-device probe, which aborted the whole test process both ways round.
+        if (sg_isvalid())
+            throw std::runtime_error(
+                "SokolRenderer: a sokol_gfx context already exists. sokol_gfx keeps its context in "
+                "one process-wide global (sg_setup/sg_shutdown) and offers no make-current entry "
+                "point, so exactly one SokolRenderer may exist at a time.");
+
         return std::make_unique<Sokol::SokolRenderer>(args);
     }
 }

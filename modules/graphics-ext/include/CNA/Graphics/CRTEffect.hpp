@@ -8,6 +8,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Full-screen CRT display emulation post-process effect.
      *
@@ -96,6 +100,8 @@ namespace CNA::Graphics {
         float maskIntensity_ = 0.35f;
         CRTMaskType maskType_ = CRTMaskType::ApertureGrille;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

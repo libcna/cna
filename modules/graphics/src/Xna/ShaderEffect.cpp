@@ -37,6 +37,13 @@ namespace Microsoft::Xna::Framework::Graphics
             effectRenderer_->DeclareUniformBlockEXT(blockSizeBytes, names, offsets, count);
     }
 
+    std::string ShaderEffect::GetCompileErrorEXT() const
+    {
+        if (effectRenderer_ == nullptr) return {};
+        if (effectRenderer_->IsValid()) return {};
+        return effectRenderer_->GetCompileError();
+    }
+
     void ShaderEffect::SetUniformMat4(const char* name, const float* matrix)
     {
         if (effectRenderer_) effectRenderer_->SetUniformMat4(name, matrix);
@@ -75,6 +82,16 @@ namespace Microsoft::Xna::Framework::Graphics
     void ShaderEffect::SetUniformVec2Array(const char* name, const float* values, int count)
     {
         if (effectRenderer_) effectRenderer_->SetUniformVec2Array(name, values, count);
+    }
+
+    void ShaderEffect::SetUniformVec3Array(const char* name, const float* values, int count)
+    {
+        if (effectRenderer_) effectRenderer_->SetUniformVec3Array(name, values, count);
+    }
+
+    void ShaderEffect::SetUniformMat4Array(const char* name, const float* matrices, int count)
+    {
+        if (effectRenderer_) effectRenderer_->SetUniformMat4Array(name, matrices, count);
     }
 
     void ShaderEffect::SetTexture(int unit, Texture2D& texture)

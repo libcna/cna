@@ -6,6 +6,7 @@
 // lets subsystem lifecycle and timing be verified in CI rather than only on a developer desktop.
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "System/Environment.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
 #include <gtest/gtest.h>
@@ -74,7 +75,7 @@ protected:
         }
         // The dummy driver gives a real video subsystem with no display server, so these tests
         // exercise the genuine SDL code path rather than being skipped in a headless CI.
-        setenv("SDL_VIDEODRIVER", "dummy", 1);
+        System::Environment::SetEnvironmentVariable("SDL_VIDEODRIVER", "dummy");
         platform_ = PlatformFactory::Create("SDL3");
         ASSERT_NE(platform_, nullptr);
     }

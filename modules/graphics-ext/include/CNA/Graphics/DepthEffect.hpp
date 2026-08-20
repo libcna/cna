@@ -10,6 +10,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Full-screen colour-depth-reduction post-process effect.
      *
@@ -74,7 +78,7 @@ namespace CNA::Graphics {
          * (mirrors ShaderEffect's own "no device.renderer_" tolerance — building a texture
          * with GraphicsDevice::GetRenderer() throws when there is no renderer).
          */
-        void EnsurePaletteTextures();
+        void ensurePaletteTextures();
 
         DepthEffectMode mode_ = DepthEffectMode::Color16Bit;
         DitherMode ditherMode_ = DitherMode::None;
@@ -82,6 +86,8 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::Texture2D palette16Texture_;
         bool paletteTexturesBuilt_ = false;
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

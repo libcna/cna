@@ -23,6 +23,7 @@
 // Exit code 0 = every leg passed, 1 = any leg failed.
 
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "System/Environment.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -215,9 +216,9 @@ int main(int argc, char** argv)
         for (const char* alias : kWorkingAliases)
         {
             if (std::string(alias) == "auto")
-                unsetenv("CNA_DILIGENT_DEVICE");
+                System::Environment::SetEnvironmentVariable("CNA_DILIGENT_DEVICE", "");
             else
-                setenv("CNA_DILIGENT_DEVICE", alias, 1);
+                System::Environment::SetEnvironmentVariable("CNA_DILIGENT_DEVICE", alias);
             bool skipped = false;
             if (RunLegIsolated(argv[0], alias, skipped))
             {
@@ -229,7 +230,7 @@ int main(int argc, char** argv)
 
         // Leg "bogus": run with --leg=bogus directly (no alias env assignment needed by the
         // supervisor itself -- the child leg below sets it).
-        setenv("CNA_DILIGENT_DEVICE", "not-a-real-device-xyz", 1);
+        System::Environment::SetEnvironmentVariable("CNA_DILIGENT_DEVICE", "not-a-real-device-xyz");
         bool bogusSkipped = false;
         const bool bogusOk = RunLegIsolated(argv[0], "__bogus__", bogusSkipped);
 

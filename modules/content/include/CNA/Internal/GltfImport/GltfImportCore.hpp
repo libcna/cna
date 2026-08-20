@@ -367,6 +367,42 @@ namespace CNA::Internal::GltfImport
         float alphaCutoff = 0.5f;
         /** @brief `doubleSided` (glTF default false). */
         bool doubleSided = false;
+
+        // plan_modern.md MOD-2076. The material extensions beyond what `PbrEffect` shades, kept
+        // here as plain values for the same reason the four above are: the importer's job is to
+        // say what the file contained, and deciding what to do about it belongs to whoever reads
+        // this. Each field carries the extension's own default, so a file that does not declare
+        // the extension produces the material it would have without these fields at all.
+
+        /** @brief `KHR_materials_clearcoat.clearcoatFactor` (extension default 0, meaning off). */
+        float clearcoatFactorEXT = 0.0f;
+        /** @brief `KHR_materials_clearcoat.clearcoatRoughnessFactor` (extension default 0). */
+        float clearcoatRoughnessFactorEXT = 0.0f;
+        /** @brief `KHR_materials_sheen.sheenColorFactor` (extension default black, meaning off). */
+        Microsoft::Xna::Framework::Vector3 sheenColorFactorEXT{0.0f, 0.0f, 0.0f};
+        /** @brief `KHR_materials_sheen.sheenRoughnessFactor` (extension default 0). */
+        float sheenRoughnessFactorEXT = 0.0f;
+        /** @brief `KHR_materials_transmission.transmissionFactor` (extension default 0). */
+        float transmissionFactorEXT = 0.0f;
+        /** @brief `KHR_materials_volume.thicknessFactor` (extension default 0, a thin surface). */
+        float thicknessFactorEXT = 0.0f;
+        /**
+         * @brief `KHR_materials_volume.attenuationDistance`, or 0 for the extension's infinity.
+         *
+         * glTF spells "absorbs nothing" as `+Infinity`, which is not a value a shader uniform can
+         * carry, so it arrives here as 0 -- the same spelling `PbrMaterialExtensions` uses.
+         */
+        float attenuationDistanceEXT = 0.0f;
+        /** @brief `KHR_materials_volume.attenuationColor` (extension default white). */
+        Microsoft::Xna::Framework::Vector3 attenuationColorEXT{1.0f, 1.0f, 1.0f};
+        /** @brief `KHR_materials_iridescence.iridescenceFactor` (extension default 0). */
+        float iridescenceFactorEXT = 0.0f;
+        /** @brief `KHR_materials_iridescence.iridescenceIor` (extension default 1.3). */
+        float iridescenceIorEXT = 1.3f;
+        /** @brief `KHR_materials_iridescence.iridescenceThicknessMinimum` (default 100 nm). */
+        float iridescenceThicknessMinimumEXT = 100.0f;
+        /** @brief `KHR_materials_iridescence.iridescenceThicknessMaximum` (default 400 nm). */
+        float iridescenceThicknessMaximumEXT = 400.0f;
     };
 
     /**

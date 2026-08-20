@@ -112,6 +112,8 @@ typedef uint32_t CNA_GraphicsRendererType;
 #define CNA_GRAPHICS_RENDERER_IGL UINT32_C(48)
 /** @brief Identifies the PixiJS backend. */
 #define CNA_GRAPHICS_RENDERER_PIXIJS UINT32_C(49)
+/** @brief Identifies the NanoVG backend. */
+#define CNA_GRAPHICS_RENDERER_NANOVG UINT32_C(50)
 
 /**
  * @brief Largest defined renderer identity.
@@ -121,7 +123,7 @@ typedef uint32_t CNA_GraphicsRendererType;
  * whole identity space without naming each backend. Every value above it is refused by every
  * route that takes a @ref CNA_GraphicsRendererType.
  */
-#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_PIXIJS
+#define CNA_GRAPHICS_RENDERER_MAXIMUM CNA_GRAPHICS_RENDERER_NANOVG
 
 /** @brief Fixed-width identifier for a renderer-dependent graphics capability. */
 typedef uint32_t CNA_GraphicsCapability;
@@ -185,6 +187,21 @@ typedef uint32_t CNA_GraphicsCapability;
  */
 #define CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS UINT32_C(13)
 
+/** @brief Indicates support for 32-bit floating-point colour render targets. */
+#define CNA_GRAPHICS_CAPABILITY_FLOAT_RENDER_TARGETS UINT32_C(14)
+
+/** @brief Indicates support for 16-bit floating-point colour render targets. */
+#define CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS UINT32_C(15)
+
+/** @brief Indicates support for linearly filtering half-float textures. */
+#define CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING UINT32_C(16)
+
+/** @brief Indicates support for compute shaders and storage buffers. */
+#define CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS UINT32_C(17)
+
+/** @brief Indicates support for GPU-buffer-driven indirect draws. */
+#define CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW UINT32_C(18)
+
 /**
  * @brief Largest defined graphics capability identity.
  *
@@ -192,7 +209,7 @@ typedef uint32_t CNA_GraphicsCapability;
  * @ref CNA_GRAPHICS_CAPABILITY_THREE_D through this value with no gaps, so a caller can query
  * every capability without naming each one. Every value above it is refused.
  */
-#define CNA_GRAPHICS_CAPABILITY_MAXIMUM CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS
+#define CNA_GRAPHICS_CAPABILITY_MAXIMUM CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW
 
 /** @brief Fixed-width identity of the shading dialect a custom effect's sources must use. */
 typedef uint32_t CNA_ShaderDialect;
@@ -263,6 +280,21 @@ typedef uint64_t CNA_GraphicsCapabilityFlags;
 
 /** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS. */
 #define CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS (UINT64_C(1) << 13)
+
+/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_FLOAT_RENDER_TARGETS. */
+#define CNA_GRAPHICS_CAPABILITY_FLAG_FLOAT_RENDER_TARGETS (UINT64_C(1) << 14)
+
+/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS. */
+#define CNA_GRAPHICS_CAPABILITY_FLAG_HALF_FLOAT_RENDER_TARGETS (UINT64_C(1) << 15)
+
+/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING. */
+#define CNA_GRAPHICS_CAPABILITY_FLAG_HALF_FLOAT_TEXTURE_LINEAR_FILTERING (UINT64_C(1) << 16)
+
+/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS. */
+#define CNA_GRAPHICS_CAPABILITY_FLAG_COMPUTE_SHADERS (UINT64_C(1) << 17)
+
+/** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW. */
+#define CNA_GRAPHICS_CAPABILITY_FLAG_INDIRECT_DRAW (UINT64_C(1) << 18)
 
 /** @brief Fixed-width surface-format identity used by texture APIs. */
 typedef uint32_t CNA_SurfaceFormat;

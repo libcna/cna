@@ -30,16 +30,16 @@ extern "C" {
      (((uint32_t)(minor) & UINT32_C(0xFF)) << 8) | \
      ((uint32_t)(patch) & UINT32_C(0xFF)))
 
-/** @brief Major component of the initial experimental CNA C ABI version. */
+/** @brief Major component of the current experimental CNA C ABI version. */
 #define CNA_ABI_VERSION_MAJOR UINT32_C(0)
 
 /** @brief Minor component of the experimental CNA C ABI version. */
-#define CNA_ABI_VERSION_MINOR UINT32_C(7)
+#define CNA_ABI_VERSION_MINOR UINT32_C(8)
 
-/** @brief Patch component of the initial experimental CNA C ABI version. */
+/** @brief Patch component of the current experimental CNA C ABI version. */
 #define CNA_ABI_VERSION_PATCH UINT32_C(0)
 
-/** @brief Encoded value of the initial experimental CNA C ABI version. */
+/** @brief Encoded value of the current experimental CNA C ABI version. */
 #define CNA_ABI_VERSION CNA_ABI_VERSION_ENCODE( \
     CNA_ABI_VERSION_MAJOR, CNA_ABI_VERSION_MINOR, CNA_ABI_VERSION_PATCH)
 

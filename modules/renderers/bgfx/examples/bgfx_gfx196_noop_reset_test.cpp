@@ -13,6 +13,7 @@
 //   * native fatal/assert/abort/segfault/timeout (signal classification).
 
 #include "CNA/GraphicsCapability.hpp"
+#include "System/Environment.hpp"
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -374,7 +375,7 @@ namespace
         if (pid == 0)
         {
             alarm(45);
-            setenv("CNA_BGFX_RENDERER", renderer, 1);
+            System::Environment::SetEnvironmentVariable("CNA_BGFX_RENDERER", renderer);
             char* const argv[] = {
                 const_cast<char*>(executable), const_cast<char*>("--child"),
                 const_cast<char*>(id), nullptr

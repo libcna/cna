@@ -2930,6 +2930,52 @@ namespace CNA::Internal::GltfImport
             const cgltf_float* color = prim.material->specular.specular_color_factor;
             out.material.specularColorFactorEXT = Vector3(color[0], color[1], color[2]);
         }
+        // plan_modern.md MOD-2076: the extensions beyond what PbrEffect shades. cgltf already
+        // parses every one of them; what was missing was anyone copying the values out. Each block
+        // is guarded by its own `has_` flag, so a file that does not declare an extension keeps the
+        // extension's default and is byte-for-byte the material it was before this code existed.
+        if (prim.material && prim.material->has_clearcoat)
+        {
+            out.material.clearcoatFactorEXT = prim.material->clearcoat.clearcoat_factor;
+            out.material.clearcoatRoughnessFactorEXT =
+                prim.material->clearcoat.clearcoat_roughness_factor;
+        }
+        if (prim.material && prim.material->has_sheen)
+        {
+            const cgltf_float* sheen = prim.material->sheen.sheen_color_factor;
+            out.material.sheenColorFactorEXT = Vector3(sheen[0], sheen[1], sheen[2]);
+            out.material.sheenRoughnessFactorEXT = prim.material->sheen.sheen_roughness_factor;
+        }
+        if (prim.material && prim.material->has_transmission)
+        {
+            out.material.transmissionFactorEXT =
+                prim.material->transmission.transmission_factor;
+        }
+        if (prim.material && prim.material->has_volume)
+        {
+            out.material.thicknessFactorEXT = prim.material->volume.thickness_factor;
+            const cgltf_float* attenuation = prim.material->volume.attenuation_color;
+            out.material.attenuationColorEXT =
+                Vector3(attenuation[0], attenuation[1], attenuation[2]);
+            // glTF spells "absorbs nothing" as +Infinity, which no shader uniform can carry; it
+            // arrives as 0, the same spelling PbrMaterialExtensions uses for the same thing.
+            // cgltf's own sentinel for the absent value is FLT_MAX rather than an infinity, so the
+            // test is a magnitude rather than std::isfinite -- which is exactly the difference the
+            // first version of this got wrong, letting 3.4e38 through as a real distance.
+            const cgltf_float distance = prim.material->volume.attenuation_distance;
+            const bool absorbs = std::isfinite(distance) && distance > 0.0f && distance < 1e30f;
+            out.material.attenuationDistanceEXT = absorbs ? static_cast<float>(distance) : 0.0f;
+        }
+        if (prim.material && prim.material->has_iridescence)
+        {
+            out.material.iridescenceFactorEXT =
+                prim.material->iridescence.iridescence_factor;
+            out.material.iridescenceIorEXT = prim.material->iridescence.iridescence_ior;
+            out.material.iridescenceThicknessMinimumEXT =
+                prim.material->iridescence.iridescence_thickness_min;
+            out.material.iridescenceThicknessMaximumEXT =
+                prim.material->iridescence.iridescence_thickness_max;
+        }
         // plan_gltf.md GLTF-349: KHR_materials_pbrSpecularGlossiness, converted rather than
         // refused. Khronos archived it, but it is what a decade of older assets are authored in,
         // and rejecting them would be a worse answer than an approximation with a name.

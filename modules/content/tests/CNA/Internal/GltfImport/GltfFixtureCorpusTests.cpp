@@ -2115,7 +2115,16 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     //
     // Note for whoever edits this comment: the scan counts the opening delimiter anywhere in a
     // .cpp, comments included, so spelling it here would raise the very number it explains.
-    constexpr int kCeiling = 275;
+    //
+    // 275 -> 280 is plan_modern.md MOD-2076, and the decision this ratchet asks for is: these are
+    // **loader-machinery probes**, not conformance statements about an asset. Each one asks which
+    // values of KHR_materials_clearcoat / _sheen / _transmission / _volume / _iridescence reach
+    // MaterialOut, including the two that are about the *absence* of a declaration and one about an
+    // extension nothing implements. There is no asset whose correct import they assert, so
+    // tools/gltf_fixtures/ is the wrong home for them (docs/gltf-conformance.md §3.7). One builder
+    // splices the extensions object and the extensionsUsed list into the middle of one document, so
+    // as with the UV-channel builder above, the literal openings exceed the document count.
+    constexpr int kCeiling = 280;
 
     int found = 0;
     std::map<std::string, int> perFile;

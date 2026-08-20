@@ -29,6 +29,7 @@
 #include <unordered_set>
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
@@ -187,6 +188,32 @@ namespace CNA::Internal::Renderers
      * returns 0 (no visible samples) or 1 (at least one visible sample), not an
      * exact pixel count. This matches FNA's behaviour on GLES3.
      */
+    /// plan_modern.md MOD-2163: a GPU-side elapsed-time query around a range of commands.
+    ///
+    /// Deliberately not an occlusion query with a different name. The two look alike and are not:
+    /// an occlusion query counts samples and is answered by the rasteriser, while this measures
+    /// wall-clock time *on the GPU* and needs `GL_EXT_disjoint_timer_query` on ES or GL 3.3 on the
+    /// desktop. A renderer without it must report false rather than substitute a CPU clock, because
+    /// a CPU number wearing a GPU name is worse than no number -- it is a measurement of when the
+    /// driver returned, which is exactly the thing GPU timing exists to see past.
+    class IGpuTimerRenderer
+    {
+    public:
+        virtual ~IGpuTimerRenderer() = default;
+
+        /// Starts the timed range. Only one may be open at a time on most implementations.
+        virtual void Begin() = 0;
+
+        /// Ends the timed range. The result becomes available asynchronously, usually a frame later.
+        virtual void End() = 0;
+
+        /// Whether the GPU has finished and the result can be read without stalling.
+        [[nodiscard]] virtual bool IsResultAvailable() const = 0;
+
+        /// The elapsed GPU time in nanoseconds, or zero when no result is available.
+        [[nodiscard]] virtual std::uint64_t ElapsedNanoseconds() const = 0;
+    };
+
     class IOcclusionQueryRenderer
     {
     public:
@@ -195,6 +222,121 @@ namespace CNA::Internal::Renderers
         virtual void End()   = 0;
         [[nodiscard]] virtual bool IsComplete() const = 0;
         [[nodiscard]] virtual int  PixelCount() const = 0;
+    };
+
+    class ITextureRenderer;
+
+    /**
+     * @brief A GPU buffer a compute shader reads and writes (an SSBO, in GL terms).
+     *
+     * plan_modern.md `MOD-1501`. Deliberately byte-oriented and free of every XNA type: a storage
+     * buffer holds whatever a shader says it holds, and the public `CNA::Graphics::StorageBuffer`
+     * wrapper is where a typed view over it belongs.
+     */
+    class IStorageBufferRenderer
+    {
+    public:
+        /** @brief Virtual destructor. */
+        virtual ~IStorageBufferRenderer() = default;
+
+        /**
+         * @brief Uploads bytes into the buffer, starting at its beginning.
+         *
+         * @param data     The source bytes; must hold at least @p byteSize readable bytes.
+         * @param byteSize How many bytes to upload; must not exceed @ref GetByteSize.
+         */
+        virtual void SetData(const void* data, std::size_t byteSize) = 0;
+
+        /**
+         * @brief Reads bytes back out of the buffer, starting at its beginning.
+         *
+         * @param out      Receives the bytes; must have room for at least @p byteSize.
+         * @param byteSize How many bytes to read; must not exceed @ref GetByteSize.
+         */
+        virtual void GetData(void* out, std::size_t byteSize) const = 0;
+
+        /** @brief Returns the buffer's size in bytes. */
+        [[nodiscard]] virtual std::size_t GetByteSize() const = 0;
+    };
+
+    /**
+     * @brief One compiled compute program, and the bindings a dispatch of it reads.
+     *
+     * plan_modern.md `MOD-1500`. Mirrors `IEffectRenderer`'s shape: the renderer owns the compiled
+     * object, the interface exposes only what a caller must be able to say about it, and no XNA
+     * type appears in a signature -- an image binding arrives as an `ITextureRenderer`, and the
+     * access mode as an ordinal (`CNA::GraphicsImageAccess`) rather than as an enumeration this
+     * header would have to include.
+     */
+    class IComputeShaderRenderer
+    {
+    public:
+        /** @brief Virtual destructor. */
+        virtual ~IComputeShaderRenderer() = default;
+
+        /**
+         * @brief Compiles and links the program.
+         *
+         * @param computeSrc The compute-shader source, in whatever language the renderer takes.
+         * @return True when the program linked; @ref GetCompileError says why when it did not.
+         */
+        virtual bool CompileProgram(const std::string& computeSrc) = 0;
+
+        /** @brief Makes this the program a following dispatch runs. */
+        virtual void Bind() = 0;
+
+        /**
+         * @brief Sets a scalar integer uniform.
+         *
+         * @param name  The uniform's name in the source.
+         * @param value The value.
+         */
+        virtual void SetUniformInt(const char* /*name*/, int /*value*/) {}
+
+        /**
+         * @brief Sets a scalar float uniform.
+         *
+         * @param name  The uniform's name in the source.
+         * @param value The value.
+         */
+        virtual void SetUniformFloat(const char* /*name*/, float /*value*/) {}
+
+        /**
+         * @brief Binds a storage buffer to one of the program's binding points.
+         *
+         * @param binding The binding index the shader declares.
+         * @param buffer  The buffer, or null to unbind.
+         */
+        virtual void BindStorageBuffer(int /*binding*/, IStorageBufferRenderer* /*buffer*/) {}
+
+        /**
+         * @brief Binds a texture as a readable/writable image.
+         *
+         * @param unit       The image unit the shader declares.
+         * @param texture    The texture, or null to unbind.
+         * @param accessMode A `CNA::GraphicsImageAccess` ordinal.
+         */
+        virtual void BindImageTexture(int /*unit*/, ITextureRenderer* /*texture*/,
+                                      int /*accessMode*/) {}
+
+        /**
+         * @brief Binds a texture to a sampler unit the program can sample.
+         *
+         * plan_modern.md `MOD-1552`. Distinct from @ref BindImageTexture in what it needs of the
+         * texture: sampling has no immutability requirement, so this works where an image binding
+         * does not. The caller still sets the sampler uniform itself, with @ref SetUniformInt, for
+         * the same reason `IEffectRenderer` does -- the unit is data, not a name this layer knows.
+         *
+         * @param unit    The texture unit to bind to.
+         * @param texture The texture, or null to unbind.
+         */
+        virtual void BindTexture(int /*unit*/, ITextureRenderer* /*texture*/) {}
+
+        /** @brief Returns whether a program is currently linked and usable. */
+        [[nodiscard]] virtual bool IsValid() const = 0;
+
+        /** @brief Returns the compiler/linker log from the last failed @ref CompileProgram. */
+        [[nodiscard]] virtual std::string GetCompileError() const = 0;
     };
 
     /**
@@ -747,6 +889,19 @@ namespace CNA::Internal::Renderers
         /// Sets a vec2 array uniform by name. `count` is the number of vec2 elements
         /// (`values` holds `count * 2` floats).
         virtual void SetUniformVec2Array(const char* name, const float* values, int count) {}
+
+        /// plan_modern.md MOD-217 (reopened): uploads @p count vec3 values. A vec3 array cannot be
+        /// filled through SetUniformFloatArray -- GL rejects the type mismatch and leaves the
+        /// uniform at zero, silently, which is how an SSAO kernel of 64 vec3s turns into 64 samples
+        /// at the origin and an image with no occlusion in it at all.
+        virtual void SetUniformVec3Array(const char* name, const float* values, int count) {}
+
+        /// plan_modern.md MOD-810: uploads @p count column-major 4x4 matrices, for a shader that
+        /// declares `mat4 name[N]` -- a skinning palette, most of the time. Separate from
+        /// SetUniformMat4 for the same reason the array forms above are separate from their scalar
+        /// ones: the single-matrix call uploads exactly one matrix whatever the uniform's declared
+        /// size, so filling a palette with it leaves every bone past the first at its default.
+        virtual void SetUniformMat4Array(const char* name, const float* matrices, int count) {}
         /// Binds a texture to the given sampler unit (0-based) for subsequent draw calls.
         /// Unit 0 is normally driven by the caller (e.g. SpriteBatch); this is for additional
         /// units a custom shader samples directly (e.g. a second blend-source texture).
@@ -952,6 +1107,57 @@ namespace CNA::Internal::Renderers
         /// EnvironmentMapEffect: camera world-space position for reflection vector.
         /// BasicEffect (lit path only): camera world-space position for specular half-vector.
         float eyePositionWorld[3] = {0,0,0};
+        /// plan_modern.md MOD-821: shadow reception. `shadowMap` holds light-space distance (not a
+        /// depth buffer -- CNA cannot sample a depth attachment; see CNA::Graphics::ShadowMap), and
+        /// `lightViewProjColMajor` takes a world position into that map's space. Defaults mean "no
+        /// shadows", and a renderer with no shadow-sampling variant accepts and ignores them, the
+        /// same convention the PBR fields use.
+        const ITextureRenderer* shadowMap = nullptr;
+        float lightViewProjColMajor[16] = {
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+        bool  shadowsEnabled = false;
+        float shadowDepthBias = 0.0015f;
+        /// plan_modern.md MOD-840: PCF kernel radius in shadow-map texels. 0 is a single tap, 1 a
+        /// 3x3 neighbourhood, 2 a 5x5 one. Expressed as a radius rather than a kernel size because
+        /// that is what a shader loop bound needs, and clamped by the renderer rather than trusted.
+        int   shadowPcfRadius = 1;
+        /// plan_modern.md MOD-908: cascaded shadows. Zero means "one map", and everything below is
+        /// ignored -- which is what keeps every existing draw, and every renderer with no cascade
+        /// shader, exactly as it was. When it is non-zero `shadowMap` is the cascade atlas rather
+        /// than a single map, `cascadeMatricesColMajor` holds one world-to-atlas matrix per cascade
+        /// (the atlas sub-rectangle already baked in) and `lightViewProjColMajor` is unused.
+        int   cascadeCount = 0;
+        float cascadeMatricesColMajor[4 * 16] = {};
+        /// View-space depth at which each cascade stops being used, ascending.
+        float cascadeSplits[4] = {0, 0, 0, 0};
+        /// The view matrix's third column, so the shader can compute a fragment's view depth
+        /// without being given the whole matrix a second time.
+        float cascadeViewZRow[4] = {0, 0, -1, 0};
+        /// Width of the cross-fade between neighbouring cascades, in view-depth units. Zero is a
+        /// hard switch, which is visible as a line across the ground wherever the two cascades
+        /// disagree about an edge.
+        float cascadeBlendBand = 0.0f;
+        /// Tints each cascade a different colour. A debugging aid, off by default.
+        bool  cascadeDebugTint = false;
+        /// plan_modern.md MOD-1005: one punctual light and its shadow. 0 means none -- and every
+        /// draw that has never heard of punctual lights leaves it there, which is what keeps this
+        /// free. 1 is a point light (shadowed by `punctualShadowCube`), 2 a spot light (shadowed
+        /// by `punctualShadowMap` through `punctualViewProjColMajor`). Both maps store *distance
+        /// from the light over its range*, not projected depth; see CNA::Graphics::CubeShadowMap.
+        int   punctualKind = 0;
+        float punctualPosition[3]  = {0, 0, 0};
+        float punctualDirection[3] = {0, -1, 0};
+        float punctualDiffuse[3]   = {1, 1, 1};
+        float punctualRange        = 20.0f;
+        /// Cosine of the inner and outer cone half-angles, precomputed: the shader needs the
+        /// cosines and computing them per fragment would be six transcendental calls per pixel.
+        float punctualCosInner     = 1.0f;
+        float punctualCosOuter     = 1.0f;
+        float punctualShadowBias   = 0.004f;
+        const ITextureCubeRenderer* punctualShadowCube = nullptr;
+        const ITextureRenderer*     punctualShadowMap  = nullptr;
+        float punctualViewProjColMajor[16] = {
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
         /// BasicEffect: DirectionalLight0/1/2's SpecularColor, zeroed when that light is disabled
         /// (mirrors the light*Diffuse zeroing — FNA's DirectionalLight.Enabled setter zeroes both).
         float light0Specular[3] = {0,0,0};
@@ -1181,6 +1387,27 @@ namespace CNA::Internal::Renderers
         /// §3.9.2 declares them linear unconditionally; a flag would imply a choice that does not
         /// exist.
         bool pbrEncodeOutputToSrgb = true;
+        /// plan_modern.md MOD-1224: image-based lighting, the three split-sum products at once.
+        /// `iblEnabled` false -- which is every draw that has never heard of IBL -- leaves the
+        /// flat `ambientColor` term exactly as it was, and that is deliberate: the two are the
+        /// same term computed two ways, so a renderer applies one or the other, never their sum
+        /// (MOD-1226). Renderers with no IBL shader variant accept and ignore all six fields, the
+        /// same convention the PBR and shadow groups above use.
+        bool iblEnabled = false;
+        /// Diffuse irradiance, indexed by the surface normal.
+        const ITextureCubeRenderer* iblIrradiance = nullptr;
+        /// GGX-prefiltered specular, indexed by the reflection vector; roughness selects the mip.
+        const ITextureCubeRenderer* iblPrefilteredSpecular = nullptr;
+        /// The (N.V across, roughness down) scale/bias table. Row 0 is roughness 0.
+        const ITextureRenderer* iblBrdfLut = nullptr;
+        /// How many mips the prefiltered cube was generated with. The shader's mip for a given
+        /// roughness is `roughness * (count - 1)`, which is CNA::Graphics::EnvironmentProcessor::
+        /// mipForRoughness -- the same formula on both sides, by construction rather than by
+        /// agreement.
+        int   iblPrefilteredMipCount = 1;
+        /// Multiplies the whole environment contribution. The products are 8-bit, so an
+        /// environment brighter than 1.0 carries its brightness here instead of in its texels.
+        float iblIntensity = 1.0f;
     };
 
     /**
@@ -1810,6 +2037,15 @@ namespace CNA::Internal::Renderers
             return CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
         }
 
+        /// plan_modern.md MOD-123: whether sampling a half-float colour texture with a linear
+        /// (or mip) filter is supported by this context, as distinct from being able to render into
+        /// one. Default false: a renderer that has not checked cannot promise it, and a pass that
+        /// wrongly assumes hardware filtering gets undefined sampling rather than a slower path.
+        [[nodiscard]] virtual bool SupportsHalfFloatTextureLinearFilteringEXT() const
+        {
+            return false;
+        }
+
         /// Activates the given render target (binds its FBO). Pass nullptr to
         /// restore the default back buffer.
         virtual void SetRenderTarget2D(IRenderTargetRenderer* rt) {}
@@ -1828,6 +2064,19 @@ namespace CNA::Internal::Renderers
         /// had to invent an answer: Vulkan and WebGPU both invented "always discard", so a
         /// PreserveContents cube face was wiped on every bind cycle.
         virtual std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(int size, int depthFormat, bool preserveContents = false, bool mipMap = false, int multiSampleCount = 0) { return nullptr; }
+
+        /// plan_modern.md MOD-107: CreateRenderTargetCube plus an explicit
+        /// Microsoft::Xna::Framework::Graphics::SurfaceFormat ordinal, exactly as
+        /// CreateRenderTarget2DEXT is to CreateRenderTarget2D. The default forwards and ignores the
+        /// format, so every renderer keeps its Color-only cube behaviour until it implements more;
+        /// the CNAEXT engine layer needs this for image-based lighting, whose irradiance and
+        /// prefiltered-specular products are float cube maps rendered face by face.
+        virtual std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCubeEXT(
+            int size, int depthFormat, bool preserveContents, bool mipMap,
+            int multiSampleCount, int /*surfaceFormat*/)
+        {
+            return CreateRenderTargetCube(size, depthFormat, preserveContents, mipMap, multiSampleCount);
+        }
 
         /// Compiles a shader program from GLSL/HLSL source strings.
         /// Returns nullptr on renderers that do not support programmable shaders.
@@ -1849,6 +2098,132 @@ namespace CNA::Internal::Renderers
         /// values added after they were written. GraphicsDevice consults this method for
         /// CompiledEffects so an old catch-all cannot accidentally advertise a native runtime.
         [[nodiscard]] virtual bool SupportsCompiledEffects() const { return false; }
+
+        /// plan_modern.md MOD-1502: compute shaders and storage buffers. Every default is the
+        /// honest "this renderer cannot", so all renderer families compile unchanged and none of
+        /// them accidentally claims a feature it has never heard of -- the same opt-in shape
+        /// SupportsCompiledEffects uses, and for the same reason.
+        virtual std::unique_ptr<IComputeShaderRenderer> CreateComputeShader(
+            const std::string& /*computeSrc*/)
+        {
+            return nullptr;
+        }
+
+        /// Creates a storage buffer of @p byteSize bytes, or null where unsupported.
+        virtual std::unique_ptr<IStorageBufferRenderer> CreateStorageBuffer(
+            std::size_t /*byteSize*/)
+        {
+            return nullptr;
+        }
+
+        /// Runs the bound compute program over a grid of work groups. A no-op where unsupported.
+        virtual void DispatchCompute(IComputeShaderRenderer* /*shader*/, int /*groupsX*/,
+                                     int /*groupsY*/, int /*groupsZ*/) {}
+
+        /// Orders memory access after a dispatch. `barrierBits` is a `CNA::GraphicsMemoryBarrier`
+        /// bitmask, which each renderer translates into its own native bits.
+        virtual void MemoryBarrierEXT(int /*barrierBits*/) {}
+
+        /// plan_modern.md MOD-1699: whether the source text handed to `CreateEffectRenderer`
+        /// actually determines the pixels. Three renderers answer this differently from
+        /// `GraphicsCapability::CustomEffects`, and each way is legitimate: SOFTWARE and HEADLESS
+        /// *accept* any shader source and render with their own fixed path instead (a documented
+        /// decision, not a bug), and Vulkan compiles SPIR-V bytecode rather than the GLSL text the
+        /// engine layer writes. A post-process pass that believes its shader ran on those
+        /// renderers produces a copy of its input and reports success, which is the one outcome
+        /// worse than refusing. False by default, for the same reason every other promise here is.
+        [[nodiscard]] virtual bool ExecutesShaderEffectSourceEXT() const { return false; }
+
+        /// plan_modern.md MOD-1699: whether this renderer's lit shaders actually SAMPLE the
+        /// shadow state an effect carries (`IShadowReceiverEXT`: single map, cascades, punctual).
+        /// The state itself is accepted and ignored everywhere -- that convention is what keeps a
+        /// draw working on a renderer with no shadow shader -- but "accepted and ignored" and
+        /// "honoured" are different promises, and a caller that wants to know which it is getting
+        /// has no way to ask otherwise. False by default: a renderer that has not implemented the
+        /// sampling must not claim it.
+        [[nodiscard]] virtual bool SupportsShadowSamplingEXT() const { return false; }
+
+        /// plan_modern.md MOD-1699: whether this renderer's PBR shader honours the image-based
+        /// lighting group of `GpuDrawParams` (`iblIrradiance`, `iblPrefilteredSpecular`,
+        /// `iblBrdfLut`). Same reasoning as `SupportsShadowSamplingEXT`, and the same default.
+        [[nodiscard]] virtual bool SupportsImageBasedLightingEXT() const { return false; }
+
+        /// plan_modern.md MOD-1500: whether this renderer really implements compute. False by
+        /// default, and consulted by GraphicsDevice for GraphicsCapability::ComputeShaders rather
+        /// than that capability being answered by a renderer's own switch -- many of those end in
+        /// `default: return true`.
+        [[nodiscard]] virtual bool SupportsComputeShadersEXT() const { return false; }
+
+        /// plan_modern.md MOD-2090: whether this renderer really issues indirect draws --
+        /// `DrawPrimitivesIndirectEXT` and `DrawIndexedPrimitivesIndirectEXT` below. False by
+        /// default, and consulted by GraphicsDevice for GraphicsCapability::IndirectDraw rather
+        /// than that capability being answered by a renderer's own switch, for the reason
+        /// SupportsComputeShadersEXT states.
+        [[nodiscard]] virtual bool SupportsIndirectDrawEXT() const { return false; }
+
+        /// plan_modern.md MOD-1514: whether a `Texture2D` can be bound to a compute shader as an
+        /// image. Separate from `SupportsComputeShadersEXT` because the two genuinely differ: GL ES
+        /// 3.1 requires an *immutable* texture (`glTexStorage2D`) for `glBindImageTexture`, and
+        /// CNA's textures are allocated mutably (`glTexImage2D`), so an ES context that fully
+        /// supports compute still cannot bind one. Desktop GL accepts a mutable texture. False by
+        /// default, like every other promise here.
+        [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
+
+        /// plan_modern.md MOD-2092: the colour space the swap chain is currently presenting in.
+        /// `Srgb` by default and for every CNA renderer today -- an HDR swap chain is a property of
+        /// the *presentation* path (DXGI, Vulkan surface formats, a platform's own HDR opt-in), not
+        /// of a drawing API, and no CNA platform back end offers one yet. A renderer must not claim
+        /// otherwise: PQ-encoded pixels handed to an sRGB swap chain are washed out and grey, which
+        /// is a worse outcome than SDR output that is simply correct.
+        [[nodiscard]] virtual CNA::DisplayColorSpace GetDisplayColorSpaceEXT() const
+        {
+            return CNA::DisplayColorSpace::Srgb;
+        }
+
+        /// plan_modern.md MOD-2092: asks the swap chain to present in @p space.
+        /// @return True when the swap chain now presents in that space. The default accepts only
+        ///         `Srgb`, which is the truth rather than a stub: a renderer that returned true
+        ///         without reconfiguring anything would have every caller encode for a display that
+        ///         is not there.
+        virtual bool SetDisplayColorSpaceEXT(const CNA::DisplayColorSpace space)
+        {
+            return space == CNA::DisplayColorSpace::Srgb;
+        }
+
+        /// plan_modern.md MOD-2091: how many storage buffers a VERTEX shader on this context may
+        /// read. GL ES 3.1 permits this to be zero -- a context can support compute completely and
+        /// still refuse an SSBO in a vertex stage -- so it is a separate number rather than
+        /// something derivable from `SupportsComputeShadersEXT()`. Zero means "not there", which is
+        /// what every renderer without compute returns.
+        [[nodiscard]] virtual int GetMaxVertexShaderStorageBlocksEXT() const { return 0; }
+
+        /// plan_modern.md MOD-2091: binds a storage buffer to a binding point a following DRAW's
+        /// shaders read, rather than a following dispatch's. The binding points are the same set
+        /// `IComputeShaderRenderer::BindStorageBuffer` uses; what differs is only which stage reads
+        /// them, which is why this is on the renderer rather than on a program.
+        virtual void BindStorageBufferForDrawEXT(int /*binding*/,
+                                                 const IStorageBufferRenderer& /*buffer*/) {}
+
+        /// plan_modern.md MOD-2163: whether this renderer can measure GPU time around a range of
+        /// commands. False by default, and false is the honest answer wherever the underlying API
+        /// has no timer query -- see IGpuTimerRenderer for why a CPU fallback is not offered.
+        [[nodiscard]] virtual bool SupportsGpuTimerEXT() const { return false; }
+
+        /// plan_modern.md MOD-2163: creates a GPU timer, or null where SupportsGpuTimerEXT() is
+        /// false. Null rather than a stub that returns zeroes, so a caller cannot mistake "no
+        /// timer here" for "this pass took no time".
+        virtual std::unique_ptr<IGpuTimerRenderer> CreateGpuTimerEXT() { return nullptr; }
+
+        /// plan_modern.md MOD-1505: the dispatch limits this context guarantees, per axis
+        /// (0 = x, 1 = y, 2 = z). Zero means "unknown or unsupported", which is what every
+        /// renderer without compute returns.
+        [[nodiscard]] virtual int GetMaxComputeWorkGroupCountEXT(int /*axis*/) const { return 0; }
+
+        /// The largest local size a compute shader may declare, per axis.
+        [[nodiscard]] virtual int GetMaxComputeWorkGroupSizeEXT(int /*axis*/) const { return 0; }
+
+        /// The largest product of a compute shader's local sizes.
+        [[nodiscard]] virtual int GetMaxComputeWorkGroupInvocationsEXT() const { return 0; }
 
         /// Activates a specific face of a cube-map render target for rendering.
         /// Pass nullptr to restore the default back buffer.
@@ -2158,6 +2533,75 @@ namespace CNA::Internal::Renderers
                 "DrawInstancedPrimitives is not supported on this graphics renderer.");
         }
 
+        /**
+         * @brief Draws with the count and offsets read out of a GPU buffer instead of passed in.
+         *
+         * plan_modern.md `MOD-2090`. @p argumentBuffer holds a `CNA::IndirectDrawArguments` at
+         * @p argumentByteOffset, and the renderer never looks at it: the numbers are fetched by
+         * the GPU as the command is issued, which is the whole point -- a compute shader can
+         * decide how much to draw without the answer travelling back through the CPU.
+         *
+         * The consequence is that **none of the range validation the ordinary routes perform is
+         * possible here.** `GraphicsDevice` checks that a requested primitive range fits the bound
+         * buffers before every other draw; that check cannot exist for this one, because the range
+         * is in GPU memory. A wrong count is undefined behaviour rather than an exception, and the
+         * shader that wrote it owns the obligation. Everything the CPU *can* still check --
+         * that a buffer is bound, an effect applied, and the argument offset inside the buffer --
+         * is checked in `GraphicsDevice` exactly as it is for the other routes.
+         *
+         * @param vb                 The bound vertex buffer, as for `DrawPrimitivesEx`.
+         * @param world              The world matrix.
+         * @param view               The view matrix.
+         * @param projection         The projection matrix.
+         * @param primitive          The topology; the argument buffer supplies only counts, never this.
+         * @param argumentBuffer     The buffer holding the arguments. Never null.
+         * @param argumentByteOffset Where in it they start, in bytes.
+         * @param params             The same complete draw description the ordinary routes take.
+         */
+        virtual void DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                               const Matrix& world,
+                                               const Matrix& view,
+                                               const Matrix& projection,
+                                               PrimitiveType primitive,
+                                               const IStorageBufferRenderer& argumentBuffer,
+                                               int argumentByteOffset,
+                                               const GpuDrawParams& params)
+        {
+            (void)vb; (void)world; (void)view; (void)projection; (void)primitive;
+            (void)argumentBuffer; (void)argumentByteOffset; (void)params;
+            throw std::runtime_error(
+                "Indirect drawing is not supported on this graphics renderer.");
+        }
+
+        /**
+         * @brief Indexed counterpart of @ref DrawPrimitivesIndirectEXT.
+         *
+         * @param vb                 The bound vertex buffer.
+         * @param ib                 The bound index buffer.
+         * @param world              The world matrix.
+         * @param view               The view matrix.
+         * @param projection         The projection matrix.
+         * @param primitive          The topology.
+         * @param argumentBuffer     The buffer holding a `CNA::IndirectDrawIndexedArguments`.
+         * @param argumentByteOffset Where in it they start, in bytes.
+         * @param params             The same complete draw description the ordinary routes take.
+         */
+        virtual void DrawIndexedPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
+                                                      const IIndexBufferRenderer& ib,
+                                                      const Matrix& world,
+                                                      const Matrix& view,
+                                                      const Matrix& projection,
+                                                      PrimitiveType primitive,
+                                                      const IStorageBufferRenderer& argumentBuffer,
+                                                      int argumentByteOffset,
+                                                      const GpuDrawParams& params)
+        {
+            (void)vb; (void)ib; (void)world; (void)view; (void)projection; (void)primitive;
+            (void)argumentBuffer; (void)argumentByteOffset; (void)params;
+            throw std::runtime_error(
+                "Indirect drawing is not supported on this graphics renderer.");
+        }
+
         /// Disables context-loss recovery on the running renderer.
         /// Safe to call after renderer creation when no resources have been
         /// loaded yet (e.g. from Game1 constructor). Future Create* calls
@@ -2190,10 +2634,11 @@ namespace CNA::Internal::Renderers
 
         /// Returns whether this renderer (and, for device-dependent entries, the current runtime
         /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
-        /// returns true except for multi-stream input and compiled effects, both of which require
-        /// explicit renderer opt-in. Every renderer with a narrower contract --
-        /// including no-renderer, 2D-only, fixed-function, experimental, or device-dependent
-        /// capability gaps -- must override the applicable entries truthfully.
+        /// returns true except for multi-stream input, compiled effects and the float
+        /// render-target entries, each of which requires explicit renderer opt-in. Every renderer
+        /// with a narrower contract -- including no-renderer, 2D-only, fixed-function,
+        /// experimental, or device-dependent capability gaps -- must override the applicable
+        /// entries truthfully.
         [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability capability) const
         {
             if (capability == CNA::GraphicsCapability::StencilBuffer)
@@ -2209,6 +2654,14 @@ namespace CNA::Internal::Renderers
             // can opt in. The corresponding creation default above returns nullptr.
             if (capability == CNA::GraphicsCapability::CompiledEffects)
                 return SupportsCompiledEffects();
+            // plan_modern.md MOD-100/MOD-101: float colour render targets are opt-in for the same
+            // reason. CreateRenderTarget2DEXT's own shared default drops the requested
+            // SurfaceFormat and produces an 8-bit Color target, so a renderer that has not been
+            // taught float formats would, under a true default, promise that values above 1.0
+            // survive a render-to-target -- the exact promise the HDR pipeline is built on.
+            if (capability == CNA::GraphicsCapability::FloatRenderTargets ||
+                capability == CNA::GraphicsCapability::HalfFloatRenderTargets)
+                return false;
             return true;
         }
 

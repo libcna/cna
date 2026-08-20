@@ -5,6 +5,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /**
      * @brief Target colour depth for DepthEffect's colour-quantization shader.
      *
@@ -32,6 +36,8 @@ namespace CNA::Graphics {
         /** @brief Classic 16-colour EGA/CGA palette, nearest-colour matched. */
         Palette16,
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

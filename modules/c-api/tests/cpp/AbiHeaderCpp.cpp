@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 7, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 8, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -122,13 +122,19 @@ static_assert(CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46));
 static_assert(CNA_GRAPHICS_RENDERER_TINYGL == UINT32_C(47));
 static_assert(CNA_GRAPHICS_RENDERER_IGL == UINT32_C(48));
 static_assert(CNA_GRAPHICS_RENDERER_PIXIJS == UINT32_C(49));
-static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PIXIJS);
+static_assert(CNA_GRAPHICS_RENDERER_NANOVG == UINT32_C(50));
+static_assert(CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_NANOVG);
 static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0));
 static_assert(CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12));
 static_assert(CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS == UINT32_C(13));
-static_assert(CNA_GRAPHICS_CAPABILITY_MAXIMUM == CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS);
-static_assert(CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS ==
-              (UINT64_C(1) << CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS));
+static_assert(CNA_GRAPHICS_CAPABILITY_FLOAT_RENDER_TARGETS == UINT32_C(14));
+static_assert(CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS == UINT32_C(15));
+static_assert(CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING == UINT32_C(16));
+static_assert(CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS == UINT32_C(17));
+static_assert(CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW == UINT32_C(18));
+static_assert(CNA_GRAPHICS_CAPABILITY_MAXIMUM == CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW);
+static_assert(CNA_GRAPHICS_CAPABILITY_FLAG_INDIRECT_DRAW ==
+              (UINT64_C(1) << CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW));
 static_assert(sizeof(CNA_SurfaceFormat) == sizeof(uint32_t));
 static_assert(CNA_SURFACE_FORMAT_COLOR == UINT32_C(0));
 static_assert(CNA_SURFACE_FORMAT_USHORT_EXT == UINT32_C(26));
@@ -768,6 +774,18 @@ static_assert(offsetof(CNA_PbrMaterial, emissive_color) == 44U);
 static_assert(offsetof(CNA_PbrMaterial, metallic_factor) == 48U);
 static_assert(offsetof(CNA_PbrMaterial, alpha_blend_enabled) == 68U);
 static_assert(offsetof(CNA_PbrMaterial, reserved) == 69U);
+static_assert(sizeof(CNA_PbrMaterialEXT) == 360U);
+static_assert(alignof(CNA_PbrMaterialEXT) == 8U);
+static_assert(offsetof(CNA_PbrMaterialEXT, albedo_color) == 64U);
+static_assert(offsetof(CNA_PbrMaterialEXT, emissive_factor) == 68U);
+static_assert(offsetof(CNA_PbrMaterialEXT, specular_color_factor) == 80U);
+static_assert(offsetof(CNA_PbrMaterialEXT, metallic_factor) == 92U);
+static_assert(offsetof(CNA_PbrMaterialEXT, alpha_mode) == 120U);
+static_assert(offsetof(CNA_PbrMaterialEXT, double_sided) == 124U);
+static_assert(offsetof(CNA_PbrMaterialEXT, reserved) == 129U);
+static_assert(offsetof(CNA_PbrMaterialEXT, texture_coordinate_sets) == 132U);
+static_assert(offsetof(CNA_PbrMaterialEXT, texture_transforms) == 160U);
+static_assert(CNA_PBR_MATERIAL_EXT_VERSION == UINT32_C(1));
 static_assert(sizeof(CNA_RenderPipelineSettings) == 28U);
 static_assert(alignof(CNA_RenderPipelineSettings) == 4U);
 static_assert(offsetof(CNA_RenderPipelineSettings, tonemapping_mode) == 12U);

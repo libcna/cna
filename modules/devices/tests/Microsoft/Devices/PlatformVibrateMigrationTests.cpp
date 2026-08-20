@@ -117,3 +117,50 @@ TEST(PlatformVibrateMigrationTests, ShutdownReleasesPlatformBeforeMakingControll
     EXPECT_EQ(platform.hapticSubsystemBalance, 0);
     EXPECT_NO_THROW(DevicesShutdownCoordinator::Shutdown());
 }
+
+// A backend must not call through a platform that is no longer installed.
+//
+// Found while measuring the engine layer on a second renderer (plan_modern.md Phase 16):
+// `CnaTests --gtest_filter=*Instanc*` segfaulted at process *exit*, after every test had reported,
+// on every renderer and with CNA_CNAEXT off. The backtrace was __run_exit_handlers ->
+// ~VibrateController -> ~PlatformVibrateBackend -> ReleaseService -> a call through address 0:
+// VibrateController's function-local static outlives the platform, and ReleaseService trusted the
+// IPlatform* it captured when it acquired the subsystem.
+//
+// The shutdown coordinator was meant to cover exactly this and does not on its own -- its flag is
+// process-global and DevicesShutdownCoordinatorTest::TearDown resets it, so a later exit finds it
+// false again.
+//
+// This pins the guard rather than the crash. A crash test would need ASan to be reliable; what is
+// deterministic is the guard's observable consequence -- with the current platform cleared,
+// destroying the backend must leave the old platform's subsystem balance untouched, because
+// nothing should have called into that platform at all.
+TEST(PlatformVibrateMigrationTests, DestroyingABackendDoesNotCallAPlatformThatIsNoLongerInstalled)
+{
+    CannedHapticsPlatform platform;
+    platform.haptics.Connect(HapticInfo{31, "Rumble pack", true});
+    platform.haptics.defaultVibrationId = 31;
+    ResetShutdownState reset;
+
+    VibrateController* controller = VibrateController::getDefaultProperty();
+    {
+        ScopedCurrentPlatform current(platform);
+        controller->SetBackendForTesting(nullptr);
+        ASSERT_TRUE(controller->getIsSupportedProperty());
+        // Without this the rest measures nothing: a backend that never took the subsystem would
+        // trivially leave the balance alone.
+        ASSERT_EQ(platform.hapticSubsystemBalance, 1);
+    }
+
+    // The platform object is still alive here -- a test cannot destroy it and then observe it --
+    // but it is no longer the installed one, which is the condition the guard actually checks and
+    // the condition that holds at process exit.
+    CNA::Platform::SetCurrentPlatform(nullptr);
+    controller->SetBackendForTesting(std::make_unique<InertVibrateBackend>());
+
+    EXPECT_EQ(platform.hapticSubsystemBalance, 1)
+        << "the backend released a subsystem on a platform that is no longer installed; at process "
+           "exit that platform is destroyed and the same call is a segfault";
+
+    controller->SetBackendForTesting(nullptr);
+}

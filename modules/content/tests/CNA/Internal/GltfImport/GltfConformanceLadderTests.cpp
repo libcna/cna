@@ -166,6 +166,15 @@ namespace
         excluded.push_back("GltfDracoEncoderPin");
         excluded.push_back("GltfDracoParity");
 #endif
+#ifndef CNA_CNAEXT
+        // plan_modern.md MOD-1309/MOD-1310: the glTF-to-PbrMaterial bridge belongs to the engine
+        // layer, which is compiled out by default, so these two suites do not exist in the default
+        // build. Same treatment as the Draco pair: excluded from the "must be registered" side,
+        // and their source presence checked instead, so a rung cannot come to name a suite nobody
+        // wrote.
+        excluded.push_back("GltfMaterialBridgeTest");
+        excluded.push_back("GltfMaterialToPbrMaterialTest");
+#endif
         return excluded;
     }
 
@@ -181,6 +190,16 @@ namespace
         {
             source = RepositoryRoot() / "modules" / "content" / "tests" / "CNA" /
                 "Internal" / "GltfImport" / "GltfDracoCorpusTests.cpp";
+        }
+        else if (suite == "GltfMaterialToPbrMaterialTest")
+        {
+            source = RepositoryRoot() / "modules" / "content" / "tests" / "CNA" / "Internal" /
+                "GltfImport" / "GltfMaterialToPbrMaterialTests.cpp";
+        }
+        else if (suite == "GltfMaterialBridgeTest")
+        {
+            source = RepositoryRoot() / "modules" / "graphics-ext" / "tests" / "CNA" /
+                "Graphics" / "GltfMaterialBridgeTests.cpp";
         }
         else { return false; }
         std::ifstream file(source);

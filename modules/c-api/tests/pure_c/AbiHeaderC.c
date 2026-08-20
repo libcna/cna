@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 7, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 8, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -164,15 +164,21 @@ _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
                    CNA_GRAPHICS_RENDERER_TINYGL == UINT32_C(47) &&
                    CNA_GRAPHICS_RENDERER_IGL == UINT32_C(48) &&
                    CNA_GRAPHICS_RENDERER_PIXIJS == UINT32_C(49) &&
-                   CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_PIXIJS,
+                   CNA_GRAPHICS_RENDERER_NANOVG == UINT32_C(50) &&
+                   CNA_GRAPHICS_RENDERER_MAXIMUM == CNA_GRAPHICS_RENDERER_NANOVG,
                "CNA renderer identities must remain stable");
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
                    CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12) &&
                    CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS == UINT32_C(13) &&
+                   CNA_GRAPHICS_CAPABILITY_FLOAT_RENDER_TARGETS == UINT32_C(14) &&
+                   CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS == UINT32_C(15) &&
+                   CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING == UINT32_C(16) &&
+                   CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS == UINT32_C(17) &&
+                   CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW == UINT32_C(18) &&
                    CNA_GRAPHICS_CAPABILITY_MAXIMUM ==
-                       CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS &&
-                   CNA_GRAPHICS_CAPABILITY_FLAG_COMPILED_EFFECTS ==
-                       (UINT64_C(1) << CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS),
+                       CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW &&
+                   CNA_GRAPHICS_CAPABILITY_FLAG_INDIRECT_DRAW ==
+                       (UINT64_C(1) << CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW),
                "CNA graphics capability identities must remain stable");
 _Static_assert(sizeof(CNA_SurfaceFormat) == sizeof(uint32_t),
                "CNA_SurfaceFormat must have a fixed-width representation");
@@ -905,6 +911,18 @@ _Static_assert(sizeof(CNA_PbrMaterial) == 72U && _Alignof(CNA_PbrMaterial) == 8U
                    offsetof(CNA_PbrMaterial, alpha_blend_enabled) == 68U &&
                    offsetof(CNA_PbrMaterial, reserved) == 69U,
                "CNA_PbrMaterial layout must remain stable");
+_Static_assert(sizeof(CNA_PbrMaterialEXT) == 360U && _Alignof(CNA_PbrMaterialEXT) == 8U &&
+                   offsetof(CNA_PbrMaterialEXT, albedo_color) == 64U &&
+                   offsetof(CNA_PbrMaterialEXT, emissive_factor) == 68U &&
+                   offsetof(CNA_PbrMaterialEXT, specular_color_factor) == 80U &&
+                   offsetof(CNA_PbrMaterialEXT, metallic_factor) == 92U &&
+                   offsetof(CNA_PbrMaterialEXT, alpha_mode) == 120U &&
+                   offsetof(CNA_PbrMaterialEXT, double_sided) == 124U &&
+                   offsetof(CNA_PbrMaterialEXT, reserved) == 129U &&
+                   offsetof(CNA_PbrMaterialEXT, texture_coordinate_sets) == 132U &&
+                   offsetof(CNA_PbrMaterialEXT, texture_transforms) == 160U &&
+                   CNA_PBR_MATERIAL_EXT_VERSION == UINT32_C(1),
+               "CNA_PbrMaterialEXT layout must remain stable");
 _Static_assert(sizeof(CNA_RenderPipelineSettings) == 28U &&
                    _Alignof(CNA_RenderPipelineSettings) == 4U &&
                    offsetof(CNA_RenderPipelineSettings, tonemapping_mode) == 12U &&

@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 1792,
+  "encoded": 2048,
   "major": 0,
-  "minor": 7,
+  "minor": 8,
   "patch": 0,
-  "runtime": 1792
+  "runtime": 2048
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -2852,6 +2852,7 @@
   "cna_pbr_effect_set_texture_is_srgb_ext",
   "cna_pbr_effect_set_texture_transform_ext",
   "cna_pbr_effect_set_vertex_color_enabled_ext",
+  "cna_pbr_material_ext_init",
   "cna_pbr_material_init",
   "cna_picture_album_collection_copy_type_name",
   "cna_picture_album_collection_destroy",
@@ -3718,9 +3719,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 1792,
+  "CNA_ABI_VERSION": 2048,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 7,
+  "CNA_ABI_VERSION_MINOR": 8,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -4224,10 +4225,15 @@
   "CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING": 12,
   "CNA_GRAPHICS_CAPABILITY_ANISOTROPIC_FILTERING": 4,
   "CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS": 13,
+  "CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS": 17,
   "CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS": 7,
   "CNA_GRAPHICS_CAPABILITY_DEPTH_STENCIL_BUFFER": 1,
+  "CNA_GRAPHICS_CAPABILITY_FLOAT_RENDER_TARGETS": 14,
+  "CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS": 15,
+  "CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING": 16,
+  "CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW": 18,
   "CNA_GRAPHICS_CAPABILITY_INSTANCING": 10,
-  "CNA_GRAPHICS_CAPABILITY_MAXIMUM": 13,
+  "CNA_GRAPHICS_CAPABILITY_MAXIMUM": 18,
   "CNA_GRAPHICS_CAPABILITY_MULTIPLE_RENDER_TARGETS": 3,
   "CNA_GRAPHICS_CAPABILITY_MULTI_SAMPLE_ANTI_ALIASING": 2,
   "CNA_GRAPHICS_CAPABILITY_MULTI_STREAM_VERTEX_INPUT": 9,
@@ -4283,8 +4289,9 @@
   "CNA_GRAPHICS_RENDERER_IGL": 48,
   "CNA_GRAPHICS_RENDERER_LLGL": 41,
   "CNA_GRAPHICS_RENDERER_MAGNUM": 10,
-  "CNA_GRAPHICS_RENDERER_MAXIMUM": 49,
+  "CNA_GRAPHICS_RENDERER_MAXIMUM": 50,
   "CNA_GRAPHICS_RENDERER_METAL": 42,
+  "CNA_GRAPHICS_RENDERER_NANOVG": 50,
   "CNA_GRAPHICS_RENDERER_OPENGL1": 34,
   "CNA_GRAPHICS_RENDERER_OPENGL2": 35,
   "CNA_GRAPHICS_RENDERER_OPENGL33": 4,
@@ -4674,6 +4681,7 @@
   "CNA_PACKED_VECTOR_FORMAT_RGBA64": 14,
   "CNA_PACKED_VECTOR_FORMAT_SHORT2": 15,
   "CNA_PACKED_VECTOR_FORMAT_SHORT4": 16,
+  "CNA_PBR_MATERIAL_EXT_VERSION": 1,
   "CNA_PBR_TEXTURE_BASE_COLOR": 0,
   "CNA_PBR_TEXTURE_EMISSIVE": 3,
   "CNA_PBR_TEXTURE_MAXIMUM": 6,
@@ -9560,6 +9568,124 @@
     ]
    },
    "size": 72
+  },
+  "CNA_PbrMaterialEXT": {
+   "align": 8,
+   "fields": {
+    "albedo_color": [
+     64,
+     4
+    ],
+    "albedo_texture": [
+     8,
+     8
+    ],
+    "alpha_cutoff": [
+     116,
+     4
+    ],
+    "alpha_mode": [
+     120,
+     4
+    ],
+    "ambient_occlusion_texture": [
+     32,
+     8
+    ],
+    "base_color_texture_srgb": [
+     125,
+     1
+    ],
+    "double_sided": [
+     124,
+     1
+    ],
+    "emissive_factor": [
+     68,
+     12
+    ],
+    "emissive_texture": [
+     40,
+     8
+    ],
+    "emissive_texture_srgb": [
+     126,
+     1
+    ],
+    "ior": [
+     108,
+     4
+    ],
+    "metallic_factor": [
+     92,
+     4
+    ],
+    "metallic_roughness_texture": [
+     24,
+     8
+    ],
+    "normal_scale": [
+     100,
+     4
+    ],
+    "normal_texture": [
+     16,
+     8
+    ],
+    "occlusion_strength": [
+     104,
+     4
+    ],
+    "output_encoded_to_srgb": [
+     128,
+     1
+    ],
+    "reserved": [
+     129,
+     3
+    ],
+    "roughness_factor": [
+     96,
+     4
+    ],
+    "specular_color_factor": [
+     80,
+     12
+    ],
+    "specular_color_texture": [
+     56,
+     8
+    ],
+    "specular_color_texture_srgb": [
+     127,
+     1
+    ],
+    "specular_factor": [
+     112,
+     4
+    ],
+    "specular_texture": [
+     48,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "texture_coordinate_sets": [
+     132,
+     28
+    ],
+    "texture_transforms": [
+     160,
+     196
+    ]
+   },
+   "size": 360
   },
   "CNA_Plane": {
    "align": 4,

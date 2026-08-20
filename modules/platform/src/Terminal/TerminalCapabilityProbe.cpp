@@ -111,7 +111,7 @@ namespace CNA::Platform::Terminal {
             }
 
             const char* term = std::getenv("TERM");
-            if (term == nullptr || std::strcmp(term, "dumb") == 0)
+            if (term == nullptr || term[0] == '\0' || std::strcmp(term, "dumb") == 0)
             {
                 return TerminalColourDepth::Monochrome;
             }

@@ -115,6 +115,16 @@ typedef uint32_t CNA_DepthEffectMode;
  * canonical getters and setters do. Texture slots are non-owning: a handle stored here does not
  * keep its texture alive, matching the canonical non-owning `Texture2D*` slots.
  */
+/**
+ * @brief Superseded by @ref CNA_PbrMaterialEXT; frozen at its ABI 1 shape.
+ *
+ * This mirrors the canonical `CNA::Graphics::PbrMaterial` as it stood before that type grew the
+ * `KHR_materials_specular`/`ior` factors, per-slot texture transforms, three-way alpha coverage
+ * and a floating-point emissive factor. Its layout and its initializer's values cannot change
+ * within an ABI major (`docs/c-api/ABI_VERSIONING.md`), so the current shape arrives under a new
+ * name rather than by rearranging this one. Existing consumers keep working unchanged; new code
+ * should use @ref CNA_PbrMaterialEXT, whose fields correspond one-to-one with the canonical type.
+ */
 typedef struct CNA_PbrMaterial {
     /** @brief Albedo (base color) texture handle, or `CNA_INVALID_HANDLE`. */
     CNA_Handle albedo_texture;
@@ -160,6 +170,117 @@ typedef struct CNA_PbrMaterial {
 } CNA_PbrMaterial;
 
 /**
+ * @brief The canonical `CNA::Graphics::PbrMaterial` in full, as an extensible value struct.
+ *
+ * CNA extension. Every field corresponds to exactly one accessor pair on the canonical type, so a
+ * material described here loses nothing on the way to a `PbrEffect`. Textures are handles and stay
+ * non-owning, matching the canonical non-owning `Texture2D*` slots.
+ *
+ * Initialize with @ref cna_pbr_material_ext_init, which fills `struct_size` and `struct_version`
+ * along with the canonical defaults; fields added in a later minor version are appended after
+ * `texture_transforms`.
+ */
+typedef struct CNA_PbrMaterialEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Albedo (base color) texture handle, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle albedo_texture;
+
+    /** @brief Tangent-space normal map handle, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle normal_texture;
+
+    /** @brief Metallic-roughness texture handle (B = metallic, G = roughness). */
+    CNA_Handle metallic_roughness_texture;
+
+    /** @brief Ambient-occlusion texture handle (R channel), or `CNA_INVALID_HANDLE`. */
+    CNA_Handle ambient_occlusion_texture;
+
+    /** @brief Emissive texture handle, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle emissive_texture;
+
+    /** @brief `KHR_materials_specular` strength map handle (A channel). */
+    CNA_Handle specular_texture;
+
+    /** @brief `KHR_materials_specular` color map handle (RGB). */
+    CNA_Handle specular_color_texture;
+
+    /** @brief Albedo color factor multiplied with the albedo texture. */
+    CNA_Color albedo_color;
+
+    /**
+     * @brief Linear emissive factor.
+     *
+     * A vector rather than a color: `KHR_materials_emissive_strength` scales it without an upper
+     * bound, so eight bits per channel cannot hold what an HDR pipeline expects.
+     */
+    CNA_Vector3 emissive_factor;
+
+    /** @brief Linear `KHR_materials_specular` color factor; white by default. */
+    CNA_Vector3 specular_color_factor;
+
+    /** @brief Metallic factor; the canonical range is 0 through 1. */
+    float metallic_factor;
+
+    /** @brief Roughness factor; the canonical range is 0 through 1. */
+    float roughness_factor;
+
+    /** @brief Normal-map intensity scale, where 1 is full strength. */
+    float normal_scale;
+
+    /** @brief Ambient-occlusion strength; the canonical range is 0 through 1. */
+    float occlusion_strength;
+
+    /** @brief `KHR_materials_ior` index of refraction; 1.5 by default. */
+    float ior;
+
+    /** @brief `KHR_materials_specular` strength factor; 1 by default. */
+    float specular_factor;
+
+    /** @brief Alpha cutoff threshold, meaningful only in `CNA_ALPHA_MODE_MASK_EXT`. */
+    float alpha_cutoff;
+
+    /** @brief How the material's alpha is interpreted; one `CNA_ALPHA_MODE_*_EXT` identity. */
+    CNA_AlphaModeEXT alpha_mode;
+
+    /** @brief `CNA_TRUE` to draw both faces of the surface (glTF `doubleSided`). */
+    CNA_Bool double_sided;
+
+    /** @brief `CNA_TRUE` when the albedo texture's samples are sRGB-encoded. */
+    CNA_Bool base_color_texture_srgb;
+
+    /** @brief `CNA_TRUE` when the emissive texture's samples are sRGB-encoded. */
+    CNA_Bool emissive_texture_srgb;
+
+    /** @brief `CNA_TRUE` when the specular-color texture's samples are sRGB-encoded. */
+    CNA_Bool specular_color_texture_srgb;
+
+    /** @brief `CNA_TRUE` to encode the lit result back to sRGB before the framebuffer. */
+    CNA_Bool output_encoded_to_srgb;
+
+    /** @brief Reserved bytes; always zero. */
+    uint8_t reserved[3];
+
+    /**
+     * @brief Packed vertex UV channel each texture slot samples.
+     *
+     * Indexed in slot order: base color, normal, metallic-roughness, emissive, occlusion,
+     * specular, specular color.
+     */
+    int32_t texture_coordinate_sets[7];
+
+    /** @brief Each slot's `KHR_texture_transform`, in the same slot order. */
+    CNA_TextureTransformEXT texture_transforms[7];
+} CNA_PbrMaterialEXT;
+
+/** @brief Version this build's @ref CNA_PbrMaterialEXT declares. */
+#define CNA_PBR_MATERIAL_EXT_VERSION UINT32_C(1)
+
+
+/**
  * @brief Configuration for CNA's extended render pipeline.
  *
  * Like @ref CNA_PbrMaterial this mirrors a canonical settings bag whose accessors assign without
@@ -201,13 +322,29 @@ typedef struct CNA_RenderPipelineSettings {
 typedef CNA_Handle CNA_AsciiPostProcessEffectHandle;
 
 /**
- * @brief Initializes a PBR material with the canonical defaults.
+ * @brief Initializes an ABI 1 PBR material with the defaults that shape was published with.
+ *
+ * These are the pre-`CNA_PbrMaterialEXT` defaults, kept exactly as published: an ABI major may not
+ * change what an existing name means, and that includes the values this writes. The canonical C++
+ * type has since moved its own defaults to glTF's (metallic 1, roughness 1), which
+ * @ref cna_pbr_material_ext_init reproduces.
  *
  * @param out_material Receives white albedo, metallic 0, roughness 0.5, opaque black emissive,
  * unit normal scale and occlusion strength, no alpha blending, alpha cutoff 0.5 and no textures.
  * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
  */
 CNA_C_API CNA_Result cna_pbr_material_init(CNA_PbrMaterial* out_material);
+
+/**
+ * @brief Initializes a full PBR material with the canonical defaults.
+ *
+ * @param out_material Receives `struct_size`, `struct_version`, white albedo, metallic 1,
+ * roughness 1, zero emissive, unit normal scale and occlusion strength, IOR 1.5, unit specular
+ * factor and white specular color, opaque coverage with cutoff 0.5, single-sided, every texture
+ * slot empty on UV channel 0 with the identity transform, and sRGB decoding and encoding on.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* out_material);
 
 /**
  * @brief Initializes render-pipeline settings with the canonical defaults.

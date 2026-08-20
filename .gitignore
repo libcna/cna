@@ -72,6 +72,8 @@ dx7-spike/*.exe
 dx7-spike/*.o
 dx8-spike/*.exe
 dx8-spike/*.o
+mingw-cnaext-spike/*.exe
+mingw-cnaext-spike/*.o
 __pycache__/
 *.pyc
 
@@ -86,3 +88,17 @@ tools/fna-reference/obj/
 *.dxvk-cache
 
 
+
+# CTest scratch (Testing/Temporary/LastTest.log, CTestCostData.txt), written into whatever
+# directory ctest was invoked from -- including the repo root when a build dir is passed with -C
+# or the invocation misses. Runtime artifact, not source.
+Testing/
+
+# plan_modern.md MOD-7: generated Doxygen output for the CNA::Graphics engine layer
+# (`doxygen docs/Doxyfile.cnaext`, or the CNAEXT_DoxygenGroup ctest). Regenerated, never source.
+build/doxygen-cnaext/
+
+# plan_modern.md MOD-134: scratch configure trees and logs from
+# scripts/check_renderer_configure_sweep.sh. Each tree is deleted as soon as its identity is
+# checked; the logs are kept only until the next run.
+build/renderer-sweep/

@@ -190,7 +190,7 @@ using ConditionalLoggerRoute = void (*)(std::string_view, bool);
 
 // Every public renderer identity, paired explicitly so neither side depends on the other's
 // declaration order.
-constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 49>
+constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererType>, 50>
     RendererIdentities{{
         {CNA_GRAPHICS_RENDERER_SDL_RENDERER, CNA::GraphicsRendererType::SdlRenderer},
         {CNA_GRAPHICS_RENDERER_OPENGLES2, CNA::GraphicsRendererType::OpenGLES2},
@@ -241,6 +241,7 @@ constexpr std::array<std::pair<CNA_GraphicsRendererType, CNA::GraphicsRendererTy
         {CNA_GRAPHICS_RENDERER_TINYGL, CNA::GraphicsRendererType::TinyGL},
         {CNA_GRAPHICS_RENDERER_IGL, CNA::GraphicsRendererType::Igl},
         {CNA_GRAPHICS_RENDERER_PIXIJS, CNA::GraphicsRendererType::PixiJs},
+        {CNA_GRAPHICS_RENDERER_NANOVG, CNA::GraphicsRendererType::NanoVg},
     }};
 
 // A renderer this table has never heard of resolves to CNA_GRAPHICS_RENDERER_UNKNOWN and is

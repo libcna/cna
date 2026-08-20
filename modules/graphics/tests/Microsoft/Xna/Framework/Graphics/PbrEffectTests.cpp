@@ -11,6 +11,9 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -22,7 +25,10 @@ using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::PbrEffect;
+using Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 using CNA::Internal::Renderers::GpuDrawParams;
 
@@ -459,4 +465,103 @@ TEST_F(PbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTheDrawPa
     enabled.vertexColorEnabled = false;
     fx.FillGpuDrawParams(enabled);
     EXPECT_TRUE(enabled.vertexColorEnabled);
+}
+
+// -----------------------------------------------------------------------
+// Image-based lighting (plan_modern.md MOD-1220/MOD-1221/MOD-1224/MOD-1226)
+
+TEST_F(PbrEffectDefaultsTest, ImageBasedLightIsAbsentAndInertByDefault)
+{
+    EXPECT_EQ(fx.getImageBasedLightEXT().Irradiance, nullptr);
+    EXPECT_EQ(fx.getImageBasedLightEXT().PrefilteredSpecular, nullptr);
+    EXPECT_EQ(fx.getImageBasedLightEXT().BrdfLut, nullptr);
+    EXPECT_FLOAT_EQ(fx.getImageBasedLightEXT().Intensity, 1.0f);
+    EXPECT_EQ(fx.getImageBasedLightEXT().PrefilteredMipCount, 1);
+    EXPECT_FALSE(fx.getImageBasedLightEXT().IsValidEXT());
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_FALSE(params.iblEnabled);
+    EXPECT_EQ(params.iblIrradiance, nullptr);
+    EXPECT_EQ(params.iblPrefilteredSpecular, nullptr);
+    EXPECT_EQ(params.iblBrdfLut, nullptr);
+}
+
+TEST_F(PbrEffectDefaultsTest, AnIncompleteImageBasedLightStaysInert)
+{
+    // Two thirds of a split sum is not two thirds of an answer, so a partial bundle must leave
+    // the flat ambient term in charge rather than light with what it happens to have.
+    TextureCube irradiance(gd, 4, false, SurfaceFormat::Color);
+    ImageBasedLightEXT light;
+    light.Irradiance = &irradiance;
+    fx.setImageBasedLightEXT(light);
+    EXPECT_FALSE(fx.getImageBasedLightEXT().IsValidEXT());
+
+    fx.setAmbientLightColorProperty(Vector3(0.25f, 0.5f, 0.75f));
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_FALSE(params.iblEnabled);
+    EXPECT_FLOAT_EQ(params.ambientColor[0], 0.25f);
+    EXPECT_FLOAT_EQ(params.ambientColor[1], 0.5f);
+    EXPECT_FLOAT_EQ(params.ambientColor[2], 0.75f);
+}
+
+TEST_F(PbrEffectDefaultsTest, ACompleteImageBasedLightReachesTheDrawParamsAndReplacesFlatAmbient)
+{
+    TextureCube irradiance(gd, 4, false, SurfaceFormat::Color);
+    TextureCube specular(gd, 8, true, SurfaceFormat::Color);
+    Texture2D lut(gd, 8, 8);
+
+    ImageBasedLightEXT light;
+    light.Irradiance          = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut             = &lut;
+    light.PrefilteredMipCount = 4;
+    light.Intensity           = 2.5f;
+    EXPECT_TRUE(light.IsValidEXT());
+
+    fx.setAmbientLightColorProperty(Vector3(0.25f, 0.5f, 0.75f));
+    fx.setImageBasedLightEXT(light);
+    EXPECT_EQ(fx.getImageBasedLightEXT().PrefilteredSpecular, &specular);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_TRUE(params.iblEnabled);
+    EXPECT_EQ(params.iblIrradiance, &irradiance.GetRenderer());
+    EXPECT_EQ(params.iblPrefilteredSpecular, &specular.GetRenderer());
+    EXPECT_EQ(params.iblBrdfLut, &lut.GetRenderer());
+    EXPECT_EQ(params.iblPrefilteredMipCount, 4);
+    EXPECT_FLOAT_EQ(params.iblIntensity, 2.5f);
+    // MOD-1226: the two ambient terms are exclusive, so the flat one is zeroed rather than summed.
+    EXPECT_FLOAT_EQ(params.ambientColor[0], 0.0f);
+    EXPECT_FLOAT_EQ(params.ambientColor[1], 0.0f);
+    EXPECT_FLOAT_EQ(params.ambientColor[2], 0.0f);
+    // The AmbientLightColor property itself is untouched -- the effect still remembers what the
+    // game set, and detaching the environment restores it.
+    EXPECT_FLOAT_EQ(fx.getAmbientLightColorProperty().X, 0.25f);
+
+    fx.setImageBasedLightEXT(ImageBasedLightEXT{});
+    GpuDrawParams restored;
+    fx.FillGpuDrawParams(restored);
+    EXPECT_FALSE(restored.iblEnabled);
+    EXPECT_FLOAT_EQ(restored.ambientColor[0], 0.25f);
+}
+
+TEST_F(PbrEffectDefaultsTest, CloneCarriesTheImageBasedLight)
+{
+    TextureCube irradiance(gd, 4, false, SurfaceFormat::Color);
+    TextureCube specular(gd, 8, true, SurfaceFormat::Color);
+    Texture2D lut(gd, 8, 8);
+    ImageBasedLightEXT light;
+    light.Irradiance          = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut             = &lut;
+    light.PrefilteredMipCount = 4;
+    fx.setImageBasedLightEXT(light);
+
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::Effect> clone(fx.Clone());
+    auto* cloned = dynamic_cast<PbrEffect*>(clone.get());
+    ASSERT_NE(cloned, nullptr);
+    EXPECT_TRUE(cloned->getImageBasedLightEXT().IsValidEXT());
+    EXPECT_EQ(cloned->getImageBasedLightEXT().BrdfLut, &lut);
 }

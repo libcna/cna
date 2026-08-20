@@ -5,6 +5,10 @@
 
 namespace CNA::Graphics {
 
+/** @addtogroup cnaext_engine
+ *  @{
+ */
+
     /** @brief Overall render quality preset. */
     enum class RenderQuality
     {
@@ -17,6 +21,8 @@ namespace CNA::Graphics {
         /** @brief Maximum quality regardless of performance cost. */
         Ultra,
     };
+
+/** @} */ // end of cnaext_engine
 
 } // namespace CNA::Graphics
 

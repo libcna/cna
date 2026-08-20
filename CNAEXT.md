@@ -266,10 +266,19 @@ SeamlessCubeMapFilter ///< Trilinear filtering across cube-face seams (IBL prefi
 
 New `IGraphicsRenderer` virtuals (all with safe defaults so existing renderers compile unchanged):
 
+> **Correction C1 (`plan_modern.md` §0.2).** The float-render-target factory below was proposed as a
+> *new* virtual named `CreateRenderTarget2DEx`. It already exists, as `CreateRenderTarget2DEXT`
+> (uppercase, added by `SKIA-142`). **Do not add a second virtual** — the work is implementing the
+> existing one in the 3D renderers, which is `plan_modern.md` Phase 1 (`MOD-100`–`MOD-141`). The
+> block below is kept as the shape that was wanted, not as an instruction to add it.
+>
+> **Correction C2.** The "small but required plumbing" at the end of this section — routing
+> `RenderTarget2D`'s `SurfaceFormat` into the factory instead of dropping it — was already done in
+> `RenderTarget2D.cpp` before this plan began. The remaining work was 100% renderer-side.
+
 ```cpp
 // ---- HDR / float render targets ----
-// Extend the existing factory with the requested color SurfaceFormat ordinal (currently the
-// renderer always creates an 8-bit Color target). Default keeps today's behavior.
+// ALREADY EXISTS as CreateRenderTarget2DEXT -- see correction C1 above. Do not add this virtual.
 virtual std::unique_ptr<IRenderTargetRenderer>
 CreateRenderTarget2DEx(int w, int h, int surfaceFormat, int depthFormat,
                        bool preserveContents = false, bool mipMap = false,
@@ -310,7 +319,13 @@ public:
 
 **Plumbing task (small but required for HDR):** `RenderTarget2D` already carries a `SurfaceFormat`;
 route it into `CreateRenderTarget2DEx` instead of dropping it. No XNA API change — an existing XNA
-constructor parameter simply stops being ignored.
+constructor parameter simply stops being ignored. *(Correction C2: already done — see above.)*
+
+**One capability that did not survive contact.** `StorageBuffers` and `SeamlessCubeMapFilter` were
+proposed above as separate enumerators. Only `ComputeShaders` was added: storage buffers exist
+exactly where compute does and a second enumerator would have been a synonym, and the IBL
+convolution runs on the CPU picking the cube face from the direction, so it is seamless by
+construction with no capability to ask about. See `plan_modern.md` `MOD-102`, `MOD-1500`.
 
 ### 5.1 `RenderPipeline` — the orchestrator (`CNA::Graphics`)
 
@@ -380,6 +395,18 @@ public:
                        Microsoft::Xna::Framework::Graphics::RenderTarget2D* destination) = 0;
 };
 
+> **Correction C8 (`plan_modern.md` §0.2).** The signature above became
+> `apply(const PostProcessContext&)`. SSAO needs depth, normals and the camera projection, and a
+> second entry point taking those would make a chain of *mixed* passes impossible to express — the
+> one thing this base class exists to make possible. One struct, every pass reads what it needs, and
+> a pass documents its own requirements (`MOD-200`).
+>
+> A second thing this block does not show: `isSupported(device)` is on the base and answers **two**
+> questions, not one. `GraphicsCapability::CustomEffects` means the renderer *accepts* an effect;
+> `ExecutesShaderEffectSourceEXT()` means it will actually run the source. SOFTWARE and HEADLESS
+> answer the first yes and the second no, and a pass that believed only the first reported success
+> while copying its input (`MOD-1699`).
+
 class BloomPass  : public PostProcessPass { /* extract → down/up Gaussian pyramid → composite */ };
 class SsaoPass   : public PostProcessPass { /* hemisphere-kernel AO from depth+normal, blurred   */ };
 class TonemapPass: public PostProcessPass { /* HDR→LDR via TonemappingMode + exposure + gamma     */ };
@@ -389,13 +416,30 @@ class FxaaPass   : public PostProcessPass { /* cheap post-AA for renderers witho
 ```
 
 `TonemapPass` reads the existing `TonemappingMode` enum (`None`/`Reinhard`/`Filmic`/`Aces`). Add one
-value `Uncharted2` for parity with common engines.
+value `Uncharted2` for parity with common engines. *(Done, `MOD-21` — appended, never inserted, so a
+settings bag written by an earlier build still reads back as the same operator.)*
+
+> **Correction C5 (`plan_modern.md` §0.2).** The `lowerCamelCase` method names used throughout §5 —
+> `begin`, `end`, `resize`, `apply` — are **kept**, not normalised toward XNA's `UpperCamelCase`.
+> `CNA::Graphics` is not the XNA namespace, so there is no XNA name to preserve, and the classes
+> that already existed here (`RenderPipelineSettings`, `PbrMaterial`) use this style. The rule is
+> written down in `docs/cnaext-engine-layer.md` §Conventions and CLAUDE.md (`MOD-6`).
 
 ### 5.3 Shadows (`CNA::Graphics`)
 
 A directional shadow‑map subsystem built on a **depth `RenderTarget2D`** + PCF, plus a cascaded
 variant. Shadow *reception* is exposed as a CNAEXT hook on the lit effects (marker convention), so a
 `PbrEffect`/`BasicEffect` mesh can sample the shadow map.
+
+> **Correction C6 (`plan_modern.md` §0.2).** `DirectionalLightEXT` did not exist anywhere in the
+> tree when this section was written. It was introduced as a small **engine-layer** struct
+> (`direction`, `color`, `intensity`, `castsShadows`) in `CNA::Graphics`, deliberately *not* as a new
+> XNA type — XNA 4.0 has no such class and adding one would put a CNA invention in the namespace
+> that must match XNA exactly (`MOD-800`).
+>
+> **And the target is not a depth attachment.** The map holds light-space *distance* in a colour
+> target, because CNA cannot sample a depth attachment as a texture on every renderer. Everything
+> from the caster shader to the PCF kernel follows from that (`MOD-800`–`MOD-842`).
 
 ```cpp
 namespace CNA::Graphics {
@@ -551,7 +595,7 @@ public:
 };
 
 template <typename T>
-class StorageBuffer {   // SSBO / UAV
+class StorageBuffer {   // SSBO / UAV -- see correction C7: split into StorageBuffer + StorageBufferT<T>
 public:
     StorageBuffer(GraphicsDevice& device, int elementCount);
     void setData(const std::vector<T>& data);
@@ -561,6 +605,13 @@ public:
 
 } // namespace CNA::Graphics
 ```
+
+> **Correction C7 (`plan_modern.md` §0.2).** `StorageBuffer` could not stay a template: a template's
+> implementation has to be in the header, and this project keeps non-template implementation out of
+> headers. It is split into a non-template, byte-oriented `StorageBuffer` whose implementation lives
+> in a `.cpp`, plus a thin `StorageBufferT<T>` header template that is the typed view of it
+> (`MOD-1520`). The refusal on a renderer without compute is `System::NotSupportedException`, not a
+> new engine-layer type — CNA already maps that .NET type for exactly this meaning.
 
 First real consumers (separate later tasks, not part of the core landing): a compute GPU particle
 system and compute frustum culling.
@@ -618,8 +669,15 @@ CNAEXT void setImageBasedLightEXT(const CNA::Graphics::ImageBasedLightEXT& ibl);
 
 ### File layout
 
+> **Correction C3 (`plan_modern.md` §0.2).** The block below predates the repository's move to a
+> module-oriented layout. The real paths are `modules/graphics-ext/include/CNA/Graphics/` and
+> `modules/graphics-ext/src/` — the latter **flat**, since `graphics-ext` is a single-area module.
+> The *include spelling* is unchanged and is the part that is API: `#include "CNA/Graphics/X.hpp"`.
+> Tests live in `modules/graphics-ext/tests/CNA/Graphics/`, examples in
+> `modules/graphics-ext/examples/`.
+
 ```
-include/CNA/Graphics/
+modules/graphics-ext/include/CNA/Graphics/
     CNAEXT.hpp                    ← master include (pulls in everything below)   [NEW — not yet present]
     TonemappingMode.hpp          ← enum (exists; add Uncharted2)
     RenderQuality.hpp            ← enum (exists)
@@ -633,14 +691,21 @@ include/CNA/Graphics/
     InstancedRendererEXT.hpp / LodGroupEXT.hpp                                  [NEW]
     ComputeShader.hpp / StorageBuffer.hpp                                       [NEW]
 
-src/CNA/Graphics/
+modules/graphics-ext/src/            ← flat, no CNA/Graphics/ subdirectory
     RenderPipelineSettings.cpp   (exists)   PbrMaterial.cpp (exists)
     RenderPipeline.cpp · *Pass.cpp · ShadowMap.cpp · Skybox.cpp ·
     EnvironmentProcessor.cpp · ComputeShader.cpp · StorageBuffer.cpp           [NEW]
 ```
 
-**Correction to the prior draft:** `include/CNA/Graphics/CNAEXT.hpp` was listed as done (old N05) but
-**does not exist**. Creating it as the master include is task **N05** below.
+**Correction to the prior draft:** `CNA/Graphics/CNAEXT.hpp` was listed as done (old N05) but
+**did not exist**. It was created as the master include by `plan_modern.md` `MOD-1`, and now also
+carries the `@defgroup cnaext_engine` Doxygen group (`MOD-7`).
+
+Three files the layout above did not foresee, each with its own reason:
+`EngineLayerVersion.hpp` (`MOD-8`), `EngineException.hpp` (`MOD-9`) and `RequireCapability.hpp`
+(`MOD-10`). `ImageBasedLightEXT.hpp` is *not* here at all — it lives in the **XNA** namespace under
+`modules/graphics/`, because an always-compiled effect surface cannot include a header that exists
+only under `CNA_CNAEXT` (see N42 below).
 
 ---
 
@@ -649,6 +714,28 @@ src/CNA/Graphics/
 Renumbered and reconciled with reality. Foundation first; each subsystem's reference (EasyGL)
 implementation precedes its per‑renderer follow‑ups.
 
+> **This table is a summary, not the backlog.** The work is tracked at task granularity in
+> **`plan_modern.md`** (`MOD-1`–`MOD-1924`), which records every deviation and every refusal in the
+> row itself; **`NEXT_modern.md`** carries the running ledger and the full-suite baseline after each
+> phase. The `N`-numbers below map onto `MOD` ranges as follows, and where the two disagree, the plan
+> is right:
+>
+> | `N` | `MOD` range | Phase |
+> |---|---|---|
+> | N01–N06 | `MOD-1`–`MOD-24` | 0 — foundation, conventions, build wiring |
+> | N10–N12 | `MOD-100`–`MOD-141` | 1 — float/HDR render targets |
+> | N20–N21 | `MOD-200`–`MOD-327` | 2–3 — fullscreen passes, tonemapping |
+> | N22 | `MOD-400`–`MOD-431` | 4 — bloom |
+> | N23 | `MOD-500`–`MOD-539` | 5 — depth/normal prepass, SSAO |
+> | N24 | `MOD-600`–`MOD-619` | 6 — FXAA |
+> | N25 | `MOD-700`–`MOD-747` | 7 — `RenderPipeline` |
+> | N26–N29 | (pre-existing) | `DepthEffect`/`CRTEffect`, shipped before this plan |
+> | N30–N33 | `MOD-800`–`MOD-1012` | 8–10 — directional, cascaded, point/spot shadows |
+> | N40–N44 | `MOD-1100`–`MOD-1263` | 11–12 — sky, image-based lighting |
+> | N50–N52 | `MOD-1300`–`MOD-1414` | 13–14 — materials, instancing/LOD/culling |
+> | N70–N73 | `MOD-1500`–`MOD-1565` | 15 — compute and storage buffers |
+> | N12, N33, N44, N72 | `MOD-1600`–`MOD-1699` | 16 — the per-renderer rollout matrix |
+
 ### Foundation
 
 | # | Task | Status |
@@ -656,28 +743,28 @@ implementation precedes its per‑renderer follow‑ups.
 | N01 | `CNA_CNAEXT` CMake option; builds with and without it | ✅ |
 | N02 | `TonemappingMode` / `RenderQuality` / `ShadowQuality` enums | ✅ (add `Uncharted2`) |
 | N03 | `RenderPipelineSettings` config bag | ✅ (extend fields in N30) |
-| N04 | `PbrMaterial` data bag | ✅ (extend in N42) |
-| N05 | `include/CNA/Graphics/CNAEXT.hpp` master include | ⬜ **(mislabeled done; actually missing)** |
+| N04 | `PbrMaterial` data bag | ✅ (no longer only a bag: it is a lossless value description of `PbrEffect` — `applyMaterial`/`extractMaterial` round-trip exactly, equality/hash/`ToString` included. Emissive is a `Vector3` so HDR emissive survives; alpha coverage reuses the XNA-layer `AlphaModeEXT` rather than declaring a second enum — see `plan_modern.md` MOD-1300..1315) |
+| N05 | `CNA/Graphics/CNAEXT.hpp` master include | ✅ (`MOD-1`; it was genuinely missing when this table said done. It now also carries the `@defgroup cnaext_engine` Doxygen group — `MOD-7`) |
 | N06 | `modules/graphics-ext/examples/cnaext_settings_example.cpp` compile test | ✅ |
 
 ### Renderer foundation for HDR & compute
 
 | # | Task | Status |
 |---|---|---|
-| N10 | `GraphicsCapability::{FloatRenderTargets,ComputeShaders,StorageBuffers,SeamlessCubeMapFilter}` | ⬜ |
-| N11 | Thread `RenderTarget2D`'s `SurfaceFormat` into `CreateRenderTarget2DEx`; EasyGL RGBA16F/32F FBOs | ⬜ |
+| N10 | `GraphicsCapability::{FloatRenderTargets,ComputeShaders,StorageBuffers,SeamlessCubeMapFilter}` | ✅ **as two, not four** (`MOD-102`). `FloatRenderTargets`, `HalfFloatRenderTargets` and `ComputeShaders` exist; `StorageBuffers` was dropped as a synonym of `ComputeShaders`, and `SeamlessCubeMapFilter` because the IBL convolution runs on the CPU picking the face from the direction — seamless by construction, with nothing to ask about. All three are **derived** capabilities, answered by a false-by-default renderer virtual rather than a renderer's own switch, many of which end `default: return true` |
+| N11 | Thread `RenderTarget2D`'s `SurfaceFormat` into `CreateRenderTarget2DEXT`; EasyGL RGBA16F/32F FBOs | ✅ (`MOD-100`–`MOD-141`). Note the spelling: the virtual is `CreateRenderTarget2DEXT` and already existed — see correction C1. The threading half was already done too (C2); the real work was EasyGL's float FBOs and the per-format verdict, verified end to end by `HdrRenderTargetRoundTripTests` against Mesa llvmpipe |
 | N12 | Float render targets on Vulkan / SdlGpu / Bgfx / WebGPU / D3D11 / D3D12 | ⬜ |
 
 ### HDR pipeline & post‑processing
 
 | # | Task | Status |
 |---|---|---|
-| N20 | `RenderPipeline` + `HdrSceneTarget` (HDR begin/end, resolve to backbuffer), EasyGL | ⬜ |
-| N21 | `PostProcessPass` base + `TonemapPass` (Reinhard/Filmic/ACES/Uncharted2 + exposure/gamma) | ⬜ |
-| N22 | `BloomPass` (threshold extract → Gaussian pyramid → composite) | ⬜ |
-| N23 | `SsaoPass` (hemisphere kernel from depth+normal, blur) | ⬜ |
-| N24 | `FxaaPass` | ⬜ |
-| N25 | Wire `RenderPipelineSettings` toggles → passes; per‑renderer follow‑ups | ⬜ |
+| N20 | `RenderPipeline` + HDR scene target (HDR begin/end, resolve to backbuffer), EasyGL | ✅ (`MOD-700`–`MOD-747`). No separate `HdrSceneTarget` type: the pipeline owns its scene target through `RenderTargetPool`, and a second class holding one target would have been a name, not a boundary |
+| N21 | `PostProcessPass` base + `TonemapPass` (Reinhard/Filmic/ACES/Uncharted2 + exposure/gamma) | ✅ (`MOD-200`–`MOD-327`; the base takes a `PostProcessContext` — correction C8) |
+| N22 | `BloomPass` (threshold extract → Gaussian pyramid → composite) | ✅ (`MOD-400`–`MOD-431`) |
+| N23 | `SsaoPass` (hemisphere kernel from depth+normal, blur) | ✅ (`MOD-500`–`MOD-539`; it is what added `projection`/`inverseProjection`/`nearPlane`/`farPlane` to `PostProcessContext`) |
+| N24 | `FxaaPass` | ✅ (`MOD-600`–`MOD-619`) |
+| N25 | Wire `RenderPipelineSettings` toggles → passes; per‑renderer follow‑ups | 🟨 (`MOD-700`–`MOD-747` done: a disabled pass is skipped entirely, zero draw calls. The per-renderer follow-ups are Phase 16 and are open for every renderer but EasyGL) |
 | N26 | `DepthEffect` — colour-depth-reduction post-process (`ShaderEffect` subclass): 16-bit/8-bit colour, 4/2/1-bit greyscale, GLSL for EasyGL | ✅ |
 | N27 | `DepthEffect::DitherMode` — ordered (Bayer 4x4/8x8) dithering before quantization. Error-diffusion (Floyd-Steinberg/Atkinson) deliberately not offered — inherently sequential, not single-pass-GPU-friendly without compute shaders (see N70) | ✅ |
 | N28 | `DepthEffect` `Palette256`/`Palette16` modes — real nearest-colour match against a fixed 216-entry web-safe palette / classic 16-entry EGA/CGA palette (lookup texture + fragment-shader search), composes with `DitherMode` | ✅ |
@@ -687,37 +774,37 @@ implementation precedes its per‑renderer follow‑ups.
 
 | # | Task | Status |
 |---|---|---|
-| N30 | `ShadowMap` (depth RT + PCF) + `IShadowReceiverEXT` hooks on the 4 lit effects, EasyGL shader | ⬜ |
-| N31 | `CascadedShadowMap` (3–4 cascades) | ⬜ |
-| N32 | Point‑light cube shadow maps | ⬜ (long term) |
-| N33 | Shadow‑receiver shaders on the other 3D renderers | ⬜ |
+| N30 | `ShadowMap` (distance RT + PCF) + `IShadowReceiverEXT` hooks on the 4 lit effects, EasyGL shader | ✅ (the RT holds light-space distance, not depth — CNA cannot sample a depth attachment as a texture on every renderer; see `plan_modern.md` MOD-800..842) |
+| N31 | `CascadedShadowMap` (2–4 cascades) | ✅ (2–4, not 3–4: two is a legitimate low setting, and the shader carries four either way; atlas storage rather than a texture array — see `plan_modern.md` MOD-900..917) |
+| N32 | Point‑light cube shadow maps | ✅ (and spot maps with them; the cube stores light-space *distance* rather than depth, and the four lit effects gained the punctual light the shadow attenuates — XNA's own have only directional slots. See `plan_modern.md` MOD-1000..1012) |
+| N33 | Shadow‑receiver shaders on the other 3D renderers | ⬜ (Phase 16, `MOD-1620`–`MOD-1649`. Vulkan is **measured**, not guessed: its `ShaderEffect` takes SPIR-V while this layer writes GLSL, so it reports `SupportsShadowSamplingEXT() == false` and the examples skip with the reason instead of crashing mid-draw, which is what they did before `MOD-1699`) |
 
 ### Skybox & IBL
 
 | # | Task | Status |
 |---|---|---|
-| N40 | `Skybox` renderer (cube map, fullscreen sky pass), EasyGL | ⬜ |
-| N41 | `EnvironmentProcessor::generateIrradiance` | ⬜ |
-| N42 | `EnvironmentProcessor::generatePrefilteredSpecular` + `generateBrdfLut`; `ImageBasedLightEXT` | ⬜ |
-| N43 | `PbrEffect`/`SkinnedPbrEffect` `setImageBasedLightEXT` hook + split‑sum ambient shader | ⬜ |
-| N44 | IBL shaders on the other PBR‑capable renderers | ⬜ |
+| N40 | `Skybox` renderer (cube map, fullscreen sky pass), EasyGL | ✅ (one fullscreen draw, no cube mesh: the ray from the inverse rotation-only view-projection *is* the cube lookup. Comes with `EnvironmentProcessor::convertEquirectangular`, since panoramas ship equirectangular and renderers sample cubes — see `plan_modern.md` MOD-1100..1116) |
+| N41 | `EnvironmentProcessor::generateIrradiance` | ✅ (CPU-side, not render-to-cube: a GPU path needs float render targets, cube render targets and custom effects present at once, which no renderer in the committed scope offers together — see `plan_modern.md` MOD-1200..1212) |
+| N42 | `EnvironmentProcessor::generatePrefilteredSpecular` + `generateBrdfLut`; `ImageBasedLightEXT` | ✅ (`ImageBasedLightEXT` lives in the **XNA** namespace beside `PunctualLightEXT`, not in `CNA::Graphics`: an always-compiled effect surface cannot include a header that exists only under `CNA_CNAEXT`. The BRDF table is 8-bit because `Texture::ValidateFormat` admits `SurfaceFormat::Color` only) |
+| N43 | `PbrEffect`/`SkinnedPbrEffect` `setImageBasedLightEXT` hook + split‑sum ambient shader | ✅ (flat ambient and IBL are exclusive, never summed — `FillGpuDrawParams` zeroes the flat colour so even a renderer ignoring the IBL group cannot double-count. GLSL ES 1.00 profiles have no `textureLod` and read the prefiltered cube's base level, a documented limitation of WEBGL1/OPENGLES2) |
+| N44 | IBL shaders on the other PBR‑capable renderers | ⛔ **not implemented, and Phase 16 explains why** (plan_modern.md §16.4, `MOD-1650`–`MOD-1674`, measured 2026-08-19). The *precompute* already works anywhere a `TextureCube` really stores data, since it is CPU-side. The shading half stays EasyGL-only because **no other renderer measured runs this layer's shader source**. Every one of them falls into one of two groups: those that answer `CustomEffects: yes` with `ExecutesShaderEffectSourceEXT(): no` — they accept an effect and render with their own fixed path — and those that do not accept a custom effect at all. Writing the IBL shader for them is not the work; giving them a GLSL front end is, and that is each renderer's own plan. `SupportsImageBasedLightingEXT()` is the query that says so, per renderer, at runtime) |
 
 ### Geometry helpers
 
 | # | Task | Status |
 |---|---|---|
-| N50 | `InstancedRendererEXT` (instance‑stream helper over the existing `DrawInstancedPrimitives`) | ⬜ |
-| N51 | `LodGroupEXT` distance selection | ⬜ |
-| N52 | glTF → `PbrMaterial` bridge (`applyMaterial`) so imported meshes can feed the engine layer | ⬜ |
+| N50 | `InstancedRendererEXT` (instance‑stream helper over the existing `DrawInstancedPrimitives`) | ✅ (one draw call for 10 000 cubes, 24-54x faster than the same scene looped; the per-instance fallback is opt-in rather than silent, because one call per instance is a different program, not a slower one — see `plan_modern.md` MOD-1400..1414) |
+| N51 | `LodGroupEXT` distance selection | ✅ (plus optional hysteresis and a screen-space-error mode, and `FrustumCullerEXT` beside it — culling before uploading is what makes the instance stream cheap) |
+| N52 | glTF → `PbrMaterial` bridge (`applyMaterial`) so imported meshes can feed the engine layer | ✅ (`materialFromGltfEXT`, a template over a concept so `graphics-ext` links neither the content module nor `cgltf`; the importer's runtime path is unchanged. glTF's float `baseColorFactor` quantises to the material's 8-bit albedo — the one documented loss, asserted at ≤1/255) |
 
 ### Compute (long term)
 
 | # | Task | Status |
 |---|---|---|
-| N70 | `IComputeShaderRenderer`/`IStorageBufferRenderer` + EasyGL (GLES 3.1) impl | ⬜ |
-| N71 | `ComputeShader` / `StorageBuffer<T>` public wrappers | ⬜ |
-| N72 | Compute on Vulkan / D3D11 / D3D12 | ⬜ |
-| N73 | GPU particle system + GPU frustum culling demos | ⬜ |
+| N70 | `IComputeShaderRenderer`/`IStorageBufferRenderer` + EasyGL (GLES 3.1) impl | ✅ (support is decided by the **runtime** context, not the compile-time profile — EasyGL asks for ES 3.0 and Mesa hands it 3.2. Verified for real: 1024 floats doubled, a 1 MB buffer round-tripped byte-exact. Binding a `Texture2D` as an image is desktop-GL only and says so, because GL ES needs an immutable texture and CNA allocates mutably — see `plan_modern.md` MOD-1500..1525) |
+| N71 | `ComputeShader` / `StorageBuffer<T>` public wrappers | ✅ (`StorageBuffer` is byte-oriented and non-template with its implementation in a `.cpp`; `StorageBufferT<T>` is the typed view. A dispatch is validated against the device's real limits before submission, and `System::NotSupportedException` — not a new `EngineException` — is the refusal, since CNA already maps that .NET type for this meaning) |
+| N72 | Compute on Vulkan / D3D11 / D3D12 | ⛔ **not implemented; measured instead** (plan_modern.md §16.5, `MOD-1680`–`MOD-1682`, 2026-08-19). All three answer `ComputeShaders: no`, so `ComputeShader` and `StorageBuffer` refuse by name. On D3D11 and D3D12 that was watched happening: of the twelve `ComputeTest` cases, ten **skip** and the two that pass are precisely the two that assert the refusal — `TheCapabilityAndTheLimitsAgreeWithEachOther` and `WithoutSupportBothWrappersRefuseByName`. On Vulkan the same is verified by `cnaext_compute_particles_test` skipping against a real device. The boundary behaving as designed; implementing compute in each belongs to `plan_vulkan.md` / `plan_dx.md`, not to this layer, which already has the renderer-facing interfaces (`N70`) waiting for them) |
+| N73 | GPU particle system + GPU frustum culling demos | ✅ **as subsystems, not demos, and the follow-up this row named was not the one that worked** (`plan_modern.md` `MOD-2091`, `MOD-2095`, 2026-08-20). The gap recorded here was real: a storage buffer cannot be bound as a vertex stream, so both demos had to read their results back — 0.806 ms of pipeline stall for the particles — and this row expected a buffer-aliasing API to fix it. **It was fixed without one.** The vertex shader reads the storage buffer directly by `gl_InstanceID`, which needs no aliasing at all, and both are now subsystems: `GpuInstanceCuller` writes its surviving count straight into an indirect draw command's own `InstanceCount` word with one `atomicAdd`, and `ParticleSystem` carries an emitter, a GPU/CPU simulation compared against each other, and one instanced draw. Neither reads anything back to render a frame. The price of that route is a requirement nobody expects, and it is stated where both classes list it: GL ES 3.1 permits `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` to be **zero**, so a device can implement compute in full and still refuse a storage buffer in a vertex stage. `GpuInstanceCuller` refuses when it is missing (there is no CPU equivalent of "the draw call came from the GPU"); `ParticleSystem` falls back, because a CPU simulation produces the same particles more slowly. |
 
 ### Already shipped (do not re‑plan — tracked in `plan_cnj.md` Phases 13–14)
 
@@ -737,8 +824,102 @@ implementation precedes its per‑renderer follow‑ups.
 - **Not a forced upgrade.** XNA 4.0 ports compile and run unchanged; the engine layer is off by default.
 - **Not renderer‑specific.** Every `CNA::Graphics` abstraction stays renderer‑agnostic; GPU work lives
   behind `IGraphicsRenderer`. No subsystem makes any single renderer mandatory.
-- **Not an ABI guarantee.** The engine‑layer API may change until it stabilizes.
+- **Not an ABI guarantee.** The engine‑layer API may change until it stabilizes. §9.1 says how far
+  from stable it actually is, rather than leaving "until it stabilizes" to the reader's optimism.
 - **Not a node‑based material editor.** Material graphs are explicitly out of scope (§5.5).
+
+---
+
+## 9.1 How stable is it, actually (2026-08-18)
+
+`plan_modern.md` **MOD-1905** asked for one of two statements — "v1 is stable" or an honest "still
+moving". **It is still moving**, and saying otherwise would be the more expensive mistake. But
+"still moving" is not the same as "anything might change", so here is the line, drawn where the
+evidence puts it.
+
+**Settled, and unlikely to move:**
+
+- The **shape** of the layer: `RenderPipeline` + `RenderPipelineSettings`, a `PostProcessPass` chain
+  with a `RenderTargetPool` behind it, one shadow class per light type, `Skybox` and
+  `EnvironmentProcessor` for image-based lighting. Every subsystem has landed against this shape and
+  none of them fought it.
+- The **ownership rules** (`docs/cnaext-ownership.md`): three shapes, no `shared_ptr`, nothing
+  outlives its `GraphicsDevice`.
+- The **two-part support question** (`MOD-1699`): asking a capability is not asking whether the
+  renderer will run your shader. This one cost three separate bugs to learn and is not going to be
+  unlearned.
+- The **naming and accessor conventions**, now gated by `CNAEXT_NamingRule` and
+  `CNAEXT_AccessorConventions` rather than by memory.
+
+**Still moving, and here is what would move it:**
+
+- **Per-renderer behaviour.** EasyGL is the reference and is complete; the rest of Phase 16 is open.
+  A renderer picking a subsystem up can force an interface change, and has before.
+- **Anything a capability query cannot yet answer.** Every time a renderer turned out to promise
+  something it did not do, the answer was a new `…EXT()` query on `GraphicsDevice`. There is no
+  reason to think the four that exist are the last four.
+- **Compute and storage buffers.** One renderer implements them. A second implementation is the
+  usual moment an interface designed against one backend gets corrected.
+
+**What this means for a consumer**, Nova-3D included: build against a pinned CNA revision, read
+`CNA_CNAEXT_ENGINE_VERSION` and `docs/cnaext-engine-changelog.md` when you move, and expect renames
+of the kind revision 2 already carried. The layer will say when that stops being true — in this
+section, with a date on it.
+
+---
+
+## 9.2 What changed and why — the design decisions that did not survive contact
+
+`plan_modern.md` **MOD-1907**. This document was written before any of it was built. Most of it
+held. This section lists what did not, so a reader of §5 knows which paragraphs to distrust and, more
+usefully, *why* each one was wrong — the reasons repeat.
+
+**1. "Ask the capability" turned out to be the wrong question.** §5.2's `isSupported` design assumed
+`GraphicsCapability::CustomEffects` meant the renderer would run your shader. It means the renderer
+will *accept* one. SOFTWARE and HEADLESS accept any GLSL and keep rendering with their own fixed
+path; Vulkan's `ShaderEffect` takes SPIR-V, not the GLSL this layer writes. The result was passes
+reporting success while drawing nothing, three separate times before the lesson stuck
+(`MOD-1699`). The fix is four `…EXT()` queries on `GraphicsDevice` and a two-part question every
+shader-based subsystem now asks. **The general shape:** a capability enum describes what an API
+accepts, and the layer needed to know what a renderer *does*.
+
+**2. Four new capability enumerators became two.** §5.0 proposed `FloatRenderTargets`,
+`ComputeShaders`, `StorageBuffers` and `SeamlessCubeMapFilter`. `StorageBuffers` was a synonym of
+`ComputeShaders` — no renderer can have one without the other — and `SeamlessCubeMapFilter` had
+nothing left to ask about once the irradiance convolution ran on the CPU. Two enumerators that
+answer nothing are worse than none: they invite a caller to branch on them.
+
+**3. `CreateRenderTarget2DEx` already existed, spelled `CreateRenderTarget2DEXT`.** §5.0 proposed
+adding a virtual that was already there and already plumbed. Not an interesting mistake, but a
+recurring one: **the design document was written against a mental model of the renderer interface,
+not against the header.**
+
+**4. Golden images were planned eight times and used zero times.** Eight rows proposed a golden
+image as the acceptance criterion for a visual subsystem. Every one was met by a *measured property*
+instead — the tonemap shader compared against a CPU reference, bloom's energy monotonic in
+intensity, shadows compared inside and outside the occluded region. A golden image tells you a frame
+changed; it does not tell you the thing you cared about is true, and it fails for reasons (driver
+dithering, a one-texel viewport shift) that have nothing to do with the subsystem. `MOD-1703`'s
+harness was refused for the same reason: infrastructure for a category with no members.
+
+**5. Two scope calls, decided the same way and landing in opposite places.** Auto-exposure was
+deferred at `MOD-308` for a specific reason — a whole-frame luminance reduction is a compute problem,
+not a tonemapping one — and shipped at `MOD-1552` once compute existed (`AutoExposureEXT`, a
+log-average so a few bright pixels cannot crush the frame). SMAA and TAA were declined at `MOD-610`
+and stayed declined, for reasons that did not expire: TAA needs motion vectors and a history buffer,
+which is a different pipeline shape rather than a pass, and SMAA needs a precomputed lookup texture
+this layer has no asset path for. **A deferral with a named blocker is worth writing down; "later"
+is not.**
+
+**6. Two house rules held exactly as written.** Verbs are `lowerCamelCase` and the shader floor is
+GLSL ES 3.00. Both were argued in §5.1 and §5.7 and neither needed revisiting — the second is why
+every shader in the layer runs on the renderer with the least to offer, rather than on the
+developer's machine.
+
+**7. The layer's overall shape held.** `RenderPipeline` + settings, a `PostProcessPass` chain over a
+`RenderTargetPool`, one shadow class per light type, `Skybox` and `EnvironmentProcessor` for IBL.
+Every subsystem in Phases 3–15 landed against that shape, and none of them had to bend it. That is
+the part of §5 a reader can still trust.
 
 ---
 
@@ -753,6 +934,10 @@ Nova‑3D is a planned CNA‑based 3D framework / Urho3D‑like renderer. It wil
 
 Nova‑3D never calls OpenGL/Vulkan/D3D/bgfx directly — all GPU access flows through the CNA renderer
 interface.
+
+**What Nova‑3D can actually rely on today** — as opposed to what this section intends — is
+inventoried in [`docs/cnaext-nova3d.md`](docs/cnaext-nova3d.md) (`MOD-1813`): what is implemented and
+measured, what to ask a renderer before using it, and what not to depend on yet.
 
 ---
 

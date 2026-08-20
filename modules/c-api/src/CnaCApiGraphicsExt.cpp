@@ -172,6 +172,45 @@ CNA_Result cna_pbr_material_init(CNA_PbrMaterial* const outMaterial)
     return StoreValue(outMaterial, defaults);
 }
 
+CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* const outMaterial)
+{
+    CNA_PbrMaterialEXT defaults = {};
+    defaults.struct_size                 = static_cast<uint32_t>(sizeof(CNA_PbrMaterialEXT));
+    defaults.struct_version              = CNA_PBR_MATERIAL_EXT_VERSION;
+    defaults.albedo_texture              = CNA_INVALID_HANDLE;
+    defaults.normal_texture              = CNA_INVALID_HANDLE;
+    defaults.metallic_roughness_texture  = CNA_INVALID_HANDLE;
+    defaults.ambient_occlusion_texture   = CNA_INVALID_HANDLE;
+    defaults.emissive_texture            = CNA_INVALID_HANDLE;
+    defaults.specular_texture            = CNA_INVALID_HANDLE;
+    defaults.specular_color_texture      = CNA_INVALID_HANDLE;
+    defaults.albedo_color                = {UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(255)};
+    defaults.emissive_factor             = {0.0F, 0.0F, 0.0F};
+    defaults.specular_color_factor       = {1.0F, 1.0F, 1.0F};
+    defaults.metallic_factor             = 1.0F;
+    defaults.roughness_factor            = 1.0F;
+    defaults.normal_scale                = 1.0F;
+    defaults.occlusion_strength          = 1.0F;
+    defaults.ior                         = 1.5F;
+    defaults.specular_factor             = 1.0F;
+    defaults.alpha_cutoff                = 0.5F;
+    defaults.alpha_mode                  = CNA_ALPHA_MODE_OPAQUE_EXT;
+    defaults.double_sided                = CNA_FALSE;
+    defaults.base_color_texture_srgb     = CNA_TRUE;
+    defaults.emissive_texture_srgb       = CNA_TRUE;
+    defaults.specular_color_texture_srgb = CNA_TRUE;
+    defaults.output_encoded_to_srgb      = CNA_TRUE;
+    for (int slot = 0; slot < 7; ++slot) {
+        defaults.texture_coordinate_sets[slot] = 0;
+        const CNA_Result transformResult =
+            cna_texture_transform_ext_init(&defaults.texture_transforms[slot]);
+        if (transformResult != CNA_RESULT_SUCCESS) {
+            return transformResult;
+        }
+    }
+    return StoreValue(outMaterial, defaults);
+}
+
 CNA_Result cna_render_pipeline_settings_init(CNA_RenderPipelineSettings* const outSettings)
 {
     const CNA_RenderPipelineSettings defaults = {

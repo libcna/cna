@@ -41,6 +41,8 @@ each was refused as "not a public CNA renderer identity" while the coverage matr
 mapped. The C identity table is now pinned to the count of renderers CNA declares, and the
 capability translation is exhaustive over CNA's enumeration, so a renderer or capability added to
 CNA without a C identity fails the build rather than reaching a consumer as `UNKNOWN`.
+That gate caught `NANOVG` during the `modern`-into-`next` merge, before the merged C library could
+publish a renderer it would later report as unknown.
 
 Platform-device availability uses the same successful-snapshot rule. `cna_touch_get_capabilities`
 reports connection and maximum touches, while `cna_audio_get_capabilities` probes CNA's real native

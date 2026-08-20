@@ -1,0 +1,49 @@
+# Audit: src/CNA/Graphics/CubeShadowMap.cpp
+
+## Metadata
+
+- Source file: `src/CNA/Graphics/CubeShadowMap.cpp`
+- Physical location: `modules/graphics-ext/src/CubeShadowMap.cpp`
+- Audit status: PENDING
+- Subsystem: `cna-graphics` shard — the `CNA::Graphics` engine layer
+- File type: C++ source
+- XNA/FNA relevance: N/A — `CNA::Graphics`, not `Microsoft::Xna`. The whole layer is behind the
+  `CNA_CNAEXT` CMake option (default OFF) and every file in it is `#ifdef CNA_CNAEXT`-guarded,
+  which `scripts/check_cnaext_guards.sh` enforces.
+- Graphics renderer relevance: none directly — the engine layer talks to `GraphicsDevice` and the renderer contracts, never to a renderer implementation
+- Plan rows: `MOD-1699`
+
+## Purpose
+
+A point light's shadow, as six faces of a cube map.
+
+## Executive Verdict
+
+Not yet audited. This entry is a work-queue placeholder created by `plan_modern.md` `MOD-12` so the
+engine layer's files are tracked rather than invisible to the audit inventory; the file itself
+landed with its own tests and build verification under the plan row(s) named above.
+
+## Checklist Results
+
+Pending.
+
+## Detailed Findings
+
+Pending.
+
+## Cross-File Observations
+
+Pending.
+
+## Missing or Weak Tests
+
+Pending. Note that the plan requires tests with each row, so the starting point for an audit here is
+`modules/graphics-ext/tests/CNA/Graphics/`, not an empty slate.
+
+## Positive Findings
+
+Pending.
+
+## Final Assessment
+
+Pending.

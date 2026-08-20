@@ -45,6 +45,21 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns true while the native compiled-program renderer is still alive. */
         CNAEXT [[nodiscard]] bool HasRenderer() const { return effectRenderer_ != nullptr; }
 
+        /**
+         * @brief Returns the compiler/linker log from a failed compile, empty when it succeeded.
+         *
+         * plan_modern.md `MOD-219`. `IsEffectValid()` says *that* a shader did not compile; this
+         * says why. The two are separate on purpose: a failed compile is not an exception here,
+         * because on several renderers `GraphicsCapability::CustomEffects` is true while GLSL source
+         * is never compiled at all (Vulkan takes SPIR-V; SOFTWARE and HEADLESS accept and ignore),
+         * and throwing would turn a documented capability boundary into a crash. Callers that need
+         * to *report* the failure — the engine-layer passes do, naming themselves — read it here.
+         *
+         * @return The renderer's log, or an empty string when the program linked or the renderer
+         *         keeps no log.
+         */
+        CNAEXT [[nodiscard]] std::string GetCompileErrorEXT() const;
+
         /** @brief Sets a column-major 4×4 matrix uniform by name. */
         /**
          * @brief Declares the std140 uniform block this effect's parameters live in. CNAEXT.
@@ -84,6 +99,33 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param count Number of vec2 elements (`values` holds `count * 2` floats).
          */
         CNAEXT void SetUniformVec2Array(const char* name, const float* values, int count);
+
+        /**
+         * @brief Sets a `vec3` array uniform.
+         *
+         * Distinct from SetUniformFloatArray for a reason that costs an afternoon to rediscover:
+         * GL rejects filling a `vec3[]` from a float array as a type mismatch and leaves the
+         * uniform at its default, without an error the caller sees.
+         *
+         * @param name   The uniform's name in the shader.
+         * @param values Pointer to @p count * 3 floats.
+         * @param count  Number of vec3 elements.
+         */
+        CNAEXT void SetUniformVec3Array(const char* name, const float* values, int count);
+
+        /**
+         * @brief Sets a `mat4` array uniform, e.g. a skinning palette.
+         *
+         * Distinct from SetUniformMat4, which uploads exactly one matrix whatever the uniform's
+         * declared size -- filling a palette with it leaves every element past the first at its
+         * default.
+         *
+         * @param name     The uniform's name in the shader; the `[0]` spelling GLSL uses for the
+         *                 first element is tried too, so either form works.
+         * @param matrices Pointer to @p count * 16 floats, column-major.
+         * @param count    Number of matrices.
+         */
+        CNAEXT void SetUniformMat4Array(const char* name, const float* matrices, int count);
         /**
          * @brief Binds a texture to an additional sampler unit for this effect's shader.
          *

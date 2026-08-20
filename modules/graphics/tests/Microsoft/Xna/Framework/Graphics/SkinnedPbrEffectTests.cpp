@@ -10,7 +10,10 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -22,7 +25,10 @@ using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
+using Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 using CNA::Internal::Renderers::GpuDrawParams;
 
@@ -555,4 +561,37 @@ TEST_F(SkinnedPbrEffectDefaultsTest, VertexColorEnabledDefaultsOffAndOverridesTh
     enabled.vertexColorEnabled = false;
     fx.FillGpuDrawParams(enabled);
     EXPECT_TRUE(enabled.vertexColorEnabled);
+}
+
+// -----------------------------------------------------------------------
+// Image-based lighting (plan_modern.md MOD-1223): the same surface PbrEffect carries, because a
+// skinned character standing in a scene must be lit by the same environment as everything else.
+
+TEST_F(SkinnedPbrEffectDefaultsTest, ImageBasedLightRoundTripsAndReachesTheDrawParams)
+{
+    EXPECT_FALSE(fx.getImageBasedLightEXT().IsValidEXT());
+
+    TextureCube irradiance(gd, 4, false, SurfaceFormat::Color);
+    TextureCube specular(gd, 8, true, SurfaceFormat::Color);
+    Texture2D lut(gd, 8, 8);
+    ImageBasedLightEXT light;
+    light.Irradiance          = &irradiance;
+    light.PrefilteredSpecular = &specular;
+    light.BrdfLut             = &lut;
+    light.PrefilteredMipCount = 5;
+    light.Intensity           = 0.5f;
+
+    fx.setAmbientLightColorProperty(Vector3(0.4f, 0.4f, 0.4f));
+    fx.setImageBasedLightEXT(light);
+    EXPECT_TRUE(fx.getImageBasedLightEXT().IsValidEXT());
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_TRUE(params.iblEnabled);
+    EXPECT_EQ(params.iblIrradiance, &irradiance.GetRenderer());
+    EXPECT_EQ(params.iblPrefilteredSpecular, &specular.GetRenderer());
+    EXPECT_EQ(params.iblBrdfLut, &lut.GetRenderer());
+    EXPECT_EQ(params.iblPrefilteredMipCount, 5);
+    EXPECT_FLOAT_EQ(params.iblIntensity, 0.5f);
+    EXPECT_FLOAT_EQ(params.ambientColor[0], 0.0f);
 }

@@ -1566,6 +1566,21 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> Magnum::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
+        // Magnum tracks the active GL context in one process-wide global and aborts with
+        // "GL::Context: Another context currently active" when a second Platform::GLContext is
+        // created -- an abort, not an exception, so a caller cannot recover or even ask first.
+        // Refuse by name instead, the same way TinyGLRenderer and SokolRenderer do for the same
+        // reason, and refuse *here* rather than inside the constructor: the constructor creates the
+        // platform GL context in its initializer list, and once that has happened the existing
+        // renderer's Magnum objects are torn down against the wrong context and abort on the way
+        // out. Found by plan_modern.md Phase 16's second-device probe, which took the whole test
+        // process with it.
+        if (Mg::GL::Context::hasCurrent())
+            throw std::runtime_error(
+                "MagnumRenderer: a Magnum GL context already exists. Magnum keeps the active "
+                "context in one process-wide global and offers no make-current entry point for a "
+                "second one, so exactly one MagnumRenderer may exist at a time.");
+
         return std::make_unique<Magnum::MagnumRenderer>(args);
     }
 #endif

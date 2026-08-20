@@ -10,6 +10,8 @@
 
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include <cstdio>
 #include <cassert>
 
@@ -67,27 +69,45 @@ static void testPbrMaterial()
     assert(mat.getMetallicRoughnessTexture() == nullptr);
     assert(mat.getAmbientOcclusionTexture()  == nullptr);
     assert(mat.getEmissiveTexture()          == nullptr);
-    assert(mat.getMetallicFactor()           == 0.0f);
-    assert(mat.getRoughnessFactor()          == 0.5f);
+    assert(mat.getSpecularTexture()          == nullptr);
+    assert(mat.getSpecularColorTexture()     == nullptr);
+    // plan_modern.md MOD-1301: glTF's own default material, which is also PbrEffect's default --
+    // metallic 1 and roughness 1, not the 0/0.5 this bag used before Phase 13.
+    assert(mat.getMetallicFactor()           == 1.0f);
+    assert(mat.getRoughnessFactor()          == 1.0f);
     assert(mat.getNormalScale()              == 1.0f);
     assert(mat.getOcclusionStrength()        == 1.0f);
-    assert(!mat.isAlphaBlendEnabled());
+    assert(mat.getIor()                      == 1.5f);
+    assert(mat.getSpecularFactor()           == 1.0f);
+    assert(mat.getAlphaMode() == Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Opaque);
+    assert(!mat.isDoubleSided());
     assert(mat.getAlphaCutoff()              == 0.5f);
+    assert(mat.getTextureCoordinateSet(CNA::Graphics::PbrTextureSlot::Emissive) == 0);
 
     // round-trips
     mat.setMetallicFactor(1.0f);
     mat.setRoughnessFactor(0.25f);
     mat.setNormalScale(0.8f);
     mat.setOcclusionStrength(0.6f);
-    mat.setAlphaBlendEnabled(true);
+    mat.setAlphaMode(Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Blend);
+    mat.setDoubleSided(true);
     mat.setAlphaCutoff(0.3f);
+    mat.setEmissiveFactor(Microsoft::Xna::Framework::Vector3(2.0f, 0.0f, 0.0f));
 
     assert(mat.getMetallicFactor()    == 1.0f);
     assert(mat.getRoughnessFactor()   == 0.25f);
     assert(mat.getNormalScale()       == 0.8f);
     assert(mat.getOcclusionStrength() == 0.6f);
-    assert(mat.isAlphaBlendEnabled());
+    assert(mat.getAlphaMode() == Microsoft::Xna::Framework::Graphics::AlphaModeEXT::Blend);
+    assert(mat.isDoubleSided());
     assert(mat.getAlphaCutoff()       == 0.3f);
+    assert(mat.getEmissiveFactor().X  == 2.0f);
+    // MOD-1311: the value semantics Phase 13 added.
+    assert(mat == mat);
+    assert(!(mat != mat));
+    assert(mat != PbrMaterial{});
+    assert(mat.GetHashCode() == mat.GetHashCode());
+    assert(!mat.ToString().empty());
 
     std::puts("[PASS] PbrMaterial");
 }

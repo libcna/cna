@@ -47,7 +47,11 @@ EXCLUDED_PATH_SEGMENTS = ("Internal", "Detail")
 EXCLUDED_MODULES = ("platform",)
 STABLE_ID_PATTERN = re.compile(r"CPP-[0-9A-F]{12}")
 COMPOUND_KINDS = {"class", "struct", "union"}
-MEMBER_COMPOUND_KINDS = COMPOUND_KINDS | {"namespace", "file"}
+# Doxygen moves namespace-level declarations into a group compound when a public header wraps them
+# in @addtogroup. Keep those declarations in the inventory; the source location and qualified name
+# still identify the original public API, and the identity de-duplication below collapses any copy
+# that Doxygen also leaves in the namespace/file compound.
+MEMBER_COMPOUND_KINDS = COMPOUND_KINDS | {"namespace", "file", "group"}
 PUBLIC_ACCESS = {"public", "protected", None}
 STATUS_ORDER = ("implemented", "partial", "planned", "not-applicable")
 

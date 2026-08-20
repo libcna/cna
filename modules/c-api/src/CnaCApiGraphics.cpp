@@ -196,6 +196,21 @@ struct ResolvedSpriteCommand final {
         case CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS:
             *outCapability = CNA::GraphicsCapability::CompiledEffects;
             return true;
+        case CNA_GRAPHICS_CAPABILITY_FLOAT_RENDER_TARGETS:
+            *outCapability = CNA::GraphicsCapability::FloatRenderTargets;
+            return true;
+        case CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS:
+            *outCapability = CNA::GraphicsCapability::HalfFloatRenderTargets;
+            return true;
+        case CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING:
+            *outCapability = CNA::GraphicsCapability::HalfFloatTextureLinearFiltering;
+            return true;
+        case CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS:
+            *outCapability = CNA::GraphicsCapability::ComputeShaders;
+            return true;
+        case CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW:
+            *outCapability = CNA::GraphicsCapability::IndirectDraw;
+            return true;
         default:
             return false;
     }
@@ -232,6 +247,16 @@ struct ResolvedSpriteCommand final {
             return CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING;
         case CNA::GraphicsCapability::CompiledEffects:
             return CNA_GRAPHICS_CAPABILITY_COMPILED_EFFECTS;
+        case CNA::GraphicsCapability::FloatRenderTargets:
+            return CNA_GRAPHICS_CAPABILITY_FLOAT_RENDER_TARGETS;
+        case CNA::GraphicsCapability::HalfFloatRenderTargets:
+            return CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_RENDER_TARGETS;
+        case CNA::GraphicsCapability::HalfFloatTextureLinearFiltering:
+            return CNA_GRAPHICS_CAPABILITY_HALF_FLOAT_TEXTURE_LINEAR_FILTERING;
+        case CNA::GraphicsCapability::ComputeShaders:
+            return CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS;
+        case CNA::GraphicsCapability::IndirectDraw:
+            return CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW;
     }
     return CNA_GRAPHICS_CAPABILITY_MAXIMUM + UINT32_C(1);
 }
@@ -289,6 +314,7 @@ struct ResolvedSpriteCommand final {
         case CNA::GraphicsRendererType::TinyGL: return CNA_GRAPHICS_RENDERER_TINYGL;
         case CNA::GraphicsRendererType::Igl: return CNA_GRAPHICS_RENDERER_IGL;
         case CNA::GraphicsRendererType::PixiJs: return CNA_GRAPHICS_RENDERER_PIXIJS;
+        case CNA::GraphicsRendererType::NanoVg: return CNA_GRAPHICS_RENDERER_NANOVG;
     }
     return CNA_GRAPHICS_RENDERER_UNKNOWN;
 }
