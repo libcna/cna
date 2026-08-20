@@ -345,9 +345,11 @@ an error, because neither NanoVG nor GL reports them on its own:
   one that earns its place: a missing shader stage at least fails loudly inside `nvgCreateGL2()`,
   whereas a missing stencil plane does not fail there at all — NanoVG's own README requires a
   stencil-capable render target, and its stencil-based paths would simply produce wrong output
-  later. Both checks are fail-open: a value is refused only when it was positively read and is
-  positively too small, so a platform whose attribute query fails is not locked out of a renderer
-  it could run.
+  later. Neither check can distinguish "the platform reported a small value" from "the platform
+  could not report at all": `GlContextDescription` is returned by value, and a service whose query
+  fails leaves the struct's own defaults (3.3, 8 stencil bits) in place. An unreportable platform
+  is therefore admitted rather than locked out — the outcome to want, but a consequence of those
+  defaults rather than of any read/unread distinction this renderer can make.
 
 A texture belonging to another `GraphicsDevice` is refused one layer earlier still, by
 `SpriteBatch::Draw` itself, before the sprite is queued — see the capability table above.
@@ -393,7 +395,7 @@ established split for GPU/window-creating tests — pure-function pieces live in
 | `spritebatch_custom_viewport_test` (shared) | REMED-GFX-072's own contract: sprite clip space built from the active `GraphicsDevice.Viewport`, viewport-local placement, no squish, a transform composed in viewport-local space, and a full-target batch staying full-target afterwards (13 checks). |
 | `spritebatch_viewport_switch_test` (shared) | Two `SpriteBatch` batches with different viewports in one frame, each projected and rasterized by its own (6 checks). |
 | `nanovg_sprite_rasterization_test` | A whole-frame census requiring that no pixel is partially covered — for an axis-aligned integer quad (with its exact edge columns/rows and covered-pixel count), a ~23° rotation with a fractional origin, non-integer scale and a partial source rectangle, and two ~17° rotations with both `SpriteEffects` flips under a `SetTransformMatrix`; plus a translucent sprite whose edge column must composite exactly once (11 checks). |
-| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), `Stretch` presentation combined with a custom `Viewport` AND a scissor in one scene (the only configuration where the scissor's X and Y scale factors differ, so applying one to both is visible), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, refusal of a texture belonging to the other instance whose handle collides with its own, and destroying one while the other stays live), 25 repeated construct/destroy cycles, `SetSwapInterval` (52 checks). |
+| `nanovg_presentation_viewport_scissor_test` | Every `CnaPresentationMode` (`Letterbox`/`Overscan`/`Stretch`/`FixedHeightDynamicWidth`/`NativeBackBuffer`), `TransformWindowToLogical`/`TransformLogicalToWindow` round-trips, a custom `Viewport`, resize-without-`Clear`, `RasterizerState`-driven scissor pixel-clipping under both `AlphaBlend` and `Opaque` (the latter over a background far from black, so a masked-but-still-written fragment cannot hide in the tolerance), `Stretch` presentation combined with a custom `Viewport` AND a scissor in one scene (the only configuration where the scissor's X and Y scale factors differ, so applying one to both is visible), two simultaneous `NanoVgRenderer` instances (construction, interleaved `Clear`/readback, refusal of a texture belonging to the other instance whose handle collides with its own, and destroying one while the other stays live), refusal of a GL context reported as pre-2.0 or with fewer than 8 stencil bits (driven by overriding what the platform service reports, since a driver cannot be asked for a crippled context), 25 repeated construct/destroy cycles, `SetSwapInterval` (57 checks). |
 
 Plus `NanoVgBlendStateMapping.*` (`modules/renderers/nanovg/tests/`, the pure
 `BlendStateToNvgBlendFunc` mapping function, no window/GL context needed) — including the case

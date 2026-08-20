@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -111,6 +112,22 @@ namespace CNA::Examples
 
         [[nodiscard]] int DestroyCount() const noexcept { return destroyCount_; }
 
+        /**
+         * @brief Test-only: makes GetContextAttributes() report @p attributes instead of what the
+         * driver actually granted.
+         *
+         * A renderer that refuses an inadequate context can otherwise only be tested on hardware
+         * that provides one, which is no test at all. Overriding what the platform REPORTS -- the
+         * exact value such a renderer reads -- exercises the refusal deterministically without
+         * needing a deliberately crippled GL context. Pass std::nullopt to go back to reporting
+         * the real granted attributes.
+         */
+        void SetReportedAttributesForTesting(
+            std::optional<CNA::Platform::GlContextDescription> attributes)
+        {
+            reportedAttributes_ = std::move(attributes);
+        }
+
         [[nodiscard]] CNA::Platform::GlContextHandle CreateContext(
             const CNA::Platform::WindowId window,
             const CNA::Platform::GlContextDescription& description) override
@@ -176,6 +193,7 @@ namespace CNA::Examples
         [[nodiscard]] CNA::Platform::GlContextDescription GetContextAttributes(
             CNA::Platform::GlContextHandle) const override
         {
+            if (reportedAttributes_.has_value()) return *reportedAttributes_;
             CNA::Platform::GlContextDescription result;
             int profile = 0;
             SDL_GL_GetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, &result.majorVersion);
@@ -200,6 +218,7 @@ namespace CNA::Examples
             return reinterpret_cast<void*>(SDL_GL_GetProcAddress(name));
         }
 
+        std::optional<CNA::Platform::GlContextDescription> reportedAttributes_;
         SDL_Window* window_ = nullptr;
         bool forceMakeCurrentFailure_ = false;
         int destroyCount_ = 0;

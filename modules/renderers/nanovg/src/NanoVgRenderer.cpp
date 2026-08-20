@@ -158,9 +158,15 @@ namespace CNA::Internal::Renderers::NanoVg
             // objects for NanoVG's GL2 backend to compile into (that one at least fails loudly
             // inside nvgCreateGL2), and a context WITHOUT a stencil plane does not fail there at
             // all -- NanoVG's own README requires a stencil-capable render target, and its
-            // stencil-based paths would simply produce wrong output later. Both are checked with a
-            // fail-open bias: a value is refused only when it was positively read and is
-            // positively too small, so a platform whose query fails is not locked out.
+            // stencil-based paths would simply produce wrong output later.
+            //
+            // These checks cannot distinguish "the platform reported a small value" from "the
+            // platform could not report at all": GlContextDescription is returned by value and a
+            // service whose query fails simply leaves the struct's own defaults in place (3.3, 8
+            // stencil bits, per IPlatformGlContext.hpp). The outcome is still the one to want --
+            // an unreportable platform is admitted rather than locked out of a renderer it could
+            // run -- but it is a property of those defaults, not of any read/unread distinction
+            // this renderer is able to make.
             const CNA::Platform::GlContextDescription granted = platformContext_->GetAttributes();
             if (granted.majorVersion > 0 && granted.majorVersion < 2)
             {

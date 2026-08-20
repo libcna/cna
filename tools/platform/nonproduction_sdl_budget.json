@@ -655,7 +655,7 @@
     },
     "modules/renderers/nanovg/examples/nanovg_presentation_viewport_scissor_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 49
+      "max_references": 51
     },
     "modules/renderers/nanovg/examples/nanovg_sampler_state_test.cpp": {
       "category": "renderer-integration-executable",

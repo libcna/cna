@@ -38,9 +38,9 @@ using CNA::Examples::SdlTestSurface;
 namespace
 {
     int pass = 0, fail = 0;
-    void Check(bool ok, const char* label)
+    void Check(bool ok, const std::string& label)
     {
-        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label.c_str());
         if (ok) ++pass; else ++fail;
     }
 
@@ -552,6 +552,85 @@ namespace
         SDL_DestroyWindow(window2);
     }
 
+    // ---- The GL context this renderer refuses to run on ----
+    // NanoVG needs OpenGL 2.0+ (its GL2 backend compiles GLSL 1.10 into real shader objects) and a
+    // stencil-capable render target (its own README's requirement). Neither shortfall is testable
+    // by asking for a crippled context -- a driver hands out what it has -- so the test overrides
+    // what the platform service REPORTS, which is the exact value the renderer reads. The success
+    // case is re-run afterwards through the same window, so what is proven is that the refusal
+    // came from the reported attributes and not from the environment.
+    void TestGlContextRequirementRefusals()
+    {
+        SDL_Window* window = MakeWindow(64, 64);
+        {
+        SdlTestGlContext glContext(window);
+
+        const auto expectRefused = [&](const CNA::Platform::GlContextDescription& reported,
+                                       const std::string& fragment, const std::string& label)
+        {
+            glContext.SetReportedAttributesForTesting(reported);
+            bool threw = false;
+            std::string message;
+            try
+            {
+                NanoVgRenderer refused(SdlTestRendererArgs(
+                    window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
+            }
+            catch (const std::runtime_error& ex) { threw = true; message = ex.what(); }
+            Check(threw && message.find(fragment) != std::string::npos,
+                  label + (threw ? (": rejected with \"" + message + "\"") : ": NOT rejected"));
+        };
+
+        CNA::Platform::GlContextDescription tooOld;
+        tooOld.majorVersion = 1;
+        tooOld.minorVersion = 5;
+        tooOld.stencilBits = 8;
+        expectRefused(tooOld, "OpenGL 2.0", "a pre-2.0 context is refused at construction");
+
+        CNA::Platform::GlContextDescription noStencil;
+        noStencil.majorVersion = 2;
+        noStencil.minorVersion = 1;
+        noStencil.stencilBits = 0;
+        expectRefused(noStencil, "stencil",
+                      "a context with no stencil plane is refused at construction");
+
+        CNA::Platform::GlContextDescription tooFewStencilBits = noStencil;
+        tooFewStencilBits.stencilBits = 4;
+        expectRefused(tooFewStencilBits, "stencil",
+                      "a context with fewer than 8 stencil bits is refused at construction");
+
+        // A context that satisfies both, reported through the same override, is accepted -- so the
+        // refusals above are the checks talking, not something else about this window.
+        CNA::Platform::GlContextDescription adequate;
+        adequate.majorVersion = 2;
+        adequate.minorVersion = 1;
+        adequate.stencilBits = 8;
+        glContext.SetReportedAttributesForTesting(adequate);
+        bool adequateThrew = false;
+        try
+        {
+            NanoVgRenderer accepted(SdlTestRendererArgs(
+                window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
+            accepted.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+        catch (const std::runtime_error&) { adequateThrew = true; }
+        Check(!adequateThrew, "a context meeting both requirements is accepted");
+
+        // And with the override cleared, i.e. against what this platform really granted.
+        glContext.SetReportedAttributesForTesting(std::nullopt);
+        bool realThrew = false;
+        try
+        {
+            NanoVgRenderer real(SdlTestRendererArgs(
+                window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
+            real.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        }
+        catch (const std::runtime_error&) { realThrew = true; }
+        Check(!realThrew, "the context this platform actually grants is accepted");
+        }
+        SDL_DestroyWindow(window);
+    }
+
     // ---- Repeated construct/destroy lifecycle ----
     void TestRepeatedConstructDestroyCycle()
     {
@@ -621,6 +700,7 @@ int main()
         TestScissor();
         TestPresentationScaleWithCustomViewportAndScissor();
         TestMultiInstanceCoexistence();
+        TestGlContextRequirementRefusals();
         TestRepeatedConstructDestroyCycle();
         TestSwapInterval();
     }
