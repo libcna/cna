@@ -208,6 +208,7 @@ live `GraphicsDevice` for a capability and never a compile-time `CNA_RENDERER_*`
 | Compute / storage buffers | ✅ GL ES ≥ 3.1 / GL ≥ 4.3, runtime-probed; image bindings desktop-GL only | ⬜ not implemented; reports false and both wrappers refuse | ⬜ | ⬜ — both wrappers throw `System::NotSupportedException` naming the renderer |
 | Indirect draws | ✅ GL ES ≥ 3.1 / GL ≥ 4.0, runtime-probed; both routes, including per-instance streams | ⬜ | ⬜ | ⬜ — `SupportsIndirectDrawEXT()` is false by default and `GraphicsDevice` refuses the draw naming the renderer |
 | GPU culling into an indirect draw | ✅ needs compute, indirect draw, executed effect source and a vertex-stage SSBO — all four probed | ⬜ | ⬜ | ⬜ — `GpuInstanceCuller` refuses and names the missing requirement; there is no fallback, because a CPU path would not remove the stall |
+| Particles | ✅ GPU simulation + instanced billboards | 🟨 CPU simulation and the stock-effect draw work anywhere | 🟨 same | 🟨 — `ParticleSystem` falls back to its CPU path and the same particles appear, more slowly |
 
 **Asking a renderer what it will actually do.** Three questions, and they are not the same question:
 
@@ -858,6 +859,51 @@ they are tonemapped and graded with everything else.
 **Cost is one fullscreen pass per decal**, which is what a screen-space projection costs when it is
 not batched. `DecalPass::isInsideDecalBox` is offered as a plain static so a game can decide whether
 a decal is worth drawing at all before spending one.
+
+### Particles
+
+`plan_modern.md` `MOD-2095`. An emitter, a simulation and a draw. Particles are simulated on the GPU
+where the device has compute and on the CPU where it does not, and drawn as camera-facing billboards
+in one instanced call.
+
+```cpp
+CNA::Graphics::ParticleSystem sparks(device, 2048);
+CNA::Graphics::ParticleEmitterSettings settings;
+settings.Position = muzzle;  settings.Direction = forward;
+settings.EmissionRate = 400.0f;  settings.Lifetime = 0.8f;
+sparks.setSettings(settings);
+sparks.reset();
+
+sparks.update(elapsedSeconds);
+sparks.draw(view, projection, &sparkTexture);
+```
+
+**The rate and the lifetime together decide how many particles exist.** `EmissionRate * Lifetime`
+slots are live; ask for more than the capacity holds and the count is clamped, with
+`isEmissionRateClamped()` saying so rather than the system quietly emitting fewer than the settings
+claim. `reset()` staggers ages across one lifetime so emission is continuous from the first frame
+rather than arriving as one puff.
+
+**Particles do not die permanently** — a slot whose age passes its lifetime is born again at the
+emitter, one generation on, carrying the overshoot into its new age so a long frame does not shorten
+every lifetime it spans. Settings changes apply to the next particle born, not to those in flight.
+
+**The two simulations are one simulation.** The GPU and CPU paths are written to the same
+specification, down to the float expressions: the spawn values come from an integer hash that is
+bit-identical in GLSL and C++, so a comparison between the two paths is meaningful and is asserted
+rather than assumed.
+
+**The GPU path reads back nothing.** The vertex shader reads the buffer the compute shader wrote,
+which needs a storage buffer readable from a vertex stage (see `GpuInstanceCuller` for why that is
+its own requirement) plus `GraphicsCapability::Instancing`. Where any of that is missing the system
+falls back to the CPU — and here a fallback is the right answer, unlike for GPU culling: the same
+particles appear, only simulated more slowly. `usesCompute()` says which ran.
+
+**`setSimulationOnCpuEXT` pins it to the CPU** on a device that has both. Worth having on a tile GPU
+where a dispatch and its barrier cost more than stepping a few hundred particles — and it is how the
+fallback gets exercised at all on a machine that does not need it.
+
+**`readParticlesEXT()` is a stall** when the GPU path is running. Tests and tools only.
 
 ### Culling that becomes the draw: `GpuInstanceCuller`
 
