@@ -177,7 +177,12 @@ fails the model is not automatically the thing that is wrong.
 
 The whole orchestration layer exists and is verified on EasyGL: `RenderPipeline`, the post-process
 chain, all four shadow types, skybox and IBL, materials, instancing/LOD/culling, compute and
-auto-exposure. Final sweep: **7944 ran · 7880 pass · 64 skip · 0 fail**. See
+auto-exposure — and, since Phase 20, clustered lighting, volumetrics, area lights, the glTF material
+extensions, probe-based indirect light, indirect draws, GPU culling, particles, decals, spatial
+upscaling, display-space encoding and per-object velocity. Current sweep (2026-08-20, after Phase
+20): **8294 ran · 8229 pass · 65 skip · 0 fail**, with every `CNAEXT_` gate green for the first time
+(26/26). Phase 19's own final sweep, which the rest of §3 is written against, was 7944 ran · 7880
+pass · 64 skip · 0 fail. See
 `docs/cnaext-engine-layer.md` for the capability boundary per subsystem and per renderer, and §3
 below for the measured baselines including the twenty-renderer table (`MOD-1906`).
 
@@ -590,8 +595,10 @@ like a regression.
 
 ### The final sweep (`MOD-1906`), and the two failures that were the harness
 
-The last full run on the reference renderer is **7944 ran · 7880 pass · 64 skip · 0 fail**, exit
-code 0. Two failures were seen on the way there and neither was a regression; both are recorded
+The last full run on the reference renderer *at the time of `MOD-1906`* was **7944 ran · 7880 pass ·
+64 skip · 0 fail**, exit code 0. (Phase 20 has since taken it to 8294 · 8229 · 65 · 0; this section
+is left in the tense it was written in, because what it explains is the two failures below rather
+than the count.) Two failures were seen on the way there and neither was a regression; both are recorded
 because the next person to see them should not have to rediscover why.
 
 `DynamicSoundEffectInstanceTest.StressSubmitFloatBufferEXTAgainstRepeatedPlayCyclesNeverCorruptsLiveStream`
