@@ -185,8 +185,7 @@ void main() {
     VolumetricFogPass::VolumetricFogPass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device)), pool_(device)
     {
-        const bool packed =
-            !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle);
+        const bool packed = DepthNormalPrepass::usesPackedDepthEXT(device);
         buildEffect_   = std::make_unique<ShaderEffect>(device, kVertexSource, MakeBuildSource());
         resolveEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource,
                                                         MakeResolveSource(packed));

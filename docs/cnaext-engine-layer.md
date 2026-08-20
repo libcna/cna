@@ -385,13 +385,22 @@ costs one iteration.
 
 | Image | Encoding | Cleared to |
 |---|---|---|
-| Depth | Linear view depth, normalised by the far plane, in `HalfSingle` — or packed across the four channels of a `Color` target where float targets are missing (`MOD-507`) | white: "nothing here, infinitely far" |
+| Depth | Linear view depth, normalised by the far plane, **packed across the four channels of a `Color` target** on every renderer (`MOD-507`, `MOD-2035`) | white: "nothing here, infinitely far" |
 | Normals | View-space, `n * 0.5 + 0.5`, in `Color` | `(128, 128, 255)`: facing the camera |
 
 Both clear values are chosen so that an *unwritten* texel is harmless. Black depth would make every
 empty pixel the nearest possible occluder and darken the whole frame; a black normal decodes to
 `(-1,-1,-1)`, a direction no visible surface has, and SSAO reading it manufactures occlusion out of
 empty space.
+
+**Depth is packed everywhere, and that is a change** (`MOD-2035`). It used to go into a `HalfSingle`
+target wherever the renderer had one. On the reference renderer that image turned out to be unusable
+by the passes that read it — SSAO driven from the real prepass occluded *nothing* from it, and
+occludes normally from a packed one. The mechanism is not established and this document will not
+invent one; what settles the choice is that packing is the better encoding anyway, at 1 part in 2^24
+against a half-float's 11-bit mantissa, and needs no capability, so there is one fewer per-renderer
+branch. Ask `DepthNormalPrepass::usesPackedDepthEXT(device)` rather than deriving it — six passes
+decode this image and all of them must reach the same answer.
 
 **Consumers must not write the decoder themselves** (`MOD-504`). `getDepthDecodeGlsl(packed)` returns
 the GLSL that reads this prepass: `cnaDecodeLinearDepth(vec4)` and

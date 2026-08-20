@@ -3,6 +3,7 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -20,6 +21,48 @@
 #include <vector>
 
 namespace CnaTest::EngineLayer {
+
+    /**
+     * @brief One texel of a depth image, in whatever encoding the prepass currently uses.
+     *
+     * plan_modern.md `MOD-2035`. Every screen-space test used to write `Color(v, v, v, 255)` and
+     * call it depth, which was the right bytes only while the prepass stored depth unpacked. It
+     * does not any more, and a test that hand-builds a depth image has to build the one the passes
+     * actually decode -- so the encoding is asked for here rather than assumed in eight files.
+     *
+     * @param device The device whose prepass encoding applies.
+     * @param depth  The linear depth, 0 at the eye and 1 at the far plane.
+     * @return The texel a prepass would have written.
+     */
+    [[nodiscard]] inline Microsoft::Xna::Framework::Color DepthTexel(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, const float depth)
+    {
+        const float clamped = std::clamp(depth, 0.0f, 1.0f);
+        if (!CNA::Graphics::DepthNormalPrepass::usesPackedDepthEXT(device))
+        {
+            const int value = static_cast<int>(clamped * 255.0f + 0.5f);
+            return Microsoft::Xna::Framework::Color(value, value, value, 255);
+        }
+        float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+        CNA::Graphics::DepthNormalPrepass::packDepth(clamped, r, g, b, a);
+        const auto channel = [](const float v) {
+            return static_cast<int>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
+        };
+        return Microsoft::Xna::Framework::Color(channel(r), channel(g), channel(b), channel(a));
+    }
+
+    /**
+     * @brief The same, from a 0..255 byte the older tests were written in terms of.
+     *
+     * @param device    The device whose prepass encoding applies.
+     * @param depthByte The depth as the tests used to spell it, 0..255.
+     * @return The texel a prepass would have written.
+     */
+    [[nodiscard]] inline Microsoft::Xna::Framework::Color DepthTexelFromByte(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice& device, const int depthByte)
+    {
+        return DepthTexel(device, static_cast<float>(depthByte) / 255.0f);
+    }
 
     /**
      * @brief Whether this renderer really runs the shader source an effect is built from.

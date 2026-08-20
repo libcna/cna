@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/ShaderDiagnostics.hpp"
+#include "CNA/Graphics/DepthNormalPrepass.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -51,8 +52,7 @@ void main() {
         // The range check is what keeps a distant silhouette from darkening the surface in front of
         // it: a sample is only counted when the geometry it hit is within the sampling radius, so
         // an object far behind the pixel occludes nothing.
-        constexpr const char* kOcclusionSource = R"(#version 300 es
-precision highp float;
+        constexpr const char* kOcclusionBody = R"(
 in vec2 TexCoord;
 out vec4 FragColor;
 uniform sampler2D texture1;
@@ -66,7 +66,11 @@ uniform float uDepthRange;
 uniform int   uSampleCount;
 
 void main() {
-    float centerDepth = texture(texture1, TexCoord).r;
+    // MOD-2035: decoded, not read raw. This said `.r` for its whole life, which is the depth only
+    // when the prepass stores it unpacked -- so on every renderer without half-float render targets
+    // SSAO has been comparing the top eight bits of a packed value against each other and calling
+    // the result occlusion. It produced a plausible frame, which is why nothing caught it.
+    float centerDepth = cnaDecodeLinearDepth(texture(texture1, TexCoord));
 
     // Nothing was rendered here (the prepass cleared to "infinitely far"); the sky is not occluded.
     if (centerDepth <= 0.0) {
@@ -101,7 +105,7 @@ void main() {
 
         vec3 samplePosition = tbn * uKernel[i];
         vec2 sampleUv = TexCoord + samplePosition.xy * uRadius;
-        float sampleDepth = textureLod(texture1, sampleUv, 0.0).r;
+        float sampleDepth = cnaDecodeLinearDepth(textureLod(texture1, sampleUv, 0.0));
         if (sampleDepth <= 0.0) continue;
 
         // An occluder is simply something nearer to the camera than this pixel. The obvious
@@ -158,7 +162,11 @@ void main() {
     SsaoPass::SsaoPass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device)), pool_(device)
     {
-        occlusionEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, kOcclusionSource);
+        std::string occlusionSource = "#version 300 es\nprecision highp float;\n";
+        occlusionSource += DepthNormalPrepass::getDepthDecodeGlsl(
+            DepthNormalPrepass::usesPackedDepthEXT(device));
+        occlusionSource += kOcclusionBody;
+        occlusionEffect_ = std::make_unique<ShaderEffect>(device, kVertexSource, occlusionSource);
         composeEffect_   = std::make_unique<ShaderEffect>(device, kVertexSource, kComposeSource);
 
         // plan_modern.md MOD-219: a failed compile makes this pass copy its input through, which is

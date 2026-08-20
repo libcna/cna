@@ -38,6 +38,8 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CnaTest::EngineLayer::DepthTexel;
+using CnaTest::EngineLayer::DepthTexelFromByte;
 
 constexpr int   kSize     = 64;
 constexpr float kFarPlane = 100.0f;
@@ -72,9 +74,8 @@ int DepthByte(const float worldDepth)
 /// Near half close to the camera, far half well beyond it.
 std::unique_ptr<RenderTarget2D> MakeSplitDepth(GraphicsDevice& gd)
 {
-    return MakeImage(gd, [](int, const int y) {
-        const int value = DepthByte(InNearHalf(y) ? kNearHalfDepth : kFarHalfDepth);
-        return Color(value, value, value, 255);
+    return MakeImage(gd, [&gd](int, const int y) {
+        return DepthTexelFromByte(gd, DepthByte(InNearHalf(y) ? kNearHalfDepth : kFarHalfDepth));
     });
 }
 

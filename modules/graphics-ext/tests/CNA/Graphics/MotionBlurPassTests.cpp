@@ -35,6 +35,8 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CnaTest::EngineLayer::DepthTexel;
+using CnaTest::EngineLayer::DepthTexelFromByte;
 
 constexpr int   kSize     = 64;
 constexpr float kFarPlane = 100.0f;
@@ -68,8 +70,7 @@ std::unique_ptr<RenderTarget2D> MakeVerticalStripes(GraphicsDevice& gd)
 
 std::unique_ptr<RenderTarget2D> MakeFlatDepth(GraphicsDevice& gd)
 {
-    const int value = static_cast<int>((kDepth / kFarPlane) * 255.0f + 0.5f);
-    return MakeImage(gd, [value](int, int) { return Color(value, value, value, 255); });
+    return MakeImage(gd, [&gd](int, int) { return DepthTexel(gd, kDepth / kFarPlane); });
 }
 
 std::vector<Color> ReadTarget(RenderTarget2D& target)

@@ -138,8 +138,7 @@ void main() {
     DepthOfFieldPass::DepthOfFieldPass(GraphicsDevice& device)
         : fullscreen_(std::make_unique<FullscreenPass>(device))
     {
-        const bool packed =
-            !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle);
+        const bool packed = DepthNormalPrepass::usesPackedDepthEXT(device);
         effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, MakeFragmentSource(packed));
         bool logged = false;
         detail::reportShaderCompileFailure(device, "DepthOfFieldPass", effect_.get(), logged);

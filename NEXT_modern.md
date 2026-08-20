@@ -109,39 +109,39 @@ exactly behind a surface, an `isfinite` guard that let cgltf's `FLT_MAX` sentine
 zero-thickness thin film that was not quite the material without it. **None of those produced a
 broken frame.** Every one produced a plausible one.
 
-**`MOD-2035` is closed, and the recorded bisection was wrong.** For several sessions the one red
-gate, `CNAEXT_Showcase` check E, was attributed to EasyGL's half-float render target on four
-independent measurements. That hypothesis no longer reproduces — the four targets differing only in
-surface format now occlude within 12% of each other — and the real cause was in the example: it drove
-the depth/normal prepass with `drawScene()`, whose every draw calls `Apply()` on the scene's own
-effects and so replaced the prepass program `begin()` had just selected. The "depth" target held the
-shaded frame's red channel, and SSAO compared shading against shading, which produces a weak
-plausible term everywhere instead of occlusion at contacts. Driving the prepass with the prepass
-effect took check E from **2 strongly-occluded pixels to 1 021**, and the gate from 7/8 to **8/8**.
-The bisection test is kept and rewritten to assert the opposite of what it once documented, which is
-the cheapest guard against the symptom returning. **Every `CNAEXT_` gate is green.**
+**`MOD-2035` is closed — and this ledger has to record that it was closed wrongly first.** Earlier
+in the same session it was marked done on the strength of a measurement showing the format
+bisection no longer reproduced. **That measurement did not survive.** It reverted on the same
+machine with the same code, `CNAEXT_Showcase` check E went back to 0, and re-running the comparison
+now gives the original result every time. The bisection four earlier measurements supported was
+right, and the one contradicting it was the anomaly.
 
-The lesson is the one this ledger keeps writing down in different words: four measurements agreeing
-is not the same as a cause. The format comparison was real and repeatable, and it was measuring a
-consequence — a depth image that was never depth in the first place makes *every* downstream
-difference look like the variable you happened to vary.
+The lesson is worth more than the row: **a measurement that contradicts four earlier ones is a
+reason to measure again, not a reason to close a ticket.** Two runs agreeing is not two independent
+confirmations when both come from the same machine minutes apart.
 
-**§20.10 now has numbers, and two of them read the opposite way from what the section argues.**
-`cna_test_cnaext_gpu_driven` (`MOD-2100`, one ID past the phase's declared range — see §20.12 in the
-plan for why that was the better trade) measures each new path against the one it claims to beat, in
-the same frame. GPU culling **loses** to CPU culling at 256 objects and draws level at 1024, which is
-exactly what a software rasteriser must produce: a dispatch on llvmpipe is CPU work plus driver
-overhead, so the GPU path pays for the abstraction and buys nothing back. `MOD-2091` never claimed
-the arithmetic was faster — it claimed the answer stops coming back to the CPU — and llvmpipe has no
-pipeline to stall, so **the thing being bought is invisible to every measurement in this repository**.
-That is now written into `docs/cnaext-perf.md`'s *Not measured yet* section rather than left as an
-implication a reader has to supply.
+The fix is to stop using the format that fails. `DepthNormalPrepass` now packs depth into an 8-bit
+target on every renderer: SSAO from the real prepass occludes **0 pixels of 16384 with half-float
+depth and 2101 with packed**, and check E goes from **0 strongly-occluded pixels to 1022**. Packing
+is not settling for a workaround — this class's own documentation already called it the *more*
+precise encoding, and it needs no capability, so it removes a per-renderer branch.
 
-The particle crossover, by contrast, is real and useful: the CPU step is 2–4× faster at 1024
-particles and the GPU 2× faster at 8192, with both halves running the same simulation. That turns
-`setSimulationOnCpuEXT` from a testing affordance into a tuning one. And the indirect draw is
-**indistinguishable** from the ordinary draw at 256×256 — the two overlap across runs, so its
-overhead is below the noise floor rather than measurably zero, which is what the row says.
+**The mechanism is still open, and the code says so rather than inventing one.**
+`HalfFloatDepthSamplingTests` reduces the question to one shader — two textures proven to hold
+identical values, one loop inlined over each — and on this renderer the two agree. The reduction
+does not capture what the real pass hit. It is kept as a guard, not as an explanation.
+
+Two real bugs surfaced on the way, both fixed, and both of the kind this phase keeps producing —
+they made plausible frames. **`SsaoPass` read the depth channel raw** instead of decoding it, so on
+every renderer without half-float render targets it had been comparing the top byte of a packed
+value against itself. And the packed/half-float decision was **re-derived independently in seven
+places**; it is single-sourced now, without which this change would have left six passes decoding an
+encoding the prepass had stopped writing. Seventeen tests across eight files hand-built depth images
+in the old encoding and now go through one shared helper.
+
+The showcase fix from the wrong closure stands and is unaffected: `drawScene()` really did replace
+the prepass program, so the "depth" target held the shaded frame's red channel. Both defects were
+real and independent — only one of them was the whole story.
 
 **`MOD-2033` is closed too, which makes Phase 20 complete and every `MOD-*` row from `MOD-1` to
 `MOD-2099` carry a verdict.** The row was right that per-object velocity is an obligation on the
@@ -484,6 +484,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | `cmake-build-cnaext`, after closing `MOD-2035` — **every `CNAEXT_` gate green for the first time (25/25)** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
 | 2026-08-20 | same, after `MOD-2033` (per-object velocity) — **Phase 20 complete**, 25/25 gates | Xvfb :99 | 8293 ran · 8228 pass · 65 skip · **0 fail** |
 | 2026-08-20 | same, after `MOD-2100` (the section's benchmark example and its `CNAEXT_GpuDriven` gate) | Xvfb :99 | 8293 ran · 8228 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **26/26** |
+| 2026-08-20 | same, after `MOD-2035`'s **real** fix — the prepass packs depth on every renderer, `SsaoPass` decodes it, seventeen tests rebuilt on the shared helper | Xvfb :99 | 8294 ran · 8229 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **26/26**, `CNAEXT_Showcase` 8/8 with 1022 strongly-occluded pixels |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after all of §20.10 touched `GraphicsDevice`, `IGraphicsRenderer`, `GraphicsCapability` and the EasyGL renderer | Xvfb :99 | 7567 ran · 7504 pass · 62 skip · **1 fail** — `TwoProcessLoopbackTest.HostMigration…`, which passes on its own in 715 ms and times out at 30 s under full-suite load: the fourth instance of the load-induced failures §3 already describes, and nothing to do with this work (it spawns two processes and speaks UDP) |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,

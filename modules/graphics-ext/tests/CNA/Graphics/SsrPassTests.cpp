@@ -41,6 +41,8 @@ using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CnaTest::EngineLayer::DepthTexel;
+using CnaTest::EngineLayer::DepthTexelFromByte;
 
 constexpr int   kSize      = 32;
 constexpr float kNearPlane = 1.0f;
@@ -115,21 +117,23 @@ Color Grey(const int value) { return Color(value, value, value, 255); }
 /// The reflector, with the occluder standing in front of it near the top of the screen.
 std::unique_ptr<RenderTarget2D> MakeTiltedPlaneDepth(GraphicsDevice& gd)
 {
-    return MakeRowImage(gd, [](const int row) { return Grey(DepthByteOfRow(row)); });
+    return MakeRowImage(gd, [&gd](const int row) {
+        return DepthTexelFromByte(gd, DepthByteOfRow(row));
+    });
 }
 
 /// The same plane with nothing in front of it: a ray leaving it must never come back to it.
 std::unique_ptr<RenderTarget2D> MakeTiltedPlaneDepthWithoutBand(GraphicsDevice& gd)
 {
-    return MakeRowImage(gd, [](const int row) {
-        return Grey(static_cast<int>(PlaneDepthAtRow(row) * 255.0f + 0.5f));
+    return MakeRowImage(gd, [&gd](const int row) {
+        return DepthTexel(gd, PlaneDepthAtRow(row));
     });
 }
 
 /// Every pixel the same distance away: a wall facing the camera.
 std::unique_ptr<RenderTarget2D> MakeFlatDepth(GraphicsDevice& gd, const int depthByte)
 {
-    return MakeRowImage(gd, [depthByte](int) { return Grey(depthByte); });
+    return MakeRowImage(gd, [&gd, depthByte](int) { return DepthTexelFromByte(gd, depthByte); });
 }
 
 /// Normals encoded as `n * 0.5 + 0.5`, the prepass's own encoding.

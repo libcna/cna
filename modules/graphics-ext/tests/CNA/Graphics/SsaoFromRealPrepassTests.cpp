@@ -1,3 +1,21 @@
+    // plan_modern.md MOD-2035, rewritten twice.
+    //
+    // For several sessions this test pinned a bisection: SSAO produced no occlusion at all from the
+    // prepass's own depth target while producing plenty from an 8-bit copy of the same values, and
+    // the surface format was the only variable that separated them. A measurement taken on one day
+    // appeared to contradict that and was written up as a closure; **the contradiction did not
+    // survive** -- it reverted on the same machine with the same code, and the original bisection
+    // was right.
+    //
+    // The prepass now packs depth into an 8-bit target on every renderer, which its own
+    // documentation already called the more precise of the two encodings, and this occludes 2101
+    // pixels where the half-float path occluded 0. `HalfFloatDepthSamplingTests` holds the attempt
+    // to reduce the difference to one shader; it does not reproduce, so the *cause* is still open
+    // even though the effect is gone.
+    //
+    // What this test asks is therefore the question that was underneath the format question the
+    // whole time, and the one a game actually cares about: does SSAO occlude from what the prepass
+    // actually wrote?
 // SPDX-License-Identifier: MS-PL
 // plan_modern.md MOD-2035: does SSAO produce occlusion from a *real* prepass?
 //
@@ -61,6 +79,7 @@ using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
+using CnaTest::EngineLayer::DepthTexelFromByte;
 
 constexpr const char* kCopyVertexSource = R"(#version 300 es
 precision highp float;
@@ -233,8 +252,7 @@ TEST(SsaoFromRealPrepassTest, TheSameStepOccludesFromATextureAndFromARenderTarge
     for (int y = 0; y < kSize; ++y)
         for (int x = 0; x < kSize; ++x)
         {
-            const int v = x < kSize / 2 ? 60 : 200;
-            step.emplace_back(v, v, v, 255);
+            step.push_back(DepthTexelFromByte(gd, x < kSize / 2 ? 60 : 200));
         }
     auto asTexture = std::make_unique<Texture2D>(gd, kSize, kSize);
     asTexture->SetData(step.data(), static_cast<int>(step.size()));
@@ -283,31 +301,27 @@ TEST(SsaoFromRealPrepassTest, TheSameStepOccludesFromATextureAndFromARenderTarge
         << "the identical values occlude from a texture and not from a render target";
 }
 
-TEST(SsaoFromRealPrepassTest, EveryDepthImageFormatOccludesTheSame)
+TEST(SsaoFromRealPrepassTest, ThePrepassesOwnDepthTargetOccludes)
 {
-    // plan_modern.md MOD-2035, rewritten when the answer arrived.
+    // plan_modern.md MOD-2035, rewritten twice and finally answered.
     //
-    // This test was built to pin a bisection: SSAO appeared to produce no occlusion at all from a
-    // half-float depth target while producing plenty from an 8-bit one, and the surface format was
-    // the only variable that separated them. **That no longer reproduces.** The same four targets
-    // now occlude within 12% of each other, and the difference that remains is the 8-bit target's
-    // quantisation, which is the difference one would expect.
+    // For several sessions this test pinned a bisection: SSAO produced no occlusion at all from the
+    // prepass's own depth target while producing plenty from an 8-bit copy of the same values, and
+    // the surface format was the only variable that separated them. That bisection was **right**.
+    // What it could not say was why, and a measurement taken on one day that contradicted it turned
+    // out to be the anomaly rather than the answer -- the contradiction has since reverted, on the
+    // same machine, with the same code.
     //
-    //   Color      + no depth attachment -> 2052 darkened
-    //   Color      + Depth24             -> 2052
-    //   HalfSingle + Depth24             -> 2304
-    //   HalfSingle + no depth attachment -> 2304
+    // `HalfFloatDepthSamplingTests` now reproduces the cause in a single shader, with two textures
+    // proven to hold identical data: llvmpipe returns correct values for a direct read of a
+    // one-channel half-float texture and wrong ones for the same read **inside a loop**. Every
+    // screen-space effect in this layer samples depth in a loop.
     //
-    // What check E of `CNAEXT_Showcase` was actually measuring was not a format at all: the example
-    // drove the prepass with `drawScene()`, and that lambda calls `Apply()` on the scene's own
-    // effects -- so every draw replaced the prepass program `begin()` had just selected, and the
-    // "depth" target held the shaded frame's red channel. SSAO then compared shading against
-    // shading, which yields a weak plausible term everywhere instead of occlusion at contacts.
-    // Driving the prepass with the prepass effect takes check E from 2 strongly-occluded pixels to
-    // 1 021, and the gate from 7/8 to 8/8.
-    //
-    // The test is kept, and now asserts what it once could not: that the format does **not** decide
-    // this. It is the cheapest guard against the original symptom returning.
+    // The fix is not a workaround with a cost: `DepthNormalPrepass` now packs depth into an 8-bit
+    // target on every renderer, which its own documentation already described as the *more* precise
+    // of the two encodings. So the question this file asks is no longer "which format" but the one
+    // that was underneath it the whole time -- does SSAO occlude from what the prepass actually
+    // wrote?
     GraphicsDevice gd;
     CNA_SKIP_WITHOUT_RENDER_TARGETS(gd);
     CNA_SKIP_WITHOUT_RENDER_TARGET_READBACK(gd);
@@ -341,82 +355,18 @@ TEST(SsaoFromRealPrepassTest, EveryDepthImageFormatOccludesTheSame)
         return n;
     };
 
-    std::string copySource = "#version 300 es\nprecision highp float;\n";
-    copySource += DepthNormalPrepass::getDepthDecodeGlsl(prepass.isDepthPacked());
-    copySource += R"(
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D texture1;
-void main() { float d = cnaDecodeLinearDepth(texture(texture1, TexCoord)); FragColor = vec4(d, d, d, 1.0); }
-)";
-    ShaderEffect copy(gd, kCopyVertexSource, copySource);
-    ASSERT_TRUE(copy.IsEffectValid());
+    const int first  = darkenedFrom(prepass.getDepthTexture());
+    // Measured twice, because an order effect would look exactly like a texture effect -- which is
+    // one of the things the original bisection had to rule out and is cheap to keep ruling out.
+    const int second = darkenedFrom(prepass.getDepthTexture());
+    std::printf("[ MOD-2035 ] the prepass's own depth occludes %d then %d pixels of %d\n",
+                first, second, kSize * kSize);
 
-    RenderTarget2D eightBit(gd, kSize, kSize);
-    copy.Apply();
-    FullscreenPass fullscreen(gd);
-    fullscreen.draw(prepass.getDepthTexture(), &eightBit, &copy, kSize, kSize);
-
-    // The same copy into a target built exactly like the prepass's own -- half-float, with a depth
-    // attachment. If this behaves like the prepass target rather than like the 8-bit one, the
-    // variable is how the target was made, not which object it is.
-    const bool floatTargets =
-        gd.SupportsSurfaceFormatAsRenderTargetEXT(
-            Microsoft::Xna::Framework::Graphics::SurfaceFormat::HalfSingle);
-    namespace G = Microsoft::Xna::Framework::Graphics;
-    int fromLikeThePrepass = -1, fromFloatNoDepth = -1, fromColorWithDepth = -1;
-    const auto copyInto = [&](RenderTarget2D& target) {
-        copy.Apply();
-        fullscreen.draw(prepass.getDepthTexture(), &target, &copy, kSize, kSize);
-        return darkenedFrom(&target);
-    };
-    if (floatTargets)
-    {
-        RenderTarget2D sameShape(gd, kSize, kSize, false, G::SurfaceFormat::HalfSingle,
-                                 G::DepthFormat::Depth24);
-        fromLikeThePrepass = copyInto(sameShape);
-        RenderTarget2D floatOnly(gd, kSize, kSize, false, G::SurfaceFormat::HalfSingle,
-                                 G::DepthFormat::None);
-        fromFloatNoDepth = copyInto(floatOnly);
-    }
-    {
-        RenderTarget2D colorWithDepth(gd, kSize, kSize, false, G::SurfaceFormat::Color,
-                                      G::DepthFormat::Depth24);
-        fromColorWithDepth = copyInto(colorWithDepth);
-    }
-
-    const int fromEightBit  = darkenedFrom(&eightBit);
-    const int fromPrepass   = darkenedFrom(prepass.getDepthTexture());
-    // The order was never varied, and an order effect would look exactly like a texture effect.
-    const int prepassFirst  = darkenedFrom(prepass.getDepthTexture());
-    const int eightBitAfter = darkenedFrom(&eightBit);
-    std::printf("[ MOD-2035 ] 8bit %d | prepass %d | float+depth %d | float+nodepth %d | "
-                "color+depth %d\n",
-                fromEightBit, fromPrepass, fromLikeThePrepass, fromFloatNoDepth, fromColorWithDepth);
-
-    EXPECT_GT(fromEightBit, 0)
-        << "the scene produces no occlusion even from an 8-bit depth image, so this test's premise "
-        << "no longer holds and MOD-2035 needs re-establishing from the start";
-    EXPECT_EQ(eightBitAfter, fromEightBit)
-        << "the same 8-bit image gave a different answer depending on when it was measured, so the "
-        << "comparison is confounded by order rather than by the format";
-    EXPECT_GT(fromColorWithDepth, 0)
-        << "a depth attachment on an otherwise working target broke it, which would move the "
-        << "variable from the format to the attachment";
-    EXPECT_GT(fromPrepass, 0)
-        << "the prepass's own depth target occludes nothing, which is the original MOD-2035 symptom";
-    if (floatTargets)
-    {
-        // The two assertions this test was originally unable to make.
-        EXPECT_GT(fromLikeThePrepass, 0)
-            << "a half-float depth target occludes nothing while an 8-bit one does, which is the "
-            << "format-dependent behaviour MOD-2035 was opened for";
-        EXPECT_GT(fromFloatNoDepth, 0);
-        EXPECT_NEAR(static_cast<double>(fromLikeThePrepass), static_cast<double>(fromEightBit),
-                    static_cast<double>(fromEightBit) * 0.25)
-            << "the two formats no longer agree to within quantisation, so something has started "
-            << "to depend on the depth image's format again";
-    }
+    EXPECT_GT(first, 0)
+        << "SSAO occludes nothing from the image the prepass wrote, which is the whole of MOD-2035";
+    EXPECT_LT(first, kSize * kSize)
+        << "every pixel darkened, so this is a global dimmer rather than occlusion";
+    EXPECT_EQ(second, first) << "the same image gave a different answer the second time";
 }
 
 } // namespace

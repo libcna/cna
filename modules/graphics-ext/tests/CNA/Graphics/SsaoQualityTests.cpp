@@ -31,6 +31,8 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CnaTest::EngineLayer::DepthTexel;
+using CnaTest::EngineLayer::DepthTexelFromByte;
 
 constexpr int kSize = 32;
 
@@ -112,10 +114,11 @@ TEST(SsaoHalfResolutionTest, BothPathsProduceOcclusionRatherThanOnlyTheFullOne)
     auto normals = std::make_unique<Texture2D>(gd, kSize, kSize);
     auto scene   = std::make_unique<Texture2D>(gd, kSize, kSize);
 
-    std::vector<Color> depthPixels(static_cast<std::size_t>(kSize) * kSize, Color::White);
+    std::vector<Color> depthPixels(static_cast<std::size_t>(kSize) * kSize,
+                                   DepthTexel(gd, 1.0f));
     for (int y = 0; y < kSize; ++y)
         for (int x = 0; x < kSize / 2; ++x)
-            depthPixels[static_cast<std::size_t>(y) * kSize + x] = Color(60, 60, 60, 255);
+            depthPixels[static_cast<std::size_t>(y) * kSize + x] = DepthTexelFromByte(gd, 60);
     depth->SetData(depthPixels.data(), static_cast<int>(depthPixels.size()));
 
     const std::vector<Color> facing(static_cast<std::size_t>(kSize) * kSize,

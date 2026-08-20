@@ -225,9 +225,7 @@ void main() {
         previousViewProjection_ = Matrix::getIdentityProperty();
 
         useMrt_ = device.SupportsCapability(CNA::GraphicsCapability::MultipleRenderTargets);
-        // MOD-507: a half-float target holds linear depth directly; without one it is packed across
-        // an 8-bit target's four channels.
-        packDepth_ = !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle);
+        packDepth_ = usesPackedDepthEXT(device);
 
         const std::string fragment = MakeFragmentSource();
         effect_        = std::make_unique<ShaderEffect>(device, kVertexCommon, fragment);
@@ -495,6 +493,33 @@ void main() {
     Texture2D* DepthNormalPrepass::getDepthTexture() const { return depthTarget_.get(); }
 
     Texture2D* DepthNormalPrepass::getNormalTexture() const { return normalTarget_.get(); }
+
+    bool DepthNormalPrepass::usesPackedDepthEXT(GraphicsDevice& device)
+    {
+        (void)device;
+        // MOD-507 chose the half-float target wherever one existed. MOD-2035 measured what that
+        // costs on the reference renderer, and the measurement is not subtle: with a half-float
+        // depth target, SSAO driven from the prepass occludes **nothing** -- 0 pixels of 16384 --
+        // and with a packed one it occludes 2101. `CNAEXT_Showcase`'s check E goes from 0
+        // strongly-occluded pixels to 1022 on the same frame.
+        //
+        // **The mechanism is not established, and this comment does not claim one.** A minimal
+        // reproducer -- two textures proven to hold identical values, one half-float and one 8-bit,
+        // and the same loop inlined over each -- does *not* separate them
+        // (`HalfFloatDepthSamplingTests` runs it and records what it finds). So what is known is
+        // the effect in the real pass, not its cause, and the earlier bisection in this row's
+        // history was measuring something real that a smaller test does not yet capture.
+        //
+        // Choosing the packed path anyway is not settling for a workaround, because packing is the
+        // better encoding on its own terms and this class's own documentation already said so:
+        // 1 part in 2^24 against a half-float's 11-bit mantissa, at the price of a little
+        // arithmetic on both ends, and no capability required at all -- one fewer per-renderer
+        // branch rather than one more.
+        //
+        // The half-float path is kept rather than deleted: it is one `return` away, and a renderer
+        // that samples it correctly would prefer it for the bandwidth.
+        return true;
+    }
 
     bool DepthNormalPrepass::isSupported(GraphicsDevice& device) const
     {

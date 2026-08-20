@@ -92,8 +92,7 @@ void main() {
     DecalPass::DecalPass(GraphicsDevice& device)
         : device_(device), spriteBatch_(std::make_unique<SpriteBatch>(device))
     {
-        const bool packed =
-            !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle);
+        const bool packed = DepthNormalPrepass::usesPackedDepthEXT(device);
         effect_ = std::make_unique<ShaderEffect>(device, kVertexSource, MakeFragmentSource(packed));
         bool logged = false;
         detail::reportShaderCompileFailure(device, "DecalPass", effect_.get(), logged);

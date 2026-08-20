@@ -172,13 +172,17 @@ TEST(DepthNormalPrepassTest, BothTexturesExistWhateverTheRenderer)
     EXPECT_NE(prepass.getDepthTexture(), prepass.getNormalTexture());
 }
 
-TEST(DepthNormalPrepassTest, TheDepthFormatFollowsTheRenderersFloatSupport)
+TEST(DepthNormalPrepassTest, TheDepthFormatIsSingleSourcedAndTheInstanceAgreesWithIt)
 {
+    // MOD-2035. This used to assert `isDepthPacked() == !hasHalfFloat`, which was the rule until a
+    // half-float depth image turned out to be unusable in a sampling loop on the reference renderer
+    // -- see `HalfFloatDepthSamplingTests`. What matters now is not which format wins but that **one**
+    // answer decides it: six passes decode this prepass's depth, and every one of them asks
+    // `usesPackedDepthEXT`. A prepass whose instance disagreed with that static answer would
+    // silently hand those passes an image in the encoding they are not decoding.
     GraphicsDevice gd;
     const DepthNormalPrepass prepass(gd, kSize, kSize);
-    const bool hasHalfFloat = gd.SupportsSurfaceFormatAsRenderTargetEXT(
-        Microsoft::Xna::Framework::Graphics::SurfaceFormat::HalfSingle);
-    EXPECT_EQ(prepass.isDepthPacked(), !hasHalfFloat);
+    EXPECT_EQ(prepass.isDepthPacked(), DepthNormalPrepass::usesPackedDepthEXT(gd));
 }
 
 TEST(DepthNormalPrepassTest, EveryMisuseIsRejected)

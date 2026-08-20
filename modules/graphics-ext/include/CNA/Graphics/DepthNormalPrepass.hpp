@@ -160,6 +160,20 @@ namespace CNA::Graphics {
          */
         [[nodiscard]] bool isDepthPacked() const;
 
+        /**
+         * @brief Whether a prepass on this device packs its depth, asked without constructing one.
+         *
+         * plan_modern.md `MOD-2035`. Single-sourced deliberately: six passes decode this prepass's
+         * depth and every one of them has to reach the *same* answer it did. Deriving it separately
+         * in each was the shape of a bug waiting to happen -- and this function's answer has since
+         * changed, which would have broken every copy that did not change with it.
+         *
+         * @param device The device to ask about.
+         * @return True when the packed 8-bit path is used.
+         */
+        [[nodiscard]] static bool usesPackedDepthEXT(
+            Microsoft::Xna::Framework::Graphics::GraphicsDevice& device);
+
         /** @brief Returns the roughness written into the normal target's alpha. */
         [[nodiscard]] float getRoughness() const;
 

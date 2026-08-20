@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+#include "EngineTestSupport.hpp"
+
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
@@ -34,6 +36,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CnaTest::EngineLayer::DepthTexelFromByte;
 
 constexpr int kSize = 32;
 
@@ -42,7 +45,7 @@ std::unique_ptr<Texture2D> MakeFlatDepth(GraphicsDevice& gd, const int depthByte
 {
     auto texture = std::make_unique<Texture2D>(gd, kSize, kSize);
     std::vector<Color> texels(static_cast<std::size_t>(kSize) * kSize,
-                              Color(depthByte, depthByte, depthByte, 255));
+                              DepthTexelFromByte(gd, depthByte));
     texture->SetData(texels.data(), static_cast<int>(texels.size()));
     return texture;
 }
@@ -58,7 +61,7 @@ std::unique_ptr<Texture2D> MakeStepDepth(GraphicsDevice& gd)
         for (int x = 0; x < kSize; ++x)
         {
             const int depth = x < kSize / 2 ? 60 : 200;
-            texels.emplace_back(depth, depth, depth, 255);
+            texels.push_back(DepthTexelFromByte(gd, depth));
         }
     texture->SetData(texels.data(), static_cast<int>(texels.size()));
     return texture;
@@ -197,7 +200,7 @@ TEST(SsaoPassTest, TheClearedSkyIsNotDarkenedBesideASilhouette)
         for (int x = 0; x < kSize; ++x)
         {
             const int value = x < kSize / 2 ? 60 : 255;
-            texels.emplace_back(value, value, value, 255);
+            texels.push_back(DepthTexelFromByte(gd, value));
         }
     depth->SetData(texels.data(), static_cast<int>(texels.size()));
 

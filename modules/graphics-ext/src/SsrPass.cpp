@@ -230,8 +230,7 @@ void main() {
         // to decide how to read it. A pass cannot be told: PostProcessContext carries the texture
         // and not the prepass that produced it, and guessing wrong does not fail -- it reads the
         // finest fraction of a packed value as if it were the whole depth.
-        const bool packed =
-            !device.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle);
+        const bool packed = DepthNormalPrepass::usesPackedDepthEXT(device);
         effect_ = std::make_unique<ShaderEffect>(device, kVertexSource,
                                                  MakeFragmentSource(packed));
         bool logged = false;

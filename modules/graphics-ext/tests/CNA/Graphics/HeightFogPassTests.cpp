@@ -36,6 +36,8 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using CnaTest::EngineLayer::DepthTexel;
+using CnaTest::EngineLayer::DepthTexelFromByte;
 
 constexpr int   kSize     = 32;
 constexpr float kFarPlane = 100.0f;
@@ -67,10 +69,9 @@ std::vector<Color> ReadTarget(RenderTarget2D& target)
 std::unique_ptr<RenderTarget2D> MakeSplitDepth(GraphicsDevice& gd, const float nearWorld,
                                                const float farWorld)
 {
-    return MakeImage(gd, [nearWorld, farWorld](int, const int y) {
+    return MakeImage(gd, [&gd, nearWorld, farWorld](int, const int y) {
         const float world = y < kSize / 2 ? nearWorld : farWorld;
-        const int value = static_cast<int>((world / kFarPlane) * 255.0f + 0.5f);
-        return Color(value, value, value, 255);
+        return DepthTexel(gd, world / kFarPlane);
     });
 }
 
