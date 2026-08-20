@@ -25,8 +25,55 @@ upscalers and virtual texturing — each with the specific reason rather than si
 **Phase 20 progress** (updated as sections close): 20.1 render-target coordinates, 20.2
 screen-space reflections, 20.3 the lens and grade passes, 20.4 motion blur and depth of field,
 20.5 clustered forward lighting (`MOD-2040`–`MOD-2048`), 20.6 volumetrics (`MOD-2050`–`MOD-2054`),
-20.7 area lights (`MOD-2060`–`MOD-2063`), 20.8 the material extensions (`MOD-2070`–`MOD-2077`) and
-20.9 probe-based GI (`MOD-2080`–`MOD-2087`) are done. Still open: 20.10 GPU-driven and display.
+20.7 area lights (`MOD-2060`–`MOD-2063`), 20.8 the material extensions (`MOD-2070`–`MOD-2077`),
+20.9 probe-based GI (`MOD-2080`–`MOD-2087`) and **20.10 GPU-driven rendering and display output
+(`MOD-2090`–`MOD-2095`)** are done. Every Phase 20 row now carries a verdict except the two that are
+open by design (below).
+
+**What 20.10 turned out to be about: where an answer lives.** Five of its six rows are the same
+question asked five ways — does a number the GPU produced have to come back to the CPU before it can
+be used? `MOD-2090` put `DrawPrimitivesIndirectEXT`/`DrawIndexedPrimitivesIndirectEXT` on the
+renderer boundary so a draw can read its counts out of GPU memory; `MOD-2091` made the GPU culler
+`atomicAdd` into **the indirect command's own `InstanceCount` word**, so the same atomic that
+reserves an instance's slot is what tells the draw how much to draw; `MOD-2095` gave the particle
+system the same shape. In all three the honest measure is not "it is faster" — nothing here was
+benchmarked against a readback — but that the readback is *gone from the frame path*, and each class
+names the one method that still stalls (`readVisibleCountEXT`, `readParticlesEXT`) so it cannot be
+reached for by accident.
+
+**The requirement that keeps appearing, and that nobody expects.** A compute shader cannot write a
+vertex buffer in this profile, so anything the GPU decides has to reach the draw through a storage
+buffer the **vertex shader** reads. GL ES 3.1 permits `GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS` to be
+**zero** — a device can implement compute in full and still refuse an SSBO in a vertex stage — so it
+is a separate probe (`GetMaxVertexShaderStorageBlocksEXT`), and both `GpuInstanceCuller` and
+`ParticleSystem` list it among their requirements rather than assuming compute implies it.
+
+**Two of the rows fall back and two refuse, and the difference is not taste.** `ParticleSystem`
+falls back to a CPU simulation because that produces the same particles more slowly — a device
+without compute gets a correct effect. `GpuInstanceCuller` refuses, because there is no CPU
+equivalent of "the draw call itself came from the GPU": a silent fallback would report success for a
+frame that never removed the stall. `MOD-2092` is the same reasoning at the display: **no CNA
+platform back end offers an HDR swap chain, so every renderer answers `Srgb` and refuses anything
+else**, and that refusal is the deliverable. A renderer that accepted the request without
+reconfiguring a swap chain would have its caller encode for a display that is not there, and
+PQ-encoded pixels shown as sRGB are washed out and grey — a worse frame than SDR that is simply
+correct.
+
+**Three rows in 20.10 are pinned by an identity rather than by an effect**, which turned out to be
+the assertion that matters most in each: `SpatialUpscalePass` at a 1:1 scale, `HdrDisplayOutput` in
+`Srgb`, and (differently) a decal box that reaches neither surface. All three are `EXPECT_EQ` per
+channel, not a tolerance. The reason is the same each time — a pass with nothing to do that changed
+the image anyway cannot be left in a chain, and a resolution or display dial cannot be calibrated
+against a frame the pass did not touch.
+
+**The GLSL-and-C++ pattern named below claimed two more.** `HdrDisplayOutput`'s first agreement test
+passed for the wrong reason: scRGB scales by `paperWhite/80`, so at 80-nit paper white the encoding
+*is* the identity and the comparison would have held for a pass that did nothing at all. The guard
+that caught it — "did the pass change anything?" — is now in the test beside the agreement. And
+`ParticleSystem`'s GLSL deliberately writes `1.0 + (cos(a) - 1.0) * u` rather than
+`mix(1.0, cos(a), u)`, because `mix` is `x*(1-a) + y*a`, a different float expression; with that one
+line aligned, the two simulations agree on spawn values bit for bit and only the integration can
+drift.
 
 Two rows in the closed sections carry a bound rather than a tick, and both bounds are the same
 shape — **the engine layer cannot put code in `PbrEffect`**. `PbrEffect` owns no shader source: it
@@ -66,6 +113,11 @@ Two rows stay deliberately
 open rather than closed: `MOD-2033` (per-object velocity — an obligation on the application, not
 something the layer can supply) and `MOD-2035`, which is the one red gate, `CNAEXT_Showcase`, and
 whose cause is bisected to EasyGL's half-float render target rather than to anything in the pass.
+A third bound is recorded in `MOD-2090`'s row rather than left as a surprise: CNA's only indirect
+argument buffer is a `StorageBuffer`, which is an SSBO and needs ES 3.1 / GL 4.3, while the indirect
+draw itself needs only GL 4.0 — so on a desktop context between 4.0 and 4.2 the capability
+truthfully reports `true` and there is still no CNA type able to hold the arguments. Reporting a
+higher floor to hide that would be the wrong repair.
 
 **Three sections in a row shipped with a bug the tests caught and a test that was itself wrong**,
 which is worth stating plainly: light shafts measured a black occluder against black, volumetric fog
@@ -377,6 +429,14 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-19 | **`cmake-build-d3d11`** — MinGW-w64 cross-build, run under Wine on a real D3D11 device (`MOD-1624`) | Xvfb :99 + Wine 9.0 | 488 ran · 402 pass · 86 skip · **0 fail** |
 | 2026-08-19 | **`cmake-build-d3d12`** — MinGW-w64 cross-build, run under Wine on a real D3D12 device (`MOD-1625`) | Xvfb :99 + Wine 9.0 | 426 selected · 323 pass · 86 skip · **0 fail**, 17 crash the process — see below |
 | 2026-08-19 | `cmake-build-cnaext` (EasyGL) — **the final regression sweep** (`MOD-1906`), foreground | Xvfb :99 | **7944 ran · 7880 pass · 64 skip · 0 fail** |
+| 2026-08-20 | `cmake-build-cnaext`, after Phase 20 §20.10's first three rows (`MOD-2093` spatial upscaling, `MOD-2090` indirect draw) | Xvfb :99 | 8247 ran · 8182 pass · 65 skip · **0 fail** |
+| 2026-08-20 | same, after `MOD-2091` (GPU culling into an indirect draw) | Xvfb :99 | 8255 ran · 8190 pass · 65 skip · **0 fail** |
+| 2026-08-20 | same, after `MOD-2094` (decals) and `MOD-2095` (particles) | Xvfb :99 | 8275 ran · 8210 pass · 65 skip · **0 fail** |
+| 2026-08-20 | same, after `MOD-2092` (HDR display output) — **§20.10 complete** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
+| 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after all of §20.10 touched `GraphicsDevice`, `IGraphicsRenderer`, `GraphicsCapability` and the EasyGL renderer | Xvfb :99 | 7567 ran · 7504 pass · 62 skip · **1 fail** — `TwoProcessLoopbackTest.HostMigration…`, which passes on its own in 715 ms and times out at 30 s under full-suite load: the fourth instance of the load-induced failures §3 already describes, and nothing to do with this work (it spawns two processes and speaks UDP) |
+
+`ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
+which is `MOD-2035` and was already red before this section began.
 
 The `CNA_CNAEXT=OFF` row is the one that answers "can this break what already works". It configures,
 builds and passes with the whole engine layer compiled out. Its lower test count is expected and not
