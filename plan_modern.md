@@ -1099,6 +1099,19 @@ absence a reader has to infer.
 | MOD-2098 | DLSS / XeSS / FSR 2+ temporal upscaling | ⛔ | **Vendor SDKs and a temporal pipeline this layer does not have.** DLSS and XeSS are closed vendor SDKs bound to D3D12/Vulkan; FSR 2 and above are temporal and need motion vectors and a history buffer — the same requirement that put TAA out of scope in `MOD-610`. FSR 1 is spatial and pure shader arithmetic, so it is `MOD-2093` rather than a refusal. |
 | MOD-2099 | Virtual texturing / streamed terrain | ⛔ | **An asset-pipeline problem wearing a renderer's clothes.** Sparse/virtual textures need `ARB_sparse_texture`, absent from GL ES entirely, and a software fallback needs a tile store, a feedback pass and a streaming budget — a subsystem larger than this whole phase, and one whose hard part is the offline tool rather than the runtime. Out of scope, and named so nobody plans it by accident. |
 
+
+### 20.12 The section's own numbers (`MOD-2100`)
+
+> `MOD-2100` is one past the range this phase declared (`MOD-2000`–`MOD-2099`), and it is numbered
+> that way on purpose: 20.10's six IDs were spent on its six subsystems and 20.11's four on its four
+> refusals, so measuring the section needed an ID the phase did not have. Renumbering to make room
+> would invalidate every cross-reference in `NEXT_modern.md`, `docs/cnaext-engine-layer.md` and
+> `docs/cnaext-perf.md` — a worse trade than one row past the boundary, said out loud.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2100 | Section 20.10's costs, measured | ✅ | `cna_test_cnaext_gpu_driven`, a new `CNAEXT_GpuDriven` gate and the first numbers §20.10 has had. Four checks — the renderer offers the route or SKIPs; **an indirect draw puts the same pixels on screen as the ordinary draw it replaces** (identity, not "it drew something"); GPU culling keeps exactly the instances the CPU culler keeps; the upscale at 1:1 is the frame it was given. `--benchmark` measures every new path **against the one it claims to beat, in the same frame**, and the numbers are in `docs/cnaext-perf.md`. Two of them are worth stating here because the obvious reading is wrong. **GPU culling loses to CPU culling at 256 objects and draws level at 1024** — which is what a software rasteriser must produce, since a dispatch here is CPU work plus driver overhead. `MOD-2091` never claimed the arithmetic was faster; it claimed the answer stops coming back to the CPU, and llvmpipe has no pipeline to stall, so this measurement cannot see the thing being bought. That is recorded in the *Not measured yet* section rather than left as an implication. And **the particle crossover is real**: the CPU step is 2–4× faster at 1024 particles, the GPU 2× faster at 8192. Both halves are the same simulation, so the choice is purely cost — which is exactly what `setSimulationOnCpuEXT` is for, and it stops being a testing affordance and becomes a tuning one. The indirect draw itself is **indistinguishable** from the ordinary one at this frame size: the two overlap across runs, so its overhead is below the noise floor rather than measurably zero, and the row says so. |
+
 ---
 
 ## Appendix A — Shared type sketches referenced by the tasks

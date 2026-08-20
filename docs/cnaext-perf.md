@@ -347,6 +347,49 @@ the spherical-harmonic projection, measured with a scene draw that does nothing.
 six scene draws per probe on top, which is the whole reason baking is an offline operation — an
 8×4×8 grid is 1536 scene draws before anything the layer does.
 
+## GPU-driven rendering and display output
+
+`plan_modern.md` `MOD-2090`–`MOD-2095`. Source: `cna_test_cnaext_gpu_driven --benchmark`, at
+256×256. Every row is a **pair** — the new path and the thing it claims to beat, measured the same
+way in the same frame — because a single figure here would say nothing.
+
+Three runs, and the spread is given where it matters rather than hidden behind a mean.
+
+| What | Measurement | Reading |
+|---|---|---|
+| One ordinary indexed draw | 0.95 – 1.32 ms | |
+| The same draw, indirect | 0.85 – 1.05 ms | **indistinguishable.** The two overlap across runs; the indirect path's overhead is below the noise floor of a 256×256 fill on this rasteriser |
+| Cull 256 instances, CPU | 0.013 – 0.059 ms | |
+| Cull 256 instances, GPU (no readback) | 0.091 – 0.392 ms | **the CPU wins at 256, clearly** |
+| Cull 1024 instances, CPU | 0.208 – 0.271 ms | |
+| Cull 1024 instances, GPU (no readback) | 0.196 – 0.242 ms | **a wash at 1024** — the crossover is around there |
+| Step 1024 particles, GPU | 0.35 – 0.50 ms | |
+| Step 1024 particles, CPU | 0.10 – 0.19 ms | **the CPU wins by 2–4×** |
+| Step 8192 particles, GPU | 0.21 – 0.37 ms | |
+| Step 8192 particles, CPU | 0.47 – 0.61 ms | **the GPU wins by ~2×** — a real crossover between the two counts |
+| Upscale half-size → full | 2.18 – 2.73 ms | |
+| The same pass at 1:1 (copy-through) | 1.24 – 1.49 ms | the edge-adaptive filter and the sharpen cost ≈ **0.9 ms** over a copy at this size |
+| Display output, sRGB (copy-through) | 1.34 – 1.53 ms | |
+| Display output, HDR10 (PQ + Rec. 2020) | 1.90 – 2.17 ms | the PQ encode and the primaries matrix cost ≈ **0.6 ms** |
+
+**Read the culling rows carefully, because the obvious reading of them is wrong.** GPU culling
+losing to CPU culling at 256 objects, and drawing level at 1024, is exactly what a *software*
+rasteriser should produce: a dispatch here is CPU work plus driver overhead, so the GPU path pays
+for the abstraction and buys nothing back. `MOD-2091`'s claim was never that the arithmetic is
+faster — it is that **the answer never comes back to the CPU**, which removes a pipeline stall that
+this measurement cannot see at all, because llvmpipe has no pipeline to stall. Expect the ratio to
+invert on real hardware and to keep inverting as the object count grows; expect it to stay this way
+on llvmpipe however large the field gets.
+
+**The particle crossover is real and is the reason `setSimulationOnCpuEXT` exists.** At 1024 the CPU
+step is two to four times faster than dispatching one; at 8192 the GPU is twice as fast. Both halves
+are the same simulation, so the choice is purely a cost one — and a game with a few hundred sparks
+should make it the other way from a game with a smoke column.
+
+**The three fullscreen rows share a floor.** A plain copy at 256×256 costs about 1.3–1.5 ms here,
+which is most of what the upscale and the sRGB display output measure; the numbers worth taking from
+those rows are the *differences* above that floor, not the totals.
+
 ## Not measured yet
 
 **Corrected 2026-08-19 (`MOD-1906`).** This section used to say bloom, tonemapping, SSAO and FXAA
@@ -360,6 +403,10 @@ two screens up.
 
 What genuinely has no numbers here:
 
+- **The stall that `MOD-2091` and `MOD-2095` remove.** Every number above is from Mesa llvmpipe,
+  which has no GPU pipeline to stall, so the cost a readback imposes on a real device -- the whole
+  point of feeding an indirect draw from a compute shader -- is invisible here and is *not* measured
+  anywhere in this file. The GPU-culling rows measure the abstraction's overhead and nothing else.
 - **Every renderer except EasyGL.** Phase 16 measured fifteen renderers for *behaviour*; none of
   them for cost, and on all but one the passes do not run at all (they report `isSupported() ==
   false` and copy through), so a timing would measure the copy. Only a renderer that executes

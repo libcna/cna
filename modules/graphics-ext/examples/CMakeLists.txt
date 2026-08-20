@@ -188,6 +188,12 @@ if(CNA_BUILD_TESTS AND CNA_CNAEXT AND NOT EMSCRIPTEN AND NOT WIN32)
     cna_register_renderer_test(NAME CNAEXT_GltfPbr COMMAND cna_test_cnaext_gltf_pbr
         TIMEOUT 120 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_modern.md MOD-2090..MOD-2095: section 20.10 end to end, and the only place its costs are
+    # measured -- each new path against the one it claims to beat, in the same frame.
+    cna_graphics_ext_test(cna_test_cnaext_gpu_driven cnaext_gpu_driven_test.cpp)
+    cna_register_renderer_test(NAME CNAEXT_GpuDriven COMMAND cna_test_cnaext_gpu_driven
+        TIMEOUT 180 LABELS "CnaExt;CnaExtDisplay" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_graphics_ext_test(cna_test_cnaext_caps cnaext_caps_probe.cpp)
 
     cna_graphics_ext_test(cna_test_cnaext_ssao cnaext_ssao_test.cpp)

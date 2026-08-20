@@ -126,6 +126,23 @@ is not the same as a cause. The format comparison was real and repeatable, and i
 consequence — a depth image that was never depth in the first place makes *every* downstream
 difference look like the variable you happened to vary.
 
+**§20.10 now has numbers, and two of them read the opposite way from what the section argues.**
+`cna_test_cnaext_gpu_driven` (`MOD-2100`, one ID past the phase's declared range — see §20.12 in the
+plan for why that was the better trade) measures each new path against the one it claims to beat, in
+the same frame. GPU culling **loses** to CPU culling at 256 objects and draws level at 1024, which is
+exactly what a software rasteriser must produce: a dispatch on llvmpipe is CPU work plus driver
+overhead, so the GPU path pays for the abstraction and buys nothing back. `MOD-2091` never claimed
+the arithmetic was faster — it claimed the answer stops coming back to the CPU — and llvmpipe has no
+pipeline to stall, so **the thing being bought is invisible to every measurement in this repository**.
+That is now written into `docs/cnaext-perf.md`'s *Not measured yet* section rather than left as an
+implication a reader has to supply.
+
+The particle crossover, by contrast, is real and useful: the CPU step is 2–4× faster at 1024
+particles and the GPU 2× faster at 8192, with both halves running the same simulation. That turns
+`setSimulationOnCpuEXT` from a testing affordance into a tuning one. And the indirect draw is
+**indistinguishable** from the ordinary draw at 256×256 — the two overlap across runs, so its
+overhead is below the noise floor rather than measurably zero, which is what the row says.
+
 **`MOD-2033` is closed too, which makes Phase 20 complete and every `MOD-*` row from `MOD-1` to
 `MOD-2099` carry a verdict.** The row was right that per-object velocity is an obligation on the
 application rather than a pass — so what was built is the *expression* of that obligation, not a
