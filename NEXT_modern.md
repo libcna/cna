@@ -483,6 +483,7 @@ Recorded so "no regressions" is checkable rather than asserted. Update at each p
 | 2026-08-20 | same, after `MOD-2092` (HDR display output) — **§20.10 complete** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
 | 2026-08-20 | `cmake-build-cnaext`, after closing `MOD-2035` — **every `CNAEXT_` gate green for the first time (25/25)** | Xvfb :99 | 8286 ran · 8221 pass · 65 skip · **0 fail** |
 | 2026-08-20 | same, after `MOD-2033` (per-object velocity) — **Phase 20 complete**, 25/25 gates | Xvfb :99 | 8293 ran · 8228 pass · 65 skip · **0 fail** |
+| 2026-08-20 | same, after `MOD-2100` (the section's benchmark example and its `CNAEXT_GpuDriven` gate) | Xvfb :99 | 8293 ran · 8228 pass · 65 skip · **0 fail**; `ctest -R 'CNAEXT_'` **26/26** |
 | 2026-08-20 | `cmake-build-debug` — **`CNA_CNAEXT=OFF`**, re-verified after all of §20.10 touched `GraphicsDevice`, `IGraphicsRenderer`, `GraphicsCapability` and the EasyGL renderer | Xvfb :99 | 7567 ran · 7504 pass · 62 skip · **1 fail** — `TwoProcessLoopbackTest.HostMigration…`, which passes on its own in 715 ms and times out at 30 s under full-suite load: the fourth instance of the load-induced failures §3 already describes, and nothing to do with this work (it spawns two processes and speaks UDP) |
 
 `ctest -R 'CNAEXT_'` through all of §20.10: **24 of 25 pass**, the exception being `CNAEXT_Showcase`,
