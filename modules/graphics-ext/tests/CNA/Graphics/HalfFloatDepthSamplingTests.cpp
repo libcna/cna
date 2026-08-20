@@ -10,10 +10,20 @@
 //
 // This file is the attempt to reduce that to one shader: two textures built to hold **the same
 // values** -- proven, not assumed, by reading both directly in the same shader -- and one loop
-// inlined over each. **On this project's reference renderer the two agree**, so the reduction does
-// not capture whatever the real pass hit, and this test says so rather than pretending otherwise.
-// It is kept for what it can still do: if a renderer ever *does* fail this comparison, the layer
-// must not be storing depth in the format that fails it.
+// inlined over each. It runs the comparison twice, once with no depth attachment and once with the
+// `Depth24` the prepass actually allocates, because a reduction that does not build the failing
+// shape is not a reduction.
+//
+// **On this project's reference renderer both shapes agree**, so the reduction still does not
+// capture whatever the real pass hit, and this test says so rather than pretending otherwise.
+// Three attributes have now been ruled out as the variable -- the format alone, the depth
+// attachment, and the loop itself -- which leaves the difference somewhere in what the real pass
+// does that this does not: perspective geometry through an MRT prepass, a sample coordinate
+// computed from two other texture reads, and a 64-entry uniform array. That is written down so the
+// next attempt starts where this one stopped instead of repeating it.
+//
+// The test is kept for what it can still do: if a renderer ever *does* fail this comparison, the
+// layer must not be storing depth in the format that fails it.
 
 #ifdef CNA_CNAEXT
 
@@ -23,6 +33,7 @@
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "EngineTestSupport.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
@@ -31,6 +42,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -97,25 +109,29 @@ void main() {
 }
 )";
 
-TEST(HalfFloatDepthSamplingTest, TheLayerDoesNotDependOnSamplingHalfFloatDepthInALoop)
+/// One comparison, for a half-float target built with the given depth attachment.
+///
+/// The attachment is a parameter because it is the one attribute that differed between the shape
+/// this reduction was first written with (none) and the shape the prepass actually allocates
+/// (`Depth24`) -- and a reduction that does not build the failing shape is not a reduction.
+struct Verdict
 {
-    GraphicsDevice gd;
-    if (!CnaTest::EngineLayer::RunsShaderSource(gd))
-        GTEST_SKIP() << "this renderer does not execute effect source";
-    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle))
-        GTEST_SKIP() << "no half-float render target to compare against";
+    int readsDiffer   = 0;
+    int loopFromHalf  = 0;
+    int loopFromEight = 0;
+};
 
-    // One source of truth, rendered into both formats by the same shader.
+Verdict Compare(GraphicsDevice& gd, const Microsoft::Xna::Framework::Graphics::DepthFormat depth)
+{
     Texture2D seed(gd, kSize, kSize);
     const std::vector<Color> white(static_cast<std::size_t>(kSize) * kSize, Color::White);
     seed.SetData(white.data(), static_cast<int>(white.size()));
 
-    RenderTarget2D halfFloat(gd, kSize, kSize, false, SurfaceFormat::HalfSingle,
-                             Microsoft::Xna::Framework::Graphics::DepthFormat::None);
-    RenderTarget2D eightBit(gd, kSize, kSize);
+    RenderTarget2D halfFloat(gd, kSize, kSize, false, SurfaceFormat::HalfSingle, depth);
+    RenderTarget2D eightBit(gd, kSize, kSize, false, SurfaceFormat::Color, depth);
     {
         ShaderEffect fill(gd, kVertexSource, kFillSource);
-        ASSERT_TRUE(fill.IsEffectValid());
+        EXPECT_TRUE(fill.IsEffectValid());
         FullscreenPass pass(gd);
         fill.Apply();
         pass.draw(&seed, &halfFloat, &fill, kSize, kSize);
@@ -124,7 +140,7 @@ TEST(HalfFloatDepthSamplingTest, TheLayerDoesNotDependOnSamplingHalfFloatDepthIn
     }
 
     ShaderEffect compare(gd, kVertexSource, kCompareSource);
-    ASSERT_TRUE(compare.IsEffectValid());
+    EXPECT_TRUE(compare.IsEffectValid());
     RenderTarget2D verdict(gd, kSize, kSize);
     {
         FullscreenPass pass(gd);
@@ -137,27 +153,50 @@ TEST(HalfFloatDepthSamplingTest, TheLayerDoesNotDependOnSamplingHalfFloatDepthIn
     std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
     verdict.GetData(pixels.data(), static_cast<int>(pixels.size()));
 
-    int readsDiffer = 0;
-    int loopFromHalf = 0;
-    int loopFromEight = 0;
+    Verdict out;
     for (const Color& texel : pixels)
     {
-        if (std::abs(texel.getBProperty() - texel.getAProperty()) > 2) ++readsDiffer;
-        if (texel.getRProperty() > 8) ++loopFromHalf;
-        if (texel.getGProperty() > 8) ++loopFromEight;
+        if (std::abs(texel.getBProperty() - texel.getAProperty()) > 2) ++out.readsDiffer;
+        if (texel.getRProperty() > 8) ++out.loopFromHalf;
+        if (texel.getGProperty() > 8) ++out.loopFromEight;
+    }
+    return out;
+}
+
+TEST(HalfFloatDepthSamplingTest, TheLayerDoesNotDependOnSamplingHalfFloatDepthInALoop)
+{
+    GraphicsDevice gd;
+    if (!CnaTest::EngineLayer::RunsShaderSource(gd))
+        GTEST_SKIP() << "this renderer does not execute effect source";
+    if (!gd.SupportsSurfaceFormatAsRenderTargetEXT(SurfaceFormat::HalfSingle))
+        GTEST_SKIP() << "no half-float render target to compare against";
+
+    bool anyDisagreement = false;
+    for (const auto& variant : {
+             std::pair<const char*, Microsoft::Xna::Framework::Graphics::DepthFormat>{
+                 "no depth attachment", Microsoft::Xna::Framework::Graphics::DepthFormat::None},
+             std::pair<const char*, Microsoft::Xna::Framework::Graphics::DepthFormat>{
+                 "Depth24 (the prepass's own shape)",
+                 Microsoft::Xna::Framework::Graphics::DepthFormat::Depth24}})
+    {
+        const Verdict verdict = Compare(gd, variant.second);
+
+        // Everything else is worthless unless the two images really are the same image.
+        ASSERT_EQ(verdict.readsDiffer, 0)
+            << variant.first << ": the two textures do not hold the same values, so the loops "
+            << "compare nothing";
+        ASSERT_GT(verdict.loopFromEight, 0)
+            << variant.first << ": the loop finds nothing even in the 8-bit image, so it is not "
+            << "testing what it claims";
+
+        const bool disagrees = verdict.loopFromHalf * 4 < verdict.loopFromEight;
+        anyDisagreement = anyDisagreement || disagrees;
+        std::printf("[ MOD-2035 ] %-34s identical data, same loop: half-float %d, 8-bit %d (of %d)%s\n",
+                    variant.first, verdict.loopFromHalf, verdict.loopFromEight, kSize * kSize,
+                    disagrees ? "   <-- DISAGREES" : "");
     }
 
-    // Everything below is worthless unless the two images really are the same image.
-    ASSERT_EQ(readsDiffer, 0)
-        << "the two textures do not hold the same values, so the loops below compare nothing";
-    ASSERT_GT(loopFromEight, 0)
-        << "the loop finds nothing even in the 8-bit image, so it is not testing what it claims";
-
-    std::printf("[ MOD-2035 ] identical data, same loop: half-float %d, 8-bit %d (of %d)\n",
-                loopFromHalf, loopFromEight, kSize * kSize);
-
-    const bool disagrees = loopFromHalf * 4 < loopFromEight;
-    if (disagrees)
+    if (anyDisagreement)
     {
         // The assertion is on CNA, never on the driver: where a loop cannot read a half-float
         // depth image, the layer must not be storing one.
@@ -170,8 +209,7 @@ TEST(HalfFloatDepthSamplingTest, TheLayerDoesNotDependOnSamplingHalfFloatDepthIn
         // What this renderer actually reports today. Recorded rather than asserted: the reduction
         // agreeing does not make the real pass's failure go away, it only says this shader is not
         // small enough to see it.
-        std::printf("[ MOD-2035 ] this renderer samples half-float depth in a loop the same way it "
-                    "samples 8-bit -- the reduction does not reproduce what the real pass hit\n");
+        std::printf("[ MOD-2035 ] neither shape reproduces it -- the reduction is still too small\n");
         SUCCEED();
     }
 }
