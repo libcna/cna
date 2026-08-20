@@ -16,9 +16,11 @@
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criterion*;
 > 🟨 code exists but the criterion is not met/verified; ⬜ not started; ⛔ deliberately not done
-> (with a reason). **Every row from `MOD-1` to `MOD-2099` carries a verdict** — Phases 0–19 as of
+> (with a reason). **Every row from `MOD-1` to `MOD-2100` carries a verdict** — Phases 0–19 as of
 > 2026-08-19, and Phase 20, the modern-renderer scope the first nineteen phases did not cover, as of
-> 2026-08-20.
+> 2026-08-20. The ⬜ rows below all belong to **Phase 21**, opened the same day by the same method:
+> look at what the layer has, ask what a game would reach for and not find, and verify each answer
+> against the code before writing it down.
 >
 > **Created:** 2026-08-17. **Branch:** `claude/plan-from-cnaext-m8cjop`.
 
@@ -1111,6 +1113,97 @@ absence a reader has to infer.
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | MOD-2100 | Section 20.10's costs, measured | ✅ | `cna_test_cnaext_gpu_driven`, a new `CNAEXT_GpuDriven` gate and the first numbers §20.10 has had. Four checks — the renderer offers the route or SKIPs; **an indirect draw puts the same pixels on screen as the ordinary draw it replaces** (identity, not "it drew something"); GPU culling keeps exactly the instances the CPU culler keeps; the upscale at 1:1 is the frame it was given. `--benchmark` measures every new path **against the one it claims to beat, in the same frame**, and the numbers are in `docs/cnaext-perf.md`. Two of them are worth stating here because the obvious reading is wrong. **GPU culling loses to CPU culling at 256 objects and draws level at 1024** — which is what a software rasteriser must produce, since a dispatch here is CPU work plus driver overhead. `MOD-2091` never claimed the arithmetic was faster; it claimed the answer stops coming back to the CPU, and llvmpipe has no pipeline to stall, so this measurement cannot see the thing being bought. That is recorded in the *Not measured yet* section rather than left as an implication. And **the particle crossover is real**: the CPU step is 2–4× faster at 1024 particles, the GPU 2× faster at 8192. Both halves are the same simulation, so the choice is purely cost — which is exactly what `setSimulationOnCpuEXT` is for, and it stops being a testing affordance and becomes a tuning one. The indirect draw itself is **indistinguishable** from the ordinary one at this frame size: the two overlap across runs, so its overhead is below the noise floor rather than measurably zero, and the row says so. |
+
+
+---
+
+## Phase 21 — What Phase 20 still did not cover (`MOD-2101`–`MOD-2199`)
+
+> **Created 2026-08-20**, by the same method that produced Phase 20: look at what the layer has,
+> ask what a game would reach for and not find, and check each answer against the code before
+> writing it down rather than after. Every gap below was verified absent by grep, not assumed —
+> and the largest one is stated in the layer's own documentation today
+> (`MaterialBinding.hpp`: *"Draw order still belongs to the application: CNA does not sort."*).
+>
+> **EasyGL only**, on the same owner decision that governed Phase 20 (`OQ-2`, `OQ-7`). No
+> per-renderer rollout section: Phase 16 established that no other renderer executes this layer's
+> shader source.
+>
+> **One boundary this phase does not cross.** `OQ-6` decided the scene-draw contract is app-driven:
+> the pipeline takes a callback, it does not own a scene. Nothing here becomes a scene graph.
+> `TransparentDrawList` is a *sorting aid* an application fills and the layer orders — it decides
+> when draws happen, never what they are.
+
+### 21.1 Transparency, which the layer has no story for at all (`MOD-2101`–`MOD-2110`)
+
+The single largest gap. Every subsystem in Phases 0–20 assumes opaque geometry: the prepass writes
+one depth per pixel, SSAO and SSR and fog and motion blur all reconstruct from that one depth, and
+`applyMaterialState` sets `BlendState::NonPremultiplied` for a `Blend` material and then says out
+loud that ordering is the application's problem. A game with a window in it has nothing to use.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2101 | `TransparentDrawList`: submit (bounds, callback), sort back-to-front against a camera, invoke | ⬜ | Two overlapping quads submitted in the wrong order come out composited in the right one, and the list never owns or copies the geometry. |
+| MOD-2102 | Stable ordering for equal depths, and a documented tie-break | ⬜ | Two draws at identical distance keep submission order across runs; asserted, because an unstable sort makes a frame flicker between frames that are individually correct. |
+| MOD-2103 | Sorting by *nearest point of the bounds*, not by centre | ⬜ | A long object crossing another sorts by what the camera sees first; the centre rule gets this wrong and is the classic sorted-transparency artefact. |
+| MOD-2104 | `RenderPipeline` runs a transparent phase after the opaque one and before post-process | ⬜ | Transparent geometry is tonemapped and graded with everything else; a game that registers no transparent draws renders a pixel-identical frame to today. |
+| MOD-2105 | The prepass and the transparent phase agree on who writes depth | ⬜ | Transparent draws test depth and do not write it; asserted by drawing two transparent surfaces and seeing both. |
+| MOD-2106 | `WeightedBlendedTransparency`: the accumulation and revealage targets, and the resolve | ⬜ | Order-independent: the same two quads submitted in either order produce the **same** frame, which sorting cannot promise and this must. |
+| MOD-2107 | The weight function, written twice and compared | ⬜ | McGuire–Bavoil's depth weight in GLSL and in C++, compared on the GPU — the pattern Phase 20 named after six rows hit it. |
+| MOD-2108 | What OIT costs and what it gets wrong | ⬜ | Measured against the sorted path in `docs/cnaext-perf.md`, and the failure mode stated: weighted blending is an approximation, and a stack of many surfaces at very different depths reads flatter than sorting would. |
+| MOD-2109 | Soft particles: fade `ParticleSystem` billboards against the prepass depth | ⬜ | A billboard intersecting geometry stops showing a hard cut line; needs the prepass, so it degrades to the hard edge without one. |
+| MOD-2110 | Documentation: the transparency section, and how to choose between the two paths | ⬜ | `docs/cnaext-engine-layer.md` says which to use when, and names the one thing neither can do (refraction *through* a sorted stack). |
+
+### 21.2 The shadow detail PCF cannot reach (`MOD-2120`–`MOD-2123`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2120 | `ContactShadowPass`: a short screen-space ray march in the prepass depth | ⬜ | An object resting on a surface gains the contact darkening a shadow map at any practical resolution misses. |
+| MOD-2121 | The march's own boundary: thickness, and what it invents | ⬜ | A depth image has no thickness, so a thin occluder shadows as if solid; stated and tested rather than tuned away. |
+| MOD-2122 | Composition with the shadow map rather than instead of it | ⬜ | The two multiply; a pixel already fully shadowed does not darken twice, which is the visible artefact of adding them. |
+| MOD-2123 | Cost and documentation | ⬜ | Measured per sample count; the section says it is a *complement* to shadow maps, not a replacement. |
+
+### 21.3 Grading and output (`MOD-2130`–`MOD-2133`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2130 | 3D LUT colour grading: load a `.cube` file into a `Texture3D` | ⬜ | The industry-standard grading exchange format, which `ColorGradePass`'s lift/gamma/gain cannot express; needs `GraphicsCapability::Texture3D` and refuses without it. |
+| MOD-2131 | The tetrahedral-vs-trilinear interpolation choice, decided by measurement | ⬜ | Whichever is chosen, the other is named with the reason; a LUT read with the wrong interpolation shifts neutrals, which looks like a grading choice rather than a bug. |
+| MOD-2132 | Debanding dither on the HDR→LDR step | ⬜ | A smooth dark gradient loses its visible bands; asserted by counting distinct values across a ramp, not by looking. |
+| MOD-2133 | Documentation and cost | ⬜ | Where in the chain each belongs, and why dither must come **after** the transfer function rather than before. |
+
+### 21.4 The atmosphere on geometry, not only on the sky (`MOD-2140`–`MOD-2142`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2140 | Aerial perspective: apply `AtmosphericSky`'s model along the view ray to *geometry* | ⬜ | A distant mountain takes the sky's colour with distance; today the sky is atmospheric and everything in front of it is not, which is the giveaway that the sky is a backdrop. |
+| MOD-2141 | One model, not two | ⬜ | The scattering shared with `AtmosphericSky` through one emitted GLSL string, for the reason `MOD-2035` charged the layer for. |
+| MOD-2142 | Its relationship to `HeightFogPass` and `VolumetricFogPass` | ⬜ | Documented so the three are not stacked by accident; each is a different physical claim about the same air. |
+
+### 21.5 Seeing what the layer is doing (`MOD-2160`–`MOD-2165`)
+
+Nothing in the engine layer draws a debug shape or reports a GPU time. Both gaps were felt directly
+in Phase 20: `docs/cnaext-perf.md` is measured with a CPU wall clock around a read-back, and every
+frustum, probe grid, cluster and light bound was verified by arithmetic because there is no way to
+look at one.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2160 | `DebugDraw`: lines, boxes, spheres, frustums, batched into one draw | ⬜ | A `BoundingFrustum` and a `BoundingBox` can be drawn without a game writing a vertex buffer; batched, because a debug helper that costs a draw call per line is one nobody leaves on. |
+| MOD-2161 | Gizmos for the layer's own types: light bounds, probe grids, cluster slices, cascade splits | ⬜ | Each of Phase 20's invisible structures can be seen; this is the tool the phase wanted and did without. |
+| MOD-2162 | Depth-tested and overlay modes | ⬜ | A gizmo behind geometry can be hidden or drawn through it, chosen per submission. |
+| MOD-2163 | `GpuTimer`: timer queries around a pass | ⬜ | Real GPU time rather than CPU wall clock; needs `GL_EXT_disjoint_timer_query` on ES and reports unsupported without it, rather than returning a CPU number wearing a GPU name. |
+| MOD-2164 | Per-pass timings through `RenderPipeline` | ⬜ | Every pass in the chain reports its own cost for a frame, retrieved a frame late so nothing stalls. |
+| MOD-2165 | Re-measure `docs/cnaext-perf.md`'s post-process table with GPU timings | ⬜ | The existing numbers stay, labelled as CPU wall clock, beside the GPU ones; a table that silently changed method would make its own history meaningless. |
+
+### 21.6 Refused against this profile, with reasons (`MOD-2190`–`MOD-2193`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2190 | Anything temporal — TAA, temporal AO/SSR denoising, temporal upscaling | ⛔ | **Restated as a class, because five items in this phase would otherwise each want it.** All of them need a reprojected history buffer and motion vectors for *every* pixel including transparent ones, and `MOD-2033` delivered per-object velocity as an opt-in obligation on the application rather than a guarantee. Already refused individually in `MOD-610` and `MOD-2098`; naming the class stops it being re-proposed one technique at a time. |
+| MOD-2191 | Hardware occlusion culling | ⛔ | **A latency problem, not a rendering one.** `GraphicsCapability::OcclusionQuery` exists, but a query read in the frame that issued it is a stall, and read a frame late it needs a persistent identity per object across frames — which is scene management, and `OQ-6` put scene management outside this layer. Frustum culling plus LOD already removes the bulk; the rest is the application's to structure. |
+| MOD-2192 | Virtual shadow maps | ⛔ | **Same missing hardware as `MOD-2099`.** Sparse/virtual textures need `ARB_sparse_texture`, absent from GL ES entirely, and the page-table pass that emulates them is the virtual-texturing subsystem that row already refused. Cascades remain the reachable answer. |
+| MOD-2193 | Screen-space global illumination | ⛔ | **Refused as redundant against what this layer already has, not as unreachable.** SSGI is a screen-space ray march — the same machinery as `SsrPass` — and its diffuse answer is what `LightProbeVolumeEXT` already supplies with none of the screen-space failure modes (offscreen light missing, disocclusion, view dependence). It would add a third indirect-light path that disagrees with the other two. Revisit only if probes prove insufficient for a real scene. |
 
 ---
 

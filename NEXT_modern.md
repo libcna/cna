@@ -13,7 +13,33 @@ done, 🟨 done-but-bounded with the bound stated, or ⛔ refused with the reaso
 are complete; **Phase 16 is measured rather than implemented**, which is the honest description of
 what a per-renderer rollout turned into once every renderer was actually run.
 
-**Phase 20 (`MOD-2000`–`MOD-2099`) is complete** (2026-08-20) — the modern-renderer scope the first nineteen
+**Phase 21 (`MOD-2101`–`MOD-2199`) is new and open** (2026-08-20), opened by the same method that
+produced Phase 20 and with the same owner constraint — EasyGL only. Every gap in it was **verified
+absent by grep before being written down**, not assumed, and the largest one the layer states about
+itself today: `MaterialBinding.hpp` says *"Draw order still belongs to the application: CNA does not
+sort."* The layer has **no transparency story at all** — every subsystem from Phase 0 to Phase 20
+assumes opaque geometry, because the prepass writes one depth per pixel and SSAO, SSR, fog and
+motion blur all reconstruct from that one depth. A game with a window in it has nothing to use.
+
+Also absent, and each checked: contact shadows, 3D-LUT grading, output debanding, aerial perspective
+on geometry, any debug drawing at all, and any GPU timing. The last two were felt directly in Phase
+20 — `docs/cnaext-perf.md` is measured with a CPU wall clock around a read-back, and every frustum,
+probe grid, cluster and light bound was verified by arithmetic because there is no way to look at
+one.
+
+**One boundary the phase does not cross.** `OQ-6` decided the scene-draw contract is app-driven, so
+nothing here becomes a scene graph: `TransparentDrawList` is a sorting aid an application fills and
+the layer orders — it decides *when* draws happen, never *what* they are.
+
+Four things are refused up front, and one of them as a **class**: anything temporal (TAA, temporal
+denoising, temporal upscaling) is refused once rather than five times, because five items in this
+phase would otherwise each ask for the same reprojected history. The others are hardware occlusion
+culling (a latency problem that needs per-object identity across frames, which is scene management),
+virtual shadow maps (the sparse-texture hardware `MOD-2099` already refused) and screen-space GI —
+that last one **refused as redundant rather than unreachable**, since its diffuse answer is what
+`LightProbeVolumeEXT` already gives without screen space's failure modes.
+
+**Phase 20 (`MOD-2000`–`MOD-2100`) is complete** (2026-08-20) — the modern-renderer scope the first nineteen
 phases never covered: screen-space reflections, depth of field, the lens and grading passes, motion
 blur, clustered lighting for many lights, volumetrics, area lights, the glTF material extensions
 beyond core, probe-based GI, and indirect draw. **EasyGL only, by owner decision**, with no
