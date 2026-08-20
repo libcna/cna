@@ -57,6 +57,11 @@ namespace CNA::Graphics {
     void            RenderPipelineSettings::setBloomIterations(int v)   { bloomIterations_ = v; }
 
     bool            RenderPipelineSettings::isSSAOEnabled()       const { return ssaoEnabled_; }
+    TransparencyMode RenderPipelineSettings::getTransparencyMode() const { return transparencyMode_; }
+    void RenderPipelineSettings::setTransparencyMode(const TransparencyMode value)
+    {
+        transparencyMode_ = value;
+    }
     void            RenderPipelineSettings::setSSAOEnabled(bool v)      { ssaoEnabled_ = v; }
 
     float           RenderPipelineSettings::getSSAORadius()       const { return ssaoRadius_; }

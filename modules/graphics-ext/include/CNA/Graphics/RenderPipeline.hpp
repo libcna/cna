@@ -13,6 +13,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
 #include <functional>
+#include <string>
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include <memory>
 #include <vector>
 
@@ -27,6 +29,8 @@ namespace Microsoft::Xna::Framework::Graphics {
 }
 
 namespace CNA::Graphics {
+
+    class WeightedBlendedTransparency;
 
 /** @addtogroup cnaext_engine
  *  @{
@@ -166,6 +170,36 @@ namespace CNA::Graphics {
          * @param velocity The velocity texture, or null.
          */
         void setVelocityInputEXT(Microsoft::Xna::Framework::Graphics::Texture2D* velocity);
+
+        /**
+         * @brief Registers the transparent half of the scene.
+         *
+         * plan_modern.md `MOD-2104`. Run after the opaque draw and **before** the post-process
+         * chain, so transparent geometry is tonemapped and graded with everything else — a
+         * transparent surface composited after the tonemapper would be the one thing in the frame
+         * that was never scene-referred.
+         *
+         * The pipeline sets the state the phase needs and, in `TransparencyMode::OrderIndependent`,
+         * owns the accumulation targets and the resolve. Registering nothing, or leaving the mode
+         * at its `None` default, renders exactly the frame this pipeline rendered before
+         * transparency existed.
+         *
+         * @param drawTransparent What to draw, or an empty function to unregister.
+         */
+        void setTransparentScene(std::function<void()> drawTransparent);
+
+        /**
+         * @brief Returns why `OrderIndependent` fell back to `Sorted`, or an empty string.
+         *
+         * Weighted blended transparency needs multiple render targets, a half-float render target
+         * and a renderer that executes effect source. Where any is missing the pipeline draws the
+         * sorted phase instead of drawing nothing, and this says which requirement was absent —
+         * silently drawing a different way is how a frame ends up wrong for a reason nobody can
+         * find.
+         *
+         * @return The reason, or empty when the requested mode is the one in use.
+         */
+        [[nodiscard]] const std::string& getTransparencyFallbackReasonEXT() const;
 
         /**
          * @brief Supplies the shadow pass `begin` should run before the frame.
@@ -411,6 +445,12 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::Texture2D* sceneDepth_   = nullptr;
         Microsoft::Xna::Framework::Graphics::Texture2D* sceneNormals_ = nullptr;
         Microsoft::Xna::Framework::Graphics::Texture2D* sceneVelocity_ = nullptr;
+        void drawTransparentPhase();
+        Microsoft::Xna::Framework::Graphics::RenderTargetUsage sceneUsage_ =
+            Microsoft::Xna::Framework::Graphics::RenderTargetUsage::DiscardContents;
+        std::function<void()> drawTransparent_;
+        std::unique_ptr<WeightedBlendedTransparency> orderIndependent_;
+        std::string transparencyFallbackReason_;
         std::vector<PostProcessPass*> userPasses_;
 
         int  width_  = 0;

@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Graphics/RenderPipeline.hpp"
+#include "CNA/Graphics/WeightedBlendedTransparency.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 
 #ifdef CNA_CNAEXT
 
@@ -36,6 +40,7 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::DepthFormat;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
     RenderPipeline::RenderPipeline(GraphicsDevice& device)
@@ -85,6 +90,11 @@ namespace CNA::Graphics {
         if (settings_.isHDREnabled())
             return true;
         if (settings_.getTonemappingMode() != TonemappingMode::None)
+            return true;
+        // A transparent phase needs a scene target of its own: the sorted path could draw straight
+        // to the back buffer, but the order-independent one resolves into the frame and must have
+        // one to resolve into.
+        if (drawTransparent_ && settings_.getTransparencyMode() != TransparencyMode::None)
             return true;
         if (settings_.isBloomEnabled() || settings_.isSSAOEnabled() || settings_.isFXAAEnabled() ||
             settings_.isSSREnabled() || settings_.isDOFEnabled() ||
@@ -162,14 +172,24 @@ namespace CNA::Graphics {
         }
 
         const SurfaceFormat wanted = chooseSceneFormat();
-        if (!sceneTarget_ || sceneFormat_ != wanted)
+        // MOD-2104: the order-independent path unbinds this target to accumulate into its own and
+        // binds it again to resolve, so its contents have to survive the round trip -- the default
+        // DiscardContents throws away the whole opaque frame on the second bind. Asked for only
+        // when that path can run, because preserving is not free on a tiler and no other phase in
+        // this pipeline comes back to a target it left.
+        const RenderTargetUsage usage =
+            settings_.getTransparencyMode() == TransparencyMode::OrderIndependent
+                ? RenderTargetUsage::PreserveContents
+                : RenderTargetUsage::DiscardContents;
+        if (!sceneTarget_ || sceneFormat_ != wanted || sceneUsage_ != usage)
         {
             sceneFormat_ = wanted;
+            sceneUsage_  = usage;
             // Depth is not optional: the scene drawn between begin() and end() is a real scene,
             // and a 3D one without depth renders in submission order.
             sceneTarget_ = std::make_unique<RenderTarget2D>(device_, width_, height_, false,
                                                             sceneFormat_,
-                                                            DepthFormat::Depth24Stencil8);
+                                                            DepthFormat::Depth24Stencil8, 0, usage);
         }
 
         device_.SetRenderTarget(sceneTarget_.get());
@@ -238,6 +258,10 @@ namespace CNA::Graphics {
             lastFrameTargetSwitches_ = 0;
             return;
         }
+
+        // Transparency, before anything is unbound: it is part of the scene, not a post-process,
+        // so it draws into the same target the opaque half did and is tonemapped and graded with it.
+        drawTransparentPhase();
 
         // The scene target stops being a target here and becomes a texture: every pass below samples
         // it. Unbinding first is not tidiness -- sampling a bound render target is undefined in GL --
@@ -373,6 +397,64 @@ namespace CNA::Graphics {
         Microsoft::Xna::Framework::Graphics::Texture2D* velocity)
     {
         sceneVelocity_ = velocity;
+    }
+
+    void RenderPipeline::setTransparentScene(std::function<void()> drawTransparent)
+    {
+        drawTransparent_ = std::move(drawTransparent);
+    }
+
+    const std::string& RenderPipeline::getTransparencyFallbackReasonEXT() const
+    {
+        return transparencyFallbackReason_;
+    }
+
+    void RenderPipeline::drawTransparentPhase()
+    {
+        transparencyFallbackReason_.clear();
+        if (!drawTransparent_) return;
+        const TransparencyMode mode = settings_.getTransparencyMode();
+        if (mode == TransparencyMode::None) return;
+
+        if (mode == TransparencyMode::OrderIndependent)
+        {
+            if (orderIndependent_ == nullptr)
+                orderIndependent_ =
+                    std::make_unique<WeightedBlendedTransparency>(device_, width_, height_);
+            else
+                orderIndependent_->resize(width_, height_);
+
+            if (orderIndependent_->isSupported())
+            {
+                // The accumulation binds its own targets, so the scene target is unbound for the
+                // duration and bound again for the resolve. Its usage is PreserveContents (MOD-701),
+                // which is what makes coming back to it legal rather than a discard.
+                orderIndependent_->begin(cameraFarPlane_ > 0.0f ? cameraFarPlane_ : 1000.0f);
+                drawTransparent_();
+                orderIndependent_->end();
+                device_.SetRenderTarget(sceneTarget_.get());
+                orderIndependent_->resolve(width_, height_);
+                return;
+            }
+            // Falling back rather than drawing nothing, and naming the reason rather than doing it
+            // quietly: a frame that silently changed technique is wrong for a reason nobody can
+            // find from the frame.
+            transparencyFallbackReason_ = orderIndependent_->getUnsupportedReason();
+        }
+
+        // The sorted phase, and the state is the whole of what the pipeline contributes to it:
+        // depth testing on so opaque geometry in front still occludes, depth writing off so one
+        // transparent surface does not hide the ones behind it. Getting that pair wrong is the
+        // most common transparency bug there is, and it looks like missing geometry rather than
+        // like a state error.
+        device_.setDepthStencilStateProperty(
+            Microsoft::Xna::Framework::Graphics::DepthStencilState::DepthRead);
+        device_.setBlendStateProperty(
+            Microsoft::Xna::Framework::Graphics::BlendState::NonPremultiplied);
+        drawTransparent_();
+        device_.setDepthStencilStateProperty(
+            Microsoft::Xna::Framework::Graphics::DepthStencilState::Default);
+        device_.setBlendStateProperty(Microsoft::Xna::Framework::Graphics::BlendState::Opaque);
     }
 
     void RenderPipeline::setShadowScene(ShadowMap* shadowMap, const DirectionalLightEXT& light,

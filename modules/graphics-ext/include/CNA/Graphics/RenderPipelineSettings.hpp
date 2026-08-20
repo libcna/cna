@@ -6,6 +6,7 @@
 #include "CNA/Graphics/TonemappingMode.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Graphics/RenderQuality.hpp"
+#include "CNA/Graphics/TransparencyMode.hpp"
 
 #include <string>
 #include "CNA/Graphics/ShadowQuality.hpp"
@@ -96,6 +97,27 @@ namespace CNA::Graphics {
         [[nodiscard]] bool isSSAOEnabled() const;
         /** @brief Enables or disables the SSAO post-process pass. */
         void setSSAOEnabled(bool value);
+
+        /**
+         * @brief Returns how the pipeline draws the transparent half of a scene.
+         *
+         * plan_modern.md `MOD-2104`. `None` by default: a game that registers no transparent draw
+         * renders exactly the frame it rendered before this existed.
+         *
+         * @return The mode.
+         */
+        [[nodiscard]] TransparencyMode getTransparencyMode() const;
+
+        /**
+         * @brief Chooses how the pipeline draws the transparent half of a scene.
+         *
+         * @param value The mode. `OrderIndependent` needs MRT, a half-float render target and a
+         *              renderer that executes effect source; where any is missing the pipeline
+         *              falls back to `Sorted` and says so through
+         *              @ref RenderPipeline::getTransparencyFallbackReasonEXT.
+         */
+        void setTransparencyMode(TransparencyMode value);
+
 
         /** @brief Returns the SSAO hemisphere sampling radius, in world units. */
         [[nodiscard]] float getSSAORadius() const;
@@ -372,6 +394,7 @@ namespace CNA::Graphics {
         int             bloomIterations_ = 4;
 
         bool            ssaoEnabled_     = false;
+        TransparencyMode transparencyMode_ = TransparencyMode::None;
         float           ssaoRadius_      = 0.5f;
         float           ssaoIntensity_   = 1.0f;
         int             ssaoSampleCount_ = 16;
