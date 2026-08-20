@@ -29,6 +29,7 @@
 #include <unordered_set>
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
 
@@ -2065,6 +2066,27 @@ namespace CNA::Internal::Renderers
         /// supports compute still cannot bind one. Desktop GL accepts a mutable texture. False by
         /// default, like every other promise here.
         [[nodiscard]] virtual bool SupportsComputeImageBindingEXT() const { return false; }
+
+        /// plan_modern.md MOD-2092: the colour space the swap chain is currently presenting in.
+        /// `Srgb` by default and for every CNA renderer today -- an HDR swap chain is a property of
+        /// the *presentation* path (DXGI, Vulkan surface formats, a platform's own HDR opt-in), not
+        /// of a drawing API, and no CNA platform back end offers one yet. A renderer must not claim
+        /// otherwise: PQ-encoded pixels handed to an sRGB swap chain are washed out and grey, which
+        /// is a worse outcome than SDR output that is simply correct.
+        [[nodiscard]] virtual CNA::DisplayColorSpace GetDisplayColorSpaceEXT() const
+        {
+            return CNA::DisplayColorSpace::Srgb;
+        }
+
+        /// plan_modern.md MOD-2092: asks the swap chain to present in @p space.
+        /// @return True when the swap chain now presents in that space. The default accepts only
+        ///         `Srgb`, which is the truth rather than a stub: a renderer that returned true
+        ///         without reconfiguring anything would have every caller encode for a display that
+        ///         is not there.
+        virtual bool SetDisplayColorSpaceEXT(const CNA::DisplayColorSpace space)
+        {
+            return space == CNA::DisplayColorSpace::Srgb;
+        }
 
         /// plan_modern.md MOD-2091: how many storage buffers a VERTEX shader on this context may
         /// read. GL ES 3.1 permits this to be zero -- a context can support compute completely and

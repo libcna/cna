@@ -949,6 +949,50 @@ for a frame that never removed the stall.
 reached for by accident: it waits for the GPU to finish. A frame never needs it — the count's only
 consumer is the draw, and that consumer is the GPU.
 
+### HDR display output, and why it is currently a refusal
+
+`plan_modern.md` `MOD-2092`. Two separate things wear the name "HDR", and only one of them has been
+in this layer since Phase 1. Rendering in HDR — a float scene target, exposure, tonemapping — is what
+`RenderPipeline` has always done. *Presenting* in HDR means handing the display a signal it
+interprets as absolute luminance, and that needs a swap chain nobody here has.
+
+**No CNA platform back end offers an HDR swap chain, so `GetDisplayColorSpaceEXT()` answers `Srgb` on
+every renderer and `SetDisplayColorSpaceEXT()` refuses anything else.** That is an answer, not a gap:
+an HDR swap chain belongs to the presentation path — DXGI, a Vulkan surface format, a platform's own
+opt-in — and a renderer that accepted the request without reconfiguring one would have its caller
+encode for a display that is not there. PQ-encoded pixels shown as sRGB are washed out and grey.
+
+```cpp
+if (device.SupportsDisplayColorSpaceEXT(CNA::DisplayColorSpace::Hdr10)) { /* false today */ }
+```
+
+**The encoding exists and is complete**, because it is arithmetic rather than a swap chain.
+`HdrDisplayOutput` encodes a scene-referred frame for a chosen space, which is useful for writing an
+HDR image to a file or a texture even with no HDR display attached:
+
+```cpp
+CNA::Graphics::HdrDisplayOutput display(device);
+display.setColorSpace(CNA::DisplayColorSpace::Hdr10);
+display.setPaperWhiteNits(200.0f);   // what a scene value of 1.0 is worth
+display.setPeakNits(1000.0f);
+display.draw(&sceneTarget, &output, width, height);
+```
+
+**In `Srgb` it copies through, pixel for pixel**, so the pass can sit at the end of the chain on every
+machine: `TonemapPass` has already produced display-encoded sRGB, and a second transfer function
+applied to it would be visibly wrong.
+
+**In an HDR space the SDR tonemap is bypassed rather than followed.** The SDR curve exists to fit a
+scene into 0..1; an HDR display does not need it. Feed the scene-referred target, not the tonemapped
+one.
+
+**`Hdr10` encodes absolute luminance**, which is why `setPaperWhiteNits` exists — the pass must be
+told what "white" is worth in the real world before it can encode anything. Highlights roll off
+towards `setPeakNits` rather than clipping at it, so a value beyond the display's capability
+desaturates instead of becoming a flat white shape. **`Scrgb` is still linear Rec. 709** and only the
+scale changes: 1.0 means 80 nits there, so the frame is multiplied by `paperWhite / 80` and needs a
+half-float target to hold what comes out.
+
 ### Rendering small and showing big: spatial upscaling
 
 `plan_modern.md` `MOD-2093`. `SpatialUpscalePass` is the cheapest performance dial the layer has:

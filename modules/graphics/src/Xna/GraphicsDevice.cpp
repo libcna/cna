@@ -2289,6 +2289,28 @@ namespace Microsoft::Xna::Framework::Graphics
         return GetRenderer().SupportsImageBasedLightingEXT();
     }
 
+    CNA::DisplayColorSpace GraphicsDevice::GetDisplayColorSpaceEXT() const
+    {
+        return GetRenderer().GetDisplayColorSpaceEXT();
+    }
+
+    bool GraphicsDevice::SetDisplayColorSpaceEXT(const CNA::DisplayColorSpace space)
+    {
+        return GetRenderer().SetDisplayColorSpaceEXT(space);
+    }
+
+    bool GraphicsDevice::SupportsDisplayColorSpaceEXT(const CNA::DisplayColorSpace space) const
+    {
+        // Asked by trying it and putting it back, because there is no separate query on the
+        // renderer boundary and inventing one would let the two answers drift apart.
+        const CNA::DisplayColorSpace current = GetRenderer().GetDisplayColorSpaceEXT();
+        if (space == current) return true;
+        if (!const_cast<GraphicsDevice*>(this)->GetRenderer().SetDisplayColorSpaceEXT(space))
+            return false;
+        const_cast<GraphicsDevice*>(this)->GetRenderer().SetDisplayColorSpaceEXT(current);
+        return true;
+    }
+
     int GraphicsDevice::GetMaxComputeWorkGroupCountEXT(const int axis) const
     {
         if (axis < 0 || axis > 2) return 0;

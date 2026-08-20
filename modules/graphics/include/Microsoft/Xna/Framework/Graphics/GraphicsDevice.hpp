@@ -37,6 +37,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
+#include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
@@ -1136,6 +1137,39 @@ namespace Microsoft::Xna::Framework::Graphics
          * @return True when a bound environment will actually light the surface.
          */
         CNAEXT [[nodiscard]] bool SupportsImageBasedLightingEXT() const;
+
+        /**
+         * @brief Returns the colour space the swap chain is presenting in.
+         *
+         * plan_modern.md `MOD-2092`. `Srgb` on every CNA renderer today; see
+         * @ref SetDisplayColorSpaceEXT for why that is an answer rather than a gap.
+         *
+         * @return The current display colour space.
+         */
+        CNAEXT [[nodiscard]] CNA::DisplayColorSpace GetDisplayColorSpaceEXT() const;
+
+        /**
+         * @brief Asks the swap chain to present in a different colour space.
+         *
+         * An HDR swap chain is a property of the presentation path -- DXGI, a Vulkan surface
+         * format, a platform's own HDR opt-in -- rather than of a drawing API, and no CNA platform
+         * back end offers one yet. So this returns false for anything but `Srgb` today, which is
+         * the truth: a renderer that accepted the request without reconfiguring anything would have
+         * its caller encode for a display that is not there, and PQ pixels shown as sRGB are washed
+         * out and grey.
+         *
+         * @param space The space to present in.
+         * @return True when the swap chain now presents in that space.
+         */
+        CNAEXT bool SetDisplayColorSpaceEXT(CNA::DisplayColorSpace space);
+
+        /**
+         * @brief Returns whether the swap chain can present in a given colour space.
+         *
+         * @param space The space to ask about.
+         * @return True when @ref SetDisplayColorSpaceEXT would accept it.
+         */
+        CNAEXT [[nodiscard]] bool SupportsDisplayColorSpaceEXT(CNA::DisplayColorSpace space) const;
 
         CNAEXT [[nodiscard]] int GetMaxComputeWorkGroupCountEXT(int axis) const;
 
