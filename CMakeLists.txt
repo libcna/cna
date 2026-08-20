@@ -1,6 +1,22 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(CNA LANGUAGES CXX)
+project(CNA VERSION 0.1.0 LANGUAGES CXX)
+
+# --- Release identity (docs/releasing.md) --------------------------------------------------
+# project(VERSION) accepts numeric components only, so the Semantic Versioning pre-release
+# identifier lives beside it and is joined back on here. Deliberately a normal variable and not
+# a cache entry: the version identifies the release, it is not a per-build knob, and a cached
+# copy would keep an already-configured build directory reporting the previous release after a
+# bump. CNA_VERSION_STRING is the single spelling the rest of the build reads -- the generated
+# CNA/Version.hpp, the Apple bundle version, the configure banner. Do not re-derive it elsewhere.
+set(CNA_VERSION_PRERELEASE "alpha.1")
+if(CNA_VERSION_PRERELEASE)
+    set(CNA_VERSION_STRING "${PROJECT_VERSION}-${CNA_VERSION_PRERELEASE}")
+else()
+    set(CNA_VERSION_STRING "${PROJECT_VERSION}")
+endif()
+message(STATUS "CNA: version ${CNA_VERSION_STRING}")
+include(cmake/Version.cmake)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

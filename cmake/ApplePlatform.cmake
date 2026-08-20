@@ -108,7 +108,10 @@ endif()
 # ---------------------------------------------------------------------------
 set(CNA_APPLE_BUNDLE_IDENTIFIER_PREFIX "com.openeggbert.cna" CACHE STRING
     "Reverse-DNS prefix for generated CFBundleIdentifier values (<prefix>.<target>)")
-set(CNA_APPLE_BUNDLE_VERSION "1.0.0" CACHE STRING
+# Defaults to the release's numeric components (PROJECT_VERSION, cmake/Version.cmake) rather
+# than a hard-coded 1.0.0. The pre-release identifier is deliberately dropped: CFBundle version
+# strings are one to three dot-separated integers, and "0.1.0-alpha.1" is not a legal value.
+set(CNA_APPLE_BUNDLE_VERSION "${PROJECT_VERSION}" CACHE STRING
     "CFBundleShortVersionString/CFBundleVersion written into generated Info.plist files")
 set(CNA_APPLE_DEVELOPMENT_TEAM "" CACHE STRING
     "Apple Developer Team ID used to codesign iOS products; empty disables signing (simulator, CI)")

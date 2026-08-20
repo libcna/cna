@@ -17,6 +17,13 @@ cmake --build build --target CnaTests
 ctest --test-dir build --output-on-failure
 ```
 
+### Version
+
+Current release: **0.1.0-alpha.1** (pre-release — the public API may still change; see
+[`CHANGELOG.md`](CHANGELOG.md) for what the release contains and
+[`docs/releasing.md`](docs/releasing.md) for how versions are managed). Compiled code reads its
+own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
+
 > **Looking for a specific doc?** `docs/` has 93 Markdown documents — see [`docs/README.md`](docs/README.md)
 > for an index of what's current vs. historical.
 

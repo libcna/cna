@@ -167,6 +167,10 @@ scope for the 2026-07-11 Graphics documentation-accuracy pass; check each file's
 - `avatar-real-rendering-ext.md` — the Avatar real-rendering extension (`SkinnedModelEXT`), a
   separate system from `Model`/`ModelMesh` (see `model-content-pipeline-support.md`'s own note).
 - `gdm-coverage.md` — `GraphicsDeviceManager` coverage.
+- **[`releasing.md`](releasing.md)** — where the version lives (one place: `project(CNA VERSION
+  …)` plus `CNA_VERSION_PRERELEASE`), what derives from it, which numbers are deliberately *not*
+  the product version (the C ABI version, XNA 4.0), and the step-by-step release checklist.
+  Written 2026-08-20 for the first tag, `v0.1.0-alpha.1`.
 
 ---
 

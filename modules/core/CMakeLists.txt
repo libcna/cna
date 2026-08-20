@@ -5,10 +5,15 @@
 add_library(cna_core_headers INTERFACE)
 add_library(CNA::CoreHeaders ALIAS cna_core_headers)
 target_include_directories(cna_core_headers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# The generated release identity (CNA/Version.hpp, cmake/Version.cmake) is part of core's
+# public header surface, so it rides the same include roots as the checked-in headers -- a
+# consumer includes "CNA/Version.hpp" without knowing which of the two roots resolves it.
+target_include_directories(cna_core_headers INTERFACE ${CNA_GENERATED_INCLUDE_DIR})
 
 file(GLOB CNA_CORE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 cna_add_module(cna_core Core ${CNA_CORE_SOURCES})
 cna_link_sharp_runtime(cna_core PUBLIC Core.Base)
+target_include_directories(cna_core PUBLIC ${CNA_GENERATED_INCLUDE_DIR})
 # No SDL: plan_platform.md PLAT-53 moved Logger onto its own sink and PLAT-54 moved
 # Entrypoint.hpp into the platform module, so nothing under modules/core includes an SDL header
 # any more. This is the first module to come off SDL entirely.
