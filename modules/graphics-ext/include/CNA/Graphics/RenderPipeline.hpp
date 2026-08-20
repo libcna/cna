@@ -202,6 +202,39 @@ namespace CNA::Graphics {
         [[nodiscard]] const std::string& getTransparencyFallbackReasonEXT() const;
 
         /**
+         * @brief Measures each post-process pass with its own GPU timer query.
+         *
+         * plan_modern.md `MOD-2164`. **Off by default.** Results are read a frame late and never
+         * waited for, so switching it on does not insert the stall it exists to look for; a pass
+         * whose result has not landed yet keeps the last one it reported.
+         *
+         * Where the renderer has no timer query this is accepted and does nothing —
+         * @ref isGpuTimingEnabledEXT then returns false and @ref getPassTimingsEXT stays empty, so
+         * a caller can tell "not measured here" from "this pass took no time".
+         *
+         * @param value True to measure.
+         */
+        void setGpuTimingEnabledEXT(bool value);
+
+        /**
+         * @brief Whether pass timing is on **and** the renderer can actually do it.
+         *
+         * @return True when the chain is measuring.
+         */
+        [[nodiscard]] bool isGpuTimingEnabledEXT() const;
+
+        /**
+         * @brief The most recent GPU time for each post-process pass, in chain order.
+         *
+         * Only the post-process chain. The scene draw, the prepass and the shadow passes belong to
+         * the application, and timing them from here would report the pipeline's own `begin`/`end`
+         * brackets rather than the work inside them.
+         *
+         * @return One entry per pass, or empty when timing is off or unavailable.
+         */
+        [[nodiscard]] const std::vector<PostProcessChain::PassTiming>& getPassTimingsEXT() const;
+
+        /**
          * @brief Supplies the shadow pass `begin` should run before the frame.
          *
          * plan_modern.md MOD-858/MOD-859. The pipeline cannot draw the scene by itself, for the

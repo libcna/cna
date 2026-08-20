@@ -404,6 +404,21 @@ namespace CNA::Graphics {
         drawTransparent_ = std::move(drawTransparent);
     }
 
+    void RenderPipeline::setGpuTimingEnabledEXT(const bool value)
+    {
+        chain_.setGpuTimingEnabled(value);
+    }
+
+    bool RenderPipeline::isGpuTimingEnabledEXT() const
+    {
+        return chain_.isGpuTimingEnabled();
+    }
+
+    const std::vector<PostProcessChain::PassTiming>& RenderPipeline::getPassTimingsEXT() const
+    {
+        return chain_.getPassTimings();
+    }
+
     const std::string& RenderPipeline::getTransparencyFallbackReasonEXT() const
     {
         return transparencyFallbackReason_;
