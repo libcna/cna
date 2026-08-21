@@ -75,7 +75,7 @@ jobs:
             g++-14 cmake ninja-build pkg-config \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev
 
       - name: Configure (STUB renderer, ASan + UBSan)

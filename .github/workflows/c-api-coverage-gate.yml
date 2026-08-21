@@ -51,6 +51,15 @@ jobs:
         with:
           python-version: '3.12'
 
+      # The inventory preprocesses CNA headers rather than merely grepping declarations.
+      # Prop.hpp defines DEF_PROP's embedded public: labels, so omitting the sibling changes the
+      # apparent visibility of members and produces a different, invalid public-surface inventory.
+      - name: Clone sharp-runtime parser dependency
+        run: |
+          git clone --depth 1 --branch develop \
+            https://github.com/openeggbert/sharp-runtime.git \
+            "${GITHUB_WORKSPACE}/../sharp-runtime"
+
       - name: Install Doxygen inventory dependency
         run: |
           sudo apt-get update

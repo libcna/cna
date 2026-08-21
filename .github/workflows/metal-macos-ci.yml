@@ -61,6 +61,7 @@ jobs:
           cmake -S . -B cmake-build-metal
           -DCNA_GRAPHICS_RENDERER=METAL
           -DCNA_BUILD_TESTS=ON
+          -DCNA_ENABLE_DRACO=OFF
           -DCNA_USE_CCACHE=ON
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DCNA_MAX_VENDORED_BUILD_JOBS=2

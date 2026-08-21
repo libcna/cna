@@ -118,6 +118,7 @@ jobs:
           source ~/emsdk/emsdk_env.sh
           emcmake cmake -S . -B cmake-build-htmldom \
             -DCNA_GRAPHICS_RENDERER=HTML_DOM \
+            -DCNA_ENABLE_DRACO=OFF \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache
 
