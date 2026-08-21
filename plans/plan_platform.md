@@ -10,7 +10,7 @@
 > | SDL2 extension (Phase 11) — PLAT-SDL2-1…PLAT-SDL2-8 | 8 | 8 implemented |
 >
 > See the completion record, the 2026-08-13 post-completion audit and the **2026-08-17
-> post-merge re-audit** below. This plan turns [`cnaplatform.md`](../cnaplatform.md) into an
+> post-merge re-audit** below. This plan turns [`cnaplatform.md`](../misc/cnaplatform.md) into an
 > executable task list.
 >
 > **Goal:** separate CNA from SDL3. Today SDL3 is called directly from the runtime, the input

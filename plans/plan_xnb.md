@@ -13,7 +13,7 @@
 > (`Texture3DReader`/`TextureCubeReader`) fully complete; Phase G (top-quality hardening + custom
 > reader ergonomics) fully complete; only Phase H (cancelled) and Phase I (still deferred) remain.**
 > CNA's owner decided `.xnb` becomes a real, additional runtime format
-> again, ranked **above** `.cnj` in `ContentManager`'s resolution order (see [`cnj.md`](../cnj.md)'s
+> again, ranked **above** `.cnj` in `ContentManager`'s resolution order (see [`cnj.md`](../misc/cnj.md)'s
 > "Core rule": `.xnb` → literal caller-given path → `.cnj` → native-by-extension). The MVP scope
 > through the end of Phase C (container parsing, binary primitives, uncompressed-only, a first real
 > `Texture2D` reader — this plan's own M1/M2 milestones) is fully done. CNA's owner explicitly

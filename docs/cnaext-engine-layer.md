@@ -11,7 +11,7 @@ can wrap its drawing in `RenderPipeline`, render into a float scene target, and 
 occlusion, bloom, tonemapping and FXAA — verified on EasyGL against Mesa's software renderer. What
 is still only designed: shadow maps, the skybox, image-based lighting, compute shaders, and the
 instancing/LOD helpers. Do not describe those as available. The design is
-[`../CNAEXT.md`](../CNAEXT.md); the task backlog and its evidence trail are
+[`../CNAEXT.md`](../misc/CNAEXT.md); the task backlog and its evidence trail are
 [`../plans/plan_modern.md`](../plans/plan_modern.md).
 
 Enable it with:
@@ -2226,7 +2226,7 @@ Legend: ✅ implemented and verified · 🟨 partial · ⬜ not implemented · �
 
 ## Related documents
 
-- [`../CNAEXT.md`](../CNAEXT.md) — the design of this layer (what it is, what it is not, why).
+- [`../CNAEXT.md`](../misc/CNAEXT.md) — the design of this layer (what it is, what it is not, why).
 - [`../plans/plan_modern.md`](../plans/plan_modern.md) — the task backlog implementing that design.
 - [`ascii-post-process-effect.md`](ascii-post-process-effect.md) — the ASCII effect in detail.
 - [`graphics-renderer-feature-matrix.md`](graphics-renderer-feature-matrix.md) — the XNA-level

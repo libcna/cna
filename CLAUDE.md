@@ -572,7 +572,7 @@ enforces that. A game that does not opt in renders exactly what it rendered befo
 
 Do not reconstruct this subsystem's state by reading its code:
 
-- **`CNAEXT.md`** — the design (what the layer is, what it is not, why).
+- **`misc/CNAEXT.md`** — the design (what the layer is, what it is not, why).
 - **`plans/plan_modern.md`** — the task backlog implementing it, `MOD-1`–`MOD-1924`, with every deviation
   and refusal recorded in the row itself rather than in a commit message.
 - **`NEXT_modern.md`** — the running ledger: what is done, the decisions that did not survive

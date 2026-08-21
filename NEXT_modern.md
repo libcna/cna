@@ -1,7 +1,7 @@
 # NEXT_modern.md — running ledger for the CNAEXT engine layer
 
 Continuity file for [`plans/plan_modern.md`](plans/plan_modern.md) (the `MOD-*` backlog implementing
-[`CNAEXT.md`](CNAEXT.md)). Same role `NEXT_skia.md` has for the Skia renderer: read this first,
+[`CNAEXT.md`](misc/CNAEXT.md)). Same role `NEXT_skia.md` has for the Skia renderer: read this first,
 do not reconstruct the layer's state from the general `NEXT.md`.
 
 ---

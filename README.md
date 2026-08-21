@@ -130,7 +130,7 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
   HDR spine runs end to end — but the layer is at engine revision 2 and revision 2 already carried
   renames. Build against a pinned CNA revision, read `CNA_CNAEXT_ENGINE_VERSION` and
   [`docs/cnaext-engine-changelog.md`](docs/cnaext-engine-changelog.md) when you move, and expect
-  more of the same. [`CNAEXT.md`](CNAEXT.md) §9.1 says exactly which parts are settled (the layer's
+  more of the same. [`CNAEXT.md`](misc/CNAEXT.md) §9.1 says exactly which parts are settled (the layer's
   shape, the ownership rules, the naming conventions) and which are not (per-renderer behaviour
   outside EasyGL, the set of device queries, compute).
 - Everything above the XNA API — HDR render targets and tonemapping, a post-process chain
@@ -140,7 +140,7 @@ own version from `CNA::getVersionString()` in `CNA/Version.hpp`.
   CMake option, which is **OFF by default**. With it off the layer does not exist and a game
   renders exactly what it rendered before; a ctest enforces that every file in the module is
   guarded.
-- Read [`CNAEXT.md`](CNAEXT.md) for the design, [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
+- Read [`CNAEXT.md`](misc/CNAEXT.md) for the design, [`docs/cnaext-engine-layer.md`](docs/cnaext-engine-layer.md)
   for the capability boundary per subsystem and per renderer,
   [`docs/cnaext-getting-started.md`](docs/cnaext-getting-started.md) to try it, and `plans/plan_modern.md`
   / `NEXT_modern.md` for the task backlog and the running ledger.

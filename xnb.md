@@ -4,7 +4,7 @@
 > Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`, `ReadExternalReference<T>()`) fully
 > complete; broad coverage past that still deferred.** CNA's owner decided `.xnb` should become a
 > real, additional runtime format again, alongside the already-implemented
-> [`cnj.md`](cnj.md)/[`plans/plan_cnj.md`](plans/plan_cnj.md) `.cnj` strategy — not a replacement for it.
+> [`cnj.md`](misc/cnj.md)/[`plans/plan_cnj.md`](plans/plan_cnj.md) `.cnj` strategy — not a replacement for it.
 > `ContentManager`'s resolution order now ranks `.xnb` **above** both the literal caller-given path
 > and `.cnj` (see `cnj.md`'s "Core rule"). [`plans/plan_xnb.md`](plans/plan_xnb.md)'s Phase 0/A/B/B2/B3/C
 > (container parsing, binary primitives, the uncompressed-only case, and a first real `Texture2D`

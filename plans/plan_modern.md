@@ -1,6 +1,6 @@
 # plan_modern.md — CNA Modern Engine Layer (`CNA::Graphics`, `CNA_CNAEXT`)
 
-> **Base document:** [`CNAEXT.md`](../CNAEXT.md). That file is the *final design*; this file is its
+> **Base document:** [`CNAEXT.md`](../misc/CNAEXT.md). That file is the *final design*; this file is its
 > *executable task backlog*. Every task below traces back to a CNAEXT.md section (`→ §5.1`) or to
 > one of its coarse `N`-tasks (`→ N20`). Where this plan contradicts CNAEXT.md, the contradiction
 > is listed in §0.2 and this file wins (CNAEXT.md is updated in `MOD-23`).
