@@ -24,6 +24,7 @@
 #include "CNA/Internal/Renderers/HtmlDom/HtmlDomState.hpp"
 
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <vector>
 
@@ -296,8 +297,9 @@ protected:
         }
 
         // plans/plan_html_dom.md HTMLDOM-114: a SECOND HtmlDomRenderer, constructed while the
-        // FIRST (this test's own, real) one is still alive and sharing the SAME window, must not
-        // silently ADOPT the shared DOM surface and then rip it out from under the first renderer
+        // FIRST (this test's own, real) one is still alive and sharing the SAME browser DOM
+        // surface, must not silently ADOPT that surface and then rip it out from under the first
+        // renderer
         // when the second one alone is destroyed. This is a real, confirmed defect the reference-
         // counted CNA_HtmlDom_EnsureRoot/DestroyRoot fix closes: constructing a second renderer was
         // ALREADY a no-op for the JS surface itself (guarded as "already initialized"), but
@@ -306,16 +308,25 @@ protected:
         // exist and get destroyed.
         if (frame_ == 6)
         {
-            auto& realRenderer = static_cast<HtmlDomRenderer&>(dev.GetRenderer());
             check(JsSurfaceExists() == 1 && JsRendererRefCount() == 1,
                   "HTMLDOM-114: before constructing a second renderer, the shared surface exists "
                   "with exactly one live reference -- this test's own real renderer");
             {
-                HtmlDomRenderer altRenderer(
-                    reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()), 64, 64,
-                    CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth);
+                CNA::Internal::Renderers::GraphicsRendererCreateArgs altArgs;
+                // HtmlDomRenderer shares one JS surface per browser page. Give the low-level test
+                // instance a distinct registry key so it cannot replace the real GraphicsDevice
+                // renderer while both intentionally share that page surface.
+                altArgs.surface.windowId =
+                    std::numeric_limits<CNA::Platform::WindowId>::max();
+                altArgs.surface.nativeHandle = getWindowProperty().GetNativeWindowHandleEXT();
+                altArgs.surface.drawableSize = {64, 64};
+                altArgs.virtualWidth = 64;
+                altArgs.virtualHeight = 64;
+                altArgs.presentationMode =
+                    CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth;
+                HtmlDomRenderer altRenderer(altArgs);
                 check(JsRendererRefCount() == 2,
-                      "HTMLDOM-114: constructing a second renderer sharing the same window "
+                      "HTMLDOM-114: constructing a second renderer sharing the same DOM surface "
                       "increments the shared surface's reference count to 2, rather than either "
                       "silently creating an independent surface or leaving the count unaware of it");
                 check(JsSurfaceExists() == 1,
