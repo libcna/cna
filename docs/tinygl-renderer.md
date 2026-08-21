@@ -3,7 +3,7 @@
 Capability boundary for `CNA_GRAPHICS_RENDERER=TINYGL`, CNA's fixed-function CPU OpenGL renderer.
 Task breakdown and design decisions are in [`../plans/plan_tinygl.md`](../plans/plan_tinygl.md); the
 pre-implementation probe that established the constraints below is in
-[`../tinygl-spike/README.md`](../tinygl-spike/README.md).
+[`../spikes/tinygl-spike/README.md`](../spikes/tinygl-spike/README.md).
 
 Upstream: [C-Chads/tinygl](https://github.com/C-Chads/tinygl), an archived fork of Fabrice
 Bellard's TinyGL, pinned at commit `36a7987e`. A CPU implementation of a fixed-function OpenGL 1.x

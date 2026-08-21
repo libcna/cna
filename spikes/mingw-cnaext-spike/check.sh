@@ -4,14 +4,14 @@
 # plans/plan_modern.md MOD-1719 -- cross-compile check for the engine layer as the D3D renderers see it.
 #
 # Run from the repository root:
-#   ./mingw-cnaext-spike/check.sh
+#   ./spikes/mingw-cnaext-spike/check.sh
 #
 # Needs g++-mingw-w64-x86-64 (Debian/Ubuntu: sudo apt install g++-mingw-w64-x86-64) and, for the
 # sharp-runtime include paths, a sharp-runtime checkout beside this one. Override either with
 # SHARP_RUNTIME=... on the command line.
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SHARP_RUNTIME="${SHARP_RUNTIME:-$(cd "$REPO/.." && pwd)/sharp-runtime}"
 CXX="${CXX:-x86_64-w64-mingw32-g++}"
 LAUNCHER="$(command -v ccache || true)"
@@ -56,7 +56,7 @@ for renderer in DIRECTX11 DIRECTX12 DIRECTX9; do
     # hazard for an engine layer written on Linux.
     if ! $LAUNCHER "$CXX" -std=c++23 -fsyntax-only -Wall -Wextra \
             "${BASE[@]}" "-DCNA_RENDERER_$renderer" "${INC[@]}" \
-            "$REPO/mingw-cnaext-spike/windows_header_collisions.cpp"; then
+            "$REPO/spikes/mingw-cnaext-spike/windows_header_collisions.cpp"; then
         echo "FAILED: windows_header_collisions.cpp [$renderer]" >&2
         fail=1
     fi
@@ -71,7 +71,7 @@ echo "== MSVC-shaped min/max =="
 minmax_log="$(mktemp)"
 trap 'rm -f "$minmax_log"' EXIT
 $LAUNCHER "$CXX" -std=c++23 -fsyntax-only "${BASE[@]}" -DCNA_RENDERER_DIRECTX11 "${INC[@]}" \
-        "$REPO/mingw-cnaext-spike/msvc_minmax_collisions.cpp" >"$minmax_log" 2>&1 || true
+        "$REPO/spikes/mingw-cnaext-spike/msvc_minmax_collisions.cpp" >"$minmax_log" 2>&1 || true
 # Score on where the diagnostics *originate*, not on which files appear in the "In file included
 # from" chains -- every engine-layer header appears in those chains by construction, so matching
 # them would make this check fail no matter what.

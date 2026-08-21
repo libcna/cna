@@ -444,7 +444,7 @@ directory and is shared by all multi-renderer work.
 Standalone existence-gate spike programs (throwaway-looking probes proving a new renderer's
 underlying API works before any renderer code is written — see `DX1-0`, `DX2-0`, `D9-0`) follow
 the same build-location rule as CMake builds (see *Build locations & caching* above): write and
-compile them in a `<name>-spike/` directory at the repo root (see `dx9-spike/README.md` for the
+compile them in a `spikes/<name>-spike/` directory (see `spikes/dx9-spike/README.md` for the
 precedent), never in the session scratchpad. Once a spike's finding is settled, keep its `.cpp`
 source and a short `README.md` of what it proved committed there; gitignore only the built
 binaries (`*.exe`, `*.o`) inside that directory. `ccache` works for MinGW cross-compiles too
