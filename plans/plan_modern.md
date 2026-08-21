@@ -16,16 +16,16 @@
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criterion*;
 > 🟨 code exists but the criterion is not met/verified; ⬜ not started; ⛔ deliberately not done
-> (with a reason). **Every row from `MOD-1` to `MOD-2199` carries a verdict, and none is ⬜** —
-> Phases 0–19 as of 2026-08-19, Phase 20 (the modern-renderer scope the first nineteen phases did not
-> cover) and Phase 21 both as of 2026-08-20. Phase 21 was opened the same day by the method that
-> produced Phase 20: look at what the layer has, ask what a game would reach for and not find, and
-> verify each answer against the code before writing it down.
+> (with a reason). **Every row from `MOD-1` to `MOD-2199` carries a non-blank verdict** — Phases 0–19
+> as of 2026-08-19, Phase 20 (the modern-renderer scope the first nineteen phases did not cover) and
+> Phase 21 both as of 2026-08-20. **Phase 22 deliberately reopens the plan with bounded portable-GPU
+> work recovered from the superseded `plan_moderngraphics.md` design draft on 2026-08-21.** It keeps
+> the current public architecture and records only capabilities the repository still lacks.
 >
-> The totals: **465 ✅, 84 🟨, 38 ⛔, 0 ⬜.** A 🟨 is a finished row whose bound is
-> stated in the row itself, not an unfinished one; the ⛔ rows each carry the reason rather than
-> silence. Work that remains in this repository lives in the other `plan_*.md` files — renderers,
-> samples, asset import — and is outside this plan's scope.
+> The totals: **484 ✅, 84 🟨, 40 ⛔, 46 ⬜** (including the deliberately letter-suffixed
+> `MOD-2035b` continuation row). A 🟨 is a finished row whose bound is stated in the row itself, not
+> an unfinished one; the ⛔ rows each carry the reason rather than silence. The ⬜ rows are Phase 22's
+> new implementation backlog.
 >
 > **Created:** 2026-08-17. **Branch:** `modern` (renamed 2026-08-20 from
 > `claude/plan-from-cnaext-m8cjop`; same history, same commits).
@@ -105,26 +105,30 @@ A task is ✅ only when all of these hold:
 | 0 | `MOD-1`–`MOD-24` | Foundation, conventions, build wiring | — | 24 |
 | 1 | `MOD-100`–`MOD-141` | Float / HDR render targets | 0 | 35 |
 | 2 | `MOD-200`–`MOD-233` | Fullscreen-pass infrastructure | 1 | 26 |
-| 3 | `MOD-300`–`MOD-320` | Tonemapping | 2 | 21 |
-| 4 | `MOD-400`–`MOD-418` | Bloom | 2, 3 | 19 |
-| 5 | `MOD-500`–`MOD-529` | Depth/normal prepass + SSAO | 2 | 23 |
-| 6 | `MOD-600`–`MOD-610` | FXAA and post-AA | 2 | 11 |
-| 7 | `MOD-700`–`MOD-745` | `RenderPipeline` orchestrator | 1–6 | 36 |
-| 8 | `MOD-800`–`MOD-861` | Directional shadow maps + receiver hooks | 1, 2 | 40 |
-| 9 | `MOD-900`–`MOD-917` | Cascaded shadow maps | 8 | 18 |
-| 10 | `MOD-1000`–`MOD-1012` | Point/spot shadows | 8 | 13 |
-| 11 | `MOD-1100`–`MOD-1116` | Skybox | 2 | 17 |
-| 12 | `MOD-1200`–`MOD-1248` | IBL (irradiance, prefilter, BRDF LUT) | 1, 11 | 32 |
-| 13 | `MOD-1300`–`MOD-1315` | Material system reconciliation | 12 | 16 |
-| 14 | `MOD-1400`–`MOD-1414` | Instancing, LOD, culling helpers | — | 15 |
-| 15 | `MOD-1500`–`MOD-1555` | Compute shaders + storage buffers | 0 | 24 |
-| 16 | `MOD-1600`–`MOD-1698` | Per-renderer rollout matrix | 1–15 | 84 |
-| 17 | `MOD-1700`–`MOD-1741` | Tests, golden images, CI | per subsystem | 22 |
-| 18 | `MOD-1800`–`MOD-1813` | Documentation, examples, demos | per subsystem | 14 |
-| 19 | `MOD-1900`–`MOD-1907` | API stabilization / Nova-3D readiness | all | 8 |
+| 3 | `MOD-300`–`MOD-327` | Tonemapping | 2 | 21 |
+| 4 | `MOD-400`–`MOD-431` | Bloom | 2, 3 | 19 |
+| 5 | `MOD-500`–`MOD-539` | Depth/normal prepass + SSAO | 2 | 23 |
+| 6 | `MOD-600`–`MOD-619` | FXAA and post-AA | 2 | 11 |
+| 7 | `MOD-700`–`MOD-747` | `RenderPipeline` orchestrator | 1–6 | 36 |
+| 8 | `MOD-800`–`MOD-863` | Directional shadow maps + receiver hooks | 1, 2 | 40 |
+| 9 | `MOD-900`–`MOD-929` | Cascaded shadow maps | 8 | 18 |
+| 10 | `MOD-1000`–`MOD-1027` | Point/spot shadows | 8 | 13 |
+| 11 | `MOD-1100`–`MOD-1127` | Skybox | 2 | 17 |
+| 12 | `MOD-1200`–`MOD-1263` | IBL (irradiance, prefilter, BRDF LUT) | 1, 11 | 32 |
+| 13 | `MOD-1300`–`MOD-1335` | Material system reconciliation | 12 | 16 |
+| 14 | `MOD-1400`–`MOD-1435` | Instancing, LOD, culling helpers | — | 15 |
+| 15 | `MOD-1500`–`MOD-1565` | Compute shaders + storage buffers | 0 | 24 |
+| 16 | `MOD-1600`–`MOD-1698` | Per-renderer rollout matrix | 1–15 | 85 |
+| 17 | `MOD-1700`–`MOD-1741` | Tests, golden images, CI | per subsystem | 23 |
+| 18 | `MOD-1800`–`MOD-1833` | Documentation, examples, demos | per subsystem | 14 |
+| 19 | `MOD-1900`–`MOD-1924` | API stabilization / Nova-3D readiness | all | 8 |
+| 20 | `MOD-2000`–`MOD-2100` | Beyond the XNA-era pipeline | 1–19 | 75 |
+| 21 | `MOD-2101`–`MOD-2199` | Remaining engine-layer features | 20 | 31 |
+| 22 | `MOD-2200`–`MOD-2266` | Portable modern-GPU foundations | 15, 16 | 47 |
 
-**Total: 498 tasks.** IDs are deliberately sparse inside each phase so follow-up work discovered
-during implementation gets a free neighbouring number instead of a renumbering pass.
+**Total: 653 numbered tasks, plus the `MOD-2035b` continuation row.** IDs are deliberately sparse
+inside each phase so follow-up work discovered during implementation gets a free neighbouring number
+instead of a renumbering pass.
 
 **Critical path to a first usable HDR frame:** `MOD-1` → `MOD-100`–`MOD-107` → `MOD-200`–`MOD-210`
 → `MOD-300`–`MOD-305` → `MOD-700`–`MOD-712`. Everything else is parallelizable behind that spine.
@@ -1211,6 +1215,113 @@ look at one.
 | MOD-2191 | Hardware occlusion culling | ⛔ | **A latency problem, not a rendering one.** `GraphicsCapability::OcclusionQuery` exists, but a query read in the frame that issued it is a stall, and read a frame late it needs a persistent identity per object across frames — which is scene management, and `OQ-6` put scene management outside this layer. Frustum culling plus LOD already removes the bulk; the rest is the application's to structure. |
 | MOD-2192 | Virtual shadow maps | ⛔ | **Same missing hardware as `MOD-2099`.** Sparse/virtual textures need `ARB_sparse_texture`, absent from GL ES entirely, and the page-table pass that emulates them is the virtual-texturing subsystem that row already refused. Cascades remain the reachable answer. |
 | MOD-2193 | Screen-space global illumination | ⛔ | **Refused as redundant against what this layer already has, not as unreachable.** SSGI is a screen-space ray march — the same machinery as `SsrPass` — and its diffuse answer is what `LightProbeVolumeEXT` already supplies with none of the screen-space failure modes (offscreen light missing, disocclusion, view dependence). It would add a third indirect-light path that disagrees with the other two. Revisit only if probes prove insufficient for a real scene. |
+
+---
+
+## Phase 22 — Portable modern-GPU foundations (`MOD-2200`–`MOD-2266`)
+
+This phase is the useful delta recovered from the superseded, never-integrated
+`plan_moderngraphics.md` design draft. That draft correctly identified several low-level GPU gaps,
+but proposed a second public architecture beside the one Phases 0–21 have already shipped. This
+phase **does not** create `CNA::Graphics::Modern`, `ModernGraphicsDevice`, a `graphics-modern`
+module, a second capability enum, or duplicate `ComputeShader`/`StorageBuffer`/indirect/timer
+objects. The existing choices remain canonical:
+
+- public extension types stay in `CNA::Graphics` and `modules/graphics-ext`;
+- modern draw entry points remain additive `GraphicsDevice`/`*EXT` operations;
+- `GraphicsCapability` remains the coarse discovery surface, with new promises routed through
+  explicit false-by-default renderer probes rather than legacy default-true switches;
+- `IGraphicsRenderer` remains the renderer boundary unless measured growth demonstrates that a
+  typed internal facet is needed; no native handles, descriptors, barriers, queues or command
+  buffers enter the public API;
+- EasyGL remains the implemented engine-layer reference. Vulkan is first in this phase because it
+  is the largest capable backend that still lacks the already-public compute/storage/indirect/timer
+  paths; OpenGL4 follows as the portability check without changing its existing 4.1 XNA floor.
+
+The current documentation assigns Vulkan compute to `plans/plan_vulkan.md`, but that file does not
+exist. Phase 22 therefore owns the shared contract and Vulkan implementation until a dedicated
+renderer plan is deliberately created; work must be moved, not copied, if that split later happens.
+
+### 22.1 Reconciliation and contracts (`MOD-2200`–`MOD-2202`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2200 | Reconcile `plan_moderngraphics.md` with the implemented engine layer and preserve only its live deltas | ✅ | Verified against the tree and all local Git objects on 2026-08-21: the draft and its stated baseline SHA are absent; its proposed module, namespace, device facade, capability system and duplicate resources were never adopted; the real implementation is `plan_modern.md` + `modules/graphics-ext`. The retained work is recorded in `MOD-2201`–`MOD-2266`: portable shader payloads, truthful limits/format support, texture arrays/storage textures, stronger buffer roles, Vulkan feature adoption, automatic internal synchronization, lifetime/performance rules and an OpenGL4 portability pass. The draft may now be deleted without losing a unique requirement. |
+| MOD-2201 | Re-baseline the modern-GPU surface immediately before implementation | ⬜ | Record the implementation commit, selected renderer identities, shipped public types, every relevant `IGraphicsRenderer` virtual/default, `GraphicsCapability` ordinals, and a measured EasyGL/Vulkan/OpenGL4 capability matrix. Classify every Phase 22 item as absent, partial or already supplied; update rather than duplicate anything that landed after this plan row. |
+| MOD-2202 | Publish the portable resource, ordering, threading and lifetime contract | ⬜ | One ADR fixes the rules shared by every task below: public calls have one observable order with XNA work; deferred commands snapshot/retain native resources; disposal is fence-safe; CPU readback may block only for the requested result; feature/format/limit rejection occurs before native calls; synchronization is renderer-owned; and native objects/states never leak into the portable API. The ADR maps the rules to Vulkan, OpenGL, D3D11/12, Metal and WebGPU before names are frozen. |
+
+### 22.2 Explicit portable shader payloads (`MOD-2210`–`MOD-2217`)
+
+The existing `ComputeShader` constructor accepts source "in the renderer's own language", while the
+runtime renderer can be selected after the application is built. The same mismatch already prevents
+the GLSL engine passes from running on Vulkan (`MOD-1620`). This section fixes the ambiguity
+additively; existing source-string constructors remain source-compatible.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2210 | Add explicit shader-language/stage values and false-by-default renderer language queries | ⬜ | Renderer-neutral CNA enums cover at least GLSL, SPIR-V, HLSL, DXIL, WGSL and MSL plus vertex, fragment and compute stages. A renderer reports only payloads its implemented path consumes; the answer is never inferred from renderer identity. Published numeric values are append-only and tested. |
+| MOD-2211 | Add an owning `ShaderCodeEXT` payload descriptor | ⬜ | One value carries language, stage, entry point, source label and owned text/bytes without guessing from contents or relying on caller lifetime. It rejects empty entry points, mislabeled text/binary forms and malformed SPIR-V word alignment before renderer calls. |
+| MOD-2212 | Add `ShaderPackageEXT` with multiple backend variants | ⬜ | A package owns one or more `ShaderCodeEXT` variants plus declared binding/stage requirements. It can be copied/moved safely, contains no native object, and permits an application to ship GLSL + SPIR-V + HLSL/WGSL together without asking which renderer was selected. |
+| MOD-2213 | Define and implement deterministic shader-variant selection | ⬜ | Selection uses the live renderer's implemented languages and required capabilities, has a stable preference order, rejects ambiguous duplicates, and returns a diagnostic listing considered variants when none is usable. It never silently treats GLSL text as SPIR-V or vice versa. |
+| MOD-2214 | Add package/code overloads to existing `ComputeShader` and `ShaderEffect` paths | ⬜ | The new overloads delegate into the existing public objects rather than creating parallel shader classes. Old string constructors retain their documented renderer-language behavior and tests; package construction selects once and preserves the chosen variant for the object's lifetime. |
+| MOD-2215 | Standardize structured shader diagnostics | ⬜ | Compile/validation messages carry severity, source label, line/column where available and stable owned text; exception messages summarize them without destroying programmatic access. Broken GLSL, SPIR-V and one unavailable-language package each have a deterministic negative test. |
+| MOD-2216 | Provide reproducible offline shader-package tooling | ⬜ | A checked-in tool can build the backend payloads used by examples/tests from declared sources, records compiler/version inputs and does not make shaderc/DXC a mandatory CNA runtime dependency. Generated payloads are reproducible or accompanied by an explicit toolchain-version explanation. |
+| MOD-2217 | Prove one package selects different real variants across backends | ⬜ | The same checked-in package runs an observable shader oracle through EasyGL and Vulkan, then OpenGL4 when `MOD-2261` lands; tests assert which language was selected and compare output, while an unsupported renderer exercises the complete refusal diagnostic. |
+
+### 22.3 Limits, formats and missing portable resources (`MOD-2220`–`MOD-2233`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2220 | Add an immutable renderer/device limits snapshot without duplicating existing compute queries | ⬜ | A CNA value reachable from `GraphicsDevice` consolidates the existing compute limits and adds buffer sizes/bindings, texture-array layers, sampled/storage texture counts, vertex input limits, colour attachments and timestamp period where meaningful. Unsupported values are zero/absent, integer conversions are overflow-safe, and resource constructors validate against the snapshot before native calls. |
+| MOD-2221 | Add per-`SurfaceFormat` support flags | ⬜ | The live device can distinguish sampled, filterable, render-target, blendable, storage-read/write/atomic, transfer, mipmapped and multisample use for every current `SurfaceFormat`. Unknown/unsupported combinations return no flags; coarse `GraphicsCapability` answers are derived only from implemented format facts where appropriate. Do not introduce a second format enum until a real resource needs a format `SurfaceFormat` cannot express. |
+| MOD-2222 | Implement Vulkan format/limit queries from physical-device facts | ⬜ | Vulkan maps every overlapping `SurfaceFormat` to `VkFormat`, obtains usage support from the appropriate format/property queries, and exposes only CNA paths that are implemented as well as natively available. Tests detect a hard-coded renderer-name answer or a feature bit CNA never enabled. |
+| MOD-2223 | Implement real Vulkan float/HDR `RenderTarget2D` fidelity | ⬜ | `CreateRenderTarget2DEXT` creates matching `HalfSingle`/`HalfVector2`/`HalfVector4`/`Vector4`/`HdrBlendable` attachments where supported, keys render-pass/pipeline compatibility correctly, and refuses unsupported format/sample-count pairs without substituting `Color`. Clear, draw, sample and readback oracles cover at least `HalfVector4` and `Vector4`. |
+| MOD-2224 | Add permanent format and limit contract tests | ⬜ | Shared fake-renderer tests cover zero/default support and validation; native tests cover supported and refused Vulkan combinations, odd dimensions, mip levels and MSAA. Capability snapshots agree with constructors, so no device advertises a resource that the same device then refuses for an unexplained reason. |
+| MOD-2225 | Add sampled `Texture2DArray` as a `GraphicsResource`-tracked CNA extension | ⬜ | The descriptor validates width/height/layers/mips/format/usage against live limits and format flags. The object participates in `GraphicsDevice` disposal tracking, exposes no native view, and does not change XNA `Texture2D` semantics. |
+| MOD-2226 | Add texture-array layer/mip transfers and sampled binding | ⬜ | Range APIs address layer, mip and rectangle with compressed-block/overflow validation. A native oracle uploads distinct data to at least two layers, samples both, reads them back and covers odd dimensions plus a mipmapped case. |
+| MOD-2227 | Add `StorageTexture2D` instead of overloading every `Texture2D` with image semantics | ⬜ | A dedicated immutable/usage-declared resource validates format and read/write intent, supports upload/readback where declared and works on APIs such as GLES that reject CNA's current mutable `Texture2D` image binding. Existing `ComputeShader::bindImage(Texture2D&)` remains compatible and truthfully limited. |
+| MOD-2228 | Bind storage textures through the existing compute API | ⬜ | Additive `ComputeShader` binding accepts `StorageTexture2D` with explicit read/write access, retains it safely for deferred work and validates slot/format/access. A compute-write → readback and compute-write → sampled-draw oracle proves both visibility paths. |
+| MOD-2229 | Extend `StorageBuffer` with explicit usage and CPU-access intent | ⬜ | Preserve the current constructor as a compatible default while allowing storage, transfer, indirect, vertex/index-compatible and CPU read/write roles where implemented. Range upload/readback/copy validation is overflow-safe; GPU-only buffers use staging and refuse direct CPU access instead of silently mapping. |
+| MOD-2230 | Add typed constant-buffer support only on top of the shared buffer core | ⬜ | A thin `ConstantBufferT<T>` (or convention-compatible final name) requires trivially-copyable standard-layout data, validates backend alignment/size, and binds through an additive compute/package slot API. No second allocator/resource hierarchy is introduced. |
+| MOD-2231 | Add a dedicated indirect-argument buffer role independent of compute support | ⬜ | The existing `CNA::IndirectDrawArguments` layouts remain canonical, but an argument buffer can be created on a renderer that supports indirect draw without compute/SSBO. CPU-written and compute-written cases validate alignment/ranges and eliminate `MOD-2090`'s GL 4.0–4.2 capability-with-no-usable-buffer mismatch. |
+| MOD-2232 | Add base-instance drawing as a capability-gated extension | ⬜ | The API reuses current XNA vertex/index/effect state and exposes `firstInstance` without exposing a native draw command. A native test distinguishes instance zero from a non-zero base; unsupported devices refuse before submission. |
+| MOD-2233 | Define XNA-resource/modern-resource interoperability explicitly | ⬜ | Document and test which existing `Texture2D`, `RenderTarget2D`, vertex/index buffers and new resources may be sampled, copied or bound to compute. Legal bridges retain format/lifetime information; illegal aliases fail clearly. No backend relies on application-visible image layouts or barrier enums to make a bridge correct. |
+
+### 22.4 Vulkan implementation and automatic synchronization (`MOD-2240`–`MOD-2254`)
+
+Vulkan reuses its existing instance, device, queues, swap chain, frame fences, command-order counter,
+descriptor pools and retirement queues. It must not create a second device, queue lifecycle or present
+loop for these features.
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2240 | Rework Vulkan feature/property discovery for truthful modern opt-in | ⬜ | Use `vkGetPhysicalDeviceFeatures2`/property chains where available, enable only features required by implemented CNA paths and preserve startup on devices lacking optional features. Compute queue policy is recorded; v1 prefers the existing ordered queue and does not claim async compute. |
+| MOD-2241 | Implement the existing `ComputeShader` and `StorageBuffer` contracts on Vulkan | ⬜ | SPIR-V compute modules, storage buffers, dispatch and synchronous requested-buffer readback work through current public wrappers. A vector-add test validates every element; capability remains false until that testable path and its limits are complete. |
+| MOD-2242 | Implement Vulkan constant/storage buffer binding and bounded descriptor reuse | ⬜ | Slot metadata produces internal layouts/sets without public descriptors; alignment/access are validated; bindings are snapshotted at enqueue time. Repeated dispatches reuse/reclaim descriptors and semantic pipeline layouts without per-frame unbounded growth. |
+| MOD-2243 | Implement Vulkan `Texture2DArray` allocation, views, transfers and sampling | ⬜ | Image/view ownership supports all declared layers/mips, descriptors select the full array, staging transfers preserve subresource identity, and `MOD-2226`'s oracle passes with validation enabled. |
+| MOD-2244 | Implement Vulkan storage textures and legal XNA image bridges | ⬜ | Storage-capable images/views/descriptors use queried format flags and correct access; supported existing render targets/textures bridge without duplicate native storage. Unsupported resources refuse by format/usage rather than reaching a validation error. |
+| MOD-2245 | Implement existing indirect draws plus base-instance on Vulkan | ⬜ | Current `DrawPrimitivesIndirectEXT`/indexed variant consume the canonical argument layouts; the new base-instance route preserves all current offsets. CPU- and compute-generated argument tests prove exact draw counts, offsets and first-instance semantics. |
+| MOD-2246 | Implement Vulkan GPU timing and structured debug integration | ⬜ | Existing `GpuTimer` uses recycled timestamp query pools and `timestampPeriod` without `vkDeviceWaitIdle`; debug-utils regions/messages integrate with existing logging without duplicate spam. Unsupported query/debug paths remain false/empty and tested. |
+| MOD-2247 | Put modern Vulkan work in the existing public-call ordering domain | ⬜ | Compute, copy, indirect, timestamp and debug commands receive the same monotonic order used by clear/SpriteBatch/3D work. A mixed SpriteBatch → compute → XNA 3D → indirect → present oracle fails if any stage is replayed out of order; no independent modern flush queue exists. |
+| MOD-2248 | Add an internal Vulkan logical resource-usage tracker | ⬜ | Buffers/images track coarse CNA intents such as CPU/transfer read-write, shader read-write, render-target write, sampled read and indirect/vertex/index read. Transitions are renderer-internal, subresource-aware where needed and emit no barrier when the previous state already satisfies the next use. |
+| MOD-2249 | Implement upload/transfer ↔ compute dependencies | ⬜ | Host/staging uploads become visible to dispatch, dispatch writes become visible to following dispatch/copy/readback, and buffer/image tests mutate the order so a missing dependency is observable. Routine paths contain no queue/device idle. |
+| MOD-2250 | Implement compute-write → graphics/indirect dependencies | ⬜ | Storage-buffer writes become visible to vertex/fragment reads and indirect command fetches with correct stage/access masks. GPU culling and particle paths run without CPU readback and detect stale previous-frame arguments/data. |
+| MOD-2251 | Implement render-target ↔ compute/storage-image transitions | ⬜ | Render-target writes can feed compute reads, and compute image writes can feed later sampling/rendering, with correct layouts and render-pass segmentation. A two-way native pixel oracle covers both transitions under validation layers. |
+| MOD-2252 | Make deferred modern-resource destruction fence-safe | ⬜ | Disposing wrappers immediately after enqueue cannot leave dangling command pointers or destroy native handles before the relevant frame fence. Tests cover buffers, arrays, storage images, shaders and queries across present, resize and device teardown. |
+| MOD-2253 | Bound caches/allocators and remove routine global stalls | ⬜ | Descriptor, pipeline, query, staging and retirement instrumentation stays bounded over thousands of frames and resize cycles. No new routine `vkQueueWaitIdle`/`vkDeviceWaitIdle` exists; only explicit synchronous readback and shutdown/recovery boundaries are documented exceptions. |
+| MOD-2254 | Add the Vulkan modern-GPU validation and recovery gate | ⬜ | Permanent runtime tests cover float RT, arrays, buffer compute, storage image, base instance, indirect draw, timer, mixed ordering, early disposal, resize/swap-chain recreation and repeated allocation. The suite produces zero new CNA-attributable Vulkan validation warnings/errors and passes representative ASan/UBSan on CNA-owned paths. |
+
+### 22.5 OpenGL4 portability and release evidence (`MOD-2260`–`MOD-2266`)
+
+| ID | Task | Status | Acceptance criterion |
+|---|---|---|---|
+| MOD-2260 | Preserve OpenGL4's 4.1 XNA floor while discovering a 4.3+ modern subset at runtime | ⬜ | Ordinary renderer creation and XNA tests remain valid on 4.1. Compute/SSBO/image load-store are reported only for a 4.3+ context or sufficient extensions; arrays, indirect, timer and format features are queried independently rather than hidden behind one version boolean. |
+| MOD-2261 | Implement the applicable existing/new modern contracts on OpenGL4 | ⬜ | Float/HDR targets, texture arrays, buffers, compute, storage textures, base instance, indirect draw and timers use real GL entry points where the live context supports them. `glMemoryBarrier` is selected internally from the shared usage intents; unavailable subsets stay false without failing the renderer. |
+| MOD-2262 | Run one shared modern-GPU contract suite across EasyGL, Vulkan and OpenGL4 | ⬜ | Shared tests assert the same public validation, refusal, lifetime and observable-output invariants on all three, while capability-specific differences remain explicit. A feature is not marked supported on a backend until its shared and native oracle passes. |
+| MOD-2263 | Retake negative build/runtime and module-closure gates | ⬜ | `CNA_CNAEXT=OFF` exposes none of the gated API; HEADLESS with CNAEXT on reports every new feature unavailable without native SDK linkage; header self-containment, module ownership, minimal-link and SharpRuntime closure checks remain green. |
+| MOD-2264 | Document shader packaging, capabilities, synchronization and portability | ⬜ | User documentation explains how to ship variants, query live limits/formats, choose/fallback resources and rely on implicit synchronization without native states. A generated/verified matrix distinguishes storage, sampling, rendering and array-layer support rather than collapsing them into renderer-level yes/no claims. |
+| MOD-2265 | Establish performance baselines for the implemented paths | ⬜ | Measure CPU submission and GPU time for dispatch, upload/copy/readback, indirect draw, storage-image transitions and descriptor/pipeline reuse against meaningful existing paths. Results state hardware/driver and do not use synchronous readback to represent a normal frame unless measuring readback itself. |
+| MOD-2266 | Declare the portable modern-GPU foundation complete | ⬜ | Complete only when Vulkan implements every mandatory Phase 22 path, OpenGL4 proves the applicable API is not renamed Vulkan, unsupported renderers remain unchanged, public API reconciliation finds no duplicate types, all permanent gates are green, routine global stalls are absent and documentation matches measured capability truth. Far-future mesh/task shaders, bindless, VRS, sparse resources and ray tracing remain outside this phase until a concrete CNA use case and at least two credible backend mappings exist. |
 
 ---
 
