@@ -102,9 +102,9 @@ namespace
         {
             GraphicsRendererSelection::ResetForTestingEXT();
             System::Environment::SetEnvironmentVariable(
-                "CNA_DEBUG_UNAVAILABLE_RENDERERS", std::nullopt);
+                "CNA_DEBUG_UNAVAILABLE_RENDERERS", std::string{});
             System::Environment::SetEnvironmentVariable(
-                "CNA_DEBUG_FAIL_RENDERER_INIT", std::nullopt);
+                "CNA_DEBUG_FAIL_RENDERER_INIT", std::string{});
 
             namespace Renderers = CNA::Internal::Renderers;
             std::vector<GraphicsRendererType> available;
@@ -117,9 +117,9 @@ namespace
         void TearDown() override
         {
             System::Environment::SetEnvironmentVariable(
-                "CNA_DEBUG_UNAVAILABLE_RENDERERS", std::nullopt);
+                "CNA_DEBUG_UNAVAILABLE_RENDERERS", std::string{});
             System::Environment::SetEnvironmentVariable(
-                "CNA_DEBUG_FAIL_RENDERER_INIT", std::nullopt);
+                "CNA_DEBUG_FAIL_RENDERER_INIT", std::string{});
             GraphicsRendererSelection::ResetForTestingEXT();
         }
 
