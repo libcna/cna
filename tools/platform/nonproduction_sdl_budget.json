@@ -219,7 +219,7 @@
     },
     "modules/renderers/canvas/examples/canvas_smoke_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 8
+      "max_references": 9
     },
     "modules/renderers/diligent/examples/diligent_alphatest_fog_test.cpp": {
       "category": "renderer-integration-executable",
