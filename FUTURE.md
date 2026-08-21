@@ -2,7 +2,9 @@
 
 Date: 2026-08-09 (updated 2026-08-10 — all pre-expansion preparation is complete and public:
 the final physical module/package layout, the renderer terminology normalization and the
-module-owned examples are all promoted to `develop`)
+module-owned examples are all promoted to `develop`; reconciled 2026-08-21 — Phase 2's renderer
+table and Phase 5's body text had fallen behind the status table above, which was already being
+kept current; both are now brought in line with it)
 
 > **THIS DOCUMENT IS A ROADMAP, NOT AUTHORIZATION TO START FUTURE WORK.**
 >
@@ -21,16 +23,17 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | **CURRENT** | Phase 1.5 — naming normalization (backend→renderer, DIRECTX*, OPENGLES3, CNAEXT) | **COMPLETE AND PUBLIC** — implemented on `feature/renderer-naming-normalization` (endpoint `16f76cf1a`) and promoted to `develop` on 2026-08-10 as part of the pre-expansion fast-forward. See `docs/RendererNamingMigration.md`. Renderer count unchanged at 41 |
 | **CURRENT** | Phase 1.6 — module-owned examples | **COMPLETE AND PUBLIC** — implemented on `feature/module-examples` (endpoint `675e04c7a`, a descendant of the naming endpoint) and promoted in the same fast-forward. All 1373 tracked example files now live with their owning module, registered by 44 module-local `examples/CMakeLists.txt` files; only the shared `examples/golden/` oracle corpus stays at repository level. See `docs/physical-modules.md` §"Module examples" and `modularization/module-examples/` |
 | **CURRENT** | Phase 1 — CNA modularization | **COMPLETE AND PROMOTED** in three stages, all now on public `develop`: target graph + physical `src/` layout (`41028e995`), modular sharp-runtime consumption (`ea61123e6`), and the owner-requested **final physical module/package layout** (`modules/<name>/{include,src,tests}` monorepo, plans/MODULARIZATION_PLAN.md §11–§11.2) promoted 2026-08-10 by fast-forward to `3ecbbce72` (tree unchanged by the promotion). The modularization campaign is DONE |
-| **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: six additions — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL` — are implemented on their own lanes and integrated on `11branches`. The remaining planned additions are untouched and each still requires its own explicit owner instruction |
+| **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: seven additions — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL`, `IGL` — are implemented on their own lanes and integrated. The remaining planned additions are untouched and each still requires its own explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
 | **CURRENT** | Phase 5 — glTF correctness campaign | **in progress on `feature/gltf`, ahead of its stated Phase 4 dependency** (started 2026-08-11 from `gltfissues.md`'s analysis and a forensic audit that reproduced eight defects, D1–D8, every one of which produced a *model that rendered*). The working record is `plans/plan_gltf.md`: 475 rows, **470 closed**, and all eight audit defects `fixed` in the corpus defect ledger. The evidence base is a generated 148-asset corpus, the exact L0–L6 numerical ladder run per commit under ASan+UBSan, a required production-viewer OPENGLES3 L7 gate with 137 deterministic PNGs plus 8 deterministic safe rejections, the 13-case pinned Khronos comparison and the completed 15-case Gate C viewer retake (`docs/gltf-conformance.md`). **`GLTF CORE 2.0 CORRECT` was declared on 2026-08-15** after all 20 §27.1 rows and the fresh four-renderer Gate B were green — and that declaration was later found premature (`plans/plan_gltf.md` §27.1.2: four core divergences sat inside rows that were green). The milestone in force is now the **qualified** `GLTF CORE 2.0 IMPORT/RUNTIME MODEL CORRECT` (§27.1.3), which states renderer coverage beside it rather than inside it: 15 of 17 PBR renderers apply `COLOR_0` and the other 2 refuse such a draw by name. Phase 5 remains current, rather than complete: `GLTF-459` (**GLTF ROBUST**), optional-extension/renderer-specific L7 residue and the retrospective are still open |
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
-- CNA does **not** have 55 renderers. It has **48** (41 at the pre-expansion promotion, minus the
-  removed `ASCII` renderer identity, plus `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
-  `PORTABLEGL`, `TINYGL` and `IGL`).
+- CNA does **not** have 55 renderers. It has **50** (mechanically counted,
+  `scripts/check_renderer_identities.py`): 41 at the pre-expansion promotion, minus the removed
+  `ASCII` renderer identity, plus `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
+  `PORTABLEGL`, `TINYGL`, `IGL`, `PIXIJS` and `NANOVG`.
 - Modularization is complete **and promoted**, including the final physical module/package
   layout: `develop` is a module-oriented monorepo as of 2026-08-10 (`41028e995` target graph +
   physical layout, then `3ecbbce72` `modules/<name>/{include,src,tests}`; both no-loss-proven —
@@ -59,47 +62,35 @@ Phases are sequential. Each depends on its predecessor being completed and stabi
 
 ## Phase 1 — CNA modularization (COMPLETE AND PROMOTED)
 
-Completed as the CNA development campaign following the post-audit integration promotion, and
-promoted into `develop` on 2026-08-10 (`41028e995`).
-
-Goals:
-
-- split the monolithic build/project into coherent modules;
-- establish explicit dependency boundaries between those modules;
-- isolate renderer implementations into clean renderer modules;
-- preserve public behavior;
-- avoid semantic changes unless a proven dependency cycle requires a minimal architecture
-  correction;
-- establish minimal-link/build tests, so a module's real dependency set is enforced rather than
-  assumed;
-- preserve existing test and sanitizer coverage.
-
-Exit condition: modularization is completed **and stabilized**, and one stable modularized
-`develop` commit is established as the common base for renderer expansion.
+Split the monolithic build/project into coherent modules with explicit dependency boundaries,
+isolated renderer implementations, preserved public behavior and existing test/sanitizer coverage,
+and established minimal-link/build tests that enforce each module's real dependency set rather than
+an assumed one.
 
 **Exit condition met (2026-08-10).** The stable modularized `develop` base for renderer expansion
 is the current public `develop` head; the campaign record, the promotion evidence and the bounded
-post-promotion gate are in `plans/MODULARIZATION_PLAN.md` §9–§10 and `NEXT.md`.
-
-**Dependency:** Phase 2 must not begin before this exit condition holds. Starting renderer
-expansion against the pre-modular structure would create 14 new renderers that then have to be
-migrated.
+post-promotion gate are in `plans/MODULARIZATION_PLAN.md` §9–§10 and `NEXT.md`. Phase 2 was built on
+this base rather than the pre-modular structure, which would have created renderers that then
+needed migrating.
 
 ---
 
-## Phase 2 — renderer expansion (FUTURE)
+## Phase 2 — renderer expansion (IN PROGRESS)
 
-Unblocked by Phase 1's promotion, but **not started** — and, like every phase here, it requires a
-fresh explicit owner instruction before any work begins. It must start from the stable modularized
+Unblocked by Phase 1's promotion and **in progress**. Every remaining item still requires its own
+fresh explicit owner instruction before work begins, and must start from the stable modularized
 public `develop` base, not from an older pre-modularization commit.
 
 Current public renderer count before this phase: **41** (the 2026-08-10 pre-expansion promotion).
-Six of the planned additions have since been implemented on their own lanes and integrated on the
-`11branches` integration branch — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG` and
-`PORTABLEGL`. Together with the removal of the `ASCII` renderer identity (migrated to a
-renderer-neutral post-process effect, outside this phase's scope) that brings the live count to
-**46**. The remaining items in this table are still unstarted and each still requires its own
-fresh explicit owner instruction.
+Six of the items in the table below have since been implemented and integrated — `OPENGLES2`,
+`FNA3D`, `OPENVG`, `SVG_DOM`, `IGL` and `PORTABLEGL` (rows 1, 2, 3, 4, 5 and 12) — plus `BLEND2D`,
+delivered on its own lane and no longer listed as a planned addition here. Three more identities,
+`TINYGL`, `PIXIJS` and `NANOVG`, landed from the separate `docs/renderer-expansion-candidates.md`
+roadmap and are not rows in this table. Together with the removal of the `ASCII` renderer identity
+(migrated to a renderer-neutral post-process effect, outside this phase's scope), the live count is
+**50** (mechanically counted, `scripts/check_renderer_identities.py`; see the status table at the
+top of this document). The remaining items in this table are still unstarted and each still
+requires its own fresh explicit owner instruction.
 
 This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer implementations.
 
@@ -111,7 +102,7 @@ This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer imp
 | 2 | `FNA3D` | **INTEGRATED** (`feature/fna3d`) — FNA3D pinned at release 26.08, executing XNA's own compiled stock effects through MojoShader; selects SDL_GPU/Direct3D 11/OpenGL at runtime. See `docs/fna3d-renderer.md` and `plans/plan_fna3d.md`. |
 | 3 | `OPENVG` | **INTEGRATED** (`feature/openvg`) — OpenVG 1.1 via ShivaVG on a real desktop OpenGL context. 2D-only (no 3D pipeline, no render targets). See `docs/openvg-renderer.md`. |
 | 4 | `SVG_DOM` | **INTEGRATED** (`feature/svgdom`) — Emscripten-only, 2D-only; renders `SpriteBatch` output as real pooled SVG DOM elements (`<svg>`/`<image>`/`feColorMatrix`), distinct from both `CANVAS` (rasterized) and `HTML_DOM` (CSS `<div>`s). See `docs/svg-dom-renderer.md`; real-browser validation remains an external Emscripten-SDK gate. |
-| 5 | `IGL` | Facebook IGL — https://github.com/facebook/igl |
+| 5 | `IGL` | **INTEGRATED** (2026-08-15) — Facebook IGL, driving its own OpenGL (GLX) or Vulkan backend, fixed for the process by `CNA_IGL_BACKEND`. See `plans/plan_igl.md` / `docs/igl-renderer.md`. |
 | 6 | `NVRHI` | NVIDIA NVRHI. |
 | 7 | `KORE` | Kode/Kore — https://github.com/Kode/Kore |
 | 8 | `METHANEKIT` | MethaneKit RHI. |
@@ -122,16 +113,22 @@ This phase adds one new public OpenGL ES 2 path plus 12 planned new renderer imp
 | 13 | `REACT_DOM` | A distinct React/DOM-oriented CNA rendering implementation, **only if** the final architecture proves it can truthfully satisfy a useful CNA graphics contract. It must not be counted merely as a conceptual alias of an existing identity. |
 
 That is `OPENGLES2` + 12 new renderer implementations = **13 additions** in this table, of which
-six are already integrated (the five marked INTEGRATED above, plus `BLEND2D`, which was delivered
+seven are already integrated (the six marked INTEGRATED above, plus `BLEND2D`, which was delivered
 on its own lane and is no longer listed as a planned addition).
 
 ### Target count
 
-    46 live today + 8 still-unstarted additions from the table above = 54 public CNA renderer
-    identities if every remaining planned identity lands
+    50 live today (mechanically counted, `scripts/check_renderer_identities.py`) + 7 still-unstarted
+    additions from the table above = 57 public CNA renderer identities if every remaining planned
+    identity in this table lands
+
+`TINYGL`, `PIXIJS` and `NANOVG` are already included in the 50 but are not rows in this table —
+they were delivered from the separate `docs/renderer-expansion-candidates.md` roadmap, outside
+Phase 2's original 13-item list.
 
 (The original 55 target assumed the `ASCII` renderer identity would remain; it was removed in
-favour of a renderer-neutral post-process effect, so the arithmetic ceiling is one lower.)
+favour of a renderer-neutral post-process effect, so the arithmetic ceiling from this table alone
+is one lower.)
 
 **This count is a TARGET, not an invariant.** After implementation, recount public identities
 mechanically from the actual registry and report the truthful result. If `REACT_DOM` cannot
@@ -238,49 +235,33 @@ rewriting history merely to make old plans look current.
 
 ---
 
-## Phase 5 — glTF correctness campaign (FUTURE)
+## Phase 5 — glTF correctness campaign (IN PROGRESS, ahead of schedule)
 
-Blocked on Phase 4.
+Started 2026-08-11 on `feature/gltf`, by explicit owner decision, ahead of its stated Phase 4
+dependency — the one documented exception to "Phases are sequential" above. Current status,
+evidence and the remaining open work are tracked in `plans/plan_gltf.md` (478 tasks) and
+`docs/gltf-limitations.md`; do not reconstruct this campaign's state from this document — see the
+status table at the top instead.
 
-**Motivation:** `cna-gltf-viewer` currently displays many glTF assets incorrectly or broken.
+**Motivation:** `cna-gltf-viewer` displayed many glTF assets incorrectly or broken.
 
-Treat `cna-gltf-viewer` as an integration oracle and reproduction surface — **not** as the place
-to fix things. Do not fix framework defects with viewer-specific workarounds.
+The standing rules that shaped the campaign and still apply to its remaining work:
 
-For every broken asset/path:
+- Treat `cna-gltf-viewer` as an integration oracle and reproduction surface — **not** as the place
+  to fix things. Do not fix framework defects with viewer-specific workarounds.
+- **Do not assume every `cna-gltf-viewer` visual failure is in the parser.** Classify the actual
+  owning layer.
+- Workflow per broken asset/path:
 
-    reproduce
-        -> minimize where practical
-        -> identify the owning layer
-        -> fix the owning CNA/glTF implementation
-        -> add permanent regression asset/test
-        -> retake cna-gltf-viewer
+      reproduce
+          -> minimize where practical
+          -> identify the owning layer
+          -> fix the owning CNA/glTF implementation
+          -> add permanent regression asset/test
+          -> retake cna-gltf-viewer
 
-### Audit scope
-
-Audit the complete relevant glTF path, including where applicable:
-
-- GLB/glTF parsing; accessors; sparse accessors; buffers and buffer views; component types;
-  normalized data;
-- primitive topology; indices; vertex attributes; coordinate conventions;
-- scene hierarchy; node transforms; local/world transforms; matrix/TRS interaction; cameras;
-- meshes; materials; PBR parameters;
-- textures; image loading; samplers; UV sets; color spaces; alpha modes; double-sided state;
-- normals; tangents;
-- skinning; inverse bind matrices; joints; animation; morph targets if supported/claimed;
-- lighting/effects where CNA owns the mapping; render state; renderer interaction;
-- content lifetime/caching.
-
-**Do not assume every `cna-gltf-viewer` visual failure is in the parser.** Classify the actual
-owning layer.
-
-Final goal:
-
-    glTF correctness fixed in CNA
-    + permanent regression coverage
-    + cna-gltf-viewer rendering the supported corpus correctly
-
-rather than a viewer full of special cases.
+Final goal: glTF correctness fixed in CNA, with permanent regression coverage and
+`cna-gltf-viewer` rendering the supported corpus correctly — not a viewer full of special cases.
 
 ---
 
