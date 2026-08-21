@@ -152,15 +152,16 @@ counting. No pixel duplication on cache return.
 `frame3DVB_` / `frame3DIB_` are now allocated on the first actual 3D draw call via
 `EnsureFrame3DBuffers()`. A pure 2D game like mobile-eggbert never pays this cost.
 
-### Fix 3 — EasyGL: remove `image_data_` duplicate in `EasyGLTextureBackend` ✅ **(~34 MB saved)**
+### Fix 3 — EasyGL: remove `image_data_` duplicate in `EasyGLTextureRenderer` ✅ **(~34 MB saved)**
 
-`EasyGLTextureBackend` previously stored a full `ImageData image_data_` copy of all
-pixel data separately from `Texture2D::cpuPixels_`. This was the largest remaining
-RAM regression after Fix 1:
+`EasyGLTextureRenderer` (named `EasyGLTextureBackend` at the time of this fix, renamed
+since) previously stored a full `ImageData image_data_` copy of all pixel data
+separately from `Texture2D::cpuPixels_`. This was the largest remaining RAM
+regression after Fix 1:
 
 - Each texture kept **two** independent CPU copies of its pixels:
   one in `cpuPixels_` (shared via `shared_ptr` across `Texture2D` copies) and
-  one in `EasyGLTextureBackend::image_data_` (unique per backend instance).
+  one in `EasyGLTextureRenderer::image_data_` (unique per backend instance).
 
 - This also caused the ~1.5 MB-per-world-entry RAM growth in mobile-eggbert:
   world-specific textures accumulated in the `ContentManager` cache, each costing
