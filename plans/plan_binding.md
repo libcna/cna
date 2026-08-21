@@ -9,8 +9,8 @@
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
 > owner instruction.
 
-> **Authoritative design inputs (read-only):** `analysis_binding.md` and
-> `analysis_binding_sharp_runtime.md`. The behavioral reference for the underlying XNA-facing C++
+> **Authoritative design inputs (read-only):** `misc/analysis_binding.md` and
+> `misc/analysis_binding_sharp_runtime.md`. The behavioral reference for the underlying XNA-facing C++
 > implementation remains the local FNA tree required by `AGENTS.md`.
 
 ## Goal
@@ -1541,7 +1541,7 @@ rediscover it.
 
 ### Standing constraints
 
-- `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are **strictly read-only**.
+- `misc/analysis_binding.md` and `misc/analysis_binding_sharp_runtime.md` are **strictly read-only**.
 - Only the C binding is in scope. Do not plan or implement C#, .NET, JavaScript, Rust, Python,
   Java, Zig, Go, Swift or any other language binding.
 - One task, one commit. Stage explicit file names; never `git add -A`. Do not push unless asked.

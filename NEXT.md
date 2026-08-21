@@ -593,7 +593,7 @@ task.
 ## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
 
 > `plans/plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
-> the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
+> the read-only `misc/analysis_binding.md` and `misc/analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
 > `CBIND-035F1`–`035F7` and `CBIND-035G` are complete, closing parent `CBIND-035`:

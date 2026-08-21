@@ -22,8 +22,8 @@ The following project-design documents are **read-only source material**. Do not
 move, or delete them. Derive C-binding decisions and planning artifacts from them instead:
 
 ```text
-analysis_binding.md
-analysis_binding_sharp_runtime.md
+misc/analysis_binding.md
+misc/analysis_binding_sharp_runtime.md
 ```
 
 The current approved planning boundary is limited to CNA's native C API/C ABI. Do not create
