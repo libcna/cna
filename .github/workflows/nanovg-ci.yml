@@ -18,11 +18,12 @@ name: nanovg-ci
 
 on:
   push:
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'

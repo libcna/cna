@@ -19,11 +19,12 @@ name: Emscripten multi-renderer CI
 
 on:
   push:
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -48,11 +49,14 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Clone sharp-runtime (public sibling repo, no token needed)
+      - name: Clone sibling repositories (public, no token needed)
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.."
-          git clone --depth 1 https://github.com/openeggbert/sharp-runtime.git sharp-runtime
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
 
       - name: Cache emsdk install
         id: emsdk-cache

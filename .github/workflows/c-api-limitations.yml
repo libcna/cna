@@ -15,23 +15,24 @@ name: C API limitations matrix
 
 on:
   push:
+    branches: [next, develop, main]
     paths:
       - 'docs/c-api/COVERAGE.md'
       - 'docs/c-api/LIMITATIONS.md'
       - 'tools/c-api/limitations.json'
       - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_limitations.py'
-      - 'plan_binding.md'
+      - 'plans/plan_binding.md'
       - '.github/workflows/c-api-limitations.yml'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths:
       - 'docs/c-api/COVERAGE.md'
       - 'docs/c-api/LIMITATIONS.md'
       - 'tools/c-api/limitations.json'
       - 'tools/c-api/coverage_mappings.json'
       - 'tools/c-api/generate_limitations.py'
-      - 'plan_binding.md'
+      - 'plans/plan_binding.md'
   workflow_dispatch:
 
 concurrency:
@@ -61,23 +62,24 @@ jobs:
       - name: Prove the gate rejects a deferral to a closed task
         run: |
           set -euo pipefail
-          cp tools/c-api/coverage_mappings.json /tmp/coverage_mappings.json.orig
+          cp docs/c-api/COVERAGE.md /tmp/COVERAGE.md.orig
           python3 - <<'PY'
-          import json
           from pathlib import Path
-          path = Path("tools/c-api/coverage_mappings.json")
-          data = json.loads(path.read_text(encoding="utf-8"))
-          for rule in data["rules"]:
-              if rule.get("id") == "spritebatch-begin-partial":
-                  rule["mapping"] = rule["mapping"].replace("CBIND-044", "CBIND-035")
+          path = Path("docs/c-api/COVERAGE.md")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          for index, line in enumerate(lines):
+              if line.startswith("| `CPP-") and "partial" in line.rsplit(" | ", 1)[-1]:
+                  cells = line.split(" | ")
+                  cells[4] += " Deferred to CBIND-035."
+                  lines[index] = " | ".join(cells)
                   break
           else:
-              raise SystemExit("the rule this check perturbs no longer exists")
-          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+              raise SystemExit("the partial inventory row this check perturbs no longer exists")
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
           status=0
           python3 tools/c-api/generate_limitations.py --check || status=$?
-          cp /tmp/coverage_mappings.json.orig tools/c-api/coverage_mappings.json
+          cp /tmp/COVERAGE.md.orig docs/c-api/COVERAGE.md
           if [ "$status" -eq 0 ]; then
             echo "::error::the limitations check accepted a deferral to a finished task" >&2
             exit 1
@@ -85,7 +87,7 @@ jobs:
           echo "the gate rejected the stale deferral, as it must"
 
       - name: Confirm the tree was restored
-        run: git diff --exit-code -- tools/c-api/coverage_mappings.json
+        run: git diff --exit-code -- docs/c-api/COVERAGE.md
 
       # Regenerating must be a no-op on a correct tree, for the same reason the coverage matrix's
       # must: a generator that churns makes the document unreviewable.

@@ -24,7 +24,7 @@ name: Devices and Sensors Tests
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [next, develop, main]
     paths:
       - 'modules/devices/include/Microsoft/Devices/**'
       - 'modules/devices/src/**'
@@ -37,6 +37,7 @@ on:
       - 'cmake/**'
       - '.github/workflows/devices-tests.yml'
   pull_request:
+    branches: [next, develop, main]
     paths:
       - 'modules/devices/include/Microsoft/Devices/**'
       - 'modules/devices/src/**'
@@ -49,6 +50,10 @@ on:
       - 'cmake/**'
       - '.github/workflows/devices-tests.yml'
   workflow_dispatch: {}
+
+concurrency:
+  group: devices-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   # Exact-suite-name filter, kept in sync with docs/devices-build.md Section 2/6

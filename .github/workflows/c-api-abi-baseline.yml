@@ -17,13 +17,14 @@ name: C API ABI baseline
 
 on:
   push:
+    branches: [next, develop, main]
     paths:
       - 'modules/c-api/include/**'
       - 'tools/c-api/abi_baseline.json'
       - 'tools/c-api/generate_abi_baseline.py'
       - '.github/workflows/c-api-abi-baseline.yml'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths:
       - 'modules/c-api/include/**'
       - 'tools/c-api/abi_baseline.json'

@@ -10,16 +10,15 @@
 name: glTF renderer conformance
 
 on:
-  push: {}
+  push:
+    branches: [next, develop, main]
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
   workflow_dispatch:
 
 concurrency:
-  # Per-SHA rather than per-branch: a later push must not cancel the prior commit's required
-  # evidence before it produces a result (GLTF-420).
-  group: gltf-renderer-conformance-${{ github.sha }}
-  cancel-in-progress: false
+  group: gltf-renderer-conformance-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   stride-conformance:
@@ -65,7 +64,7 @@ jobs:
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libvulkan-dev mesa-vulkan-drivers \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
 
@@ -155,7 +154,7 @@ jobs:
             g++-14 cmake ninja-build pkg-config xvfb python3-pil \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
 

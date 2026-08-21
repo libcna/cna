@@ -16,6 +16,7 @@ name: C API release gate
 
 on:
   push:
+    branches: [next, develop, main]
     paths:
       - 'tools/c-api/**'
       - 'docs/c-api/**'
@@ -23,7 +24,7 @@ on:
       - 'modules/c-api/examples/**'
       - '.github/workflows/c-api-release-gate.yml'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths:
       - 'tools/c-api/**'
       - 'docs/c-api/**'
@@ -61,23 +62,23 @@ jobs:
       - name: Prove the gate rejects a decision recorded in only one place
         run: |
           set -euo pipefail
-          cp tools/c-api/limitations.json /tmp/limitations.json.orig
+          cp tools/c-api/release_gate.json /tmp/release_gate.json.orig
           python3 - <<'PY'
           import json
           from pathlib import Path
-          path = Path("tools/c-api/limitations.json")
+          path = Path("tools/c-api/release_gate.json")
           data = json.loads(path.read_text(encoding="utf-8"))
-          for entry in data["environment"]:
-              if entry["subject"] == "There is no static configuration":
-                  entry["status"] = "by design"
+          for criterion in data["criteria"]:
+              if criterion["id"] == "coverage-closed":
+                  criterion["recorded"] = "met"
                   break
           else:
-              raise SystemExit("the decision this check perturbs is no longer recorded")
+              raise SystemExit("the coverage decision this check perturbs is no longer recorded")
           path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           PY
           status=0
           python3 tools/c-api/check_release_gate.py --check || status=$?
-          cp /tmp/limitations.json.orig tools/c-api/limitations.json
+          cp /tmp/release_gate.json.orig tools/c-api/release_gate.json
           if [ "$status" -eq 0 ]; then
             echo "::error::the release gate accepted a decision recorded in only one place" >&2
             exit 1
@@ -85,7 +86,7 @@ jobs:
           echo "the gate rejected the one-sided decision, as it must"
 
       - name: Confirm the tree was restored
-        run: git diff --exit-code -- tools/c-api/limitations.json
+        run: git diff --exit-code -- tools/c-api/release_gate.json
 
       - name: Verify regeneration is deterministic
         run: |

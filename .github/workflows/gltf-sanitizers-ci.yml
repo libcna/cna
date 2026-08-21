@@ -27,11 +27,12 @@ name: glTF sanitizers (ASan + UBSan)
 
 on:
   push:
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -74,7 +75,7 @@ jobs:
             g++-14 cmake ninja-build pkg-config \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev
 
       - name: Configure (STUB renderer, ASan + UBSan)

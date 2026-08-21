@@ -39,12 +39,12 @@ endif()
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "METAL")
     enable_testing()
 
-    # Configure-time control for Metal's real CNA<->renderer static-archive cycle. Native test
-    # executables below use ordinary target links, not a test-only --start-group workaround.
+    # Configure-time control for Metal's real graphics-core<->renderer static-archive cycle. Native
+    # test executables below use ordinary target links, not a test-only --start-group workaround.
     get_target_property(CNA_METAL_BACKEND_LINKS ${RENDERER_TARGET} LINK_LIBRARIES)
-    if(NOT "CNA" IN_LIST CNA_METAL_BACKEND_LINKS)
+    if(NOT "cna_graphics_core" IN_LIST CNA_METAL_BACKEND_LINKS)
         message(FATAL_ERROR
-            "METAL renderer must retain its reverse CNA link for out-of-line Effect/math symbols")
+            "METAL renderer must retain its reverse graphics-core link for out-of-line Effect symbols")
     endif()
 
     # Supported-contract smoke: real macOS device/window/view, buffer uploads, combined

@@ -25,7 +25,7 @@ name: 32-bit Arithmetic Coverage
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [next, develop, main]
     paths:
       - 'modules/media/src/Internal/AudioTagParser.cpp'
       - 'modules/media/include/CNA/Internal/Media/AudioTagParser.hpp'
@@ -40,6 +40,7 @@ on:
       - 'modules/renderers/software/src/SoftwareTextureAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   pull_request:
+    branches: [next, develop, main]
     paths:
       - 'modules/media/src/Internal/AudioTagParser.cpp'
       - 'modules/media/include/CNA/Internal/Media/AudioTagParser.hpp'
@@ -54,6 +55,10 @@ on:
       - 'modules/renderers/software/src/SoftwareTextureAllocation.cpp'
       - '.github/workflows/32bit-arithmetic-ci.yml'
   workflow_dispatch: {}
+
+concurrency:
+  group: arithmetic-32bit-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-run-32bit:

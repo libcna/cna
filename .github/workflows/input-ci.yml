@@ -1,8 +1,8 @@
 # INPUT-CI-001 / INPUT-CI-002 / INPUT-CI-005 — CI for the Input track.
 #
 # Matrix of build configurations, each running the (backend-agnostic) input test suite headless:
-#   - EasyGL / SDL_RENDERER / Vulkan / bgfx : the four graphics backends.
-#   - ASan+UBSan (on EasyGL)                : built with -DCNA_SANITIZE=address,undefined; any UB /
+#   - OPENGLES3 / SDL_RENDERER / Vulkan / bgfx : four renderer identities.
+#   - ASan+UBSan (on OPENGLES3)                : built with -DCNA_SANITIZE=address,undefined; any UB /
 #                                             memory error fails the job (halt_on_error=1).
 # All sibling repos (sharp-runtime, easy-gl, meta-gl) are public and clone over HTTPS with no token.
 # third_party/enet is committed here; SDL/SDL_image/SDL_mixer/googletest are submodules; bgfx is
@@ -11,12 +11,12 @@ name: input-ci
 
 on:
   push:
-    branches: [feature/input, develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -34,13 +34,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: EasyGL
-            renderer: EASYGL
+          - name: OPENGLES3
+            renderer: OPENGLES3
             sanitize: ""
             asan_options: ""
             ubsan_options: ""
           - name: ASan+UBSan
-            renderer: EASYGL
+            renderer: OPENGLES3
             sanitize: "address,undefined"
             asan_options: "detect_leaks=0:halt_on_error=1"
             ubsan_options: "print_stacktrace=1:halt_on_error=1"
@@ -84,7 +84,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             g++-14 cmake ninja-build pkg-config xvfb \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-            libvulkan-dev \
+            libvulkan-dev mesa-vulkan-drivers \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \

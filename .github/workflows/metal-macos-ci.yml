@@ -2,6 +2,7 @@ name: Native Metal renderer (macOS)
 
 on:
   push:
+    branches: [next, develop, main]
     paths:
       - '.github/workflows/metal-macos-ci.yml'
       - 'CMakeLists.txt'
@@ -22,6 +23,7 @@ on:
       - 'modules/renderers/metal/tests/CNA/Internal/Renderers/Metal/**'
       - 'modules/graphics/tests/Microsoft/Xna/Framework/GraphicsRendererCompileDefinitionTests.cpp'
   pull_request:
+    branches: [next, develop, main]
   workflow_dispatch:
 
 permissions:
@@ -43,10 +45,11 @@ jobs:
           path: cna
           submodules: true
 
-      - name: Checkout sharp-runtime sibling
+      - name: Checkout pinned sharp-runtime sibling
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
+          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
           path: sharp-runtime
 
       - name: Install build dependencies

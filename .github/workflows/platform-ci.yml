@@ -2,12 +2,12 @@ name: Platform implementation matrix
 
 on:
   push:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -170,7 +170,9 @@ jobs:
         if: matrix.display == false
         env:
           SDL_AUDIODRIVER: dummy
-        run: env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build -R '^CnaPlatform(Tests|WindowTests)$' --output-on-failure
+        # A HEADLESS or TERMINAL tuple deliberately owns no platform window. The window-ownership
+        # executable is exercised by the graphical tuples; only the platform contract applies here.
+        run: env -u DISPLAY -u WAYLAND_DISPLAY ctest --test-dir build -R '^CnaPlatformTests$' --output-on-failure
 
       - name: Run cross-implementation event oracle (graphical tuples)
         if: matrix.display
@@ -186,13 +188,15 @@ jobs:
 
       - name: Run 2D demo through the selected graphical platform
         if: matrix.display
+        working-directory: build
         env:
           SDL_AUDIODRIVER: dummy
-        run: ./build/cna_demo_2d --smoke 6
+        run: ./cna_demo_2d --smoke 6
 
       - name: Run 2D demo without a display
         if: matrix.platform == 'HEADLESS'
-        run: env -u DISPLAY -u WAYLAND_DISPLAY ./build/cna_demo_2d --smoke 6
+        working-directory: build
+        run: env -u DISPLAY -u WAYLAND_DISPLAY ./cna_demo_2d --smoke 6
 
       - name: Run terminal 2D demo integration through a pseudo-TTY
         if: matrix.platform == 'TERMINAL'

@@ -14,11 +14,12 @@ name: Multi-renderer CI
 
 on:
   push:
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -58,7 +59,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             g++-14 cmake ninja-build pkg-config \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
-            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
 

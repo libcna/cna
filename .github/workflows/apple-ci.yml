@@ -17,6 +17,7 @@ name: Apple platforms (macOS + iOS)
 
 on:
   push:
+    branches: [next, develop, main]
     paths:
       - '.github/workflows/apple-ci.yml'
       - 'CMakeLists.txt'
@@ -56,6 +57,7 @@ on:
       - 'scripts/check-apple-platform-cmake.sh'
       - 'tests/apple/apple_smoke.cpp'
   pull_request:
+    branches: [next, develop, main]
   workflow_dispatch:
 
 permissions:
@@ -93,10 +95,11 @@ jobs:
           path: cna
           submodules: true
 
-      - name: Checkout sharp-runtime sibling
+      - name: Checkout pinned sharp-runtime sibling
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
+          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
           path: sharp-runtime
 
       - name: Install build dependencies
@@ -213,10 +216,11 @@ jobs:
           path: cna
           submodules: true
 
-      - name: Checkout sharp-runtime sibling
+      - name: Checkout pinned sharp-runtime sibling
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
+          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
           path: sharp-runtime
 
       - name: Install build dependencies

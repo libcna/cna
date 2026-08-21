@@ -2,7 +2,7 @@ name: TinyGL cross-platform CI
 
 on:
   push:
-    branches: [next, develop, master]
+    branches: [next, develop, main]
     paths:
       - '.github/workflows/tinygl-cross-platform-ci.yml'
       - 'CMakeLists.txt'
@@ -29,6 +29,7 @@ on:
       - 'modules/runtime/**'
       - 'modules/storage/**'
   pull_request:
+    branches: [next, develop, main]
     paths:
       - '.github/workflows/tinygl-cross-platform-ci.yml'
       - 'CMakeLists.txt'
@@ -146,6 +147,7 @@ jobs:
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=OFF \
             -DCNA_ENABLE_NET=OFF \
+            -DCNA_ENABLE_DRACO=OFF \
             -DCNA_USE_CCACHE=OFF \
             -DCNA_MAX_VENDORED_BUILD_JOBS=2 \
             -DFETCHCONTENT_SOURCE_DIR_TINYGL="${GITHUB_WORKSPACE}/tinygl"

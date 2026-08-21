@@ -300,7 +300,7 @@ TEST(GltfConformanceLadder, RendererParityIncludesSuitesWhoseNameContainsGltf)
     EXPECT_NE(std::string::npos, source.find("run \"$B\" '*Gltf*' > \"$tmp_b\""));
 }
 
-TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererForEveryCommitAndCannotIgnoreFailure)
+TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererOnIntegrationHeadsAndCannotIgnoreFailure)
 {
     const std::filesystem::path workflow =
         RepositoryRoot() / ".github" / "workflows" / "gltf-renderer-stride-ci.yml";
@@ -332,14 +332,18 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererForEveryCommitAnd
                           "--output-on-failure"));
     EXPECT_NE(std::string::npos, source.find("fail-fast: false"));
 
-    // A docs-only plan change is still a commit, and cancelling the prior SHA would leave it with
-    // no result. Every pushed branch is included too: the workflow deliberately pays the cost
-    // rather than redefining "per commit" as only a few long-lived branches.
-    EXPECT_NE(std::string::npos, source.find("  push: {}\n"));
+    // A docs-only plan change on an integration branch is still a commit, so there is no path
+    // filter. Feature-branch pushes are covered by their PR instead of launching the expensive
+    // matrix twice. Superseded runs share the branch ref and are cancelled: only the newest head
+    // can merge, and retaining every obsolete matrix was the source of an unbounded Actions flood.
+    EXPECT_NE(std::string::npos,
+              source.find("  push:\n    branches: [next, develop, main]\n"));
+    EXPECT_NE(std::string::npos,
+              source.find("  pull_request:\n    branches: [next, develop, main]\n"));
     EXPECT_EQ(std::string::npos, source.find("paths-ignore:"));
     EXPECT_NE(std::string::npos,
-              source.find("group: gltf-renderer-conformance-${{ github.sha }}"));
-    EXPECT_NE(std::string::npos, source.find("cancel-in-progress: false"));
+              source.find("group: gltf-renderer-conformance-${{ github.ref }}"));
+    EXPECT_NE(std::string::npos, source.find("cancel-in-progress: true"));
 
     // GLTF-009/390: the application-owned L7 rung is just as required as the lower renderer
     // matrix. Pinning the viewer commit prevents a mutable develop head from changing the camera

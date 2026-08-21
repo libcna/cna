@@ -8,9 +8,9 @@
 # adversarial-input fuzz harnesses, XnbContainerFuzzTest and LzxDecoderFuzzTest -- had likely never
 # once passed in CI at all.
 #
-# This job runs the FULL, unfiltered default suite (no -L, no --gtest_filter) on EasyGL, the
-# documented default renderer on Linux (cmake/RendererSelection.cmake). Per REMED-BUILD-004's own
-# "decide explicitly which renderers CI runs the general suite on" requirement: EasyGL only, for now
+# This job runs the FULL, unfiltered default suite (no -L, no --gtest_filter) on OPENGLES3, the
+# current public identity for the EasyGL family on Linux. Per REMED-BUILD-004's own
+# "decide explicitly which renderers CI runs the general suite on" requirement: this family only, for now
 # -- deliberately narrower than "all 14 renderers", which remains future work (each other renderer
 # already has its own narrower, renderer-specific CI path or none at all).
 #
@@ -42,11 +42,12 @@ name: general-tests-ci
 
 on:
   push:
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -58,7 +59,7 @@ concurrency:
 
 jobs:
   general-tests:
-    name: CnaTests (unfiltered, EasyGL default renderer)
+    name: CnaTests (unfiltered, OPENGLES3 / EasyGL family)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -126,11 +127,11 @@ jobs:
           echo "Xvfb did not become ready on :99" >&2
           exit 1
 
-      - name: Configure (EasyGL, tests + examples on, general default suite)
+      - name: Configure (OPENGLES3, tests + examples on, general default suite)
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCNA_GRAPHICS_RENDERER=EASYGL \
+            -DCNA_GRAPHICS_RENDERER=OPENGLES3 \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=ON \
             -DCNA_TEST_DISPLAY=:99

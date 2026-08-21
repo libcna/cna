@@ -16,6 +16,7 @@ name: C API compatibility matrix
 
 on:
   push:
+    branches: [next, develop, main]
     paths:
       - 'modules/c-api/include/**'
       - 'docs/c-api/COMPATIBILITY.md'
@@ -23,7 +24,7 @@ on:
       - 'tools/c-api/generate_compatibility_matrix.py'
       - '.github/workflows/c-api-compat-matrix.yml'
   pull_request:
-    branches: [develop, master]
+    branches: [next, develop, main]
     paths:
       - 'modules/c-api/include/**'
       - 'docs/c-api/COMPATIBILITY.md'
@@ -49,12 +50,17 @@ jobs:
         with:
           python-version: '3.12'
 
-      # Clang and the MinGW cross-compiler are optional rows: without them the run still passes and
-      # simply records them as skipped. Installing them is what turns those cells into evidence.
-      - name: Install the optional toolchains
+      # Ubuntu 24.04 still exposes GCC 13 as /usr/bin/gcc, whose pre-standard spelling is
+      # -std=c2x. The matrix promises the final C23 spelling, so select GCC 14 explicitly instead
+      # of allowing a runner-image default change to redefine the claimed language mode.
+      # Clang and the MinGW cross-compiler are optional rows: installing them turns those cells
+      # into evidence rather than skips.
+      - name: Install and select the declared toolchains
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang gcc-mingw-w64-x86-64
+          sudo apt-get install -y clang gcc-14 g++-14 gcc-mingw-w64-x86-64
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
 
       - name: Check the published matrix matches its declaration
         run: python3 tools/c-api/generate_compatibility_matrix.py --check
