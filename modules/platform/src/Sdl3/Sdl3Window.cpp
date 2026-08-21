@@ -307,7 +307,26 @@ namespace CNA::Platform::Sdl3 {
 
     void Sdl3Window::Sync()
     {
-        RequireSdlSuccess(SDL_SyncWindow(window_), "Window::Sync");
+        // Deliberately NOT RequireSdlSuccess. SDL_SyncWindow() returns false for exactly one
+        // reason -- "the operation timed out before the window was in the requested state" -- and
+        // a timeout is an ordinary outcome here, not a failure: on Wayland and X11 the compositor
+        // owns the geometry and may simply not have acknowledged the change within SDL's window.
+        //
+        // Throwing on it turned a routine window resize into an uncaught PlatformException, i.e. a
+        // std::terminate, in every game that resizes its window (reproduced with galaxy-eggbert
+        // 2026-08-21: "CNA::Platform: Window::Sync failed" while dragging the window edge).
+        //
+        // Nothing depends on this call succeeding. Both callers -- GameWindow::
+        // EndScreenDeviceChange() and GraphicsDevice::applyPresentationParametersToWindow() --
+        // use it only as a best-effort ordering point so the size query that follows sees the new
+        // geometry; UpdateViewportFromWindow() re-reads that geometry on the resize event and on
+        // every Present() regardless, so a missed sync costs at most one frame of stale size.
+        //
+        // This also brings SDL3 back in line with the rest of the contract: IPlatformWindow::
+        // Sync()'s own documentation promises only that it blocks, never that it throws; the SDL2
+        // implementation pumps events and cannot fail; and PlatformConformanceTests asserts
+        // EXPECT_NO_THROW(window_->Sync()).
+        (void)SDL_SyncWindow(window_);
     }
 
     bool Sdl3Window::HasFocus() const
