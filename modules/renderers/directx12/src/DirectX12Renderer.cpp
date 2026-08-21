@@ -1219,6 +1219,35 @@ namespace CNA::Internal::Renderers::DirectX12
         vsyncEnabled_ = interval > 0;
     }
 
+    // LATENT: this renderer needs a GetDefaultViewportRect() override before it grows window
+    // resize or real presentation modes. It does NOT misbehave today, and the note is here rather
+    // than in a plan file because this method is where the trap is.
+    //
+    // The size returned here is the LOGICAL one. GraphicsDevice::UpdateViewportFromWindow() feeds
+    // it to Viewport.Width/Height, and separately applies IGraphicsRenderer::
+    // GetDefaultViewportRect() as the PHYSICAL device viewport. This renderer does not override
+    // that method, so it inherits the base default -- which returns (0, 0, GetViewportSize()),
+    // i.e. the logical size used as if it were physical pixels -- and GetEffectiveViewportEXT()
+    // then passes the stored rect straight into D3D12_VIEWPORT without rescaling it.
+    //
+    // Harmless right now only because logical and physical are the same rectangle by
+    // construction: the swap chain is created at exactly virtualWidth_ x virtualHeight_
+    // (CreateSwapChain), OnSurfaceChanged() never calls ResizeBuffers(), and SetPresentationMode()
+    // is a no-op. Break any one of those three -- resize the swap chain with the window (the gap
+    // DX-116 records as deliberately unattempted), or implement Letterbox/Overscan/
+    // FixedHeightDynamicWidth -- and the logical size stops matching the target, at which point
+    // the game renders into a sub-rectangle of the window and the rest keeps the clear colour.
+    //
+    // That is not hypothetical: it is exactly what EasyGL did, reported against galaxy-eggbert
+    // 2026-08-21 (resizing the window or F11 did not enlarge the game). The same structural gap
+    // was found and fixed in EasyGL, OpenGL4, OpenGLES1 and Magnum in the same pass; those four
+    // had already grown the window-following behaviour this one has not. Copy any of their
+    // GetDefaultViewportRect() overrides -- or OpenGL2Renderer::ComputeLogicalViewport(), the
+    // reference implementation -- when the time comes.
+    //
+    // Renderers that instead treat the pushed viewport as LOGICAL and rescale it themselves
+    // (Diligent, Sokol, LLGL, SDL_GPU, WebGPU) need no override; that is the other valid shape,
+    // and would be an equally correct answer for this renderer.
     void DirectX12Renderer::GetViewportSize(int& width, int& height)
     {
         width = virtualWidth_;

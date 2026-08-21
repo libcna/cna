@@ -601,6 +601,67 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
+    // The physical counterpart of GetLogicalSize() above, and the reason this renderer needs an
+    // IGraphicsRenderer::GetDefaultViewportRect() override at all.
+    //
+    // GraphicsDevice::UpdateViewportFromWindow() pushes THIS rectangle to glViewport, while
+    // GetLogicalSize() only feeds GraphicsDevice.Viewport.Width/Height. The base-class default
+    // returns (0, 0, GetViewportSize()) -- the LOGICAL size used as if it were physical pixels.
+    // That is correct only for a renderer with no virtual resolution, and EasyGL always has one:
+    // GraphicsDevice::Reset() sets it to the backbuffer size on every device creation, and the
+    // default presentation mode is FixedHeightDynamicWidth.
+    //
+    // So the default was actively wrong here. Resize an 800x480 window to 1200x800 and the logical
+    // size became 720x480 (height pinned, width following the aspect) -- which then got applied as
+    // a 720x480 PHYSICAL viewport inside a 1200x800 drawable. The game rendered into a corner and
+    // the rest of the window kept the clear colour, while glClear (viewport-independent) covered
+    // all of it. Reported against galaxy-eggbert 2026-08-21: resizing the window or going
+    // fullscreen with F11 did not enlarge the game.
+    //
+    // Mirrors OpenGL2Renderer::ComputeLogicalViewport()/SdlGpuRenderer's algorithm, the
+    // established reference for real Letterbox/Overscan/Stretch semantics in this codebase.
+    void EasyGLSurfaceState::GetDefaultViewportRect(int& x, int& y, int& width, int& height) const
+    {
+        int physWidth = 0;
+        int physHeight = 0;
+        GetDrawableSize(physWidth, physHeight);
+
+        x = 0;
+        y = 0;
+        width = std::max(0, physWidth);
+        height = std::max(0, physHeight);
+
+        if (physWidth <= 0 || physHeight <= 0)
+        {
+            return;
+        }
+
+        // Full drawable, no scaling: nothing to centre, and a degenerate virtual resolution has
+        // no aspect to preserve.
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer ||
+            presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth ||
+            presentationMode_ == CnaPresentationMode::Stretch ||
+            virtualWidth_ <= 0 || virtualHeight_ <= 0)
+        {
+            return;
+        }
+
+        // Letterbox/Overscan: scale the virtual resolution uniformly -- min to fit inside the
+        // drawable (bars), max to cover it (cropping) -- then centre the result.
+        const double logicalWidth = static_cast<double>(virtualWidth_);
+        const double logicalHeight = static_cast<double>(virtualHeight_);
+        const double scaleX = static_cast<double>(physWidth) / logicalWidth;
+        const double scaleY = static_cast<double>(physHeight) / logicalHeight;
+        const double scale = (presentationMode_ == CnaPresentationMode::Overscan)
+                                 ? std::max(scaleX, scaleY)
+                                 : std::min(scaleX, scaleY);
+
+        width = static_cast<int>(std::lround(logicalWidth * scale));
+        height = static_cast<int>(std::lround(logicalHeight * scale));
+        x = static_cast<int>(std::lround((static_cast<double>(physWidth) - logicalWidth * scale) * 0.5));
+        y = static_cast<int>(std::lround((static_cast<double>(physHeight) - logicalHeight * scale) * 0.5));
+    }
+
     bool EasyGLSurfaceState::WindowToLogical(const float windowX, const float windowY,
                                              float& logicalX, float& logicalY) const
     {
@@ -4411,6 +4472,15 @@ if (!ProfileIsEs2ApiGeneration())
     void EasyGLRenderer::GetViewportSize(int& width, int& height)
     {
         getLogicalSize(width, height);
+    }
+
+    // See EasyGLSurfaceState::GetDefaultViewportRect() for why this override exists: the base
+    // default would apply the LOGICAL size as the physical GL viewport, which for this renderer's
+    // always-on virtual resolution is the wrong rectangle on any window that does not match the
+    // virtual aspect.
+    void EasyGLRenderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        surfaceState_.GetDefaultViewportRect(x, y, width, height);
     }
 
     std::unique_ptr<ITextureRenderer> EasyGLRenderer::CreateTexture(const ImageData& data)

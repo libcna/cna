@@ -49,6 +49,16 @@ namespace CNA::Internal::Renderers::EasyGL
         void GetDrawableSize(int& width, int& height) const;
         /** @brief Gets the renderer's logical game extent. */
         void GetLogicalSize(int& width, int& height) const;
+        /**
+         * @brief Gets the PHYSICAL drawable sub-rectangle the logical extent maps into.
+         *
+         * The counterpart of GetLogicalSize(): that one answers "what resolution does the game
+         * think it is drawing at", this one answers "which drawable pixels does that land on".
+         * They are the same rectangle only when the window happens to match the virtual
+         * resolution's aspect. Identical to the full drawable for FixedHeightDynamicWidth,
+         * NativeBackBuffer and Stretch; only Letterbox/Overscan shrink and centre it.
+         */
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) const;
         /** @brief Converts logical client units into renderer game units. */
         bool WindowToLogical(float windowX, float windowY,
                              float& logicalX, float& logicalY) const;
@@ -1273,6 +1283,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void SetSwapInterval(int interval) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetViewportSize(int& width, int& height) override;
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void getLogicalSize(int& width, int& height) const;
         void getPhysicalSize(int& width, int& height) const;
         /// Returns the currently-bound single 2D render target's size, if one is bound (Task

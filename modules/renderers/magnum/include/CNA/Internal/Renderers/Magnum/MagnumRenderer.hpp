@@ -68,6 +68,7 @@ namespace CNA::Internal::Renderers::Magnum
          * @param height Receives the logical height.
          */
         void GetViewportSize(int& width, int& height) override;
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         /** @brief Refreshes drawable size and display scale for the same platform window. */
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /**

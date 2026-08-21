@@ -2733,6 +2733,58 @@ void main()
         GetLogicalSize(width, height);
     }
 
+    // Physical counterpart of GetLogicalSize(): which drawable pixels the logical content lands
+    // on. GraphicsDevice::UpdateViewportFromWindow() applies THIS as the device viewport, while
+    // GetViewportSize() only feeds GraphicsDevice.Viewport.Width/Height.
+    //
+    // Without this override the base default (0, 0, GetViewportSize()) applied the LOGICAL size
+    // as physical pixels. This renderer always has a virtual resolution -- GraphicsDevice::Reset()
+    // sets one on every device creation and the default presentation mode is
+    // FixedHeightDynamicWidth -- and its SetViewport() works in drawable pixels, so on any window
+    // whose aspect differs from the virtual one the game rendered into a sub-rectangle and the
+    // rest of the window kept the clear colour. Found and fixed in EasyGL first (reported against
+    // galaxy-eggbert 2026-08-21: resizing the window did not enlarge the game); this renderer had
+    // the identical structure -- logical GetViewportSize(), drawable-space SetViewport(), no
+    // override. Renderers that instead treat the pushed viewport as LOGICAL and rescale it
+    // themselves (Diligent, Sokol, LLGL, SDL_GPU, WebGPU) need no override and have none.
+    //
+    // Mirrors OpenGL2Renderer::ComputeLogicalViewport(), the reference implementation.
+    void OpenGL4Renderer::GetDefaultViewportRect(int& x, int& y, int& width, int& height)
+    {
+        int physWidth = 0;
+        int physHeight = 0;
+        GetPhysicalSize(physWidth, physHeight);
+
+        x = 0;
+        y = 0;
+        width = std::max(0, physWidth);
+        height = std::max(0, physHeight);
+
+        if (physWidth <= 0 || physHeight <= 0)
+            return;
+
+        // Full drawable, nothing to centre.
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer ||
+            presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth ||
+            presentationMode_ == CnaPresentationMode::Stretch ||
+            virtualWidth_ <= 0 || virtualHeight_ <= 0)
+            return;
+
+        // Letterbox shrinks to fit (bars), Overscan grows to cover (cropping); both centre.
+        const double logicalWidth = static_cast<double>(virtualWidth_);
+        const double logicalHeight = static_cast<double>(virtualHeight_);
+        const double scaleX = static_cast<double>(physWidth) / logicalWidth;
+        const double scaleY = static_cast<double>(physHeight) / logicalHeight;
+        const double scale = (presentationMode_ == CnaPresentationMode::Overscan)
+                                 ? std::max(scaleX, scaleY)
+                                 : std::min(scaleX, scaleY);
+
+        width = static_cast<int>(std::lround(logicalWidth * scale));
+        height = static_cast<int>(std::lround(logicalHeight * scale));
+        x = static_cast<int>(std::lround((static_cast<double>(physWidth) - logicalWidth * scale) * 0.5));
+        y = static_cast<int>(std::lround((static_cast<double>(physHeight) - logicalHeight * scale) * 0.5));
+    }
+
     bool OpenGL4Renderer::TransformWindowToLogical(float windowX, float windowY,
                                                            float& logX, float& logY) const
     {

@@ -516,6 +516,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;

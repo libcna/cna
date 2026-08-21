@@ -223,6 +223,93 @@ TEST(EasyGLSurfaceState, ResizeAndDisplayScaleUseLogicalInputAndPhysicalFramebuf
     EXPECT_FLOAT_EQ(y, 25.0f);
 }
 
+// The regression this pair of methods exists to keep apart: GetLogicalSize() is what the game
+// thinks its resolution is, GetDefaultViewportRect() is which drawable pixels that lands on.
+// EasyGL used to have only the first and inherited IGraphicsRenderer's default for the second --
+// which returns the LOGICAL size as if it were physical pixels. Since GraphicsDevice::Reset()
+// gives this renderer a virtual resolution on every device creation and the default presentation
+// mode is FixedHeightDynamicWidth, that default was wrong on any window whose aspect differs from
+// the virtual one: the game rendered into a sub-rectangle and the rest of the window kept the
+// clear colour (reported against galaxy-eggbert 2026-08-21 -- resizing or F11 did not enlarge it).
+TEST(EasyGLSurfaceState, FixedHeightDynamicWidthViewportRectCoversTheWholeDrawable)
+{
+    EasyGLSurfaceState state(
+        Surface(79, 400, 200, 1.0f), 100, 50,
+        CnaPresentationMode::FixedHeightDynamicWidth);
+
+    int width = 0;
+    int height = 0;
+    state.GetLogicalSize(width, height);
+    EXPECT_EQ(width, 100);   // logical: height pinned to 50, width follows the 2:1 drawable aspect
+    EXPECT_EQ(height, 50);
+
+    int x = -1;
+    int y = -1;
+    state.GetDefaultViewportRect(x, y, width, height);
+    EXPECT_EQ(x, 0);
+    EXPECT_EQ(y, 0);
+    EXPECT_EQ(width, 400);   // physical: the whole drawable, NOT the logical 200x50
+    EXPECT_EQ(height, 200);
+
+    // A window whose aspect no longer matches the virtual resolution is the case that used to
+    // leave part of the window unrendered.
+    state.Update(Surface(79, 1200, 800, 1.0f));
+    state.GetDefaultViewportRect(x, y, width, height);
+    EXPECT_EQ(x, 0);
+    EXPECT_EQ(y, 0);
+    EXPECT_EQ(width, 1200);
+    EXPECT_EQ(height, 800);
+}
+
+TEST(EasyGLSurfaceState, StretchAndNativeBackBufferAlsoCoverTheWholeDrawable)
+{
+    for (const CnaPresentationMode mode :
+         {CnaPresentationMode::Stretch, CnaPresentationMode::NativeBackBuffer})
+    {
+        EasyGLSurfaceState state(Surface(80, 1200, 800, 1.0f), 100, 50, mode);
+        int x = -1, y = -1, width = 0, height = 0;
+        state.GetDefaultViewportRect(x, y, width, height);
+        EXPECT_EQ(x, 0);
+        EXPECT_EQ(y, 0);
+        EXPECT_EQ(width, 1200);
+        EXPECT_EQ(height, 800);
+    }
+}
+
+// Letterbox shrinks to fit and centres (bars); Overscan grows to cover and centres (cropping).
+// Virtual 100x50 is 2:1 inside a square 400x400 drawable, so the two scales are 4 and 8.
+TEST(EasyGLSurfaceState, LetterboxAndOverscanScaleUniformlyAndCentre)
+{
+    EasyGLSurfaceState letterbox(Surface(81, 400, 400, 1.0f), 100, 50,
+                                 CnaPresentationMode::Letterbox);
+    int x = -1, y = -1, width = 0, height = 0;
+    letterbox.GetDefaultViewportRect(x, y, width, height);
+    EXPECT_EQ(width, 400);
+    EXPECT_EQ(height, 200);
+    EXPECT_EQ(x, 0);
+    EXPECT_EQ(y, 100);
+
+    EasyGLSurfaceState overscan(Surface(81, 400, 400, 1.0f), 100, 50,
+                                CnaPresentationMode::Overscan);
+    overscan.GetDefaultViewportRect(x, y, width, height);
+    EXPECT_EQ(width, 800);
+    EXPECT_EQ(height, 400);
+    EXPECT_EQ(x, -200);
+    EXPECT_EQ(y, 0);
+}
+
+TEST(EasyGLSurfaceState, DegenerateDrawableYieldsAnEmptyViewportRect)
+{
+    EasyGLSurfaceState state(Surface(82, 0, 0, 1.0f), 100, 50,
+                             CnaPresentationMode::Letterbox);
+    int x = -1, y = -1, width = -1, height = -1;
+    state.GetDefaultViewportRect(x, y, width, height);
+    EXPECT_EQ(x, 0);
+    EXPECT_EQ(y, 0);
+    EXPECT_EQ(width, 0);
+    EXPECT_EQ(height, 0);
+}
+
 TEST(EasyGLSurfaceState, InvalidScaleFallsBackToUnscaledClientCoordinates)
 {
     EasyGLSurfaceState state(Surface(78, 320, 180, 0.0f), 0, 0,
