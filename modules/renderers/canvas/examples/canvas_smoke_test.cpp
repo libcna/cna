@@ -22,6 +22,8 @@
 
 #include "CNA/Internal/Renderers/Canvas/CanvasRenderer.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <cstdio>
 #include <vector>
 
