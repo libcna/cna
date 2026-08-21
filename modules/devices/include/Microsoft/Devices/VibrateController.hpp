@@ -166,7 +166,7 @@ namespace Microsoft::Devices
 
     public:
         /**
-         * @brief Destroys the vibrate controller, releasing its backend's resources.
+         * @brief Destroys the vibrate controller and its backend.
          *
          * Only ever runs once (Task P5-11), when the process-lifetime
          * singleton returned by getDefaultProperty() is itself destroyed
@@ -177,8 +177,10 @@ namespace Microsoft::Devices
          * directly.
          *
          * Runs at process-exit static teardown, a point this codebase does
-         * not control relative to the host platform's native shutdown. See
-         * Detail::DevicesShutdownCoordinator.
+         * not control relative to the host platform's native shutdown. A normal host calls
+         * `Detail::DevicesShutdownCoordinator::Shutdown()` first to release platform resources;
+         * a registered fallback prevents this destructor from calling an already-destroyed
+         * platform if the host omits that step.
          */
         ~VibrateController();
 

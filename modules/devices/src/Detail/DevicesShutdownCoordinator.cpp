@@ -4,6 +4,7 @@
 
 #include "Microsoft/Devices/VibrateController.hpp"
 
+#include <cstdlib>
 #include <mutex>
 
 namespace Microsoft::Devices::Detail
@@ -40,6 +41,20 @@ namespace Microsoft::Devices::Detail
         // an application accidentally calls it after shutdown.
         VibrateController::getDefaultProperty()->ShutdownBackendForPlatform();
         GetFlag().store(true, std::memory_order_release);
+    }
+
+    void DevicesShutdownCoordinator::RegisterProcessExitFallback()
+    {
+        static const bool registered = [] {
+            std::atexit([] {
+                // This callback is registered after VibrateController's function-local static is
+                // initialized, so it runs before that singleton's destructor. Do not touch the
+                // platform here: a later-created lazy platform may already have been destroyed.
+                GetFlag().store(true, std::memory_order_release);
+            });
+            return true;
+        }();
+        (void)registered;
     }
 
     void DevicesShutdownCoordinator::ResetForTesting()

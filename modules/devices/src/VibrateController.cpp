@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "Detail/PlatformVibrateBackend.hpp"
+#include "Microsoft/Devices/Detail/DevicesShutdownCoordinator.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Devices
@@ -54,6 +55,7 @@ namespace Microsoft::Devices
     VibrateController* VibrateController::getDefaultProperty()
     {
         static VibrateController instance;
+        Detail::DevicesShutdownCoordinator::RegisterProcessExitFallback();
         return &instance;
     }
 

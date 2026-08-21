@@ -59,8 +59,8 @@ endif()
 # Detail::DevicesShutdownCoordinator exists to close. The shared CnaTests binary cannot exercise
 # this: calling the real SDL_Quit() there would tear down SDL process-wide for every other test
 # sharing that binary. See tools/devices/shutdown_ordering_harness.cpp's own top-of-file comment
-# for the "--skip-shutdown-call" flag used to confirm under ASan that this reproduces a genuine
-# heap-use-after-free when the fix's guard is bypassed.
+# for the "--skip-shutdown-call" flag used to exercise the process-exit fallback when the normal
+# explicit coordinator call is omitted.
 # plans/plan_platform.md PLAT-SDL2-6: the whole point of this harness is to call the real SDL3
 # SDL_Quit(), so it is meaningful only where SDL3 is actually the selected edge. Under an
 # SDL2-only selection it would be the one remaining executable dragging SDL3 back in, to test an

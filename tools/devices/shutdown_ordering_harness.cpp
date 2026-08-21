@@ -7,13 +7,14 @@
 // SDL_Quit() would tear native services down for every other test in that process.
 //
 // Pass "--skip-shutdown-call" to omit the Detail::DevicesShutdownCoordinator::Shutdown() call
-// this harness otherwise makes before SDL_Quit(), preserving the historical unsafe ordering for
-// sanitizer comparison.
+// this harness otherwise makes before SDL_Quit(). That path exercises the process-exit fallback:
+// it cannot balance native resources before SDL_Quit(), but it must not call through a platform
+// whose static lifetime has already ended.
 //
 // Exit code is always 0 if the process reaches the end of main() without crashing -- the actual
-// signal this harness exists to produce is an ASan report (or lack of one) on stderr, checked by
-// whoever invokes it, not the exit code itself (a real ASan heap-use-after-free report, depending
-// on ASAN_OPTIONS, may itself abort the process with a non-zero exit code before reaching here).
+// signal this harness exists to produce is a sanitizer report (or lack of one) on stderr, checked
+// by whoever invokes it, not the exit code itself (a sanitizer finding may abort the process with
+// a non-zero exit code before reaching here).
 #include "Microsoft/Devices/Detail/DevicesShutdownCoordinator.hpp"
 #include "Microsoft/Devices/VibrateController.hpp"
 

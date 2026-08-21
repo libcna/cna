@@ -22,7 +22,7 @@ namespace Microsoft::Devices::Detail
         /** @brief Creates a lazy backend; no subsystem or device is touched yet. */
         PlatformVibrateBackend() = default;
 
-        /** @brief Releases the haptic-subsystem hold when native shutdown has not begun. */
+        /** @brief Releases the haptic-subsystem hold when native or process-exit shutdown has not begun. */
         ~PlatformVibrateBackend() override;
 
         PlatformVibrateBackend(const PlatformVibrateBackend&) = delete;

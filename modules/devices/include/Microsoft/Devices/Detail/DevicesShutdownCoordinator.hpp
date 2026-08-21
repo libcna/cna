@@ -15,7 +15,10 @@ namespace Microsoft::Devices::Detail
      * handles. `Shutdown()` therefore destroys the controller's platform adapter immediately,
      * while the selected platform is still valid, and only then publishes the shutdown flag.
      * Later controller calls are safe inert operations and the singleton destructor has no
-     * platform resource left to release.
+     * platform resource left to release. A process-exit fallback also marks shutdown immediately
+     * before the singleton destructor runs. That fallback cannot balance native resources as
+     * precisely as `Shutdown()`, but it prevents a late destructor from calling through a platform
+     * whose own static lifetime has already ended.
      *
      * The dedicated shutdown-ordering harness exercises the required sequence in a standalone
      * process because the shared test executable cannot tear down process-wide native services.
@@ -31,6 +34,14 @@ namespace Microsoft::Devices::Detail
          * `Microsoft::Devices` object was ever constructed.
          */
         static void Shutdown();
+
+        /**
+         * @brief Registers the process-exit fallback after the controller singleton is created.
+         *
+         * Idempotent. Normal hosts should still call `Shutdown()` while their platform is alive;
+         * this only makes omitted shutdown safe during unordered static teardown.
+         */
+        static void RegisterProcessExitFallback();
 
         /** @brief True once `Shutdown()` has been called; false otherwise (the default). */
         [[nodiscard]] static bool IsShutdown()
