@@ -15,7 +15,7 @@ namespace {
     // Emscripten's default build is fully synchronous/single-threaded: a real WebSocket handshake
     // cannot complete while C++ code holds the call stack, since nothing ever returns control to
     // Node's event loop. emscripten_sleep() genuinely yields back to Node and resumes later, but
-    // only works because CnaTests is linked with -sASYNCIFY=1 (see CMakeLists.txt).
+    // only works because CnaTests is linked with -sJSPI=1 (see cmake/UnitTests.cmake).
     void PollYield() { emscripten_sleep(10); }
 #else
     void PollYield() { }

@@ -83,7 +83,7 @@ namespace {
     // cannot complete while C++ code holds the call stack, since nothing ever returns control to
     // Node's event loop (confirmed empirically - even a real-time sleep loop never lets it finish
     // without this). emscripten_sleep() genuinely yields back to Node and resumes later, but only
-    // works because CnaTests is linked with -sASYNCIFY=1 (see CMakeLists.txt). Called once per
+    // works because CnaTests is linked with -sJSPI=1 (see cmake/UnitTests.cmake). Called once per
     // polling-loop iteration below in place of native/Windows's instant, no-delay-needed spin.
     void PollYield() { emscripten_sleep(10); }
 #else

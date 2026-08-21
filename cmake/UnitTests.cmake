@@ -281,17 +281,20 @@ if(CNA_BUILD_TESTS)
     if(EMSCRIPTEN)
         # Emscripten's EXIT_RUNTIME defaults to 0 (deliberately keeps the JS runtime alive after
         # main() returns, so pending async JS/WebSocket handles can keep running) - without this,
-        # `node CnaTests.js` never exits after printing its results, even on success.
+        # `node --experimental-wasm-stack-switching CnaTests.js` never exits after printing its
+        # results, even on success.
         target_link_options(CnaTests PRIVATE -sEXIT_RUNTIME=1)
 
         # Emscripten's default build is fully synchronous/single-threaded: a real WebSocket
         # handshake structurally cannot complete while C++ code holds the call stack (confirmed
         # empirically - even a real 1s sleep loop never lets it finish, since nothing returns
         # control to Node's event loop). The SystemLink loopback tests need emscripten_sleep() to
-        # actually yield back to Node between polls, which requires Asyncify. Scoped to CnaTests
-        # only (a per-executable link-time transformation - does not affect native/Windows builds
-        # or any other Emscripten executable target such as the demos or the two-process harness).
-        target_link_options(CnaTests PRIVATE -sASYNCIFY=1)
+        # actually yield back to Node between polls. JSPI provides that suspension while remaining
+        # compatible with the Wasm exception ABI selected at the repository root; Emscripten 6
+        # explicitly rejects Asyncify mixed with -fwasm-exceptions. Scoped to CnaTests only (a
+        # per-executable link setting - it does not affect native/Windows builds or any other
+        # Emscripten executable target such as the demos or the two-process harness).
+        target_link_options(CnaTests PRIVATE -sJSPI=1)
     endif()
 
     target_link_libraries(CnaTests
