@@ -181,10 +181,18 @@ GPU staging buffer).
 
 Already correctly disabled in release builds. No action needed.
 
-### Fix 5 — Reduce sprite ring buffer sizes
+### Fix 5 — Reduce sprite ring buffer sizes ✅ **(~1.5 MB saved)**
 
-`MaxSpriteVertices = 32768` (2 MB × 2) may be larger than needed for mobile-eggbert.
-A smaller default (e.g. 8192) would save ~1.5 MB. Low priority, not yet done.
+`MaxSpriteVertices` (2 MB × 2 at the old default) was larger than needed for
+mobile-eggbert. Reduced from `32768` to `8192`
+(`modules/renderers/vulkan/include/CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp`).
+`MaxSpriteIndices` scales off it automatically. This ring buffer is per-segment,
+shared across every active `SpriteBatch` replayed within one bind cycle; a segment
+whose combined sprite count exceeds the buffer's capacity has its overflow batches
+silently skipped for that replay (`VulkanRenderer.cpp`'s `vbOff + vbBytes >
+kSpriteVBSize` guard) rather than growing the buffer or asserting — the existing
+sample scenes (500 sprites) stay well under the new 2048-sprite-per-segment
+ceiling, but a game pushing close to or past it would need this raised back up.
 
 ---
 
@@ -219,4 +227,4 @@ a NOXNA `ContentManager::Unload(const std::string& assetName)` per-asset evictio
 | Vulkan lazy 3D buffers | ~10 MB | ✅ Done (commit a5c4274) |
 | EasyGL `image_data_` removal | ~34 MB | ✅ Done (this commit) |
 | Mesa driver shadow copies | ~34 MB | ⚠️ Hard to avoid on Mesa |
-| Sprite ring buffer sizing | ~1.5 MB | Low priority |
+| Sprite ring buffer sizing | ~1.5 MB | ✅ Done (`MaxSpriteVertices` 32768 → 8192) |

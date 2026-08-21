@@ -1411,7 +1411,7 @@ namespace CNA::Internal::Renderers::Vulkan
     private:
         // --- Constants ---
         static constexpr int      MaxFramesInFlight = 2;
-        static constexpr uint32_t MaxSpriteVertices = 32768;
+        static constexpr uint32_t MaxSpriteVertices = 8192;
         static constexpr uint32_t MaxSpriteIndices  = MaxSpriteVertices / 4 * 6;
         static constexpr uint32_t MaxDescriptorSets = 512;
 
