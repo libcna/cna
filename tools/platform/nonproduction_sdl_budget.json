@@ -625,10 +625,6 @@
       "category": "renderer-integration-executable",
       "max_references": 7
     },
-    "modules/renderers/html-dom/examples/htmldom_dispose_test.cpp": {
-      "category": "renderer-integration-executable",
-      "max_references": 1
-    },
     "modules/renderers/html-dom/examples/htmldom_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 9
