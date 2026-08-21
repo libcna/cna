@@ -39,14 +39,18 @@ name: general-tests-ci
 on:
   push:
     branches: [next, develop, main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - 'docs/c-api/COVERAGE.md'
   pull_request:
     branches: [next, develop, main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - 'docs/c-api/COVERAGE.md'
   workflow_dispatch:
 
 concurrency:
