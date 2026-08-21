@@ -39,12 +39,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Clone sharp-runtime (public sibling repo, no token needed)
-        run: |
-          set -euo pipefail
-          cd "${GITHUB_WORKSPACE}/.."
-          git clone --depth 1 --branch develop \
-            "https://github.com/openeggbert/sharp-runtime.git" sharp-runtime
+      - name: Checkout pinned sharp-runtime dependency
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
+          path: .ci-deps/sharp-runtime
 
       - name: Cache emsdk install
         id: emsdk-cache
@@ -118,6 +118,7 @@ jobs:
           source ~/emsdk/emsdk_env.sh
           emcmake cmake -S . -B cmake-build-htmldom \
             -DCNA_GRAPHICS_RENDERER=HTML_DOM \
+            -DCNA_SHARP_RUNTIME_ROOT="${GITHUB_WORKSPACE}/.ci-deps/sharp-runtime" \
             -DCNA_ENABLE_DRACO=OFF \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache
