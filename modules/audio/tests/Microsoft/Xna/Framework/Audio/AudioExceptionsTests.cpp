@@ -146,11 +146,13 @@ TEST(NoAudioHardwareExceptionTest, IsCatchableAsSystemException)
 
 // ===================== NoMicrophoneConnectedException =====================
 
-TEST(NoMicrophoneConnectedExceptionTest, DefaultCtorHasNoCustomMessage)
+TEST(NoMicrophoneConnectedExceptionTest, DefaultCtorNamesTheRuntimeType)
 {
-    // FNA's default ctor body is empty -> base Exception() -> empty message.
     NoMicrophoneConnectedException e;
-    EXPECT_TRUE(std::string(e.what()).empty());
+    EXPECT_EQ(
+        e.getMessageProperty(),
+        "Exception of type 'Microsoft.Xna.Framework.Audio.NoMicrophoneConnectedException' was thrown."
+    );
     EXPECT_EQ(e.getInnerExceptionProperty(), nullptr);
 }
 

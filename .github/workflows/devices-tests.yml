@@ -88,6 +88,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
+          ref: bc8dbf4112c6df8a56f08d80517e872ac0e873b3
           path: sharp-runtime
 
       - name: Checkout easy-gl
@@ -131,7 +132,7 @@ jobs:
 
       - name: Build CnaTests
         working-directory: cna_devices
-        run: cmake --build --preset devices-ubsan --parallel
+        run: cmake --build --preset devices-ubsan --parallel 2
 
       - name: Run Devices/Sensors test suite
         working-directory: cna_devices
@@ -158,5 +159,5 @@ jobs:
       - name: Build and run strict XNA API surface check
         working-directory: cna_devices
         run: |
-          cmake --build --preset devices-ubsan --target cna_strict_xna_api_check --parallel
+          cmake --build --preset devices-ubsan --target cna_strict_xna_api_check --parallel 2
           ./cmake-build-devices-ubsan/cna_strict_xna_api_check

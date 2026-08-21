@@ -4,7 +4,6 @@
 #include "System/Exception.hpp"
 #include <exception>
 #include <string>
-#include <utility>
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -13,15 +12,14 @@ namespace Microsoft::Xna::Framework::Audio
     {
     public:
         /** @brief Constructs a NoMicrophoneConnectedException with the default message. */
-        NoMicrophoneConnectedException() = default;
+        NoMicrophoneConnectedException();
 
         /**
          * @brief Constructs a NoMicrophoneConnectedException with the given message.
          *
          * @param message Error description.
          */
-        explicit NoMicrophoneConnectedException(const std::string& message)
-            : System::Exception(message) {}
+        explicit NoMicrophoneConnectedException(const std::string& message);
 
         /**
          * @brief Constructs a NoMicrophoneConnectedException with a message and an inner exception.
@@ -29,7 +27,6 @@ namespace Microsoft::Xna::Framework::Audio
          * @param message        Error description.
          * @param innerException Underlying exception that caused this one.
          */
-        NoMicrophoneConnectedException(const std::string& message, std::exception_ptr innerException)
-            : System::Exception(message, std::move(innerException)) {}
+        NoMicrophoneConnectedException(const std::string& message, std::exception_ptr innerException);
     };
 }

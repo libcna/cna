@@ -53,7 +53,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
-          ref: f23ded28c7b94a745cf82f8804b5b7104ca5780e
+          ref: bc8dbf4112c6df8a56f08d80517e872ac0e873b3
           path: .ci-deps/sharp-runtime
 
       - name: Clone renderer sibling repositories (public, no token needed)
