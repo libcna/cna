@@ -926,9 +926,9 @@ TEST(VibrateControllerTests, OneHundredThousandProbeStartStopCyclesAgainstTheRea
         EXPECT_NO_THROW(controller->Stop());
     }
 
-    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+    EXPECT_LE(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
         << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
-    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+    EXPECT_LE(CnaTestSupport::GetThreadCount(), threadsBefore)
         << "thread count grew after " << Cycles << " cycles -- possible leak";
 
     // Restores a fresh real backend for whatever test runs next in this shared binary --

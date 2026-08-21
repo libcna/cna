@@ -5,7 +5,8 @@
 # modules/renderers/CMakeLists.txt so they remain reachable outside selected-renderer dispatch.
 if(EMSCRIPTEN AND CNA_BUILD_TESTS)
     add_executable(cna_test_svgdom_smoke svgdom_smoke_test.cpp)
-    target_link_libraries(cna_test_svgdom_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_svgdom_smoke
+        PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_test_svgdom_smoke PROPERTIES SUFFIX ".html")
     target_link_options(cna_test_svgdom_smoke PRIVATE
         -sALLOW_MEMORY_GROWTH=1
@@ -15,7 +16,8 @@ if(EMSCRIPTEN AND CNA_BUILD_TESTS)
     # (SVGDOM-B/D/E/F) and the SVG-backbuffer draw-order regression (SVGDOM-A), which needs a real
     # Playwright screenshot since no API rasterizes a live SVG subtree to pixels synchronously.
     add_executable(cna_test_svgdom_pixel_verification svgdom_pixel_verification_test.cpp)
-    target_link_libraries(cna_test_svgdom_pixel_verification PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_svgdom_pixel_verification
+        PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_test_svgdom_pixel_verification PROPERTIES SUFFIX ".html")
     target_link_options(cna_test_svgdom_pixel_verification PRIVATE
         -sALLOW_MEMORY_GROWTH=1

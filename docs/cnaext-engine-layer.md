@@ -282,6 +282,7 @@ Legend: ✅ verified in this repository · 🟨 partial, or verified only by sha
 | `HtmlDom` | ⛔ 2D-only by identity |  |
 | `SvgDom` | ⛔ 2D-only by identity |  |
 | `PixiJs` | ⛔ 2D-only by identity | Emscripten-only, and not yet built on any real toolchain (`plans/plan_pixijs.md`). |
+| `NanoVg` | ⛔ 2D-only by identity | Native NanoVG SpriteBatch renderer; explicitly reports no `ThreeD` capability. |
 | `Skia` | ⛔ 2D-only by identity | CPU raster; advertises no 3D/depth/MSAA/MRT. |
 | `Blend2D` | ⛔ 2D-only, and now measured | **0 engine-layer failures**; answers no to every capability the layer asks about. |
 | `OpenVg` | ⛔ 2D-only, and now measured | **0 engine-layer failures**; the one renderer that supports *nothing at all*, which is what showed `RequireCapabilityTest` had assumed every renderer supports something. Needs `libglu1-mesa-dev`. |

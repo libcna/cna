@@ -627,7 +627,7 @@
     },
     "modules/renderers/html-dom/examples/htmldom_smoke_test.cpp": {
       "category": "renderer-integration-executable",
-      "max_references": 9
+      "max_references": 10
     },
     "modules/renderers/llgl/examples/llgl_resize_test.cpp": {
       "category": "renderer-integration-executable",

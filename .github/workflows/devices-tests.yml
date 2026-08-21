@@ -19,8 +19,9 @@ name: Devices and Sensors Tests
 # either (DEVICES_GTEST_FILTER below named only Microsoft::Devices suites) —
 # REMED-DEVICES-001's own FileDialog/MessageBox mutex-lifetime regression
 # tests never actually executed under a sanitizer in real CI. Every CNA::Devices
-# test here exercises an injectable test backend (SetBackendForTesting()), not
-# a real native dialog/tray, so this runs headless-safe on a plain runner.
+# test here exercises an injectable device backend (SetBackendForTesting()), not
+# real camera/dialog/tray hardware. Camera texture-upload tests still create an OPENGLES3
+# GraphicsDevice, so that suite runs against Xvfb below.
 
 on:
   push:
@@ -113,7 +114,7 @@ jobs:
             libxfixes-dev libxi-dev libxss-dev libxtst-dev libxkbcommon-dev \
             libdrm-dev libgbm-dev libgl1-mesa-dev libgles2-mesa-dev \
             libegl1-mesa-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
-            libthai-dev libwayland-dev libdecor-0-dev \
+            libthai-dev libwayland-dev libdecor-0-dev xvfb xauth \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 
       # Vendored SDL3/SDL_image/SDL_mixer are built from source on first
@@ -143,8 +144,11 @@ jobs:
       # attributable to the CNA::Devices surface specifically, not the Microsoft::Devices one.
       - name: Run CNA::Devices test suite
         working-directory: cna_devices
+        env:
+          SDL_VIDEODRIVER: x11
+          SDL_AUDIODRIVER: dummy
         run: |
-          ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${CNA_DEVICES_GTEST_FILTER}"
+          xvfb-run -a ./cmake-build-devices-ubsan/CnaTests --gtest_filter="${CNA_DEVICES_GTEST_FILTER}"
 
       # Task DEVPERF-001: this job is this project's clean-room reproducibility
       # evidence -- a fresh actions/checkout (no access to any contributor's

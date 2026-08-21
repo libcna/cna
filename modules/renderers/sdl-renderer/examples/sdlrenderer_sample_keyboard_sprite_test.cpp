@@ -4,9 +4,9 @@
 // feeding into SpriteBatch rendering over multiple real frames, a different code path from
 // Tasks 667-729's narrow API checks (none of which drive gameplay logic off input state).
 //
-// Since this runs headlessly under Xvfb via ctest (no real keyboard), the Right arrow key is
-// held down for the whole run via CNA::Internal::Input::InputManager::SetKeyState -- the same
-// injection seam KeyboardInputTests.cpp already uses for automated keyboard testing. Each
+// Since this runs headlessly under Xvfb via ctest (no real keyboard), the real platform is wrapped
+// by the shared canned-keyboard test decorator. The platform remains real for windowing, timing,
+// and graphics while its once-per-frame keyboard snapshot holds the Right arrow down. Each
 // Update() moves the sprite right by a fixed logical-pixel increment as long as
 // Keyboard::GetState().IsKeyDown(Keys::Right) is true, proving the full
 // input-state -> Update() -> Draw() -> SDL_Renderer pipeline works end to end.
@@ -29,11 +29,12 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
-#include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Platform/CannedKeyboard.hpp"
 
 #include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <utility>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -76,13 +77,11 @@ protected:
             Texture2D::CreateFromPixels(dev, kSpriteSize, kSpriteSize,
                 std::vector<std::uint8_t>(static_cast<std::size_t>(kSpriteSize * kSpriteSize * 4), 255)));
 
-        // Simulate holding the Right arrow key for the whole run (headless, no real keyboard).
-        CNA::Internal::Input::InputManager::SetKeyState(Keys::Right, true);
     }
 
     void Update(GameTime&) override
     {
-        if (done_) return;
+        if (done_ || frame_ >= kFrameCount) return;
         if (Keyboard::GetState().IsKeyDown(Keys::Right))
             spriteX_ += kMovePerFrame;
         ++frame_;
@@ -112,15 +111,13 @@ protected:
         check(px.getRProperty() >= 240 && px.getGProperty() >= 240 && px.getBProperty() >= 240,
               "Sprite is genuinely rendered at the keyboard-driven position, not just tracked internally");
 
-        // Cleanup: don't leak simulated key state past this process's own lifetime.
-        CNA::Internal::Input::InputManager::SetKeyState(Keys::Right, false);
-
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();
     }
 
 public:
-    SdlKeyboardSpriteSample()
+    explicit SdlKeyboardSpriteSample(std::unique_ptr<CNA::Platform::IPlatform> platform)
+        : Game(std::move(platform))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kBackbufferSize);
@@ -133,7 +130,9 @@ public:
 
 int main()
 {
-    SdlKeyboardSpriteSample game;
+    auto platform = std::make_unique<CNA::Platform::Testing::CannedKeyboardPlatform>();
+    platform->Canned().SetPending({CNA::Platform::KeyCode::Right});
+    SdlKeyboardSpriteSample game(std::move(platform));
     game.Run();
     return game.getResult();
 }

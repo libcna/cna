@@ -27,7 +27,8 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # SDL3 binds to and this renderer anchors its DOM surface over) alongside the .js/.wasm.
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     add_executable(cna_test_htmldom_smoke htmldom_smoke_test.cpp)
-    target_link_libraries(cna_test_htmldom_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_htmldom_smoke
+        PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_test_htmldom_smoke PROPERTIES SUFFIX ".html")
     # UTF8ToString is referenced from an EM_JS body rather than from C++, so it has to be kept
     # explicitly -- the linker cannot see that use and would otherwise drop it.
@@ -50,7 +51,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     # rendered/read-back pixels, not just structural checks. Driven by the same
     # run-htmldom-browser-test.sh / htmldom-browser-test.mjs harness as the smoke test.
     add_executable(cna_test_htmldom_pixel_verification htmldom_pixel_verification_test.cpp)
-    target_link_libraries(cna_test_htmldom_pixel_verification PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_htmldom_pixel_verification
+        PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_test_htmldom_pixel_verification PROPERTIES SUFFIX ".html")
     target_link_options(cna_test_htmldom_pixel_verification PRIVATE
         -sALLOW_MEMORY_GROWTH=1
@@ -60,7 +62,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     # frame, steady-state ms/frame) and a 300-frame stability run (oscillating sprite counts,
     # cycling tints forcing real variant-cache LRU eviction). Driven by the same harness.
     add_executable(cna_test_htmldom_stress htmldom_stress_test.cpp)
-    target_link_libraries(cna_test_htmldom_stress PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_htmldom_stress
+        PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_test_htmldom_stress PROPERTIES SUFFIX ".html")
     target_link_options(cna_test_htmldom_stress PRIVATE
         -sALLOW_MEMORY_GROWTH=1
@@ -70,7 +73,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "HTML_DOM")
     # texture registry (Module['cnaDomTextures']) back down, rather than trusting the destructor
     # chain by code review alone. Driven by the same harness.
     add_executable(cna_test_htmldom_dispose htmldom_dispose_test.cpp)
-    target_link_libraries(cna_test_htmldom_dispose PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    target_link_libraries(cna_test_htmldom_dispose
+        PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
     set_target_properties(cna_test_htmldom_dispose PROPERTIES SUFFIX ".html")
     target_link_options(cna_test_htmldom_dispose PRIVATE
         -sALLOW_MEMORY_GROWTH=1

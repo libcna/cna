@@ -40,7 +40,7 @@
 // the host page's own layout happens to be.
 //
 // plans/plan_html_dom.md HTMLDOM-115: the REST of the host-page integration surface -- an existing
-// element ID-colliding with this renderer's own, the canvas's own pre-existing `visibility` value
+// element ID-colliding with this renderer's own, the canvas's own pre-existing `opacity` value
 // (preserved and restored exactly, not assumed to have been unset), and a `window.resize` listener
 // so a host-page reflow that MOVES the canvas without resizing it (Present()'s own dirty check only
 // fires on a SIZE change) still re-syncs the wrapper's own position. Z-order relative to page

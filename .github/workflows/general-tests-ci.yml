@@ -16,13 +16,9 @@
 #
 # Known pre-existing failures and the classification step below:
 # As of this job's introduction, a full unfiltered run on this exact configuration (EasyGL, Debug,
-# CNA_BUILD_TESTS=ON, CNA_BUILD_EXAMPLES=ON, CNA_DEVICES=OFF) has 4 known, already-tracked failures
+# CNA_BUILD_TESTS=ON, CNA_BUILD_EXAMPLES=ON, CNA_DEVICES=OFF) has 1 known, already-tracked failure
 # under an isolated Xvfb display (see remediation/REMEDIATION_PROGRESS.md Wave 0 triage table):
-#   - EasyGL_AvatarRenderer_TintRouting      -- real production tint-doubling bug (REMED-GFX-006 area)
-#   - EasyGL_MRT_TwoAttachments              -- REMED-GFX-016
 #   - EasyGL_GraphicsDevice_ReferenceStencil -- disclosed in-source limitation (Task 319/872)
-#   - easy-gl-resource-smoke-tests           -- REMED-NA-011, the external easy-gl submodule's own
-#                                               test suite (reference-only, not a CNA finding)
 # A 5th failure the local baseline also recorded, EasyGL_RealWindowResize (REMED-BUILD-010), is
 # specific to running against a REAL desktop compositor (GNOME/Mutter) on the test DISPLAY -- under
 # an isolated Xvfb server (what this job uses, and what REMED-BUILD-010's own investigation
@@ -85,13 +81,17 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            g++-14 cmake ninja-build pkg-config xvfb x11-utils \
+            gcc-14 g++-14 cmake ninja-build pkg-config doxygen xvfb x11-utils \
             libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
             libvulkan-dev \
             libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
             libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev libxss-dev libxtst-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+          # CApiHeaderCompatibility probes the named gcc/g++ rows as well as $CC/$CXX.
+          # Ubuntu 24.04's unversioned GCC 13 rejects the final -std=c23 spelling.
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
 
       - name: Record SDL submodule commit (for the cache key)
         id: sdlsha
@@ -156,17 +156,14 @@ jobs:
       # Classifies each failed test as known-pre-existing (see the header comment above) or
       # genuinely new. Nothing is excluded from *running* -- every test in the default suite executes
       # above regardless of this step; this step only decides whether the *job* goes red, so a real
-      # regression is never silently absorbed into "5 pre-existing failures, as usual."
+      # regression is never silently absorbed into "known pre-existing failures, as usual."
       - name: Classify failures (known pre-existing vs. genuinely new regressions)
         working-directory: build
         run: |
           set -euo pipefail
 
           KNOWN_FAILURES=(
-            "EasyGL_AvatarRenderer_TintRouting"
-            "EasyGL_MRT_TwoAttachments"
             "EasyGL_GraphicsDevice_ReferenceStencil"
-            "easy-gl-resource-smoke-tests"
           )
 
           FAILED_LOG="Testing/Temporary/LastTestsFailed.log"

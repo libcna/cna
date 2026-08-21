@@ -456,6 +456,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Sample 3/5: keyboard-driven sprite -- Keyboard::GetState()-driven Update() logic.
     cna_sdl_test(cna_test_sdl_sample_keyboard_sprite
                  sdlrenderer_sample_keyboard_sprite_test.cpp)
+    target_include_directories(cna_test_sdl_sample_keyboard_sprite PRIVATE
+                               ${CMAKE_SOURCE_DIR}/modules/platform/tests)
     cna_register_renderer_test(NAME SDL_Renderer_Sample_KeyboardSprite COMMAND cna_test_sdl_sample_keyboard_sprite
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

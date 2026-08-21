@@ -28,9 +28,10 @@
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 
+#include "System/Environment.hpp"
+
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
-#include <cstdlib>
 #include <exception>
 #include <map>
 #include <memory>
@@ -100,8 +101,10 @@ namespace
         void SetUp() override
         {
             GraphicsRendererSelection::ResetForTestingEXT();
-            unsetenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
-            unsetenv("CNA_DEBUG_FAIL_RENDERER_INIT");
+            System::Environment::SetEnvironmentVariable(
+                "CNA_DEBUG_UNAVAILABLE_RENDERERS", std::nullopt);
+            System::Environment::SetEnvironmentVariable(
+                "CNA_DEBUG_FAIL_RENDERER_INIT", std::nullopt);
 
             namespace Renderers = CNA::Internal::Renderers;
             std::vector<GraphicsRendererType> available;
@@ -113,16 +116,19 @@ namespace
 
         void TearDown() override
         {
-            unsetenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
-            unsetenv("CNA_DEBUG_FAIL_RENDERER_INIT");
+            System::Environment::SetEnvironmentVariable(
+                "CNA_DEBUG_UNAVAILABLE_RENDERERS", std::nullopt);
+            System::Environment::SetEnvironmentVariable(
+                "CNA_DEBUG_FAIL_RENDERER_INIT", std::nullopt);
             GraphicsRendererSelection::ResetForTestingEXT();
         }
 
         /// Marks a renderer as failing during initialization, after its window already exists.
         static void ForceInitFailure(GraphicsRendererType type)
         {
-            setenv("CNA_DEBUG_FAIL_RENDERER_INIT",
-                   std::string(CNA::getGraphicsRendererName(type)).c_str(), 1);
+            System::Environment::SetEnvironmentVariable(
+                "CNA_DEBUG_FAIL_RENDERER_INIT",
+                std::string(CNA::getGraphicsRendererName(type)));
         }
 
         /// The build default -- always present, whatever this configuration compiled in.

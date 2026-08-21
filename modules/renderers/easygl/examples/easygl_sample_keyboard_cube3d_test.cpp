@@ -7,9 +7,9 @@
 // end for genuine 3D rendering driven by real (here, simulated) input, not just a scripted
 // animation.
 //
-// Since this runs headlessly under Xvfb via ctest (no real keyboard), the Right arrow key is
-// held down for the whole run via CNA::Internal::Input::InputManager::SetKeyState -- the same
-// injection seam KeyboardInputTests.cpp and Task 730's own keyboard sample already use.
+// Since this runs headlessly under Xvfb via ctest (no real keyboard), the real platform is wrapped
+// by the shared canned-keyboard test decorator. The platform remains real for windowing, timing,
+// and graphics while its once-per-frame keyboard snapshot holds the Right arrow down.
 //
 // View/Projection stay at BasicEffect's own real default (Identity), so World-space X coincides
 // with NDC X and the screen-space mapping is the same simple (x+1)/2*width formula used by
@@ -33,10 +33,12 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
-#include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Platform/CannedKeyboard.hpp"
 
+#include <cmath>
 #include <cstdio>
 #include <memory>
+#include <utility>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -103,13 +105,11 @@ protected:
         effect_ = std::make_unique<BasicEffect>(getGraphicsDeviceProperty());
         effect_->VertexColorEnabled = true;
 
-        // Simulate holding the Right arrow key for the whole run (headless, no real keyboard).
-        CNA::Internal::Input::InputManager::SetKeyState(Keys::Right, true);
     }
 
     void Update(GameTime&) override
     {
-        if (done_) return;
+        if (done_ || frame_ >= kFrameCount) return;
         if (Keyboard::GetState().IsKeyDown(Keys::Right))
             x_ += kStepX;
         ++frame_;
@@ -126,7 +126,9 @@ protected:
         const int screenY = kSize / 2;
         const int endScreenX = ndcToScreenX(x_);
         const float expectedX = kStartX + kStepX * kFrameCount;
-        check(x_ == expectedX,
+        std::printf("[INFO] keyboard-driven position: actual %.9f, expected %.9f after %d updates\n",
+                    static_cast<double>(x_), static_cast<double>(expectedX), frame_);
+        check(std::abs(x_ - expectedX) <= 1.0e-6f,
               "Object moved the exact distance driven by simulated Keyboard::GetState() over 4 Update() cycles");
 
         Color endPx(0, 0, 0, 0);
@@ -139,15 +141,13 @@ protected:
         check(endPx.getRProperty() < 16 && endPx.getGProperty() >= 100 && endPx.getBProperty() >= 240,
               "3D object is genuinely rendered at the keyboard-driven World-space position, not just tracked internally");
 
-        // Cleanup: don't leak simulated key state past this process's own lifetime.
-        CNA::Internal::Input::InputManager::SetKeyState(Keys::Right, false);
-
         std::printf("=== %d/%d PASS ===\n", pass_, pass_ + fail_);
         Exit();
     }
 
 public:
-    KeyboardCube3DSample()
+    explicit KeyboardCube3DSample(std::unique_ptr<CNA::Platform::IPlatform> platform)
+        : Game(std::move(platform))
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
@@ -159,7 +159,9 @@ public:
 
 int main()
 {
-    KeyboardCube3DSample game;
+    auto platform = std::make_unique<CNA::Platform::Testing::CannedKeyboardPlatform>();
+    platform->Canned().SetPending({CNA::Platform::KeyCode::Right});
+    KeyboardCube3DSample game(std::move(platform));
     game.Run();
     return game.getResult();
 }

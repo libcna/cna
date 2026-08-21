@@ -237,13 +237,14 @@ namespace
      * own `kDualTextureAcceptsPositionTexture`. Every family here is fed one stride-20 quad so a
      * single expected image is valid across all of them; SkinnedEffect and the PBR pair genuinely
      * want normal/tangent-bearing strides, and some renderers enforce that where others tolerate it:
-     * WEBGPU falls through to DrawColoredPrimitives and throws "requires a stride-16
-     * (VertexPositionColor) vertex buffer", D3D9 reports "stride 20 has no matching CNA vertex
-     * layout (plans/plan_dx9.md D9-82f)". Their texture SLOT is the same ITextureRenderer binding the
-     * other families use, so the contract is still covered there by the remaining families.
+     * EasyGL validates the stock program's declared attributes, WEBGPU falls through to
+     * DrawColoredPrimitives, and D3D9 reports that stride 20 has no matching CNA vertex layout.
+     * Their texture SLOT is the same ITextureRenderer binding the other families use, so the
+     * contract is still covered there by the remaining families.
      */
     constexpr bool kSkinnedFamiliesAcceptPositionTexture =
-#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_WEBGPU) || \
+    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
     defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_LLGL)
         false;
 #else
@@ -282,13 +283,14 @@ namespace
     /**
      * @brief Whether EnvironmentMapEffect accepts a VertexPositionTexture stream.
      *
-     * D3D9 requires a normal-bearing stride for it (plans/plan_dx9.md D9-82e); D3D11 and D3D12 say so
-     * outright -- "EnvironmentMapEffect (env_map3d) requires stride 32
-     * (VertexPositionNormalTexture)". Same kind of boundary as above; leg L1's cube-sampling
-     * sub-check is recorded rather than asserted there, and its face-aliasing checks still run.
+     * EasyGL and D3D9 require a normal-bearing stride for it; D3D11 and D3D12 say so outright --
+     * "EnvironmentMapEffect (env_map3d) requires stride 32 (VertexPositionNormalTexture)". Same
+     * kind of boundary as above; leg L1's cube-sampling sub-check is recorded rather than asserted
+     * there, and its face-aliasing checks still run.
      */
     constexpr bool kEnvMapAcceptsPositionTexture =
-#if defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
     defined(CNA_RENDERER_LLGL)
         false;
 #else
@@ -1096,8 +1098,7 @@ class RenderTargetEffectSourceTest : public Game
             if (f == Family::EnvMapDiffuse && !kEnvMapAcceptsPositionTexture)
             {
                 boundary(std::string("B1 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": EnvironmentMapEffect requires a normal-bearing stream here "
-                         "(plans/plan_dx9.md D9-82e)");
+                         ": EnvironmentMapEffect requires a normal-bearing stream here");
                 continue;
             }
             if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
@@ -1314,8 +1315,7 @@ class RenderTargetEffectSourceTest : public Game
             if (f == Family::EnvMapDiffuse && !kEnvMapAcceptsPositionTexture)
             {
                 boundary(std::string("M2 ") + FamilyName(f) + " skipped on " + kRendererName +
-                         ": EnvironmentMapEffect requires a normal-bearing stream here "
-                         "(plans/plan_dx9.md D9-82e)");
+                         ": EnvironmentMapEffect requires a normal-bearing stream here");
                 continue;
             }
             if ((f == Family::Skinned || f == Family::Pbr || f == Family::SkinnedPbr) &&
@@ -1804,7 +1804,7 @@ class RenderTargetEffectSourceTest : public Game
         if (!kEnvMapAcceptsPositionTexture)
         {
             boundary(std::string("L1 ") + kRendererName + " needs a normal-bearing stream for "
-                     "EnvironmentMapEffect (plans/plan_dx9.md D9-82e), so the cube-slot draw is recorded "
+                     "EnvironmentMapEffect, so the cube-slot draw is recorded "
                      "rather than asserted here; the face-aliasing checks below still run");
         }
         else try

@@ -136,10 +136,10 @@ namespace
         return Math.round(parseFloat(root.children[i].style.opacity) * 255);
     });
 
-    /// 1 when the SDL canvas is hidden (the DOM surface renders in its place).
-    EM_JS(int, JsCanvasHidden, (), {
+    /// 1 when the SDL canvas is transparent but remains available for pointer input.
+    EM_JS(int, JsCanvasTransparent, (), {
         const canvas = Module['canvas'] || document.querySelector('canvas');
-        return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
+        return canvas && canvas.style.opacity === '0' ? 1 : 0;
     });
 
     /// plans/plan_html_dom.md HTMLDOM-113: 1 when THIS browser actually recognises
@@ -332,7 +332,7 @@ namespace
     int JsSpriteHasDataUrlBackground(int) { return 0; }
     int JsSpriteWidth(int) { return -1; }
     int JsSpriteOpacity255(int) { return -1; }
-    int JsCanvasHidden() { return 0; }
+    int JsCanvasTransparent() { return 0; }
     int JsSupportsPlusLighter() { return 0; }
     int JsSpriteBackgroundRepeat(int) { return 0; }
     int JsSpriteBackgroundRepeatIs(int, const char*) { return 0; }
@@ -427,7 +427,8 @@ protected:
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
             check(JsSurfaceExists() == 1, "the #cna-dom-root surface element was created");
-            check(JsCanvasHidden() == 1, "the SDL <canvas> is hidden, so only the DOM surface shows");
+            check(JsCanvasTransparent() == 1,
+                  "the SDL <canvas> is transparent but remains active for pointer input");
             check(JsSupportsPlusLighter() == 1,
                   "HTMLDOM-113: this test browser genuinely supports mix-blend-mode: "
                   "plus-lighter -- every other Additive pixel check in this suite (and "
@@ -772,12 +773,19 @@ protected:
                   "HTMLDOM-93a: a region created against the current (pre-resize) 64x64 surface "
                   "gets the expected insets");
 
-            // Resize the real SDL window, then call the renderer's own Present() directly -- that is
-            // what notices the logical size changed and re-derives every region's clip-path
-            // (HtmlDomState's CNA_HtmlDom_UpdateSurface). Not dev.Present(): see the note above for
-            // why that would hide what this test is checking behind GraphicsDevice's own separate
-            // reset.
-            SDL_SetWindowSize(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()), 128, 128);
+            // Resize the real SDL window, then forward the corresponding platform-neutral surface
+            // snapshot before calling the renderer's own Present(). Production does this through
+            // GraphicsDevice's platform-event path; this low-level test deliberately bypasses that
+            // path, so it must reproduce both halves rather than expecting the renderer to query a
+            // native window that is no longer part of its interface.
+            auto* window =
+                reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
+            SDL_SetWindowSize(window, 128, 128);
+            CNA::Internal::Renderers::RendererSurfaceInfo resizedSurface;
+            resizedSurface.windowId = SDL_GetWindowID(window);
+            resizedSurface.nativeHandle = getWindowProperty().GetNativeWindowHandleEXT();
+            resizedSurface.drawableSize = {128, 128};
+            renderer.OnSurfaceChanged(resizedSurface);
             renderer.Present();
 
             // HTMLDOM-98: real XNA/FNA Viewport does NOT auto-track a resized backbuffer on its own

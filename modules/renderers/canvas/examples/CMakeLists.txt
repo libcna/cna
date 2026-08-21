@@ -20,7 +20,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "CANVAS")
     add_executable(cna_test_canvas_smoke canvas_smoke_test.cpp)
-    target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SDL3::SDL3)
+    target_link_libraries(cna_test_canvas_smoke PRIVATE CNA ${RENDERER_TARGET} SDL3::SDL3)
 
     # CNA::GraphicsCapability: Canvas is 2D-only -- SupportsCapability() reports which
     # capabilities are genuinely absent (ThreeD and everything that depends on it). Twin of

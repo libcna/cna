@@ -4818,7 +4818,10 @@ namespace Microsoft::Xna::Framework::Content
                             // GLTF-337, the offline twin of the runtime path's own branch: an
                             // unlit material gets its lighting turned off and the lighting rig
                             // skipped, because every path through ApplyPunctualLightsEXT ends with
-                            // lighting ON and would undo the flag.
+                            // lighting ON and would undo the flag. The glTF lighting policy belongs
+                            // only to cnjVersion 2, emitted by gltf_to_cnj. Applying it to legacy
+                            // version-1/hand-written models changes BasicEffect's XNA default from
+                            // unlit to EnableDefaultLighting and visibly dims their colours.
                             if (unlit)
                             {
                                 CNA::Internal::GltfImport::MeshOut unlitOut;
@@ -4826,7 +4829,7 @@ namespace Microsoft::Xna::Framework::Content
                                 unlitOut.material = material;
                                 ApplyUnlitMaterialEXT(*fx, unlitOut);
                             }
-                            else
+                            else if (envelope.cnjVersion >= 2)
                             {
                                 ApplyPunctualLightsEXT(*fx, punctualLights);
                             }

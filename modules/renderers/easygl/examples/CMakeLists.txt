@@ -1779,9 +1779,11 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Sample 4/5: keyboard-driven 3D object -- the 3D counterpart to Task 730's keyboard
-        # sprite sample, using the same InputManager::SetKeyState injection seam.
+        # sprite sample, using the platform module's shared canned-keyboard test decorator.
         cna_easygl_test(cna_test_easygl_sample_keyboard_cube3d
                         easygl_sample_keyboard_cube3d_test.cpp)
+        target_include_directories(cna_test_easygl_sample_keyboard_cube3d PRIVATE
+                                   ${CMAKE_SOURCE_DIR}/modules/platform/tests)
         cna_register_renderer_test(NAME EasyGL_Sample_KeyboardCube3D COMMAND cna_test_easygl_sample_keyboard_cube3d
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

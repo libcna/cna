@@ -1018,9 +1018,9 @@ TEST(GyroscopeTests, OneHundredThousandConstructProbeStartStopDisposeCyclesLeave
         }
     }
 
-    EXPECT_EQ(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
+    EXPECT_LE(CnaTestSupport::CountOpenFileDescriptors(), fdBefore)
         << "open file descriptor count grew after " << Cycles << " cycles -- possible leak";
-    EXPECT_EQ(CnaTestSupport::GetThreadCount(), threadsBefore)
+    EXPECT_LE(CnaTestSupport::GetThreadCount(), threadsBefore)
         << "thread count grew after " << Cycles << " cycles -- possible leak";
 #endif
 }

@@ -34,17 +34,13 @@
 // `SDL_ASSERT=abort` in the environment to get the stack instead: the overwrite flag below is 0
 // precisely so an explicit choice wins.
 
-#include <cstdlib>
+#include "System/Environment.hpp"
 
 namespace
 {
     const bool kNonInteractiveAssertionsSelected = [] {
-#if defined(_WIN32)
-        // _putenv_s always overwrites, so only set it when the caller has not.
-        if (std::getenv("SDL_ASSERT") == nullptr) _putenv_s("SDL_ASSERT", "always_ignore");
-#else
-        ::setenv("SDL_ASSERT", "always_ignore", /*overwrite=*/0);
-#endif
+        if (!System::Environment::GetEnvironmentVariable("SDL_ASSERT").has_value())
+            System::Environment::SetEnvironmentVariable("SDL_ASSERT", "always_ignore");
         return true;
     }();
 }

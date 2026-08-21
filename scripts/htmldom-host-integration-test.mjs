@@ -1,6 +1,6 @@
 // plans/plan_html_dom.md HTMLDOM-115: Playwright driver exercising the two host-page-integration
 // behaviours that can ONLY be observed by manipulating the DOM BEFORE the Emscripten module ever
-// loads -- CNA_HtmlDom_EnsureRoot's own "capture the canvas's pre-existing visibility" and "detect
+// loads -- CNA_HtmlDom_EnsureRoot's own "capture the canvas's pre-existing opacity" and "detect
 // an existing conflicting #cna-dom-root" logic both run once, synchronously, inside the very first
 // renderer construction, which happens extremely early (as part of the module's own bootstrap
 // script executing, before this harness's own JS could ever run first via a normal page-load
@@ -29,7 +29,7 @@ if (!url) {
 
 const TIMEOUT_MS = Number(process.env.CNA_HTMLDOM_TEST_TIMEOUT_MS ?? 60000);
 
-async function runVisibilityPreservationCheck(browser) {
+async function runOpacityPreservationCheck(browser) {
     const page = await browser.newPage();
     try {
         // Sets the STATIC canvas element's own inline style directly in the HTML source -- present
@@ -39,20 +39,20 @@ async function runVisibilityPreservationCheck(browser) {
         await page.route('**/*.html', async (route) => {
             const response = await route.fetch();
             let body = await response.text();
-            body = body.replace('id="canvas"', 'id="canvas" style="visibility:collapse"');
+            body = body.replace('id="canvas"', 'id="canvas" style="opacity:0.42"');
             await route.fulfill({ response, body });
         });
         await page.goto(url, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(
-            () => typeof Module !== 'undefined' && 'cnaDomOriginalCanvasVisibility' in Module,
+            () => typeof Module !== 'undefined' && 'cnaDomOriginalCanvasOpacity' in Module,
             null, { timeout: TIMEOUT_MS });
 
-        const captured = await page.evaluate(() => Module['cnaDomOriginalCanvasVisibility']);
-        const ok = captured === 'collapse';
-        console.log(`       HTMLDOM-115 visibility capture: expected "collapse", got ` +
+        const captured = await page.evaluate(() => Module['cnaDomOriginalCanvasOpacity']);
+        const ok = captured === '0.42';
+        console.log(`       HTMLDOM-115 opacity capture: expected "0.42", got ` +
                     `${JSON.stringify(captured)}`);
         console.log(`[${ok ? 'PASS' : 'FAIL'}] HTMLDOM-115: CNA_HtmlDom_EnsureRoot captures the ` +
-                    `canvas's REAL pre-existing visibility value (here, a host page that had ` +
+                    `canvas's REAL pre-existing opacity value (here, a host page that had ` +
                     `already set a distinctive non-default one) rather than assuming it was unset`);
         return ok;
     } finally {
@@ -109,7 +109,7 @@ const browser = await chromium.launch({ headless: true });
 let exitCode = 1;
 try {
     const results = await Promise.all([
-        runVisibilityPreservationCheck(browser),
+        runOpacityPreservationCheck(browser),
         runIdCollisionCheck(browser),
     ]);
     const passed = results.filter(Boolean).length;
