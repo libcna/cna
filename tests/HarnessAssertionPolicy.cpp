@@ -31,15 +31,24 @@
 // report as an ordinary passing `EXPECT_ANY_THROW` in 70 ms. The cost is that execution continues
 // past an invariant the third-party library considered violated, so a genuinely new assertion is
 // reported by whatever goes wrong next rather than at its own site. Run the suite with
-// `SDL_ASSERT=abort` in the environment to get the stack instead: the overwrite flag below is 0
-// precisely so an explicit choice wins.
+// `SDL_ASSERT=abort` in the environment to get the stack instead: the presence check below ensures
+// that an explicit choice wins.
 
 #include "System/Environment.hpp"
 
 namespace
 {
+    template<typename T>
+    [[nodiscard]] bool hasEnvironmentEntry(const T& value)
+    {
+        if constexpr (requires { value.has_value(); })
+            return value.has_value();
+        else
+            return !value.empty();
+    }
+
     const bool kNonInteractiveAssertionsSelected = [] {
-        if (!System::Environment::GetEnvironmentVariable("SDL_ASSERT").has_value())
+        if (!hasEnvironmentEntry(System::Environment::GetEnvironmentVariable("SDL_ASSERT")))
             System::Environment::SetEnvironmentVariable("SDL_ASSERT", "always_ignore");
         return true;
     }();
