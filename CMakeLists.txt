@@ -164,6 +164,10 @@ endif()
 
 include(cmake/RendererSelection.cmake)
 
+# Runtime payloads such as Wicked Engine's shader compiler belong beside the
+# final application, not beside CNA's intermediate static renderer archive.
+include(cmake/RendererRuntime.cmake)
+
 # plans/plan_runtimerenderer.md design decision 3: emit the explicit table of renderer families
 # linked into this build. Must run after RendererSelection.cmake has resolved the identity.
 include(cmake/RendererRegistry.cmake)

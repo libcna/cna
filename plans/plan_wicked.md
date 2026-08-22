@@ -76,7 +76,7 @@ missing.
 | WICKED-2 | `cmake/ThirdPartyWicked.cmake`: resolve `CNA_WICKED_ROOT`, optional pinned FetchContent, disable editor/tests/samples, link `WickedEngine` | ✅ |
 | WICKED-3 | `cmake/patches/wicked-sdl3-platform.patch`: SDL3 branch in `wiPlatform.h` and `wiGraphicsDevice_Vulkan.cpp`, the three `CMakeLists.txt`, FAudio's `FAUDIO_SDL3_PLATFORM`, and an inert `wiInput.cpp` cursor table (6 files, 94 added lines) | ✅ |
 | WICKED-4 | Hard Emscripten gate, Linux/Windows platform note | ✅ |
-| WICKED-5 | Copy `libdxcompiler.so` next to the built backend | ✅ |
+| WICKED-5 | Expose `cna_copy_renderer_runtime()` and copy `libdxcompiler.so` next to each consuming executable (copying it only next to the intermediate static backend archive is insufficient) | ✅ |
 | WICKED-6 | Pin the Wicked revision (`CNA_WICKED_COMMIT`) the patch is authored against | ✅ |
 | WICKED-7 | `CNA::GraphicsBackendType::Wicked` + `"WICKED"` name mapping, and its shared test's switch | ✅ |
 
