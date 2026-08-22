@@ -47,6 +47,8 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -393,7 +395,13 @@ protected:
     void Draw(const GameTime&) override {
         auto& device = getGraphicsDeviceProperty();
         device.Clear(Color(135, 196, 230, 255), 1.0f); // sky blue
-        device.SetDepthTestEnabled(true);
+
+        // SpriteBatch applies its own XNA/FNA default render states and deliberately leaves them
+        // active after End(). Restore the complete 3D baseline every frame before drawing the
+        // demo's intentionally two-sided box and ground geometry.
+        device.setBlendStateProperty(BlendState::Opaque);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
 
         const auto& vp = device.getViewportProperty();
         const float aspect =
