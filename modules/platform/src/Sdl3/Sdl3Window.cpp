@@ -169,12 +169,9 @@ namespace CNA::Platform::Sdl3 {
     // makes while the frame's event pump is on the stack. Both keep the last successfully queried
     // value rather than reporting a failure the caller has no way to act on.
     //
-    // The fallback exists because SDL_GetWindowSize was observed failing with "Video subsystem has
-    // not been initialized" on a live window under Emscripten. That was originally read as a
-    // transient browser-side startup race; it was not. It is what a torn-down SDL video subsystem
-    // looks like to a window that outlived it -- see docs/emscripten-mainloop-game-lifetime.md for
-    // the Game-lifetime bug that produced one, and note that the fallback cannot repair that case,
-    // it only keeps the failure from being reported as a nonsensical 0x0 window.
+    // SDL can refuse a size query while the browser is updating its canvas or while native window
+    // state is being torn down. Keeping the last valid rectangle is the only useful result for this
+    // non-critical per-frame property; renderer creation uses the strict pixel-size query instead.
     WindowBounds Sdl3Window::GetClientBounds() const
     {
         int x = lastKnownBounds_.x;

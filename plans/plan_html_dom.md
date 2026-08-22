@@ -425,6 +425,13 @@ only the still-open DOM-backbuffer Opaque deviation and the other blend-equation
 
 ---
 
+> **Runtime update (2026-08-22).** HTMLDOM-111 and HTMLDOM-114 predate the framework-level
+> Emscripten lifetime repair. `Game::Run()` no longer registers an independently re-entering
+> `emscripten_set_main_loop`; it awaits `requestAnimationFrame()` through Asyncify on the same
+> logical Wasm stack. The end-to-end benchmark therefore remains rAF-paced, while stack-local game
+> ownership is valid and `Run()` returns normally after `Exit()`. Chrome and Firefox smoke runs now
+> prove three frames plus that return for `HTML_DOM` without a heap-lifetime workaround.
+
 ## What the browser run caught
 
 The first headless-Chromium run reported 3 of 17 checks failing against a backend that was in fact

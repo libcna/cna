@@ -285,9 +285,8 @@ software one without saying so.
     has no per-channel blend-factor customization to reproduce that with. Colour channels are always
     exact; the alpha channel is exact only when the source is fully opaque (where the squared and
     unsquared formulas coincide).
-12. **Effectively one live, actively-driven `GraphicsDevice` per process** (HTMLDOM-114) — not a
-    choice this renderer makes, but a real constraint of `emscripten_set_main_loop`'s own
-    `simulate_infinite_loop` contract, which `Game::Run()` uses: it never returns to its caller, so
+12. **Effectively one live, actively-driven `GraphicsDevice` per process** (HTMLDOM-114) —
+    `Game::Run()` is the blocking application loop, matching XNA and native CNA, so
     two independently-driven `Game::Run()` loops cannot coexist in one process. A SECOND
     `HtmlDomRenderer` sharing the same window CAN still be constructed while a first is alive
     (nothing in `IGraphicsRenderer` prevents it, and this is now safe rather than forbidden) — the

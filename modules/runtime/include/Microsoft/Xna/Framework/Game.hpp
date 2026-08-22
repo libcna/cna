@@ -211,27 +211,6 @@ namespace Microsoft::Xna::Framework
 
         /**
          * @brief Runs the game loop until Exit is called.
-         *
-         * CNAEXT platform note: under Emscripten this call does not return normally. It ends by
-         * calling `emscripten_set_main_loop(..., simulateInfiniteLoop=1)`, which the Emscripten
-         * runtime implements by throwing a raw JavaScript `'unwind'` value
-         * (see `src/lib/libeventloop.js`, function `$setMainLoop`) to unwind the C++/Wasm call
-         * stack back out to the browser event loop. Every wasm stack frame between this call and
-         * wherever that throw is caught -- including the frame that owns `this`, if it is a local
-         * variable -- has its storage reclaimed as part of that unwind, while the periodic
-         * main-loop callback keeps using a raw pointer to `this` captured just before the throw.
-         * A `Game` (or subclass) instance driven through Run() under Emscripten MUST therefore
-         * have a lifetime that outlives this call returning -- heap-allocate it (`new`), or give
-         * it static/global storage; never call Run() on a variable local to the calling function.
-         * Getting this wrong does not fail loudly: the object's memory is silently reused by
-         * later stack allocations (event polling, Update(), Draw(), ...), corrupting fields read
-         * on the next callback tick -- typically surfacing as a WebAssembly indirect-call fault
-         * ("table index is out of bounds" / "null function or function signature mismatch") the
-         * first time a virtual method is called through a now-corrupted pointer inside this
-         * object, such as BeginDraw()/EndDraw() via GraphicsDeviceManager. See
-         * `docs/emscripten-mainloop-game-lifetime.md` and `emscripten-mainloop-stack-spike/` for
-         * the full investigation and a minimal reproduction. Native builds are unaffected: the
-         * non-Emscripten RunLoop() path is a real blocking `while` loop with no stack unwind.
          */
         void Run();
 
@@ -472,9 +451,8 @@ namespace Microsoft::Xna::Framework
 
 #if defined(__EMSCRIPTEN__)
     private:
-        // Emscripten non-blocking main loop support.
-        // The callback is a static C-compatible function passed to
-        // emscripten_set_main_loop(); it reads/writes s_emLoopState.
+        // Emscripten loop state. RunLoop yields through Asyncify between frames until the frame body
+        // clears its game pointer, retaining the public Run() call's blocking lifetime semantics.
         struct EmscriptenLoopState;
         static EmscriptenLoopState s_emLoopState;
         static void EmscriptenMainLoopCallback();

@@ -590,6 +590,10 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
             "checkout (branch 'develop' of meta-gl).")
     endif()
     if(NOT _cna_easygl_subdir_added)
+        if(EMSCRIPTEN)
+            set(EASYGL_EMSCRIPTEN_EXCEPTION_MODEL "JS" CACHE STRING
+                "Exception ABI used by easy-gl when embedded in CNA" FORCE)
+        endif()
         add_subdirectory(../easy-gl easy-gl)
         set(_cna_easygl_subdir_added TRUE)
     endif()

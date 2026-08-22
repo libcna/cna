@@ -182,9 +182,17 @@ namespace CNA::Platform::Sdl3 {
 
     bool Sdl3GlContext::SetSwapInterval(const int interval)
     {
+#if defined(__EMSCRIPTEN__)
+        // Browser presentation is compositor-controlled. SDL implements this call by changing
+        // Emscripten's registered main-loop timing, but CNA's Asyncify loop deliberately retains the
+        // XNA Run() stack and therefore has no separately registered Emscripten main loop.
+        (void) interval;
+        return true;
+#else
         // Returns a status rather than throwing: a driver that declines adaptive vsync should
         // leave rendering running at whatever interval it already had, not abort the frame.
         return SDL_GL_SetSwapInterval(interval);
+#endif
     }
 
     void* Sdl3GlContext::GetProcAddress(const std::string& name) const

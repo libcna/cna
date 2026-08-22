@@ -24,6 +24,10 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #include <emscripten/html5.h>
+
+EM_ASYNC_JS(void, CNA_WaitForAnimationFrame, (), {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+});
 #endif
 
 namespace Microsoft::Xna::Framework
@@ -269,29 +273,14 @@ namespace Microsoft::Xna::Framework
     Game::~Game()
     {
 #if defined(__EMSCRIPTEN__)
-        // A game that finished normally cleared this on its way out (see EmscriptenMainLoopCallback
-        // below), so reaching here with the pointer still aimed at this object means the game is
-        // being destroyed while the browser is still scheduled to call back into it. There is one
-        // way that happens by accident, and it is common enough to name outright: RunLoop()'s
-        // emscripten_set_main_loop(..., simulateInfiniteLoop=1) unwinds the calling stack with a
-        // JavaScript throw, which -fwasm-exceptions turns into real destructor calls for locals --
-        // so a Game that is a local variable in main() destroys itself before the first frame.
-        //
-        // Cancelling is not a repair: this game's graphics device and platform are going away
-        // regardless, and the page will show nothing either way. It replaces a use-after-free --
-        // which surfaces frames later as a WebAssembly indirect-call fault, or as an SDL "video
-        // subsystem has not been initialized" error from a window that outlived the subsystem, and
-        // neither of those names the actual mistake -- with a clean stop and a message pointing at
-        // the call site that has to change.
+        // Destruction from a re-entrant callback while this game owns the browser loop must stop
+        // RunLoop before its platform and graphics resources disappear.
         if (s_emLoopState.game == this)
         {
-            emscripten_cancel_main_loop();
             s_emLoopState.game = nullptr;
             CNA::Logger::Error(
-                "CNA: the Game driving the Emscripten main loop was destroyed; the loop is "
-                "cancelled and the page stops here. Under Emscripten a Game must not be a local "
-                "variable -- heap-allocate it (see Game::Run() and "
-                "docs/emscripten-mainloop-game-lifetime.md).");
+                "CNA: the Game driving the Emscripten loop was destroyed while Run() was active; "
+                "the loop stops before its resources are released.");
         }
 #endif
         Dispose(false);
@@ -986,21 +975,18 @@ namespace Microsoft::Xna::Framework
 
             if (!state.game->RunApplication)
             {
-                emscripten_cancel_main_loop();
                 state.game->OnExiting(state.game, System::EventArgs::Empty);
                 state.game = nullptr;
             }
         }
         catch (const std::exception& exception)
         {
-            emscripten_cancel_main_loop();
             s_emLoopState.game = nullptr;
             CNA::Logger::Error(
                 std::string("CNA: fatal exception in Emscripten main loop: ") + exception.what());
         }
         catch (...)
         {
-            emscripten_cancel_main_loop();
             s_emLoopState.game = nullptr;
             CNA::Logger::Error("CNA: unknown fatal exception in Emscripten main loop");
         }
@@ -1021,7 +1007,17 @@ namespace Microsoft::Xna::Framework
 #if defined(__EMSCRIPTEN__)
         s_emLoopState.game = this;
         s_emLoopState.gameTime = gameTime_;
-        emscripten_set_main_loop(EmscriptenMainLoopCallback, 0, 1);
+
+        // Asyncify suspends and resumes this same Wasm stack between frames. Calling the frame body
+        // directly is important: a separately registered browser callback cannot re-enter the
+        // Wasm instance while this Run() stack is suspended. Unlike simulateInfiniteLoop, this
+        // preserves the logical caller and therefore the ordinary stack-local XNA Game lifetime.
+        while (s_emLoopState.game == this)
+        {
+            EmscriptenMainLoopCallback();
+            if (s_emLoopState.game == this)
+                CNA_WaitForAnimationFrame();
+        }
 #else
         while (RunApplication)
         {

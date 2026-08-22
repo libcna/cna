@@ -65,28 +65,12 @@ endif()
 # before sharp-runtime is added below, since unwinding requires every frame in the call chain
 # to agree on the same exception-handling ABI.
 #
-# plans/plan_glbackends.md GLB-39: uses the modern Wasm exception-handling proposal
-# (-fwasm-exceptions), not the legacy JS-based -fexceptions model this project used previously.
-# Forced by a real link failure once the GL-family renderers (OPENGLES3/OPENGL33/WEBGL1/WEBGL2)
-# started depending on the sibling easy-gl -> meta-gl chain: easy-gl's own
-# cmake/EasyGlPlatform.cmake sets -fwasm-exceptions in ITS directory scope (needed for its own
-# standalone Emscripten preset/tests), which only affects object files compiled within that
-# subdirectory tree (meta-gl, easy-gl) -- it does NOT propagate to CNA's own top-level directory
-# scope, where the final executable link steps are defined (the modules' example CMakeLists). With the old
-# legacy -fexceptions here, meta-gl's objects (compiled under -fwasm-exceptions, referencing the
-# Wasm EH exception-tag import symbol __cpp_exception) and the final link (configured for legacy
-# JS EH, unaware of that symbol) disagreed on ABI, producing
-# "wasm-ld: undefined symbol: __cpp_exception". Matching CNA's own top-level flag to
-# -fwasm-exceptions makes every object file in the link agree, without needing to touch the
-# sibling repo at all. -sNO_DISABLE_EXCEPTION_CATCHING is a legacy-JS-EH-only linker setting with
-# no Wasm-EH equivalent (Wasm EH can always catch), so it is dropped rather than replaced.
+# Emscripten's native Wasm exception ABI cannot be combined with Asyncify in the supported
+# Binaryen toolchain. CNA needs Asyncify to retain XNA's blocking Game::Run() call across browser
+# frames on Firefox as well as Chromium, so every object uses the JS-lowered exception ABI.
 if(EMSCRIPTEN)
-    # Emscripten still defaults WASM_LEGACY_EXCEPTIONS to ON, which emits the
-    # deprecated legacy `try` instruction. Select the standardized
-    # `try_table` exception ABI explicitly and keep every object and final
-    # executable on that same ABI.
-    add_compile_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
-    add_link_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
+    add_compile_options(-fexceptions)
+    add_link_options(-fexceptions -sDISABLE_EXCEPTION_CATCHING=0 -sASYNCIFY=1)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)

@@ -245,8 +245,7 @@ TEST(GraphicsDevicePlatformWindowTests,
     // UpdateViewportFromWindow() is what GameWindow.ClientSizeChanged runs, from inside the frame's
     // event pump, because the operating system or the browser delivered a resize. A window that
     // refuses a query there must cost the game one viewport refresh, not the whole game loop --
-    // this reproduces exactly what a torn-down SDL video subsystem looks like to a window that
-    // outlived it (docs/emscripten-mainloop-game-lifetime.md).
+    // this reproduces a transient platform size-query refusal without coupling the test to SDL.
     WindowOwnershipTrace trace;
     TracedPlatform platform(trace);
     ScopedCurrentPlatform current(platform);

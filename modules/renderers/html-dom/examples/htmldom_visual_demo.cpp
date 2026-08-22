@@ -209,11 +209,7 @@ public:
 
 int main()
 {
-    // Heap-allocated, not a local: emscripten_set_main_loop(..., simulateInfiniteLoop=1) unwinds
-    // this stack frame via a JS-level throw (see docs/emscripten-mainloop-game-lifetime.md) --
-    // a stack-local Game here would have its storage reclaimed while the loop callback still
-    // holds a raw pointer to it.
-    HtmlDomVisualDemo* game = new HtmlDomVisualDemo();
-    game->Run();
+    HtmlDomVisualDemo game;
+    game.Run();
     return 0;
 }

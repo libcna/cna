@@ -173,6 +173,20 @@ target_compile_definitions(cna_build_flags INTERFACE
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
 )
 
+if(EMSCRIPTEN)
+    # These are part of CNA's public WebAssembly ABI: consumers and every linked library must use
+    # the same exception model. Emscripten's JS exception lowering is compatible with Asyncify
+    # (native Wasm EH is not), and Asyncify lets Game::Run() suspend and restore its caller while
+    # the browser owns frame scheduling. Together they preserve XNA's blocking lifetime contract
+    # across the browser versions supported by Emscripten without legacy Wasm `try` instructions.
+    target_compile_options(cna_build_flags INTERFACE
+            -fexceptions)
+    target_link_options(cna_build_flags INTERFACE
+            -fexceptions
+            -sDISABLE_EXCEPTION_CATCHING=0
+            -sASYNCIFY=1)
+endif()
+
 # The current high-level mixer is SDL3_mixer based.  Do not advertise sound support in a
 # configuration which deliberately selected a non-SDL3 audio transport: that would compile
 # the XNA facade against an implementation which cannot exist in the resulting binary.

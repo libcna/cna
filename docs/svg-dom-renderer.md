@@ -48,7 +48,7 @@ at their root cause. Each is referenced by its investigation code below.
 | — | `SvgDomTextureRenderer`'s destructor was `= default` and never deleted its JS registry entry, despite its own header doc claiming it did — a genuine, unbounded memory leak (cached base64 PNG strings) for every destroyed `Texture2D`. | Missing `CNA_SvgDom_DestroyTexture` call. | Added the JS deletion call, mirroring the render-target path's own `CNA_SvgDom_DestroyTargetCanvas`. |
 | — | `GetData` bounds checks (`x + w > width_`, `dataLength < w * h * 4`) used plain 32-bit `int` arithmetic that can overflow on caller-controlled input, letting an out-of-bounds region slip past validation — on Emscripten/wasm32 specifically, `int` and `size_t` are both 32-bit, so this is not merely a native-build styling concern. | No overflow-safe arithmetic. | Bounds checks now compute in `int64_t`; texture construction also rejects a `width*height*4` byte count that would not fit a 32-bit `int`, since this renderer's own buffer-size/length surface is `int` throughout. |
 | — | **(Cross-renderer, not SVG_DOM-specific)** `GameWindow::queryClientBoundsFromSDL()` threw whenever `SDL_GetWindowSize` failed, including a real Emscripten startup race: SDL3's Emscripten video backend can report "not initialized" for the first one or two event-loop ticks after `SDL_CreateWindow()` already returned a valid window. | The browser-side canvas/context setup `SDL_GetWindowSize` depends on finishes asynchronously, strictly after control has already returned to C++. | Falls back to the last-known bounds for that one tick instead of throwing (`modules/runtime/src/GameWindow.cpp`) — found and fixed while investigating why no CNA Emscripten renderer had ever completed a real browser run before (reproduces identically for `HTML_DOM`). |
-| — | **(Cross-renderer, not SVG_DOM-specific)** A follow-up pass found and fixed the actual blocker mentioned above: `Game::BeginDraw()` crashed under Emscripten because every CNA example (including this renderer's own) stack-allocated its `Game` subclass in `main()` — `emscripten_set_main_loop(..., simulateInfiniteLoop=1)`'s JS-level unwind prematurely runs that object's destructor (a proven, wasm-native-exception-handling interaction, not a `GameServiceContainer` defect), deleting the real `GraphicsDeviceManager` through its owning `unique_ptr` and leaving `Game::graphicsDeviceManager_` dangling. | Stack-local `Game` object lifetime versus `emscripten_set_main_loop`'s unwind-via-throw mechanism. | Every SVG_DOM/HTML_DOM/CANVAS example `main()` now heap-allocates its `Game` subclass; see `docs/emscripten-mainloop-game-lifetime.md` and `emscripten-mainloop-stack-spike/` for the full root-cause writeup and proof. This is what unblocked the real-browser verification below. |
+| — | **(Cross-renderer, not SVG_DOM-specific)** The old `simulateInfiniteLoop=1` game loop unwound and destroyed a stack-local `Game` before its first frame. | The browser callback retained a pointer into the unwound Wasm caller. | `Game::Run()` now retains its caller through Asyncify and yields the same logical Wasm stack between frames. Examples use ordinary local ownership; see `docs/emscripten-mainloop-game-lifetime.md`. |
 | — | Unblocking `Draw()` exposed two pre-existing, never-before-executed bugs in this renderer's *own test files* (not the renderer implementation): `svgdom_smoke_test.cpp` checked a hardcoded sprite index (`0`) for two draws that the SVGDOM-A coalescing architecture correctly appends as later children of the same flush slot, and undercounted its own expected-check total by one; `svgdom_pixel_verification_test.cpp` built its SVGDOM-D coherence check's render target with the default `RenderTargetUsage::DiscardContents`, so the real, correct, XNA-documented discard-on-rebind clear (not a canvas-sync bug) was clearing the target before the check's own second draw. | Stale index/count assumptions and a render-target-usage mismatch in test code, not renderer defects. | Both files corrected: real per-child indices, correct expected-check count, and `RenderTargetUsage::PreserveContents` on the target that actually needs content preservation across a rebind (matching the same fix already established in `ascii_offscreentarget_test.cpp`). |
 
 ---
@@ -191,9 +191,9 @@ five unsupported resource factories. ✅ All unit-tested natively (`SvgDom3DSurf
 6. **No hierarchical camera/world `<g>` grouping** ⬜ — a scene where only the camera moves still
    updates every visible sprite's own `transform` rather than a single shared parent transform. A
    real, valuable follow-up for large static scenes (tilemaps, mostly-static UI); out of scope here.
-7. **Effectively one live, actively-driven `GraphicsDevice` per process** — the same
-   `emscripten_set_main_loop` constraint every Emscripten CNA renderer shares, not specific to
-   `SVG_DOM`. The existing ref-counted `EnsureRoot`/`DestroyRoot` pair correctly handles
+7. **Effectively one live, actively-driven `GraphicsDevice` per process** — `Game::Run()` is a
+   blocking application loop, as on XNA and native CNA. The existing ref-counted
+   `EnsureRoot`/`DestroyRoot` pair correctly handles
    construct→destroy→reconstruct on the *same* window; genuine concurrent multi-window use was not
    exercised (CNA's Emscripten renderers share this single-Module-per-process assumption generally).
 
@@ -207,29 +207,11 @@ verification. That pass correctly identified it as a **pre-existing, cross-rende
 (reproducing identically for `HTML_DOM`), not an `SVG_DOM` defect, and refused to fabricate browser
 verification it hadn't actually obtained.
 
-A dedicated follow-up pass root-caused and fixed it. **Summary of the finding** (full write-up:
-`docs/emscripten-mainloop-game-lifetime.md`; proof: `emscripten-mainloop-stack-spike/`):
-
-`emscripten_set_main_loop(fn, fps, simulateInfiniteLoop=1)` is implemented by the Emscripten
-runtime as a raw JavaScript `throw 'unwind'`. CNA compiles with `-fwasm-exceptions` (native
-WebAssembly exception handling), under which the `catch_all`/cleanup landing pad generated for a
-local object with a non-trivial destructor genuinely catches *any* exception unwinding through it —
-including that foreign JS throw. Every CNA Emscripten example (including this renderer's own)
-stack-allocated its `Game` subclass in `main()`. That stack-local object's destructor therefore ran
-for real, immediately, at the `emscripten_set_main_loop` call site — deleting the real
-`GraphicsDeviceManager` through its owning `unique_ptr` member and leaving `Game::graphicsDeviceManager_`
-(a raw, non-owning pointer) dangling. The dangling pointer didn't fault until, frames later, that
-freed heap memory had been reused by something else and `Game::BeginDraw()` dereferenced it to make
-a virtual call — misreading the corrupted memory as a WebAssembly function-table index. This was
-**not** a `GameServiceContainer`/multiple-inheritance defect — that hypothesis was investigated and
-ruled out with sanitizer-verified reproductions (native ASan+UBSan+vptr and Emscripten
-`-sSAFE_HEAP`) before the real cause was found; see the spike's own `README.md`.
-
-**The fix:** every CNA Emscripten example's `main()` — `SVG_DOM`, `HTML_DOM`, `CANVAS`, and the
-general 3D demo — now heap-allocates its `Game` subclass instead of stack-allocating it (`new`,
-deliberately never `delete`d, correct for a page-lifetime app object), and `Game::Run()`'s own doc
-comment documents the constraint. This is a call-site object-lifetime fix, not a change to `Game`,
-`GraphicsDeviceManager`, or `GameServiceContainer` themselves.
+A dedicated follow-up pass proved that `simulateInfiniteLoop=1` unwound the Wasm caller and
+destroyed a local `Game` while the browser callback retained its address. The current fix is in
+`Game::Run()` itself: Asyncify suspends and resumes the same logical Wasm stack between frames, preserving
+XNA's blocking lifetime contract. Local game objects are valid and no page-lifetime leak is needed.
+See `docs/emscripten-mainloop-game-lifetime.md` for the maintained contract and historical spike.
 
 With that fix in place, `Game::BeginDraw()`/`Draw()`/`EndDraw()` now run correctly under Emscripten,
 and the pixel/structural browser test pages this renderer's earlier remediation pass wrote — but

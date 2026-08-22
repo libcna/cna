@@ -16,12 +16,9 @@
 // 1. TWO metrics, not one, both reported: "CPU submission" (the original performance.now() bracket
 //    around Begin()/Draw()/End() -- real, but explicitly NOT a frame-rate number) and "real
 //    end-to-end frame cadence", measured as the wall-clock gap between the START of one Draw() call
-//    and the START of the next. Game::Run() drives its Emscripten main loop via
-//    emscripten_set_main_loop(..., fps=0, ...) (Game.cpp), which per Emscripten's own documented
-//    contract means "let requestAnimationFrame pace this" -- so Draw() already fires once per real
-//    browser animation frame, and the start-to-start gap between two calls is exactly the real
-//    frame period: it can only elapse once the browser has finished whatever rendering work the
-//    PREVIOUS frame queued, which is the one thing the old submission-only bracket could never see.
+//    and the START of the next. Game::Run() awaits requestAnimationFrame() through Asyncify while
+//    retaining its Wasm caller, so this interval includes the previous frame's browser-visible
+//    scheduling delay and is the one thing the old submission-only bracket could never see.
 // 2. TWO workloads, not one: "stable tint" (position animates every frame, tint per sprite is FIXED
 //    -- this renderer's own documented sweet spot, "rewards static sprite sheets and moving
 //    sprites") and "heavy churn" (position AND tint both animate every frame -- this renderer's own
