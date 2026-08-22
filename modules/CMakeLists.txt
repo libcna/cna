@@ -58,6 +58,36 @@ else()
             "-DCNA_ENABLE_DRACO=OFF for the intentional decoder-free build.")
     endif()
 
+    # Draco 1.5.7 hard-requires an EMSCRIPTEN environment variable under an Emscripten toolchain
+    # (draco_check_emscripten_environment, a FATAL_ERROR), and emsdk stopped exporting that name
+    # long ago -- emsdk_env.sh sets EMSDK instead. Left alone, every web build of CNA dies at
+    # configure time inside a submodule the game never asked about, with a message naming Draco's
+    # README rather than anything a CNA consumer can act on. Derive it from what the toolchain
+    # does provide instead of making each consumer export it by hand. Configure-time only, which
+    # is where Draco reads it; nothing about the host build is touched.
+    if(EMSCRIPTEN AND NOT EXISTS "$ENV{EMSCRIPTEN}")
+        if(DEFINED EMSCRIPTEN_ROOT_PATH AND EXISTS "${EMSCRIPTEN_ROOT_PATH}")
+            set(ENV{EMSCRIPTEN} "${EMSCRIPTEN_ROOT_PATH}")
+        else()
+            # emcc itself lives in the Emscripten root, so the selected compiler locates it
+            # without assuming any particular emsdk layout.
+            get_filename_component(_cna_emscripten_root "${CMAKE_C_COMPILER}" DIRECTORY)
+            if(EXISTS "${_cna_emscripten_root}")
+                set(ENV{EMSCRIPTEN} "${_cna_emscripten_root}")
+            endif()
+            unset(_cna_emscripten_root)
+        endif()
+        if(EXISTS "$ENV{EMSCRIPTEN}")
+            message(STATUS "CNA: derived EMSCRIPTEN=$ENV{EMSCRIPTEN} for the vendored Draco build")
+        else()
+            message(FATAL_ERROR
+                "CNA: the vendored Draco requires an EMSCRIPTEN environment variable pointing at "
+                "the Emscripten root, and CNA could not derive one. Export it (EMSCRIPTEN=<emsdk>/"
+                "upstream/emscripten), or configure -DCNA_ENABLE_DRACO=OFF for the intentional "
+                "decoder-free build.")
+        endif()
+    endif()
+
     # Only the normative KHR_draco_mesh_compression bitstream feature set is enabled. Draco 1.5.7
     # still builds one static library containing its encoder too; CNA links only the public
     # draco::draco target and exposes none of that API as its own public surface.
