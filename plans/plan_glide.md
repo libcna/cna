@@ -22,12 +22,13 @@ renderer.
   compatibility runtime. dgVoodoo2 is only an example caller-supplied binary runtime: this lane
   deliberately pins no dgVoodoo version/commit, does not build it, and does not redistribute or
   relicense it. CNA's own code remains Ms-PL.
-- Host classification: the production backend is **build-only / runtime unavailable** on this host.
-  No physical Voodoo hardware and no compatible `glide3x.dll` were present. The independent x86
-  fake-DLL test exercised all 39 required ABI exports under Wine, but that test double is only a
-  wrapper-contract oracle and is not native-hardware or emulator rendering validation. Full i686
-  CNA linkage stops in the sibling `sharp-runtime`: its i686 dependency path first lacks ZLIB and
-  its accepted `__int128` use is unsupported by `i686-w64-mingw32-g++`.
+- Host classification: the production backend has a verified **Wine/OpenGlide runtime route** as of
+  2026-08-22. OpenGlide commit `b8ac1a32c98f9f8e8616aeffcf4b0af163b59b8f` loaded through
+  `CNA_GLIDE3X_DLL`, reported Glide 3.04/Banshee, and the complete cna-template executable drew
+  three smoke frames and exited 0 under Wine 10. dgVoodoo 2.87.3 crashed inside its own D3D11
+  `ResolveSubresource` path under both WineD3D and DXVK 2.6; dgVoodoo does not support Wine. The
+  independent x86 fake-DLL test continues to cover all 39 required ABI exports. None of these
+  results replaces native physical-Voodoo or golden-image validation.
 - Current draw contract: one ordinary stream is supported. Its public `VertexOffset` is consumed
   through the already-folded `vertexStart`/`baseVertex`; `startIndex` selects index elements and
   each decoded index receives `baseVertex`. Residual per-stream offsets, duplicate semantics,
@@ -68,6 +69,11 @@ renderer.
 
 ## Completed
 
+- [x] **RTR-P14-9 — Validate an actual Glide runtime under Wine.** The explicit
+  `scripts/run-wine-glide.sh` route accepts a caller-supplied OpenGlide DLL and asserts both its
+  exact loaded path and CNA's `GLIDE` renderer identity. The 2026-08-22 cna-template smoke run used
+  OpenGlide commit `b8ac1a32c98f9f8e8616aeffcf4b0af163b59b8f`, drew three frames and exited 0.
+  dgVoodoo 2.87.3 remains suitable for its supported Windows target, not Wine.
 - [x] i686 MinGW deployment copies the exception runtime selected by the active toolchain
   (`libgcc_s_dw2-1.dll` here, with SEH/SJLJ probing for other MinGW variants), together with
   `libstdc++-6.dll` and `libwinpthread-1.dll`. Wine now loads the template executable through the

@@ -6,7 +6,9 @@ through `grSstWinOpen`, batches compatible SpriteBatch quads through
 `grDrawVertexArrayContiguous`, uploads texture data
 through the Glide TMU API, swaps with `grBufferSwap`, and reads pixels with `grLfbReadRegion`.
 
-It is intended for an emulator runtime such as [dgVoodoo2](https://dgvoodoo2.dege.freeweb.hu/).
+It is intended for a compatibility runtime such as
+[dgVoodoo2](https://github.com/dege-diosg/dgVoodoo2) on Windows or
+[OpenGlide](https://github.com/JHRobotics/openglide9x) on Wine.
 `glide3x.dll` is external to CNA: this repository neither contains nor copies it. Place a compatible
 DLL beside the executable, or set `CNA_GLIDE3X_DLL` to the DLL's full Windows path before launching.
 Use `PresentationMode::NativeBackBuffer` and a swap interval of either 0 or 1. Glide has no
@@ -24,12 +26,17 @@ not select a dgVoodoo2 version/commit, build it, patch it, redistribute it, or c
 CNA's. Consult the selected runtime's own license and redistribution terms. CNA's renderer source is
 covered by the repository's Ms-PL license.
 
-The 2026-08-08 post-audit host had no physical Voodoo hardware and no compatible `glide3x.dll`.
-Validation is therefore **build-only** for the production renderer, plus a fake-wrapper ABI contract
-under Wine. It is not emulator image validation and not native-hardware validation. Full CNA i686
-linkage was externally blocked in the sibling `sharp-runtime` dependency path; the renderer itself
-passed i686 whole-translation-unit syntax, 78 portable tests, and the same 78 tests under linked
-ASan/UBSan runtimes. Five OPENGLES3 pixel/state tests provided the shared-interface control.
+The 2026-08-22 runtime pass built OpenGlide commit
+`b8ac1a32c98f9f8e8616aeffcf4b0af163b59b8f` as a 32-bit MinGW DLL and ran the complete
+cna-template GLIDE executable under Wine 10. The runtime identified itself as Glide 3.04 on Banshee,
+CNA selected `GLIDE`, and the template drew three smoke frames and exited 0. This establishes a real
+Wine runtime route in addition to the fake-wrapper ABI contract, but it is not physical-Voodoo or
+golden-image validation.
+
+dgVoodoo 2.87.3's x86 Glide DLL was also tested, but crashed inside its D3D11
+`ResolveSubresource` path under both WineD3D and DXVK 2.6. The dgVoodoo project explicitly states
+that Wine/Linux/Proton is not a supported target, so this is treated as an external runtime
+incompatibility rather than worked around inside CNA.
 
 Set `CNA_GLIDE_DIAGNOSTICS=1` to print the loaded runtime path, selected virtual/native mode,
 TMU count, texture limits and usable TMU0 bytes at startup. The report contains no native pointer
@@ -59,9 +66,17 @@ That target builds a deliberately tiny x86 fake DLL and verifies undecorated and
 export lookup, plus the error path for a missing export. It is a loader-contract test, not a
 replacement for the full fake-DLL render-call capture or a visual runtime test.
 
-Copy a compatible 32-bit `glide3x.dll` (and its required dgVoodoo companion files) beside
-`cna_glide_smoke.exe`, configure dgVoodoo for the machine, then run the executable under Windows
-or Wine. Alternatively, set `CNA_GLIDE3X_DLL` before launching. The smoke program verifies a green
+On Windows, install a compatible 32-bit `glide3x.dll` such as dgVoodoo and configure that runtime.
+On Wine, use the validated OpenGlide route and select the DLL explicitly:
+
+```bash
+CNA_GLIDE3X_DLL=/absolute/path/to/openglide9x/glide3x.dll \
+  scripts/run-wine-glide.sh /tmp/cna-template-matrix/windows-GLIDE/HelloGame.exe --smoke-test
+```
+
+The wrapper converts a Unix DLL path to a Wine path, starts the executable from its own directory so
+relative content paths work, and refuses success unless CNA reports both the exact requested runtime
+and the `GLIDE` renderer. Omit `--smoke-test` for an interactive run. The smoke program verifies a green
 clear, a red one-pixel texture drawn with `SpriteBatch`, a native Gouraud-shaded
 `VertexPositionColor` triangle, and direct backbuffer readback. It is not a
 normal CTest because CNA cannot provide or configure the external emulator.
@@ -154,6 +169,7 @@ nontrivial widths. The normal destination is ARGB4444; opt-in alpha classificati
 RGB565 or ARGB1555. The renderer keeps its own retained image and never changes `Texture2D`'s shared
 CPU/GPU cache-authority contract.
 
-For emulator installation and redistribution conditions, consult dgVoodoo2's own
-[documentation](https://dgvoodoo2.dege.freeweb.hu/dgVoodoo2/ReadmeGeneral/). CNA does not package
+For runtime installation and redistribution conditions, consult dgVoodoo2's
+[documentation](https://github.com/dege-diosg/dgVoodoo2) or OpenGlide's
+[repository and license](https://github.com/JHRobotics/openglide9x). CNA does not package
 that runtime.
