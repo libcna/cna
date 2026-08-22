@@ -1125,6 +1125,6 @@ link. These rows record defects found by the first real runtime pass.
 | RTR-P14-3 | ✅ | `GLIDE`: package the i686 MinGW GCC/C++ runtime DLLs; Wine now reaches only the explicitly caller-supplied `glide3x.dll` boundary. |
 | RTR-P14-4 | ✅ | `WICKED`: deploy `libdxcompiler.so` beside the consuming executable through CNA's renderer-runtime API. Real Radeon/Vulkan smoke run loads compiler 1.9 and draws three frames. |
 | RTR-P14-5 | ✅ | `PORTABLEGL`: implement the ordinary unlit textured `BasicEffect` route for standard `VertexPositionTexture`, including sampler slot zero. Pixel oracle passes 8/8 (perspective projection plus Clamp/Wrap included), all 12 PortableGL suites pass, and cna-template draws three frames without aborting. |
-| RTR-P14-6 | ⬜ | `OPENGLES1`: diagnose and repair SDL GL-context `BadAlloc`. |
+| RTR-P14-6 | ✅ | `OPENGLES1`: `BadAlloc` belongs to Debian Mesa's deliberate `-Dgles1=disabled` build, independently reproduced outside CNA; substituting ES2/desktop GL would falsify this renderer. The rebuilt cna-template artifact runs against the repository's documented side-by-side ES1 Mesa (`OpenGL ES-CM 1.1 Mesa 25.0.7`), draws three frames and exits 0. |
 | RTR-P14-7 | ⬜ | `DIRECTX10`: repair the missing cube texture observed under Wine. |
 | RTR-P14-8 | ⬜ | `DIRECTX12`: repair the banner's opaque gray background observed under Wine. |

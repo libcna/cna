@@ -81,6 +81,19 @@ terminate called after throwing an instance of 'std::runtime_error'
 instead), so it fails identically and throws a clear `std::runtime_error` identifying the missing
 driver, rather than silently falling back to something else.
 
+The same rule applies to the cna-template matrix artifact. On this development machine its
+verified invocation is:
+
+```bash
+cd /tmp/cna-template-matrix/linux-OPENGLES1
+/rv/data/development/github.com/openeggbert/cnanext/scripts/opengles1-test-env.sh \
+  ./HelloGame --smoke-test
+```
+
+Running `./HelloGame` directly selects Debian's system Mesa and therefore ends in the expected
+`BadAlloc`; the wrapper selects the side-by-side Mesa built with ES1 enabled. The verified run
+reports `OpenGL ES-CM 1.1 Mesa 25.0.7`, draws three frames, returns from `Game::Run`, and exits 0.
+
 **Practical implication:** this renderer cannot be runtime-verified (context creation, Clear/
 Present, any pixel-level test) against Debian's stock Mesa packages, on any GPU. Suitable targets
 are:
