@@ -14,6 +14,23 @@ as a WebAssembly indirect-call fault:
 - Debug builds: `RuntimeError: table index is out of bounds`
 - Release builds: `null function or function signature mismatch`
 
+There is a second symptom, reached earlier, whenever the browser delivers a window event before the
+first draw. `Game`'s destructor takes CNA's platform (`Game::platform_`) with it, and
+`~Sdl3Platform()` releases every subsystem that instance acquired — `SDL_INIT_VIDEO` included. The
+window object outlives the subsystem that owns it, so the next platform query on it fails:
+
+```text
+SDL_GetWindowSize failed: Video subsystem has not been initialized
+```
+
+That message is worth recognising on sight. It reads like an initialisation-order or canvas-sizing
+problem in a game that has just finished creating its window and GL context successfully, and it
+has been misread as one more than once — once inside this repository (commit `bd2ddc4c0`, which
+called it "a transient SDL3-on-Emscripten startup race" 2.5 hours before the real cause below was
+proven), and once in a consuming project, where it was filed as "the canvas never gets sized".
+It is not transient and not about sizing: it is what a destroyed `Game` looks like from the
+main-loop callback that is still running.
+
 ## Root cause
 
 `Game::RunLoop()`'s Emscripten path ends with:
@@ -38,7 +55,7 @@ between the `emscripten_set_main_loop` call site and wherever the throw is ultim
 (back in Emscripten's own JS runtime, at the original `main()` invocation) — including a `Game`
 subclass, if it happens to be a local variable in one of those frames.
 
-This is proven, not inferred, in `emscripten-mainloop-stack-spike/repro.cpp`: a stack-local
+This is proven, not inferred, in `spikes/emscripten-mainloop-stack-spike/repro.cpp`: a stack-local
 object owning a resource via `std::unique_ptr` (mirroring how a real `Game` subclass owns its
 `GraphicsDeviceManager`) has its destructor — and its owned resource's destructor — run
 **immediately** after the `emscripten_set_main_loop` call, before a single main-loop tick
@@ -80,9 +97,24 @@ the spike's `README.md`). The fix applied in this pass:
    `modules/graphics/examples/demo_2d/src/Main.cpp`, `modules/devices/examples/demo_devices/src/Main.cpp`,
    and `modules/input/examples/demo_input/src/Main.cpp` already heap-allocated their `Game`
    object and needed no change.
-3. A permanent, minimal, always-reproducing spike (`emscripten-mainloop-stack-spike/`) keeps the
+3. A permanent, minimal, always-reproducing spike (`spikes/emscripten-mainloop-stack-spike/`) keeps the
    failing pattern demonstrable for future maintainers without needing to rediscover it, per this
    repository's existence-gate-spike convention.
+
+## What CNA does when it happens anyway
+
+A consuming project can still get this wrong, so the framework does not depend on it being right.
+Two call sites absorb the fallout rather than turning it into a crash — neither repairs a destroyed
+`Game`, and neither is a substitute for the rule at the top of this file:
+
+- `Sdl3Window::GetClientBounds()` keeps the last successfully queried bounds instead of throwing,
+  so a bounds read never reports a nonsensical 0x0 window.
+- `GraphicsDevice::UpdateViewportFromWindow()` guards its platform-window queries, so the
+  `GameWindow.ClientSizeChanged` subscriber — which runs from inside the frame's event pump,
+  because the browser delivered a resize — cannot unwind the game loop over one refused query.
+  Deliberately narrow: `GraphicsDevice::createRenderer()` makes the same `GetPixelSize()` call and
+  stays strict, because a renderer that cannot learn its surface size is a real failure the caller
+  asked for. `GraphicsDevicePlatformWindowTests` covers both halves.
 
 ## What this is not
 

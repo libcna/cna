@@ -32,6 +32,7 @@ struct WindowOwnershipTrace
     WindowDescription description;
     std::uintptr_t adoptedHandle = 0;
     bool throwFromSync = false;
+    bool throwFromPixelSize = false;
 };
 
 class TracedWindow final : public IPlatformWindow
@@ -60,6 +61,10 @@ public:
     }
     [[nodiscard]] WindowSize GetPixelSize() const override
     {
+        if (trace_.throwFromPixelSize)
+        {
+            throw std::runtime_error("synthetic drawable-size query failure");
+        }
         return WindowSize{width_ * 2, height_ * 2};
     }
     void SetSize(const int width, const int height) override
@@ -228,6 +233,54 @@ TEST(GraphicsDevicePlatformWindowTests,
     EXPECT_EQ(trace.events, (std::vector<std::string>{
         "video-acquired", "window-adopted", "fullscreen-applied",
         "size-requested", "window-synced", "window-destroyed", "video-released"}));
+#endif
+}
+
+TEST(GraphicsDevicePlatformWindowTests,
+     AViewportRefreshSurvivesAWindowThatRefusesItsDrawableSize)
+{
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
+    GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
+#else
+    // UpdateViewportFromWindow() is what GameWindow.ClientSizeChanged runs, from inside the frame's
+    // event pump, because the operating system or the browser delivered a resize. A window that
+    // refuses a query there must cost the game one viewport refresh, not the whole game loop --
+    // this reproduces exactly what a torn-down SDL video subsystem looks like to a window that
+    // outlived it (docs/emscripten-mainloop-game-lifetime.md).
+    WindowOwnershipTrace trace;
+    TracedPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+
+    GraphicsDevice device;
+    const auto widthBefore = device.getViewportProperty().getWidthProperty();
+    const auto heightBefore = device.getViewportProperty().getHeightProperty();
+
+    trace.throwFromPixelSize = true;
+    EXPECT_NO_THROW(device.UpdateViewportFromWindow());
+
+    // The refusal is absorbed, not acted on: the viewport keeps the value it already had rather
+    // than collapsing to whatever a failed query left behind.
+    EXPECT_EQ(device.getViewportProperty().getWidthProperty(), widthBefore);
+    EXPECT_EQ(device.getViewportProperty().getHeightProperty(), heightBefore);
+#endif
+}
+
+TEST(GraphicsDevicePlatformWindowTests,
+     DeviceCreationStillFailsOnAWindowThatRefusesItsDrawableSize)
+{
+#if defined(CNA_PLATFORM_SDL3) || !(defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL))
+    GTEST_SKIP() << "requires an SDL-free platform selection and a window-independent renderer";
+#else
+    // The other half of the contract, and the reason the tolerance above is scoped to one block
+    // rather than to the query itself: creating a renderer for a surface whose size cannot be
+    // determined is a genuine failure the caller asked for and can act on. Only the unsolicited,
+    // event-driven refresh absorbs it.
+    WindowOwnershipTrace trace;
+    trace.throwFromPixelSize = true;
+    TracedPlatform platform(trace);
+    ScopedCurrentPlatform current(platform);
+
+    EXPECT_ANY_THROW((void)GraphicsDevice());
 #endif
 }
 

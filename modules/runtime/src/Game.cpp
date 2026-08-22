@@ -33,6 +33,20 @@ namespace Microsoft::Xna::Framework
         std::vector<CNA::Platform::PlatformEvent> events;
     };
 
+#if defined(__EMSCRIPTEN__)
+    // Defined here rather than next to EmscriptenMainLoopCallback below because ~Game() reads it,
+    // and a nested type has to be complete by then.
+    struct Game::EmscriptenLoopState
+    {
+        Game* game = nullptr;
+        GameTime gameTime;
+        std::uint64_t lastTickMs = 0;
+        double accumulatorMs = 0.0;
+    };
+
+    Game::EmscriptenLoopState Game::s_emLoopState;
+#endif
+
     namespace
     {
         [[nodiscard]] double TotalMilliseconds(const System::TimeSpan& value)
@@ -255,6 +269,32 @@ namespace Microsoft::Xna::Framework
 
     Game::~Game()
     {
+#if defined(__EMSCRIPTEN__)
+        // A game that finished normally cleared this on its way out (see EmscriptenMainLoopCallback
+        // below), so reaching here with the pointer still aimed at this object means the game is
+        // being destroyed while the browser is still scheduled to call back into it. There is one
+        // way that happens by accident, and it is common enough to name outright: RunLoop()'s
+        // emscripten_set_main_loop(..., simulateInfiniteLoop=1) unwinds the calling stack with a
+        // JavaScript throw, which -fwasm-exceptions turns into real destructor calls for locals --
+        // so a Game that is a local variable in main() destroys itself before the first frame.
+        //
+        // Cancelling is not a repair: this game's graphics device and platform are going away
+        // regardless, and the page will show nothing either way. It replaces a use-after-free --
+        // which surfaces frames later as a WebAssembly indirect-call fault, or as an SDL "video
+        // subsystem has not been initialized" error from a window that outlived the subsystem, and
+        // neither of those names the actual mistake -- with a clean stop and a message pointing at
+        // the call site that has to change.
+        if (s_emLoopState.game == this)
+        {
+            emscripten_cancel_main_loop();
+            s_emLoopState.game = nullptr;
+            CNA::Logger::Error(
+                "CNA: the Game driving the Emscripten main loop was destroyed; the loop is "
+                "cancelled and the page stops here. Under Emscripten a Game must not be a local "
+                "variable -- heap-allocate it (see Game::Run() and "
+                "docs/emscripten-mainloop-game-lifetime.md).");
+        }
+#endif
         Dispose(false);
         // Hand the ambient installation back to whichever game is still alive, if any. This runs
         // before platform_ is destroyed (members are destroyed after the body), so the accessor
@@ -899,16 +939,6 @@ namespace Microsoft::Xna::Framework
     }
 
 #if defined(__EMSCRIPTEN__)
-    struct Game::EmscriptenLoopState
-    {
-        Game* game = nullptr;
-        GameTime gameTime;
-        std::uint64_t lastTickMs = 0;
-        double accumulatorMs = 0.0;
-    };
-
-    Game::EmscriptenLoopState Game::s_emLoopState;
-
     void Game::EmscriptenMainLoopCallback()
     {
         try

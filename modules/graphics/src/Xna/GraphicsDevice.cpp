@@ -2970,12 +2970,39 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (renderer_ != nullptr && platformWindow_ != nullptr)
         {
+            // A platform window is allowed to refuse a query -- refusing is how IPlatformWindow
+            // reports "I cannot answer right now", and GetPixelSize() is the one query on this
+            // path that reports it by throwing rather than by falling back to a last-known value.
+            // This method already treats "I cannot determine a size" as a non-error further down
+            // (it simply returns when nothing produced usable dimensions), so a refusal here must
+            // reach that same outcome rather than unwinding the caller: the loudest caller is the
+            // GameWindow.ClientSizeChanged subscriber, which runs from inside the frame's event
+            // pump because the operating system or the browser delivered a resize. Throwing there
+            // ends the game over a window resize.
+            //
+            // Deliberately narrow: only the queries are guarded. OnSurfaceChanged() stays outside,
+            // so a renderer that genuinely fails to adopt the new surface still reports it.
+            bool surfaceQueried = false;
             CNA::Internal::Renderers::RendererSurfaceInfo surface;
-            surface.windowId = platformWindow_->GetId();
-            surface.nativeHandle = platformWindow_->GetNativeHandle();
-            surface.drawableSize = platformWindow_->GetPixelSize();
-            surface.displayScale = platformWindow_->GetDisplayScale();
-            renderer_->OnSurfaceChanged(surface);
+            try
+            {
+                surface.windowId = platformWindow_->GetId();
+                surface.nativeHandle = platformWindow_->GetNativeHandle();
+                surface.drawableSize = platformWindow_->GetPixelSize();
+                surface.displayScale = platformWindow_->GetDisplayScale();
+                surfaceQueried = true;
+            }
+            catch (const std::exception& exception)
+            {
+                CNA::Logger::Warn(
+                    std::string("CNA: the platform window refused a surface query, so the renderer "
+                                "keeps its previous surface for this update: ") + exception.what());
+            }
+
+            if (surfaceQueried)
+            {
+                renderer_->OnSurfaceChanged(surface);
+            }
         }
 
         int width = 0;
