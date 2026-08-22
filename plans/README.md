@@ -17,7 +17,8 @@ requirements remain in [`CHECKLIST.md`](../CHECKLIST.md).
 - [`plan_runtimerenderer.md`](plan_runtimerenderer.md) — runtime graphics-renderer selection.
 - [`plan_sdl3free.md`](plan_sdl3free.md) — SDL3-independent build paths.
 - [`plan_modern.md`](plan_modern.md) — the `CNA::Graphics` modern engine layer.
-- [`plan_samples.md`](plan_samples.md) — sample coverage and integration work.
+- [`cna-samples/plan.md`](../../cna-samples/plan.md) — authoritative sample coverage,
+  cross-repository gap fixes and native/web verification work.
 
 ## XNA subsystems, content, and ABI
 

@@ -196,7 +196,7 @@ Full per-file exempt listing lives under `exempt/<reason>.md`. Summary:
 | `binary-or-data-asset` | 119 | [exempt/binary-or-data-asset.md](exempt/binary-or-data-asset.md) |
 | `generated-content-asset` | 77 | [exempt/generated-content-asset.md](exempt/generated-content-asset.md) |
 | `legal-text` | 3 | [exempt/legal-text.md](exempt/legal-text.md) |
-| `planning-tracking-doc` | 44 | [exempt/planning-tracking-doc.md](exempt/planning-tracking-doc.md) |
+| `planning-tracking-doc` | 43 | [exempt/planning-tracking-doc.md](exempt/planning-tracking-doc.md) |
 | `third-party-vendored` | 44 | [exempt/third-party-vendored.md](exempt/third-party-vendored.md) |
 | `vcs-meta` | 8 | [exempt/vcs-meta.md](exempt/vcs-meta.md) |
 | `vendored-test-fixture` | 30 | [exempt/vendored-test-fixture.md](exempt/vendored-test-fixture.md) |

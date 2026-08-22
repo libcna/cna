@@ -2,7 +2,7 @@
 
 [<- Back to AUDIT_MANIFEST.md](../AUDIT_MANIFEST.md)
 
-Count: **44**
+Count: **43**
 
 Reason: root-level planning/tracking/status document, project-management artifact per audit scope decision (not audited as source; may be consulted as secondary context)
 
@@ -43,12 +43,11 @@ Reason: root-level planning/tracking/status document, project-management artifac
 | 33 | `plans/plan_input.md` |
 | 34 | `plans/plan_media.md` |
 | 35 | `plans/plan_net.md` |
-| 36 | `plans/plan_samples.md` |
-| 37 | `plans/plan_sdlgpu.md` |
-| 38 | `plans/plan_software.md` |
-| 39 | `plans/plan_webgpu.md` |
-| 40 | `plans/plan_xnb.md` |
-| 41 | `programs.md` |
-| 42 | `tasks/backlog/000035_Bundle SDL3, SDL_image, and SDL_mixer into the Project.md` |
-| 43 | `tasks/backlog/000036_Implement Content System with ContentTypeReader and ShaderEffect.md` |
-| 44 | `xnb.md` |
+| 36 | `plans/plan_sdlgpu.md` |
+| 37 | `plans/plan_software.md` |
+| 38 | `plans/plan_webgpu.md` |
+| 39 | `plans/plan_xnb.md` |
+| 40 | `programs.md` |
+| 41 | `tasks/backlog/000035_Bundle SDL3, SDL_image, and SDL_mixer into the Project.md` |
+| 42 | `tasks/backlog/000036_Implement Content System with ContentTypeReader and ShaderEffect.md` |
+| 43 | `xnb.md` |

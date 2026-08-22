@@ -4417,7 +4417,8 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 
 > **Separate, unrelated track — `plans/plan_graphics.md` Phase 78 (DEFERRED.md item #11, HLSL→GLSL sample
 > shader conversion) is now FULLY COMPLETE, as of 2026-07-16 (EasyGL only).** This is completely
-> independent of the D3D work above — it unblocks samples catalogued in `plans/plan_samples.md`
+> independent of the D3D work above — it unblocks samples now catalogued in
+> `../cna-samples/plan.md`
 > (`../cna-samples`' own 153-sample re-audit), not `plans/plan_dx.md`. **Task 945 decided** (project
 > owner, 2026-07-16): manual line-by-line HLSL→GLSL porting, no `SPIRV-Cross`/`dxc` pipeline — every
 > HLSL construct hit across every shader ported turned out to be a mechanical 1:1 substitution.
@@ -4434,11 +4435,11 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 > vertex streams). **What remains is explicitly NOT `cna_graphics` scope**: the actual sample ports
 > (`.cpp`/`.hpp`/`Content/` under `../cna-samples/samples/<Name>/`) for these 13 (now-unblocked)
 > samples still need to be written in the sibling `../cna-samples` repo, tracked in that repo's own
-> plan file, not here or in `plans/plan_graphics.md`/`plans/plan_samples.md`. `plans/plan_samples.md` also still has
-> ~88 other `⬜` rows unrelated to this shader-conversion track (re-verification passes, other
-> DEFERRED.md items, etc.) — untouched by this work, standing backlog. Full detail: `plans/plan_graphics.md`
-> Task 947's own row (chronological per-shader history, discriminating-power mutation testing for
-> every one) and Tasks 1079–1082's own rows; `plans/plan_samples.md` for the per-sample CNA-gap tracking.
+> authoritative plan, not here or in `plans/plan_graphics.md`. The former CNA-side sample queue was
+> merged into `../cna-samples/plan.md` on 2026-08-22; its old status counts are historical. Full
+> detail: `plans/plan_graphics.md` Task 947's own row (chronological per-shader history,
+> discriminating-power mutation testing for every one) and Tasks 1079–1082's own rows;
+> `../cna-samples/plan.md` for the unified per-sample and cross-repository tracking.
 
 > **Separate, unrelated track — `feature/input` branch, `audit_input.md` remediation + full
 > phase-by-phase FNA-parity audit, in progress as of 2026-07-17.** Completely independent of the D3D9
@@ -5890,7 +5891,7 @@ Most recent first. Full detail lives in `plans/plan_dx9.md` — this is a short 
 | `09121309` | **Phase D9-0 fully closed** (`D9-2`–`D9-5`): confirmed `d3d9`-alone link set (no `dxguid`); a real Wine+DXVK D3D9 device/swap-chain/`Clear`/`Present`/`GetRenderTargetData`/`LockRect` round-trip with an exact pixel match plus a full `D3DCAPS9` dump (`vs_3_0`/`ps_3_0`, `NumSimultaneousRTs=4`, 16384 max texture size, DXVK reports unconditional NPOT support — flagged as provisional/synthetic, not an authentic XNA-era driver's caps); confirmed `D3DPOOL_MANAGED` textures are genuinely `LockRect`-readable and survive `Reset()` with no re-upload (so `Texture2D::GetData()` can be a plain `LockRect` later, `D9-52`); and a new `scripts/run-wine-dxvk9.sh` (mirrors `run-wine-dxvk.sh`'s DXVK-marker gate under new `CNA_D3D9_*` env-var names), proven both ways — passes against the real `~/.wine-cna-d3d11` DXVK prefix, and correctly fails (exit 3) against a freshly-initialized, DXVK-less prefix that silently fell back to WineD3D. |
 | `59a35d4c` | Recorded the project owner's two 2026-07-14 decisions in `plans/plan_dx9.md`: implementation authorized through Phase D9-13, and the `IGraphicsBackend` boundary problem resolved via an approved additive extension. |
 | `d1ae928f` | Added `plans/plan_dx9.md` and the proven Phase D9-0 spike artifacts (`dx9-spike/`: shader compiler, `.fxb` bytecode oracle, real XNA 4.0 reference renderer) to the `feature/dx9` worktree. |
-| many, see `plans/plan_graphics.md` (2026-07-16) | **`plans/plan_graphics.md` Phase 78 (HLSL→GLSL sample shader conversion, DEFERRED.md #11) fully closed — unrelated to the D3D work below, see this file's own top banner.** Task 945 decided (manual line-by-line porting). Task 947 went 0→**13/13**: `NetRumble` (`Clouds.fx` + the bloom trio), `PerPixelLighting`/`VertexLighting` (5 effect/technique combinations), `DistortionSample` (`Distort.fx` + `Distorters.fx`, 5 techniques), `NonPhotoRealistic` (`CartoonEffect.Fx` + `PostprocessEffect.Fx`, 8 techniques), `ShadowMapping`, `NormalMapping`, `BillboardSample`, `ShatterEffect`, `Particles3D`/`XmlParticles`, `ShipGame` (4 distinct shaders: `AnimSprite.fx`/`Blur.fx`/`NormalMapping.fx`/`Particle.fx`, incl. real GPU point sprites), `InstancedModel` (`InstancedModel.fx`, incl. real GPU hardware instancing). 4 new EasyGL-only backend capabilities landed along the way as their own tasks: **1079** (`ShaderEffect` into the 3D draw path), **1080** (custom vertex layouts for that path), **1081** (`TextureCube` sampling for custom shaders), **1082** (real GPU hardware instancing via `glVertexAttribDivisor`). `ctest -R "EasyGL_"` grew from ~190 to **231/233** across the whole campaign, same 2 pre-existing unrelated failures throughout, every task individually mutation-tested and committed separately. Full chronological detail (exact expected pixel values, discriminating-power mutation testing per shader) is in `plans/plan_graphics.md`'s own Task 947/1079–1082 rows, not duplicated here. `plans/plan_samples.md` updated per-sample (13 rows now say "No longer CNA-blocked"). **Not done**: the actual sample ports themselves in `../cna-samples` — out of `cna_graphics` scope. |
+| many, see `plans/plan_graphics.md` (2026-07-16) | **`plans/plan_graphics.md` Phase 78 (HLSL→GLSL sample shader conversion, DEFERRED.md #11) fully closed — unrelated to the D3D work below, see this file's own top banner.** Task 945 decided (manual line-by-line porting). Task 947 went 0→**13/13**: `NetRumble` (`Clouds.fx` + the bloom trio), `PerPixelLighting`/`VertexLighting` (5 effect/technique combinations), `DistortionSample` (`Distort.fx` + `Distorters.fx`, 5 techniques), `NonPhotoRealistic` (`CartoonEffect.Fx` + `PostprocessEffect.Fx`, 8 techniques), `ShadowMapping`, `NormalMapping`, `BillboardSample`, `ShatterEffect`, `Particles3D`/`XmlParticles`, `ShipGame` (4 distinct shaders: `AnimSprite.fx`/`Blur.fx`/`NormalMapping.fx`/`Particle.fx`, incl. real GPU point sprites), `InstancedModel` (`InstancedModel.fx`, incl. real GPU hardware instancing). 4 new EasyGL-only backend capabilities landed along the way as their own tasks: **1079** (`ShaderEffect` into the 3D draw path), **1080** (custom vertex layouts for that path), **1081** (`TextureCube` sampling for custom shaders), **1082** (real GPU hardware instancing via `glVertexAttribDivisor`). `ctest -R "EasyGL_"` grew from ~190 to **231/233** across the whole campaign, same 2 pre-existing unrelated failures throughout, every task individually mutation-tested and committed separately. Full chronological detail (exact expected pixel values, discriminating-power mutation testing per shader) is in `plans/plan_graphics.md`'s own Task 947/1079–1082 rows, not duplicated here. The former `plans/plan_samples.md` status was merged into `../cna-samples/plan.md` on 2026-08-22. **Not done**: the actual sample ports themselves in `../cna-samples` — out of `cna_graphics` scope. |
 
 ---
 
@@ -6241,17 +6242,12 @@ See `plans/plan_dx9.md`'s "Execution order" table for the full sequence beyond t
 
 **Other standing backlog, unrelated to D3D9** (full history: `plans/plan_dx.md` for the now-fully-closed
 D3D11/D3D12 work, this file's own top banner for Phase 78):
-- **`plans/plan_samples.md` standing queue** (formerly Phase 79, `plans/plan_graphics.md` Tasks 957–1076,
-  moved+renumbered `SAMPLE-1`–`SAMPLE-120` on 2026-07-16): a full re-audit of all 153
-  `../cna-samples`-catalogued samples, one row per sample. **13 rows** (`SAMPLE-32`/`33`/`34`/`35`/
-  `36`/`38`/`39`/`40`/`42`/`43`/`45`/`62`/`66`) now say "No longer CNA-blocked" thanks to Phase 78
-  — their own CNA-side shader gap is closed, but they're still `⬜` in `plans/plan_samples.md` because
-  **the actual sample port itself** (`.cpp`/`.hpp`/`Content/` under `../cna-samples/samples/<Name>/`)
-  hasn't been written yet — that's a different repo, out of `cna_graphics` scope, tracked in
-  `../cna-samples`'s own plan file. The other ~88 `⬜` rows in `plans/plan_samples.md` are unrelated to
-  shaders (re-verification passes, other DEFERRED.md items) — pick any of those, or any of the 13
-  above if the sibling repo's own plan calls for it. Do not touch `⛔` rows (structural/permanent,
-  no CNA action possible).
+- **`../cna-samples/plan.md` standing queue** (the authoritative 2026-08-22 merge of the former
+  Phase 79/CNA sample plan and `cna-samples/PLAN.md`): a fresh audit of all 153 physical upstream
+  directories, one row per directory. Historical `Done`, placeholder and permanent-ignore labels
+  are now untrusted evidence. Each session ports/re-verifies the sample, removes sample-side
+  workarounds, fixes any CNA/sharp-runtime gap in the owning repository and proves native plus real
+  browser behavior. The Racing Game remains separately governed by `cna-samples/plan_racing.md`.
 - Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) remains **DEFERRED**, not a next task —
   see §9.
 
