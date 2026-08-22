@@ -48,6 +48,17 @@ if(CNA_BUILD_EXAMPLES)
             -sFORCE_FILESYSTEM=1
             "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content@/Content"
         )
+        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1")
+            target_link_options(cna_demo_2d PRIVATE
+                "-sMIN_WEBGL_VERSION=1"
+                "-sMAX_WEBGL_VERSION=1")
+        elseif(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+            # Emscripten defaults to WebGL 1 unless the final executable requests WebGL 2.
+            # EasyGL's WEBGL2 profile emits GLSL ES 3.00 shaders, which WebGL 1 rejects.
+            target_link_options(cna_demo_2d PRIVATE
+                "-sMIN_WEBGL_VERSION=2"
+                "-sMAX_WEBGL_VERSION=2")
+        endif()
     else()
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32 AND NOT APPLE)
             target_link_libraries(cna_demo_2d PRIVATE
