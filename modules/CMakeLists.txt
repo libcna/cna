@@ -39,12 +39,33 @@ endif()
 # conformance must not silently depend on which distro version happened to be installed. A system
 # package remains an explicit escape hatch for packagers, and the decoder-free configuration stays
 # available as an intentional test mode for the extension-required refusal path.
-option(CNA_ENABLE_DRACO "Enable KHR_draco_mesh_compression decoding" ON)
+#
+# Off by default under Emscripten, and only there. The pinned Draco 1.5.7 predates the toolchain
+# by enough that a web build of CNA cannot get through it: emsdk no longer exports the EMSCRIPTEN
+# variable its CMake demands, src/draco/io/ply_reader.cc calls std::all_of on a current libc++
+# without including <algorithm>, and its own --whole-archive self-link then makes wasm-ld report
+# the whole library as duplicate symbols. Each of those is worked around or reported below, but
+# the last one is upstream's own link recipe and CNA is not going to rewrite it inside a submodule
+# pinned for conformance reasons. The result was that NO Emscripten build of CNA succeeded at all,
+# by default, over a component a web game may well not use -- so the decoder-free configuration,
+# which CNA already supports and documents (compressed primitives throw at import), becomes the
+# web default. -DCNA_ENABLE_DRACO=ON still opts in and is expected to fail at link until the
+# pinned Draco moves.
+if(EMSCRIPTEN)
+    option(CNA_ENABLE_DRACO "Enable KHR_draco_mesh_compression decoding" OFF)
+else()
+    option(CNA_ENABLE_DRACO "Enable KHR_draco_mesh_compression decoding" ON)
+endif()
 option(CNA_USE_SYSTEM_DRACO "Use a system Draco package instead of CNA's pinned submodule" OFF)
 
 if(NOT CNA_ENABLE_DRACO)
     set(CNA_DRACO_AVAILABLE OFF)
-    message(STATUS "CNA: Draco explicitly disabled -- KHR_draco_mesh_compression primitives will throw at import time")
+    if(EMSCRIPTEN)
+        message(STATUS "CNA: Draco off for this web build (pinned Draco 1.5.7 does not link under "
+                       "Emscripten) -- KHR_draco_mesh_compression primitives will throw at import time")
+    else()
+        message(STATUS "CNA: Draco explicitly disabled -- KHR_draco_mesh_compression primitives will throw at import time")
+    endif()
 elseif(CNA_USE_SYSTEM_DRACO)
     find_package(draco CONFIG REQUIRED)
     set(CNA_DRACO_AVAILABLE ON)
@@ -99,7 +120,20 @@ else()
     set(DRACO_UNITY_PLUGIN OFF CACHE BOOL "Disable vendored Draco Unity plugin" FORCE)
     set(DRACO_MAYA_PLUGIN OFF CACHE BOOL "Disable vendored Draco Maya plugin" FORCE)
     set(DRACO_TRANSCODER_SUPPORTED OFF CACHE BOOL "Disable vendored Draco transcoder" FORCE)
+    # Draco 1.5.7 predates libc++'s transitive-include cleanup: src/draco/io/ply_reader.cc calls
+    # std::all_of while including only <array> and <regex>, which libstdc++ still pulls in for it
+    # and a current libc++ does not. GCC hosts therefore build it and every clang build fails --
+    # an Emscripten build is where CNA first meets one. Exactly one production file in the tree
+    # does this (the only other is a test, and DRACO_TESTS is off above), and the submodule must
+    # stay byte-identical to the pinned google/draco 1.5.7, so the header is supplied from outside
+    # for this subtree alone and the flag is put back immediately afterwards.
+    set(_cna_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include algorithm")
+    endif()
     add_subdirectory("${_cna_draco_dir}" "${CMAKE_CURRENT_BINARY_DIR}/draco" EXCLUDE_FROM_ALL)
+    set(CMAKE_CXX_FLAGS "${_cna_saved_cxx_flags}")
+    unset(_cna_saved_cxx_flags)
     set(CNA_DRACO_AVAILABLE ON)
     message(STATUS "CNA: Using pinned vendored Draco 1.5.7 (8786740086a9f4d83f44aa83badfbea4dce7a1b5)")
 endif()
