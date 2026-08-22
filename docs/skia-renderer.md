@@ -122,11 +122,19 @@ developer procedure uses at most eight workers.
 ```sh
 git clone https://skia.googlesource.com/skia.git /path/to/skia
 git -C /path/to/skia checkout ebf50520d720a1ce9d842d942d04c6c39c3fbc7b
+git clone https://chromium.googlesource.com/chromium/src/base/allocator/partition_allocator.git \
+  /path/to/skia/third_party/externals/partition_alloc
+git -C /path/to/skia/third_party/externals/partition_alloc checkout \
+  b1d0141bcecfda2bfd108882d818fc5df70ae5c7
 cd /path/to/skia
 bin/fetch-gn
 bin/gn gen /path/to/skia-out/raster --args='is_official_build=true is_debug=false cc="clang" cxx="clang++" skia_use_gl=false skia_enable_ganesh=false skia_use_vulkan=false skia_use_dawn=false skia_enable_graphite=false skia_enable_pdf=false skia_use_freetype=false skia_use_fontconfig=false skia_use_libpng_decode=false skia_use_libjpeg_turbo_decode=false skia_use_libwebp_decode=false skia_use_wuffs=false skia_use_icu=false skia_enable_tools=false'
 ninja -C /path/to/skia-out/raster -j8 skia
 ```
+
+The minimal raster target still depends on Skia's pinned PartitionAlloc `raw_ptr` and allocator
+targets. The checkout above is therefore required even though the GN arguments disable every GPU
+and codec dependency; without it GN cannot load `partition_alloc.gni` and generates no build.
 
 The output directory must contain `libskia.a`, `libskcms.a`, `liballocator_base.a`, `liballocator_core.a`, `liballocator_shim.a`, and `libraw_ptr.a`.
 

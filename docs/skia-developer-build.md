@@ -74,17 +74,28 @@ The CMake environment limit also applies to the one-time vendored SDL builds tha
 first CNA configure; their internal `cmake --build --parallel` command would otherwise use the
 native tool's unrestricted default.
 
-Clone, detach at the pinned revision, fetch GN, generate the exact raster configuration, and build
-with at most three workers (this repository's own build-hygiene rule; see
+Clone, detach at the pinned revision, fetch the pinned PartitionAlloc dependency and GN, generate
+the exact raster configuration, and build with at most three workers (this repository's own
+build-hygiene rule; see
 /rv/data/development/github.com/openeggbert/CLAUDE.md):
 
 ```sh
 git clone https://skia.googlesource.com/skia.git "$CNA_SKIA_SRC"
 git -C "$CNA_SKIA_SRC" checkout --detach ebf50520d720a1ce9d842d942d04c6c39c3fbc7b
+git clone https://chromium.googlesource.com/chromium/src/base/allocator/partition_allocator.git \
+  "$CNA_SKIA_SRC/third_party/externals/partition_alloc"
+git -C "$CNA_SKIA_SRC/third_party/externals/partition_alloc" checkout --detach \
+  b1d0141bcecfda2bfd108882d818fc5df70ae5c7
 "$CNA_SKIA_SRC/bin/fetch-gn"
-"$CNA_SKIA_SRC/bin/gn" gen "$CNA_SKIA_OUT" --args='is_official_build=true is_debug=false cc="clang" cxx="clang++" skia_use_gl=false skia_enable_ganesh=false skia_use_vulkan=false skia_use_dawn=false skia_enable_graphite=false skia_enable_pdf=false skia_use_freetype=false skia_use_fontconfig=false skia_use_libpng_decode=false skia_use_libjpeg_turbo_decode=false skia_use_libwebp_decode=false skia_use_wuffs=false skia_use_icu=false skia_enable_tools=false'
+"$CNA_SKIA_SRC/bin/gn" gen "$CNA_SKIA_OUT" --root="$CNA_SKIA_SRC" --args='is_official_build=true is_debug=false cc="clang" cxx="clang++" skia_use_gl=false skia_enable_ganesh=false skia_use_vulkan=false skia_use_dawn=false skia_enable_graphite=false skia_enable_pdf=false skia_use_freetype=false skia_use_fontconfig=false skia_use_libpng_decode=false skia_use_libjpeg_turbo_decode=false skia_use_libwebp_decode=false skia_use_wuffs=false skia_use_icu=false skia_enable_tools=false'
 ninja -C "$CNA_SKIA_OUT" -j3 skia
 ```
+
+The selected raster graph still links Skia's `raw_ptr` and allocator targets, so
+`partition_alloc` is required even though every GPU and codec dependency above is disabled. The
+revision is the exact entry from this Skia commit's `DEPS`; omitting it makes GN stop at
+`src/partition_alloc/BUILD.gn` before producing a Ninja file. `--root` is explicit so the command
+works from the CNA checkout as written instead of depending on the caller's current directory.
 
 Verify the revision and complete archive set before configuring CNA:
 
