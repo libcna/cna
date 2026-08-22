@@ -3457,25 +3457,32 @@ if (ProfileUsesGlslEs100())
 
         vbo_.create();
         ibo_.create();
-        vao_.create();
-
-        vao_.bind();
+        if (!ProfileIsEs2ApiGeneration())
+        {
+            vao_.create();
+            vao_.bind();
+        }
         vbo_.bind(::easygl::BufferTarget::Array);
 
-        // Position (0), TexCoord (1), Color (2)
-        vao_.enable_attribute(0);
-        vao_.set_attribute_pointer(0, 2, ::easygl::DataType::Float, false, 8 * sizeof(float), (void*)0);
+        if (!ProfileIsEs2ApiGeneration())
+        {
+            // Position (0), TexCoord (1), Color (2). WebGL 1 / GLES 2 has no core VAO;
+            // that path reapplies the same default-array attributes immediately before drawing.
+            vao_.enable_attribute(0);
+            vao_.set_attribute_pointer(0, 2, ::easygl::DataType::Float, false,
+                                       8 * sizeof(float), (void*)0);
 
-        vao_.enable_attribute(1);
-        vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false, 8 * sizeof(float),
-                                   (void*)(2 * sizeof(float)));
+            vao_.enable_attribute(1);
+            vao_.set_attribute_pointer(1, 2, ::easygl::DataType::Float, false,
+                                       8 * sizeof(float), (void*)(2 * sizeof(float)));
 
-        vao_.enable_attribute(2);
-        vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, 8 * sizeof(float),
-                                   (void*)(4 * sizeof(float)));
+            vao_.enable_attribute(2);
+            vao_.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false,
+                                       8 * sizeof(float), (void*)(4 * sizeof(float)));
 
-        ibo_.bind(::easygl::BufferTarget::ElementArray);
-        vao_.unbind();
+            ibo_.bind(::easygl::BufferTarget::ElementArray);
+            vao_.unbind();
+        }
     }
 
     void EasyGLSpriteBatchRenderer::Begin()
@@ -3633,7 +3640,30 @@ if (ProfileUsesGlslEs100())
                       pending_vertices_.data(),
                       pending_vertices_.size() * sizeof(Vertex));
 
-        vao_.bind();
+        if (ProfileIsEs2ApiGeneration())
+        {
+            // Vertex attribute state is global in the GLES 2 / WebGL 1 core API. Other draws may
+            // have changed it since the previous batch, so restore SpriteBatch's complete layout
+            // after binding this batch's VBO instead of pretending a core VAO exists.
+            metagl::glEnableVertexAttribArray(metagl::AttribLocation{0});
+            metagl::glVertexAttribPointer(metagl::AttribLocation{0}, 2,
+                                          metagl::DataType::Float, 0,
+                                          static_cast<metagl::GLsizei>(8 * sizeof(float)), (void*)0);
+            metagl::glEnableVertexAttribArray(metagl::AttribLocation{1});
+            metagl::glVertexAttribPointer(metagl::AttribLocation{1}, 2,
+                                          metagl::DataType::Float, 0,
+                                          static_cast<metagl::GLsizei>(8 * sizeof(float)),
+                                          (void*)(2 * sizeof(float)));
+            metagl::glEnableVertexAttribArray(metagl::AttribLocation{2});
+            metagl::glVertexAttribPointer(metagl::AttribLocation{2}, 4,
+                                          metagl::DataType::Float, 0,
+                                          static_cast<metagl::GLsizei>(8 * sizeof(float)),
+                                          (void*)(4 * sizeof(float)));
+        }
+        else
+        {
+            vao_.bind();
+        }
 
         ibo_.bind(::easygl::BufferTarget::ElementArray);
         ibo_.set_data(::easygl::BufferTarget::ElementArray,
@@ -3647,7 +3677,8 @@ if (ProfileUsesGlslEs100())
             nullptr
         );
 
-        vao_.unbind();
+        if (!ProfileIsEs2ApiGeneration())
+            vao_.unbind();
 
         pending_vertices_.clear();
         pending_indices_.clear();
@@ -5801,7 +5832,8 @@ else
     void EasyGLVertexBufferRenderer::InitializeLayout()
     {
         vbo.create();
-        vao.create();
+        if (!ProfileIsEs2ApiGeneration())
+            vao.create();
         // Attribute layout is configured lazily in ApplyLayout() once stride is known.
     }
 
@@ -6102,7 +6134,8 @@ else
     void EasyGLVertexBufferRenderer::ApplyLayout(std::size_t stride)
     {
         const int s = static_cast<int>(stride);
-        vao.bind();
+        if (!ProfileIsEs2ApiGeneration())
+            vao.bind();
         vbo.bind(::easygl::BufferTarget::Array);
 
         if (!declarationElements_.empty())
@@ -6129,7 +6162,8 @@ else
                     vao.set_attribute_pointer(location, desc.componentCount, desc.type,
                                               desc.normalized, s, offset);
             }
-            vao.unbind();
+            if (!ProfileIsEs2ApiGeneration())
+                vao.unbind();
             return;
         }
 
@@ -6320,14 +6354,37 @@ else
             // Treating every unknown record as position-only left the other locations in stale
             // VAO state and rendered normals, UVs or skin weights from unrelated buffers. Refuse
             // it loudly; a genuinely custom layout reaches the generic declaration path above.
-            vao.unbind();
+            if (!ProfileIsEs2ApiGeneration())
+                vao.unbind();
             throw System::NotSupportedException(
                 "EasyGLRenderer::ApplyLayout: unsupported vertex stride " +
                 std::to_string(stride) +
                 " without a VertexDeclaration; the upload is refused rather than bound as "
                 "position-only.");
         }
-        vao.unbind();
+        if (!ProfileIsEs2ApiGeneration())
+            vao.unbind();
+    }
+
+    void EasyGLVertexBufferRenderer::BindForDraw() const
+    {
+        if (ProfileIsEs2ApiGeneration())
+        {
+            // ES 2.0/WebGL 1 keeps attribute pointers in context state rather than
+            // a core VAO. SpriteBatch and 3D draws share that state, so restore
+            // this buffer's layout immediately before every draw.
+            const_cast<EasyGLVertexBufferRenderer*>(this)->ApplyLayout(stride_in_bytes_);
+        }
+        else
+        {
+            vao.bind();
+        }
+    }
+
+    void EasyGLVertexBufferRenderer::UnbindAfterDraw() const
+    {
+        if (!ProfileIsEs2ApiGeneration())
+            vao.unbind();
     }
 
     EasyGLVertexBufferRenderer::EasyGLVertexBufferRenderer(int vertex_capacity, ::easygl::ResourceRegistry* registry)
@@ -9208,7 +9265,7 @@ if (ProfileIsEs2ApiGeneration())
         }
 
         if (!wireframeIboCreated_) { wireframeIbo_.create(); wireframeIboCreated_ = true; }
-        vb.vao.bind();
+        vb.BindForDraw();
         wireframeIbo_.bind(::easygl::BufferTarget::ElementArray);
         wireframeIbo_.set_data(::easygl::BufferTarget::ElementArray,
                                wireframeScratch_.data(),
@@ -9234,7 +9291,7 @@ else
                                                ::easygl::DataType::UnsignedInt, nullptr, baseVertex);
 }
         }
-        vb.vao.unbind();
+        vb.UnbindAfterDraw();
         return true;
     }
 
@@ -9271,9 +9328,9 @@ else
         if (wireframe_ && DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, 0))
             return;
 
-        vb.vao.bind();
+        vb.BindForDraw();
         device.draw_arrays(ToEasyGl(primitive), 0, vertex_count);
-        vb.vao.unbind();
+        vb.UnbindAfterDraw();
     }
 
     void EasyGLRenderer::DrawIndexedColoredPrimitives(const IVertexBufferRenderer& vb_in,
@@ -9311,12 +9368,12 @@ else
         if (wireframe_ && DrawWireframe(vb, &ib, primitive, primitiveCount, 0, 0, 0))
             return;
 
-        vb.vao.bind();
+        vb.BindForDraw();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         const auto idxType = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                               : ::easygl::DataType::UnsignedShort;
         device.draw_elements(ToEasyGl(primitive), index_count, idxType, nullptr);
-        vb.vao.unbind();
+        vb.UnbindAfterDraw();
     }
 
     namespace
@@ -9463,9 +9520,9 @@ else
         {
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
             const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
-            vb.vao.bind();
+            vb.BindForDraw();
             device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
-            vb.vao.unbind();
+            vb.UnbindAfterDraw();
             if (multiStream) { vao.bind(); RestoreSingleStreamAttributes(vao, params); vao.unbind(); }
             return;
         }
@@ -9483,11 +9540,11 @@ else
             DrawWireframe(vb, nullptr, primitive, primitiveCount, 0, 0, params.vertexStart))
             return;
 
-        vb.vao.bind();
+        vb.BindForDraw();
         TraceBoundTextureUnit("draw-arrays-3d", 0);
         device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
-        vb.vao.unbind();
+        vb.UnbindAfterDraw();
     }
 
     void EasyGLRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb_in,
@@ -9576,7 +9633,7 @@ else
         {
             BindCustomEffectMatrices(*params.customEffectRenderer, world, view, projection);
             const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
-            vb.vao.bind();
+            vb.BindForDraw();
             ib.ibo.bind(::easygl::BufferTarget::ElementArray);
             const auto idxTypeCustom = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                         : ::easygl::DataType::UnsignedShort;
@@ -9601,7 +9658,7 @@ else
 }
             }
             if (multiStream) RestoreSingleStreamAttributes(vao, params);
-            vb.vao.unbind();
+            vb.UnbindAfterDraw();
             return;
         }
 
@@ -9619,7 +9676,7 @@ else
                           params.startIndex, params.baseVertex, 0))
             return;
 
-        vb.vao.bind();
+        vb.BindForDraw();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         const auto idxType2 = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                : ::easygl::DataType::UnsignedShort;
@@ -9644,7 +9701,7 @@ else
 }
         }
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
-        vb.vao.unbind();
+        vb.UnbindAfterDraw();
     }
 
     void EasyGLRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb_in,

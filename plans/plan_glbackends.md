@@ -433,8 +433,12 @@ list. **All of GLB-30 through GLB-35 are `easy-gl` repo work** (on `easy-glrvc`,
   transform's correctness against real shader text extracted from this file, and a real
   `emcmake`/`emcc` build of `cna_house3d_demo` under `-DCNA_GRAPHICS_BACKEND=WEBGL1` compiles and
   links cleanly, running under Node exactly as far as `WEBGL2` already does (same DOM-only
-  limitation, not GL/shader-related). **Not verified**: actual GLSL ES 1.00 driver acceptance
-  (needs a real browser). **`SkinnedEffect`/`SkinnedPbrEffect`'s `uvec4 aBoneIndices` gap — closed
+  limitation, not GL/shader-related). **Browser verification added 2026-08-22**: Firefox and
+  Chromium both create a real WebGL 1 / GLSL ES 1.00 context, render the template's textured 3D
+  cube for multiple frames, and return from `Game::Run()` after the smoke exit. That run exposed
+  and fixed one remaining ES2 mechanic: SpriteBatch and ordinary vertex buffers had treated core
+  VAOs as available; they now reapply their global attribute pointers immediately before each
+  WebGL1/OpenGLES2 draw. **`SkinnedEffect`/`SkinnedPbrEffect`'s `uvec4 aBoneIndices` gap — closed
   as a same-session follow-up** (project owner authorized it 2026-07-20 morning after the narrower
   scope below was found): `DescribeVertexElementFormat()`'s `Byte4` case now reads the same
   underlying bytes as floats under `WEBGL1` (no `VertexBuffer` upload change needed — `Byte4` is

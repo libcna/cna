@@ -701,6 +701,12 @@ namespace CNA::Internal::Renderers::EasyGL
         /// DrawInstancedPrimitivesEx's custom-effect branch).
         [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const { return declarationElements_; }
 
+        /** @brief Binds this buffer and its vertex layout for an ordinary draw. */
+        void BindForDraw() const;
+
+        /** @brief Releases the vertex-array binding used by an ordinary draw. */
+        void UnbindAfterDraw() const;
+
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
 
