@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,6 +40,7 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
 namespace CNA::Platform
@@ -1095,6 +1097,58 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
 
         /**
+         * @brief Returns the cached detailed capability snapshot for the active renderer/device.
+         *
+         * The snapshot separates atomic feature support, numeric limits and per-format usage.
+         * It is rebuilt when the native renderer is reconstructed or a capability-affecting
+         * presentation setting is applied.
+         *
+         * @return Immutable capability profile owned by this graphics device. The reference
+         * remains valid until renderer reconstruction or device destruction; copy it to retain a
+         * snapshot across either operation.
+         */
+        CNAEXT [[nodiscard]] const CNA::RendererCapabilityProfile&
+        GetRendererCapabilityProfileEXT() const;
+
+        /**
+         * @brief Returns the detailed classified answer for one renderer feature.
+         * @param feature Feature to inspect.
+         * @return Supported, unsupported, restricted or unknown.
+         */
+        CNAEXT [[nodiscard]] CNA::RendererFeatureSupport GetRendererFeatureSupportEXT(
+            CNA::RendererFeature feature) const;
+
+        /**
+         * @brief Tests whether the complete detailed feature contract is supported.
+         * @param feature Feature to inspect.
+         * @return True only for an unqualified supported answer.
+         */
+        CNAEXT [[nodiscard]] bool SupportsRendererFeatureEXT(CNA::RendererFeature feature) const;
+
+        /**
+         * @brief Returns one numeric renderer/device limit from the cached profile.
+         * @param limit Limit to inspect.
+         * @return Limit value with an explicit known/unknown flag.
+         */
+        CNAEXT [[nodiscard]] CNA::RendererLimitValue GetRendererLimitEXT(
+            CNA::RendererLimit limit) const;
+
+        /**
+         * @brief Returns known and supported usage masks for one surface format.
+         * @param format Surface format to inspect.
+         * @return Per-usage support facts; missing known bits remain explicitly unknown.
+         */
+        CNAEXT [[nodiscard]] CNA::RendererFormatSupport GetRendererSurfaceFormatSupportEXT(
+            SurfaceFormat format) const;
+
+        /**
+         * @brief Returns a generated English report of features, limits, formats and extra notes.
+         * @return UTF-8 text owned by the cached profile and valid until profile invalidation or
+         * device destruction.
+         */
+        CNAEXT [[nodiscard]] std::string_view GetRendererCapabilityReportEXT() const;
+
+        /**
          * @brief Returns whether the active renderer really creates a render target of the given
          *        surface format, instead of substituting an 8-bit Color target for it.
          *
@@ -1310,6 +1364,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // raster renderer's final destructor calls.
         std::unique_ptr<CNA::Platform::IPlatformSurfacePresenter> surfacePresenter_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
+        /// Detailed device-specific capabilities, populated lazily and invalidated with renderer
+        /// reconstruction or an applied capability-affecting setting.
+        mutable std::optional<CNA::RendererCapabilityProfile> rendererCapabilityProfile_;
         /// plans/plan_runtimerenderer.md RTR-P5: the descriptor this device actually resolved to, which
         /// may differ from the selected one when a fallback chain substituted another renderer.
         /// Pinned at construction so a later reconstruction (Reset, multisample change) rebuilds
@@ -1456,6 +1513,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         void createOrAttachWindow();
         void createRenderer();
+        [[nodiscard]] CNA::RendererCapabilityProfile BuildRendererCapabilityProfileEXT() const;
+        void InvalidateRendererCapabilityProfileEXT() const;
 
         /**
          * @brief Brings this device's platform video-subsystem reference to @p acquired.

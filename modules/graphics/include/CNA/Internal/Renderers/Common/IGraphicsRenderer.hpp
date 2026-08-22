@@ -2666,6 +2666,23 @@ namespace CNA::Internal::Renderers
         }
 
         /**
+         * @brief Returns renderer-specific English limitations that are intentionally not a
+         *        machine-readable capability or numeric limit.
+         *
+         * This is for qualitative, combination, performance, validation-environment and known-
+         * issue notes. Any fact an application can safely branch on belongs in the structured
+         * capability profile instead. The shared default contributes no renderer-specific text;
+         * `GraphicsDevice` still appends the common interpretation rules to every generated
+         * report.
+         *
+         * @return Stable UTF-8 text, or an empty view when the renderer has no extra note.
+         */
+        [[nodiscard]] virtual std::string_view GetAdditionalLimitationsTextEXT() const
+        {
+            return {};
+        }
+
+        /**
          * @brief REMED-GFX-201: how many per-vertex `VertexBufferBinding`s this renderer can bind
          *        to one ordinary draw.
          *

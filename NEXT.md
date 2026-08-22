@@ -1,5 +1,15 @@
 # NEXT.md
 
+## Detailed renderer capability profiles (`MOD-2203`, 2026-08-22)
+
+`GraphicsDevice` now exposes one cached CNAEXT capability snapshot with 30 atomic feature answers,
+10 known/unknown limits, per-`SurfaceFormat` known/supported usage masks and a generated English
+report. The legacy `GraphicsCapability` API and its 64-bit C flags remain unchanged. The new C ABI
+uses individual append-only identities and size/copy report calls. See
+`docs/renderer-capability-profiles.md` for the contract. `MOD-2220` and `MOD-2221` remain open: the
+new profile records the existing audited facts but does not pretend the larger native limit and
+format-usage inventory is already implemented.
+
 ## The 2026-08-18 merge of `next` into `feature/fx`
 
 > Merged `origin/next` at `94f23eac7` into `feature/fx` (merge base `05a9eab06`, 43 commits).

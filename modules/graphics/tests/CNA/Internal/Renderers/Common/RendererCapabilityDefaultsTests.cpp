@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MS-PL
 // plans/plan_runtimerenderer.md RTR-P3-17: the defaults of the virtuals that replaced the XNA layer's
 // #ifdef CNA_RENDERER_* blocks.
 //
@@ -117,6 +118,12 @@ TEST(RendererCapabilityDefaultsTest, CompressedTransferDefaultsToFalseForEveryFo
     {
         EXPECT_FALSE(renderer.IsCompressedTransferFormatEXT(format)) << "format ordinal " << format;
     }
+}
+
+TEST(RendererCapabilityDefaultsTest, AdditionalLimitationsDefaultToNoRendererSpecificText)
+{
+    DefaultsOnlyRenderer renderer;
+    EXPECT_TRUE(renderer.GetAdditionalLimitationsTextEXT().empty());
 }
 
 TEST(RendererCapabilityDefaultsTest, AppliedMultiSampleCountEchoesTheRequest)

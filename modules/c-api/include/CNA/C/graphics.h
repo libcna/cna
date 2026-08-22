@@ -296,6 +296,150 @@ typedef uint64_t CNA_GraphicsCapabilityFlags;
 /** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW. */
 #define CNA_GRAPHICS_CAPABILITY_FLAG_INDIRECT_DRAW (UINT64_C(1) << 18)
 
+/**
+ * @brief Fixed-width identity of one atomic renderer feature.
+ *
+ * This append-only identity space is intentionally separate from the legacy 64-bit
+ * @ref CNA_GraphicsCapabilityFlags summary. Callers can enumerate the closed range through
+ * @ref CNA_RENDERER_FEATURE_MAXIMUM and receive a four-state answer for each entry.
+ */
+typedef uint32_t CNA_RendererFeature;
+
+/** @brief Complete XNA-style 3D vertex/index drawing pipeline. */
+#define CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE UINT32_C(0)
+/** @brief Complete depth/stencil attachment usable by graphics draws. */
+#define CNA_RENDERER_FEATURE_DEPTH_STENCIL_BUFFER UINT32_C(1)
+/** @brief At least one multisample anti-aliasing mode above one sample. */
+#define CNA_RENDERER_FEATURE_MULTI_SAMPLE_ANTI_ALIASING UINT32_C(2)
+/** @brief More than one simultaneous colour render target. */
+#define CNA_RENDERER_FEATURE_MULTIPLE_RENDER_TARGETS UINT32_C(3)
+/** @brief Anisotropic texture filtering with an observable result. */
+#define CNA_RENDERER_FEATURE_ANISOTROPIC_FILTERING UINT32_C(4)
+/** @brief Wire-frame rasterization, native or exactly emulated. */
+#define CNA_RENDERER_FEATURE_WIRE_FRAME_RASTERIZATION UINT32_C(5)
+/** @brief Occlusion-query begin/end/result operations. */
+#define CNA_RENDERER_FEATURE_OCCLUSION_QUERIES UINT32_C(6)
+/** @brief Creation and use of source-based shader-effect objects. */
+#define CNA_RENDERER_FEATURE_SHADER_EFFECTS UINT32_C(7)
+/** @brief Supplied shader-effect source determines rendered pixels. */
+#define CNA_RENDERER_FEATURE_SHADER_EFFECT_SOURCE_EXECUTION UINT32_C(8)
+/** @brief Persistent three-dimensional texture upload/readback storage. */
+#define CNA_RENDERER_FEATURE_TEXTURE_3D_STORAGE UINT32_C(9)
+/** @brief Multiple same-rate vertex streams in one draw. */
+#define CNA_RENDERER_FEATURE_MULTI_STREAM_VERTEX_INPUT UINT32_C(10)
+/** @brief Instanced graphics drawing. */
+#define CNA_RENDERER_FEATURE_INSTANCED_DRAWING UINT32_C(11)
+/** @brief A stencil plane usable independently of depth. */
+#define CNA_RENDERER_FEATURE_STENCIL_BUFFER UINT32_C(12)
+/** @brief Faithful additive blending. */
+#define CNA_RENDERER_FEATURE_ADDITIVE_BLENDING UINT32_C(13)
+/** @brief XNA/FNA Direct3D 9 Effect Framework bytecode execution. */
+#define CNA_RENDERER_FEATURE_COMPILED_XNA_EFFECTS UINT32_C(14)
+/** @brief Faithful 32-bit-per-channel floating-point render targets. */
+#define CNA_RENDERER_FEATURE_FLOAT32_RENDER_TARGETS UINT32_C(15)
+/** @brief Faithful 16-bit-per-channel floating-point render targets. */
+#define CNA_RENDERER_FEATURE_FLOAT16_RENDER_TARGETS UINT32_C(16)
+/** @brief Linear or mip filtering of half-float colour textures. */
+#define CNA_RENDERER_FEATURE_FLOAT16_TEXTURE_LINEAR_FILTERING UINT32_C(17)
+/** @brief Compute shaders together with the storage-buffer path. */
+#define CNA_RENDERER_FEATURE_COMPUTE_SHADERS UINT32_C(18)
+/** @brief Binding a two-dimensional texture as a compute image. */
+#define CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING UINT32_C(19)
+/** @brief GPU-buffer-driven indirect graphics drawing. */
+#define CNA_RENDERER_FEATURE_INDIRECT_DRAWING UINT32_C(20)
+/** @brief Lit stock/PBR shaders sample configured shadow state. */
+#define CNA_RENDERER_FEATURE_SHADOW_SAMPLING UINT32_C(21)
+/** @brief PBR shaders consume configured image-based-lighting resources. */
+#define CNA_RENDERER_FEATURE_IMAGE_BASED_LIGHTING UINT32_C(22)
+/** @brief GPU timestamp queries measure a submitted command range. */
+#define CNA_RENDERER_FEATURE_GPU_TIMERS UINT32_C(23)
+/** @brief Source-based effects consume desktop OpenGL GLSL. */
+#define CNA_RENDERER_FEATURE_SHADER_DIALECT_GLSL_DESKTOP UINT32_C(24)
+/** @brief Source-based effects consume OpenGL ES/WebGL GLSL. */
+#define CNA_RENDERER_FEATURE_SHADER_DIALECT_GLSL_ES UINT32_C(25)
+/** @brief Source-based effects consume Vulkan-oriented GLSL. */
+#define CNA_RENDERER_FEATURE_SHADER_DIALECT_GLSL_VULKAN UINT32_C(26)
+/** @brief Source-based effects consume HLSL. */
+#define CNA_RENDERER_FEATURE_SHADER_DIALECT_HLSL UINT32_C(27)
+/** @brief Source-based effects consume Metal Shading Language. */
+#define CNA_RENDERER_FEATURE_SHADER_DIALECT_MSL UINT32_C(28)
+/** @brief Source-based effects consume WebGPU Shading Language. */
+#define CNA_RENDERER_FEATURE_SHADER_DIALECT_WGSL UINT32_C(29)
+/** @brief Largest currently defined detailed renderer-feature identity. */
+#define CNA_RENDERER_FEATURE_MAXIMUM CNA_RENDERER_FEATURE_SHADER_DIALECT_WGSL
+
+/** @brief Fixed-width classified answer for one detailed renderer feature. */
+typedef uint32_t CNA_RendererFeatureSupport;
+
+/** @brief The feature has not yet been audited or runtime-probed. */
+#define CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN UINT32_C(0)
+/** @brief The complete feature contract is unavailable. */
+#define CNA_RENDERER_FEATURE_SUPPORT_UNSUPPORTED UINT32_C(1)
+/** @brief The complete documented feature contract is available. */
+#define CNA_RENDERER_FEATURE_SUPPORT_SUPPORTED UINT32_C(2)
+/** @brief Only an explicitly documented subset of the contract is available. */
+#define CNA_RENDERER_FEATURE_SUPPORT_RESTRICTED UINT32_C(3)
+/** @brief Largest defined detailed renderer-feature support identity. */
+#define CNA_RENDERER_FEATURE_SUPPORT_MAXIMUM CNA_RENDERER_FEATURE_SUPPORT_RESTRICTED
+
+/** @brief Fixed-width identity of one numeric renderer/device limit. */
+typedef uint32_t CNA_RendererLimit;
+
+/** @brief Maximum width or height of a two-dimensional texture. */
+#define CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION UINT32_C(0)
+/** @brief Maximum same-rate vertex streams in one draw. */
+#define CNA_RENDERER_LIMIT_MAX_VERTEX_STREAMS UINT32_C(1)
+/** @brief Maximum compute work-group count on the X axis. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_COUNT_X UINT32_C(2)
+/** @brief Maximum compute work-group count on the Y axis. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_COUNT_Y UINT32_C(3)
+/** @brief Maximum compute work-group count on the Z axis. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_COUNT_Z UINT32_C(4)
+/** @brief Maximum compute local size on the X axis. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_SIZE_X UINT32_C(5)
+/** @brief Maximum compute local size on the Y axis. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_SIZE_Y UINT32_C(6)
+/** @brief Maximum compute local size on the Z axis. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_SIZE_Z UINT32_C(7)
+/** @brief Maximum product of all compute local sizes. */
+#define CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_INVOCATIONS UINT32_C(8)
+/** @brief Maximum storage-buffer bindings readable by a vertex shader. */
+#define CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS UINT32_C(9)
+/** @brief Largest currently defined numeric renderer-limit identity. */
+#define CNA_RENDERER_LIMIT_MAXIMUM CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS
+
+/** @brief Fixed-width usage masks for per-surface-format support. */
+typedef uint32_t CNA_RendererFormatUsageFlags;
+
+/** @brief Faithful two-dimensional texture storage. */
+#define CNA_RENDERER_FORMAT_USAGE_TEXTURE_STORAGE (UINT32_C(1) << 0)
+/** @brief Sampling in a graphics shader. */
+#define CNA_RENDERER_FORMAT_USAGE_SAMPLED (UINT32_C(1) << 1)
+/** @brief Linear or mip filtering while sampling. */
+#define CNA_RENDERER_FORMAT_USAGE_FILTERABLE (UINT32_C(1) << 2)
+/** @brief Creation and binding as a render target. */
+#define CNA_RENDERER_FORMAT_USAGE_RENDER_TARGET (UINT32_C(1) << 3)
+/** @brief Blending graphics output into the format. */
+#define CNA_RENDERER_FORMAT_USAGE_BLENDABLE (UINT32_C(1) << 4)
+/** @brief Reading through a compute/storage-image binding. */
+#define CNA_RENDERER_FORMAT_USAGE_STORAGE_READ (UINT32_C(1) << 5)
+/** @brief Writing through a compute/storage-image binding. */
+#define CNA_RENDERER_FORMAT_USAGE_STORAGE_WRITE (UINT32_C(1) << 6)
+/** @brief Storage-image atomic operations. */
+#define CNA_RENDERER_FORMAT_USAGE_STORAGE_ATOMIC (UINT32_C(1) << 7)
+/** @brief Copying the format out of a resource. */
+#define CNA_RENDERER_FORMAT_USAGE_TRANSFER_SOURCE (UINT32_C(1) << 8)
+/** @brief Copying data into a resource of the format. */
+#define CNA_RENDERER_FORMAT_USAGE_TRANSFER_DESTINATION (UINT32_C(1) << 9)
+/** @brief Owning or generating more than one mip level. */
+#define CNA_RENDERER_FORMAT_USAGE_MIPMAPPED (UINT32_C(1) << 10)
+/** @brief Creating a multisampled image. */
+#define CNA_RENDERER_FORMAT_USAGE_MULTISAMPLE (UINT32_C(1) << 11)
+/** @brief Transferring through a colour-shaped element. */
+#define CNA_RENDERER_FORMAT_USAGE_COLOR_TRANSFER (UINT32_C(1) << 12)
+/** @brief Mask containing every currently defined renderer-format usage bit. */
+#define CNA_RENDERER_FORMAT_USAGE_ALL ((UINT32_C(1) << 13) - UINT32_C(1))
+
 /** @brief Fixed-width surface-format identity used by texture APIs. */
 typedef uint32_t CNA_SurfaceFormat;
 
@@ -673,6 +817,79 @@ CNA_C_API CNA_Result cna_graphics_device_supports_capability(
     CNA_Handle graphics_device,
     CNA_GraphicsCapability capability,
     CNA_Bool* out_supported);
+
+/**
+ * @brief Gets the classified answer for one atomic renderer feature.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param feature One `CNA_RENDERER_FEATURE_*` identity.
+ * @param out_support Receives one `CNA_RENDERER_FEATURE_SUPPORT_*` answer.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_renderer_feature_support_ext(
+    CNA_Handle graphics_device,
+    CNA_RendererFeature feature,
+    CNA_RendererFeatureSupport* out_support);
+
+/**
+ * @brief Gets one numeric renderer/device limit and whether the answer is known.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param limit One `CNA_RENDERER_LIMIT_*` identity.
+ * @param out_known Receives `CNA_TRUE` when @p out_value is a classified answer.
+ * @param out_value Receives the limit value, or zero when the answer is unknown.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_renderer_limit_ext(
+    CNA_Handle graphics_device,
+    CNA_RendererLimit limit,
+    CNA_Bool* out_known,
+    uint64_t* out_value);
+
+/**
+ * @brief Gets known and supported usage masks for one surface format.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param format One `CNA_SURFACE_FORMAT_*` identity.
+ * @param out_known_usages Receives usage bits whose support has been classified.
+ * @param out_supported_usages Receives supported usage bits, always a subset of known bits.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * A bit absent from @p out_known_usages means unknown, not unsupported. Callers must not infer
+ * support or rejection for such a usage from the renderer name or another usage bit.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_surface_format_support_ext(
+    CNA_Handle graphics_device,
+    CNA_SurfaceFormat format,
+    CNA_RendererFormatUsageFlags* out_known_usages,
+    CNA_RendererFormatUsageFlags* out_supported_usages);
+
+/**
+ * @brief Gets the UTF-8 byte count of the complete English renderer-capability report.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_bytes Receives the exact report byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_capability_report_size_ext(
+    CNA_Handle graphics_device,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the complete English renderer-capability report as UTF-8 without a terminator.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param destination Caller-owned destination bytes, or null only when @p capacity is zero.
+ * @param capacity Capacity of @p destination in bytes.
+ * @param out_bytes Receives the required report byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented
+ * argument/handle/thread/native failure. No partial report is written.
+ */
+CNA_C_API CNA_Result cna_graphics_device_copy_capability_report_ext(
+    CNA_Handle graphics_device,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
 
 /**
  * @brief Gets the shading dialect a custom effect's sources must be written in.

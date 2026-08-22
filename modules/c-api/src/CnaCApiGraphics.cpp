@@ -6,6 +6,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/RendererCapabilityProfile.hpp"
 // The renderer contract is an internal header written for the graphics module's own warning
 // settings, not for this library's `-Wall -Wextra -Werror` (CBIND-052A). It is included only for
 // the ShaderDialectEXT enumerators the dialect route names, so the one diagnostic its defaulted
@@ -259,6 +260,66 @@ struct ResolvedSpriteCommand final {
             return CNA_GRAPHICS_CAPABILITY_INDIRECT_DRAW;
     }
     return CNA_GRAPHICS_CAPABILITY_MAXIMUM + UINT32_C(1);
+}
+
+static_assert(
+    static_cast<uint32_t>(CNA::RendererFeature::ThreeDimensionalPipeline) ==
+        CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE &&
+    static_cast<uint32_t>(CNA::RendererFeature::ShaderEffectSourceExecution) ==
+        CNA_RENDERER_FEATURE_SHADER_EFFECT_SOURCE_EXECUTION &&
+    static_cast<uint32_t>(CNA::RendererFeature::ComputeImageBinding) ==
+        CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING &&
+    static_cast<uint32_t>(CNA::RendererFeature::ShaderDialectWgsl) ==
+        CNA_RENDERER_FEATURE_MAXIMUM &&
+    static_cast<uint32_t>(CNA::RendererFeature::Count) ==
+        CNA_RENDERER_FEATURE_MAXIMUM + UINT32_C(1));
+
+static_assert(
+    static_cast<uint32_t>(CNA::RendererLimit::MaxTextureDimension) ==
+        CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION &&
+    static_cast<uint32_t>(CNA::RendererLimit::MaxComputeWorkGroupInvocations) ==
+        CNA_RENDERER_LIMIT_MAX_COMPUTE_WORK_GROUP_INVOCATIONS &&
+    static_cast<uint32_t>(CNA::RendererLimit::MaxVertexShaderStorageBlocks) ==
+        CNA_RENDERER_LIMIT_MAXIMUM &&
+    static_cast<uint32_t>(CNA::RendererLimit::Count) ==
+        CNA_RENDERER_LIMIT_MAXIMUM + UINT32_C(1));
+
+[[nodiscard]] bool TryMapRendererFeature(
+    const CNA_RendererFeature feature,
+    CNA::RendererFeature* const outFeature) noexcept
+{
+    if (outFeature == nullptr || feature > CNA_RENDERER_FEATURE_MAXIMUM) {
+        return false;
+    }
+    *outFeature = static_cast<CNA::RendererFeature>(feature);
+    return true;
+}
+
+[[nodiscard]] bool TryMapRendererLimit(
+    const CNA_RendererLimit limit,
+    CNA::RendererLimit* const outLimit) noexcept
+{
+    if (outLimit == nullptr || limit > CNA_RENDERER_LIMIT_MAXIMUM) {
+        return false;
+    }
+    *outLimit = static_cast<CNA::RendererLimit>(limit);
+    return true;
+}
+
+[[nodiscard]] CNA_RendererFeatureSupport MapRendererFeatureSupport(
+    const CNA::RendererFeatureSupport support) noexcept
+{
+    switch (support) {
+        case CNA::RendererFeatureSupport::Unknown:
+            return CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN;
+        case CNA::RendererFeatureSupport::Unsupported:
+            return CNA_RENDERER_FEATURE_SUPPORT_UNSUPPORTED;
+        case CNA::RendererFeatureSupport::Supported:
+            return CNA_RENDERER_FEATURE_SUPPORT_SUPPORTED;
+        case CNA::RendererFeatureSupport::Restricted:
+            return CNA_RENDERER_FEATURE_SUPPORT_RESTRICTED;
+    }
+    return CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN;
 }
 
 [[nodiscard]] CNA_GraphicsRendererType MapGraphicsRendererType(
@@ -648,6 +709,152 @@ CNA_Result cna_graphics_device_supports_capability(
         *outSupported = graphicsDevice->value->SupportsCapability(nativeCapability)
             ? CNA_TRUE
             : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_renderer_feature_support_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_RendererFeature feature,
+    CNA_RendererFeatureSupport* const outSupport)
+{
+    return CallWithExceptionBarrier([&]() {
+        CNA::RendererFeature nativeFeature{};
+        if (outSupport == nullptr || !TryMapRendererFeature(feature, &nativeFeature)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The detailed renderer-feature query arguments are invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupport = MapRendererFeatureSupport(
+            graphicsDevice->value->GetRendererFeatureSupportEXT(nativeFeature));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_renderer_limit_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_RendererLimit limit,
+    CNA_Bool* const outKnown,
+    uint64_t* const outValue)
+{
+    return CallWithExceptionBarrier([&]() {
+        CNA::RendererLimit nativeLimit{};
+        if (outKnown == nullptr || outValue == nullptr ||
+            !TryMapRendererLimit(limit, &nativeLimit)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The renderer-limit query arguments are invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA::RendererLimitValue value =
+            graphicsDevice->value->GetRendererLimitEXT(nativeLimit);
+        *outKnown = value.known ? CNA_TRUE : CNA_FALSE;
+        *outValue = value.known ? value.value : UINT64_C(0);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_surface_format_support_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_SurfaceFormat format,
+    CNA_RendererFormatUsageFlags* const outKnownUsages,
+    CNA_RendererFormatUsageFlags* const outSupportedUsages)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (format > CNA_SURFACE_FORMAT_USHORT_EXT || outKnownUsages == nullptr ||
+            outSupportedUsages == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The renderer surface-format query arguments are invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA::RendererFormatSupport support =
+            graphicsDevice->value->GetRendererSurfaceFormatSupportEXT(
+                static_cast<SurfaceFormat>(format));
+        *outKnownUsages = support.knownUsages;
+        *outSupportedUsages = support.supportedUsages;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_capability_report_size_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outBytes == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The renderer-capability report size output is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = graphicsDevice->value->GetRendererCapabilityReportEXT().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_copy_capability_report_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The renderer-capability report output buffer is invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const std::string_view report =
+            graphicsDevice->value->GetRendererCapabilityReportEXT();
+        *outBytes = report.size();
+        if (capacity < report.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The renderer-capability report output buffer is too small.");
+        }
+        if (!report.empty()) {
+            std::memcpy(destination, report.data(), report.size());
+        }
         return CNA_RESULT_SUCCESS;
     });
 }

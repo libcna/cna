@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -34,6 +35,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "System/ArgumentException.hpp"
@@ -51,6 +53,68 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // Matches FNA's internal GraphicsDevice.MAX_RENDERTARGET_BINDINGS.
         constexpr std::size_t MAX_RENDERTARGET_BINDINGS = 4;
+
+        constexpr std::array<SurfaceFormat, 27> CapabilitySurfaceFormats = {
+            SurfaceFormat::Color,
+            SurfaceFormat::Bgr565,
+            SurfaceFormat::Bgra5551,
+            SurfaceFormat::Bgra4444,
+            SurfaceFormat::Dxt1,
+            SurfaceFormat::Dxt3,
+            SurfaceFormat::Dxt5,
+            SurfaceFormat::NormalizedByte2,
+            SurfaceFormat::NormalizedByte4,
+            SurfaceFormat::Rgba1010102,
+            SurfaceFormat::Rg32,
+            SurfaceFormat::Rgba64,
+            SurfaceFormat::Alpha8,
+            SurfaceFormat::Single,
+            SurfaceFormat::Vector2,
+            SurfaceFormat::Vector4,
+            SurfaceFormat::HalfSingle,
+            SurfaceFormat::HalfVector2,
+            SurfaceFormat::HalfVector4,
+            SurfaceFormat::HdrBlendable,
+            SurfaceFormat::ColorBgraEXT,
+            SurfaceFormat::ColorSrgbEXT,
+            SurfaceFormat::Dxt5SrgbEXT,
+            SurfaceFormat::Bc7EXT,
+            SurfaceFormat::Bc7SrgbEXT,
+            SurfaceFormat::ByteEXT,
+            SurfaceFormat::UShortEXT
+        };
+
+        constexpr std::array<std::string_view, 27> CapabilitySurfaceFormatNames = {
+            "Color", "Bgr565", "Bgra5551", "Bgra4444", "Dxt1", "Dxt3", "Dxt5",
+            "NormalizedByte2", "NormalizedByte4", "Rgba1010102", "Rg32", "Rgba64",
+            "Alpha8", "Single", "Vector2", "Vector4", "HalfSingle", "HalfVector2",
+            "HalfVector4", "HdrBlendable", "ColorBgraEXT", "ColorSrgbEXT",
+            "Dxt5SrgbEXT", "Bc7EXT", "Bc7SrgbEXT", "ByteEXT", "UShortEXT"
+        };
+
+        static_assert(static_cast<int>(SurfaceFormat::Color) == 0 &&
+                      static_cast<int>(SurfaceFormat::UShortEXT) == 26,
+                      "Update the detailed surface-format catalog when SurfaceFormat grows");
+
+        [[nodiscard]] constexpr CNA::RendererFeatureSupport FeatureSupport(const bool supported)
+        {
+            return supported ? CNA::RendererFeatureSupport::Supported
+                             : CNA::RendererFeatureSupport::Unsupported;
+        }
+
+        [[nodiscard]] bool ResolveFormatVerdict(
+            const CNA::Internal::Renderers::RendererFormatVerdict verdict,
+            const bool frameworkDefault)
+        {
+            switch (verdict)
+            {
+                case CNA::Internal::Renderers::RendererFormatVerdict::Supported: return true;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Unsupported: return false;
+                case CNA::Internal::Renderers::RendererFormatVerdict::Defer:
+                    return frameworkDefault;
+            }
+            return false;
+        }
 
         int toSwapInterval(PresentInterval pi)
         {
@@ -541,6 +605,7 @@ namespace Microsoft::Xna::Framework::Graphics
             const int appliedMultiSampleCount = renderer_->ApplyMultiSampleCount(
                 presentationParameters_.getMultiSampleCountProperty());
             presentationParameters_.setMultiSampleCountProperty(appliedMultiSampleCount);
+            InvalidateRendererCapabilityProfileEXT();
 
             // Previously missing: this Reset() overload never forwarded PresentationInterval to
             // the renderer, unlike SetPresentationParameters()'s own identical field -- meaning
@@ -2299,6 +2364,247 @@ namespace Microsoft::Xna::Framework::Graphics
         return GetRenderer().SupportsCapability(capability);
     }
 
+    const CNA::RendererCapabilityProfile& GraphicsDevice::GetRendererCapabilityProfileEXT() const
+    {
+        if (!rendererCapabilityProfile_.has_value())
+            rendererCapabilityProfile_.emplace(BuildRendererCapabilityProfileEXT());
+        return *rendererCapabilityProfile_;
+    }
+
+    CNA::RendererFeatureSupport GraphicsDevice::GetRendererFeatureSupportEXT(
+        const CNA::RendererFeature feature) const
+    {
+        return GetRendererCapabilityProfileEXT().GetFeature(feature).support;
+    }
+
+    bool GraphicsDevice::SupportsRendererFeatureEXT(const CNA::RendererFeature feature) const
+    {
+        return GetRendererCapabilityProfileEXT().Supports(feature);
+    }
+
+    CNA::RendererLimitValue GraphicsDevice::GetRendererLimitEXT(
+        const CNA::RendererLimit limit) const
+    {
+        return GetRendererCapabilityProfileEXT().GetLimit(limit);
+    }
+
+    CNA::RendererFormatSupport GraphicsDevice::GetRendererSurfaceFormatSupportEXT(
+        const SurfaceFormat format) const
+    {
+        const int ordinal = static_cast<int>(format);
+        if (ordinal < 0) return {};
+        return GetRendererCapabilityProfileEXT().GetSurfaceFormatSupport(
+            static_cast<std::uint32_t>(ordinal));
+    }
+
+    std::string_view GraphicsDevice::GetRendererCapabilityReportEXT() const
+    {
+        return GetRendererCapabilityProfileEXT().GetEnglishReport();
+    }
+
+    CNA::RendererCapabilityProfile GraphicsDevice::BuildRendererCapabilityProfileEXT() const
+    {
+        CNA::RendererCapabilityProfile profile;
+        auto& renderer = GetRenderer();
+        profile.rendererName_.assign(GetGraphicsRendererName());
+
+        const auto setLegacy = [&](const CNA::RendererFeature feature,
+                                   const CNA::GraphicsCapability capability,
+                                   std::string note = {}) {
+            profile.SetFeature(feature, FeatureSupport(SupportsCapability(capability)),
+                               std::move(note));
+        };
+
+        setLegacy(CNA::RendererFeature::ThreeDimensionalPipeline,
+                  CNA::GraphicsCapability::ThreeD);
+        setLegacy(CNA::RendererFeature::DepthStencilBuffer,
+                  CNA::GraphicsCapability::DepthStencilBuffer);
+        setLegacy(CNA::RendererFeature::MultiSampleAntiAliasing,
+                  CNA::GraphicsCapability::MultiSampleAntiAliasing);
+        setLegacy(CNA::RendererFeature::MultipleRenderTargets,
+                  CNA::GraphicsCapability::MultipleRenderTargets);
+        setLegacy(CNA::RendererFeature::AnisotropicFiltering,
+                  CNA::GraphicsCapability::AnisotropicFiltering);
+        setLegacy(CNA::RendererFeature::WireFrameRasterization,
+                  CNA::GraphicsCapability::WireFrame);
+        setLegacy(CNA::RendererFeature::OcclusionQueries,
+                  CNA::GraphicsCapability::OcclusionQuery);
+        setLegacy(CNA::RendererFeature::ShaderEffects,
+                  CNA::GraphicsCapability::CustomEffects,
+                  "This states that a ShaderEffect object is accepted; source execution is a "
+                  "separate feature.");
+        const bool acceptsShaderEffects =
+            SupportsCapability(CNA::GraphicsCapability::CustomEffects);
+        const bool executesShaderEffectSource =
+            acceptsShaderEffects && renderer.ExecutesShaderEffectSourceEXT();
+        profile.SetFeature(
+            CNA::RendererFeature::ShaderEffectSourceExecution,
+            FeatureSupport(executesShaderEffectSource),
+            "False is intentional when a renderer accepts the object but uses a fixed shader "
+            "path or a different payload representation.");
+        setLegacy(CNA::RendererFeature::Texture3DStorage,
+                  CNA::GraphicsCapability::Texture3D,
+                  "Storage and transfer only; general shader sampling is not implied.");
+        setLegacy(CNA::RendererFeature::MultiStreamVertexInput,
+                  CNA::GraphicsCapability::MultiStreamVertexInput);
+        setLegacy(CNA::RendererFeature::InstancedDrawing,
+                  CNA::GraphicsCapability::Instancing);
+        setLegacy(CNA::RendererFeature::StencilBuffer,
+                  CNA::GraphicsCapability::StencilBuffer);
+        setLegacy(CNA::RendererFeature::AdditiveBlending,
+                  CNA::GraphicsCapability::AdditiveBlending);
+        setLegacy(CNA::RendererFeature::CompiledXnaEffects,
+                  CNA::GraphicsCapability::CompiledEffects);
+        setLegacy(CNA::RendererFeature::Float32RenderTargets,
+                  CNA::GraphicsCapability::FloatRenderTargets);
+        setLegacy(CNA::RendererFeature::Float16RenderTargets,
+                  CNA::GraphicsCapability::HalfFloatRenderTargets);
+        setLegacy(CNA::RendererFeature::Float16TextureLinearFiltering,
+                  CNA::GraphicsCapability::HalfFloatTextureLinearFiltering);
+        setLegacy(CNA::RendererFeature::ComputeShaders,
+                  CNA::GraphicsCapability::ComputeShaders);
+        profile.SetFeature(
+            CNA::RendererFeature::ComputeImageBinding,
+            FeatureSupport(renderer.SupportsComputeShadersEXT() &&
+                           renderer.SupportsComputeImageBindingEXT()));
+        setLegacy(CNA::RendererFeature::IndirectDrawing,
+                  CNA::GraphicsCapability::IndirectDraw);
+        profile.SetFeature(CNA::RendererFeature::ShadowSampling,
+                           FeatureSupport(renderer.SupportsShadowSamplingEXT()));
+        profile.SetFeature(CNA::RendererFeature::ImageBasedLighting,
+                           FeatureSupport(renderer.SupportsImageBasedLightingEXT()));
+        profile.SetFeature(CNA::RendererFeature::GpuTimers,
+                           FeatureSupport(renderer.SupportsGpuTimerEXT()));
+
+        const auto dialect = renderer.GetShaderDialectEXT();
+        profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslDesktop,
+                           FeatureSupport(executesShaderEffectSource && dialect ==
+                               CNA::Internal::Renderers::ShaderDialectEXT::GlslDesktop));
+        profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslEs,
+                           FeatureSupport(executesShaderEffectSource && dialect ==
+                               CNA::Internal::Renderers::ShaderDialectEXT::GlslEs));
+        profile.SetFeature(CNA::RendererFeature::ShaderDialectGlslVulkan,
+                           FeatureSupport(executesShaderEffectSource && dialect ==
+                               CNA::Internal::Renderers::ShaderDialectEXT::GlslVulkan));
+        profile.SetFeature(CNA::RendererFeature::ShaderDialectHlsl,
+                           FeatureSupport(executesShaderEffectSource && dialect ==
+                               CNA::Internal::Renderers::ShaderDialectEXT::Hlsl));
+        profile.SetFeature(CNA::RendererFeature::ShaderDialectMsl,
+                           FeatureSupport(executesShaderEffectSource && dialect ==
+                               CNA::Internal::Renderers::ShaderDialectEXT::Msl));
+        profile.SetFeature(CNA::RendererFeature::ShaderDialectWgsl,
+                           FeatureSupport(executesShaderEffectSource && dialect ==
+                               CNA::Internal::Renderers::ShaderDialectEXT::Wgsl));
+
+        const int maxTextureDimension = renderer.GetMaxTextureDimension();
+        profile.SetLimit(CNA::RendererLimit::MaxTextureDimension,
+                         maxTextureDimension >= 0,
+                         maxTextureDimension >= 0
+                             ? static_cast<std::uint64_t>(maxTextureDimension)
+                             : UINT64_C(0));
+        const bool has3D = SupportsCapability(CNA::GraphicsCapability::ThreeD);
+        const bool hasMultiStream =
+            SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput);
+        const int maxVertexStreams = has3D ? (hasMultiStream ? renderer.GetMaxVertexStreams() : 1) : 0;
+        profile.SetLimit(CNA::RendererLimit::MaxVertexStreams, maxVertexStreams >= 0,
+                         maxVertexStreams >= 0
+                             ? static_cast<std::uint64_t>(maxVertexStreams)
+                             : UINT64_C(0));
+
+        const bool hasCompute = renderer.SupportsComputeShadersEXT();
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            const int count = renderer.GetMaxComputeWorkGroupCountEXT(axis);
+            const int size = renderer.GetMaxComputeWorkGroupSizeEXT(axis);
+            profile.SetLimit(static_cast<CNA::RendererLimit>(
+                                 static_cast<std::uint32_t>(
+                                     CNA::RendererLimit::MaxComputeWorkGroupCountX) + axis),
+                             !hasCompute || count > 0,
+                             count > 0 ? static_cast<std::uint64_t>(count) : UINT64_C(0));
+            profile.SetLimit(static_cast<CNA::RendererLimit>(
+                                 static_cast<std::uint32_t>(
+                                     CNA::RendererLimit::MaxComputeWorkGroupSizeX) + axis),
+                             !hasCompute || size > 0,
+                             size > 0 ? static_cast<std::uint64_t>(size) : UINT64_C(0));
+        }
+        const int invocations = renderer.GetMaxComputeWorkGroupInvocationsEXT();
+        profile.SetLimit(CNA::RendererLimit::MaxComputeWorkGroupInvocations,
+                         !hasCompute || invocations > 0,
+                         invocations > 0 ? static_cast<std::uint64_t>(invocations) : UINT64_C(0));
+        const int vertexStorageBlocks = renderer.GetMaxVertexShaderStorageBlocksEXT();
+        profile.SetLimit(CNA::RendererLimit::MaxVertexShaderStorageBlocks,
+                         vertexStorageBlocks >= 0,
+                         vertexStorageBlocks >= 0
+                             ? static_cast<std::uint64_t>(vertexStorageBlocks)
+                             : UINT64_C(0));
+
+        constexpr std::uint32_t classifiedFormatUsages =
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::TextureStorage) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::RenderTarget) |
+            static_cast<std::uint32_t>(CNA::RendererFormatUsage::ColorTransfer);
+        for (std::size_t i = 0; i < CapabilitySurfaceFormats.size(); ++i)
+        {
+            const SurfaceFormat format = CapabilitySurfaceFormats[i];
+            const int ordinal = static_cast<int>(format);
+            std::uint32_t supported = 0;
+            if (ResolveFormatVerdict(renderer.ClassifySurfaceFormatEXT(ordinal),
+                                     format == SurfaceFormat::Color))
+                supported |= static_cast<std::uint32_t>(
+                    CNA::RendererFormatUsage::TextureStorage);
+            if (SupportsSurfaceFormatAsRenderTargetEXT(format))
+                supported |= static_cast<std::uint32_t>(CNA::RendererFormatUsage::RenderTarget);
+            if (ResolveFormatVerdict(renderer.ClassifyColorTransferFormatEXT(ordinal),
+                                     Texture::GetFormatSizeEXT(format) % 4 == 0))
+                supported |= static_cast<std::uint32_t>(CNA::RendererFormatUsage::ColorTransfer);
+            profile.SetSurfaceFormat(static_cast<std::uint32_t>(ordinal),
+                                     CapabilitySurfaceFormatNames[i],
+                                     {classifiedFormatUsages, supported});
+        }
+
+        profile.additionalLimitationsText_ =
+            "Machine-readable entries describe individual observable CNA contracts. They do not "
+            "promise that every arbitrary combination of otherwise supported features is valid; "
+            "a combination is guaranteed only where its public API documents and validates it. "
+            "Unknown format-usage bits are deliberately not treated as unsupported. Runtime-"
+            "probed answers belong to this GraphicsDevice and may change after renderer/device "
+            "reconstruction. Native versus emulated delivery and performance are not inferred "
+            "when the renderer has no measured structured distinction. Testing evidence on one "
+            "driver or compatibility layer is not certification of untested hardware.";
+
+        if (!has3D)
+        {
+            profile.additionalLimitationsText_ +=
+                " This renderer reports no complete 3D pipeline; resource bookkeeping or narrow "
+                "storage extensions do not turn it into a rasterizing 3D renderer.";
+        }
+        if (acceptsShaderEffects && !renderer.ExecutesShaderEffectSourceEXT())
+        {
+            profile.additionalLimitationsText_ +=
+                " ShaderEffect objects are accepted, but the supplied source text does not "
+                "determine rendered pixels on this renderer.";
+        }
+        if (hasCompute && !renderer.SupportsComputeImageBindingEXT())
+        {
+            profile.additionalLimitationsText_ +=
+                " Compute dispatch is available, but the current Texture2D path cannot be bound "
+                "as a compute image.";
+        }
+        const std::string_view rendererLimitations = renderer.GetAdditionalLimitationsTextEXT();
+        if (!rendererLimitations.empty())
+        {
+            profile.additionalLimitationsText_ += " Renderer-specific note: ";
+            profile.additionalLimitationsText_.append(rendererLimitations);
+        }
+
+        profile.BuildEnglishReport();
+        return profile;
+    }
+
+    void GraphicsDevice::InvalidateRendererCapabilityProfileEXT() const
+    {
+        rendererCapabilityProfile_.reset();
+    }
+
     bool GraphicsDevice::ExecutesShaderEffectSourceEXT() const
     {
         return GetRenderer().ExecutesShaderEffectSourceEXT();
@@ -2426,6 +2732,7 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::RecreateRendererForMultiSampleCount(int multiSampleCount)
     {
         presentationParameters_.setMultiSampleCountProperty(multiSampleCount);
+        InvalidateRendererCapabilityProfileEXT();
         renderer_.reset();
         createRenderer();
         UpdateViewportFromWindow();
@@ -2838,6 +3145,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createRenderer()
     {
+        InvalidateRendererCapabilityProfileEXT();
         GraphicsRendererCreateArgs args;
         if (platformWindow_ != nullptr)
         {
@@ -2943,6 +3251,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::destroyNativeResources()
     {
+        InvalidateRendererCapabilityProfileEXT();
         renderer_.reset();
         surfacePresenter_.reset();
 

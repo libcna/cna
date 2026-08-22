@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 static const CNA_Matrix Identity = {
@@ -338,6 +339,122 @@ static void on_resource_destroyed(
     if (info->has_tag == CNA_FALSE && info->name.byte_length == 0U && info->name.data == 0) {
         ++counters->resource_destroyed_named;
     }
+}
+
+static int validate_capability_profile(CNA_Handle graphics_device)
+{
+    CNA_Bool legacy_3d = CNA_FALSE;
+    CNA_RendererFeatureSupport detailed_3d = UINT32_MAX;
+    if (cna_graphics_device_supports_capability(
+            graphics_device, CNA_GRAPHICS_CAPABILITY_THREE_D, &legacy_3d) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_renderer_feature_support_ext(
+            graphics_device, CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE,
+            &detailed_3d) != CNA_RESULT_SUCCESS ||
+        detailed_3d != (legacy_3d == CNA_TRUE
+            ? CNA_RENDERER_FEATURE_SUPPORT_SUPPORTED
+            : CNA_RENDERER_FEATURE_SUPPORT_UNSUPPORTED)) {
+        return 0;
+    }
+
+    for (CNA_RendererFeature feature = UINT32_C(0);
+         feature <= CNA_RENDERER_FEATURE_MAXIMUM;
+         ++feature) {
+        CNA_RendererFeatureSupport support = UINT32_MAX;
+        if (cna_graphics_device_get_renderer_feature_support_ext(
+                graphics_device, feature, &support) != CNA_RESULT_SUCCESS ||
+            support == CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN ||
+            support > CNA_RENDERER_FEATURE_SUPPORT_MAXIMUM) {
+            return 0;
+        }
+    }
+    if (cna_graphics_device_get_renderer_feature_support_ext(
+            graphics_device, CNA_RENDERER_FEATURE_MAXIMUM + UINT32_C(1),
+            &detailed_3d) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_renderer_feature_support_ext(
+            graphics_device, CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    CNA_Bool known = CNA_FALSE;
+    uint64_t value = 0U;
+    if (cna_graphics_device_get_renderer_limit_ext(
+            graphics_device, CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION,
+            &known, &value) != CNA_RESULT_SUCCESS ||
+        known != CNA_TRUE || value == 0U ||
+        cna_graphics_device_get_renderer_limit_ext(
+            graphics_device, CNA_RENDERER_LIMIT_MAXIMUM + UINT32_C(1),
+            &known, &value) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_renderer_limit_ext(
+            graphics_device, CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION,
+            0, &value) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_renderer_limit_ext(
+            graphics_device, CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION,
+            &known, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    CNA_RendererFormatUsageFlags known_usages = 0U;
+    CNA_RendererFormatUsageFlags supported_usages = 0U;
+    const CNA_RendererFormatUsageFlags classified =
+        CNA_RENDERER_FORMAT_USAGE_TEXTURE_STORAGE |
+        CNA_RENDERER_FORMAT_USAGE_RENDER_TARGET |
+        CNA_RENDERER_FORMAT_USAGE_COLOR_TRANSFER;
+    if (cna_graphics_device_get_surface_format_support_ext(
+            graphics_device, CNA_SURFACE_FORMAT_COLOR,
+            &known_usages, &supported_usages) != CNA_RESULT_SUCCESS ||
+        known_usages != classified ||
+        (supported_usages & ~known_usages) != 0U ||
+        (known_usages & CNA_RENDERER_FORMAT_USAGE_SAMPLED) != 0U ||
+        cna_graphics_device_get_surface_format_support_ext(
+            graphics_device, CNA_SURFACE_FORMAT_USHORT_EXT + UINT32_C(1),
+            &known_usages, &supported_usages) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_surface_format_support_ext(
+            graphics_device, CNA_SURFACE_FORMAT_COLOR,
+            0, &supported_usages) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_surface_format_support_ext(
+            graphics_device, CNA_SURFACE_FORMAT_COLOR,
+            &known_usages, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    uint64_t report_bytes = 0U;
+    if (cna_graphics_device_get_capability_report_size_ext(
+            graphics_device, &report_bytes) != CNA_RESULT_SUCCESS ||
+        report_bytes < UINT64_C(2000) || report_bytes >= (uint64_t)SIZE_MAX ||
+        cna_graphics_device_get_capability_report_size_ext(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    char guard = 'q';
+    uint64_t required = 0U;
+    if (cna_graphics_device_copy_capability_report_ext(
+            graphics_device, &guard, 1U, &required) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        required != report_bytes || guard != 'q' ||
+        cna_graphics_device_copy_capability_report_ext(
+            graphics_device, 0, 0U, &required) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        required != report_bytes ||
+        cna_graphics_device_copy_capability_report_ext(
+            graphics_device, 0, 1U, &required) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_copy_capability_report_ext(
+            graphics_device, &guard, 1U, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    char* const report = (char*)malloc((size_t)report_bytes + 1U);
+    if (report == 0) {
+        return 0;
+    }
+    const CNA_Result copy_result = cna_graphics_device_copy_capability_report_ext(
+        graphics_device, report, report_bytes, &required);
+    report[report_bytes] = '\0';
+    const int valid_report = copy_result == CNA_RESULT_SUCCESS && required == report_bytes &&
+        strstr(report, "Renderer capability report") != 0 &&
+        strstr(report, "Detailed features") != 0 &&
+        strstr(report, "Additional limitations") != 0;
+    free(report);
+    return valid_report;
 }
 
 static int validate_device_state(CNA_Handle graphics_device)
@@ -1431,6 +1548,7 @@ static CNA_Result on_load(
     CNA_Handle graphics_device = CNA_INVALID_HANDLE;
     if (game_time != 0 ||
         cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
+        !validate_capability_profile(graphics_device) ||
         !validate_device_state(graphics_device) ||
         !validate_texture_collections(graphics_device) ||
         !validate_device_events(graphics_device, state) ||

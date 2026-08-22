@@ -22,7 +22,7 @@
 > work recovered from the superseded `plan_moderngraphics.md` design draft on 2026-08-21.** It keeps
 > the current public architecture and records only capabilities the repository still lacks.
 >
-> The totals: **484 ✅, 84 🟨, 40 ⛔, 46 ⬜** (including the deliberately letter-suffixed
+> The totals: **485 ✅, 84 🟨, 40 ⛔, 46 ⬜** (including the deliberately letter-suffixed
 > `MOD-2035b` continuation row). A 🟨 is a finished row whose bound is stated in the row itself, not
 > an unfinished one; the ⛔ rows each carry the reason rather than silence. The ⬜ rows are Phase 22's
 > new implementation backlog.
@@ -124,9 +124,9 @@ A task is ✅ only when all of these hold:
 | 19 | `MOD-1900`–`MOD-1924` | API stabilization / Nova-3D readiness | all | 8 |
 | 20 | `MOD-2000`–`MOD-2100` | Beyond the XNA-era pipeline | 1–19 | 75 |
 | 21 | `MOD-2101`–`MOD-2199` | Remaining engine-layer features | 20 | 31 |
-| 22 | `MOD-2200`–`MOD-2266` | Portable modern-GPU foundations | 15, 16 | 47 |
+| 22 | `MOD-2200`–`MOD-2266` | Portable modern-GPU foundations | 15, 16 | 48 |
 
-**Total: 653 numbered tasks, plus the `MOD-2035b` continuation row.** IDs are deliberately sparse
+**Total: 654 numbered tasks, plus the `MOD-2035b` continuation row.** IDs are deliberately sparse
 inside each phase so follow-up work discovered during implementation gets a free neighbouring number
 instead of a renumbering pass.
 
@@ -1242,13 +1242,14 @@ The current documentation assigns Vulkan compute to `plans/plan_vulkan.md`, but 
 exist. Phase 22 therefore owns the shared contract and Vulkan implementation until a dedicated
 renderer plan is deliberately created; work must be moved, not copied, if that split later happens.
 
-### 22.1 Reconciliation and contracts (`MOD-2200`–`MOD-2202`)
+### 22.1 Reconciliation and contracts (`MOD-2200`–`MOD-2203`)
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
 | MOD-2200 | Reconcile `plan_moderngraphics.md` with the implemented engine layer and preserve only its live deltas | ✅ | Verified against the tree and all local Git objects on 2026-08-21: the draft and its stated baseline SHA are absent; its proposed module, namespace, device facade, capability system and duplicate resources were never adopted; the real implementation is `plan_modern.md` + `modules/graphics-ext`. The retained work is recorded in `MOD-2201`–`MOD-2266`: portable shader payloads, truthful limits/format support, texture arrays/storage textures, stronger buffer roles, Vulkan feature adoption, automatic internal synchronization, lifetime/performance rules and an OpenGL4 portability pass. The draft may now be deleted without losing a unique requirement. |
 | MOD-2201 | Re-baseline the modern-GPU surface immediately before implementation | ⬜ | Record the implementation commit, selected renderer identities, shipped public types, every relevant `IGraphicsRenderer` virtual/default, `GraphicsCapability` ordinals, and a measured EasyGL/Vulkan/OpenGL4 capability matrix. Classify every Phase 22 item as absent, partial or already supplied; update rather than duplicate anything that landed after this plan row. |
 | MOD-2202 | Publish the portable resource, ordering, threading and lifetime contract | ⬜ | One ADR fixes the rules shared by every task below: public calls have one observable order with XNA work; deferred commands snapshot/retain native resources; disposal is fence-safe; CPU readback may block only for the requested result; feature/format/limit rejection occurs before native calls; synchronization is renderer-owned; and native objects/states never leak into the portable API. The ADR maps the rules to Vulkan, OpenGL, D3D11/12, Metal and WebGPU before names are frozen. |
+| MOD-2203 | Add a detailed renderer capability profile and English limitations report | ✅ | `RendererCapabilityProfile` is an immutable, cached CNAEXT snapshot with 30 append-only atomic feature identities, four-state support, 10 known/unknown numeric limits and separate known/supported usage masks for all 27 `SurfaceFormat` values. The initial builder maps only audited existing renderer/device facts; unclassified format usages stay unknown rather than becoming false. `IGraphicsRenderer` can append English limitations and `GraphicsDevice` generates a complete report without making text a machine protocol. A separate additive C ABI preserves the legacy 64-bit flags. C++ catalog/profile tests plus strict C header, ABI and lifecycle/device smoke coverage verify ordinals, mappings, invalid inputs, two-call report copying and caching. `MOD-2220`/`MOD-2221` remain open for the larger native limit/format inventory. |
 
 ### 22.2 Explicit portable shader payloads (`MOD-2210`–`MOD-2217`)
 

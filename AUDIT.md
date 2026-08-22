@@ -1,5 +1,16 @@
 # CNA XNA 4.0 API Audit
 
+> **Renderer capability note (2026-08-22, `MOD-2203`):** the non-XNA renderer discovery surface
+> now has an additive detailed profile beside the unchanged legacy `GraphicsCapability` summary:
+> 30 append-only atomic features, four-state answers, 10 known/unknown limits, per-format
+> known/supported masks and a generated English limitations report. The C ABI exposes the same
+> facts without growing its published 64-bit flag value. This does not change XNA API coverage;
+> the extension contract and its deliberately still-unknown format uses are documented in
+> `docs/renderer-capability-profiles.md`. The regenerated C coverage snapshot now records 512
+> headers / 8,272 symbols: 6,415 implemented, 15 partial, 1,396 planned and 446 not applicable;
+> all 96 new native profile declarations are explicitly mapped by `MOD-2203`, so this task adds no
+> accidental C-binding backlog.
+
 Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementation).
 
 **Legend:**

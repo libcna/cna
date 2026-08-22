@@ -30,6 +30,24 @@ _Static_assert(sizeof(CNA_GraphicsRendererType) == sizeof(uint32_t),
                "CNA_GraphicsRendererType must have a fixed-width representation");
 _Static_assert(sizeof(CNA_GraphicsCapabilityFlags) == sizeof(uint64_t),
                "CNA_GraphicsCapabilityFlags must have a fixed-width representation");
+_Static_assert(sizeof(CNA_RendererFeature) == sizeof(uint32_t) &&
+                   CNA_RENDERER_FEATURE_THREE_DIMENSIONAL_PIPELINE == UINT32_C(0) &&
+                   CNA_RENDERER_FEATURE_SHADER_EFFECT_SOURCE_EXECUTION == UINT32_C(8) &&
+                   CNA_RENDERER_FEATURE_COMPUTE_IMAGE_BINDING == UINT32_C(19) &&
+                   CNA_RENDERER_FEATURE_MAXIMUM == UINT32_C(29),
+               "CNA detailed renderer-feature identities must remain stable");
+_Static_assert(sizeof(CNA_RendererFeatureSupport) == sizeof(uint32_t) &&
+                   CNA_RENDERER_FEATURE_SUPPORT_UNKNOWN == UINT32_C(0) &&
+                   CNA_RENDERER_FEATURE_SUPPORT_RESTRICTED == UINT32_C(3),
+               "CNA renderer-feature support identities must remain stable");
+_Static_assert(sizeof(CNA_RendererLimit) == sizeof(uint32_t) &&
+                   CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION == UINT32_C(0) &&
+                   CNA_RENDERER_LIMIT_MAXIMUM == UINT32_C(9),
+               "CNA renderer-limit identities must remain stable");
+_Static_assert(sizeof(CNA_RendererFormatUsageFlags) == sizeof(uint32_t) &&
+                   CNA_RENDERER_FORMAT_USAGE_COLOR_TRANSFER == (UINT32_C(1) << 12) &&
+                   CNA_RENDERER_FORMAT_USAGE_ALL == UINT32_C(0x1fff),
+               "CNA renderer-format usage flags must remain stable");
 _Static_assert(sizeof(CNA_EffectParameterClass) == sizeof(uint32_t) &&
                    CNA_EFFECT_PARAMETER_CLASS_SCALAR == UINT32_C(0) &&
                    CNA_EFFECT_PARAMETER_CLASS_VECTOR == UINT32_C(1) &&
