@@ -18,18 +18,17 @@
 // this is a genuine, safe reuse, not a collision risk (D3D12RootSignatureCache.hpp's own doc
 // comment already establishes this principle for lit_textured3d/textured3d sharing (2,1,1)).
 //
-// Honest scope gaps, documented rather than silently omitted:
+// Scope notes:
 //   - SetCustomEffect() (D3D11's own DX-71): CLOSED (DX-121) -- a valid custom Effect now draws
 //     through its own real D3D12EffectRenderer PSO+constant-buffer, see FlushBatch()'s own branch.
 //   - SetSamplerFilter()/SetSamplerAddressMode() (D3D11's own DX-72): CLOSED (DX-133) -- these now
 //     genuinely drive slot 0's real sampler descriptor via DX-119's dynamic per-slot sampler system
 //     (owner_->ApplySamplerState(0, ...) in FlushBatch(), mirroring D3D11SpriteBatchRenderer's own
 //     exact call), not a fixed static sampler.
-//   - Blend state: D3D12 has no Phase-DX7-equivalent blend-state cache yet either -- this PSO uses
-//     the same Opaque-blend default every other D3D12 draw uses today (D3D12PipelineStateDesc's own
-//     default fields). Real alpha-blended sprite compositing is deferred to whenever a D3D12 blend-
-//     state system lands; single non-overlapping sprite draws (this task's own test coverage) are
-//     unaffected by this gap.
+//   - Blend state: CLOSED (DX-163) -- stock SpriteBatch PSOs are cached by the currently-applied
+//     XNA blend factors/functions, write mask, sample mask and render-target format. AlphaBlend,
+//     Additive, NonPremultiplied, Opaque and custom BlendState values therefore reach the real
+//     D3D12 output merger instead of every sprite silently using Opaque.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "D3D12Buffers.hpp"
@@ -38,6 +37,8 @@
 #include <wrl/client.h>
 
 #include <cstdint>
+#include <map>
+#include <tuple>
 #include <vector>
 
 namespace CNA::Internal::Renderers::DirectX12
@@ -87,7 +88,8 @@ namespace CNA::Internal::Renderers::DirectX12
 
         D3D12VertexBufferRenderer vb_;
         D3D12IndexBufferRenderer ib_;
-        ComPtr<ID3D12PipelineState> sprite2DPso_;
+        using SpritePsoKey = std::tuple<int, int, int, int, int, int, int, unsigned int, unsigned int>;
+        std::map<SpritePsoKey, ComPtr<ID3D12PipelineState>> sprite2DPsos_;
         ComPtr<ID3D12Resource> perDrawConstantBuffer_;
         void* perDrawConstantBufferMapped_ = nullptr;
 

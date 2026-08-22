@@ -2359,6 +2359,36 @@ int main()
             sb->SetSamplerAddressMode(1, 1); // TextureAddressMode::Clamp
         }
 
+        // R9 (DX-163): SpriteBatch must consume the live XNA BlendState. Before DX-163 its
+        // hand-built PSO hardcoded BlendEnable=FALSE, so the premultiplied half-alpha source below
+        // replaced green with dark red (128,0,0) instead of compositing to (128,127,0).
+        {
+            ImageData whiteImage;
+            whiteImage.width = 1; whiteImage.height = 1; whiteImage.mipLevels = 1;
+            whiteImage.pixels = {255, 255, 255, 255};
+            D3D12TextureRenderer whiteTexture(&renderer, whiteImage);
+
+            renderer.ApplyBlendState(
+                /*colorSrcBlend=One*/0, /*alphaSrcBlend=One*/0,
+                /*colorDstBlend=InverseSourceAlpha*/5, /*alphaDstBlend=InverseSourceAlpha*/5,
+                /*colorBlendFunc=Add*/0, /*alphaBlendFunc=Add*/0,
+                CNA::Internal::Renderers::BlendWriteState{});
+            renderer.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+            sb->Begin();
+            sb->Draw(whiteTexture, Rectangle(0, 0, kRtWidth, kRtHeight),
+                     Rectangle(0, 0, 1, 1), Color(128, 0, 0, 128));
+            sb->End();
+            const auto afterR9 = ReadBackRenderTargetFull(renderer, rt.Get(), kRtWidth, kRtHeight);
+            Check(isColor(pixelAt(afterR9, 32, 32), 128, 127, 0, 255),
+                  "R9: SpriteBatch consumes BlendState::AlphaBlend in its real D3D12 PSO -- "
+                  "premultiplied half-red over green is exactly (128,127,0,255), not opaque dark red "
+                  "(plans/plan_dx.md DX-163)");
+
+            renderer.ApplyBlendState(
+                /*One*/0, /*One*/0, /*Zero*/1, /*Zero*/1,
+                /*Add*/0, /*Add*/0, CNA::Internal::Renderers::BlendWriteState{});
+        }
+
         // Note on SpriteSortMode (DX-131): sort-mode ordering is implemented entirely in the shared,
         // renderer-agnostic Microsoft::Xna::Framework::Graphics::SpriteBatch.cpp (sorts the pending
         // draw-call list before handing it to the renderer's own Draw() calls, in order) -- there is

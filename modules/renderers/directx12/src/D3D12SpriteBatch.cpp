@@ -5,6 +5,7 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
+#include "CNA/Internal/Renderers/D3DCommon/D3DStateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -95,8 +96,14 @@ namespace CNA::Internal::Renderers::DirectX12
 
     ID3D12PipelineState* D3D12SpriteBatchRenderer::GetOrCreateSprite2DPso(ID3D12RootSignature* rootSig)
     {
-        if (sprite2DPso_)
-            return sprite2DPso_.Get();
+        const SpritePsoKey key{
+            owner_->currentColorSrcBlend_, owner_->currentAlphaSrcBlend_,
+            owner_->currentColorDstBlend_, owner_->currentAlphaDstBlend_,
+            owner_->currentColorBlendFunc_, owner_->currentAlphaBlendFunc_,
+            owner_->currentColorWriteMask_, owner_->currentSampleMask_,
+            static_cast<unsigned int>(owner_->GetBoundColorFormatEXT())};
+        if (const auto it = sprite2DPsos_.find(key); it != sprite2DPsos_.end())
+            return it->second.Get();
 
         const uint8_t* vsBytes = nullptr; std::size_t vsSize = 0;
         const uint8_t* psBytes = nullptr; std::size_t psSize = 0;
@@ -126,23 +133,25 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.SampleDesc.Count = 1;
         desc.NodeMask = 0;
 
-        // Same explicit-hardcoded-defaults simplification every other D3D12 draw uses today (no
-        // D3D12 Phase-DX7-equivalent state-object cache exists yet -- this file's own header
-        // comment documents the honest blend/sampler gap this implies for SpriteBatch specifically).
         desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
         desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
         desc.RasterizerState.FrontCounterClockwise = FALSE;
         desc.RasterizerState.DepthClipEnable = TRUE;
 
         D3D12_RENDER_TARGET_BLEND_DESC& rt0 = desc.BlendState.RenderTarget[0];
-        rt0.BlendEnable = FALSE;
-        rt0.SrcBlend = D3D12_BLEND_ONE;
-        rt0.DestBlend = D3D12_BLEND_ZERO;
-        rt0.BlendOp = D3D12_BLEND_OP_ADD;
-        rt0.SrcBlendAlpha = D3D12_BLEND_ONE;
-        rt0.DestBlendAlpha = D3D12_BLEND_ZERO;
-        rt0.BlendOpAlpha = D3D12_BLEND_OP_ADD;
-        rt0.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        const bool colorOpaque = owner_->currentColorSrcBlend_ == 0 && owner_->currentColorDstBlend_ == 1;
+        const bool alphaOpaque = owner_->currentAlphaSrcBlend_ == 0 && owner_->currentAlphaDstBlend_ == 1;
+        rt0.BlendEnable = !(colorOpaque && alphaOpaque);
+        rt0.SrcBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorSrcBlend_));
+        rt0.DestBlend = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentColorDstBlend_));
+        rt0.BlendOp = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentColorBlendFunc_));
+        rt0.SrcBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaSrcBlend_));
+        rt0.DestBlendAlpha = static_cast<D3D12_BLEND>(BlendToD3D11(owner_->currentAlphaDstBlend_));
+        rt0.BlendOpAlpha = static_cast<D3D12_BLEND_OP>(BlendFunctionToD3D11(owner_->currentAlphaBlendFunc_));
+        rt0.LogicOpEnable = FALSE;
+        rt0.LogicOp = D3D12_LOGIC_OP_NOOP;
+        rt0.RenderTargetWriteMask = static_cast<UINT8>(owner_->currentColorWriteMask_ & 0xF);
+        desc.SampleMask = owner_->currentSampleMask_;
 
         desc.DepthStencilState.DepthEnable = FALSE;
         desc.DepthStencilState.StencilEnable = FALSE;
@@ -151,10 +160,13 @@ namespace CNA::Internal::Renderers::DirectX12
         desc.RTVFormats[0] = owner_->GetBoundColorFormatEXT();
         desc.DSVFormat = DXGI_FORMAT_UNKNOWN;
 
-        HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(sprite2DPso_.ReleaseAndGetAddressOf()));
+        ComPtr<ID3D12PipelineState> pso;
+        HRESULT hr = device_->CreateGraphicsPipelineState(&desc, IID_PPV_ARGS(pso.ReleaseAndGetAddressOf()));
         if (FAILED(hr))
             throw std::runtime_error("D3D12SpriteBatchRenderer: CreateGraphicsPipelineState failed, hr=" + FormatHr(hr));
-        return sprite2DPso_.Get();
+        ID3D12PipelineState* result = pso.Get();
+        sprite2DPsos_.emplace(key, std::move(pso));
+        return result;
     }
 
     ID3D12Resource* D3D12SpriteBatchRenderer::GetOrCreatePerDrawConstantBuffer()

@@ -443,6 +443,8 @@ namespace CNA::Internal::Renderers::DirectX12
         void SetActiveOcclusionQueryEXT(ID3D12QueryHeap* heap) { activeOcclusionQueryHeap_ = heap; }
 
     private:
+        friend class D3D12SpriteBatchRenderer;
+
         [[noreturn]] static void NotYetImplemented(const char* what);
 
         void CreateDeviceResources();

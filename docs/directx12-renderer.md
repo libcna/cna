@@ -58,6 +58,9 @@ diagnostic, see "Known limitations"), not just "the API call returned `S_OK`."
   queries, `Texture3D`, custom `ShaderEffect` compilation, and `SpriteBatch::Begin(effect)`'s own
   integration on top of it are all real and independently CTest-proven now (`DX-118`/`DX-119`/
   `DX-120`/`DX-122`/`DX-121`) — see "Known limitations" for what's still genuinely open.
+- Stock `SpriteBatch` PSOs consume the active XNA blend factors/functions, write mask and sample
+  mask (`DX-163`). Premultiplied `BlendState::AlphaBlend` is real; translucent sprites no longer
+  pass through an opaque hardcoded PSO.
 
 ## Development environment: Wine + vkd3d-proton dev-loop
 
@@ -112,8 +115,8 @@ Like `D3D11`, D3D12 tests are not ordinary `Game`-subclass examples — the rout
 Proton-managed window/`Present()` path to drive one through (Proton's own bootstrap launch is too
 heavy for a normal CTest run, see "Known limitations"). All correctness tests live in
 `modules/renderers/directx12/examples/directx12_smoke_test.cpp` (`DirectX12_Smoke` CTest, the single registered D3D12 CTest — checks
-lettered A through VV as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149`–`DX-155`,
-**212/212 passing**) and talk to the real
+lettered A through VV as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149`–`DX-155`, plus
+the later contract checks and `DX-163`'s SpriteBatch AlphaBlend oracle (**261/261 passing**), and talk to the real
 `ID3D12Device`/command queue/list fairly directly. The general off-screen pixel-readback shape:
 
 ```cpp
