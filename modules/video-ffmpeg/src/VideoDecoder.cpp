@@ -20,6 +20,15 @@ extern "C" {
 
 namespace CNA::Internal::Media
 {
+    bool IsVideoDecoderAvailable() noexcept
+    {
+        return true;
+    }
+
+    void RequireVideoDecoderAvailable()
+    {
+    }
+
     VideoDecoder::VideoDecoder() = default;
 
     VideoDecoder::~VideoDecoder()

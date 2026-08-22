@@ -138,7 +138,8 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > that no implementer may make alone. The published verdict is **not ready**, and correctly so.
 > The owner ruled on both on 2026-08-16. `CBIND-045` implements the first: the package now carries
 > the SDL3 libraries CNA builds, so an installed C API links and runs with no environment variable
-> at all, while FFmpeg stays a system dependency on purpose. `CBIND-046` implements the second: a
+> at all, while enabled FFmpeg stays a system dependency on purpose (since `MEDIA-233`, an
+> explicit `CNA_ENABLE_VIDEO=OFF` build omits it entirely). `CBIND-046` implements the second: a
 > static archive that publishes the same 2,720 `cna_*` names the shared library does, built by
 > partially linking the whole closure into one object and localizing everything else, with the build
 > failing outright if a non-ABI symbol survives. With both decisions delivered the release gate's
@@ -1656,8 +1657,8 @@ never reached `GestureDetector`) to real and gesture-tested (`plans/plan_input.m
 | PlaylistCollection | ✅ | Real; backed by `MediaCollectionBase<Playlist>` |
 | Song | ✅ | API complete **as of Phase 16** — `Album`/`Artist`/`Genre`/`ToString()` were MISSING until `MEDIA-174`/`176` (CNA inherited the omission from FNA's own `Song.cs`; the previous ✅ here was inaccurate). `TrackNumber`/`IsRated`/`Rating` are now real tag-derived values, not hardcoded constants (`MEDIA-181`/`184`) |
 | SongCollection | ✅ | API complete; member-level diff against the XNA reference XML confirms no gaps (`MEDIA-213`) |
-| Video | ⚠️ | API complete on Linux/macOS (FFmpeg-backed). On Windows/Android/Emscripten, `Video.cpp` itself is excluded from the build (`cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE` gate) while the public header stays available -- referencing this class there is a link error, not a graceful runtime `NotSupportedException` (found by external code review, `plans/plan_media.md` §10) |
-| VideoPlayer | ⚠️ | Implemented (FFmpeg) on Linux/macOS; same Windows/Android/Emscripten link-error caveat as `Video` above |
+| Video | ✅ | Public API and content readers are link-complete in every build (`MEDIA-233`). `CNA_ENABLE_VIDEO=AUTO` (default) selects the optional `cna_video_ffmpeg` backend on supported hosts when its four pkg-config modules exist; `OFF` or an unavailable `AUTO` keeps metadata construction functional and makes file probing deterministically throw `System::NotSupportedException`. Real target-native decoding on Windows/MSVC, MinGW, Android and Emscripten remains the separate `MEDIA-192`..`195` portability backlog; iOS has the same documented fallback but no numbered decode task yet. |
+| VideoPlayer | ✅ | Public state/configuration/disposal API is link-complete in every build (`MEDIA-233`). With the optional FFmpeg backend absent, `Play(non-null-video)` throws `System::NotSupportedException` before changing state; with it present, the existing real decoder is used. |
 | VideoSoundtrackType (enum) | ✅ | Complete |
 | VisualizationData | ✅ | API complete |
 

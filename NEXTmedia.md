@@ -4,29 +4,29 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plans/plan_media.md`
-> (`MEDIA-1`–`MEDIA-232`, Phases 0-16); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-233`, Phases 0-17); this file is a short current-state index.
 
-## 1. Status (2026-07-18) — Phases 0-16; **merged into `develop`**
+## 1. Status (2026-08-22) — 228/232 tasks done
 
 **Where the work lives:** `feature/media` @ `22df8325`, merged into `develop` as `cb053b71`
 (two merges: `a3f88c94`/`36ac9656` for Phases 8-16 Groups A-I, `cb053b71` for `MEDIA-228`..`232`).
-Full task detail: `plans/plan_media.md` (`MEDIA-1`–`MEDIA-232`; **231 real tasks — `MEDIA-157`
-was never assigned**, so the highest ID is not the count).
+Full task detail: `plans/plan_media.md` (`MEDIA-1`–`MEDIA-233`; **232 real tasks — `MEDIA-157`
+was never assigned**, so the highest ID is not the count). The historical Phase 0-16 work remains
+merged as recorded; `MEDIA-233` is the current optional-video-backend change.
 
 **Current baseline, measured on the merged tree — quote this number, not the historical ones:**
 **5471 tests, 5467 passed, 0 failed, 4 pre-existing hardware skips** (two Accelerometer, two
 Gyroscope; both need real hardware). Per-phase figures recorded earlier in this file are
 *branch-only and pre-merge* — see `MEDIA-231`.
 
-### Open work (7 tasks, all Group D)
+### Open work (4 tasks, Group D)
 
-`MEDIA-192`..`198` — **FFmpeg on Windows, Android and Emscripten.** `Video`, `VideoPlayer` and
-`VideoDecoder` are excluded from the build there (`cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE`
-gate) while their public headers remain, so using them is a **link error**, not a clean runtime
-failure; `AudioDurationProbe` also returns 0 unconditionally on those platforms. **Deferred by the
-project owner.** The owner explicitly rejected `NotSupportedException` stubs — the target is real
-FFmpeg. `MEDIA-198` defines the honest platform-support matrix any attempt must fill in: what was
-actually built and run, versus merely written. **This cannot be closed from a Linux-only sandbox.**
+`MEDIA-192`..`195` — **real target-native FFmpeg on Windows/MSVC, MinGW, Android and Emscripten.**
+The project owner explicitly reversed the former fallback rejection on 2026-08-22: `MEDIA-233`
+makes the public XNA video surface link-complete everywhere and adds `CNA_ENABLE_VIDEO=OFF/AUTO/ON`.
+Without FFmpeg, probing/playback now reports `System::NotSupportedException`; it is no longer a link
+error. This fallback does not claim those four real decoder ports are implemented, so their tasks
+remain open. The honest platform/evidence matrix is in `docs/video-backend.md` (`MEDIA-198`).
 
 ### Known gaps that are NOT tracked as open tasks
 
@@ -393,7 +393,8 @@ confirmed defects. All are now fixed or honestly documented (`plans/plan_media.m
     (`cmake/CnaLibrary.cmake`'s `CNA_FFMPEG_AVAILABLE` gate excludes the `.cpp` files but not the
     headers on those platforms). Documented in `AUDIT.md` (⚠️, not a silent ✅); a real fix (runtime
     stub implementations) is a larger, separate undertaking this sandbox can't build or verify
-    anyway.
+    anyway. **Later correction:** this was true for Phase 8 and was closed by `MEDIA-233` after the
+    owner explicitly changed the policy on 2026-08-22; see the current status at the top.
 11. **Missing `GetTypeName()` tests + undocumented `CHECKLIST.md` deviations** (`MEDIA-137`) — all
     6 collection types and `VideoPlayer` had no `GetTypeName()` test; `VideoPlayer::Dispose()`'s
     idempotency and `GetTexture()`-before-`Play()`-returning-`nullptr` had inline comments but no
@@ -899,11 +900,8 @@ not required for "not just stubs" — surfaced during this plan's own design/aud
   CMake build variant (with CI coverage) would let this — and the identically-shaped situation
   across the rest of the Audio/Media stack's own `#ifdef SOUND_ENABLED` pairs — finally be tested
   for real.
-- **`Video`/`VideoPlayer` fail with a link error, not a runtime `NotSupportedException`, on
-  Windows/Android/Emscripten** (Phase 8, `MEDIA-136`): `cmake/CnaLibrary.cmake`'s
-  `CNA_FFMPEG_AVAILABLE` gate excludes `Video.cpp`/`VideoPlayer.cpp`/`VideoDecoder.cpp` from the
-  build on those platforms while the public headers stay available. A real fix would need either
-  runtime stub `.cpp` implementations that throw `NotSupportedException` for those platforms, or a
-  compile-time guard surfaced earlier/more clearly than a linker error. This sandbox has no way to
-  build for or verify any of those three platforms, so this is documented rather than attempted
-  blind.
+- ~~**`Video`/`VideoPlayer` fail with a link error on no-FFmpeg targets** (Phase 8,
+  `MEDIA-136`)~~ — **closed by `MEDIA-233`** under the owner's revised 2026-08-22 policy. The public
+  types/readers always compile; the unavailable decoder throws `System::NotSupportedException` at
+  probing/playback, and `CNA_ENABLE_VIDEO=OFF` removes FFmpeg from a Game executable's dependency
+  graph. Real native decoders for the fallback-only platforms remain `MEDIA-192`..`195`.

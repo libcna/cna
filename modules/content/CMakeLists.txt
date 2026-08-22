@@ -1,14 +1,5 @@
 file(GLOB_RECURSE CNA_CONTENT_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
-# REMED-BUILD-013 (discovered while verifying it): VideoContentTypeReader.cpp constructs a
-# Video (Media::Video::Video(...)) -- a genuine, previously-latent gap in the FFmpeg
-# exclusion list, never hit before because every original FFmpeg-unavailable target (MinGW,
-# Emscripten, Android) that links a full CNA never got far enough in a
-# real build to reach it.
-if(NOT CNA_FFMPEG_AVAILABLE)
-    list(FILTER CNA_CONTENT_SOURCES EXCLUDE REGEX ".*/src/Xnb/VideoContentTypeReader\\.cpp$")
-endif()
-
 cna_add_module(cna_content Content ${CNA_CONTENT_SOURCES})
 target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media cna_math cna_core)
 cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO)

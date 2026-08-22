@@ -86,7 +86,12 @@ The stress suite found a heap use-after-free on its first run; that is what this
 
 *Evidence:* the CNACApi install component, proved by CApi_InstalledConsumer
 
-Ruled on by the project owner on 2026-08-16: the package ships them. FFmpeg stays a system dependency for reasons that are not convenience -- redistribution terms, soname freezing against security updates, and the transitive libraries a distribution build was linked against. CApi_InstalledConsumer now passes no -rpath-link and no LD_LIBRARY_PATH, so a regression here fails a test rather than surprising a consumer.
+Ruled on by the project owner on 2026-08-16: the package ships the SDL libraries CNA builds. When
+the optional video backend is enabled, FFmpeg stays a system dependency for reasons that are not
+convenience -- redistribution terms, soname freezing against security updates, and the transitive
+libraries a distribution build was linked against. `CNA_ENABLE_VIDEO=OFF` now omits FFmpeg while
+preserving the ABI. CApi_InstalledConsumer passes no `-rpath-link` and no `LD_LIBRARY_PATH`, so a
+regression here fails a test rather than surprising a consumer.
 
 ### ✅ A static configuration that keeps the same ABI promise
 

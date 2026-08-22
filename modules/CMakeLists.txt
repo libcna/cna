@@ -5,33 +5,56 @@
 # modules, and keeps the source-partition/no-loss ownership gate.
 # =====================================================================================
 
-# --- FFmpeg (video decoding) — not available on Emscripten/Android, nor on any Windows target
-# (mingw-w64 cross-build OR a native MSVC build, e.g. this project's own D3D11/D3D12 Windows CI --
-# neither has an FFmpeg pkg-config path; on the MinGW cross-build, pkg-config would otherwise
-# silently resolve to the host's native FFmpeg and poison the cross-compile's include path with
-# native glibc headers). WIN32 covers both MinGW and native MSVC uniformly; MINGW is kept for
-# clarity/documentation even though it's now redundant with WIN32. ---
-# iOS joins that list for the same reason as the MinGW cross-build: pkg-config on a macOS host
-# resolves to Homebrew's *macOS* FFmpeg, whose headers and dylibs would poison an iOS
-# cross-compile (and fail the link with "built for macOS"). macOS itself keeps FFmpeg -- that is a
-# native build against exactly the libraries pkg-config reports.
+# --- Optional FFmpeg video backend ------------------------------------------------------------
+# CNA_ENABLE_VIDEO is a three-state feature switch:
+#   OFF  -- do not probe or link FFmpeg; public Video/VideoPlayer types use the unavailable backend.
+#   AUTO -- use FFmpeg only when all required pkg-config modules are present.
+#   ON   -- require a supported platform and all FFmpeg development modules.
+#
+# The platforms below deliberately remain outside the current FFmpeg integration. In particular,
+# a cross-build must never resolve the build host's pkg-config files and poison its target include
+# or library paths. AUTO falls back to the no-video backend there; ON reports the unsupported
+# configuration immediately instead of silently changing the user's request.
+set(CNA_FFMPEG_AVAILABLE OFF)
+set(_cna_ffmpeg_platform_supported ON)
 if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
-    set(CNA_FFMPEG_AVAILABLE OFF)
-else()
-    set(CNA_FFMPEG_AVAILABLE ON)
+    set(_cna_ffmpeg_platform_supported OFF)
 endif()
 
+if(CNA_ENABLE_VIDEO STREQUAL "ON" AND NOT _cna_ffmpeg_platform_supported)
+    message(FATAL_ERROR
+        "CNA_ENABLE_VIDEO=ON is not supported by this target toolchain. Use AUTO/OFF, or add a "
+        "target-native FFmpeg integration for this platform.")
+elseif(NOT CNA_ENABLE_VIDEO STREQUAL "OFF" AND _cna_ffmpeg_platform_supported)
+    if(CNA_ENABLE_VIDEO STREQUAL "ON")
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(LIBAVCODEC REQUIRED IMPORTED_TARGET libavcodec)
+        pkg_check_modules(LIBAVFORMAT REQUIRED IMPORTED_TARGET libavformat)
+        pkg_check_modules(LIBAVUTIL REQUIRED IMPORTED_TARGET libavutil)
+        pkg_check_modules(LIBSWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
+        set(CNA_FFMPEG_AVAILABLE ON)
+    else()
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(LIBAVCODEC QUIET IMPORTED_TARGET libavcodec)
+            pkg_check_modules(LIBAVFORMAT QUIET IMPORTED_TARGET libavformat)
+            pkg_check_modules(LIBAVUTIL QUIET IMPORTED_TARGET libavutil)
+            pkg_check_modules(LIBSWRESAMPLE QUIET IMPORTED_TARGET libswresample)
+            if(LIBAVCODEC_FOUND AND LIBAVFORMAT_FOUND AND LIBAVUTIL_FOUND AND
+               LIBSWRESAMPLE_FOUND)
+                set(CNA_FFMPEG_AVAILABLE ON)
+            endif()
+        endif()
+    endif()
+endif()
+unset(_cna_ffmpeg_platform_supported)
+
 if(CNA_FFMPEG_AVAILABLE)
-    find_package(PkgConfig REQUIRED)
-    # IMPORTED_TARGET (not raw _LIBRARIES/_INCLUDE_DIRS variables) so include dirs, -L search
-    # dirs, and libraries all propagate correctly as INTERFACE properties of a real CMake target
-    # -- the same pattern this project already uses for SDL3::SDL3/Vulkan::Vulkan. This
-    # matters in practice: Homebrew's ffmpeg on macOS lives under a non-default prefix
-    # (/opt/homebrew), unlike Linux distro packages under /usr/lib/<triplet>.
-    pkg_check_modules(LIBAVCODEC  REQUIRED IMPORTED_TARGET libavcodec)
-    pkg_check_modules(LIBAVFORMAT REQUIRED IMPORTED_TARGET libavformat)
-    pkg_check_modules(LIBAVUTIL   REQUIRED IMPORTED_TARGET libavutil)
-    pkg_check_modules(LIBSWRESAMPLE REQUIRED IMPORTED_TARGET libswresample)
+    message(STATUS
+        "CNA: video enabled (${CNA_ENABLE_VIDEO}; FFmpeg backend cna_video_ffmpeg)")
+else()
+    message(STATUS
+        "CNA: video disabled (${CNA_ENABLE_VIDEO}); Video playback reports NotSupportedException")
 endif()
 
 # --- Draco (KHR_draco_mesh_compression mesh decoding, plans/plan_gltf.md GLTF-353/GLTF-363) ---------
@@ -151,9 +174,9 @@ if(CNA_DRACO_AVAILABLE)
     endif()
 endif()
 
-# The root-scope test registration (cmake/UnitTests.cmake) keys its FFmpeg-gated test
-# exclusions on this value; export it up from this directory scope, or the root would see
-# an unset variable and silently drop the five video test TUs on FFmpeg-capable hosts.
+# The root-scope test registration (cmake/UnitTests.cmake) keys its real-decoder test exclusions on
+# this value; export it up from this directory scope, or the root would see an unset variable and
+# silently drop the FFmpeg fixture suites on capable hosts.
 set(CNA_FFMPEG_AVAILABLE ${CNA_FFMPEG_AVAILABLE} PARENT_SCOPE)
 set(CNA_DRACO_AVAILABLE ${CNA_DRACO_AVAILABLE} PARENT_SCOPE)
 
@@ -170,6 +193,7 @@ target_compile_definitions(cna_build_flags INTERFACE
         $<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
+        $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_VIDEO_AVAILABLE>
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
 )
 
@@ -224,6 +248,12 @@ add_subdirectory(graphics)
 add_subdirectory(input)
 add_subdirectory(audio)
 add_subdirectory(media)
+if(CNA_FFMPEG_AVAILABLE)
+    add_subdirectory(video-ffmpeg)
+    # cna_media owns the stable XNA API and decoder-facing contract. The optional backend owns
+    # every FFmpeg symbol and satisfies that contract only in an enabled build.
+    target_link_libraries(cna_media PRIVATE cna_video_ffmpeg)
+endif()
 add_subdirectory(content)
 add_subdirectory(storage)
 add_subdirectory(runtime)
@@ -286,7 +316,7 @@ endif()
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
-    c-api core math platform runtime graphics input audio media content storage
+    c-api core math platform runtime graphics input audio media video-ffmpeg content storage
     devices devices-ext graphics-ext gamer-services net)
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6

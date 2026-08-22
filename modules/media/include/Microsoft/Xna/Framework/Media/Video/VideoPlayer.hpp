@@ -35,8 +35,10 @@ namespace Microsoft::Xna::Framework::Media
     /**
      * @brief Controls video playback.
      *
-     * Decodes video frames via FFmpeg and renders them through the CNA graphics
-     * renderer. Audio is fed through CNA's selected audio implementation.
+     * When the optional backend is enabled, decodes video frames via FFmpeg and renders them
+     * through the CNA graphics renderer. Audio is fed through CNA's selected audio implementation.
+     * The type and its metadata/state API remain available without that backend; Play() then
+     * rejects deterministically instead of leaving unresolved linker symbols.
      */
     class VideoPlayer final : public System::Object, public System::IDisposable
     {
@@ -137,6 +139,7 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Starts playback of the given video from the beginning.
          *
          * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
          * @throws System::InvalidOperationException If the video's declared width/height/frame
          *         rate does not match what the decoded file actually reports.
          * @param video Video to play.

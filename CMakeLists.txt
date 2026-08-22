@@ -81,6 +81,17 @@ option(CNA_BUILD_EXAMPLES "Build CNA example applications (house3d demo, demo_2d
 option(CNA_CNAEXT "Enable CNA CNAEXT extended graphics layer (beyond XNA 4.0)" OFF)
 option(CNA_DEVICES "Enable CNA-specific device/sensor extensions beyond XNA 4.0 (battery, camera, clipboard, ...)" OFF)
 option(CNA_ENABLE_NET "Build CNA networking (GamerServices + Net, requires ENet)" ON)
+set(CNA_ENABLE_VIDEO "AUTO" CACHE STRING
+    "Enable FFmpeg video playback (OFF, AUTO, or ON)")
+set_property(CACHE CNA_ENABLE_VIDEO PROPERTY STRINGS OFF AUTO ON)
+string(TOUPPER "${CNA_ENABLE_VIDEO}" _cna_enable_video_normalized)
+if(NOT _cna_enable_video_normalized MATCHES "^(OFF|AUTO|ON)$")
+    message(FATAL_ERROR
+        "CNA_ENABLE_VIDEO must be OFF, AUTO, or ON (received '${CNA_ENABLE_VIDEO}').")
+endif()
+set(CNA_ENABLE_VIDEO "${_cna_enable_video_normalized}" CACHE STRING
+    "Enable FFmpeg video playback (OFF, AUTO, or ON)" FORCE)
+unset(_cna_enable_video_normalized)
 # On a Linux cross-build, Direct2D tests normally use the project's dedicated system-Wine prefix.
 # PROTON is an opt-in DXVK-backed alternative for a local Steam Proton installation; native
 # Windows configurations still execute the .exe directly.

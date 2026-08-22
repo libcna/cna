@@ -403,6 +403,10 @@ Beyond graphics, CNA ports the XNA 4.0 `GamerServices` and `Net` namespaces (and
     - `../easy-gl` and `../meta-gl` (needed for the `OPENGLES2`/`OPENGLES3`/`OPENGL33`/
       `WEBGL1`/`WEBGL2` renderers)
 - SDL3, SDL3_image, and SDL3_mixer are built from vendored submodules by default — no system SDL packages required.
+- FFmpeg is optional. `CNA_ENABLE_VIDEO=AUTO` (the default) enables video decoding when
+  `libavcodec`, `libavformat`, `libavutil` and `libswresample` development packages are present;
+  use `OFF` for a game that does not need video, or `ON` to require them. The XNA video types remain
+  available in all three modes; see [docs/video-backend.md](docs/video-backend.md).
 
 ### Prerequisites (Windows)
 

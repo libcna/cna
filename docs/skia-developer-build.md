@@ -34,7 +34,8 @@ Skia revision and the build option at another.
 
 ## 1. Prepare CNA prerequisites
 
-On Debian/Ubuntu, install the build/test tools and CNA's required FFmpeg development packages:
+On Debian/Ubuntu, install the build/test tools and the optional FFmpeg development packages used by
+VideoPlayer tests:
 
 ```sh
 sudo apt-get update
@@ -45,7 +46,8 @@ sudo apt-get install -y \
 
 The default CNA build compiles SDL3, SDL3_image, and SDL3_mixer from the repository submodules.
 Optional SDL features may need additional packages listed in `third_party/SDL/docs/README-linux.md`,
-but they are not part of the Skia adapter contract.
+but they are not part of the Skia adapter contract. A Skia build that does not test video may omit
+FFmpeg and configure `-DCNA_ENABLE_VIDEO=OFF`.
 
 `sharp-runtime` is a separate sibling checkout rather than a submodule. Starting from the directory
 that will contain both projects:

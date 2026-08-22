@@ -60,8 +60,9 @@ macOS-specific defaults, all overridable:
 | `CNA_APPLE_BUNDLE_MACOS_EXECUTABLES` | `OFF` | When `ON`, repository executables become `.app` bundles and non-system dylibs are copied into `Contents/Frameworks` with fixed install names. Off by default because examples/tools/tests are normally invoked by path. |
 | `CNA_APPLE_BUNDLE_IDENTIFIER_PREFIX` | `com.openeggbert.cna` | Generated `CFBundleIdentifier` is `<prefix>.<target-name-with-dashes>`. |
 
-FFmpeg (VideoPlayer) is available on macOS through Homebrew and is detected by `pkg-config`,
-exactly as on Linux.
+FFmpeg (`VideoPlayer`) is available on macOS through Homebrew and is detected by `pkg-config`,
+exactly as on Linux. `CNA_ENABLE_VIDEO=AUTO` enables it when found; `OFF` produces a CNA/Game
+binary without FFmpeg while retaining the public video API.
 
 An application consuming CNA with `add_subdirectory()` is not part of CNA's repository-owned
 bundle sweep. Configure its executable explicitly:
@@ -132,10 +133,11 @@ iOS-specific defaults:
   the same reason it already did on Android: UIKit owns the process, and SDL's own `main()` has
   to run `UIApplicationMain` before the game's `main()` is called. A game that does not include
   `CNA/Platform/Entrypoint.hpp` never gets a `UIApplication`, and therefore no window and no events.
-- **FFmpeg is disabled** (`CNA_FFMPEG_AVAILABLE=OFF`): `pkg-config` on a macOS host resolves to
-  Homebrew's *macOS* FFmpeg, which cannot be linked into an iOS binary. `VideoPlayer` and the
-  rest of the video surface are therefore absent from an iOS build, exactly as on Android,
-  Emscripten and Windows.
+- **FFmpeg is disabled** (`CNA_ENABLE_VIDEO=AUTO` resolves unavailable): `pkg-config` on a macOS
+  host resolves to Homebrew's *macOS* FFmpeg, which cannot be linked into an iOS binary. The public
+  `Video`/`VideoPlayer` and content-reader surface remains link-complete; file probing/playback
+  reports `System::NotSupportedException`. `CNA_ENABLE_VIDEO=ON` fails configuration until a real
+  target-native iOS integration exists.
 - **Multi-process tests are excluded** from `CnaTests`. An app-sandboxed process may not spawn
   another executable, and the harness paths those tests bake in are build-machine absolute paths
   that do not exist inside the `.app`.

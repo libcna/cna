@@ -30,6 +30,7 @@ namespace Microsoft::Xna::Framework::Media
          * constructor, the 7-argument one is the XNB-sourced constructor.
          *
          * @throws System::IO::FileNotFoundException If no file exists at fileName.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
          * @param fileName File path to the video file.
          * @param device   GraphicsDevice used for frame rendering.
          */
@@ -107,6 +108,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @param uri    File URI or local path.
          * @param device GraphicsDevice used for frame rendering.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
          * @return Pointer to the newly created Video.
          */
         CNAEXT static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);

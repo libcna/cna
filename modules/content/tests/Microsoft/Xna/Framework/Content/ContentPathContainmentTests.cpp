@@ -19,9 +19,7 @@
 #include <vector>
 
 #include "CNA/Internal/Xnb/SongContentTypeReader.hpp"
-#ifdef CNA_FFMPEG_AVAILABLE
 #include "CNA/Internal/Xnb/VideoContentTypeReader.hpp"
-#endif
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -36,10 +34,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
-#ifdef CNA_FFMPEG_AVAILABLE
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #include "Microsoft/Xna/Framework/Media/VideoSoundtrackType.hpp"
-#endif
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -56,10 +52,8 @@ using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Media::Song;
-#ifdef CNA_FFMPEG_AVAILABLE
 using Microsoft::Xna::Framework::Media::Video;
 using Microsoft::Xna::Framework::Media::VideoSoundtrackType;
-#endif
 
 namespace
 {
@@ -175,7 +169,6 @@ namespace
         return FinishXnb(body);
     }
 
-#ifdef CNA_FFMPEG_AVAILABLE
     std::vector<std::uint8_t> BuildVideoXnb(const std::string& reference)
     {
         System::IO::MemoryStream body;
@@ -194,7 +187,6 @@ namespace
         writer.Flush();
         return FinishXnb(body);
     }
-#endif
 
     void WriteClip(const fs::path& path, double durationSeconds)
     {
@@ -369,9 +361,7 @@ protected:
     {
         ContentTypeReaderManager::ClearTypeCreators();
         CNA::Internal::Xnb::RegisterSongXnbReader();
-#ifdef CNA_FFMPEG_AVAILABLE
         CNA::Internal::Xnb::RegisterVideoXnbReader();
-#endif
     }
 
     void TearDown() override
@@ -458,7 +448,6 @@ TEST_F(ContentPathContainmentTest, ExplicitExternalSongXnbRemainsConfinedAndLoad
               (bundle / "song.ogg").lexically_normal());
 }
 
-#ifdef CNA_FFMPEG_AVAILABLE
 TEST_F(ContentPathContainmentTest, VideoXnbTraversalRejectsBeforeCreationAndDoesNotPoisonCache)
 {
     ScratchTree tree;
@@ -539,7 +528,6 @@ TEST_F(ContentPathContainmentTest, ExplicitExternalVideoXnbRemainsConfinedAndLoa
     EXPECT_EQ(fs::path(video.getFileNameProperty()).lexically_normal(),
               (bundle / "video.ogv").lexically_normal());
 }
-#endif
 
 TEST_F(ContentPathContainmentTest, Texture3DDataJsonUnicodeTraversalIsRejectedBeforeRead)
 {

@@ -1,17 +1,16 @@
 # plan_media.md — Completing and implementing the FNA Media → CNA port (C++ / XNA 4.0)
 
-> ## STATUS (2026-07-18): 224 of 231 tasks done; merged into `develop` as `cb053b71`
+> ## STATUS (2026-08-22): 228 of 232 tasks done
 >
-> (IDs run to `MEDIA-232` but `MEDIA-157` was never assigned — skipped when Phase 13 was
-> numbered — so there are 231 real tasks, not 232. Verified by diffing the checkbox IDs
+> (IDs run to `MEDIA-233` but `MEDIA-157` was never assigned — skipped when Phase 13 was
+> numbered — so there are 232 real tasks, not 233. Verified by diffing the checkbox IDs
 > against the full range rather than assuming the highest ID equals the count.)
 >
-> **Open: 7 tasks, all Group D (`MEDIA-192`..`198`)** — real FFmpeg for `Video`/`VideoPlayer`/
-> `VideoDecoder` on Windows, Android and Emscripten, where they are currently excluded from the
-> build entirely (using them is a **link error**, and `AudioDurationProbe` returns 0).
-> **Deferred by the project owner.** `NotSupportedException` stubs were explicitly rejected.
-> **Not closeable from a Linux-only sandbox** — it needs the real toolchains, and `MEDIA-198`
-> requires recording what was actually built and run versus merely written.
+> **Open: 4 tasks, Group D (`MEDIA-192`..`195`)** — real target-native FFmpeg decoding on
+> Windows/MSVC, MinGW, Android and Emscripten. `MEDIA-233` records the owner's 2026-08-22 decision
+> reversing the earlier rejection of a runtime fallback: all XNA video types and readers are now
+> link-complete without FFmpeg and fail deterministically at decode/play time. That closes the old
+> link-error/configuration problem without falsely claiming real decoding on those platforms.
 >
 > **Baseline on the merged tree: 5471 tests, 5467 passed, 0 failed, 4 pre-existing hardware skips.**
 > Per-phase counts recorded in Phases 8-16 below are *branch-only and pre-merge* (`MEDIA-231`).
@@ -75,9 +74,11 @@
   `src/Content/ContentReaders/SongReader.cs`/`VideoReader.cs` and `src/FrameworkDispatcher.cs` for the
   two integration points outside `Media/` itself.
 - **Backend (playback half):** `MediaPlayer` runs on **SDL3_mixer** (`MIX_*` API), gated behind
-  `#ifdef SOUND_ENABLED`. `VideoPlayer`/`CNA::Internal::Media::VideoDecoder` run on **FFmpeg**
-  (`libavcodec`/`libavformat`/`libavutil`/`libswresample`), gated behind `CNA_FFMPEG_AVAILABLE`, with a
-  **hand-written YUV→RGBA conversion** (no `libswscale`, per `CLAUDE.md`). Both are a backend swap vs.
+  `#ifdef SOUND_ENABLED`. `VideoPlayer`/`CNA::Internal::Media::VideoDecoder` use the optional
+  **`cna_video_ffmpeg`** module (`libavcodec`/`libavformat`/`libavutil`/`libswresample`) when
+  `CNA_ENABLE_VIDEO=AUTO/ON` resolves enabled, with a **hand-written YUV→RGBA conversion** (no
+  `libswscale`, per `AGENTS.md`). The stable media module supplies a deterministic no-decoder
+  implementation otherwise. Both are a backend swap vs.
   FNA (FNA: SDL3_mixer→`FAudio` for Song; `dav1dfile`+`Theorafile` per-codec native decoders +
   shader-based YUV blit for Video) — see §2 for why this is an accepted deviation, not a defect.
 - **Backend (library half, new):** no backend exists yet. Built from scratch in Phase 3 on top of
@@ -1146,6 +1147,8 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   or verify those platforms anyway.
   *Accept:* documented in `AUDIT.md`'s `Video`/`VideoPlayer` rows (⚠️, not a silent ✅) and in
   `NEXTmedia.md`'s open items for a future session with access to those build targets.
+  *Later correction (2026-08-22):* this accurately documented the condition at the time; the owner
+  subsequently authorized the fallback and `MEDIA-233` closes the link-error gap.
 
 - [x] **MEDIA-137 — Close the remaining `MEDIA-121` per-overload test gaps.** `GetTypeName()` was
   untested for all 6 collection types (`GenreCollection`/`ArtistCollection`/`AlbumCollection`/
@@ -2047,7 +2050,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   branch remains untestable until a no-audio build variant exists — do not claim otherwise.
   *Accept:* the visualization tests pass in the existing headless test environment.
 
-#### Group D — Real FFmpeg on every platform (owner decision 2)
+#### Group D — Real FFmpeg on every platform (owner decision 2, revised 2026-08-22)
 
 > `cmake/CnaLibrary.cmake:32` currently deletes `VideoDecoder.cpp`, `Video.cpp` and `VideoPlayer.cpp`
 > from the build whenever `CNA_FFMPEG_AVAILABLE` is off (set off for `MINGW`/`WIN32`/`EMSCRIPTEN`/
@@ -2057,8 +2060,12 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 > (`src/CNA/Internal/Media/AudioDurationProbe.cpp:32`), silently zeroing every library
 > `Song`/`Album`/`Playlist` duration.
 >
-> **Owner explicitly rejected the `NotSupportedException`-stub approach.** The target is genuine
-> FFmpeg availability on all four currently-excluded configurations.
+> **Historical decision:** the owner originally rejected a `NotSupportedException` fallback and
+> required genuine FFmpeg availability on all four excluded configurations. **Correction
+> (2026-08-22):** the owner explicitly reversed that decision and requested a stable optional
+> backend with `OFF/AUTO/ON`, while keeping real target-native FFmpeg as a separate portability
+> goal. `MEDIA-233` implements the new decision. This note preserves, rather than silently rewrites,
+> why `MEDIA-192`..`198` were originally worded as they were.
   *Done:* `GetMixer()` throws when no audio device can be created; the setter catches that so enabling visualization on a headless machine leaves the flag set with empty capture, which `GetVisualizationData` already renders as zeroed arrays. The `SOUND_ENABLED`-off path keeps the flag round-tripping since the state lives outside the `#ifdef`. Note the standing `MEDIA-135` caveat: `SOUND_ENABLED` is defined in every build config this project produces, so the `#else` branch itself is still untestable here.
 
 - [ ] **MEDIA-192 — Windows (MSVC): acquire and link FFmpeg.** Highest-priority platform for XNA
@@ -2098,14 +2105,18 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* either a working Emscripten video build, or a written escalation stating exactly what
   blocks it and what the realistic options are (with sizes/effort), for the owner to decide.
 
-- [ ] **MEDIA-196 — Remove the source-exclusion filter once platforms genuinely build.** Delete the
+- [x] **MEDIA-196 — Remove the source-exclusion filter once platforms genuinely build.** Delete the
   `list(FILTER CNA_SOURCES EXCLUDE ...)` block at `cmake/CnaLibrary.cmake:33` for every platform
   that `MEDIA-192`-`195` actually fixed. **Blocked by those tasks** — removing the filter before a
   platform really has FFmpeg converts a link error into a *configure/compile* error, which is worse.
   *Accept:* no platform both installs the `Video`/`VideoPlayer` headers and omits their
   implementations.
+  *Done under the owner's revised 2026-08-22 policy:* `Video.cpp`, `VideoPlayer.cpp` and the XNB/
+  loose readers now compile unconditionally. Decoder-free configurations compile the explicit
+  unavailable implementation, so every installed declaration has a definition and the old link
+  error is gone without pretending FFmpeg decoding exists.
 
-- [ ] **MEDIA-197 — Remove `AudioDurationProbe`'s `#else` zero-returning branch.** Once FFmpeg is
+- [x] **MEDIA-197 — Remove `AudioDurationProbe`'s `#else` zero-returning branch.** Once FFmpeg is
   universal, the fallback at `AudioDurationProbe.cpp:32` becomes dead code and should be deleted
   rather than left as a trap that silently zeroes durations. **Blocked by `MEDIA-196`.** If any
   platform remains without FFmpeg after `MEDIA-195`'s escalation, keep the branch but make its
@@ -2113,8 +2124,12 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   actually true of every caller, including `Album`/`Playlist` duration summation, and that a library
   full of zero-duration songs is distinguishable from a real zero).
   *Accept:* durations are real on every supported platform, or the remaining gap is precisely scoped.
+  *Done under the revised policy:* the preprocessor branch was replaced by two physical
+  implementations. `cna_video_ffmpeg` owns the real probe; `cna_media` owns an explicit zero-returning
+  fallback, with zero documented and tested as the existing unknown-duration sentinel. Song playback
+  remains SDL-backed and unaffected.
 
-- [ ] **MEDIA-198 — Escalation rule + honest platform-support matrix.** Add a table to
+- [x] **MEDIA-198 — Escalation rule + honest platform-support matrix.** Add a table to
   `NEXTmedia.md`/`AUDIT.md` recording, per platform, whether video is: genuinely working
   (build+decode verified), building-but-unverified, or blocked-with-reason. **Explicit instruction
   from the owner: if a platform cannot be made to work, come back and say so — do not substitute a
@@ -2122,6 +2137,11 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   papered over.
   *Accept:* the matrix exists and each row states exactly what was verified and how (build only vs.
   real decode), with no row claiming more than was actually run.
+  *Done:* `docs/video-backend.md` records native Linux/macOS as the current FFmpeg integration and
+  Windows/MSVC, MinGW, Android, Emscripten and iOS as deterministic fallback targets. Linux is
+  build/test/decode verified by `MEDIA-233`; macOS is covered by the existing native CI history;
+  none of the fallback rows claims a target build or decode run from this Linux task. The four real
+  portability tasks above remain open.
 
 #### Group E — Audio format coverage (owner decision 4)
 
@@ -2532,8 +2552,36 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   reviewer under a real Wayland session with ENet loopback, with all four Draco tests registered and
   completing.
 
+### Phase 17 — Optional FFmpeg video backend (2026-08-22)
+
+> The owner explicitly reversed Group D's original “real decoder or no fallback” policy: Game,
+> MediaPlayer and the installed XNA video surface must be usable without carrying FFmpeg, while
+> target-native decoders on the currently unsupported platforms remain separate honest work.
+
+- [x] **MEDIA-233 — Split FFmpeg out of the stable Media surface and add
+  `CNA_ENABLE_VIDEO=OFF/AUTO/ON`.** `cna_media` now always owns `Video`, `VideoPlayer`, both content
+  reader paths and a decoder contract. The optional `cna_video_ffmpeg` (`CNA::VideoFfmpeg`) target
+  owns every libavcodec/libavformat/libavutil/libswresample source and link edge. `OFF` never probes
+  those packages; `AUTO` enables the backend only when all four are present; `ON` requires them and
+  rejects a target without a native integration.
+  *No-backend contract:* metadata/XNB construction and player state/configuration/disposal remain
+  available. A missing raw path still throws `FileNotFoundException`; probing an existing path and
+  `Play(non-null-video)` throw `System::NotSupportedException`, with `Play` refusing before it
+  changes state. The C ABI maps this to `CNA_RESULT_NOT_SUPPORTED`. Audio-duration probing returns
+  the established zero/unknown sentinel, while Song/MediaPlayer playback stays SDL3_mixer-backed.
+  *Verified on Linux:* the `ON` tree built `cna_runtime`, `cna_video_ffmpeg`, `CnaTests`,
+  `cna_c_api_video_smoke` and `cna_demo_2d`; all 66 decoder/video/player/content tests passed and
+  the C smoke passed. A fresh `OFF` tree built the same stable targets without a video-backend
+  target; 24 fallback/content/MediaPlayer tests and the C smoke passed. `readelf -d` and `ldd` on
+  both `cna_demo_2d` and `libcna_c_api.so` contained no FFmpeg library. A fresh `AUTO` configure
+  selected `cna_video_ffmpeg` with the installed modules and selected the fallback when pkg-config
+  was deliberately pointed at an empty module directory. `ON` with that empty directory and invalid
+  option values both fail configuration.
+  *Still open:* `MEDIA-192`..`195` remain the real Windows/MSVC, MinGW, Android and Emscripten
+  decoder ports; this fallback does not claim decode support on those targets.
+
 ---
-  *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox.
+  *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox. **Later correction (2026-08-22):** under the owner's revised policy `MEDIA-196`..`198` and the link-complete fallback are done; only the real decoder ports `MEDIA-192`..`195` remain open.
 
 ## 6. Recommended order and milestones
 

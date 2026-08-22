@@ -98,8 +98,9 @@ statics in inline and template code), which cannot be localized because their un
 makes them correct. Those are mangled C++ names no C program can collide with, and the build fails
 if a symbol of any other binding appears, so the exception cannot widen quietly.
 
-A static consumer links the archive plus SDL3 (shipped in the package), FFmpeg (from the system) and
-the usual `stdc++ m pthread dl` — the `CNA::CApiStatic` target carries all of that for you.
+A static consumer links the archive plus SDL3 (shipped in the package) and the usual
+`stdc++ m pthread dl`; when `CNA_ENABLE_VIDEO=AUTO/ON` selected the optional backend, it also links
+FFmpeg from the system. The `CNA::CApiStatic` target carries the resolved set for you.
 
 Building the archive can be turned off per build tree with `-DCNA_C_API_BUILD_STATIC=OFF`: it is a
 few hundred megabytes in a debug build and is rewritten whenever the library relinks. Where it is
@@ -107,8 +108,9 @@ off, the consumer test says so by name rather than testing half a package in sil
 
 ## Native dependencies
 
-`libcna_c_api.so` carries `DT_NEEDED` entries for SDL3, SDL3_image, SDL3_mixer and FFmpeg. The two
-halves of that list are handled differently, on purpose.
+`libcna_c_api.so` carries `DT_NEEDED` entries for SDL3, SDL3_image and SDL3_mixer. It additionally
+carries FFmpeg entries only when `CNA_ENABLE_VIDEO=AUTO/ON` selected `cna_video_ffmpeg`; an `OFF`
+build has no FFmpeg dependency.
 
 **The SDL3 libraries ship with the package.** This project builds them, so the `CNACApi` component
 installs them into the same directory as `libcna_c_api.so`, whose `INSTALL_RPATH` is `$ORIGIN`. The
@@ -116,14 +118,18 @@ result is that an installed CNA needs **no environment variable of any kind**: i
 `-rpath-link` and runs without `LD_LIBRARY_PATH`. `CApi_InstalledConsumer` passes neither, which is
 how that claim stays true — a regression fails a test instead of surprising a consumer.
 
-**FFmpeg does not.** `libavcodec`, `libavformat`, `libavutil` and `libswresample` come from the
-distribution, and copying a distribution's binaries into this package would take on their
-redistribution terms, freeze their soname against future security updates, and drag in the
-transitive libraries they were linked against. Install them the ordinary way:
+**When enabled, FFmpeg does not ship in the package.** `libavcodec`, `libavformat`, `libavutil` and
+`libswresample` come from the distribution, and copying a distribution's binaries into this package
+would take on their redistribution terms, freeze their soname against future security updates, and
+drag in the transitive libraries they were linked against. Install them the ordinary way:
 
 ```sh
 sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 ```
+
+Configure `-DCNA_ENABLE_VIDEO=OFF` to omit that dependency while keeping the entire C video ABI
+available. File-backed creation and playback then return `CNA_RESULT_NOT_SUPPORTED`, while declared
+metadata remains usable. `AUTO` is the default; see [../video-backend.md](../video-backend.md).
 
 The example runs headless. Set `SDL_VIDEODRIVER=dummy` where there is no display, exactly as this
 repository's own tests do.

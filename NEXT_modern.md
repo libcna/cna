@@ -546,7 +546,8 @@ cd .. && git clone https://github.com/openeggbert/sharp-runtime.git
         git clone -b develop https://github.com/openeggbert/meta-gl.git
 
 # 3. System packages (Debian/Ubuntu). SDL3 is built from source at configure time and needs
-#    the full X11 set; the FFmpeg headers are required by the media module.
+#    the full X11 set. FFmpeg is optional: this example installs it for VideoPlayer; pass
+#    -DCNA_ENABLE_VIDEO=OFF and omit the four libav*/libswresample packages for an audio-only game.
 apt-get install -y \
   libxcursor-dev libxi-dev libxrandr-dev libxss-dev libxkbcommon-dev libwayland-dev \
   libdecor-0-dev libxtst-dev libxext-dev libxfixes-dev libxinerama-dev libdrm-dev libgbm-dev \

@@ -44,7 +44,10 @@ static int write_fixture(void)
     return fclose(file) == 0 && written == sizeof(bytes);
 }
 
-static int validate_video_values(const CNA_Handle device, const char* const path)
+static int validate_video_values(
+    const CNA_Handle device,
+    const char* const path,
+    int* const out_video_available)
 {
     CNA_VideoHandle video = CNA_INVALID_HANDLE;
     CNA_VideoHandle declared = CNA_INVALID_HANDLE;
@@ -57,43 +60,58 @@ static int validate_video_values(const CNA_Handle device, const char* const path
     int64_t ticks = INT64_C(-1);
     uint64_t bytes = UINT64_C(9);
     char text[1024];
+    CNA_Result create_result;
 
     /* A missing file is refused by the probing constructor, exactly as the canonical one refuses
-       it, while the metadata constructor never touches the file. */
+       it, while the metadata constructor never touches the file. An existing file additionally
+       identifies whether this build contains the optional FFmpeg video backend. */
     if (cna_video_create(device, view("no_such_video.mp4"), &rejected) != CNA_RESULT_IO ||
         rejected != CNA_INVALID_HANDLE ||
-        cna_video_create(device, view(path), 0) != CNA_RESULT_INVALID_ARGUMENT ||
-        cna_video_create(device, view(path), &video) != CNA_RESULT_SUCCESS ||
-        video == CNA_INVALID_HANDLE) {
+        cna_video_create(device, view(path), 0) != CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
-    /* The file exists but is not decodable video, so the probe leaves every value at zero rather
-       than failing -- the canonical behavior this ABI reports faithfully. */
-    if (cna_video_get_width(video, &number) != CNA_RESULT_SUCCESS || number != 0 ||
-        cna_video_get_height(video, &number) != CNA_RESULT_SUCCESS || number != 0 ||
-        cna_video_get_frames_per_second(video, &fps) != CNA_RESULT_SUCCESS || fps != 0.0F ||
-        cna_video_get_duration(video, &ticks) != CNA_RESULT_SUCCESS || ticks != INT64_C(0)) {
+    create_result = cna_video_create(device, view(path), &video);
+    if (create_result == CNA_RESULT_SUCCESS) {
+        if (video == CNA_INVALID_HANDLE) {
+            return 0;
+        }
+        *out_video_available = 1;
+    } else if (create_result == CNA_RESULT_NOT_SUPPORTED) {
+        if (video != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+        *out_video_available = 0;
+    } else {
         return 0;
     }
-    if (cna_video_get_has_graphics_device(video, &flag) != CNA_RESULT_SUCCESS ||
-        flag != CNA_TRUE) {
-        return 0;
-    }
-    memset(text, 0, sizeof(text));
-    if (cna_video_get_file_name_size(video, &bytes) != CNA_RESULT_SUCCESS ||
-        bytes != (uint64_t)strlen(path) || bytes >= (uint64_t)sizeof(text) ||
-        cna_video_copy_file_name(video, text, (uint64_t)sizeof(text), &bytes) !=
-            CNA_RESULT_SUCCESS ||
-        strcmp(text, path) != 0) {
-        return 0;
-    }
-    memset(text, 0, sizeof(text));
-    if (cna_video_get_type_name_size(video, &bytes) != CNA_RESULT_SUCCESS ||
-        bytes >= (uint64_t)sizeof(text) ||
-        cna_video_copy_type_name(video, text, (uint64_t)sizeof(text), &bytes) !=
-            CNA_RESULT_SUCCESS ||
-        strcmp(text, "Microsoft.Xna.Framework.Media.Video") != 0) {
-        return 0;
+
+    if (*out_video_available) {
+        /* The file exists but is not decodable video, so the probe leaves every value at zero
+           rather than failing -- the canonical behavior this ABI reports faithfully. */
+        if (cna_video_get_width(video, &number) != CNA_RESULT_SUCCESS || number != 0 ||
+            cna_video_get_height(video, &number) != CNA_RESULT_SUCCESS || number != 0 ||
+            cna_video_get_frames_per_second(video, &fps) != CNA_RESULT_SUCCESS || fps != 0.0F ||
+            cna_video_get_duration(video, &ticks) != CNA_RESULT_SUCCESS || ticks != INT64_C(0) ||
+            cna_video_get_has_graphics_device(video, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_TRUE) {
+            return 0;
+        }
+        memset(text, 0, sizeof(text));
+        if (cna_video_get_file_name_size(video, &bytes) != CNA_RESULT_SUCCESS ||
+            bytes != (uint64_t)strlen(path) || bytes >= (uint64_t)sizeof(text) ||
+            cna_video_copy_file_name(video, text, (uint64_t)sizeof(text), &bytes) !=
+                CNA_RESULT_SUCCESS ||
+            strcmp(text, path) != 0) {
+            return 0;
+        }
+        memset(text, 0, sizeof(text));
+        if (cna_video_get_type_name_size(video, &bytes) != CNA_RESULT_SUCCESS ||
+            bytes >= (uint64_t)sizeof(text) ||
+            cna_video_copy_type_name(video, text, (uint64_t)sizeof(text), &bytes) !=
+                CNA_RESULT_SUCCESS ||
+            strcmp(text, "Microsoft.Xna.Framework.Media.Video") != 0) {
+            return 0;
+        }
     }
 
     /* The compiled-asset constructor stores exactly the metadata it is given. */
@@ -148,8 +166,14 @@ static int validate_video_values(const CNA_Handle device, const char* const path
        plain path works and a scheme-bearing string is simply a path that does not exist. */
     {
         CNA_VideoHandle from_uri = CNA_INVALID_HANDLE;
-        if (cna_video_create_from_uri_ext(device, view(path), &from_uri) != CNA_RESULT_SUCCESS ||
-            cna_video_destroy(from_uri) != CNA_RESULT_SUCCESS ||
+        const CNA_Result from_uri_result =
+            cna_video_create_from_uri_ext(device, view(path), &from_uri);
+        if (((*out_video_available != 0) &&
+             (from_uri_result != CNA_RESULT_SUCCESS ||
+              cna_video_destroy(from_uri) != CNA_RESULT_SUCCESS)) ||
+            ((*out_video_available == 0) &&
+             (from_uri_result != CNA_RESULT_NOT_SUPPORTED ||
+              from_uri != CNA_INVALID_HANDLE)) ||
             cna_video_create_from_uri_ext(
                 device, view("http://example.com/v.mp4"), &rejected) != CNA_RESULT_IO ||
             rejected != CNA_INVALID_HANDLE) {
@@ -158,13 +182,16 @@ static int validate_video_values(const CNA_Handle device, const char* const path
     }
 
     return cna_video_destroy(declared) == CNA_RESULT_SUCCESS &&
-        cna_video_destroy(video) == CNA_RESULT_SUCCESS &&
-        cna_video_destroy(video) == CNA_RESULT_INVALID_HANDLE &&
+        ((*out_video_available != 0 &&
+          cna_video_destroy(video) == CNA_RESULT_SUCCESS &&
+          cna_video_destroy(video) == CNA_RESULT_INVALID_HANDLE) ||
+         (*out_video_available == 0 &&
+          cna_video_destroy(video) == CNA_RESULT_INVALID_HANDLE)) &&
         cna_video_get_width(rejected, &number) == CNA_RESULT_INVALID_HANDLE;
 }
 
 static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
-                                 const char* const path)
+                                 const char* const path, const int video_available)
 {
     CNA_VideoPlayerHandle player = CNA_INVALID_HANDLE;
     CNA_VideoPlayerHandle rejected = CNA_INVALID_HANDLE;
@@ -215,23 +242,36 @@ static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
         return 0;
     }
 
-    /* Playing a file the platform cannot decode leaves the player stopped rather than failing --
-       the canonical behavior. The two answers are asserted as a relationship: a player that really
-       started playing reports the video it was given, while one whose decoder failed reports none,
-       because the canonical player clears its video in that case. */
-    if (cna_video_create(device, view(path), &video) != CNA_RESULT_SUCCESS ||
-        cna_video_player_play(player, video) != CNA_RESULT_SUCCESS ||
-        cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS ||
-        (state != CNA_MEDIA_STATE_STOPPED && state != CNA_MEDIA_STATE_PLAYING) ||
-        cna_video_player_get_video(player, &playing, &flag) != CNA_RESULT_SUCCESS) {
-        return 0;
-    }
-    if (state == CNA_MEDIA_STATE_PLAYING) {
-        if (flag != CNA_TRUE || playing != video) {
+    if (video_available) {
+        /* Playing a file the platform cannot decode leaves the player stopped rather than failing
+           when the decoder exists. A player that really starts reports the video it was given. */
+        if (cna_video_create(device, view(path), &video) != CNA_RESULT_SUCCESS ||
+            cna_video_player_play(player, video) != CNA_RESULT_SUCCESS ||
+            cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS ||
+            (state != CNA_MEDIA_STATE_STOPPED && state != CNA_MEDIA_STATE_PLAYING) ||
+            cna_video_player_get_video(player, &playing, &flag) != CNA_RESULT_SUCCESS) {
             return 0;
         }
-    } else if (flag != CNA_FALSE || playing != CNA_INVALID_HANDLE) {
-        return 0;
+        if (state == CNA_MEDIA_STATE_PLAYING) {
+            if (flag != CNA_TRUE || playing != video) {
+                return 0;
+            }
+        } else if (flag != CNA_FALSE || playing != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+    } else {
+        /* Metadata-only video values remain constructible, while the first playback attempt
+           deterministically reports the absent optional backend without changing player state. */
+        if (cna_video_create_with_metadata(
+                device, view(path), 2500, 640, 360, 29.97F,
+                CNA_VIDEO_SOUNDTRACK_TYPE_DIALOG, &video) != CNA_RESULT_SUCCESS ||
+            cna_video_player_play(player, video) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS ||
+            state != CNA_MEDIA_STATE_STOPPED ||
+            cna_video_player_get_video(player, &playing, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE || playing != CNA_INVALID_HANDLE) {
+            return 0;
+        }
     }
     /* Pause, resume and stop are safe in every state; stop always ends stopped. */
     if (cna_video_player_pause(player) != CNA_RESULT_SUCCESS ||
@@ -243,8 +283,8 @@ static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
         cna_video_player_set_video_track_ext(player, 0) != CNA_RESULT_SUCCESS) {
         return 0;
     }
-    /* Releasing the caller's video handle cannot leave the player pointing at a destroyed video,
-       because the player retains what it was given. */
+    /* After successful Play the player retains the video; after rejected Play it owns no video.
+       Releasing the caller's handle is safe in either backend configuration. */
     if (cna_video_destroy(video) != CNA_RESULT_SUCCESS ||
         cna_video_player_get_state(player, &state) != CNA_RESULT_SUCCESS) {
         return 0;
@@ -275,12 +315,13 @@ static CNA_Result on_update(
     (void)out_error;
     VideoSmokeState* const state = (VideoSmokeState*)context;
     CNA_Handle graphics_device = CNA_INVALID_HANDLE;
+    int video_available = 0;
     if (game_time == 0 ||
         cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;
     }
-    if (!validate_video_values(graphics_device, FixturePath) ||
-        !validate_video_player(game, graphics_device, FixturePath)) {
+    if (!validate_video_values(graphics_device, FixturePath, &video_available) ||
+        !validate_video_player(game, graphics_device, FixturePath, video_available)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;

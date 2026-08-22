@@ -144,16 +144,11 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Terminal.*\\.cpp$")
     endif()
 
-    # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
-    # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
-    # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
-    # exist in the built CNA library on an FFmpeg-unavailable platform (MinGW/Emscripten/Android/iOS),
-    # and previously failed to link there (never hit before this task: no FFmpeg-unavailable CnaTests
-    # build had gotten this far). VideoSoundtrackTypeTests.cpp is unaffected -- that enum has no .cpp
-    # and no FFmpeg dependency.
+    # MEDIA-233: Video/VideoPlayer and the XNB reader now exist in every build. Only suites that
+    # require successful decoding of real fixture bytes are excluded without the optional backend;
+    # VideoBackendAvailabilityTests and the reader/containment suites verify the no-backend contract.
     if(NOT CNA_FFMPEG_AVAILABLE)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Media/VideoDecoderTests\\.cpp$")
-        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Xnb/VideoContentTypeReaderTests\\.cpp$")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoTests\\.cpp$")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Media/Video/VideoPlayerTests\\.cpp$")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Content/ContentManagerVideoXnbTests\\.cpp$")

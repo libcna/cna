@@ -309,6 +309,10 @@ namespace Microsoft::Xna::Framework::Media
     {
         CheckDisposed(isDisposed_);
         if (!video) return;
+        // CNA's optional-backend profile intentionally keeps VideoPlayer's state/configuration API
+        // usable without FFmpeg. Reject before assigning video_ so a failed Play is transactional
+        // and leaves the observable stopped/no-video state intact (plans/plan_media.md MEDIA-233).
+        CNA::Internal::Media::RequireVideoDecoderAvailable();
         video_ = video;
         OpenDecoder(video);
         if (!decoder_) return;

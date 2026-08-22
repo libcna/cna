@@ -24,6 +24,7 @@ umbrella targets and the physical source-partition validator.
 | modules/input | base | `cna_input` (`CNA::Input`) | graphics, math, core | Core.Base |
 | modules/audio | base | `cna_audio` (`CNA::Audio`) | core, math; private: media (cycle), input (dispatcher pump) | Core.Base, IO, Runtime |
 | modules/media | base | `cna_media` (`CNA::Media`) | audio, graphics; private: input (dispatcher surface) | Core.Base, IO |
+| modules/video-ffmpeg | optional backend (`CNA_ENABLE_VIDEO`) | `cna_video_ffmpeg` (`CNA::VideoFfmpeg`) | build flags; private: media contract headers and system FFmpeg, linked into media only when enabled | Core.Base |
 | modules/content | base | `cna_content` (`CNA::Content`) | graphics, audio, media, math, core | Core.Base, IO |
 | modules/storage | base | `cna_storage` (`CNA::Storage`) | core-headers (headers-only: PlayerIndex/CNAEXT/PathContainment) | Core.Base, IO, Runtime, Threading |
 | modules/devices | base | `cna_devices` (`CNA::Devices`) | runtime, graphics, core, math | Core.Base |
@@ -135,6 +136,10 @@ miscellaneous dumping ground again.
   MouseCursor builds on Texture2D).
 - **audio ↔ media** — FrameworkDispatcher pumps MediaPlayer; MediaPlayer plays through the
   mixer.
+- **media → video-ffmpeg (optional)** — `cna_media` always owns the XNA `Video`/`VideoPlayer`
+  surface and a link-complete unavailable implementation. `CNA_ENABLE_VIDEO=AUTO/ON` may replace
+  that implementation with `cna_video_ffmpeg`; `OFF` leaves the entire Game/audio link graph free
+  of FFmpeg. See [video-backend.md](video-backend.md).
 - **graphics ↔ selected renderer** — the factory edge plus the unconditional reverse edges
   (`${RENDERER_TARGET}` → graphics/core/math), declared by
   `cna_renderer_common_setup()` in `modules/renderers/CMakeLists.txt`.

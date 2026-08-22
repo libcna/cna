@@ -32,13 +32,9 @@ namespace CNA::Internal::Xnb
         RegisterSpriteFontXnbReader();
         RegisterSoundEffectXnbReader();
         RegisterSongXnbReader();
-        // REMED-BUILD-013 (discovered while verifying it): VideoContentTypeReader.cpp is excluded
-        // from CNA_SOURCES on FFmpeg-unavailable platforms (CnaLibrary.cmake), same as its Video.cpp/
-        // VideoPlayer.cpp/VideoDecoder.cpp siblings -- RegisterVideoXnbReader() would otherwise be an
-        // undefined reference on any FFmpeg-free build, including iOS.
-#ifdef CNA_FFMPEG_AVAILABLE
+        // The reader and metadata-only Video constructor are backend-independent. Playback is the
+        // operation that reports NotSupportedException in a no-video build.
         RegisterVideoXnbReader();
-#endif
         RegisterStockEffectXnbReaders();
         RegisterEffectXnbReader();
         RegisterModelXnbReaders();

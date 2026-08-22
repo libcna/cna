@@ -188,12 +188,12 @@ install(DIRECTORY include/
 # library's INSTALL_RPATH of $ORIGIN, is what makes the installed package load with no environment
 # variable and link with no -rpath-link: the loader looks beside the library and finds them.
 #
-# What is deliberately NOT shipped is every library CNA did not build. FFmpeg is the one that
-# matters -- libavcodec, libavformat, libavutil and libswresample come from the distribution, and
-# copying a distribution's binaries into this package would take on their redistribution terms,
-# freeze their soname against future security updates, and drag in the dozens of transitive
-# dependencies they were linked against. They stay a system dependency, named in
-# docs/c-api/CONSUMING.md, which is the honest arrangement rather than the convenient one.
+# What is deliberately NOT shipped is every library CNA did not build. When the optional video
+# backend is enabled, libavcodec, libavformat, libavutil and libswresample come from the distribution;
+# copying those binaries into this package would take on their redistribution terms, freeze their
+# soname against future security updates, and drag in their transitive dependencies. They remain a
+# system dependency only for that configuration, as documented in docs/c-api/CONSUMING.md. An
+# explicit CNA_ENABLE_VIDEO=OFF package has no FFmpeg edge at all.
 if(NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install/lib")
     install(DIRECTORY "${CNA_SDL_PREBUILT_ROOT}/install/lib/"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}

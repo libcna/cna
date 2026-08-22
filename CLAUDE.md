@@ -637,10 +637,11 @@ See `docs/webgpu-renderer.md` for the current capability boundary.
 
 ## System Dependencies (Linux)
 
-The following system packages are required to build CNA on Debian/Ubuntu:
+The following system packages enable optional CNA features on Debian/Ubuntu:
 
 ```bash
-# FFmpeg — required for VideoPlayer (video decoding)
+# FFmpeg — optional VideoPlayer backend; required only with CNA_ENABLE_VIDEO=ON
+# AUTO (the default) enables it when present; OFF omits every FFmpeg link dependency.
 sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 
 # Note: libswscale-dev may not be available in some repos (runtime libswscale8 is enough).

@@ -16,31 +16,87 @@ struct SwrContext;
 
 namespace CNA::Internal::Media
 {
-    /// Internal FFmpeg-based video/audio decoder used by VideoPlayer.
-    ///
-    /// Owns the FFmpeg state for one open video file. Not thread-safe — all
-    /// methods must be called from the same thread.
+    /**
+     * @brief Reports whether this build contains the optional FFmpeg video backend.
+     *
+     * @return true when video decoding is available; otherwise false.
+     */
+    [[nodiscard]] bool IsVideoDecoderAvailable() noexcept;
+
+    /**
+     * @brief Verifies that the optional video decoder is available.
+     *
+     * @throws System::NotSupportedException If CNA was built without a video backend.
+     */
+    void RequireVideoDecoderAvailable();
+
+    /**
+     * @brief Internal video/audio decoder used by VideoPlayer.
+     *
+     * The enabled implementation owns FFmpeg state for one open video file; the disabled
+     * implementation preserves the same link-complete type and rejects decoding deterministically.
+     * This type is not thread-safe; all methods must be called from the same thread.
+     */
     class VideoDecoder
     {
     public:
+        /** @brief Constructs a closed decoder. */
         VideoDecoder();
+
+        /** @brief Closes the decoder and releases all decoder resources. */
         ~VideoDecoder();
 
+        /** @brief VideoDecoder instances cannot be copied. */
         VideoDecoder(const VideoDecoder&)            = delete;
+
+        /** @brief VideoDecoder instances cannot be copy-assigned. */
         VideoDecoder& operator=(const VideoDecoder&) = delete;
 
-        /// Opens the file and reads stream metadata.
-        /// @return true on success, false if the file cannot be opened or
-        ///         contains no usable video stream.
+        /**
+         * @brief Opens a file and reads its stream metadata.
+         *
+         * @param path Path to the video file.
+         * @return true on success; false if the file cannot be opened or has no usable video.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
+         */
         bool Open(const std::string& path);
 
-        /// Closes all streams and frees FFmpeg resources.
+        /** @brief Closes all streams and releases decoder resources. */
         void Close();
 
+        /**
+         * @brief Returns whether a file is open.
+         *
+         * @return true when a file is open.
+         */
         [[nodiscard]] bool IsOpen()          const { return fmtCtx_ != nullptr; }
+
+        /**
+         * @brief Returns the decoded frame width.
+         *
+         * @return Width in pixels.
+         */
         [[nodiscard]] int  GetWidth()        const { return width_; }
+
+        /**
+         * @brief Returns the decoded frame height.
+         *
+         * @return Height in pixels.
+         */
         [[nodiscard]] int  GetHeight()       const { return height_; }
+
+        /**
+         * @brief Returns the decoded frame rate.
+         *
+         * @return Frames per second.
+         */
         [[nodiscard]] float GetFPS()         const { return fps_; }
+
+        /**
+         * @brief Returns the container duration.
+         *
+         * @return Duration in seconds.
+         */
         [[nodiscard]] double GetDuration()   const { return durationSec_; }
         // Requires a working resampler too, not just an opened audio codec -- ProcessAudioPacket()
         // silently discards every decoded audio frame without a working swrCtx_ (it early-returns),
@@ -56,34 +112,68 @@ namespace CNA::Internal::Media
         // external code review, plans/plan_media.md MEDIA-169 -- this comment previously described an
         // already-superseded SetupResampler()-during-initial-setup scenario Phase 13's MEDIA-162 fix
         // had already closed off, instead of the real, current path).
+        /**
+         * @brief Returns whether decoded audio is usable.
+         *
+         * @return true when audio is usable.
+         */
         [[nodiscard]] bool HasAudio()        const { return audioCtx_ != nullptr && swrCtx_ != nullptr; }
+
+        /**
+         * @brief Returns the decoded audio sample rate.
+         *
+         * @return Samples per second.
+         */
         [[nodiscard]] int GetSampleRate()    const { return sampleRate_; }
+
+        /**
+         * @brief Returns the decoded audio channel count.
+         *
+         * @return Number of channels.
+         */
         [[nodiscard]] int GetChannels()      const { return channels_; }
 
-        /// Seeks to the beginning of the stream.
+        /**
+         * @brief Seeks to the beginning of the stream.
+         *
+         * @throws System::NotSupportedException If CNA was built without a video backend.
+         */
         void SeekToStart();
 
-        /// Switches the active audio stream to the trackIndex-th audio stream (0-based). Returns
-        /// true if a different stream is now active (a genuine switch happened, decode state was
-        /// discarded), false if trackIndex was already active or out of range (a true no-op) --
-        /// callers that recreate downstream resources (audio streams, textures) after a switch
-        /// need to know whether anything actually changed, not just that the call didn't throw
-        /// (plans/plan_media.md MEDIA-154, found by external code review).
+        /**
+         * @brief Switches the active zero-based audio stream.
+         *
+         * @param trackIndex Zero-based index among audio streams.
+         * @return true if the active stream changed; false for the current or an invalid index.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
+         */
         bool SetAudioStream(int trackIndex);
 
-        /// Switches the active video stream to the trackIndex-th video stream (0-based). Same
-        /// return-value contract as SetAudioStream() above.
+        /**
+         * @brief Switches the active zero-based video stream.
+         *
+         * @param trackIndex Zero-based index among video streams.
+         * @return true if the active stream changed; false for the current or an invalid index.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
+         */
         bool SetVideoStream(int trackIndex);
 
-        /// Decodes the next video frame into RGBA output buffer.
-        /// @param rgbaOut  output buffer; resized to width*height*4 bytes.
-        /// @param ptsOut   presentation timestamp in seconds.
-        /// @return false on EOF or decode error.
+        /**
+         * @brief Decodes the next video frame into an RGBA output buffer.
+         *
+         * @param rgbaOut Output buffer, resized to width times height times four bytes.
+         * @param ptsOut Receives the presentation timestamp in seconds.
+         * @return false on end of stream or a decode error.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
+         */
         bool NextFrame(std::vector<uint8_t>& rgbaOut, double& ptsOut);
 
-        /// Drains decoded audio into a float32 interleaved buffer.
-        /// Should be called alongside NextFrame to keep audio in sync.
-        /// @param samplesOut  appended to (not replaced).
+        /**
+         * @brief Drains decoded audio into an interleaved float32 buffer.
+         *
+         * @param samplesOut Buffer to append decoded samples to.
+         * @throws System::NotSupportedException If CNA was built without a video backend.
+         */
         void DrainAudio(std::vector<float>& samplesOut);
 
     private:

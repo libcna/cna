@@ -7,20 +7,23 @@
 
 namespace CNA::Internal::Media
 {
-    /// Lightweight audio-file duration probing for MediaLibrary's real Song/Album/Playlist
-    /// Duration (plans/plan_media.md MEDIA-65/68 -- "Duration (sum of member Song.Duration)"). Uses
-    /// FFmpeg's container/stream metadata parsing only (avformat_find_stream_info) -- no full
-    /// audio decode -- so it stays fast enough to run once per song during MediaLibrary's
-    /// synchronous constructor-time scan.
+    /**
+     * @brief Probes audio-file duration for MediaLibrary metadata.
+     *
+     * The optional FFmpeg implementation reads only container and stream metadata, without fully
+     * decoding audio, so a library scan remains inexpensive. Decoder-free builds retain this type
+     * and report an unknown duration.
+     */
     class AudioDurationProbe
     {
     public:
-        /// Returns the audio file's duration in whole milliseconds, or 0 if it couldn't be
-        /// determined (file unreadable/unsupported, or this build has no FFmpeg available --
-        /// Windows/Android/Emscripten, matching Video/VideoPlayer's own platform availability,
-        /// see CMakeLists' CNA_FFMPEG_AVAILABLE). A 0 return is indistinguishable from a
-        /// genuinely instantaneous/empty file, matching Song's own pre-existing "0 = unknown"
-        /// convention for its 2-arg constructor.
+        /**
+         * @brief Returns an audio file's duration in whole milliseconds.
+         *
+         * @param path Path to the audio file.
+         * @return Duration in milliseconds, or zero when it cannot be determined or the optional
+         *         FFmpeg backend is disabled.
+         */
         static SharpRuntime::intcs ProbeDurationMS(const std::string& path);
     };
 }

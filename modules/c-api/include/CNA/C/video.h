@@ -55,6 +55,7 @@ CNA_C_API CNA_Result cna_video_info_init(CNA_VideoInfo* out_info);
  * @param file_name UTF-8 path to the video file.
  * @param out_video Receives an owned video handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when no file exists at that path,
+ *         `CNA_RESULT_NOT_SUPPORTED` when CNA was built without its optional video decoder,
  *         `CNA_RESULT_ENCODING`, or a documented argument/handle/thread/native failure.
  *
  * A file that exists but cannot be decoded is **not** an error here: the canonical constructor
@@ -80,9 +81,9 @@ CNA_C_API CNA_Result cna_video_create(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined soundtrack identity,
  *         `CNA_RESULT_ENCODING`, or a documented argument/handle/thread/native failure.
  *
- * This is the compiled-asset constructor: it does **not** touch the file, so a wrong path is only
- * discovered when the video is played. Declared metadata that disagrees with the real file is
- * refused at play time, not here.
+ * This is the compiled-asset constructor: it does **not** touch the file or require an installed
+ * video decoder, so a wrong path or disabled decoder is only discovered when the video is played.
+ * Declared metadata that disagrees with the real file is refused at play time, not here.
  */
 CNA_C_API CNA_Result cna_video_create_with_metadata(
     CNA_Handle graphics_device,
@@ -101,6 +102,7 @@ CNA_C_API CNA_Result cna_video_create_with_metadata(
  * @param uri UTF-8 `file:` URI or plain path.
  * @param out_video Receives an owned video handle.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when nothing exists at that path,
+ *         `CNA_RESULT_NOT_SUPPORTED` when CNA was built without its optional video decoder,
  *         `CNA_RESULT_ENCODING`, or a documented argument/handle/thread failure.
  *
  * The canonical factory carries an `EXT` suffix because it is an extension beyond XNA 4.0 rather
@@ -433,8 +435,9 @@ CNA_C_API CNA_Result cna_video_player_get_texture(
  * @param player Owned player handle.
  * @param video Owned video handle; it stays the caller's.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the player has been disposed or the
- *         video's declared metadata disagrees with the file, or a documented
- *         argument/handle/thread/native failure.
+ *         video's declared metadata disagrees with the file, `CNA_RESULT_NOT_SUPPORTED` when CNA
+ *         was built without its optional video decoder, or a documented argument/handle/thread/
+ *         native failure.
  *
  * A file the platform cannot decode leaves the player stopped rather than failing, exactly as the
  * canonical operation does — read `cna_video_player_get_state` back to see whether playback began.

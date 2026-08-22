@@ -615,10 +615,9 @@ The job:
 - installs the same Ubuntu SDL3 build dependencies documented in
   `third_party/SDL/docs/README-linux.md`'s "Ubuntu 18.04, all available features"
   list (plus `libwayland-dev`/`libdecor-0-dev` from its Ubuntu 22.04+ addendum) and the
-  FFmpeg dev packages from this repo's own `CLAUDE.md` (`CMakeLists.txt` requires
-  `libavcodec`/`libavformat`/`libavutil`/`libswresample` via `pkg-config` unconditionally
-  on Linux, regardless of which target is actually being built — see its
-  `CNA_FFMPEG_AVAILABLE` block);
+  FFmpeg dev packages for the optional VideoPlayer backend. They are no longer required by a
+  device-only/Game build: `CNA_ENABLE_VIDEO=AUTO` uses them when present and
+  `CNA_ENABLE_VIDEO=OFF` omits the entire dependency (see `docs/video-backend.md`);
 - caches `.sdl-prebuilt-Linux-x86_64/` (the vendored SDL3/SDL_image/SDL_mixer
   from-source build tree, Section 1) keyed on the submodules' own tracked commits, so a
   submodule bump invalidates the cache automatically and every other push reuses the

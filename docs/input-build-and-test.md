@@ -35,7 +35,8 @@ git submodule update --init --recursive
 git -C .. clone <sharp-runtime-url> sharp-runtime
 git -C .. clone <easy-gl-url> easy-gl        # only needed for -DCNA_GRAPHICS_RENDERER=OPENGLES3
 
-# 3. System packages (Debian/Ubuntu) for VideoPlayer (unrelated to input, but part of the lib):
+# 3. Optional VideoPlayer backend (unrelated to input); omit this and use
+#    -DCNA_ENABLE_VIDEO=OFF when the input build does not need video:
 sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
 ```
 

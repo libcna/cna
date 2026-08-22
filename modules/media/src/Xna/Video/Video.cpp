@@ -30,6 +30,10 @@ namespace Microsoft::Xna::Framework::Media
                 "Could not find file '" + fileName_ + "'.", fileName_);
         }
 
+        // CNA's deliberate decoder-free build profile has no FNA equivalent: keep the XNA type
+        // link-complete, but reject the first operation that needs native codec services instead
+        // of making every Game executable carry FFmpeg (plans/plan_media.md MEDIA-233).
+        CNA::Internal::Media::RequireVideoDecoderAvailable();
         CNA::Internal::Media::VideoDecoder probe;
         if (probe.Open(fileName_))
         {

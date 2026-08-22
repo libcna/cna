@@ -331,7 +331,7 @@ included) — not repeated here.
 | `Missing vendored 'SDL' …` right after a fresh clone | Downloaded a ZIP/release archive instead of cloning with Git, or forgot to init submodules — vendored `third_party/SDL`/`SDL_image`/`SDL_mixer` are empty | `git submodule update --init --recursive`, or pass `-DCNA_USE_SYSTEM_SDL=ON` to use system SDL3 packages instead |
 | `Could not find a package configuration file for Vulkan` (`VULKAN` renderer) | `find_package(Vulkan REQUIRED)` — no Vulkan SDK/loader installed | Install your distro's `vulkan-sdk`/`libvulkan-dev` package (or the LunarG SDK) before configuring |
 | CMake FetchContent hangs/fails on `bgfx.cmake` clone (`BGFX` renderer) | `BGFX` fetches `bgfx.cmake` from GitHub at configure time — needs network access and can be slow the first time | Retry, or pre-seed a local clone and point `FETCHCONTENT_SOURCE_DIR_BGFX_CMAKE` at it |
-| Video/`VideoPlayer`-related link errors | Missing FFmpeg dev packages — not a graphics-renderer issue, but hits every renderer | `CLAUDE.md`'s "System Dependencies (Linux)" section: `sudo apt-get install libavcodec-dev libavformat-dev libavutil-dev libswresample-dev` |
+| `CNA_ENABLE_VIDEO=ON` cannot find FFmpeg | The required FFmpeg development packages are missing; this is independent of the graphics renderer | Install `libavcodec-dev libavformat-dev libavutil-dev libswresample-dev`, use the default `AUTO` fallback, or configure `-DCNA_ENABLE_VIDEO=OFF` for a game without video. See [video-backend.md](video-backend.md). |
 
 ### Common runtime failures
 

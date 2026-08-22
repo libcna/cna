@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Media/AudioDurationProbe.hpp"
 
-#ifdef CNA_FFMPEG_AVAILABLE
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 }
-#endif
 
 namespace CNA::Internal::Media
 {
-#ifdef CNA_FFMPEG_AVAILABLE
     SharpRuntime::intcs AudioDurationProbe::ProbeDurationMS(const std::string& path)
     {
         AVFormatContext* fmtCtx = nullptr;
@@ -29,12 +26,4 @@ namespace CNA::Internal::Media
 
         return durationMs > 0 ? static_cast<SharpRuntime::intcs>(durationMs) : 0;
     }
-#else
-    SharpRuntime::intcs AudioDurationProbe::ProbeDurationMS(const std::string&)
-    {
-        // No FFmpeg on this platform (Windows/Android/Emscripten) -- matches Video/VideoPlayer's
-        // own unavailability there. Callers treat 0 as "unknown", not an error.
-        return 0;
-    }
-#endif
 }
