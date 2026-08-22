@@ -454,9 +454,17 @@ function(cna_copy_mingw_cxx_runtime target_name)
         return()
     endif()
 
-    foreach(_runtime_dll IN ITEMS libgcc_s_seh-1.dll libstdc++-6.dll)
+    # GCC names its shared unwinder after the exception model selected by the
+    # target toolchain.  x86_64 MinGW normally uses SEH, while i686 commonly
+    # uses DW2 (and some older toolchains use SJLJ).  Probe every supported
+    # spelling instead of assuming the host architecture.
+    set(_libgcc_runtime "")
+    foreach(_libgcc_candidate IN ITEMS
+            libgcc_s_seh-1.dll
+            libgcc_s_dw2-1.dll
+            libgcc_s_sjlj-1.dll)
         execute_process(
-            COMMAND "${CMAKE_CXX_COMPILER}" "-print-file-name=${_runtime_dll}"
+            COMMAND "${CMAKE_CXX_COMPILER}" "-print-file-name=${_libgcc_candidate}"
             OUTPUT_VARIABLE _runtime_dll_path
             OUTPUT_STRIP_TRAILING_WHITESPACE
             ERROR_QUIET
@@ -467,14 +475,39 @@ function(cna_copy_mingw_cxx_runtime target_name)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${_runtime_dll_path}"
                     $<TARGET_FILE_DIR:${target_name}>
-                COMMENT "Copying ${_runtime_dll} next to ${target_name}"
+                COMMENT "Copying ${_libgcc_candidate} next to ${target_name}"
                 VERBATIM)
-        else()
-            message(WARNING
-                "cna_copy_mingw_cxx_runtime: could not locate ${_runtime_dll}. "
-                "The executable may fail to run on machines without MinGW installed.")
+            set(_libgcc_runtime "${_libgcc_candidate}")
+            break()
         endif()
     endforeach()
+
+    if(NOT _libgcc_runtime)
+        message(WARNING
+            "cna_copy_mingw_cxx_runtime: could not locate a shared libgcc runtime "
+            "(SEH, DW2, or SJLJ). The executable may fail to run on machines "
+            "without MinGW installed.")
+    endif()
+
+    execute_process(
+        COMMAND "${CMAKE_CXX_COMPILER}" "-print-file-name=libstdc++-6.dll"
+        OUTPUT_VARIABLE _libstdcxx_dll
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_libstdcxx_dll AND _libstdcxx_dll MATCHES "[/\\\\]" AND EXISTS "${_libstdcxx_dll}")
+        file(TO_CMAKE_PATH "${_libstdcxx_dll}" _libstdcxx_dll)
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${_libstdcxx_dll}"
+                $<TARGET_FILE_DIR:${target_name}>
+            COMMENT "Copying libstdc++-6.dll next to ${target_name}"
+            VERBATIM)
+    else()
+        message(WARNING
+            "cna_copy_mingw_cxx_runtime: could not locate libstdc++-6.dll. "
+            "The executable may fail to run on machines without MinGW installed.")
+    endif()
 
     cna_copy_mingw_runtime(${target_name})
 endfunction()

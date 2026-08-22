@@ -68,6 +68,12 @@ renderer.
 
 ## Completed
 
+- [x] i686 MinGW deployment copies the exception runtime selected by the active toolchain
+  (`libgcc_s_dw2-1.dll` here, with SEH/SJLJ probing for other MinGW variants), together with
+  `libstdc++-6.dll` and `libwinpthread-1.dll`. Wine now loads the template executable through the
+  CNA startup path and stops only at the deliberately caller-supplied `glide3x.dll` dependency.
+  The backend also accepts every valid CNA presentation policy at startup and maps it to Glide's
+  one truthful native-backbuffer path; invalid enum values remain rejected.
 - [x] Native `grSstWinOpen`, back-buffer clear/present, LFB readback, and loader support for both
   undecorated and x86 stdcall-exported Glide DLLs.
 - [x] `SpriteBatch` texture upload through TMU0 and compatible quad batching through

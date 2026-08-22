@@ -368,15 +368,9 @@ namespace CNA::Internal::Renderers::Glide
         explicit Impl(const GraphicsRendererCreateArgs& args)
             : virtualWidth(args.virtualWidth > 0 ? args.virtualWidth : 640)
             , virtualHeight(args.virtualHeight > 0 ? args.virtualHeight : 480)
-            , presentationMode(static_cast<CnaPresentationMode>(args.presentationMode))
+            , presentationMode(CnaPresentationMode::NativeBackBuffer)
             , swapInterval(args.swapInterval)
         {
-            if (presentationMode != CnaPresentationMode::NativeBackBuffer)
-            {
-                throw std::runtime_error(
-                    "GLIDE renderer supports only PresentationMode::NativeBackBuffer; Glide 3.x has no faithful "
-                    "logical-surface scaling path");
-            }
             if (swapInterval < 0 || swapInterval > 1)
             {
                 throw std::runtime_error("GLIDE renderer supports only swap intervals 0 (immediate) and 1 (v-sync)");
@@ -1979,11 +1973,22 @@ namespace CNA::Internal::Renderers::Glide
 
     void GlideRenderer::SetPresentationMode(int mode)
     {
-        if (static_cast<CnaPresentationMode>(mode) != CnaPresentationMode::NativeBackBuffer)
+        switch (static_cast<CnaPresentationMode>(mode))
         {
-            throw std::runtime_error(
-                "GLIDE renderer supports only PresentationMode::NativeBackBuffer; scaling is owned by the external Glide runtime");
+        case CnaPresentationMode::Letterbox:
+        case CnaPresentationMode::Overscan:
+        case CnaPresentationMode::Stretch:
+        case CnaPresentationMode::NativeBackBuffer:
+        case CnaPresentationMode::FixedHeightDynamicWidth:
+            break;
+        default:
+            throw std::invalid_argument("GLIDE renderer received an invalid presentation mode");
         }
+
+        // XNA applications do not select a backend-specific presentation mode.
+        // Glide owns the physical display mode and scales it through its runtime,
+        // so every CNA presentation policy degrades to the same native-backbuffer
+        // path instead of making an otherwise valid game fail during startup.
         impl_->presentationMode = CnaPresentationMode::NativeBackBuffer;
     }
 
