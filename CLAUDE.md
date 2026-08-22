@@ -435,7 +435,12 @@ directory and is shared by all multi-renderer work.
   `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` on a fresh configure if the cache shows it NOTFOUND).
 - **bgfx:** do not re-clone. Prefer a reusable `~/deps/bgfx`; the bgfx `shaderc` tool (needed to
   regenerate `bgfx_shaders.hpp`) can also be built from `cmake-build-bgfx/_deps/bgfx_cmake-src/`.
-- Cap build parallelism at `-j4` in this sandbox.
+- **Build parallelism is not capped.** Earlier revisions of this file required `-j3`/`-j4` because
+  the machine had a cooling fault; that hardware was repaired on 2026-08-22 and the ceiling was
+  lifted with it. Use the whole machine — `-j$(nproc)` or plain `--parallel`. The one thing still
+  worth watching is memory rather than heat: sanitizer and template-heavy translation units can
+  each want several GB, so if a specific target starts swapping, lower the job count for that
+  target instead of reinstating a project-wide limit.
 
 ---
 

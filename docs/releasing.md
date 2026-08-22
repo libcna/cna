@@ -72,7 +72,7 @@ are `alpha.N` → `beta.N` → `rc.N`, ordered as SemVer orders them. `0.1.0-alp
    This is a stopgap that documents the revision without enforcing it; a configure-time check
    against a recorded pin, or a submodule, is the intended replacement.
 4. **Build and test** in an existing build directory (see the build rules in `CLAUDE.md` —
-   reuse a `cmake-build-<variant>/` tree, cap parallelism):
+   reuse a `cmake-build-<variant>/` tree):
 
    ```bash
    cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_RENDERER=OPENGLES3

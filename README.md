@@ -480,7 +480,7 @@ brew install ccache ffmpeg
 git submodule update --init
 
 cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build cmake-build-macos --target CnaTests --parallel 4
+cmake --build cmake-build-macos --target CnaTests --parallel
 ```
 
 `METAL` is available here as well (`-DCNA_GRAPHICS_RENDERER=METAL`); its own supported contract is
@@ -498,7 +498,7 @@ cmake -S . -B cmake-build-ios \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
       -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
       -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
-cmake --build cmake-build-ios --parallel 4
+cmake --build cmake-build-ios --parallel
 
 # Simulator: add -DCNA_IOS_SIMULATOR=ON (use a separate build directory).
 # Device deployment needs the Xcode generator and a team id:
@@ -563,7 +563,7 @@ cmake -S . -B cmake-build-d3d9 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D9 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d9 --target CnaTests --parallel 4
+cmake --build cmake-build-d3d9 --target CnaTests --parallel
 ```
 
 Running the resulting `.exe`s needs a Wine + DXVK dev-loop, in a prefix separate from D3D11's own
@@ -590,7 +590,7 @@ cmake -S . -B cmake-build-d3d11 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D11 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d11 --target CnaTests --parallel 4
+cmake --build cmake-build-d3d11 --target CnaTests --parallel
 ```
 
 Running the resulting `.exe`s needs a Wine + DXVK dev-loop (`docs/directx11-renderer.md` has full setup
@@ -619,7 +619,7 @@ cmake -S . -B cmake-build-d3d12 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D12 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d12 --target CnaTests --parallel 4
+cmake --build cmake-build-d3d12 --target CnaTests --parallel
 ```
 
 Running the resulting `.exe`s needs a Wine + vkd3d-proton dev-loop, in a prefix separate from

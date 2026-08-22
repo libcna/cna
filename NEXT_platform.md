@@ -100,18 +100,18 @@ verified without ever being compiled. They turned out to be correct, but that wa
 process. Always build `cmake-build-devices` before claiming a devices-ext change works.
 
 Do **not** create build directories in the scratchpad — see `CLAUDE.md`, *Build locations &
-caching*. Cap parallelism at `-j4`.
+caching*. Parallelism is not capped (see `CLAUDE.md`).
 
 ### Commands
 
 ```bash
-cmake --build cmake-build-debug    --target CnaTests -j4 && ./cmake-build-debug/Debug/bin/CnaTests
-cmake --build cmake-build-headless --target CnaTests -j4 && ./cmake-build-headless/CnaTests
-cmake --build cmake-build-terminal --target CnaTests -j4 && ./cmake-build-terminal/CnaTests
+cmake --build cmake-build-debug    --target CnaTests -j$(nproc) && ./cmake-build-debug/Debug/bin/CnaTests
+cmake --build cmake-build-headless --target CnaTests -j$(nproc) && ./cmake-build-headless/CnaTests
+cmake --build cmake-build-terminal --target CnaTests -j$(nproc) && ./cmake-build-terminal/CnaTests
 cmake -S . -B cmake-build-debug -DCNA_DEVICES=ON
-cmake --build cmake-build-debug --target CnaTests -j4 && ./cmake-build-debug/CnaTests
+cmake --build cmake-build-debug --target CnaTests -j$(nproc) && ./cmake-build-debug/CnaTests
 cmake -S . -B cmake-build-debug -DCNA_DEVICES=OFF
-cmake --build cmake-build-debug --target CnaTests -j4
+cmake --build cmake-build-debug --target CnaTests -j$(nproc)
 
 cd cmake-build-debug && ctest -R CnaPlatform --output-on-failure   # SDL_VIDEODRIVER=dummy suites
 

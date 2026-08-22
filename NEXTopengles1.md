@@ -23,8 +23,8 @@ context** — `radeonsi` on real hardware fails exactly like `llvmpipe`. A local
 rootless; the full recipe and its three pitfalls are in `docs/opengles1-backend.md`.
 
 ```bash
-# build (never more than -j4 on this shared machine)
-cmake --build cmake-build-opengles1 -j4
+# build
+cmake --build cmake-build-opengles1 -j$(nproc)
 
 # tests -- the wrapper selects the ES1 Mesa and the virtual display :99
 scripts/opengles1-test-env.sh ctest --test-dir cmake-build-opengles1 -R OpenGLES1

@@ -29,7 +29,7 @@ checkout, exactly the way `docs/skia-developer-build.md`'s raster procedure alre
 ## Shared source checkout, two GN outputs
 
 Per the repository's own build-hygiene rules (`/rv/data/development/github.com/openeggbert/CLAUDE.md`
--- reuse checkouts, cap parallelism, no scratchpad builds), the Ganesh artifact reuses the **exact
+-- reuse checkouts, no scratchpad builds), the Ganesh artifact reuses the **exact
 same pinned Skia source checkout** the raster artifact already uses. It is not re-cloned:
 
 ```text

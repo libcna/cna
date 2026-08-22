@@ -4315,10 +4315,10 @@ Line and point topologies are deliberately still accepted. `WebGpuWireFrameContr
 >   check `CNA_TEST_DISPLAY` in each build dir's `CMakeCache.txt` isn't stale before trusting a
 >   `ctest` run; `ctest --test-dir <dir>` also changes each test's CWD, breaking fixture-relative
 >   paths — run `CnaTests` directly from the repo root instead when in doubt.
-> - This machine is shared with other concurrent Claude Code agents — cap build parallelism at
->   `-j4`, never `-j$(nproc)`; pause starting new heavy work at CPU Tctl ≥85°C (resume at ≤75°C,
->   but always finish in-flight work regardless of temperature); low free RAM alone isn't urgent
->   if swap still has headroom.
+> - ~~cap build parallelism at `-j4`, never `-j$(nproc)`~~ — **superseded 2026-08-22**: the
+>   cooling fault that produced this rule was repaired, and builds now use the whole machine.
+>   Watch memory rather than temperature: low free RAM alone isn't urgent if swap still has
+>   headroom, but a target that starts swapping should get a lower job count of its own.
 >
 > **Remaining open items in `plans/plan_graphics.md`** (35 `⬜` + 1 `🟨`, as of 2026-07-18 — re-grep
 > `plans/plan_graphics.md` for `⬜|🟨` to confirm this hasn't drifted before trusting it blindly):

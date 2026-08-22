@@ -2703,7 +2703,7 @@ level-boundary contract.
 - Updated `docs/skia-surface-mode-adr.md`'s "Reopening requirements" section to note gate 1's
   artifact half is now done while explicitly leaving the mode-selector half and gates 2-6 open, and
   `docs/skia-developer-build.md` to point at the new doc and fix a real pre-existing inconsistency:
-  every `-j8`/`--parallel 8` example there predated this repository's current mandatory `-j3` build
+  every `-j8`/`--parallel 8` example there predated the `-j3` build cap this repository carried at the time (lifted 2026-08-22)
   cap; corrected all seven occurrences.
 - `docs/skia-backend.md`/`docs/skia-release-gate.md` deliberately untouched, per their existing
   freeze-until-SKIA-170 policy.

@@ -554,9 +554,9 @@ apt-get install -y \
   libavcodec-dev libavformat-dev libavutil-dev libswresample-dev ccache
 
 # 4. Configure + build (first configure builds SDL3 into .sdl-prebuilt-<system>-<arch>/, ~minutes;
-#    the first CnaTests build is ~1055 targets, so keep it to -j4 in a sandbox)
+#    the first CnaTests build is ~1055 targets)
 cmake --preset cnaext
-cmake --build --preset cnaext --target CnaTests -j4
+cmake --build --preset cnaext --target CnaTests -j$(nproc)
 SDL_AUDIODRIVER=dummy ./cmake-build-cnaext/CnaTests --gtest_filter='CnaExt*'
 ```
 
@@ -712,7 +712,7 @@ Three things are worth knowing before repeating it:
 
 - **Drive the build in bounded foreground chunks.** This container restarts, and a restart kills a
   detached background build without a trace in the log — the log simply stops. Ninja resumes from
-  where it stopped, so `timeout 570 cmake --build cmake-build-asan --target CnaTests -j4`, repeated,
+  where it stopped, so `timeout 570 cmake --build cmake-build-asan --target CnaTests -j$(nproc)`, repeated,
   is the reliable shape. The first attempt here lost about 50 minutes to a build that had been dead
   the whole time.
 - **Disk.** The ASan tree needs room the three existing build directories did not leave. The

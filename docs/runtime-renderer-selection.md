@@ -479,7 +479,7 @@ archive sizes overstates it by an order of magnitude here.
 ### What is NOT measured here, and why
 
 - **Build time.** A trustworthy figure needs from-scratch builds of each set, and this project's
-  build rules cap parallelism and treat repeated clean rebuilds as real SSD wear to be avoided
+  build rules treat repeated clean rebuilds as real SSD wear to be avoided
   (`../CLAUDE.md`). Timing several full builds for a table was not judged worth that cost. The
   incremental cost is the one developers actually pay, and it is dominated by how many renderer
   archives must relink, which the per-renderer table above already indicates.
