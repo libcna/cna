@@ -3952,6 +3952,18 @@ if (ProfileUsesGlslEs100())
         }
 
         device.initialize(glProcAddressLoader);
+        // WebGL commonly exposes only four rasterizer subpixel bits. Wine's usual 63/128-pixel
+        // displacement rounds back to exactly half a pixel at that precision, putting XNA's 1x1
+        // right triangles on an excluded fill edge again. Use the closest representable value
+        // below half a pixel, capped at Wine's established correction on higher-precision GL.
+        GLint subpixelBits = 0;
+        metagl::glGetIntegerv(::metagl::GetParameter::SubpixelBits, &subpixelBits);
+        if (subpixelBits > 1 && subpixelBits < 24)
+        {
+            const float representableBelowHalf =
+                1.0f - std::ldexp(1.0f, 1 - subpixelBits);
+            xnaPixelCenterScale_ = std::min(xnaPixelCenterScale_, representableBelowHalf);
+        }
         if (ProfileIsDesktopCore())
             EnableVertexProgramPointSize();
         // Same reason as the capability dump below: a startup diagnostic goes to the logger (and
@@ -8522,8 +8534,23 @@ CNA_GL_PUNCTUAL_DECL
         // with a direction vector, not a UV.
         float rtFlipV[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
+        // XNA 4.0's Direct3D 9 coordinates address pixel centers while OpenGL addresses pixel
+        // corners. Preserve D3D's top-left fill convention with the same slightly-less-than-half-
+        // pixel displacement Wine/MonoGame use: 63/128 of a window pixel. Post-multiplying a
+        // row-vector WVP by this clip-space translation produces clip.xy += offset * clip.w.
+        int viewportX = 0, viewportY = 0, viewportWidth = 0, viewportHeight = 0;
+        device.get_viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+        Matrix xnaPixelCenter = Matrix::getIdentityProperty();
+        if (viewportWidth > 0 && viewportHeight > 0)
+        {
+            xnaPixelCenter = Matrix::CreateTranslation(
+                xnaPixelCenterScale_ / static_cast<float>(viewportWidth),
+                -xnaPixelCenterScale_ / static_cast<float>(viewportHeight),
+                0.0f);
+        }
+
         // WVP
-        const Matrix wvp = world * view * projection;
+        const Matrix wvp = world * view * projection * xnaPixelCenter;
         float wvp_col[16];
         wvp.ToColumnMajor(wvp_col);
         if (p.loc_wvp >= 0)

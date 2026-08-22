@@ -823,6 +823,8 @@ namespace CNA::Internal::Renderers::EasyGL
         int swapInterval_ = 1;
         /// plans/plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
         GlProfile profile_ = kCompileTimeGlProfile;
+        /// Clip-space multiplier for XNA's slightly-less-than-half-pixel center correction.
+        float xnaPixelCenterScale_ = 63.0f / 64.0f;
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
         int sampleCount_ = 1;

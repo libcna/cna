@@ -1714,6 +1714,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_RasterizerState_CullMode COMMAND cna_test_easygl_rasterizerstate_cullmode
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SAMPLE-001: XNA/D3D9 considers integer screen coordinates pixel centers. The original
+        # Primitives sample relies on that convention for every one-pixel star.
+        cna_easygl_test(cna_test_easygl_xna_pixel_center
+                        easygl_xna_pixel_center_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_XnaPixelCenter COMMAND cna_test_easygl_xna_pixel_center
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # XNA culling-compatibility audit (docs/xna_culling_compatibility_audit.md): extends the
         # identity-only CullMode test above with a real Matrix::CreateLookAt camera and
         # perspective/orthographic projection -- verbatim reuse of the shared renderer-agnostic
