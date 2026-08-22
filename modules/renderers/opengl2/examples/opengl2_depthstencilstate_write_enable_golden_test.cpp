@@ -83,6 +83,21 @@ protected:
                             Rectangle(samplePx - 4, sampleY - 4, 8, 8),
                             "examples/golden/easygl_depthstencilstate_write_enable_golden_test.png",
                             /*tolerance=*/60);
+
+        // Seed nearest depth, then clear it to far while depth writes are disabled. XNA/FNA
+        // requires Clear to ignore the mask and restore it: green passes without writing, then
+        // blue passes behind it. Before the fix the masked clear left depth at zero and neither
+        // draw appeared, which is the same failure that progressively erased cna-template's cube.
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.Clear(ClearOptions::DepthBuffer, Color::Black, 0.0f, 0);
+        device.setDepthStencilStateProperty(writeDisabled);
+        device.Clear(ClearOptions::DepthBuffer, Color::Black, 1.0f, 0);
+        DrawQuad(device, 0.0f, 1.0f, 0.2f, kGreen);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        DrawQuad(device, 0.0f, 1.0f, 0.5f, kBlue);
+
+        ExpectPixel("clear-ignores-and-restores-depth-write-mask",
+                    Rectangle(W * 3 / 4, sampleY, 1, 1), kBlue, /*tolerance=*/60);
     }
 };
 

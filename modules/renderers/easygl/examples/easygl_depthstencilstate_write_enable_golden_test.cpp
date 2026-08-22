@@ -94,6 +94,22 @@ protected:
                             Rectangle(samplePx - 4, sampleY - 4, 8, 8),
                             "examples/golden/easygl_depthstencilstate_write_enable_golden_test.png",
                             /*tolerance=*/60);
+
+        // Regression for GraphicsDevice.Clear after a SpriteBatch-style depth-write-disabled
+        // draw. Seed depth to the nearest value, then request a far clear while writes are
+        // disabled. XNA/FNA requires the clear to ignore that write mask and restore it: the
+        // green draw must therefore pass without writing depth, and the later blue draw passes
+        // behind it. OPENGL1 used to leave the seeded depth untouched, making both draws fail.
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        device.Clear(ClearOptions::DepthBuffer, Color::Black, 0.0f, 0);
+        device.setDepthStencilStateProperty(writeDisabled);
+        device.Clear(ClearOptions::DepthBuffer, Color::Black, 1.0f, 0);
+        DrawQuad(device, 0.0f, 1.0f, 0.2f, kGreen);
+        device.setDepthStencilStateProperty(DepthStencilState::Default);
+        DrawQuad(device, 0.0f, 1.0f, 0.5f, kBlue);
+
+        ExpectPixel("clear-ignores-and-restores-depth-write-mask",
+                    Rectangle(W * 3 / 4, sampleY, 1, 1), kBlue, /*tolerance=*/60);
     }
 };
 

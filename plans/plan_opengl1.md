@@ -608,5 +608,19 @@ One more found while implementing `EnvironmentMapEffect`'s cube-map support (sam
   -- without this fix the test's "pure base color" (`Amount=0`) case would have read back as black
   instead of the expected `AmbientLightColor*DiffuseColor`.
 
+## Status: OPENGL-CUBE-1 — XNA Clear ignores draw masks (2026-08-22)
+
+The cna-template cube progressively collapsed while its five-second SpriteBatch banner was
+visible, then recovered as soon as the banner disappeared. The banner left
+`DepthBufferWriteEnable=false`; this backend passed the state straight through to `glClear`, and
+OpenGL consequently refused to clear depth on the next frame. FNA3D explicitly saves, opens and
+restores the scissor plus color/depth/stencil write masks around every clear because XNA
+`GraphicsDevice.Clear` is independent of draw state. OPENGL1 now follows that contract for all six
+clear combinations. The extended `OpenGL1_DepthStencilState_WriteEnable_Golden` test seeds near
+depth, clears to far while depth writes are disabled, then proves both that the clear occurred and
+that the disabled mask was restored. Direct Xvfb run: all three checks pass. The rebuilt
+cna-template OPENGL1 executable was runtime-inspected at 0.4, 1.6 and 2.8 seconds; the textured
+cube remains complete throughout the overlapping translucent banner.
+
 ## Design rule
 Do not turn OPENGL1 into a second modern OpenGL backend. Features should be implemented with true legacy/fixed-function OpenGL or well-defined period-compatible extensions. Shader-dependent XNA/NOXNA features should remain unsupported rather than secretly delegating to EasyGL.

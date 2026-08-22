@@ -4,7 +4,7 @@
 // drawn through the real public XNA API (VertexBuffer/BasicEffect/GraphicsDevice.DrawPrimitives)
 // and verified via ReadBackbuffer, mirroring opengl2_2d_test.cpp's rigor for the 3D path.
 //
-// Every vertex uses World=View=Projection=Identity, so vertex XYZ IS clip-space XYZ directly
+// Checks A-D use World=View=Projection=Identity, so vertex XYZ IS clip-space XYZ directly
 // (matches sdlgpu_samplerstate_test.cpp's own established convention for this kind of test).
 //
 // Check A -- a colored3d triangle (VertexPositionColor, BasicEffect.VertexColorEnabled=true)
@@ -17,7 +17,9 @@
 //   sampled texture color exactly.
 // Check D -- a colored_textured3d quad (VertexPositionColorTexture) reads back texture*vertex
 //   color exactly.
-// Check E -- 120 frames of the whole scene render with no exception.
+// Check E -- a real LookAt + perspective WVP keeps a unit quad centered and bounded. This catches
+//   a second transpose of CNA's row-major-flat Matrix upload, which identity-only checks cannot.
+// Check F -- 120 frames of the whole scene render with no exception.
 //
 // BasicEffect lighting (VertexPositionNormalTexture/EnableDefaultLighting) is deliberately not
 // covered here -- this renderer's 3D shaders are unlit (plans/plan_opengl2.md's own documented
@@ -35,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -182,6 +185,30 @@ class OpenGL2ThreeDTest : public Game
         dev.SetVertexBuffer(nullptr);
     }
 
+    void DrawPerspectiveQuad(GraphicsDevice& dev)
+    {
+        BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;
+        fx.setWorldProperty(Matrix::getIdentityProperty());
+        fx.setViewProperty(Matrix::CreateLookAt(
+            Vector3(0.0f, 0.0f, 6.0f), Vector3::Zero, Vector3::Up));
+        fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+            0.78539816339f, 4.0f / 3.0f, 0.1f, 100.0f));
+        fx.Apply();
+
+        const Color yellow(255, 220, 0, 255);
+        const VertexPositionColor verts[6] = {
+            {Vector3(-1.0f,  1.0f, 0.0f), yellow},
+            {Vector3( 1.0f, -1.0f, 0.0f), yellow},
+            {Vector3(-1.0f, -1.0f, 0.0f), yellow},
+            {Vector3(-1.0f,  1.0f, 0.0f), yellow},
+            {Vector3( 1.0f,  1.0f, 0.0f), yellow},
+            {Vector3( 1.0f, -1.0f, 0.0f), yellow},
+        };
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
+        dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+    }
+
 protected:
     void LoadContent() override
     {
@@ -244,11 +271,24 @@ protected:
                   "colored_textured3d quad reads back texture*vertexColor: got=" + ColorStr(got));
         }
 
+        // Check E: non-identity camera/projection matrix packing.
+        dev.Clear(Color::Black);
+        DrawPerspectiveQuad(dev);
+        if (runChecks)
+        {
+            const Color center = ReadPixel(160, 120);
+            const Color corner = ReadPixel(20, 20);
+            Check(Matches(center, Color(255, 220, 0, 255), 10)
+                      && Matches(corner, Color::Black, 10),
+                  "LookAt+perspective WVP is centered and bounded: center=" + ColorStr(center)
+                      + ", corner=" + ColorStr(corner));
+        }
+
         if (frame_ == kTotalFrames)
         {
             Check(true, "120 frames of the 3D scene render with no exception");
-            std::printf("=== %d/%d PASS ===\n", passCount_, 6);
-            result_ = (passCount_ == 6) ? 0 : 1;
+            std::printf("=== %d/%d PASS ===\n", passCount_, 7);
+            result_ = (passCount_ == 7) ? 0 : 1;
             Exit();
         }
     }

@@ -68,6 +68,28 @@ void MinMagFilter(int filter,bool mip,GLenum&minF,GLenum&magF){
 }
 void Mat(const Matrix&m,float o[16]){o[0]=m.M11;o[1]=m.M12;o[2]=m.M13;o[3]=m.M14;o[4]=m.M21;o[5]=m.M22;o[6]=m.M23;o[7]=m.M24;o[8]=m.M31;o[9]=m.M32;o[10]=m.M33;o[11]=m.M34;o[12]=m.M41;o[13]=m.M42;o[14]=m.M43;o[15]=m.M44;}
 void Color4(const Color&c){glColor4ub((GLubyte)c.getRProperty(),(GLubyte)c.getGProperty(),(GLubyte)c.getBProperty(),(GLubyte)c.getAProperty());}
+
+// OpenGL applies the current scissor and write masks to glClear, while XNA's
+// GraphicsDevice.Clear is independent of the currently bound draw state. FNA3D's OpenGL
+// driver temporarily opens exactly these masks around its clear and restores them afterwards.
+// Querying the native state here keeps the backend correct even when a state was applied through
+// SetDepthWriteEnabled() rather than ApplyDepthStencilState().
+void ClearIgnoringDrawMasks(const GLbitfield mask)
+{
+ const GLboolean scissorEnabled=glIsEnabled(GL_SCISSOR_TEST);
+ GLboolean colorMask[4]={GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE};
+ GLboolean depthMask=GL_TRUE;
+ GLint stencilMask=-1;
+ if(scissorEnabled)glDisable(GL_SCISSOR_TEST);
+ if(mask&GL_COLOR_BUFFER_BIT){glGetBooleanv(GL_COLOR_WRITEMASK,colorMask);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);}
+ if(mask&GL_DEPTH_BUFFER_BIT){glGetBooleanv(GL_DEPTH_WRITEMASK,&depthMask);glDepthMask(GL_TRUE);}
+ if(mask&GL_STENCIL_BUFFER_BIT){glGetIntegerv(GL_STENCIL_WRITEMASK,&stencilMask);glStencilMask(~0u);}
+ glClear(mask);
+ if(mask&GL_COLOR_BUFFER_BIT)glColorMask(colorMask[0],colorMask[1],colorMask[2],colorMask[3]);
+ if(mask&GL_DEPTH_BUFFER_BIT)glDepthMask(depthMask);
+ if(mask&GL_STENCIL_BUFFER_BIT)glStencilMask(static_cast<GLuint>(stencilMask));
+ if(scissorEnabled)glEnable(GL_SCISSOR_TEST);
+}
 // plans/plan_opengl1.md phase 3: ARB_multitexture/core-1.3 entry points for DualTextureEffect's
 // second texture unit -- glActiveTexture/glMultiTexCoord2f are not part of the GL 1.1 core
 // export table (notably on Windows' frozen opengl32.dll), so they need portable loading via
@@ -334,7 +356,7 @@ void OpenGL1Renderer::SetRenderTargets(const RenderTargetBindingDescriptor*rende
  }
  SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
 }
-void OpenGL1Renderer::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1Renderer::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1Renderer::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1Renderer::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1Renderer::ClearDepth(float d){glClearDepth(d);glClear(GL_DEPTH_BUFFER_BIT);}void OpenGL1Renderer::ClearStencil(int s){glClearStencil(s);glClear(GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);glClear(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
+void OpenGL1Renderer::SetDepthTestEnabled(bool e){e?glEnable(GL_DEPTH_TEST):glDisable(GL_DEPTH_TEST);}void OpenGL1Renderer::SetBlendEnabled(bool e){e?glEnable(GL_BLEND):glDisable(GL_BLEND);}void OpenGL1Renderer::SetDepthWriteEnabled(bool e){glDepthMask(e?GL_TRUE:GL_FALSE);}void OpenGL1Renderer::ClearColorAndDepth(float r,float g,float b,float a,float d){glClearColor(r,g,b,a);glClearDepth(d);ClearIgnoringDrawMasks(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void OpenGL1Renderer::ClearDepth(float d){glClearDepth(d);ClearIgnoringDrawMasks(GL_DEPTH_BUFFER_BIT);}void OpenGL1Renderer::ClearStencil(int s){glClearStencil(s);ClearIgnoringDrawMasks(GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearDepthAndStencil(float d,int s){glClearDepth(d);glClearStencil(s);ClearIgnoringDrawMasks(GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearColorAndStencil(float r,float g,float b,float a,int s){glClearColor(r,g,b,a);glClearStencil(s);ClearIgnoringDrawMasks(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}void OpenGL1Renderer::ClearColorDepthAndStencil(float r,float g,float b,float a,float d,int s){glClearColor(r,g,b,a);glClearDepth(d);glClearStencil(s);ClearIgnoringDrawMasks(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);}
 // plans/plan_opengl1.md items 18/19 (EasyGL parity): colorBlendFunc/alphaBlendFunc (blend equations
 // beyond additive) and alphaSrcBlend/alphaDstBlend (separate alpha blend factors) used to be
 // dropped entirely -- glBlendFunc always implied GL_FUNC_ADD for both channels and reused the

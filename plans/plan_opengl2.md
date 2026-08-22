@@ -1315,6 +1315,27 @@ full rebuild (`cmake ..` after editing `cmake/Tests/OpenGL2Tests.cmake`) exposed
 **locally and temporarily, never committed** (3 one-line stubs, reverted via `git checkout --`
 immediately after use) purely to link the two new OpenGL2 test executables above for verification.
 
+## Status: OPENGL-CUBE-1 — Clear masks and non-identity WVP packing (2026-08-22)
+
+The cna-template cube exposed two independent defects hidden by this backend's existing tests:
+
+- Like OPENGL1, every clear inherited the current scissor and color/depth/stencil write masks.
+  A SpriteBatch-style `DepthBufferWriteEnable=false` therefore prevented the following frame's
+  depth clear. All six clear combinations now use FNA3D's save/open/clear/restore contract. The
+  depth-write golden test now proves both the masked clear and restoration of the original mask.
+- `ComputeColumnMajorWVP` manually transposed CNA's row-major-flat `Matrix` storage before passing
+  it to `glUniformMatrix4fv(GL_FALSE)`. GL already interprets that flat storage as the transpose
+  required to convert XNA row-vector multiplication into GLSL column-vector multiplication, so
+  this was a second transpose. Identity-only `OpenGL2_3D` coverage could not observe it. The path
+  now computes `World * View * Projection` with `Matrix` and uploads its established flat layout,
+  matching OPENGL33's traced uniform byte-for-byte.
+
+`OpenGL2_3D` gained a real LookAt + perspective check and passes 7/7, including a centered colored
+quad and an untouched corner. The clear regression passes 3/3. The rebuilt cna-template OPENGL2
+executable was runtime-inspected at 0.4, 1.6 and 2.8 seconds; the textured cube stays correctly
+bounded and complete throughout the translucent banner instead of stretching across the window or
+losing faces.
+
 ## Implemented foundation
 - Dedicated `CNA_GRAPHICS_BACKEND=OPENGL2` selection.
 - SDL-created OpenGL 2.1 compatibility context. SDL is only window/context glue; rendering is direct OpenGL.

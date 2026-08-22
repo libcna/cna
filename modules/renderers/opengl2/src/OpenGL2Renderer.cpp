@@ -53,6 +53,42 @@ namespace CNA::Internal::Renderers::OpenGL2
             description.doubleBuffer = true;
             return description;
         }
+
+        // glClear obeys scissor and the active color/depth/stencil write masks; XNA Clear does
+        // not. This is the same save/open/clear/restore contract as FNA3D's OpenGL driver.
+        void ClearIgnoringDrawMasks(const GLbitfield mask)
+        {
+            const GLboolean scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+            GLboolean colorMask[4] = {GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE};
+            GLboolean depthMask = GL_TRUE;
+            GLint stencilMask = -1;
+
+            if (scissorEnabled) glDisable(GL_SCISSOR_TEST);
+            if ((mask & GL_COLOR_BUFFER_BIT) != 0)
+            {
+                glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+                glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            }
+            if ((mask & GL_DEPTH_BUFFER_BIT) != 0)
+            {
+                glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+                glDepthMask(GL_TRUE);
+            }
+            if ((mask & GL_STENCIL_BUFFER_BIT) != 0)
+            {
+                glGetIntegerv(GL_STENCIL_WRITEMASK, &stencilMask);
+                glStencilMask(~0u);
+            }
+
+            glClear(mask);
+
+            if ((mask & GL_COLOR_BUFFER_BIT) != 0)
+                glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
+            if ((mask & GL_DEPTH_BUFFER_BIT) != 0) glDepthMask(depthMask);
+            if ((mask & GL_STENCIL_BUFFER_BIT) != 0)
+                glStencilMask(static_cast<GLuint>(stencilMask));
+            if (scissorEnabled) glEnable(GL_SCISSOR_TEST);
+        }
     }
 
     // plans/plan_opengl2.md (context-loss recovery): mirrors easy-gl's RecoverableResource.hpp exactly
@@ -461,35 +497,15 @@ namespace CNA::Internal::Renderers::OpenGL2
             }
         }
 
-        void MultiplyRowMajor(const Matrix& a, const Matrix& b, float out[16])
-        {
-            const float A[16] = {a.M11, a.M12, a.M13, a.M14, a.M21, a.M22, a.M23, a.M24,
-                                  a.M31, a.M32, a.M33, a.M34, a.M41, a.M42, a.M43, a.M44};
-            const float B[16] = {b.M11, b.M12, b.M13, b.M14, b.M21, b.M22, b.M23, b.M24,
-                                  b.M31, b.M32, b.M33, b.M34, b.M41, b.M42, b.M43, b.M44};
-            for (int r = 0; r < 4; ++r)
-                for (int c = 0; c < 4; ++c)
-                {
-                    float sum = 0.0f;
-                    for (int k = 0; k < 4; ++k)
-                        sum += A[r * 4 + k] * B[k * 4 + c];
-                    out[r * 4 + c] = sum;
-                }
-        }
-
-        // Combines World*View*Projection (XNA row-major) and writes it out column-major,
-        // ready for glUniformMatrix4fv(..., GL_FALSE, ...).
+        // XNA transforms row vectors by World*View*Projection. Uploading CNA's row-major-flat
+        // Matrix storage as GL column-major data transposes it implicitly, which makes GLSL's
+        // `uWVP * position` exactly equivalent. The former code transposed that flat storage a
+        // second time, so any non-identity view/projection produced projective W terms in the
+        // wrong row; identity-only tests concealed the error.
         void ComputeColumnMajorWVP(const Matrix& world, const Matrix& view, const Matrix& projection, float out[16])
         {
-            float wv[16];
-            MultiplyRowMajor(world, view, wv);
-            const Matrix worldView(wv[0], wv[1], wv[2], wv[3], wv[4], wv[5], wv[6], wv[7],
-                                   wv[8], wv[9], wv[10], wv[11], wv[12], wv[13], wv[14], wv[15]);
-            float wvp[16];
-            MultiplyRowMajor(worldView, projection, wvp);
-            for (int r = 0; r < 4; ++r)
-                for (int c = 0; c < 4; ++c)
-                    out[c * 4 + r] = wvp[r * 4 + c];
+            const Matrix wvp = world * view * projection;
+            wvp.ToColumnMajor(out);
         }
 
         // ShaderEffect renderer: a user-authored, runtime-compiled GLSL program (Task
@@ -3064,33 +3080,33 @@ namespace CNA::Internal::Renderers::OpenGL2
     {
         glClearColor(r, g, b, a);
         glClearDepth(depth);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        ClearIgnoringDrawMasks(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
 
     void OpenGL2Renderer::ClearDepth(float depth)
     {
         glClearDepth(depth);
-        glClear(GL_DEPTH_BUFFER_BIT);
+        ClearIgnoringDrawMasks(GL_DEPTH_BUFFER_BIT);
     }
 
     void OpenGL2Renderer::ClearStencil(int stencil)
     {
         glClearStencil(stencil);
-        glClear(GL_STENCIL_BUFFER_BIT);
+        ClearIgnoringDrawMasks(GL_STENCIL_BUFFER_BIT);
     }
 
     void OpenGL2Renderer::ClearDepthAndStencil(float depth, int stencil)
     {
         glClearDepth(depth);
         glClearStencil(stencil);
-        glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        ClearIgnoringDrawMasks(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     }
 
     void OpenGL2Renderer::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
         glClearColor(r, g, b, a);
         glClearStencil(stencil);
-        glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        ClearIgnoringDrawMasks(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     }
 
     void OpenGL2Renderer::ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil)
@@ -3098,7 +3114,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         glClearColor(r, g, b, a);
         glClearDepth(depth);
         glClearStencil(stencil);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        ClearIgnoringDrawMasks(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
     }
 
     void OpenGL2Renderer::SetDepthTestEnabled(bool enabled) { enabled ? glEnable(GL_DEPTH_TEST) : glDisable(GL_DEPTH_TEST); }
