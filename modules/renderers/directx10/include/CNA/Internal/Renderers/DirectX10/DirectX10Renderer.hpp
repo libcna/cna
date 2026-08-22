@@ -7,15 +7,11 @@
 // model. Delivered via Wine's own builtin d3d10.dll/d3d10_1.dll (thin wrappers; DXVK 2.6.0 ships no
 // d3d10.dll at all) forwarding to DXVK's real d3d10core.dll + dxgi.dll.
 //
-// MVP scope (plans/plan_d3d10.md design decision 3, mirroring DIRECTX1's own "baseline first, richness
-// later" precedent): DrawColoredPrimitives/DrawIndexedColoredPrimitives (required by
-// IGraphicsRenderer) are real shader draws (world*view*projection transform + vertex-color
-// passthrough, no lighting). DrawPrimitivesEx/DrawIndexedPrimitivesEx are intentionally NOT
-// overridden -- IGraphicsRenderer's own safe default falls back to the colored-primitives path, so
-// draws requesting lighting/texturing via GpuDrawParams still render correctly as flat vertex
-// color (XNA's own graceful degradation), just without DirectX11Renderer's own full 10-stock-
-// shader-variant richness. CreateEffectRenderer/occlusion query/3D-cube-textures/instancing are
-// likewise left at IGraphicsRenderer's own safe defaults.
+// The ordinary Draw*PrimitivesEx routes implement the unlit BasicEffect subsets used by
+// VertexPositionColor and VertexPositionTexture. Unsupported stock-effect configurations are
+// rejected explicitly; texture/effect state is never discarded and rendered as an unrelated
+// vertex-color draw. CreateEffectRenderer/occlusion query/3D-cube-textures/instancing remain at
+// IGraphicsRenderer's unsupported defaults.
 //
 // This header intentionally does NOT include <d3d10.h> (matching D3D9/D3D11/D3D12/DIRECTX1..DIRECTX8's own
 // containment rule): all real <d3d10.h>/<dxgi.h>/<d3dcompiler.h> usage lives in
@@ -151,7 +147,15 @@ namespace CNA::Internal::Renderers::DirectX10
                                           const IIndexBufferRenderer& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
-        // DrawPrimitivesEx/DrawIndexedPrimitivesEx intentionally NOT overridden -- see file header.
+        void DrawPrimitivesEx(const IVertexBufferRenderer& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb,
+                                     const IIndexBufferRenderer& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
 
     private:
         struct Impl;

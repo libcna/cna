@@ -47,7 +47,8 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<DirectX10Renderer&>(dev.GetRenderer());
 
-        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GraphicsDevice has a real window under the D3D10 renderer");
+        check(getWindowProperty().getHandleProperty() != 0,
+              "GraphicsDevice has a real window under the D3D10 renderer");
 
         {
             dev.Clear(Color(20, 40, 60, 255));

@@ -177,6 +177,7 @@ namespace CNA::Internal::Renderers::DirectX10
             "cbuffer PerDraw : register(b0)\n"
             "{\n"
             "    row_major float4x4 Mvp;\n"
+            "    float4 Diffuse;\n"
             "};\n"
             "struct VSInput { float3 Position : POSITION0; float4 Color : COLOR0; };\n"
             "struct VSOutput { float4 Position : SV_POSITION; float4 Color : COLOR0; };\n"
@@ -189,7 +190,29 @@ namespace CNA::Internal::Renderers::DirectX10
             "}\n"
             "float4 PSMain(VSOutput input) : SV_TARGET\n"
             "{\n"
-            "    return input.Color;\n"
+            "    return input.Color * Diffuse;\n"
+            "}\n";
+
+        constexpr const char* kTextured3DShaderSrc =
+            "cbuffer PerDraw : register(b0)\n"
+            "{\n"
+            "    row_major float4x4 Mvp;\n"
+            "    float4 Diffuse;\n"
+            "};\n"
+            "struct VSInput { float3 Position : POSITION0; float2 UV : TEXCOORD0; };\n"
+            "struct VSOutput { float4 Position : SV_POSITION; float2 UV : TEXCOORD0; };\n"
+            "VSOutput VSMain(VSInput input)\n"
+            "{\n"
+            "    VSOutput output;\n"
+            "    output.Position = mul(float4(input.Position, 1.0), Mvp);\n"
+            "    output.UV = input.UV;\n"
+            "    return output;\n"
+            "}\n"
+            "Texture2D tex0 : register(t0);\n"
+            "SamplerState samp0 : register(s0);\n"
+            "float4 PSMain(VSOutput input) : SV_TARGET\n"
+            "{\n"
+            "    return tex0.Sample(samp0, input.UV) * Diffuse;\n"
             "}\n";
 
         // SpriteBatch: screen-pixel-space position (NOT NDC) + color + uv. No half-texel
@@ -910,6 +933,8 @@ namespace CNA::Internal::Renderers::DirectX10
 
         CompiledShader coloredShader{};
         ID3D10Buffer* coloredConstantBuffer = nullptr;
+        CompiledShader texturedShader{};
+        ID3D10Buffer* texturedConstantBuffer = nullptr;
 
         ID3D10BlendState* currentBlendState = nullptr;
         ID3D10DepthStencilState* currentDepthStencilState = nullptr;
@@ -936,6 +961,10 @@ namespace CNA::Internal::Renderers::DirectX10
             if (coloredShader.layout) coloredShader.layout->Release();
             if (coloredShader.ps) coloredShader.ps->Release();
             if (coloredShader.vs) coloredShader.vs->Release();
+            if (texturedConstantBuffer) texturedConstantBuffer->Release();
+            if (texturedShader.layout) texturedShader.layout->Release();
+            if (texturedShader.ps) texturedShader.ps->Release();
+            if (texturedShader.vs) texturedShader.vs->Release();
             if (depthStencilView) depthStencilView->Release();
             if (depthStencilTex) depthStencilTex->Release();
             if (backBufferRTV) backBufferRTV->Release();
@@ -1018,10 +1047,20 @@ namespace CNA::Internal::Renderers::DirectX10
                            coloredElements, 2, impl_->coloredShader);
         D3D10_BUFFER_DESC cbDesc{};
         cbDesc.Usage = D3D10_USAGE_DEFAULT;
-        cbDesc.ByteWidth = 64;
+        cbDesc.ByteWidth = 80;
         cbDesc.BindFlags = D3D10_BIND_CONSTANT_BUFFER;
         hr = impl_->device->CreateBuffer(&cbDesc, nullptr, &impl_->coloredConstantBuffer);
         if (FAILED(hr)) ThrowHr("ID3D10Device::CreateBuffer(colored PerDraw)", hr);
+
+        static const D3D10_INPUT_ELEMENT_DESC texturedElements[] = {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D10_INPUT_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 12, D3D10_INPUT_PER_VERTEX_DATA, 0 },
+        };
+        CompileShaderPair(impl_->device, kTextured3DShaderSrc, std::strlen(kTextured3DShaderSrc),
+                           texturedElements, 2, impl_->texturedShader);
+        cbDesc.ByteWidth = 80; // row_major float4x4 + float4 Diffuse
+        hr = impl_->device->CreateBuffer(&cbDesc, nullptr, &impl_->texturedConstantBuffer);
+        if (FAILED(hr)) ThrowHr("ID3D10Device::CreateBuffer(textured PerDraw)", hr);
     }
 
     DirectX10Renderer::~DirectX10Renderer() = default;
@@ -1335,9 +1374,10 @@ namespace CNA::Internal::Renderers::DirectX10
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
         const Matrix wvp = world * view * projection;
-        float mvp[16];
-        wvp.ToColumnMajor(mvp); // row-major flat layout, matches HLSL row_major cbuffer field
-        impl_->device->UpdateSubresource(impl_->coloredConstantBuffer, 0, nullptr, mvp, 0, 0);
+        float constants[20] = {};
+        wvp.ToColumnMajor(constants); // row-major flat layout, matches HLSL row_major cbuffer field
+        constants[16] = constants[17] = constants[18] = constants[19] = 1.0f;
+        impl_->device->UpdateSubresource(impl_->coloredConstantBuffer, 0, nullptr, constants, 0, 0);
 
         ID3D10Buffer* vbRaw = d3dVb.GetBufferEXT();
         const UINT strideU = static_cast<UINT>(stride);
@@ -1363,9 +1403,10 @@ namespace CNA::Internal::Renderers::DirectX10
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
         const Matrix wvp = world * view * projection;
-        float mvp[16];
-        wvp.ToColumnMajor(mvp);
-        impl_->device->UpdateSubresource(impl_->coloredConstantBuffer, 0, nullptr, mvp, 0, 0);
+        float constants[20] = {};
+        wvp.ToColumnMajor(constants);
+        constants[16] = constants[17] = constants[18] = constants[19] = 1.0f;
+        impl_->device->UpdateSubresource(impl_->coloredConstantBuffer, 0, nullptr, constants, 0, 0);
 
         ID3D10Buffer* vbRaw = d3dVb.GetBufferEXT();
         const UINT strideU = static_cast<UINT>(stride);
@@ -1381,6 +1422,164 @@ namespace CNA::Internal::Renderers::DirectX10
 
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         impl_->device->DrawIndexed(indexCount, 0, 0);
+    }
+
+    namespace
+    {
+        void ValidateDirectX10OrdinaryDraw(const GpuDrawParams& params, const char* route)
+        {
+            const auto unsupported = [&](const char* feature) {
+                throw System::NotSupportedException(
+                    std::string("DIRECTX10: the ") + route + " route cannot execute " + feature +
+                    ". This renderer implements the unlit VertexPositionColor and "
+                    "VertexPositionTexture BasicEffect subsets; the draw is refused rather than "
+                    "rendered as a different effect.");
+            };
+
+            RejectUnsupportedStreamCombination(params, "DIRECTX10");
+            if (params.texture1 != nullptr || params.dualTexture) unsupported("DualTextureEffect");
+            if (params.lightingEnabled) unsupported("BasicEffect lighting");
+            if (params.fogEnabled) unsupported("BasicEffect fog");
+            if (params.envMapping || params.envMap != nullptr) unsupported("EnvironmentMapEffect");
+            if (params.skinned) unsupported("SkinnedEffect");
+            if (params.pbr) unsupported("PbrEffect");
+            if (params.alphaTestEffect || params.alphaTest[0] != 0.0f ||
+                params.alphaTest[1] != 0.0f || params.alphaTest[2] != 1.0f ||
+                params.alphaTest[3] != 1.0f)
+                unsupported("AlphaTestEffect");
+            if (params.customEffectRequested || params.customEffectRenderer != nullptr ||
+                params.compiledEffectRuntime != nullptr)
+                unsupported("a custom effect");
+            if (params.instanceCount > 1) unsupported("instanced submission");
+            if (params.cpu2DColorMatrixEnabled) unsupported("ColorMatrixEffect");
+            if (params.shadowsEnabled || params.cascadeCount > 0 || params.punctualKind != 0)
+                unsupported("extended shadow or punctual-light parameters");
+        }
+
+        void RequireDirectX10Declaration(const D3D10VertexBufferRenderer& vb,
+                                         int expectedStride, const char* route)
+        {
+            CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
+                vb.Declaration(), static_cast<int>(vb.GetStrideEXT()),
+                CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt,
+                "DIRECTX10", route);
+            if (vb.GetStrideEXT() != static_cast<std::size_t>(expectedStride))
+                throw System::NotSupportedException(
+                    std::string("DIRECTX10: the ") + route + " route requires vertex stride " +
+                    std::to_string(expectedStride) + " bytes, but the bound buffer uses " +
+                    std::to_string(vb.GetStrideEXT()) + " bytes.");
+        }
+    }
+
+    void DirectX10Renderer::DrawPrimitivesEx(
+        const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
+        const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+        const GpuDrawParams& params)
+    {
+        ValidateDirectX10OrdinaryDraw(params, "ordinary-nonindexed");
+        const auto& d3dVb = static_cast<const D3D10VertexBufferRenderer&>(vb);
+        const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+        if (params.vertexStart < 0 || params.vertexStart + static_cast<int>(vertexCount) > vb.GetVertexCount())
+            throw std::out_of_range("DIRECTX10: DrawPrimitivesEx vertex range exceeds the bound buffer");
+
+        const bool textured = params.textureEnabled;
+        if (textured && params.texture0 == nullptr)
+            throw std::runtime_error("DIRECTX10: textureEnabled=true but texture0 is null");
+        if (textured && params.vertexColorEnabled)
+            throw System::NotSupportedException(
+                "DIRECTX10: textured VertexPositionColorTexture is not implemented; the draw is refused");
+        if (!textured && !params.vertexColorEnabled)
+            throw System::NotSupportedException(
+                "DIRECTX10: untextured VertexPosition is not implemented; the draw is refused");
+
+        RequireDirectX10Declaration(d3dVb, textured ? 20 : 16,
+                                    textured ? "ordinary-textured" : "ordinary-colored");
+        float constants[20] = {};
+        (world * view * projection).ToColumnMajor(constants);
+        std::copy_n(params.diffuseColor, 4, constants + 16);
+
+        ID3D10Buffer* vbRaw = d3dVb.GetBufferEXT();
+        const UINT stride = static_cast<UINT>(d3dVb.GetStrideEXT());
+        const UINT offset = params.vertexStreamCount > 0
+            ? static_cast<UINT>(VertexStreamByteOffset(params.vertexStreams[0])) : 0;
+        impl_->device->IASetVertexBuffers(0, 1, &vbRaw, &stride, &offset);
+        impl_->device->IASetPrimitiveTopology(ToD3D10Topology(primitive));
+
+        CompiledShader& shader = textured ? impl_->texturedShader : impl_->coloredShader;
+        ID3D10Buffer* constantBuffer = textured
+            ? impl_->texturedConstantBuffer : impl_->coloredConstantBuffer;
+        impl_->device->UpdateSubresource(constantBuffer, 0, nullptr, constants, 0, 0);
+        impl_->device->IASetInputLayout(shader.layout);
+        impl_->device->VSSetShader(shader.vs);
+        impl_->device->PSSetShader(shader.ps);
+        impl_->device->VSSetConstantBuffers(0, 1, &constantBuffer);
+        impl_->device->PSSetConstantBuffers(0, 1, &constantBuffer);
+        if (textured)
+        {
+            const auto* owner = dynamic_cast<const D3D10TextureOwner*>(params.texture0);
+            if (owner == nullptr)
+                throw std::runtime_error("DIRECTX10: texture0 was not created by this renderer");
+            ID3D10ShaderResourceView* srv = owner->SRV();
+            impl_->device->PSSetShaderResources(0, 1, &srv);
+        }
+        impl_->device->Draw(vertexCount, static_cast<UINT>(params.vertexStart));
+    }
+
+    void DirectX10Renderer::DrawIndexedPrimitivesEx(
+        const IVertexBufferRenderer& vb, const IIndexBufferRenderer& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        ValidateDirectX10OrdinaryDraw(params, "ordinary-indexed");
+        const auto& d3dVb = static_cast<const D3D10VertexBufferRenderer&>(vb);
+        const auto& d3dIb = static_cast<const D3D10IndexBufferRenderer&>(ib);
+        const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+        if (params.startIndex < 0 || params.startIndex + static_cast<int>(indexCount) > ib.GetIndexCount())
+            throw std::out_of_range("DIRECTX10: DrawIndexedPrimitivesEx index range exceeds the bound buffer");
+
+        const bool textured = params.textureEnabled;
+        if (textured && params.texture0 == nullptr)
+            throw std::runtime_error("DIRECTX10: textureEnabled=true but texture0 is null");
+        if (textured && params.vertexColorEnabled)
+            throw System::NotSupportedException(
+                "DIRECTX10: textured VertexPositionColorTexture is not implemented; the draw is refused");
+        if (!textured && !params.vertexColorEnabled)
+            throw System::NotSupportedException(
+                "DIRECTX10: untextured VertexPosition is not implemented; the draw is refused");
+
+        RequireDirectX10Declaration(d3dVb, textured ? 20 : 16,
+                                    textured ? "ordinary-indexed-textured" : "ordinary-indexed-colored");
+        float constants[20] = {};
+        (world * view * projection).ToColumnMajor(constants);
+        std::copy_n(params.diffuseColor, 4, constants + 16);
+
+        ID3D10Buffer* vbRaw = d3dVb.GetBufferEXT();
+        const UINT stride = static_cast<UINT>(d3dVb.GetStrideEXT());
+        const UINT offset = params.vertexStreamCount > 0
+            ? static_cast<UINT>(VertexStreamByteOffset(params.vertexStreams[0])) : 0;
+        impl_->device->IASetVertexBuffers(0, 1, &vbRaw, &stride, &offset);
+        impl_->device->IASetIndexBuffer(d3dIb.GetBufferEXT(),
+            d3dIb.IsThirtyTwoBit() ? DXGI_FORMAT_R32_UINT : DXGI_FORMAT_R16_UINT, 0);
+        impl_->device->IASetPrimitiveTopology(ToD3D10Topology(primitive));
+
+        CompiledShader& shader = textured ? impl_->texturedShader : impl_->coloredShader;
+        ID3D10Buffer* constantBuffer = textured
+            ? impl_->texturedConstantBuffer : impl_->coloredConstantBuffer;
+        impl_->device->UpdateSubresource(constantBuffer, 0, nullptr, constants, 0, 0);
+        impl_->device->IASetInputLayout(shader.layout);
+        impl_->device->VSSetShader(shader.vs);
+        impl_->device->PSSetShader(shader.ps);
+        impl_->device->VSSetConstantBuffers(0, 1, &constantBuffer);
+        impl_->device->PSSetConstantBuffers(0, 1, &constantBuffer);
+        if (textured)
+        {
+            const auto* owner = dynamic_cast<const D3D10TextureOwner*>(params.texture0);
+            if (owner == nullptr)
+                throw std::runtime_error("DIRECTX10: texture0 was not created by this renderer");
+            ID3D10ShaderResourceView* srv = owner->SRV();
+            impl_->device->PSSetShaderResources(0, 1, &srv);
+        }
+        impl_->device->DrawIndexed(indexCount, static_cast<UINT>(params.startIndex), params.baseVertex);
     }
 }
 

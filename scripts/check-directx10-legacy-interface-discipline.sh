@@ -13,7 +13,7 @@ set -uo pipefail
 
 repo_root="$1"
 d3d10_src="${repo_root}/modules/renderers/directx10/src"
-d3d10_include="${repo_root}/modules/renderers/directx10/include/CNA/Internal/Renderers/D3D10"
+d3d10_include="${repo_root}/modules/renderers/directx10/include/CNA/Internal/Renderers/DirectX10"
 
 if [ ! -d "$d3d10_src" ] || [ ! -d "$d3d10_include" ]; then
     echo "error: D3D10 renderer directories not found under ${repo_root}" >&2

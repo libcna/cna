@@ -85,12 +85,10 @@ Two real environment bugs found and fixed, both fully documented in `dx10-spike/
    - `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (**required** by `IGraphicsBackend`):
      real `vs_4_0`/`ps_4_0` shader pair — `world*view*projection` transform + vertex-color
      passthrough (matching `BasicEffect(VertexColorEnabled=true)`, no lighting).
-   - `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (**optional**, has a safe default fallback to the
-     colored-primitives path): **NOT overridden in this v1** — draws requesting lighting/texturing
-     via `GpuDrawParams` still render correctly as flat vertex color (XNA's own graceful
-     degradation), just without the lighting/texture richness `D3D11GraphicsBackend`'s own full
-     10-stock-shader-variant catalog provides. Documented boundary, not a missed requirement —
-     `IGraphicsBackend`'s own default exists precisely for backends at this stage.
+   - `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: real unlit `BasicEffect` shader routes for
+     `VertexPositionColor` and `VertexPositionTexture`, including diffuse tint and native draw/index
+     offsets. Other stock-effect configurations are rejected explicitly rather than losing their
+     effect state in the interface's colored fallback.
    - `CreateEffectBackend` (custom `ShaderEffect`): **not implemented in this v1**, same boundary
      `DX1`..`DX8` all share (throws via the base default).
    - `CreateOcclusionQuery`/`CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube`/
@@ -163,7 +161,7 @@ the relevant CTest through `scripts/run-wine-d3d10.sh` (against `DISPLAY=:0`), a
 |---|---|---|---|
 | `D3D10-40` | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`: real `vs_4_0`/`ps_4_0` shader (transform + vertex-color passthrough) | ✅ | |
 | `D3D10-41` | Near/far-plane clipping is real GPU hardware clipping (no CPU Sutherland-Hodgman needed, unlike `DX1`..`DX8`) | ✅ | Verified via `D3D10_ClippingBehindCamera` CTest. |
-| `D3D10-42` | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` left at the safe default fallback (decision 3 — documented v1 boundary) | ✅ | |
+| `D3D10-42` | Initial `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` fallback | superseded | `D3D10-85` replaces the state-dropping fallback with real unlit textured/colored routes. |
 
 ## Phase T6 — `VertexBuffer`/`IndexBuffer` backends
 
@@ -187,14 +185,15 @@ the relevant CTest through `scripts/run-wine-d3d10.sh` (against `DISPLAY=:0`), a
 | `D3D10-82` | `docs/d3d10-backend.md` | ✅ | |
 | `D3D10-83` | Update `cmake/BackendSelection.cmake` docstring, `README.md`, `plan_dxold.md`'s DX10 row | ✅ | |
 | `D3D10-84` | Full `D3D10`-labeled CTest suite regression + targeted cross-backend test re-run | ✅ | |
+| `D3D10-85` | Restore the unlit textured `BasicEffect` `VertexPositionTexture` route; preserve draw/index offsets and reject unsupported effect combinations instead of silently dropping texture state | ✅ | Pixel oracle: `DirectX10_Textured3D`; cna-template cube verified in Wine. |
 
 ---
 
 ## Boundaries — explicitly out of scope for this v1
 
 Real, hardware/API-level DirectX-10-era boundaries: none — D3D10 is a full modern API. Boundaries in
-THIS v1 are scope decisions (§3.3), not hardware limits: lighting/texturing via `DrawPrimitivesEx`
-(flat vertex color only, safe default fallback), custom `ShaderEffect`, occlusion query, 3D/cube
+THIS v1 are scope decisions (§3.3), not hardware limits: lighting and the stock-effect variants
+beyond the unlit textured/vertex-color `BasicEffect` subsets, custom `ShaderEffect`, occlusion query, 3D/cube
 textures, instancing. All have safe base-class defaults and are documented, real future-work items,
 not silently dropped.
 

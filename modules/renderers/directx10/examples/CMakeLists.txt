@@ -55,6 +55,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX10")
     cna_register_renderer_test(NAME DirectX10_Device3DSmoke COMMAND ${_directx10_device3d_cmd}
         TIMEOUT 60 LABELS "DIRECTX10")
 
+    cna_directx10_test(cna_test_directx10_textured3d directx10_textured3d_test.cpp)
+    cna_directx10_ctest_command(_directx10_textured3d_cmd cna_test_directx10_textured3d)
+    cna_register_renderer_test(NAME DirectX10_Textured3D COMMAND ${_directx10_textured3d_cmd}
+        TIMEOUT 60 LABELS "DIRECTX10")
+
     cna_directx10_test(cna_test_directx10_spritebatch directx10_spritebatch_test.cpp)
     cna_directx10_ctest_command(_directx10_spritebatch_cmd cna_test_directx10_spritebatch)
     cna_register_renderer_test(NAME DirectX10_SpriteBatch COMMAND ${_directx10_spritebatch_cmd}

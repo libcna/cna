@@ -85,10 +85,10 @@ Wine+DXVK testing.
 - `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (**required** by `IGraphicsRenderer`): real
   `vs_4_0`/`ps_4_0` shader — `world*view*projection` transform + vertex-color passthrough (matches
   `BasicEffect(VertexColorEnabled=true)`, no lighting).
-- `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (**optional**, has a safe default fallback to the
-  colored-primitives path): **not overridden in this v1** — draws requesting lighting/texturing via
-  `GpuDrawParams` still render correctly as flat vertex color (XNA's own graceful degradation), just
-  without `DirectX11Renderer`'s own full 10-stock-shader-variant richness.
+- `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`: real unlit `BasicEffect` shader routes for
+  `VertexPositionColor` and `VertexPositionTexture`. They apply diffuse tint, texture sampling,
+  `vertexStart`, `startIndex`, `baseVertex`, and the captured stream offset. Unsupported effect
+  variants throw instead of being silently rendered as unrelated flat vertex color.
 - `CreateEffectRenderer` (custom `ShaderEffect`), occlusion query, 3D/cube textures, instancing: not
   implemented in this v1 — all have safe `IGraphicsRenderer` base-class defaults (return
   `nullptr`/throw), matching every renderer in this family at its own MVP stage.
@@ -96,12 +96,12 @@ Wine+DXVK testing.
 
 ## 4. CTest results
 
-**10/10 `D3D10`-labeled CTests pass**: `DirectX10_LegacyInterfaceDiscipline`, `DirectX10_Smoke`,
-`DirectX10_Device3DSmoke`, `DirectX10_SpriteBatch`, `DirectX10_GraphicsCapability`,
+**11/11 `D3D10`-labeled CTests pass**: `DirectX10_LegacyInterfaceDiscipline`, `DirectX10_Smoke`,
+`DirectX10_Device3DSmoke`, `DirectX10_Textured3D`, `DirectX10_SpriteBatch`, `DirectX10_GraphicsCapability`,
 `DirectX10_MultipleRenderTargets`, plus the shared, renderer-agnostic EasyGL-authored
 `DirectX10_BlendState_Opaque`/`DirectX10_BlendState_AlphaBlend`/`DirectX10_DepthStencilState_StencilEnable`/
 `DirectX10_RasterizerState_CullMode` (the same sources `D3D11`/`Vulkan` already reuse verbatim, testing
-only the `BasicEffect(VertexColorEnabled=true)` path this v1 implements).
+the vertex-color path and the dedicated texture×diffuse pixel oracle).
 
 `SupportsCapability`: `ThreeD`/`DepthStencilBuffer`/`WireFrame`/`AnisotropicFiltering`/
 `MultipleRenderTargets` all report `true` (`MultipleRenderTargets=true` is a genuine, real
