@@ -133,10 +133,20 @@ namespace CNA::Platform::Sdl3 {
     private:
         [[nodiscard]] bool HasVulkanSupport() const;
 
+        /// Acquires the controller subsystem the first time something asks for the gamepad or
+        /// joystick service, and at most once per instance. See the definition for why this is
+        /// not done up front.
+        void EnsureControllerSubsystem();
+
         /// Per-subsystem acquisition count owned by THIS instance. SDL keeps its own global
         /// refcount; this one exists so the destructor can release exactly what it acquired and
         /// no more, which matters when the host application holds subsystems of its own.
         std::map<PlatformSubsystem, int> ownedRefCounts_;
+
+        /// Whether EnsureControllerSubsystem() has already run. Set even when the acquisition
+        /// failed: one attempt per instance, so a host without controller support does not pay
+        /// the enumeration cost again on every query.
+        bool controllerSubsystemEnsured_ = false;
 
         /// One stable host probe. Empty until capabilities or the accessor are first queried.
         mutable std::optional<bool> vulkanAvailable_;

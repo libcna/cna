@@ -234,7 +234,6 @@ namespace Microsoft::Xna::Framework
           graphicsDeviceManager_(nullptr),
           currentAdapter_(nullptr),
           hasInitialized_(false),
-          controllerSubsystemAcquired_(false),
           suppressDraw_(false),
           isDisposed_(false),
           forceElapsedTimeToZero_(false),
@@ -812,13 +811,9 @@ namespace Microsoft::Xna::Framework
 
         }
 
-        // This is an unmanaged platform reference owned by Game itself, so the destructor's
-        // Dispose(false) path must release it just as surely as an explicit Dispose().
-        if (controllerSubsystemAcquired_)
-        {
-            platform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
-            controllerSubsystemAcquired_ = false;
-        }
+        // Nothing to release for controllers: Game no longer acquires that subsystem (see
+        // DoInitialize()), and the platform releases whatever it acquired on its own behalf when
+        // it is destroyed -- which, since Game owns the platform, is a moment later than this.
 
         isDisposed_ = true;
     }
@@ -841,14 +836,13 @@ namespace Microsoft::Xna::Framework
             graphicsDeviceManager_->CreateDevice();
         }
 
-        // The game owns this subsystem reference, but not its implementation. A platform may map
-        // it to native subsystem lifetime, make it a no-op, or provide a different lifetime.
-        // Acquiring before the first event pump makes already-connected pads visible in frame one.
-        if (platform_->GetGamepad() != nullptr || platform_->GetJoystick() != nullptr)
-        {
-            platform_->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Gamepad);
-            controllerSubsystemAcquired_ = true;
-        }
+        // No controller subsystem is acquired here. plans/plan_platform.md PLAT-83 did, to make
+        // already-connected pads visible in frame one, and the cost turned out to be a full udev
+        // device enumeration -- ~1.9 seconds on this project's Linux reference machine, paid
+        // before the first frame by every game whether or not it ever reads a controller, and seen
+        // by a player as a window that stays blank for two seconds. The platform now acquires it
+        // when something first asks for the gamepad or joystick service, so a game that wants
+        // controllers still gets them and one that does not pays nothing.
 
         Initialize();
 
@@ -1241,13 +1235,22 @@ namespace Microsoft::Xna::Framework
         {
             mouse->Update();
         }
-        if (CNA::Platform::IPlatformGamepad* gamepad = platform_->GetGamepad())
+        // Gated, and the gate is what makes the lazy acquisition in DoInitialize()'s comment work:
+        // reaching GetGamepad()/GetJoystick() is itself what asks the platform to start the
+        // controller subsystem, so an unconditional pump here would put its cost back at frame one
+        // and defeat the whole thing. Once a game has genuinely asked for controllers -- through
+        // GamePad or Joysticks, which go to the same accessors -- the subsystem is initialized and
+        // this pump runs from that frame on.
+        if (platform_->IsSubsystemInitialized(CNA::Platform::PlatformSubsystem::Gamepad))
         {
-            gamepad->Update();
-        }
-        if (CNA::Platform::IPlatformJoystick* joystick = platform_->GetJoystick())
-        {
-            joystick->Update();
+            if (CNA::Platform::IPlatformGamepad* gamepad = platform_->GetGamepad())
+            {
+                gamepad->Update();
+            }
+            if (CNA::Platform::IPlatformJoystick* joystick = platform_->GetJoystick())
+            {
+                joystick->Update();
+            }
         }
     }
 

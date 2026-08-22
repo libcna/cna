@@ -430,8 +430,51 @@ namespace CNA::Platform::Sdl3 {
 
     IPlatformKeyboard* Sdl3Platform::GetKeyboard() { return &keyboard_; }
     IPlatformMouse* Sdl3Platform::GetMouse() { return &mouse_; }
-    IPlatformGamepad* Sdl3Platform::GetGamepad() { return &gamepad_; }
-    IPlatformJoystick* Sdl3Platform::GetJoystick() { return &joystick_; }
+    // Acquiring SDL_INIT_GAMEPAD costs a full udev device enumeration -- measured at ~1.9 seconds
+    // on this project's Linux reference machine. plans/plan_platform.md PLAT-83 had Game::DoInitialize()
+    // pay that up front, before the first frame, so every CNA game opened on a blank window for
+    // about two seconds whether or not it ever read a controller. Deferring it to the first real
+    // request moves the cost onto the games that actually want controllers, and removes it
+    // entirely from the ones that do not.
+    //
+    // Game::UpdateInput() deliberately does not reach these accessors until the subsystem is
+    // already initialized, so its once-per-frame pump cannot be what triggers this.
+    void Sdl3Platform::EnsureControllerSubsystem()
+    {
+        if (controllerSubsystemEnsured_)
+        {
+            return;
+        }
+        // Set before the attempt, not after: a host whose controller subsystem cannot start must
+        // pay the failed enumeration once, not on every GamePad::GetState() for the rest of the run.
+        controllerSubsystemEnsured_ = true;
+
+        try
+        {
+            AcquireSubsystem(PlatformSubsystem::Gamepad);
+        }
+        catch (const PlatformException&)
+        {
+            // Deliberately absorbed, and this is the one thing the change costs. Under PLAT-83 a
+            // controller subsystem that refused to start took the whole game down during startup,
+            // where the message was at least attached to the failure. Reached from here the same
+            // throw would arrive in the middle of an ordinary GamePad::GetState(), which XNA
+            // callers neither expect nor guard, so it stops here and the services go on reporting
+            // no devices -- indistinguishable from a player with nothing plugged in, which every
+            // caller already handles. There is no log line because this module references no core
+            // symbol by design (see modules/platform/CMakeLists.txt); a host that needs to know
+            // can ask IsSubsystemInitialized(PlatformSubsystem::Gamepad).
+            return;
+        }
+
+        // The per-frame pump has been skipped for every frame up to this one, so without this the
+        // first query would answer about a device list nothing has ever read.
+        gamepad_.Update();
+        joystick_.Update();
+    }
+
+    IPlatformGamepad* Sdl3Platform::GetGamepad() { EnsureControllerSubsystem(); return &gamepad_; }
+    IPlatformJoystick* Sdl3Platform::GetJoystick() { EnsureControllerSubsystem(); return &joystick_; }
     IPlatformTextInput* Sdl3Platform::GetTextInput() { return &textInput_; }
     IPlatformSensors* Sdl3Platform::GetSensors() { return &sensors_; }
     IPlatformHaptics* Sdl3Platform::GetHaptics() { return &haptics_; }

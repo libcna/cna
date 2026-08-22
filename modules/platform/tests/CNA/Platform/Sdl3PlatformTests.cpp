@@ -382,6 +382,43 @@ TEST_F(Sdl3PlatformTest, NotYetImplementedSurfacesRefuseInsteadOfReturningSometh
     EXPECT_THROW((void)platform_->CreateSurfacePresenter(window), PlatformException);
 }
 
+TEST_F(Sdl3PlatformTest, TheControllerSubsystemStartsOnDemandRatherThanWithThePlatform)
+{
+    // The gamepad subsystem costs a full udev device enumeration to start -- ~1.9 seconds on this
+    // project's Linux reference machine. plans/plan_platform.md PLAT-83 had Game::DoInitialize()
+    // pay it before the first frame, so every game opened on a blank window for two seconds
+    // whether or not it ever read a controller. The platform starts it when something asks for
+    // the service instead, and this is that promise: constructing a platform must not start it,
+    // and asking for the gamepad must.
+    //
+    // A transition, not absolute state, per this fixture's own rule: SDL's refcount is
+    // process-global and another test in this binary may already hold the subsystem up, in which
+    // case there is no transition left to observe and nothing to assert.
+    std::unique_ptr<IPlatform> platform = PlatformFactory::Create("SDL3");
+    ASSERT_NE(platform, nullptr);
+
+    if (platform->IsSubsystemInitialized(PlatformSubsystem::Gamepad))
+    {
+        GTEST_SKIP() << "something else in this process already holds the controller subsystem up";
+    }
+
+    EXPECT_FALSE(platform->IsSubsystemInitialized(PlatformSubsystem::Gamepad))
+        << "constructing a platform must not start the controller subsystem";
+
+    EXPECT_NE(platform->GetGamepad(), nullptr);
+    EXPECT_TRUE(platform->IsSubsystemInitialized(PlatformSubsystem::Gamepad))
+        << "asking for the gamepad service is what starts it";
+
+    // Second time through is the same instance's already-acquired subsystem, not a second
+    // acquisition: the platform releases exactly what it took, and taking twice would leave SDL's
+    // refcount one above where this test found it.
+    EXPECT_NE(platform->GetJoystick(), nullptr);
+
+    platform.reset();
+    EXPECT_FALSE(PlatformFactory::Create("SDL3")->IsSubsystemInitialized(PlatformSubsystem::Gamepad))
+        << "the destroyed platform must have released what it acquired";
+}
+
 TEST_F(Sdl3PlatformTest, UnknownPlatformNameRefusesAndListsWhatIsAvailable)
 {
     try

@@ -424,7 +424,6 @@ namespace Microsoft::Xna::Framework
         Graphics::GraphicsAdapter* currentAdapter_;
 
         bool hasInitialized_;
-        bool controllerSubsystemAcquired_;
         bool suppressDraw_;
         bool isDisposed_;
         bool forceElapsedTimeToZero_;
