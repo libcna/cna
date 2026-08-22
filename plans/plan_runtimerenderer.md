@@ -1110,3 +1110,21 @@ repository does not contain. Any other compiler error is a hard failure.
 Measured on the fix commit: 45 descriptors, 43 compiled, 2 structure-only, 0 problems. Run against
 the three original files it reports 6 problems and names each -- including the Bgfx one, which only
 layer 2 can see.
+
+---
+
+## P14 — cna-template runtime matrix repair (2026-08-22)
+
+The 49 non-Metal cna-template targets must be executed, not accepted merely because their archives
+link. These rows record defects found by the first real runtime pass.
+
+| # | Status | Finding and verification |
+|---|---|---|
+| RTR-P14-1 | ✅ | `OPENGL1`/`OPENGL2`: restore XNA clear semantics across inherited write masks and correct OpenGL2's WVP upload. Dedicated depth and perspective pixel tests plus animated cna-template runs pass. |
+| RTR-P14-2 | ✅ | Emscripten renderers: preserve blocking `Game::Run()` semantics through Asyncify and JS exceptions. All six web identities run in Chromium and Firefox and return after three smoke frames. |
+| RTR-P14-3 | ✅ | `GLIDE`: package the i686 MinGW GCC/C++ runtime DLLs; Wine now reaches only the explicitly caller-supplied `glide3x.dll` boundary. |
+| RTR-P14-4 | ✅ | `WICKED`: deploy `libdxcompiler.so` beside the consuming executable through CNA's renderer-runtime API. Real Radeon/Vulkan smoke run loads compiler 1.9 and draws three frames. |
+| RTR-P14-5 | ✅ | `PORTABLEGL`: implement the ordinary unlit textured `BasicEffect` route for standard `VertexPositionTexture`, including sampler slot zero. Pixel oracle passes 8/8 (perspective projection plus Clamp/Wrap included), all 12 PortableGL suites pass, and cna-template draws three frames without aborting. |
+| RTR-P14-6 | ⬜ | `OPENGLES1`: diagnose and repair SDL GL-context `BadAlloc`. |
+| RTR-P14-7 | ⬜ | `DIRECTX10`: repair the missing cube texture observed under Wine. |
+| RTR-P14-8 | ⬜ | `DIRECTX12`: repair the banner's opaque gray background observed under Wine. |

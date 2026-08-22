@@ -181,7 +181,9 @@ protected:
                 DrawQuad(fx, Color(255, 0, 0, 255));
             }
             catch (const std::exception&) { textureThrew = true; }
-            check(textureThrew, "check G: a textured BasicEffect draw is refused deterministically");
+            check(textureThrew,
+                  "check G: textured BasicEffect with VertexPositionColor is refused rather than "
+                  "reinterpreting color bytes as texture coordinates");
 
             check(RegionIs(Whole(), Color::Black),
                   "check G: neither refused draw wrote a single pixel");

@@ -10,6 +10,8 @@
 // Check B -- DrawIndexedPrimitives (VertexBuffer + IndexBuffer + BasicEffect, 4 vertices / 6
 //   indices tiling NDC -1..1) produces the exact vertex color at the backbuffer's center pixel,
 //   proving the real glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ...)/glDrawElements path.
+// Check C -- a textured BasicEffect with VertexPositionTexture draws through the ordinary 3D
+//   route and samples Texture0, which is the stock-effect shape cna-template's cube uses.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -21,6 +23,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -29,6 +33,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 #include "CNA/Internal/Renderers/PortableGL/PortableGLRenderer.hpp"
 
@@ -166,8 +171,86 @@ protected:
                   "the real PortableGL glDrawElements path draws the exact indexed-vertex color");
         }
 
-        std::printf("=== %d/%d PASS ===\n", passCount_, 4);
-        result_ = (passCount_ == 4) ? 0 : 1;
+        // Check C: the ordinary textured BasicEffect route used by cna-template's cube.
+        {
+            dev.Clear(Color::Black);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+
+            const VertexPositionTexture verts[6] = {
+                {Vector3(-1.0f,  1.0f, 0.0f), Vector2(0.0f, 0.0f)},
+                {Vector3( 1.0f,  1.0f, 0.0f), Vector2(1.0f, 0.0f)},
+                {Vector3( 1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f)},
+                {Vector3(-1.0f,  1.0f, 0.0f), Vector2(0.0f, 0.0f)},
+                {Vector3( 1.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f)},
+                {Vector3(-1.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f)},
+            };
+
+            BasicEffect fx(dev);
+            fx.setTextureEnabledProperty(true);
+            fx.setTextureProperty(texture_.get());
+            fx.VertexColorEnabled = false;
+            fx.setViewProperty(Matrix::CreateLookAt(
+                Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3::Up));
+            fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+                0.78539816339f, 1.0f, 0.1f, 100.0f));
+            fx.Apply();
+
+            bool threw = false;
+            try
+            {
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, verts, 0, 2);
+            }
+            catch (...) { threw = true; }
+            check(!threw, "textured BasicEffect accepts VertexPositionTexture");
+
+            const Rectangle centerRegion(30, 30, 4, 4);
+            std::vector<Color> centerPixels(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion, centerPixels.data(), 0,
+                                  static_cast<int>(centerPixels.size()));
+            bool allBlue = true;
+            for (const Color& p : centerPixels)
+            {
+                if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 255)
+                {
+                    allBlue = false;
+                    break;
+                }
+            }
+            check(allBlue,
+                  "perspective textured 3D samples BasicEffect.Texture at the projected center");
+
+            const std::vector<std::uint8_t> columnPixels = {
+                255, 0, 0, 255,  0, 255, 0, 255,
+                255, 0, 0, 255,  0, 255, 0, 255,
+            };
+            Texture2D columns = Texture2D::CreateFromPixels(dev, 2, 2, columnPixels);
+            VertexPositionTexture outsideVerts[6];
+            for (int i = 0; i < 6; ++i)
+                outsideVerts[i] = VertexPositionTexture(verts[i].Position, Vector2(1.25f, 0.5f));
+            fx.setTextureProperty(&columns);
+            fx.Apply();
+            const auto centerPixel = [&dev]() {
+                Color pixel(0, 0, 0, 0);
+                const Rectangle center(32, 32, 1, 1);
+                dev.GetBackBufferData(&center, &pixel, 0, 1);
+                return pixel;
+            };
+
+            dev.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+            dev.Clear(Color::Black);
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, outsideVerts, 0, 2);
+            check(centerPixel().getGProperty() == 255,
+                  "3D SamplerStates[0]=PointClamp selects the right edge texel");
+
+            dev.getSamplerStatesProperty()[0] = SamplerState::PointWrap;
+            dev.Clear(Color::Black);
+            dev.DrawUserPrimitives(PrimitiveType::TriangleList, outsideVerts, 0, 2);
+            check(centerPixel().getRProperty() == 255,
+                  "3D SamplerStates[0]=PointWrap wraps the same U coordinate to the left texel");
+        }
+
+        std::printf("=== %d/%d PASS ===\n", passCount_, 8);
+        result_ = (passCount_ == 8) ? 0 : 1;
         Exit();
     }
 

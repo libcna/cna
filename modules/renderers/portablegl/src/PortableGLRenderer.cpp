@@ -353,6 +353,31 @@ namespace CNA::Internal::Renderers::PortableGL
             GLuint texture;
         };
 
+        struct Textured3DUniforms
+        {
+            float mvp[16];
+            float diffuse[4];
+            GLuint texture;
+        };
+
+        void Textured3DVertexShader(float* vs_output, vec4* vertex_attribs,
+                                    Shader_Builtins* builtins, void* uniforms)
+        {
+            const auto* u = static_cast<const Textured3DUniforms*>(uniforms);
+            builtins->gl_Position = MultiplyColumnMajor(u->mvp, vertex_attribs[0]);
+            vs_output[0] = vertex_attribs[1].x;
+            vs_output[1] = vertex_attribs[1].y;
+        }
+
+        void Textured3DFragmentShader(float* fs_input, Shader_Builtins* builtins, void* uniforms)
+        {
+            const auto* u = static_cast<const Textured3DUniforms*>(uniforms);
+            const vec4 texel = texture2D(u->texture, fs_input[0], fs_input[1]);
+            builtins->gl_FragColor = EmitFragmentColor(
+                texel.x * u->diffuse[0], texel.y * u->diffuse[1],
+                texel.z * u->diffuse[2], texel.w * u->diffuse[3]);
+        }
+
         void TexturedVertexShader(float* vs_output, vec4* vertex_attribs, Shader_Builtins* builtins, void* uniforms)
         {
             const auto* u = static_cast<const TexturedUniforms*>(uniforms);
@@ -391,13 +416,13 @@ namespace CNA::Internal::Renderers::PortableGL
     {
         const auto refuse = [&](const std::string& what) {
             Unsupported("the " + std::string(route) + " route cannot execute " + what +
-                        ". This renderer implements the unlit VertexPositionColor stock-effect "
-                        "subset only (VertexColorEnabled, DiffuseColor, Alpha); an unsupported "
+                        ". This renderer implements the unlit VertexPositionColor and "
+                        "VertexPositionTexture BasicEffect subsets; an unsupported "
                         "configuration is refused rather than rendered as something else.");
         };
 
-        if (p.textureEnabled || p.texture0 != nullptr || p.texture1 != nullptr)
-            refuse("a textured effect");
+        if (p.texture1 != nullptr)
+            refuse("a second texture");
         if (p.lightingEnabled)
             refuse("BasicEffect lighting");
         if (p.fogEnabled)
@@ -432,6 +457,8 @@ namespace CNA::Internal::Renderers::PortableGL
         state.diffuse[2] = p.diffuseColor[2];
         state.diffuse[3] = p.diffuseColor[3];
         state.vertexColorEnabled = p.vertexColorEnabled;
+        if (p.textureEnabled && p.texture0 != nullptr)
+            state.texture = static_cast<const PortableGLTextureRenderer*>(p.texture0);
         if (const GpuVertexStreamBinding* stream = FirstPerVertexStream(p))
             state.streamVertexOffset = stream->vertexOffset;
         state.vertexStart = p.vertexStart;
@@ -795,6 +822,7 @@ namespace CNA::Internal::Renderers::PortableGL
         pix_t* backbuffer = nullptr;
         GLuint coloredProgram = 0;
         GLuint texturedProgram = 0;
+        GLuint textured3DProgram = 0;
         /// Reused dynamic vertex buffer for immediate-mode SpriteBatch quads (2 triangles, 6
         /// vertices of {vec2 pos, vec2 uv, vec4 color} = 32 bytes each), re-uploaded per Draw().
         GLuint quadBuffer = 0;
@@ -804,6 +832,11 @@ namespace CNA::Internal::Renderers::PortableGL
         /// current program never refers to a dead frame between draws.
         ColoredUniforms coloredUniforms{};
         TexturedUniforms texturedUniforms{};
+        Textured3DUniforms textured3DUniforms{};
+
+        int samplerFilter[16] = {};
+        int samplerAddressU[16] = {};
+        int samplerAddressV[16] = {};
 
         bool depthTestEnabled = false;
         bool blendEnabled = false;
@@ -872,6 +905,11 @@ namespace CNA::Internal::Renderers::PortableGL
         const GLenum texturedInterp[6] = {PGL_SMOOTH4, PGL_SMOOTH2};
         impl_->texturedProgram = pglCreateProgram(TexturedVertexShader, TexturedFragmentShader, 6,
                                                   const_cast<GLenum*>(texturedInterp), GL_FALSE);
+
+        const GLenum textured3DInterp[2] = {PGL_SMOOTH2};
+        impl_->textured3DProgram = pglCreateProgram(
+            Textured3DVertexShader, Textured3DFragmentShader, 2,
+            const_cast<GLenum*>(textured3DInterp), GL_FALSE);
 
         GLuint quadBuf = 0;
         glGenBuffers(1, &quadBuf);
@@ -1361,16 +1399,15 @@ namespace CNA::Internal::Renderers::PortableGL
         glDepthRangef(minDepth, maxDepth);
     }
 
-    void PortableGLRenderer::ApplySamplerState(int /*slot*/, int /*filter*/,
-                                               int /*addressU*/, int /*addressV*/,
+    void PortableGLRenderer::ApplySamplerState(int slot, int filter,
+                                               int addressU, int addressV,
                                                int /*maxAnisotropy*/)
     {
-        // Deliberately inert -- see the declaration's documentation. No PortableGL draw path can
-        // sample a texture through a GraphicsDevice sampler slot: the 3D route refuses every
-        // textured effect configuration, and SpriteBatch carries its own resolved SamplerState
-        // through SetSamplerFilter()/SetSamplerAddressMode(), which this renderer implements for
-        // real. GraphicsDevice pushes all 16 slots before every single draw, so throwing here would
-        // reject ordinary drawing rather than an unsupported feature.
+        if (slot < 0 || slot >= 16)
+            throw std::out_of_range("PortableGLRenderer::ApplySamplerState: slot out of range");
+        impl_->samplerFilter[slot] = filter;
+        impl_->samplerAddressU[slot] = addressU;
+        impl_->samplerAddressV[slot] = addressV;
     }
 
     void PortableGLRenderer::ApplySamplerMipState(int /*slot*/, int /*maxMipLevel*/, float /*lodBias*/)
@@ -1406,17 +1443,20 @@ namespace CNA::Internal::Renderers::PortableGL
                                                const char* route)
     {
         const auto& vb = static_cast<const PortableGLVertexBufferRenderer&>(vbIn);
-        if (vb.StrideInBytes() != 16)
+        const bool textured = state.texture != nullptr;
+        const std::size_t expectedStride = textured ? 20u : 16u;
+        if (vb.StrideInBytes() != expectedStride)
             Unsupported(
-                std::string("the ") + route + " route supports only the 16-byte "
-                "VertexPositionColor layout; the bound vertex buffer's stride is " +
+                std::string("the ") + route + " route requires the " +
+                (textured ? "20-byte VertexPositionTexture" : "16-byte VertexPositionColor") +
+                " layout; the bound vertex buffer's stride is " +
                 std::to_string(vb.StrideInBytes()) + " bytes.");
 
         // REMED-GFX-DECL-GUARD: a stride does not determine element composition. A declaration
         // that puts something else in the same 16 bytes is refused here, before any native draw,
         // rather than reinterpreted as Position0@0 Vector3 + Color0@12 Color.
         CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
-            vb.DeclaredLayout(), 16,
+            vb.DeclaredLayout(), expectedStride,
             CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt,
             kRendererName, route);
 
@@ -1434,27 +1474,42 @@ namespace CNA::Internal::Renderers::PortableGL
         MakeCurrent(&impl_->context);
 
         const Matrix combined = world * view * projection;
-        combined.ToColumnMajor(impl_->coloredUniforms.mvp);
-        impl_->coloredUniforms.diffuse[0] = state.diffuse[0];
-        impl_->coloredUniforms.diffuse[1] = state.diffuse[1];
-        impl_->coloredUniforms.diffuse[2] = state.diffuse[2];
-        impl_->coloredUniforms.diffuse[3] = state.diffuse[3];
-        impl_->coloredUniforms.vertexColorEnabled = state.vertexColorEnabled ? 1.0f : 0.0f;
-
-        glUseProgram(impl_->coloredProgram);
-        pglSetUniform(&impl_->coloredUniforms);
+        if (textured)
+        {
+            combined.ToColumnMajor(impl_->textured3DUniforms.mvp);
+            std::copy(std::begin(state.diffuse), std::end(state.diffuse),
+                      std::begin(impl_->textured3DUniforms.diffuse));
+            impl_->textured3DUniforms.texture = state.texture->GLTextureHandle();
+            state.texture->ApplySamplerState(
+                impl_->samplerFilter[0], impl_->samplerAddressU[0], impl_->samplerAddressV[0]);
+            glUseProgram(impl_->textured3DProgram);
+            pglSetUniform(&impl_->textured3DUniforms);
+        }
+        else
+        {
+            combined.ToColumnMajor(impl_->coloredUniforms.mvp);
+            std::copy(std::begin(state.diffuse), std::end(state.diffuse),
+                      std::begin(impl_->coloredUniforms.diffuse));
+            impl_->coloredUniforms.vertexColorEnabled = state.vertexColorEnabled ? 1.0f : 0.0f;
+            glUseProgram(impl_->coloredProgram);
+            pglSetUniform(&impl_->coloredUniforms);
+        }
 
         // The stream's own VertexBufferBinding.VertexOffset shifts the attribute base; the
         // start-vertex term rides in glDrawArrays' own `first`, which PortableGL adds to the
         // attribute index it fetches (offset + stride * i). GraphicsDevice folds a single stream's
         // whole offset into vertexStart, so for an ordinary draw this base is zero -- but reading
         // both means the renderer never silently drops one of them.
-        const std::ptrdiff_t attribBase = AttributeBaseBytes(state.streamVertexOffset, 16u);
+        const std::ptrdiff_t attribBase = AttributeBaseBytes(state.streamVertexOffset, expectedStride);
         glBindBuffer(GL_ARRAY_BUFFER, vb.GLBufferHandle());
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 16,
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(expectedStride),
                               reinterpret_cast<const GLvoid*>(attribBase));
-        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16,
-                              reinterpret_cast<const GLvoid*>(attribBase + 12));
+        if (textured)
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 20,
+                                  reinterpret_cast<const GLvoid*>(attribBase + 12));
+        else
+            glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16,
+                                  reinterpret_cast<const GLvoid*>(attribBase + 12));
         SelectVertexAttribArrays(2);
 
         glDrawArrays(ToPglMode(primitive), static_cast<GLint>(state.vertexStart), vertexCount);
@@ -1472,14 +1527,17 @@ namespace CNA::Internal::Renderers::PortableGL
     {
         const auto& vb = static_cast<const PortableGLVertexBufferRenderer&>(vbIn);
         const auto& ib = static_cast<const PortableGLIndexBufferRenderer&>(ibIn);
-        if (vb.StrideInBytes() != 16)
+        const bool textured = state.texture != nullptr;
+        const std::size_t expectedStride = textured ? 20u : 16u;
+        if (vb.StrideInBytes() != expectedStride)
             Unsupported(
-                std::string("the ") + route + " route supports only the 16-byte "
-                "VertexPositionColor layout; the bound vertex buffer's stride is " +
+                std::string("the ") + route + " route requires the " +
+                (textured ? "20-byte VertexPositionTexture" : "16-byte VertexPositionColor") +
+                " layout; the bound vertex buffer's stride is " +
                 std::to_string(vb.StrideInBytes()) + " bytes.");
 
         CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
-            vb.DeclaredLayout(), 16,
+            vb.DeclaredLayout(), expectedStride,
             CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt,
             kRendererName, route);
 
@@ -1519,22 +1577,37 @@ namespace CNA::Internal::Renderers::PortableGL
         MakeCurrent(&impl_->context);
 
         const Matrix combined = world * view * projection;
-        combined.ToColumnMajor(impl_->coloredUniforms.mvp);
-        impl_->coloredUniforms.diffuse[0] = state.diffuse[0];
-        impl_->coloredUniforms.diffuse[1] = state.diffuse[1];
-        impl_->coloredUniforms.diffuse[2] = state.diffuse[2];
-        impl_->coloredUniforms.diffuse[3] = state.diffuse[3];
-        impl_->coloredUniforms.vertexColorEnabled = state.vertexColorEnabled ? 1.0f : 0.0f;
+        if (textured)
+        {
+            combined.ToColumnMajor(impl_->textured3DUniforms.mvp);
+            std::copy(std::begin(state.diffuse), std::end(state.diffuse),
+                      std::begin(impl_->textured3DUniforms.diffuse));
+            impl_->textured3DUniforms.texture = state.texture->GLTextureHandle();
+            state.texture->ApplySamplerState(
+                impl_->samplerFilter[0], impl_->samplerAddressU[0], impl_->samplerAddressV[0]);
+            glUseProgram(impl_->textured3DProgram);
+            pglSetUniform(&impl_->textured3DUniforms);
+        }
+        else
+        {
+            combined.ToColumnMajor(impl_->coloredUniforms.mvp);
+            std::copy(std::begin(state.diffuse), std::end(state.diffuse),
+                      std::begin(impl_->coloredUniforms.diffuse));
+            impl_->coloredUniforms.vertexColorEnabled = state.vertexColorEnabled ? 1.0f : 0.0f;
+            glUseProgram(impl_->coloredProgram);
+            pglSetUniform(&impl_->coloredUniforms);
+        }
 
-        glUseProgram(impl_->coloredProgram);
-        pglSetUniform(&impl_->coloredUniforms);
-
-        const std::ptrdiff_t attribBase = AttributeBaseBytes(baseElement, 16u);
+        const std::ptrdiff_t attribBase = AttributeBaseBytes(baseElement, expectedStride);
         glBindBuffer(GL_ARRAY_BUFFER, vb.GLBufferHandle());
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 16,
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(expectedStride),
                               reinterpret_cast<const GLvoid*>(attribBase));
-        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16,
-                              reinterpret_cast<const GLvoid*>(attribBase + 12));
+        if (textured)
+            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 20,
+                                  reinterpret_cast<const GLvoid*>(attribBase + 12));
+        else
+            glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16,
+                                  reinterpret_cast<const GLvoid*>(attribBase + 12));
         SelectVertexAttribArrays(2);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ib.GLBufferHandle());

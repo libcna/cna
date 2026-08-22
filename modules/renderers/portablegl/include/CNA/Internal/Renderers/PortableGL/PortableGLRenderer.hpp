@@ -305,11 +305,11 @@ namespace CNA::Internal::Renderers::PortableGL
      * `glPolygonMode`).
      *
      * Scope, stated as capability truth rather than intent:
-     *  - 3D: the unlit `VertexPositionColor` (stride 16) route only. `BasicEffect`'s
-     *    `VertexColorEnabled`, `DiffuseColor` and `Alpha` are honoured exactly as every other CNA
-     *    renderer's stock unlit program honours them (`vc * diffuse`); lighting, texturing, fog,
-     *    alpha test, skinning, dual-texture, environment mapping, PBR, instancing and multi-stream
-     *    input are **refused deterministically**, never approximated.
+     *  - 3D: unlit `VertexPositionColor` (stride 16) and textured `VertexPositionTexture`
+     *    (stride 20) BasicEffect routes. `VertexColorEnabled`, `DiffuseColor`, `Alpha`, texture 0,
+     *    and sampler filter/address state are honoured. Lighting, fog, alpha test, skinning,
+     *    dual-texture, environment mapping, PBR, instancing and multi-stream input are **refused
+     *    deterministically**, never approximated.
      *  - 2D: a real textured SpriteBatch quad path with the batch's own `SamplerState`.
      *  - State: `BlendState` (separate RGB/alpha factors and equations, `BlendFactor`,
      *    target-0 `ColorWriteChannels`), `DepthStencilState` (depth **and** stencil, including
@@ -588,13 +588,11 @@ namespace CNA::Internal::Renderers::PortableGL
         void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
 
         /**
-         * @brief Accepts a `GraphicsDevice.SamplerStates` slot, which no PortableGL draw path reads.
+         * @brief Stores a `GraphicsDevice.SamplerStates` slot for textured 3D draws.
          *
-         * PortableGL's only texture-sampling route is the SpriteBatch quad shader, and SpriteBatch
-         * carries its own resolved `SamplerState` through `ISpriteBatchRenderer::SetSamplerFilter`/
-         * `SetSamplerAddressMode` (which this renderer does implement). The 3D route refuses every
-         * textured `BasicEffect` configuration, so no draw can consult a device sampler slot: this
-         * is inert state, not ignored state, and is documented rather than silently dropped.
+         * The textured `BasicEffect` route applies slot zero to its sampled texture. SpriteBatch
+         * continues to carry its independently resolved sampler through
+         * `ISpriteBatchRenderer::SetSamplerFilter`/`SetSamplerAddressMode`.
          *
          * @param slot          Texture unit index.
          * @param filter        Raw `TextureFilter` ordinal.
@@ -610,8 +608,7 @@ namespace CNA::Internal::Renderers::PortableGL
          *
          * PortableGL textures carry exactly one mip level (`glGenerateMipmap` is an upstream no-op
          * and this renderer never allocates a chain), so `MaxMipLevel`/`MipMapLevelOfDetailBias`
-         * have nothing to select between. See `ApplySamplerState()` for why this is inert rather
-         * than ignored.
+         * have nothing to select between.
          *
          * @param slot        Texture unit index.
          * @param maxMipLevel Highest mip level the sampler may use.
@@ -670,7 +667,8 @@ namespace CNA::Internal::Renderers::PortableGL
          * `params.vertexStart` selects the first vertex (`glDrawArrays`'s own `first`) and the bound
          * stream's `VertexOffset` shifts the attribute base, so a draw never silently starts at
          * vertex zero. The supported `BasicEffect` subset (`VertexColorEnabled`, `DiffuseColor`,
-         * `Alpha`) is applied; every unsupported effect configuration is refused.
+         * `Alpha`, `TextureEnabled`, `Texture`, and sampler slot zero) is applied; every unsupported
+         * effect configuration is refused.
          *
          * @param vb            Vertex buffer named by `params.vertexStreams[0]`.
          * @param world,view,projection Per-draw transform matrices.
@@ -754,6 +752,8 @@ namespace CNA::Internal::Renderers::PortableGL
             /// `GpuDrawParams::vertexColorEnabled`. The legacy route is documented as "equivalent
             /// to BasicEffect with VertexColorEnabled = true", which is this default.
             bool vertexColorEnabled = true;
+            /// Texture 0 for the unlit VertexPositionTexture route, or null for the colored route.
+            const PortableGLTextureRenderer* texture = nullptr;
             /// The bound stream's own `VertexBufferBinding.VertexOffset`, in vertex elements.
             int streamVertexOffset = 0;
             /// First vertex for a non-indexed draw.
