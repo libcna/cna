@@ -59,6 +59,24 @@ TEST_F(MediaLibraryTestFixture, PlaylistEqualitySetForEqualAndUnequalPlaylists)
     EXPECT_EQ(favorites->GetHashCode(), favorites->GetHashCode());
 }
 
+// plans/plan_media.md MEDIA-234: cover the System.Object override separately from Equals(Playlist).
+TEST_F(MediaLibraryTestFixture, PlaylistObjectEqualsChecksRuntimeTypeAndValue)
+{
+    Playlist* favorites = FindPlaylist(library->getPlaylistsProperty(), "Favorites");
+    Playlist* international = FindPlaylist(library->getPlaylistsProperty(), "International");
+    ASSERT_NE(favorites, nullptr);
+    ASSERT_NE(international, nullptr);
+
+    const System::Object* equalPlaylist = favorites;
+    const System::Object* unequalPlaylist = international;
+    const System::Object* wrongType = library.get();
+    const System::Object* nullObject = nullptr;
+    EXPECT_TRUE(favorites->Equals(equalPlaylist));
+    EXPECT_FALSE(favorites->Equals(unequalPlaylist));
+    EXPECT_FALSE(favorites->Equals(wrongType));
+    EXPECT_FALSE(favorites->Equals(nullObject));
+}
+
 TEST_F(MediaLibraryTestFixture, PlaylistGetTypeNameIsFullyQualified)
 {
     Playlist* favorites = FindPlaylist(library->getPlaylistsProperty(), "Favorites");
@@ -74,7 +92,7 @@ TEST_F(MediaLibraryTestFixture, PlaylistEqualsReturnsFalseForNullOther)
 {
     Playlist* favorites = FindPlaylist(library->getPlaylistsProperty(), "Favorites");
     ASSERT_NE(favorites, nullptr);
-    EXPECT_FALSE(favorites->Equals(nullptr));
+    EXPECT_FALSE(favorites->Equals(static_cast<const Playlist*>(nullptr)));
 }
 
 // plans/plan_media.md MEDIA-108: Duration -- sum of song durations, all TimeSpan.Zero for

@@ -81,6 +81,24 @@ TEST_F(MediaLibraryTestFixture, PictureEqualitySetByResolvedPath)
     EXPECT_TRUE(*beach != *portrait);
 }
 
+// plans/plan_media.md MEDIA-234: cover the System.Object override separately from Equals(Picture).
+TEST_F(MediaLibraryTestFixture, PictureObjectEqualsChecksRuntimeTypeAndValue)
+{
+    Picture* beach = FindPicture(library->getPicturesProperty(), "beach");
+    Picture* portrait = FindPicture(library->getPicturesProperty(), "portrait");
+    ASSERT_NE(beach, nullptr);
+    ASSERT_NE(portrait, nullptr);
+
+    const System::Object* equalPicture = beach;
+    const System::Object* unequalPicture = portrait;
+    const System::Object* wrongType = library.get();
+    const System::Object* nullObject = nullptr;
+    EXPECT_TRUE(beach->Equals(equalPicture));
+    EXPECT_FALSE(beach->Equals(unequalPicture));
+    EXPECT_FALSE(beach->Equals(wrongType));
+    EXPECT_FALSE(beach->Equals(nullObject));
+}
+
 TEST_F(MediaLibraryTestFixture, PictureAlbumPropertyPointsToContainingAlbum)
 {
     Picture* beach = FindPicture(library->getPicturesProperty(), "beach");

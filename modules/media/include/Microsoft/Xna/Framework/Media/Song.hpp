@@ -172,6 +172,14 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Song* song) const;
 
         /**
+         * @brief Returns whether this song is equal to another object.
+         *
+         * @param obj Object to compare with.
+         * @return true if the object is an equal Song; otherwise false.
+         */
+        [[nodiscard]] bool Equals(const System::Object* obj) const override;
+
+        /**
          * @brief Gets the hash code for this Song instance.
          *
          * Deliberately content-based (a hash of the resolved file handle), unlike FNA's own

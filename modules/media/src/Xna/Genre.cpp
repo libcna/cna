@@ -44,6 +44,11 @@ namespace Microsoft::Xna::Framework::Media
         return other != nullptr && name_ == other->name_;
     }
 
+    bool Genre::Equals(const System::Object* obj) const
+    {
+        return Equals(dynamic_cast<const Genre*>(obj));
+    }
+
     int Genre::GetHashCode() const
     {
         return static_cast<int>(std::hash<std::string>{}(name_));

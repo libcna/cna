@@ -134,6 +134,11 @@ namespace Microsoft::Xna::Framework::Media
         return artist_->Equals(other->artist_);
     }
 
+    bool Album::Equals(const System::Object* obj) const
+    {
+        return Equals(dynamic_cast<const Album*>(obj));
+    }
+
     int Album::GetHashCode() const
     {
         std::size_t h1 = std::hash<std::string>{}(name_);

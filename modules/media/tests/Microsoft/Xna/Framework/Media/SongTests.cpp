@@ -17,6 +17,16 @@ namespace
         "tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg";
     constexpr const char* kOtherRealFixture =
         "tests/assets/media/music/Artist One/Album Beta/01 - Twilight.mp3";
+
+    class NonSongObject final : public System::Object
+    {
+    public:
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string typeName = "CNA.Tests.NonSongObject";
+            return typeName;
+        }
+    };
 }
 
 // plans/plan_media.md MEDIA-10: the ctor's missing-file path now throws the same typed exception FNA
@@ -104,6 +114,24 @@ TEST(SongTest, EqualsAndOperatorsCompareUnequalForDifferentHandles)
     EXPECT_FALSE(a.Equals(&b));
     EXPECT_FALSE(a == b);
     EXPECT_TRUE(a != b);
+}
+
+// plans/plan_media.md MEDIA-234: cover the System.Object override separately from Equals(Song).
+TEST(SongTest, ObjectEqualsChecksRuntimeTypeAndValue)
+{
+    Song song(kRealFixture, "Sunrise");
+    Song equalSong(kRealFixture, "Different Display Name");
+    Song unequalSong(kOtherRealFixture, "Sunrise");
+    NonSongObject wrongType;
+
+    const System::Object* equalObject = &equalSong;
+    const System::Object* unequalObject = &unequalSong;
+    const System::Object* wrongTypeObject = &wrongType;
+    const System::Object* nullObject = nullptr;
+    EXPECT_TRUE(song.Equals(equalObject));
+    EXPECT_FALSE(song.Equals(unequalObject));
+    EXPECT_FALSE(song.Equals(wrongTypeObject));
+    EXPECT_FALSE(song.Equals(nullObject));
 }
 
 TEST(SongTest, PlayCountGetSet)

@@ -1637,11 +1637,11 @@ never reached `GestureDetector`) to real and gesture-tested (`plans/plan_input.m
 
 | Class / Enum | Status | Notes |
 |---|---|---|
-| Album | ✅ | Real thumbnails (genuinely downscaled, `MEDIA-209`) and embedded ID3v2 APIC / FLAC PICTURE cover art (`MEDIA-206`/`207`) as of Phase 16; `HasArt` is asserted to agree exactly with what `GetAlbumArt()` can deliver. Real, from-scratch local-library implementation (FNA itself is a permanent `NotImplementedException` stub — no upstream behavior to match); backed by `MediaLibraryIndex`, grouped by (Name, Artist) |
+| Album | ✅ | Real thumbnails (genuinely downscaled, `MEDIA-209`) and embedded ID3v2 APIC / FLAC PICTURE cover art (`MEDIA-206`/`207`) as of Phase 16; `HasArt` is asserted to agree exactly with what `GetAlbumArt()` can deliver. Real, from-scratch local-library implementation (FNA itself is a permanent `NotImplementedException` stub — no upstream behavior to match); backed by `MediaLibraryIndex`, grouped by (Name, Artist). Typed and `System::Object` equality overloads complete (`MEDIA-234`) |
 | AlbumCollection | ✅ | Real; backed by `CNA::Internal::Media::MediaCollectionBase<Album>` |
-| Artist | ✅ | Real, from-scratch (see Album's note); case-insensitive name dedup against tag-casing inconsistencies (`plans/plan_media.md` D10) |
+| Artist | ✅ | Real, from-scratch (see Album's note); case-insensitive name dedup against tag-casing inconsistencies (`plans/plan_media.md` D10); typed and `System::Object` equality overloads complete (`MEDIA-234`) |
 | ArtistCollection | ✅ | Real; backed by `MediaCollectionBase<Artist>` |
-| Genre | ✅ | Real, from-scratch (see Album's note) |
+| Genre | ✅ | Real, from-scratch (see Album's note); typed and `System::Object` equality overloads complete (`MEDIA-234`) |
 | GenreCollection | ✅ | Real; backed by `MediaCollectionBase<Genre>` |
 | MediaLibrary | ✅ | Real, from-scratch orchestrator: synchronous point-in-time scan of real OS Music/Pictures folders (`CNA::Internal::Media::MediaLibraryPaths`) at construction, builds the whole Song/Album/Artist/Genre/Picture/PictureAlbum/Playlist object graph (`plans/plan_media.md` §4, MEDIA-46..69) |
 | MediaPlayer | ✅ | Implemented (SDL3_mixer). Visualization is **genuinely functional as of Phase 16** (`MIX_SetPostMixCallback` PCM tap + a from-scratch radix-2 FFT, `MEDIA-186`..`191`); it was a pure stub before, with a test that asserted the broken behavior as if it were the specification |
@@ -1649,13 +1649,13 @@ never reached `GestureDetector`) to real and gesture-tested (`plans/plan_input.m
 | MediaSource | ✅ | Real; `GetAvailableMediaSources()` returns one real `LocalDevice` entry. All 4 XNA members present. `WindowsMediaConnect` device *discovery* is deliberately not implemented — an Xbox 360/WMP-era concept with no desktop equivalent; the enum value itself exists (`MEDIA-212`) |
 | MediaSourceType (enum) | ✅ | Complete |
 | MediaState (enum) | ✅ | Complete |
-| Picture | ✅ | Real downscaled thumbnails as of Phase 16 (`MEDIA-210`; `GetThumbnail()` used to be a synonym for `GetImage()`). Real, from-scratch (see Album's note); dimensions via the existing `CNA::Internal::Graphics::ImageLoader` (reused, not reimplemented) |
-| PictureAlbum | ✅ | Real, from-scratch; real filesystem-tree-mirroring parent/child structure |
+| Picture | ✅ | Real downscaled thumbnails as of Phase 16 (`MEDIA-210`; `GetThumbnail()` used to be a synonym for `GetImage()`). Real, from-scratch (see Album's note); dimensions via the existing `CNA::Internal::Graphics::ImageLoader` (reused, not reimplemented); typed and `System::Object` equality overloads complete (`MEDIA-234`) |
+| PictureAlbum | ✅ | Real, from-scratch; real filesystem-tree-mirroring parent/child structure; typed and `System::Object` equality overloads complete (`MEDIA-234`) |
 | PictureAlbumCollection | ✅ | Real; backed by `MediaCollectionBase<PictureAlbum>` |
 | PictureCollection | ✅ | Real; backed by `MediaCollectionBase<Picture>` |
-| Playlist | ✅ | Real, from-scratch; backed by a real M3U/M3U8 parser (`plans/plan_media.md` D5) |
+| Playlist | ✅ | Real, from-scratch; backed by a real M3U/M3U8 parser (`plans/plan_media.md` D5); typed and `System::Object` equality overloads complete (`MEDIA-234`) |
 | PlaylistCollection | ✅ | Real; backed by `MediaCollectionBase<Playlist>` |
-| Song | ✅ | API complete **as of Phase 16** — `Album`/`Artist`/`Genre`/`ToString()` were MISSING until `MEDIA-174`/`176` (CNA inherited the omission from FNA's own `Song.cs`; the previous ✅ here was inaccurate). `TrackNumber`/`IsRated`/`Rating` are now real tag-derived values, not hardcoded constants (`MEDIA-181`/`184`) |
+| Song | ✅ | API complete **as of Phase 18** — `Album`/`Artist`/`Genre`/`ToString()` were MISSING until `MEDIA-174`/`176`, and the `System::Object.Equals` override was missing until `MEDIA-234` (the previous ✅ here was inaccurate). `TrackNumber`/`IsRated`/`Rating` are real tag-derived values, not hardcoded constants (`MEDIA-181`/`184`) |
 | SongCollection | ✅ | API complete; member-level diff against the XNA reference XML confirms no gaps (`MEDIA-213`) |
 | Video | ✅ | Public API and content readers are link-complete in every build (`MEDIA-233`). `CNA_ENABLE_VIDEO=AUTO` (default) selects the optional `cna_video_ffmpeg` backend on supported hosts when its four pkg-config modules exist; `OFF` or an unavailable `AUTO` keeps metadata construction functional and makes file probing deterministically throw `System::NotSupportedException`. Real target-native decoding on Windows/MSVC, MinGW, Android and Emscripten remains the separate `MEDIA-192`..`195` portability backlog; iOS has the same documented fallback but no numbered decode task yet. |
 | VideoPlayer | ✅ | Public state/configuration/disposal API is link-complete in every build (`MEDIA-233`). With the optional FFmpeg backend absent, `Play(non-null-video)` throws `System::NotSupportedException` before changing state; with it present, the existing real decoder is used. |

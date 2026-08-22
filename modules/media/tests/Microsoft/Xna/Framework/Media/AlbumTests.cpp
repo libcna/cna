@@ -148,6 +148,26 @@ TEST_F(MediaLibraryTestFixture, AlbumEqualitySetForEqualAndUnequalAlbums)
     EXPECT_TRUE(*alpha != *gamma);
 }
 
+// plans/plan_media.md MEDIA-234: FNA exposes both IEquatable<Album>.Equals(Album) and the
+// System.Object override. Exercise the latter through the base pointer so overload resolution
+// cannot accidentally select the already-covered typed overload.
+TEST_F(MediaLibraryTestFixture, AlbumObjectEqualsChecksRuntimeTypeAndValue)
+{
+    Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
+    Album* gamma = FindAlbum(library->getAlbumsProperty(), "Album Gamma");
+    ASSERT_NE(alpha, nullptr);
+    ASSERT_NE(gamma, nullptr);
+
+    const System::Object* equalAlbum = alpha;
+    const System::Object* unequalAlbum = gamma;
+    const System::Object* wrongType = library.get();
+    const System::Object* nullObject = nullptr;
+    EXPECT_TRUE(alpha->Equals(equalAlbum));
+    EXPECT_FALSE(alpha->Equals(unequalAlbum));
+    EXPECT_FALSE(alpha->Equals(wrongType));
+    EXPECT_FALSE(alpha->Equals(nullObject));
+}
+
 TEST_F(MediaLibraryTestFixture, AlbumGetTypeNameIsFullyQualified)
 {
     Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");

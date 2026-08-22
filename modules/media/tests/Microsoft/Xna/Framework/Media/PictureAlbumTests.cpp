@@ -85,6 +85,26 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumEqualitySetForEqualAndUnequalAlbums)
     EXPECT_TRUE(*vacation != *family);
 }
 
+// plans/plan_media.md MEDIA-234: cover the System.Object override separately from
+// Equals(PictureAlbum).
+TEST_F(MediaLibraryTestFixture, PictureAlbumObjectEqualsChecksRuntimeTypeAndValue)
+{
+    PictureAlbum* root = library->getRootPictureAlbumProperty();
+    PictureAlbum* vacation = FindChildAlbum(root->getAlbumsProperty(), "Vacation");
+    PictureAlbum* family = FindChildAlbum(root->getAlbumsProperty(), "Family");
+    ASSERT_NE(vacation, nullptr);
+    ASSERT_NE(family, nullptr);
+
+    const System::Object* equalAlbum = vacation;
+    const System::Object* unequalAlbum = family;
+    const System::Object* wrongType = library.get();
+    const System::Object* nullObject = nullptr;
+    EXPECT_TRUE(vacation->Equals(equalAlbum));
+    EXPECT_FALSE(vacation->Equals(unequalAlbum));
+    EXPECT_FALSE(vacation->Equals(wrongType));
+    EXPECT_FALSE(vacation->Equals(nullObject));
+}
+
 TEST_F(MediaLibraryTestFixture, PictureAlbumGetTypeNameIsFullyQualified)
 {
     PictureAlbum* root = library->getRootPictureAlbumProperty();

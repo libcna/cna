@@ -61,6 +61,24 @@ TEST_F(MediaLibraryTestFixture, ArtistEqualitySetForEqualAndUnequalArtists)
     EXPECT_TRUE(*artistOne != *artistTwo);
 }
 
+// plans/plan_media.md MEDIA-234: cover the System.Object override separately from Equals(Artist).
+TEST_F(MediaLibraryTestFixture, ArtistObjectEqualsChecksRuntimeTypeAndValue)
+{
+    Artist* artistOne = FindArtist(library->getArtistsProperty(), "Artist One");
+    Artist* artistTwo = FindArtist(library->getArtistsProperty(), "Artist Two");
+    ASSERT_NE(artistOne, nullptr);
+    ASSERT_NE(artistTwo, nullptr);
+
+    const System::Object* equalArtist = artistOne;
+    const System::Object* unequalArtist = artistTwo;
+    const System::Object* wrongType = library.get();
+    const System::Object* nullObject = nullptr;
+    EXPECT_TRUE(artistOne->Equals(equalArtist));
+    EXPECT_FALSE(artistOne->Equals(unequalArtist));
+    EXPECT_FALSE(artistOne->Equals(wrongType));
+    EXPECT_FALSE(artistOne->Equals(nullObject));
+}
+
 TEST_F(MediaLibraryTestFixture, ArtistGetTypeNameIsFullyQualified)
 {
     Artist* artistOne = FindArtist(library->getArtistsProperty(), "Artist One");

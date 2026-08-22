@@ -81,6 +81,11 @@ namespace Microsoft::Xna::Framework::Media
         return other != nullptr && path_ == other->path_;
     }
 
+    bool Picture::Equals(const System::Object* obj) const
+    {
+        return Equals(dynamic_cast<const Picture*>(obj));
+    }
+
     int Picture::GetHashCode() const
     {
         return static_cast<int>(std::hash<std::string>{}(path_));

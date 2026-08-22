@@ -103,6 +103,14 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Album* other) const;
 
         /**
+         * @brief Returns whether this album is equal to another object.
+         *
+         * @param obj Object to compare with.
+         * @return true if the object is an equal Album; otherwise false.
+         */
+        [[nodiscard]] bool Equals(const System::Object* obj) const override;
+
+        /**
          * @brief Gets the hash code for this Album instance.
          * @return Hash code of the object.
          */

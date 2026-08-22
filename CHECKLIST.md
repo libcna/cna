@@ -143,7 +143,7 @@ surface (`plans/plan_runtimerenderer.md`):
 | `IEnumerable<T>` replaced by `begin()`/`end()` (CNAEXT) | C++ iterator idiom |
 | `Type`-based service lookup uses `typeid` / templates | No C# reflection |
 | Type-assignability check in `AddService` omitted | No runtime reflection in C++ |
-| `Equals(object obj)` override omitted | No `object` base in C++ structs/value types |
+| `Equals(object obj)` override omitted on a C++ value type that does not inherit `System::Object` | No `object` base exists for those structs/value types. This exception does not apply to reference types that inherit `System::Object`; they must override `Equals(const System::Object*)` when XNA/FNA overrides `Equals(Object)` (`MEDIA-234`) |
 | `DeviceCreated`/`DeviceDisposing` event hookup simplified | Service always available in CNA |
 | `IsAssignableFrom` check in `GameServiceContainer` omitted | No runtime reflection |
 | C# `internal set` mapped to `private` + `friend class <OneSpecificClass>` (e.g. `Microsoft::Devices::Sensors::AccelerometerReading`'s setters, friended to `Accelerometer` only) | C++ `friend` is per-named-class, not assembly-scoped like C#'s `internal` — narrower than the real API but the closest available mechanism; acceptable since each reading type has exactly one producing sensor class |

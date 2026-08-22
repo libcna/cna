@@ -1,9 +1,9 @@
 # plan_media.md — Completing and implementing the FNA Media → CNA port (C++ / XNA 4.0)
 
-> ## STATUS (2026-08-22): 228 of 232 tasks done
+> ## STATUS (2026-08-22): 229 of 233 tasks done
 >
-> (IDs run to `MEDIA-233` but `MEDIA-157` was never assigned — skipped when Phase 13 was
-> numbered — so there are 232 real tasks, not 233. Verified by diffing the checkbox IDs
+> (IDs run to `MEDIA-234` but `MEDIA-157` was never assigned — skipped when Phase 13 was
+> numbered — so there are 233 real tasks, not 234. Verified by diffing the checkbox IDs
 > against the full range rather than assuming the highest ID equals the count.)
 >
 > **Open: 4 tasks, Group D (`MEDIA-192`..`195`)** — real target-native FFmpeg decoding on
@@ -40,7 +40,7 @@
 > supersedes a first-pass draft that reached 73 tasks; this version deliberately goes to finer
 > granularity (per-file compliance tasks, per-behavior test tasks matching `CHECKLIST.md`'s
 > per-overload testing mandate, and several real gaps the first pass missed) at the project owner's
-> explicit request for maximum thoroughness — **126 tasks as first written** (now 232, after
+> explicit request for maximum thoroughness — **126 tasks as first written** (now 233, after
 > nine external review rounds appended Phases 8-16), not padded for a round number: every task
 > below is an independently completable, individually justified unit of work. Matching `plan_audio.md`'s
 > own real history (an initial plan, then supplementary `P9-*`/`Phase 10` addenda as later audits found
@@ -2579,6 +2579,23 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   option values both fail configuration.
   *Still open:* `MEDIA-192`..`195` remain the real Windows/MSVC, MinGW, Android and Emscripten
   decoder ports; this fallback does not claim decode support on those targets.
+
+### Phase 18 — Restore `System::Object.Equals` parity (2026-08-22)
+
+- [x] **MEDIA-234 — Implement the missing `Equals(Object)` overrides on all seven equatable Media
+  reference types.** A latest-CNA/latest-sharp-runtime compatibility build exposed
+  `-Werror=overloaded-virtual` in the strict C API target: `Album`, `Artist`, `Genre`, `Picture`,
+  `PictureAlbum`, `Playlist` and `Song` each declared only `Equals(const T*)`, hiding
+  `System::Object::Equals(const Object*)`. This was a real API and behavior gap, not a warning to
+  suppress: FNA declares both `IEquatable<T>.Equals(T)` and `override Equals(Object)` for every one
+  of these classes. Each override now safely runtime-checks with `dynamic_cast` and delegates to the
+  existing typed equality implementation, preserving its value semantics while returning false for
+  null and wrong-type objects. Seven separate base-pointer tests cover equal and unequal values,
+  wrong runtime types and null; mutation verification replaced all seven implementations with
+  `false` and produced exactly 7/7 expected failures. Verified against sharp-runtime
+  `54578590b328aa9612fe38bfddca9fd8ca795144`: `cna_media`, strict `cna_c_api` and `CnaTests` all
+  build, the focused Media run passes 115/115 tests, and the C API Media smoke test passes with a
+  sandbox-safe data directory and SDL's offscreen video driver.
 
 ---
   *Done:* full `CnaTests` run on the canonical EASYGL build -- **4911 tests, 4909 passed, 0 failed**, 2 pre-existing hardware skips (Accelerometer/Gyroscope, need real hardware). `grep -c FAILED` on the COMPLETE log, never a truncated tail. Every test added by this phase was mutation-verified falsifiable before its task was marked done (one mutation check initially produced empty output and was re-run rather than accepted). **Deliberately not calling `plan_media.md` 'complete':** Group D (`MEDIA-192`..`198`, FFmpeg on Windows/Android/Emscripten) remains genuinely open and cannot be closed from this Linux-only sandbox. **Later correction (2026-08-22):** under the owner's revised policy `MEDIA-196`..`198` and the link-complete fallback are done; only the real decoder ports `MEDIA-192`..`195` remain open.

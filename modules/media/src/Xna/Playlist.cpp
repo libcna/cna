@@ -43,6 +43,11 @@ namespace Microsoft::Xna::Framework::Media
         return other != nullptr && name_ == other->name_;
     }
 
+    bool Playlist::Equals(const System::Object* obj) const
+    {
+        return Equals(dynamic_cast<const Playlist*>(obj));
+    }
+
     int Playlist::GetHashCode() const
     {
         return static_cast<int>(std::hash<std::string>{}(name_));

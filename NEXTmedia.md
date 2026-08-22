@@ -4,15 +4,16 @@
 > per-domain convention as `NEXTaudio.md`/`NEXTdevices.md`/`NEXTinput.md`/`NEXTnet.md`. The repo-root
 > `NEXT.md` is explicitly reserved for the `feature/dx9` branch (its own banner note, 2026-07-14) —
 > **do not edit it from this branch.** Full task-by-task detail lives in `plans/plan_media.md`
-> (`MEDIA-1`–`MEDIA-233`, Phases 0-17); this file is a short current-state index.
+> (`MEDIA-1`–`MEDIA-234`, Phases 0-18); this file is a short current-state index.
 
-## 1. Status (2026-08-22) — 228/232 tasks done
+## 1. Status (2026-08-22) — 229/233 tasks done
 
 **Where the work lives:** `feature/media` @ `22df8325`, merged into `develop` as `cb053b71`
 (two merges: `a3f88c94`/`36ac9656` for Phases 8-16 Groups A-I, `cb053b71` for `MEDIA-228`..`232`).
-Full task detail: `plans/plan_media.md` (`MEDIA-1`–`MEDIA-233`; **232 real tasks — `MEDIA-157`
+Full task detail: `plans/plan_media.md` (`MEDIA-1`–`MEDIA-234`; **233 real tasks — `MEDIA-157`
 was never assigned**, so the highest ID is not the count). The historical Phase 0-16 work remains
-merged as recorded; `MEDIA-233` is the current optional-video-backend change.
+merged as recorded; `MEDIA-233` added the optional-video-backend split and `MEDIA-234` restores the
+missing `System::Object.Equals` overrides on all seven equatable Media reference types.
 
 **Current baseline, measured on the merged tree — quote this number, not the historical ones:**
 **5471 tests, 5467 passed, 0 failed, 4 pre-existing hardware skips** (two Accelerometer, two

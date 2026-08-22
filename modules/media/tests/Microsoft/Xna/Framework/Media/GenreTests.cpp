@@ -58,6 +58,24 @@ TEST_F(MediaLibraryTestFixture, GenreEqualitySetForEqualAndUnequalGenres)
     EXPECT_EQ(rock->GetHashCode(), rock->GetHashCode());
 }
 
+// plans/plan_media.md MEDIA-234: cover the System.Object override separately from Equals(Genre).
+TEST_F(MediaLibraryTestFixture, GenreObjectEqualsChecksRuntimeTypeAndValue)
+{
+    Genre* rock = FindGenre(library->getGenresProperty(), "Rock");
+    Genre* electronic = FindGenre(library->getGenresProperty(), "Electronic");
+    ASSERT_NE(rock, nullptr);
+    ASSERT_NE(electronic, nullptr);
+
+    const System::Object* equalGenre = rock;
+    const System::Object* unequalGenre = electronic;
+    const System::Object* wrongType = library.get();
+    const System::Object* nullObject = nullptr;
+    EXPECT_TRUE(rock->Equals(equalGenre));
+    EXPECT_FALSE(rock->Equals(unequalGenre));
+    EXPECT_FALSE(rock->Equals(wrongType));
+    EXPECT_FALSE(rock->Equals(nullObject));
+}
+
 TEST_F(MediaLibraryTestFixture, GenreToStringReturnsName)
 {
     Genre* rock = FindGenre(library->getGenresProperty(), "Rock");

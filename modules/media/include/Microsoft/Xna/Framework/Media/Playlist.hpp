@@ -57,6 +57,14 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Playlist* other) const;
 
         /**
+         * @brief Returns whether this playlist is equal to another object.
+         *
+         * @param obj Object to compare with.
+         * @return true if the object is an equal Playlist; otherwise false.
+         */
+        [[nodiscard]] bool Equals(const System::Object* obj) const override;
+
+        /**
          * @brief Gets the hash code for this Playlist instance.
          * @return Hash code of the object.
          */

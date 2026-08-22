@@ -114,6 +114,11 @@ namespace Microsoft::Xna::Framework::Media
         return song != nullptr && handle_ == song->handle_;
     }
 
+    bool Song::Equals(const System::Object* obj) const
+    {
+        return Equals(dynamic_cast<const Song*>(obj));
+    }
+
     int Song::GetHashCode() const
     {
         return static_cast<int>(std::hash<std::string>{}(handle_));

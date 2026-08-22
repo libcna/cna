@@ -93,6 +93,14 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] bool Equals(const Picture* other) const;
 
         /**
+         * @brief Returns whether this picture is equal to another object.
+         *
+         * @param obj Object to compare with.
+         * @return true if the object is an equal Picture; otherwise false.
+         */
+        [[nodiscard]] bool Equals(const System::Object* obj) const override;
+
+        /**
          * @brief Gets the hash code for this Picture instance.
          * @return Hash code of the object.
          */
