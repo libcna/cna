@@ -23,6 +23,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] inline bool ProfileIsDesktopCore()  { return IsDesktopCoreProfile(ActiveGlProfile()); }
         [[nodiscard]] inline bool ProfileUsesGlslEs100()  { return UsesGlslEs100(ActiveGlProfile()); }
         [[nodiscard]] inline bool ProfileIsEs2ApiGeneration() { return UsesEs2ApiGeneration(ActiveGlProfile()); }
+        [[nodiscard]] inline bool ProfileRequiresBaseVertexPointerRebase()
+        {
+            return RequiresBaseVertexPointerRebase(ActiveGlProfile());
+        }
         [[nodiscard]] inline bool ProfileIs(GlProfile expected) { return ActiveGlProfile() == expected; }
     }
 }
@@ -1222,8 +1226,8 @@ if (ProfileIsDesktopCore())
     //     term of the requested min filter for textures without a full chain (the level-count
     //     registry below tracks which textures allocated complete chains);
     //   - glDrawElementsBaseVertex does not exist (it is ES 3.2): baseVertex draws re-offset every
-    //     enabled attribute pointer by baseVertex elements of its own stride instead
-    //     (Es2ShiftEnabledVertexAttribPointers -- FNA3D's own no-base-vertex GL fallback shape);
+    //     enabled attribute pointer by baseVertex elements of its own stride instead. The helper
+    //     is shared with WebGL and the ES 3.0 floor for the same API limitation;
     //   - GL_READ_FRAMEBUFFER does not exist (ES 3.0): readbacks bind GL_FRAMEBUFFER, whose single
     //     color attachment is the implicit read source (ReadbackFramebufferTarget() below).
     // =============================================================================================
@@ -1491,14 +1495,13 @@ if (ProfileIsEs2ApiGeneration())
             }
         }
 
-        /// Re-offsets every enabled vertex attribute's pointer by @p baseVertex elements of its
+        /// Re-offsets every enabled per-vertex attribute pointer by @p baseVertex elements of its
         /// own stride, in @p direction (+1 applies the shift, -1 restores it). Must run while the
-        /// draw's VAO is bound; uses only core ES 2.0 queries and calls. This produces exactly
-        /// glDrawElementsBaseVertex's addressing for the single-stream layouts reachable under
-        /// this profile (multi-stream input and instancing are refused up front -- see
-        /// SupportsCapability), because every enabled attribute belongs to the one vertex stream
-        /// whose elements baseVertex counts.
-        void Es2ShiftEnabledVertexAttribPointers(int baseVertex, int direction)
+        /// draw's VAO is bound. This is FNA3D's no-base-vertex fallback shape and serves every CNA
+        /// profile whose guaranteed API floor lacks glDrawElementsBaseVertex: GLES 2/3 and both
+        /// WebGL generations. ES 3-class profiles can also have per-instance attributes enabled;
+        /// those are identified by a nonzero divisor and deliberately left unchanged.
+        void ShiftEnabledPerVertexAttribPointers(int baseVertex, int direction)
         {
             if (baseVertex == 0) return;
 
@@ -1517,13 +1520,25 @@ if (ProfileIsEs2ApiGeneration())
                                               ::metagl::VertexAttribParameter::ArrayEnabled, &enabled);
                 if (enabled == 0) continue;
 
-                GLint size = 4, type = GL_FLOAT, normalized = 0, stride = 0, bufferBinding = 0;
+                if (!ProfileIsEs2ApiGeneration())
+                {
+                    GLint divisor = 0;
+                    ::metagl::glGetVertexAttribiv(
+                        location, ::metagl::VertexAttribParameter::ArrayDivisor, &divisor);
+                    if (divisor != 0) continue;
+                }
+
+                GLint size = 4, type = GL_FLOAT, normalized = 0, integer = 0;
+                GLint stride = 0, bufferBinding = 0;
                 ::metagl::glGetVertexAttribiv(location,
                                               ::metagl::VertexAttribParameter::ArraySize, &size);
                 ::metagl::glGetVertexAttribiv(location,
                                               ::metagl::VertexAttribParameter::ArrayType, &type);
                 ::metagl::glGetVertexAttribiv(location,
                                               ::metagl::VertexAttribParameter::ArrayNormalized, &normalized);
+                if (!ProfileIsEs2ApiGeneration())
+                    ::metagl::glGetVertexAttribiv(
+                        location, ::metagl::VertexAttribParameter::ArrayInteger, &integer);
                 ::metagl::glGetVertexAttribiv(location,
                                               ::metagl::VertexAttribParameter::ArrayStride, &stride);
                 ::metagl::glGetVertexAttribiv(location,
@@ -1543,10 +1558,19 @@ if (ProfileIsEs2ApiGeneration())
 
                 ::metagl::glBindBuffer(::metagl::BufferTarget::Array,
                                        ::metagl::BufferId{static_cast<GLuint>(bufferBinding)});
-                ::metagl::glVertexAttribPointer(
-                    location, size, static_cast<::metagl::DataType>(type),
-                    normalized != 0 ? 1 : 0, stride,
-                    static_cast<const std::uint8_t*>(pointer) + delta);
+                if (integer != 0)
+                {
+                    ::metagl::glVertexAttribIPointer(
+                        location, size, static_cast<::metagl::DataType>(type), stride,
+                        static_cast<const std::uint8_t*>(pointer) + delta);
+                }
+                else
+                {
+                    ::metagl::glVertexAttribPointer(
+                        location, size, static_cast<::metagl::DataType>(type),
+                        normalized != 0 ? 1 : 0, stride,
+                        static_cast<const std::uint8_t*>(pointer) + delta);
+                }
             }
 
             ::metagl::glBindBuffer(::metagl::BufferTarget::Array,
@@ -8685,7 +8709,9 @@ CNA_GL_PUNCTUAL_DECL
                     desc.normalized, sourceStride, offset);
             }
         }
-        if (!ProfileIsEs2ApiGeneration()) buffer.vao.unbind();
+        // The caller bound this VAO for the draw and expects the semantic remap to remain active
+        // through glDraw*. Unbinding here leaves WebGL2 drawing against VAO 0 (all attributes
+        // disabled); the caller restores the declaration and unbinds after the draw.
         return true;
     }
 
@@ -9530,14 +9556,13 @@ if (ProfileIsEs2ApiGeneration())
             device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
                                  ::easygl::DataType::UnsignedInt, nullptr);
         } else {
-if (ProfileIsEs2ApiGeneration())
+if (ProfileRequiresBaseVertexPointerRebase())
 {
-            // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled attribute
-            // pointer by baseVertex elements instead, draw, and restore (see the helper's doc).
-            Es2ShiftEnabledVertexAttribPointers(baseVertex, +1);
+            // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
+            ShiftEnabledPerVertexAttribPointers(baseVertex, +1);
             device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
                                  ::easygl::DataType::UnsignedInt, nullptr);
-            Es2ShiftEnabledVertexAttribPointers(baseVertex, -1);
+            ShiftEnabledPerVertexAttribPointers(baseVertex, -1);
 }
 else
 {
@@ -9842,16 +9867,19 @@ else
             }
             else
             {
-#if defined(CNA_GL_PROFILE_OPENGLES2)
-                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, +1);
+if (ProfileRequiresBaseVertexPointerRebase())
+{
+                ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
                 device.draw_elements(ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
                                      compiledIndexOffset);
-                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, -1);
-#else
+                ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
+}
+else
+{
                 ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), compiledIndexCount,
                                                    compiledIdxType, compiledIndexOffset,
                                                    params.baseVertex);
-#endif
+}
             }
             compiledVao.unbind();
             return;
@@ -9900,13 +9928,12 @@ else
             if (params.baseVertex == 0) {
                 device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
             } else {
-if (ProfileIsEs2ApiGeneration())
+if (ProfileRequiresBaseVertexPointerRebase())
 {
-                // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled
-                // attribute pointer by baseVertex elements instead, draw, and restore.
-                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, +1);
+                // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
+                ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
                 device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
-                Es2ShiftEnabledVertexAttribPointers(params.baseVertex, -1);
+                ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
 }
 else
 {
@@ -9944,13 +9971,12 @@ else
         if (params.baseVertex == 0) {
             device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
         } else {
-if (ProfileIsEs2ApiGeneration())
+if (ProfileRequiresBaseVertexPointerRebase())
 {
-            // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled attribute
-            // pointer by baseVertex elements instead, draw, and restore.
-            Es2ShiftEnabledVertexAttribPointers(params.baseVertex, +1);
+            // GLES/WebGL profiles cannot assume glDrawElementsBaseVertex (ES 3.2).
+            ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
             device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
-            Es2ShiftEnabledVertexAttribPointers(params.baseVertex, -1);
+            ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
 }
 else
 {
@@ -10022,9 +10048,20 @@ else
             }
             else
             {
+if (ProfileRequiresBaseVertexPointerRebase())
+{
+                ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
+                device.draw_elements_instanced(ToEasyGl(primitive), compiledIndexCount,
+                                               compiledIdxType, compiledIndexOffset,
+                                               instanceCount);
+                ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
+}
+else
+{
                 ::metagl::glDrawElementsInstancedBaseVertex(
                     ToEasyGl(primitive), compiledIndexCount, compiledIdxType,
                     compiledIndexOffset, instanceCount, params.baseVertex);
+}
             }
             compiledVao.unbind();
             return;
@@ -10151,9 +10188,19 @@ else
         }
         else
         {
+if (ProfileRequiresBaseVertexPointerRebase())
+{
+            ShiftEnabledPerVertexAttribPointers(params.baseVertex, +1);
+            device.draw_elements_instanced(
+                ToEasyGl(primitive), index_count, idxType, indexOffset, instanceCount);
+            ShiftEnabledPerVertexAttribPointers(params.baseVertex, -1);
+}
+else
+{
             ::metagl::glDrawElementsInstancedBaseVertex(
                 ToEasyGl(primitive), index_count, idxType, indexOffset,
                 instanceCount, params.baseVertex);
+}
         }
 
         // REMED-GFX-202: every location this draw claimed is released again, in reverse, so a later

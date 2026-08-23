@@ -167,4 +167,20 @@ namespace CNA::Internal::Renderers::EasyGL
     {
         return profile == GlProfile::OpenGLES2 || profile == GlProfile::WebGL1;
     }
+
+    /**
+     * @brief Reports whether indexed base-vertex draws require pointer rebasing.
+     *
+     * `glDrawElementsBaseVertex` is core in desktop OpenGL 3.2, but only in OpenGL ES 3.2
+     * and is absent from both WebGL generations. CNA requests an ES 3.0 context for its
+     * OpenGLES3 identity, so that profile cannot assume the entry point even when a local
+     * driver happens to return a newer context.
+     *
+     * @param profile The profile to test.
+     * @return false only for CNA's OpenGL 3.3 desktop-core profile.
+     */
+    [[nodiscard]] constexpr bool RequiresBaseVertexPointerRebase(GlProfile profile)
+    {
+        return profile != GlProfile::OpenGL33;
+    }
 }
