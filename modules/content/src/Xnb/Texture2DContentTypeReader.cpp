@@ -18,6 +18,7 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Content::ContentReader;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+    using Microsoft::Xna::Framework::Graphics::Texture;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
 
     namespace
@@ -78,6 +79,11 @@ namespace CNA::Internal::Xnb
             const std::size_t bytesPerBlock = format == SurfaceFormat::Dxt1 ? 8u : 16u;
             return blockWidth * blockHeight * bytesPerBlock;
         }
+    }
+
+    Texture* TextureReader::Read(ContentReader& /*input*/, std::optional<Texture*> existingInstance)
+    {
+        return existingInstance.value_or(nullptr);
     }
 
     Texture2D Texture2DReader::Read(ContentReader& input, std::optional<Texture2D> existingInstance)
@@ -242,6 +248,9 @@ namespace CNA::Internal::Xnb
 
     void RegisterTexture2DXnbReader()
     {
+        Microsoft::Xna::Framework::Content::ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.TextureReader",
+            [] { return std::make_unique<TextureReader>(); });
         Microsoft::Xna::Framework::Content::ContentTypeReaderManager::AddTypeCreator(
             "Microsoft.Xna.Framework.Content.Texture2DReader",
             [] { return std::make_unique<Texture2DReader>(); });

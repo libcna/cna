@@ -711,6 +711,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void recreate_gl_resource() override;
 
     private:
+        friend class EasyGLRenderer;
+
         void InitializeLayout();
         void ApplyLayout(std::size_t stride);
         void uploadWithOptions(const void* data, std::size_t byte_count, SetDataOptions options);
@@ -1061,6 +1063,15 @@ namespace CNA::Internal::Renderers::EasyGL
         static void RequireDeclarationFitsStockProgramEXT(
             const std::vector<VertexElement>& declaredElements, std::size_t stride,
             const GpuDrawParams& params);
+        /**
+         * @brief Rebinds one declared vertex buffer by XNA semantic for the selected stock shader.
+         * @return True when a declaration was present and the VAO was rebound.
+         */
+        static bool ConfigureDeclarationForStockProgramEXT(
+            EasyGLVertexBufferRenderer& buffer, std::size_t stride,
+            const GpuDrawParams& params);
+        /** @brief Restores the buffer's declaration-order VAO layout after a stock draw. */
+        static void RestoreDeclarationLayoutEXT(EasyGLVertexBufferRenderer& buffer);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                             const Matrix& projection, const GpuDrawParams& params);
         /// REMED-GFX-147: resolves uRtFlipV/uRtFlipVHi for a freshly linked stock 3D program.

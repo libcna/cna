@@ -391,29 +391,24 @@ TEST(VertexDeclarationFidelityTest, StockProgramAcceptsAShorterDeclaration)
         RequireDeclarationMatchesStockProgram({}, kColored, 2, "EasyGL", "colored3d"));
 }
 
-TEST(VertexDeclarationFidelityTest, StockProgramRefusesADeclarationWhoseOrderMovesASemantic)
+TEST(VertexDeclarationFidelityTest, StockProgramAcceptsReorderedSemantics)
 {
-    try
-    {
-        RequireDeclarationMatchesStockProgram(Elements({Col(0), Pos(4)}), kColored, 2, "EasyGL",
-                                              "colored3d");
-        FAIL() << "an element bound to a location that means something else was accepted";
-    }
-    catch (const System::NotSupportedException& e)
-    {
-        const std::string what = e.what();
-        EXPECT_NE(std::string::npos, what.find("colored3d")) << what;
-        EXPECT_NE(std::string::npos, what.find("aPos")) << what;
-        EXPECT_NE(std::string::npos, what.find("element 0")) << what;
-    }
+    EXPECT_NO_THROW(RequireDeclarationMatchesStockProgram(
+        Elements({Uv(12), Nrm(20), Pos(0)}), kLit, 3, "EasyGL", "lit_textured3d"));
 }
 
-TEST(VertexDeclarationFidelityTest, StockProgramRefusesAColourWhereItExpectsANormal)
+TEST(VertexDeclarationFidelityTest, StockProgramIgnoresUnusedSemantic)
 {
-    // positionColorPadded32 on EasyGL: stride 32 selects lit_textured3d, whose location 1 is
-    // aNormal, and the declaration's second element is a packed colour.
-    EXPECT_THROW(RequireDeclarationMatchesStockProgram(Elements({Pos(), Col(12)}), kLit, 3,
-                                                        "EasyGL", "lit_textured3d"),
+    EXPECT_NO_THROW(RequireDeclarationMatchesStockProgram(
+        Elements({Pos(), Col(12)}), kLit, 3, "EasyGL", "lit_textured3d"));
+}
+
+TEST(VertexDeclarationFidelityTest, StockProgramRefusesWrongFormatForConsumedSemantic)
+{
+    EXPECT_THROW(RequireDeclarationMatchesStockProgram(
+                     Elements({Pos(), VertexElement(12, VertexElementFormat::Vector4,
+                                                    VertexElementUsage::Normal, 0)}),
+                     kLit, 3, "EasyGL", "lit_textured3d"),
                  System::NotSupportedException);
 }
 

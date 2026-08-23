@@ -3,6 +3,7 @@
 
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 // plans/plan_xnb.md XNB-23/24: the first real Graphics .xnb reader -- see PrimitiveContentTypeReaders.hpp's
@@ -11,6 +12,28 @@
 
 namespace CNA::Internal::Xnb
 {
+    /**
+     * @brief FNA's inert base `Microsoft.Xna.Framework.Content.TextureReader`.
+     *
+     * The reader exists in XNB manifests that contain a field declared as the abstract
+     * `Texture` base, even when the serialized object is dispatched to a concrete texture
+     * reader. Like FNA, it consumes no data and returns the existing instance.
+     */
+    class TextureReader
+        : public Microsoft::Xna::Framework::Content::ContentTypeReader<Microsoft::Xna::Framework::Graphics::Texture*>
+    {
+    public:
+        /** @brief Constructs the inert base texture reader. */
+        TextureReader()
+            : Microsoft::Xna::Framework::Content::ContentTypeReader<Microsoft::Xna::Framework::Graphics::Texture*>(
+                  "Microsoft.Xna.Framework.Graphics.Texture") {}
+
+    protected:
+        Microsoft::Xna::Framework::Graphics::Texture* Read(
+            Microsoft::Xna::Framework::Content::ContentReader& input,
+            std::optional<Microsoft::Xna::Framework::Graphics::Texture*> existingInstance) override;
+    };
+
     /**
      * @brief FNA's real `Microsoft.Xna.Framework.Content.Texture2DReader`
      *        (`src/Content/ContentReaders/Texture2DReader.cs`), implemented strictly against
@@ -44,6 +67,6 @@ namespace CNA::Internal::Xnb
             std::optional<Microsoft::Xna::Framework::Graphics::Texture2D> existingInstance) override;
     };
 
-    /** @brief Registers Texture2DReader under its real FNA canonical name. Idempotent. */
+    /** @brief Registers TextureReader and Texture2DReader under their real FNA canonical names. Idempotent. */
     void RegisterTexture2DXnbReader();
 }

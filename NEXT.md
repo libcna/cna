@@ -1,5 +1,18 @@
 # NEXT.md
 
+## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
+
+The sample audit removed the sample-side model, cubemap, font and background workarounds and fed
+the 22 files produced by the original XNA 4.0 content pipeline directly to CNA. That exposed three
+framework defects which are now fixed at their owning layer: the inert base `TextureReader` was not
+registered, `ModelReader` rejected all non-null custom Tags (including the sample's real
+`SkinningData`), and EasyGL bound stock-shader attributes by declaration-list position even though
+XNA binds them by semantic. EasyGL now validates and maps the declared usage/index to the selected
+stock program while preserving declaration-order binding for custom effects. The native
+OPENGLES3 sample loads all 22 XNBs and renders all seven screens, including the original skinned
+character and environment-map cubemap. Focused XNB tests pass 24/24 and vertex-declaration tests
+pass 25/25. The cna-samples audit record owns browser evidence and artifact paths.
+
 ## Detailed renderer capability profiles (`MOD-2203`, 2026-08-22)
 
 `GraphicsDevice` now exposes one cached CNAEXT capability snapshot with 30 atomic feature answers,

@@ -7,6 +7,9 @@
 // standalone Python parser before this reader was written -- see the fixture's own manifest.json
 // for the full parsed structure.
 
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
@@ -22,6 +25,9 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "System/IO/BinaryWriter.hpp"
+#include "System/IO/MemoryStream.hpp"
+#include "System/Object.hpp"
 
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Content::ContentManager;
@@ -39,6 +45,104 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 namespace
 {
+    class TestModelTag final : public System::Object
+    {
+    public:
+        [[nodiscard]] const std::string& GetTypeName() const override
+        {
+            static const std::string name = "CNA.Test.ModelTag";
+            return name;
+        }
+    };
+
+    class TestModelTagReader final
+        : public Microsoft::Xna::Framework::Content::ContentTypeReader<std::shared_ptr<System::Object>>
+    {
+    public:
+        TestModelTagReader()
+            : Microsoft::Xna::Framework::Content::ContentTypeReader<std::shared_ptr<System::Object>>(
+                  "CNA.Test.ModelTag") {}
+
+    protected:
+        std::shared_ptr<System::Object> Read(
+            Microsoft::Xna::Framework::Content::ContentReader& /*input*/,
+            std::optional<std::shared_ptr<System::Object>> /*existingInstance*/) override
+        {
+            return std::make_shared<TestModelTag>();
+        }
+    };
+
+    class ScratchModelContentRoot
+    {
+    public:
+        ScratchModelContentRoot()
+            : path_(std::filesystem::temp_directory_path()
+                    / ("cna_xnb_model_tag_test_" +
+                       std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+        {
+            std::filesystem::create_directories(path_);
+        }
+
+        ~ScratchModelContentRoot()
+        {
+            std::error_code error;
+            std::filesystem::remove_all(path_, error);
+        }
+
+        [[nodiscard]] const std::filesystem::path& path() const { return path_; }
+
+    private:
+        std::filesystem::path path_;
+    };
+
+    std::vector<std::uint8_t> BuildTaggedModelXnb()
+    {
+        System::IO::MemoryStream bodyStream;
+        System::IO::BinaryWriter writer(&bodyStream, true);
+
+        writer.Write7BitEncodedInt(3);
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.ModelReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write(std::string("CNA.Test.ModelTagReader"));
+        writer.Write(static_cast<int32_t>(0));
+        writer.Write7BitEncodedInt(0); // shared resources
+        writer.Write7BitEncodedInt(1); // root ModelReader
+
+        writer.Write(static_cast<uint32_t>(1)); // one root bone
+        writer.Write7BitEncodedInt(2);          // bone name StringReader
+        writer.Write(std::string("Root"));
+        const float identity[16] = {
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        };
+        for (float value : identity) writer.Write(value);
+        writer.Write(static_cast<uint8_t>(0));  // no parent
+        writer.Write(static_cast<uint32_t>(0)); // no children
+        writer.Write(static_cast<int32_t>(0));  // no meshes
+        writer.Write(static_cast<uint8_t>(1));  // root bone reference
+        writer.Write7BitEncodedInt(3);           // model Tag
+        writer.Flush();
+
+        const auto body = bodyStream.ToArray();
+        System::IO::MemoryStream fileStream;
+        System::IO::BinaryWriter fileWriter(&fileStream, true);
+        fileWriter.Write(static_cast<uint8_t>('X'));
+        fileWriter.Write(static_cast<uint8_t>('N'));
+        fileWriter.Write(static_cast<uint8_t>('B'));
+        fileWriter.Write(static_cast<uint8_t>('w'));
+        fileWriter.Write(static_cast<uint8_t>(5));
+        fileWriter.Write(static_cast<uint8_t>(0));
+        fileWriter.Write(static_cast<int32_t>(10 + static_cast<int32_t>(body.size())));
+        fileWriter.Write(body.data(), 0, static_cast<int32_t>(body.size()));
+        fileWriter.Flush();
+        const auto file = fileStream.ToArray();
+        return {file.begin(), file.end()};
+    }
+
     class ModelContentTypeReaderTest : public ::testing::Test
     {
     protected:
@@ -158,4 +262,23 @@ TEST_F(ModelContentTypeReaderTest, LoadingTwiceReusesTheCachedModelLikeAnyOtherA
     VertexBuffer* firstVb = first.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getVertexBufferProperty();
     VertexBuffer* secondVb = second.getMeshesProperty()[0]->getMeshPartsProperty()[0]->getVertexBufferProperty();
     EXPECT_EQ(firstVb, secondVb);
+}
+
+TEST_F(ModelContentTypeReaderTest, CustomReferenceTypeModelTagIsRetainedAndOwnedByTheModel)
+{
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.ModelTagReader", [] { return std::make_unique<TestModelTagReader>(); });
+
+    ScratchModelContentRoot root;
+    const auto bytes = BuildTaggedModelXnb();
+    std::ofstream file(root.path() / "tagged.xnb", std::ios::binary);
+    file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    file.close();
+
+    ContentManager taggedContent(nullptr, root.path().string());
+    taggedContent.setGraphicsDevice(gd);
+    Model model = taggedContent.Load<Model>("tagged");
+
+    ASSERT_NE(model.getTagProperty(), nullptr);
+    EXPECT_EQ(model.getTagProperty()->GetTypeName(), "CNA.Test.ModelTag");
 }

@@ -43,19 +43,6 @@ namespace CNA::Internal::Xnb
             return input.getContentManagerProperty()->getGraphicsDeviceInternal();
         }
 
-        void RejectNonNullTag(ContentReader& input, const char* fieldContext)
-        {
-            // Ordinary XNA content never sets a non-null Tag through the stock content pipeline
-            // (it's a hook for game-specific pipeline extensions) -- reject clearly rather than
-            // silently dropping data a real caller might actually expect back.
-            if (input.ReadObject().has_value())
-            {
-                throw ContentLoadException(
-                    std::string("ModelReader: non-null ") + fieldContext +
-                    " Tag values are not supported.");
-            }
-        }
-
         // FNA's ModelReader.ReadBoneReference: the bone ID is encoded as an 8-bit value when the
         // model has fewer than 255 bones, else a full 32-bit value; 0 means "no bone", so a real
         // reference is stored 1-based.
@@ -90,7 +77,30 @@ namespace CNA::Internal::Xnb
             std::vector<std::shared_ptr<VertexBuffer>> vertexBufferOwners;
             std::vector<std::shared_ptr<IndexBuffer>> indexBufferOwners;
             std::vector<std::shared_ptr<Effect>> effectOwners;
+            std::vector<std::shared_ptr<System::Object>> tagOwners;
         };
+
+        System::Object* ReadTag(
+            ContentReader& input, const char* fieldContext, ModelReaderOwnedResources& resources)
+        {
+            std::any value = input.ReadObject();
+            if (!value.has_value())
+            {
+                return nullptr;
+            }
+
+            if (value.type() != typeid(std::shared_ptr<System::Object>))
+            {
+                throw ContentLoadException(
+                    std::string("ModelReader: non-null ") + fieldContext +
+                    " Tag must deserialize as std::shared_ptr<System::Object>.");
+            }
+
+            auto owner = std::any_cast<std::shared_ptr<System::Object>>(std::move(value));
+            System::Object* tag = owner.get();
+            resources.tagOwners.push_back(std::move(owner));
+            return tag;
+        }
     }
 
     VertexDeclaration VertexDeclarationReader::Read(
@@ -257,7 +267,7 @@ namespace CNA::Internal::Xnb
             std::string meshName = input.ReadObject<std::string>();
             const int32_t parentBoneIndex = ReadBoneReference(input, boneCount);
             const BoundingSphere boundingSphere = input.ReadBoundingSphere();
-            RejectNonNullTag(input, "mesh");
+            System::Object* meshTag = ReadTag(input, "mesh", *res);
 
             const int32_t partCount = input.ReadInt32();
             if (partCount < 0 || partCount > 100000)
@@ -277,7 +287,7 @@ namespace CNA::Internal::Xnb
                 partPtr->SetNumVertices(input.ReadInt32());
                 partPtr->SetStartIndex(input.ReadInt32());
                 partPtr->SetPrimitiveCount(input.ReadInt32());
-                RejectNonNullTag(input, "mesh part");
+                partPtr->setTagProperty(ReadTag(input, "mesh part", *res));
 
                 partRawPtrs.push_back(partPtr);
                 res->partOwners.push_back(std::move(part));
@@ -306,6 +316,7 @@ namespace CNA::Internal::Xnb
 
             auto mesh = std::make_unique<ModelMesh>(&device, std::move(meshName), std::move(partRawPtrs));
             mesh->setBoundingSphereProperty(boundingSphere);
+            mesh->setTagProperty(meshTag);
             meshRawPtrs.push_back(mesh.get());
             meshParentBones.push_back(
                 parentBoneIndex != -1 ? RequireBone(boneRawPtrs, parentBoneIndex, "mesh parent") : nullptr);
@@ -320,7 +331,7 @@ namespace CNA::Internal::Xnb
         const std::size_t rootIndex = rootBoneIndex != -1 ? static_cast<std::size_t>(rootBoneIndex) : 0;
 
         Model model(&device, boneRawPtrs, meshRawPtrs, meshParentBones, rootIndex);
-        RejectNonNullTag(input, "model");
+        model.setTagProperty(ReadTag(input, "model", *res));
 
         model.setOwnedResources(res);
         return model;

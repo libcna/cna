@@ -111,6 +111,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, RegistersEveryOtherBuiltInReader)
         "Microsoft.Xna.Framework.Content.DateTimeReader",
         "Microsoft.Xna.Framework.Content.TimeSpanReader",
         "Microsoft.Xna.Framework.Content.CurveReader",
+        "Microsoft.Xna.Framework.Content.TextureReader",
         "Microsoft.Xna.Framework.Content.Texture2DReader",
         "Microsoft.Xna.Framework.Content.Texture3DReader",
         "Microsoft.Xna.Framework.Content.TextureCubeReader",
@@ -138,6 +139,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, IsIdempotentWhenCalledMultipleTimes)
 {
     EXPECT_NO_THROW(CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders());
     EXPECT_NO_THROW(CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders());
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.TextureReader"));
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.Texture2DReader"));
 }
 

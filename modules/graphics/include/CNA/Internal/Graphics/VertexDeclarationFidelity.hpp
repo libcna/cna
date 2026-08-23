@@ -663,20 +663,21 @@ namespace CNA::Internal::Graphics
     }
 
     /**
-     * @brief Throws unless @p declaredElements can be bound by index to @p inputs.
+     * @brief Throws unless every declaration semantic used by @p inputs has the expected format.
      *
-     * Asymmetric in the same way as the stride rule: only the locations the declaration actually
-     * fills are checked. A declaration shorter than the program's input list leaves the remaining
-     * inputs unbound, which is a missing input rather than a reinterpretation of declared bytes,
-     * and is exactly what a position-only declaration relies on today.
+     * Declaration order and byte offsets are intentionally unrestricted. XNA vertex declarations
+     * identify shader inputs by usage and usage index, and compiled XNB model data commonly orders
+     * TextureCoordinate before Normal even though CNA's stock shaders declare Normal first. A
+     * renderer that maps semantics to locations may bind either order faithfully. Inputs omitted
+     * by the declaration remain unbound, preserving the position-only behavior used by existing
+     * stock draws; declaration elements the selected program does not consume are ignored.
      *
-     * @param declaredElements The public declaration's elements, in declaration order.
+     * @param declaredElements The public declaration's elements.
      * @param inputs The selected stock program's inputs, in attribute-location order.
      * @param inputCount How many inputs @p inputs holds.
      * @param rendererName The renderer's public name, for the diagnostic.
      * @param programName The selected stock program's name, for the diagnostic.
-     * @throws System::NotSupportedException When an element would be bound to a location whose
-     *         shader input means something else.
+     * @throws System::NotSupportedException When a consumed semantic has the wrong format.
      */
     inline void RequireDeclarationMatchesStockProgram(
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
@@ -689,28 +690,26 @@ namespace CNA::Internal::Graphics
         using Microsoft::Xna::Framework::Graphics::VertexElement;
 
         if (declaredElements.empty() || inputs == nullptr) return;
-        const std::size_t checked =
-            declaredElements.size() < inputCount ? declaredElements.size() : inputCount;
-        for (std::size_t i = 0; i < checked; ++i)
+        for (std::size_t elementIndex = 0; elementIndex < declaredElements.size(); ++elementIndex)
         {
-            const VertexElement& e = declaredElements[i];
-            const StockProgramInput& in = inputs[i];
-            if (in.usage == e.getVertexElementUsageProperty() &&
-                in.usageIndex == e.getUsageIndexProperty() &&
-                in.format == e.getVertexElementFormatProperty())
-                continue;
-            throw System::NotSupportedException(
-                std::string(rendererName) +
-                ": this VertexDeclaration cannot be bound to the stock '" + programName +
-                "' program -- element " + std::to_string(i) + " declares " +
-                detail::Describe(e.getVertexElementUsageProperty(), e.getUsageIndexProperty(),
-                                 e.getOffsetProperty(), e.getVertexElementFormatProperty()) +
-                " but that attribute location supplies '" + in.name + "' (" +
-                detail::UsageName(in.usage) + std::to_string(in.usageIndex) + ' ' +
-                detail::FormatName(in.format) +
-                "). Stock programs bind their inputs by attribute location and the declaration's "
-                "element order chooses those locations, so the draw is refused rather than "
-                "rendered from the wrong attribute.");
+            const VertexElement& e = declaredElements[elementIndex];
+            for (std::size_t inputIndex = 0; inputIndex < inputCount; ++inputIndex)
+            {
+                const StockProgramInput& in = inputs[inputIndex];
+                if (in.usage != e.getVertexElementUsageProperty() ||
+                    in.usageIndex != e.getUsageIndexProperty())
+                    continue;
+                if (in.format == e.getVertexElementFormatProperty())
+                    break;
+                throw System::NotSupportedException(
+                    std::string(rendererName) +
+                    ": this VertexDeclaration cannot be bound to the stock '" + programName +
+                    "' program -- element " + std::to_string(elementIndex) + " declares " +
+                    detail::Describe(e.getVertexElementUsageProperty(), e.getUsageIndexProperty(),
+                                     e.getOffsetProperty(), e.getVertexElementFormatProperty()) +
+                    " but shader input '" + in.name + "' expects " +
+                    detail::FormatName(in.format) + ".");
+            }
         }
     }
 }

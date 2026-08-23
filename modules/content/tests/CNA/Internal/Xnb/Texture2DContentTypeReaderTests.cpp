@@ -20,6 +20,7 @@ using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
@@ -41,7 +42,25 @@ namespace
 
 TEST_F(Texture2DContentTypeReaderTest, IsRegisteredUnderRealFnaCanonicalName)
 {
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.TextureReader"));
     EXPECT_TRUE(ContentTypeReaderManager::IsRegistered("Microsoft.Xna.Framework.Content.Texture2DReader"));
+}
+
+TEST_F(Texture2DContentTypeReaderTest, BaseTextureReaderReturnsItsExistingInstanceWithoutReadingData)
+{
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+    System::IO::MemoryStream stream;
+    ContentReader reader(&cm, &stream, "test", 5, 'w');
+    Texture2D texture(gd, 1, 1);
+    Texture* expected = &texture;
+
+    auto typeReader = ContentTypeReaderManager::CreateReader(
+        "Microsoft.Xna.Framework.Content.TextureReader");
+    ASSERT_NE(typeReader, nullptr);
+
+    EXPECT_EQ(std::any_cast<Texture*>(typeReader->ReadUntyped(reader, std::any(expected))), expected);
+    EXPECT_EQ(std::any_cast<Texture*>(typeReader->ReadUntyped(reader, std::any{})), nullptr);
 }
 
 TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoadException)

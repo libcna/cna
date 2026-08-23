@@ -8396,12 +8396,10 @@ CNA_GL_PUNCTUAL_DECL
         return prog_colored_;
     }
 
-    // REMED-GFX-218 / REMED-GFX-DECL-GUARD: what each stock program declares, in attribute-location
-    // order, transcribed from the `layout(location=N) in ...` lines of the very shaders the
-    // Ensure*Program() calls above compile. EasyGL binds each declaration element at the location
-    // matching its INDEX (ApplyLayout), and the same location means different things in different
-    // programs -- location 1 is aColor at stride 16, aUV at 20 and aNormal at 32 -- so there is no
-    // global semantic-to-location function and this ordered list is the only truthful comparison.
+    // REMED-GFX-218 / SAMPLE-005: what each stock program declares, in attribute-location order.
+    // The same location means different things in different programs, so validation and binding
+    // select this per-program table, then locate each input by XNA usage/index in the caller's
+    // declaration. Custom effects keep their separate declaration-order convention.
     void EasyGLRenderer::RequireDeclarationFitsStockProgramEXT(
         const std::vector<VertexElement>& declaredElements, std::size_t stride,
         const GpuDrawParams& params)
@@ -8436,11 +8434,13 @@ CNA_GL_PUNCTUAL_DECL
                                                                 kIndices, kColor};
         static constexpr StockProgramInput kPbr[]            = {kPos, kNormal, kTangent, kUv};
         static constexpr StockProgramInput kPbrDualUv[]      = {kPos, kNormal, kTangent, kUv,
-                                                                kUv1};
+                                                                kUv1, kColor};
         static constexpr StockProgramInput kPbrSkinned[]     = {kPos, kNormal, kTangent, kUv,
                                                                 kWeights, kIndices};
         static constexpr StockProgramInput kPbrSkinnedDualUv[] = {
             kPos, kNormal, kTangent, kUv, kWeights, kIndices, kUv1};
+        static constexpr StockProgramInput kPbrSkinnedDualUvColor[] = {
+            kPos, kNormal, kTangent, kUv, kWeights, kIndices, kUv1, kColor};
 
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
@@ -8448,7 +8448,12 @@ CNA_GL_PUNCTUAL_DECL
         switch (SelectStockProgramShape(stride, params, declaredElements))
         {
         case StockProgramShape::PbrSkinned:
-            if (stride == 76)
+            if (stride == 80)
+            {
+                inputs = kPbrSkinnedDualUvColor;
+                count = std::size(kPbrSkinnedDualUvColor);
+            }
+            else if (stride == 76)
             {
                 inputs = kPbrSkinnedDualUv; count = std::size(kPbrSkinnedDualUv);
             }
@@ -8498,6 +8503,202 @@ CNA_GL_PUNCTUAL_DECL
         }
         CNA::Internal::Graphics::RequireDeclarationMatchesStockProgram(
             declaredElements, inputs, count, "EasyGL", name);
+    }
+
+    bool EasyGLRenderer::ConfigureDeclarationForStockProgramEXT(
+        EasyGLVertexBufferRenderer& buffer, std::size_t stride,
+        const GpuDrawParams& params)
+    {
+        using CNA::Internal::Graphics::StockProgramInput;
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+        using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+
+        const std::vector<VertexElement>& primaryDeclaration = buffer.GetDeclarationElements();
+        if (primaryDeclaration.empty()) return false;
+
+        static constexpr StockProgramInput kPos{
+            VertexElementUsage::Position, 0, VertexElementFormat::Vector3, "aPos"};
+        static constexpr StockProgramInput kColor{
+            VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
+        static constexpr StockProgramInput kUv{
+            VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        static constexpr StockProgramInput kUv1{
+            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
+        static constexpr StockProgramInput kNormal{
+            VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
+        static constexpr StockProgramInput kTangent{
+            VertexElementUsage::Tangent, 0, VertexElementFormat::Vector4, "aTangent"};
+        static constexpr StockProgramInput kWeights{
+            VertexElementUsage::BlendWeight, 0, VertexElementFormat::Vector4, "aBoneWeights"};
+        static constexpr StockProgramInput kIndices{
+            VertexElementUsage::BlendIndices, 0, VertexElementFormat::Byte4, "aBoneIndices"};
+
+        static constexpr StockProgramInput kColored[] = {kPos, kColor};
+        static constexpr StockProgramInput kTextured[] = {kPos, kUv};
+        static constexpr StockProgramInput kColTextured[] = {kPos, kColor, kUv};
+        static constexpr StockProgramInput kLitUntextured[] = {kPos, kNormal};
+        static constexpr StockProgramInput kLit[] = {kPos, kNormal, kUv};
+        static constexpr StockProgramInput kSkinned[] = {
+            kPos, kNormal, kUv, kWeights, kIndices, kColor};
+        static constexpr StockProgramInput kPbr[] = {kPos, kNormal, kTangent, kUv};
+        static constexpr StockProgramInput kPbrDualUv[] = {
+            kPos, kNormal, kTangent, kUv, kUv1, kColor};
+        static constexpr StockProgramInput kPbrSkinned[] = {
+            kPos, kNormal, kTangent, kUv, kWeights, kIndices};
+        static constexpr StockProgramInput kPbrSkinnedDualUv[] = {
+            kPos, kNormal, kTangent, kUv, kWeights, kIndices, kUv1};
+        static constexpr StockProgramInput kPbrSkinnedDualUvColor[] = {
+            kPos, kNormal, kTangent, kUv, kWeights, kIndices, kUv1, kColor};
+
+        const StockProgramInput* inputs = kColored;
+        std::size_t count = std::size(kColored);
+        switch (SelectStockProgramShape(stride, params, primaryDeclaration))
+        {
+        case StockProgramShape::PbrSkinned:
+            if (stride == 80)
+            {
+                inputs = kPbrSkinnedDualUvColor;
+                count = std::size(kPbrSkinnedDualUvColor);
+            }
+            else if (stride == 76)
+            {
+                inputs = kPbrSkinnedDualUv;
+                count = std::size(kPbrSkinnedDualUv);
+            }
+            else
+            {
+                inputs = kPbrSkinned;
+                count = std::size(kPbrSkinned);
+            }
+            break;
+        case StockProgramShape::Pbr:
+            if (stride == 60)
+            {
+                inputs = kPbrDualUv;
+                count = std::size(kPbrDualUv);
+            }
+            else
+            {
+                inputs = kPbr;
+                count = std::size(kPbr);
+            }
+            break;
+        case StockProgramShape::SkinnedVertexLit:
+        case StockProgramShape::Skinned:
+            inputs = kSkinned; count = std::size(kSkinned); break;
+        case StockProgramShape::EnvMapped:
+        case StockProgramShape::LitVertexLit:
+        case StockProgramShape::Lit:
+            inputs = kLit; count = std::size(kLit); break;
+        case StockProgramShape::DualTexturedColored:
+            inputs = kColTextured; count = std::size(kColTextured); break;
+        case StockProgramShape::DualTextured:
+        case StockProgramShape::Textured:
+            inputs = kTextured; count = std::size(kTextured); break;
+        case StockProgramShape::ColoredTextured:
+            inputs = kColTextured; count = std::size(kColTextured); break;
+        case StockProgramShape::LitVertexLitUntextured:
+        case StockProgramShape::LitUntextured:
+            inputs = kLitUntextured; count = std::size(kLitUntextured); break;
+        case StockProgramShape::Colored:
+            break;
+        }
+
+        if (!ProfileIsEs2ApiGeneration()) buffer.vao.bind();
+        for (std::size_t location = 0; location < count; ++location)
+        {
+            buffer.vao.disable_attribute(static_cast<unsigned int>(location));
+            buffer.vao.set_attribute_divisor(static_cast<unsigned int>(location), 0);
+
+            const StockProgramInput& input = inputs[location];
+            const EasyGLVertexBufferRenderer* sourceBuffer = nullptr;
+            const VertexElement* sourceElement = nullptr;
+            std::size_t sourceStride = buffer.GetStride();
+            std::size_t sourceBaseOffset = 0;
+
+            const auto findInStream =
+                [&input, &sourceBuffer, &sourceElement, &sourceStride, &sourceBaseOffset](
+                    const EasyGLVertexBufferRenderer& candidateBuffer,
+                    std::size_t candidateStride,
+                    int vertexOffset)
+                {
+                    const auto& candidateDeclaration = candidateBuffer.GetDeclarationElements();
+                    const auto element = std::find_if(
+                        candidateDeclaration.begin(), candidateDeclaration.end(),
+                        [&input](const VertexElement& candidate)
+                        {
+                            return candidate.getVertexElementUsageProperty() == input.usage &&
+                                   candidate.getUsageIndexProperty() == input.usageIndex;
+                        });
+                    if (element == candidateDeclaration.end()) return false;
+                    sourceBuffer = &candidateBuffer;
+                    sourceElement = &*element;
+                    sourceStride = candidateStride;
+                    sourceBaseOffset = static_cast<std::size_t>(std::max(vertexOffset, 0)) *
+                                       candidateStride;
+                    return true;
+                };
+
+            for (int streamIndex = 0;
+                 sourceElement == nullptr && streamIndex < params.vertexStreamCount;
+                 ++streamIndex)
+            {
+                const GpuVertexStreamBinding& stream =
+                    params.vertexStreams[static_cast<std::size_t>(streamIndex)];
+                if (stream.instanceFrequency != 0 || stream.buffer == nullptr) continue;
+                const auto& candidateBuffer =
+                    *static_cast<const EasyGLVertexBufferRenderer*>(stream.buffer);
+                const std::size_t candidateStride = stream.strideInBytes > 0
+                    ? static_cast<std::size_t>(stream.strideInBytes)
+                    : candidateBuffer.GetStride();
+                findInStream(candidateBuffer, candidateStride, stream.vertexOffset);
+            }
+            if (sourceElement == nullptr)
+                findInStream(buffer, buffer.GetStride(), 0);
+            if (sourceElement == nullptr) continue;
+
+            if (sourceElement->getVertexElementFormatProperty() != input.format)
+            {
+                throw System::NotSupportedException(
+                    std::string("EasyGL: vertex semantic '") + input.name +
+                    "' has a format incompatible with the selected stock program.");
+            }
+
+            const VertexAttribFormat desc =
+                DescribeVertexElementFormat(sourceElement->getVertexElementFormatProperty());
+            const void* offset = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(
+                    sourceBaseOffset +
+                    static_cast<std::size_t>(sourceElement->getOffsetProperty())));
+            const unsigned int attributeLocation = static_cast<unsigned int>(location);
+            sourceBuffer->vbo.bind(::easygl::BufferTarget::Array);
+            buffer.vao.enable_attribute(attributeLocation);
+            if (desc.isInteger)
+            {
+                buffer.vao.set_attribute_i_pointer(
+                    attributeLocation, desc.componentCount, desc.type, sourceStride, offset);
+            }
+            else
+            {
+                buffer.vao.set_attribute_pointer(
+                    attributeLocation, desc.componentCount, desc.type,
+                    desc.normalized, sourceStride, offset);
+            }
+        }
+        if (!ProfileIsEs2ApiGeneration()) buffer.vao.unbind();
+        return true;
+    }
+
+    void EasyGLRenderer::RestoreDeclarationLayoutEXT(EasyGLVertexBufferRenderer& buffer)
+    {
+        if (!ProfileIsEs2ApiGeneration()) buffer.vao.bind();
+        for (unsigned int location = 0; location < 16; ++location)
+        {
+            buffer.vao.disable_attribute(location);
+            buffer.vao.set_attribute_divisor(location, 0);
+        }
+        if (!ProfileIsEs2ApiGeneration()) buffer.vao.unbind();
+        buffer.ApplyLayout(buffer.GetStride());
     }
 
     // REMED-GFX-147: resolved for every stock 3D program from one place, right after it links, so
@@ -9556,7 +9757,7 @@ else
         // own elements. A single-stream draw takes neither branch and is unchanged.
         const bool multiStream = HasMultipleVertexStreams(params);
         auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
-        if (multiStream)
+        if (multiStream && params.customEffectRenderer != nullptr)
         {
             vao.bind();
             if (!ConfigureMultiStreamAttributes(vao, params))
@@ -9584,7 +9785,6 @@ else
         Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
-
         const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " verts=" << vertex_count);
@@ -9594,10 +9794,14 @@ else
             return;
 
         vb.BindForDraw();
+        const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
+            const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
         TraceBoundTextureUnit("draw-arrays-3d", 0);
         device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
+        if (semanticLayout)
+            RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
     }
 
     void EasyGLRenderer::DrawIndexedPrimitivesEx(const IVertexBufferRenderer& vb_in,
@@ -9669,7 +9873,7 @@ else
         // many of its own elements.
         const bool multiStream = HasMultipleVertexStreams(params);
         auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
-        if (multiStream)
+        if (multiStream && params.customEffectRenderer != nullptr)
         {
             vao.bind();
             if (!ConfigureMultiStreamAttributes(vao, params))
@@ -9719,7 +9923,6 @@ else
         Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
-
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         CNA_RENDER_LOG("DrawIndexedPrimitivesEx: stride=" << layoutStride
             << " prim=" << static_cast<int>(primitive) << " indices=" << index_count);
@@ -9730,6 +9933,8 @@ else
             return;
 
         vb.BindForDraw();
+        const bool semanticLayout = ConfigureDeclarationForStockProgramEXT(
+            const_cast<EasyGLVertexBufferRenderer&>(vb), layoutStride, params);
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
         const auto idxType2 = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                                : ::easygl::DataType::UnsignedShort;
@@ -9755,6 +9960,8 @@ else
         }
         if (multiStream) RestoreSingleStreamAttributes(vao, params);
         vb.UnbindAfterDraw();
+        if (semanticLayout)
+            RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
     }
 
     void EasyGLRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb_in,
@@ -9885,8 +10092,13 @@ else
         }
 
         auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        const bool semanticLayout = params.customEffectRenderer == nullptr &&
+            ConfigureDeclarationForStockProgramEXT(
+                const_cast<EasyGLVertexBufferRenderer&>(vb),
+                CombinedVertexStrideOr(params, vb.GetStride()), params);
         vao.bind();
-        if (reconfigurePerVertex && !ConfigureMultiStreamAttributes(vao, params))
+        if (params.customEffectRenderer != nullptr && reconfigurePerVertex &&
+            !ConfigureMultiStreamAttributes(vao, params))
         {
             vao.unbind();
             throw System::InvalidOperationException(
@@ -9965,6 +10177,8 @@ else
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }
         vao.unbind();
+        if (semanticLayout)
+            RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
 }
     }
 
@@ -10031,8 +10245,13 @@ else
         }
 
         auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+        const bool semanticLayout = params.customEffectRenderer == nullptr &&
+            ConfigureDeclarationForStockProgramEXT(
+                const_cast<EasyGLVertexBufferRenderer&>(vb),
+                CombinedVertexStrideOr(params, vb.GetStride()), params);
         vao.bind();
-        if (reconfigurePerVertex && !ConfigureMultiStreamAttributes(vao, params))
+        if (params.customEffectRenderer != nullptr && reconfigurePerVertex &&
+            !ConfigureMultiStreamAttributes(vao, params))
         {
             vao.unbind();
             throw System::InvalidOperationException(
@@ -10109,6 +10328,8 @@ else
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }
         vao.unbind();
+        if (semanticLayout)
+            RestoreDeclarationLayoutEXT(const_cast<EasyGLVertexBufferRenderer&>(vb));
     }
 
     void EasyGLRenderer::DrawPrimitivesIndirectEXT(const IVertexBufferRenderer& vb,
