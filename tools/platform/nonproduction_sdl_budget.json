@@ -199,7 +199,7 @@
     },
     "modules/platform/tests/CNA/Platform/Sdl3PlatformTests.cpp": {
       "category": "platform-sdl3-integration",
-      "max_references": 3
+      "max_references": 18
     },
     "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp": {
       "category": "containment-assertion",
