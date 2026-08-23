@@ -406,7 +406,7 @@ TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-    if (CNA_RENDERER_IS(Skia))
+    if (CNA_RENDERER_IS(Skia, OpenGLES3, OpenGL33, WebGL2))
     {
         EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
     }
@@ -583,7 +583,10 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
         // to end on both its backends, and only if its texel is a multiple of four bytes -- the
         // framework's own transfer rule, which ByteEXT, UShortEXT and HalfSingle would break.
         const bool igl = CNA_RENDERER_IS(Igl);
+        const bool easyGlSignedNormalized =
+            CNA_RENDERER_IS(OpenGLES3, OpenGL33, WebGL2);
         const bool supported = format == SurfaceFormat::Color
+            || (easyGlSignedNormalized && format == SurfaceFormat::NormalizedByte4)
             || (igl && (format == SurfaceFormat::Rg32 || format == SurfaceFormat::Single))
             || (skia && (false
             || format == SurfaceFormat::Bgr565

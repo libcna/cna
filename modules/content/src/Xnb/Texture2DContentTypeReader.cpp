@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
 
 namespace CNA::Internal::Xnb
 {
@@ -17,6 +18,7 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Content::ContentLoadException;
     using Microsoft::Xna::Framework::Content::ContentReader;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::Texture;
     using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -112,11 +114,12 @@ namespace CNA::Internal::Xnb
         // Always decompress DXT to Color -- see this reader's class docs for why (XNB-24's
         // fuller per-renderer capability query is deferred, not required for correctness).
         const SurfaceFormat uploadFormat = IsCompressed(surfaceFormat) ? SurfaceFormat::Color : surfaceFormat;
-        if (uploadFormat != SurfaceFormat::Color)
+        if (uploadFormat != SurfaceFormat::Color &&
+            uploadFormat != SurfaceFormat::NormalizedByte4)
         {
             throw ContentLoadException(
                 "Texture2DReader: SurfaceFormat is not yet supported by CNA's .xnb reader "
-                "(only Color/Dxt1/Dxt3/Dxt5 are implemented so far).");
+                "(only Color/NormalizedByte4/Dxt1/Dxt3/Dxt5 are implemented so far).");
         }
 
         GraphicsDevice* device = input.getContentManagerProperty()
@@ -217,13 +220,10 @@ namespace CNA::Internal::Xnb
                 }
             }
 
-            // Color is not a raw 4-byte POD -- it derives from IPackedVectorT, which has virtual
-            // methods, so it carries a vtable pointer. Raw RGBA bytes must be used to construct
-            // real Color values one at a time, never reinterpret_cast wholesale.
             const int32_t pixelCount = levelWidth * levelHeight;
             // The compressed branch above always produces exactly pixelCount*4 bytes by
-            // construction; only the uncompressed Color branch can still disagree here, if the
-            // file's own declared byteCount doesn't actually match levelWidth/levelHeight (a
+            // construction; either uncompressed four-byte format can still disagree here, if the
+            // file's own declared byteCount does not match levelWidth/levelHeight (a
             // truncated/adversarial file) -- catch that before indexing into bytes below.
             if (bytes.size() != static_cast<std::size_t>(pixelCount) * 4)
             {
@@ -233,14 +233,33 @@ namespace CNA::Internal::Xnb
                     "x" + std::to_string(levelHeight) + "'s required " +
                     std::to_string(static_cast<std::size_t>(pixelCount) * 4) + " bytes.");
             }
-            std::vector<Color> colors;
-            colors.reserve(static_cast<std::size_t>(pixelCount));
-            for (int32_t i = 0; i < pixelCount; ++i)
+            if (uploadFormat == SurfaceFormat::NormalizedByte4)
             {
-                const std::size_t o = static_cast<std::size_t>(i) * 4;
-                colors.emplace_back(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+                std::vector<NormalizedByte4> normals(static_cast<std::size_t>(pixelCount));
+                for (int32_t i = 0; i < pixelCount; ++i)
+                {
+                    const std::size_t o = static_cast<std::size_t>(i) * 4;
+                    const uint32_t packed = static_cast<uint32_t>(bytes[o]) |
+                        (static_cast<uint32_t>(bytes[o + 1]) << 8u) |
+                        (static_cast<uint32_t>(bytes[o + 2]) << 16u) |
+                        (static_cast<uint32_t>(bytes[o + 3]) << 24u);
+                    normals[static_cast<std::size_t>(i)].setPackedValueProperty(packed);
+                }
+                texture.SetData(level, nullptr, normals.data(), 0, pixelCount);
             }
-            texture.SetData(level, nullptr, colors.data(), 0, pixelCount);
+            else
+            {
+                // Color is not a raw 4-byte POD -- it derives from IPackedVectorT, which has
+                // virtual methods, so construct real values instead of reinterpreting the bytes.
+                std::vector<Color> colors;
+                colors.reserve(static_cast<std::size_t>(pixelCount));
+                for (int32_t i = 0; i < pixelCount; ++i)
+                {
+                    const std::size_t o = static_cast<std::size_t>(i) * 4;
+                    colors.emplace_back(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+                }
+                texture.SetData(level, nullptr, colors.data(), 0, pixelCount);
+            }
         }
 
         return texture;

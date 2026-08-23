@@ -408,6 +408,46 @@ TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchContract)
     CNA::TestSupport::RunCompiledEffectSpriteBatchContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SpriteBatchInheritsStockVertexShaderForPixelOnlyEffect)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    CNA::TestSupport::SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.pixelShaderSamplesTexture = true;
+    options.samplerRegister = 1;
+    Effect effect(device, CNA::TestSupport::BuildSyntheticEffect(options));
+    effect.getParametersProperty()["Tint"]->SetValue(
+        Microsoft::Xna::Framework::Vector4::One);
+
+    Texture2D sprite(device, 1, 1);
+    const Color red[1] = {Color::Red};
+    sprite.SetData(red, 1);
+    Texture2D secondary(device, 1, 1);
+    const Color green[1] = {Color::Green};
+    secondary.SetData(green, 1);
+    device.getTexturesProperty()(1, &secondary);
+    device.getSamplerStatesProperty()[1] = SamplerState::PointClamp;
+
+    RenderTarget2D target(device, 8, 8);
+    device.SetRenderTarget(&target);
+    device.Clear(Color::Black);
+    SpriteBatch batch(device);
+    batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, nullptr, nullptr, nullptr, &effect);
+    batch.Draw(sprite, Rectangle(0, 0, 8, 8), Rectangle(0, 0, 1, 1), Color::White);
+    batch.End();
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+    Color actual(0, 0, 0, 0);
+    const Rectangle centre(4, 4, 1, 1);
+    target.GetData(0, &centre, &actual, 0, 1);
+    EXPECT_NEAR(actual.getRProperty(), 0, 3);
+    EXPECT_NEAR(actual.getGProperty(), 128, 3);
+    EXPECT_NEAR(actual.getBProperty(), 0, 3);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedOrientationContract)
 {
     GraphicsDevice device;

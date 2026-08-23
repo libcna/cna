@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <algorithm>
@@ -580,7 +581,8 @@ namespace CNA::Internal::Renderers::EasyGL
 
     void EasyGLRenderer::BindCompiledEffectForDrawEXT(
         const CompiledEffectStreamEXT* streams, std::size_t streamCount,
-        ICompiledEffectRuntime& runtime, const ITextureRenderer* spriteBatchSlotZeroTexture)
+        ICompiledEffectRuntime& runtime, const ITextureRenderer* spriteBatchSlotZeroTexture,
+        const Microsoft::Xna::Framework::Graphics::TextureCollection* spriteBatchTextures)
     {
         RequireCompiledEffectContextEXT("a compiled-effect draw");
         auto* effect = dynamic_cast<EasyGLCompiledEffect*>(&runtime);
@@ -733,6 +735,10 @@ namespace CNA::Internal::Renderers::EasyGL
             {
                 nativeTexture = ResolvedSamplerTextureEXT{};
                 nativeTexture.texture2D = spriteBatchSlotZeroTexture;
+            }
+            else if (!nativeTexture.Resolved() && spriteBatchTextures != nullptr)
+            {
+                nativeTexture = ResolveSamplerTexture((*spriteBatchTextures)[sampler.index]);
             }
             const std::string slotName = std::to_string(sampler.index) + " ('" +
                 (sampler.name != nullptr ? sampler.name : "<unnamed>") + "')";

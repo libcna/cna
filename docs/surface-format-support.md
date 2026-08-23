@@ -96,10 +96,9 @@ Both are `internal` in FNA; made `public static` on CNA's `Texture` instead (doc
 deviation — see `AUDIT.md`), since 3 of the 4 real call sites aren't subclasses of `Texture` in CNA.
 Wired `ValidateGetDataFormat` into all 4 of FNA's real call sites: `Texture2D::GetData`,
 `Texture3D::GetData`, `TextureCube::GetData`, `GraphicsDevice::GetBackBufferData` — all using
-`elementSizeInBytes = 4` (this project's `Color`/RGBA-raw-bytes convention). Currently a no-op in
-practice everywhere, since `Texture::ValidateFormat` still blocks every non-`Color` format before
-any of this logic would run — but it's the correct, forward-looking infrastructure for future
-Phase 34 format support.
+`elementSizeInBytes = 4` (this project's `Color`/RGBA-raw-bytes convention). Renderer-specific
+promotion gates now use it for supported non-Color formats, including EasyGL's ES 3-class
+`NormalizedByte4` path.
 
 ---
 
@@ -145,15 +144,15 @@ no equivalent bug — neither has any `SRGB`/`Srgb` format reference anywhere in
 ## How format selection works (current state)
 
 Historically `Texture2D` stored the requested `SurfaceFormat` in `format_` but did not forward it
-to the renderers covered by this document. `ImageData` now also carries a format ordinal so the
-Skia renderer can implement its promoted packed formats; existing decoders and other renderers keep
-the default `Color` value.
+to the renderers covered by this document. `ImageData` now carries the format ordinal. Skia uses
+that for its promoted formats; EasyGL uses it for `NormalizedByte4` on OpenGL ES 3/OpenGL 3.3/
+WebGL 2 profiles, storing exact signed bytes as `GL_RGBA8_SNORM`.
 
 `Texture3D` and `TextureCube` receive `surfaceFormat` as an `int` argument in
 `CreateTexture3D` / `CreateTextureCube`, but every renderer ignores it (`/* surfaceFormat */`).
 
-**Result for the historical renderers covered below**: accepted textures are still stored as
-RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix linked above.
+Other accepted textures in the historical renderers below remain RGBA8 unorm. Skia's broader
+current exceptions are documented only in its checked matrix linked above.
 
 ---
 
@@ -180,7 +179,7 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 | **Dxt3** | 1 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
 | **Dxt5** | 1 | ⚠️ | ⚠️ | ⚠️ | ⚠️ | Same as Dxt1 |
 | NormalizedByte2 | 2 | ❌ | ❌ | ❌ | ❌ | Signed 8-bit per channel; no signed GL/Vk format used |
-| NormalizedByte4 | 4 | ❌ | ❌ | ❌ | ❌ | Same |
+| NormalizedByte4 | 4 | ✅ GL_RGBA8_SNORM (ES 3-class profiles) | ❌ | ❌ | ❌ | Signed bytes upload and sample in [-1,1]; ES 2/WebGL 1 reject clearly |
 | Rgba1010102 | 4 | ❌ | ❌ | ❌ | ❌ | 10-bit per channel; requires GL_RGB10_A2 / VK_FORMAT_A2B10G10R10_UNORM_PACK32 |
 | Rg32 | 4 | ❌ | ❌ | ❌ | — | 16-bit per channel RG; requires GL_RG16 / VK_FORMAT_R16G16_UNORM |
 | Rgba64 | 8 | ❌ | ❌ | ❌ | — | 16-bit per channel RGBA; requires GL_RGBA16 / VK_FORMAT_R16G16B16A16_UNORM |
@@ -206,7 +205,7 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 
 | Renderer | Texture2D | Texture3D | TextureCube | RenderTarget (color) | RenderTarget (depth) |
 |---------|-----------|-----------|-------------|----------------------|----------------------|
-| EasyGL | GL_RGBA8 | GL_RGBA8 | GL_RGBA8 | GL_RGBA8 | GL_DEPTH_COMPONENT24 |
+| EasyGL | GL_RGBA8; GL_RGBA8_SNORM for NormalizedByte4 on ES 3-class profiles | GL_RGBA8 | GL_RGBA8 | GL_RGBA8 | GL_DEPTH_COMPONENT24 |
 | Vulkan | VK_FORMAT_R8G8B8A8_UNORM | VK_FORMAT_R8G8B8A8_UNORM | VK_FORMAT_R8G8B8A8_UNORM | swapchain format¹ | D32_SFLOAT or D24_UNORM_S8² |
 | Bgfx | RGBA8 | RGBA8 | RGBA8 | RGBA8 | D24S8 |
 | SDL_Renderer | SDL_PIXELFORMAT_RGBA32 | — | — | SDL_PIXELFORMAT_RGBA32 | — |
@@ -243,7 +242,8 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 ### Low priority / unlikely needed
 
 - `Bgr565`, `Bgra5551`, `Bgra4444`, `ColorBgraEXT` — uncommon in modern use.
-- `NormalizedByte2/4` — bump-map formats; rarely used.
+- `NormalizedByte2` and `NormalizedByte4` outside EasyGL's ES 3-class Texture2D path — bump-map
+  formats.
 - `Dxt5SrgbEXT` — follows from fixing DXT native upload + sRGB.
 - `Bc7EXT`/`Bc7SrgbEXT` — no existing CPU-decompress fallback (unlike Dxt1/3/5), so this needs a
   real BC7 decoder before it can work at all, even via the CPU-decompress path.
@@ -255,8 +255,8 @@ RGBA8 unorm. Skia's current exceptions are documented only in its checked matrix
 
 To properly support non-Color formats, the following refactors are needed:
 
-1. **Pass `SurfaceFormat` through `IGraphicsRenderer::CreateTexture`** — add it to
-   `ImageData` or add a second overload `CreateTexture2D(w, h, format, mipMap)`.
+1. **Pass `SurfaceFormat` through `IGraphicsRenderer::CreateTexture`** — done through
+   `ImageData::surfaceFormat`; each renderer must still opt a format into its verified mapping.
 
 2. **Add a format dispatch function in each renderer** — map `SurfaceFormat` enum to
    the native `metagl::InternalFormat` / `VkFormat` / `bgfx::TextureFormat`.

@@ -1,6 +1,10 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Internal/Graphics/SrgbTransfer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+#include "CNA/Internal/Renderers/EasyGL/EasyGLCompiledEffect.hpp"
+#include "Fna3dStockEffectBlobs.hpp"
+#endif
 
 namespace CNA::Internal::Renderers::EasyGL
 {
@@ -39,7 +43,9 @@ namespace CNA::Internal::Renderers::EasyGL
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/NotSupportedException.hpp"
 #include <cstddef>
@@ -2290,12 +2296,13 @@ if (!ProfileIsEs2ApiGeneration())
     // --- EasyGLTextureRenderer ---
 
     EasyGLTextureRenderer::EasyGLTextureRenderer(const ImageData& data, ::easygl::ResourceRegistry* registry)
-        : registry_(registry), mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
+        : registry_(registry), surfaceFormat_(data.surfaceFormat),
+          mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
         width = data.width;
         height = data.height;
         texture.create();
-        texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, data.pixels.data());
+        UploadLevel(0, width, height, data.pixels.data());
         AllocateDeclaredLevels();
 if (ProfileIsEs2ApiGeneration())
 {
@@ -2314,6 +2321,37 @@ else
                                mipLevels_ - 1);
 }
         if (registry_) registry_->add(this);
+    }
+
+    void EasyGLTextureRenderer::UploadLevel(int level, int levelWidth, int levelHeight,
+                                            const void* pixels)
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat_) == SurfaceFormat::NormalizedByte4)
+        {
+            texture.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 1);
+            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                                 ::easygl::InternalFormat::Rgba8Snorm,
+                                 levelWidth, levelHeight,
+                                 ::easygl::PixelFormat::Rgba,
+                                 ::easygl::PixelType::Byte, pixels);
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::MinFilter,
+                                  static_cast<int>(::easygl::TextureMinFilter::Linear));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::MagFilter,
+                                  static_cast<int>(::easygl::TextureMagFilter::Linear));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::WrapS,
+                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+            texture.set_parameter(::easygl::TextureTarget::Texture2D,
+                                  ::easygl::TextureParameterSetter::WrapT,
+                                  static_cast<int>(::easygl::TextureWrapMode::ClampToEdge));
+            return;
+        }
+        texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
+                             levelWidth, levelHeight, pixels);
     }
 
     // REMED-GFX-175: a Texture2D created with mipMap=true DECLARES a chain, and Task 924 widens
@@ -2335,7 +2373,7 @@ else
         {
             const int levelW = std::max(1, width >> level);
             const int levelH = std::max(1, height >> level);
-            texture.set_image_2d(::easygl::TextureTarget::Texture2D, level, levelW, levelH, nullptr);
+            UploadLevel(level, levelW, levelH, nullptr);
         }
     }
 
@@ -2365,14 +2403,12 @@ if (ProfileIsEs2ApiGeneration())
         texture.create();
         if (pixels_ && !pixels_->empty())
         {
-            texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
-                                 width, height, pixels_->data());
+            UploadLevel(0, width, height, pixels_->data());
         }
         else
         {
             const std::vector<uint8_t> blank(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4, 0);
-            texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0,
-                                 width, height, blank.data());
+            UploadLevel(0, width, height, blank.data());
         }
         // REMED-GFX-175: the fresh GL texture object has storage for level 0 only, so a declared
         // chain has to be re-allocated here too or the texture comes back from a context loss
@@ -2406,14 +2442,12 @@ else
     {
         // pixels_ (shared with Texture2D::cpuPixels_) is already updated by the caller
         // before this method is invoked — no need to update it here.
-        texture.bind(::easygl::TextureTarget::Texture2D);
-        texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, rgba);
+        UploadLevel(0, width, height, rgba);
     }
 
     void EasyGLTextureRenderer::UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH)
     {
-        texture.bind(::easygl::TextureTarget::Texture2D);
-        texture.set_image_2d(::easygl::TextureTarget::Texture2D, level, levelW, levelH, rgba);
+        UploadLevel(level, levelW, levelH, rgba);
     }
 
     // --- EasyGLRenderTargetRenderer ---
@@ -3365,6 +3399,28 @@ if (ProfileIsEs2ApiGeneration())
         , graphicsRenderer_(renderer)
     {
         InitializeResources();
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        if (graphicsRenderer_ != nullptr)
+        {
+            const auto& bytes =
+                CNA::Internal::Renderers::Fna3d::StockEffectBlobs::kSpriteEffectFxb;
+            spriteCompiledEffect_ = std::make_unique<EasyGLCompiledEffect>(
+                *graphicsRenderer_, bytes, sizeof(bytes));
+            const auto& parameters = spriteCompiledEffect_->GetDescription().parameters;
+            const auto matrix = std::find_if(
+                parameters.begin(), parameters.end(),
+                [](const CompiledEffectParameterDescription& parameter)
+                {
+                    return parameter.name == "MatrixTransform";
+                });
+            if (matrix == parameters.end())
+            {
+                throw std::runtime_error(
+                    "CNA EasyGL: embedded XNA SpriteEffect has no MatrixTransform parameter.");
+            }
+            spriteMatrixParameterIndex_ = matrix->runtimeIndex;
+        }
+#endif
         if (registry_) registry_->add(this);
     }
 
@@ -3710,12 +3766,47 @@ if (ProfileUsesGlslEs100())
     }
 
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    void EasyGLSpriteBatchRenderer::ApplyCompiledSpriteVertexShader(
+        int logicalWidth, int logicalHeight)
+    {
+        if (spriteCompiledEffect_ == nullptr || customEffect_ == nullptr ||
+            logicalWidth <= 0 || logicalHeight <= 0)
+        {
+            throw std::runtime_error(
+                "CNA EasyGL: the XNA SpriteBatch vertex effect is unavailable.");
+        }
+
+        const Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, static_cast<float>(logicalWidth),
+            static_cast<float>(logicalHeight), 0.0f, 0.0f, -1.0f);
+        const Matrix combined = transform_ * projection;
+        const float values[16] = {
+            combined.M11, combined.M21, combined.M31, combined.M41,
+            combined.M12, combined.M22, combined.M32, combined.M42,
+            combined.M13, combined.M23, combined.M33, combined.M43,
+            combined.M14, combined.M24, combined.M34, combined.M44,
+        };
+        spriteCompiledEffect_->SetParameterValue(
+            spriteMatrixParameterIndex_, values, sizeof(values));
+        spriteCompiledEffect_->SetTechnique(0);
+
+        GraphicsDevice& graphicsDevice = customEffect_->getGraphicsDeviceInternal();
+        CompiledEffectDeviceState deviceState;
+        deviceState.blend = &graphicsDevice.getBlendStateProperty();
+        deviceState.depthStencil = &graphicsDevice.getDepthStencilStateProperty();
+        deviceState.rasterizer = &graphicsDevice.getRasterizerStateProperty();
+        deviceState.samplerStates = &graphicsDevice.getSamplerStatesProperty();
+        deviceState.vertexSamplerStates = &graphicsDevice.getVertexSamplerStatesProperty();
+        CompiledEffectPassStateChanges ignoredChanges;
+        spriteCompiledEffect_->ApplyPass(0, deviceState, ignoredChanges);
+    }
+
     void EasyGLSpriteBatchRenderer::FlushBatchWithCompiledEffect()
     {
-        // plans/plan_fx.md FX-080. Sprite vertices reach a custom effect in the target's own pixel
-        // space, exactly as in FNA: `SpriteBatch` sets `MatrixTransform` on the STOCK sprite
-        // effect only (`PrepRenderState`), never on a custom one, so a ported XNA sprite effect
-        // carries its own projection parameter and the game assigns it. Nothing is invented here.
+        // FNA applies its stock SpriteEffect before every custom-effect batch. A custom pass may
+        // assign only a pixel shader, as Microsoft's SpriteEffects sample does; Direct3D then
+        // retains the stock vertex shader and its MatrixTransform. EasyGL reproduces that shader
+        // inheritance through the same compiled XNA SpriteEffect before applying the custom pass.
         ICompiledEffectRuntime* runtime = customEffect_->GetCompiledRuntimePtr();
         if (graphicsRenderer_ == nullptr || runtime == nullptr || current_texture_ == nullptr)
         {
@@ -3752,16 +3843,21 @@ if (ProfileUsesGlslEs100())
 
         // The viewport is still this renderer's own business: a batch drawn into a RenderTarget2D
         // rasterizes at the target's size, not the window's, whatever shader runs.
+        int logicalWidth = 0;
+        int logicalHeight = 0;
         int rtW = 0, rtH = 0;
         if (graphicsRenderer_->GetCurrentRenderTarget2DSize(rtW, rtH) && rtW > 0 && rtH > 0)
         {
             device_.set_viewport(0, 0, rtW, rtH);
+            logicalWidth = rtW;
+            logicalHeight = rtH;
         }
         else
         {
             int physW = 0, physH = 0;
             graphicsRenderer_->getPhysicalSize(physW, physH);
             if (physW > 0 && physH > 0) device_.set_viewport(0, 0, physW, physH);
+            graphicsRenderer_->getLogicalSize(logicalWidth, logicalHeight);
         }
         graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_,
                                              pendingAddressV_, 1);
@@ -3781,13 +3877,16 @@ if (ProfileUsesGlslEs100())
                 "CNA EasyGL: a compiled Effect used with SpriteBatch must have a current "
                 "technique with at least one pass.");
         }
+        ApplyCompiledSpriteVertexShader(logicalWidth, logicalHeight);
         ::easygl::VertexArray& vao = graphicsRenderer_->EnsureCompiledEffectVaoEXT();
+        const TextureCollection& deviceTextures =
+            customEffect_->getGraphicsDeviceInternal().getTexturesProperty();
         for (int pass = 0; pass < passCount; ++pass)
         {
             technique->getPassesProperty()[pass].Apply();
             vao.bind();
             graphicsRenderer_->BindCompiledEffectForDrawEXT(&stream, 1, *runtime,
-                                                            current_texture_);
+                                                            current_texture_, &deviceTextures);
             easyIndexBuffer->ibo.bind(::easygl::BufferTarget::ElementArray);
             device_.draw_elements(::easygl::PrimitiveType::Triangles, indexCount,
                                   ::easygl::DataType::UnsignedShort, nullptr);
@@ -4062,7 +4161,10 @@ if (ProfileUsesGlslEs100())
                          "anisotropic filtering: "
                       << (hasAniso ? ("supported (Task 918, up to " + std::to_string(static_cast<int>(maxAnisoCap)) + "x)")
                                    : std::string("NOT supported (falls back to trilinear)"))
-                      << "; texture SurfaceFormat: Color only (Task 176)"
+                      << "; texture SurfaceFormat: Color"
+                      << (ProfileIsEs2ApiGeneration()
+                              ? " only"
+                              : " + NormalizedByte4 (RGBA8_SNORM)")
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
@@ -4591,6 +4693,29 @@ if (!ProfileIsEs2ApiGeneration())
         }
         return std::make_unique<EasyGLRenderTargetRenderer>(w, h, depthFormat, RegistryPtr(), bound_,
                                                            mipMap, multiSampleCount, surfaceFormat);
+    }
+
+    RendererFormatVerdict EasyGLRenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::Color)
+            return RendererFormatVerdict::Supported;
+        if (format == SurfaceFormat::NormalizedByte4)
+        {
+            return ProfileIsEs2ApiGeneration()
+                ? RendererFormatVerdict::Unsupported
+                : RendererFormatVerdict::Supported;
+        }
+        return RendererFormatVerdict::Defer;
+    }
+
+    RendererFormatVerdict EasyGLRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::NormalizedByte4)
+            return RendererFormatVerdict::Unsupported;
+        return RendererFormatVerdict::Defer;
     }
 
     RendererFormatVerdict EasyGLRenderer::ClassifyRenderTargetFormatEXT(int surfaceFormat) const

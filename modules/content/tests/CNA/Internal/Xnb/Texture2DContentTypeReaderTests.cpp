@@ -7,11 +7,14 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Xnb/Texture2DContentTypeReader.hpp"
+#include "CNA/RendererTestGate.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/IO/BinaryWriter.hpp"
 #include "System/IO/MemoryStream.hpp"
 
@@ -20,6 +23,8 @@ using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentReader;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4;
+using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -84,6 +89,53 @@ TEST_F(Texture2DContentTypeReaderTest, UnsupportedSurfaceFormatThrowsContentLoad
     ASSERT_NE(typeReader, nullptr);
 
     EXPECT_THROW(typeReader->ReadUntyped(reader, std::any{}), ContentLoadException);
+}
+
+TEST_F(Texture2DContentTypeReaderTest, NormalizedByte4PreservesSignedPackedTexels)
+{
+    using namespace CNA::Testing::Renderers;
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Skia);
+
+    ContentManager cm;
+    cm.setGraphicsDevice(gd);
+
+    constexpr uint32_t leftPacked = 0x7F004081u;
+    constexpr uint32_t rightPacked = 0xC07F00C0u;
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write(static_cast<int32_t>(SurfaceFormat::NormalizedByte4));
+    writer.Write((int32_t)2);
+    writer.Write((int32_t)1);
+    writer.Write((int32_t)1);
+    writer.Write((int32_t)8);
+    for (const uint32_t packed : {leftPacked, rightPacked})
+    {
+        writer.Write(static_cast<uint8_t>(packed));
+        writer.Write(static_cast<uint8_t>(packed >> 8u));
+        writer.Write(static_cast<uint8_t>(packed >> 16u));
+        writer.Write(static_cast<uint8_t>(packed >> 24u));
+    }
+    writer.Flush();
+    const auto bytes = ms.ToArray();
+
+    System::IO::MemoryStream input(bytes.data(), static_cast<int32_t>(bytes.size()));
+    ContentReader reader(&cm, &input, "normalized-byte4", 5, 'w');
+    auto typeReader = ContentTypeReaderManager::CreateReader(
+        "Microsoft.Xna.Framework.Content.Texture2DReader");
+    ASSERT_NE(typeReader, nullptr);
+
+    Texture2D texture = std::any_cast<Texture2D>(
+        typeReader->ReadUntyped(reader, std::any{}));
+    EXPECT_EQ(texture.getFormatProperty(), SurfaceFormat::NormalizedByte4);
+    EXPECT_EQ(texture.getWidthProperty(), 2);
+    EXPECT_EQ(texture.getHeightProperty(), 1);
+
+    NormalizedByte4 actual[2];
+    texture.GetData(actual, 2);
+    EXPECT_EQ(actual[0].getPackedValueProperty(), leftPacked);
+    EXPECT_EQ(actual[1].getPackedValueProperty(), rightPacked);
+    EXPECT_LT(actual[0].ToVector4().X, 0.0f);
+    EXPECT_GT(actual[0].ToVector4().W, 0.0f);
 }
 
 // plans/plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own

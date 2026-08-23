@@ -49,9 +49,9 @@ below) — both need their own explicit registration.
 | Math (`Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray`) | ✅ Full | |
 | `Decimal`/`DateTime`/`TimeSpan` | ✅ Full | Faithful field-for-field decoding, not a lossy `double` shortcut |
 | `Curve` | ✅ Full | |
-| `Texture2DReader` | ✅ `SurfaceFormat.Color`/`Dxt1`/`Dxt3`/`Dxt5` only | Compressed formats are always software-decompressed to `Color` on load (matches this project's existing `SurfaceFormat: Color only` GPU-upload policy — see the EasyGL renderer's own startup log line) |
-| `Texture3DReader` | ✅ Same scope as `Texture2DReader` | No real fixture exists anywhere in the available test-asset library (volume textures are rare in real XNA content) — verified via a hand-constructed stream instead, field-by-field against FNA's own `Texture3DReader.cs` |
-| `TextureCubeReader` | ✅ Same scope as `Texture2DReader` | Verified against a real MonoGame fixture covering all 6 faces and a full DXT1 mip chain (including the sub-4×4 block-rounding edge cases) |
+| `Texture2DReader` | ✅ `SurfaceFormat.Color`/`NormalizedByte4`/`Dxt1`/`Dxt3`/`Dxt5` | `NormalizedByte4` preserves its exact signed packed texels and requires a renderer that promotes it (EasyGL ES 3-class profiles or Skia); compressed formats are software-decompressed to `Color` |
+| `Texture3DReader` | ✅ `SurfaceFormat.Color`/`Dxt1`/`Dxt3`/`Dxt5` | No real fixture exists anywhere in the available test-asset library (volume textures are rare in real XNA content) — verified via a hand-constructed stream instead, field-by-field against FNA's own `Texture3DReader.cs` |
+| `TextureCubeReader` | ✅ `SurfaceFormat.Color`/`Dxt1`/`Dxt3`/`Dxt5` | Verified against a real MonoGame fixture covering all 6 faces and a full DXT1 mip chain (including the sub-4×4 block-rounding edge cases) |
 | `SpriteFontReader` | ✅ Full | Depends on `Texture2DReader` and 3 closed generic-collection readers (see below) |
 | `SoundEffectReader` | ✅ 16-bit PCM only | 8-bit PCM, IEEE float, MS-ADPCM, IMA-ADPCM, and XMA2 are recognized but explicitly rejected — no decode path exists yet. See the support matrix below |
 | `SongReader` | ✅ Full | `Song` is always an external audio file reference (`.ogg`/etc, matching FNA), never embedded PCM |
@@ -209,7 +209,7 @@ without changing either method's observable behavior for any valid input.
 | General `EffectReader` on a renderer without `CompiledEffects` | ❌ loading fails with an asset-specific capability diagnostic rather than a silent shader fallback. True for every identity except FNA3D, and SDL_GPU / the EasyGL family with their own build option on |
 | LZ4 compression | ❌ Not supported yet — deferred (`plans/plan_xnb.md` XNB-30C) |
 | Generic collection readers for an unregistered `T` combination | ❌ Not supported — each closed combination needs its own explicit registration |
-| `Texture2D`/`Texture3D`/`TextureCube` formats beyond `Color`/`Dxt1`/`Dxt3`/`Dxt5` | ❌ Not supported yet |
+| Texture formats beyond `Texture2D`'s `Color`/`NormalizedByte4`/`Dxt1`/`Dxt3`/`Dxt5` and `Texture3D`/`TextureCube`'s existing Color/DXT scope | ❌ Not supported yet |
 | `SoundEffect` formats beyond 16-bit PCM | ❌ Not supported yet — see the audio support matrix above |
 | Platform identifiers MonoGame added after FNA's fork point (`'b'`/`'5'`/`'O'`/`'S'`/`'V'`) | ❌ Not accepted, matching FNA exactly (deliberate, not an oversight) |
 

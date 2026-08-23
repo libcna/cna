@@ -18,12 +18,20 @@
 #include <string>
 #include <vector>
 
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class TextureCollection;
+}
+
 namespace CNA::Internal::Renderers::EasyGL
 {
     class EasyGLRenderer;
     class EasyGLRenderTargetRenderer;
     class EasyGLRenderTargetCubeRenderer;
     class EasyGLPlatformContext;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    class EasyGLCompiledEffect;
+#endif
 
     /**
      * @brief Platform-neutral presentation metrics consumed by the EasyGL family.
@@ -158,6 +166,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
 
     private:
+        void UploadLevel(int level, int levelWidth, int levelHeight, const void* pixels);
+
         /**
          * @brief Gives GL storage to every DECLARED mip level above 0, with no pixel data.
          *
@@ -172,6 +182,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         std::shared_ptr<std::vector<uint8_t>> pixels_;
         ::easygl::ResourceRegistry* registry_ = nullptr;
+        int surfaceFormat_ = 0;
         // Task 924: real mip level count this texture was created with -- GL_TEXTURE_MAX_LEVEL
         // must be clamped to match it (mipLevels_-1), or a mipmap-requiring TextureFilter (e.g.
         // Anisotropic) treats the texture as an incomplete mipmap chain and renders solid black,
@@ -616,6 +627,10 @@ namespace CNA::Internal::Renderers::EasyGL
         bool current_texture_bottom_up_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        std::unique_ptr<EasyGLCompiledEffect> spriteCompiledEffect_;
+        std::uint32_t spriteMatrixParameterIndex_ = 0;
+#endif
 
         // Raw TextureFilter/TextureAddressMode values set via SetSamplerFilter/SetSamplerAddressMode
         // (SpriteBatch::Begin), applied to texture unit 0 on the next FlushBatch(). Defaults match
@@ -662,6 +677,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// no projection uniform of this renderer's own -- and because keeping it out of the
         /// common path leaves that path byte-for-byte unchanged when no compiled effect is set.
         void FlushBatchWithCompiledEffect();
+        void ApplyCompiledSpriteVertexShader(int logicalWidth, int logicalHeight);
 #endif
     };
 
@@ -1208,6 +1224,8 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param spriteBatchSlotZeroTexture When non-null, the texture that takes sampler slot 0
          *        regardless of what the effect assigned -- SpriteBatch's own rule (FNA sets
          *        `GraphicsDevice.Textures[0]` after the pass applies). Null for ordinary draws.
+         * @param spriteBatchTextures When non-null, the SpriteBatch effect's owning device texture
+         *        slots used for pixel samplers the pass itself did not assign.
          * @throws std::runtime_error if the applied pass bound no shader pair, or @p runtime was
          *         not created by this renderer.
          * @throws System::NotSupportedException if no stream supplies an input the vertex shader
@@ -1217,7 +1235,9 @@ namespace CNA::Internal::Renderers::EasyGL
         CNAEXT void BindCompiledEffectForDrawEXT(
             const CompiledEffectStreamEXT* streams, std::size_t streamCount,
             ICompiledEffectRuntime& runtime,
-            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr);
+            const ITextureRenderer* spriteBatchSlotZeroTexture = nullptr,
+            const Microsoft::Xna::Framework::Graphics::TextureCollection*
+                spriteBatchTextures = nullptr);
 
         /**
          * @brief CNAEXT. The one vertex array object every compiled-effect draw binds.
@@ -1337,6 +1357,21 @@ namespace CNA::Internal::Renderers::EasyGL
         std::unique_ptr<IRenderTargetRenderer> CreateRenderTarget2DEXT(
             int w, int h, int depthFormat, bool preserveContents, bool mipMap,
             int multiSampleCount, int surfaceFormat) override;
+        /**
+         * @brief Reports texture storage support for the active EasyGL profile.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return `Supported` for Color and ES 3-class `NormalizedByte4`, `Unsupported` for
+         *         `NormalizedByte4` on ES 2-class profiles, or `Defer` for other formats.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+        /**
+         * @brief Reports whether Color transfers preserve the requested texture's texel meaning.
+         *
+         * @param surfaceFormat Raw XNA `SurfaceFormat` ordinal.
+         * @return `Unsupported` for signed `NormalizedByte4`, or `Defer` otherwise.
+         */
+        [[nodiscard]] RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const override;
         /// plans/plan_modern.md MOD-104/MOD-117: this renderer's own verdict on a render-target
         /// SurfaceFormat. Color is Supported unconditionally; the float formats are answered by a
         /// cached runtime framebuffer-completeness probe, because their availability is a property

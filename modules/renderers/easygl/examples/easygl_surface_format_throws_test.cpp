@@ -218,9 +218,15 @@ protected:
         expectThrows("Texture2D NormalizedByte2", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte2);
         });
+#if defined(CNA_GL_PROFILE_OPENGLES3) || defined(CNA_GL_PROFILE_OPENGL33) || defined(CNA_GL_PROFILE_WEBGL2)
+        expectNoThrow("Texture2D NormalizedByte4", [&]{
+            Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
+        });
+#else
         expectThrows("Texture2D NormalizedByte4", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::NormalizedByte4);
         });
+#endif
         expectThrows("Texture2D Single", [&]{
             Texture2D t(dev, 2, 2, false, SurfaceFormat::Single);
         });
