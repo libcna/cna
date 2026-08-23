@@ -8290,7 +8290,8 @@ CNA_GL_PUNCTUAL_DECL
     // gets. SelectProgram() below and StockProgramInputsEXT() both read this, so the program a
     // draw is bound to and the input shape it is checked against can never drift apart.
     EasyGLRenderer::StockProgramShape EasyGLRenderer::SelectStockProgramShape(
-        std::size_t stride, const GpuDrawParams& params)
+        std::size_t stride, const GpuDrawParams& params,
+        const std::vector<VertexElement>& declaredElements)
     {
         if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
         if (params.pbr) return StockProgramShape::Pbr;
@@ -8319,6 +8320,21 @@ CNA_GL_PUNCTUAL_DECL
             return stride == 24 ? StockProgramShape::DualTexturedColored
                                 : StockProgramShape::DualTextured;
         }
+        // SAMPLE-002: XNA application-defined vertices are selected by their declaration, not
+        // merely by stride. Position+Normal is 24 bytes just like VertexPositionColorTexture,
+        // but BasicEffect must light it and must not reinterpret the normal as color/UV data.
+        const bool positionNormal =
+            stride == 24 && declaredElements.size() == 2 &&
+            declaredElements[0] == VertexElement(
+                0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0) &&
+            declaredElements[1] == VertexElement(
+                12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0);
+        if (positionNormal)
+        {
+            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
+                       ? StockProgramShape::LitVertexLitUntextured
+                       : StockProgramShape::LitUntextured;
+        }
         switch (stride)
         {
         case 20: return StockProgramShape::Textured;
@@ -8338,10 +8354,11 @@ CNA_GL_PUNCTUAL_DECL
         }
     }
 
-    EasyGLRenderer::Prog3D& EasyGLRenderer::SelectProgram(std::size_t stride,
-                                                                          const GpuDrawParams& params)
+    EasyGLRenderer::Prog3D& EasyGLRenderer::SelectProgram(
+        std::size_t stride, const GpuDrawParams& params,
+        const std::vector<VertexElement>& declaredElements)
     {
-        switch (SelectStockProgramShape(stride, params))
+        switch (SelectStockProgramShape(stride, params, declaredElements))
         {
         case StockProgramShape::PbrSkinned:
             // GLTF-463: stride 80 is stride 76 with a colour appended, so it takes the same
@@ -8366,8 +8383,10 @@ CNA_GL_PUNCTUAL_DECL
             EnsureTextured3DProgram();          return prog_textured_;
         case StockProgramShape::ColoredTextured:
             EnsureColoredTextured3DProgram();   return prog_col_textured_;
+        case StockProgramShape::LitVertexLitUntextured:
         case StockProgramShape::LitVertexLit:
             EnsureLit3DVertexLitProgram();      return prog_lit_textured_vertexlit_;
+        case StockProgramShape::LitUntextured:
         case StockProgramShape::Lit:
             EnsureLit3DProgram();               return prog_lit_textured_;
         case StockProgramShape::Colored:
@@ -8411,6 +8430,7 @@ CNA_GL_PUNCTUAL_DECL
         static constexpr StockProgramInput kColored[]        = {kPos, kColor};
         static constexpr StockProgramInput kTextured[]       = {kPos, kUv};
         static constexpr StockProgramInput kColTextured[]    = {kPos, kColor, kUv};
+        static constexpr StockProgramInput kLitUntextured[]  = {kPos, kNormal};
         static constexpr StockProgramInput kLit[]            = {kPos, kNormal, kUv};
         static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
                                                                 kIndices, kColor};
@@ -8425,7 +8445,7 @@ CNA_GL_PUNCTUAL_DECL
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
         const char* name = "colored3d";
-        switch (SelectStockProgramShape(stride, params))
+        switch (SelectStockProgramShape(stride, params, declaredElements))
         {
         case StockProgramShape::PbrSkinned:
             if (stride == 76)
@@ -8463,6 +8483,12 @@ CNA_GL_PUNCTUAL_DECL
         case StockProgramShape::ColoredTextured:
             inputs = kColTextured; count = std::size(kColTextured);
             name = "colored_textured3d"; break;
+        case StockProgramShape::LitVertexLitUntextured:
+            inputs = kLitUntextured; count = std::size(kLitUntextured);
+            name = "lit_untextured3d_vertexlit"; break;
+        case StockProgramShape::LitUntextured:
+            inputs = kLitUntextured; count = std::size(kLitUntextured);
+            name = "lit_untextured3d"; break;
         case StockProgramShape::LitVertexLit:
             inputs = kLit; count = std::size(kLit); name = "lit_textured3d_vertexlit"; break;
         case StockProgramShape::Lit:
@@ -9555,7 +9581,7 @@ else
         }
 
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
-        Prog3D& p = SelectProgram(layoutStride, params);
+        Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
 
@@ -9690,7 +9716,7 @@ else
         }
 
         const std::size_t layoutStride = CombinedVertexStrideOr(params, vb.GetStride());
-        Prog3D& p = SelectProgram(layoutStride, params);
+        Prog3D& p = SelectProgram(layoutStride, params, vb.GetDeclarationElements());
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
 
@@ -9899,7 +9925,8 @@ else
             // REMED-GFX-201: the shader sees the CONCATENATION of the per-vertex streams, so the
             // program is selected by the combined stride -- which equals the one stream's own
             // stride whenever a single per-vertex buffer is bound.
-            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            Prog3D& p = SelectProgram(
+                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
             ib.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -9932,7 +9959,8 @@ else
         }
         if (params.customEffectRenderer == nullptr)
         {
-            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            Prog3D& p = SelectProgram(
+                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
             if (p.loc_instanced >= 0)
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }
@@ -10034,7 +10062,8 @@ else
         }
         else
         {
-            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            Prog3D& p = SelectProgram(
+                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
             p.prog.use();
             BindDrawParams(p, world, view, projection, params);
         }
@@ -10074,7 +10103,8 @@ else
             RestoreSingleStreamAttributes(vao, params);
         if (params.customEffectRenderer == nullptr)
         {
-            Prog3D& p = SelectProgram(CombinedVertexStrideOr(params, vb.GetStride()), params);
+            Prog3D& p = SelectProgram(
+                CombinedVertexStrideOr(params, vb.GetStride()), params, meshDecl);
             if (p.loc_instanced >= 0)
                 p.prog.set_uniform(p.loc_instanced, 0.0f);
         }

@@ -109,6 +109,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_BasicEffect_Golden COMMAND cna_test_easygl_basiceffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # SAMPLE-002: application-defined Position+Normal vertices have the same 24-byte stride
+        # as VertexPositionColorTexture, so this real draw proves EasyGL selects by declaration.
+        cna_easygl_test(cna_test_easygl_basiceffect_position_normal
+                        easygl_basiceffect_position_normal_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_BasicEffect_PositionNormal
+            COMMAND cna_test_easygl_basiceffect_position_normal
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 465: golden-image case reusing Phase 47's already-verified SpriteBatch
         # rotation-around-origin scene (Task 417).
         cna_easygl_test(cna_test_easygl_spritebatch_rotation_golden

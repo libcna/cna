@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <gtest/gtest.h>
 
@@ -95,6 +96,27 @@ using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 
 namespace
 {
+    struct PositionNormalVertex
+    {
+        Vector3 Position;
+        Vector3 Normal;
+    };
+
+    static_assert(sizeof(PositionNormalVertex) == 24);
+    static_assert(std::is_trivially_copyable_v<PositionNormalVertex>);
+
+    VertexDeclaration PositionNormalDeclaration()
+    {
+        return VertexDeclaration(
+            24,
+            {
+                VertexElement(
+                    0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+                VertexElement(
+                    12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            });
+    }
+
     VertexDeclaration PositionColorDeclaration()
     {
         return VertexDeclaration(
@@ -767,6 +789,27 @@ TEST_F(VertexBufferEmptyDataTest, RawReadbackAnswersExactlyWhatTheRawUploadWrote
     EXPECT_THROW(buffer.GetDataRawEXT(-1, readBack.data(), 1, 13),
                  System::ArgumentOutOfRangeException);
     EXPECT_NO_THROW(buffer.GetDataRawEXT(0, nullptr, 0, 13));
+}
+
+TEST_F(VertexBufferEmptyDataTest, GenericSetDataUploadsAnApplicationDefinedVertexType)
+{
+    RequireVertexBuffers();
+
+    const std::array<PositionNormalVertex, 2> source{{
+        {Vector3(1.0f, 2.0f, 3.0f), Vector3(0.0f, 1.0f, 0.0f)},
+        {Vector3(4.0f, 5.0f, 6.0f), Vector3(0.0f, 0.0f, -1.0f)},
+    }};
+    VertexBuffer buffer(device, PositionNormalDeclaration(), 2, BufferUsage::None);
+
+    EXPECT_NO_THROW(buffer.SetData(source.data(), static_cast<int>(source.size())));
+
+    std::array<PositionNormalVertex, 2> readBack{};
+    ASSERT_NO_THROW(buffer.GetDataRawEXT(
+        0, readBack.data(), static_cast<int>(readBack.size()), sizeof(PositionNormalVertex)));
+    EXPECT_EQ(source[0].Position, readBack[0].Position);
+    EXPECT_EQ(source[0].Normal, readBack[0].Normal);
+    EXPECT_EQ(source[1].Position, readBack[1].Position);
+    EXPECT_EQ(source[1].Normal, readBack[1].Normal);
 }
 
 TEST_F(VertexBufferEmptyDataTest, WindowedRawUploadLeavesTheRestOfTheBufferAlone)

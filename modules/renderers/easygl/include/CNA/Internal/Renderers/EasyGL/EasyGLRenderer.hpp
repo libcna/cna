@@ -1047,11 +1047,13 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             PbrSkinned, Pbr, SkinnedVertexLit, Skinned, EnvMapped,
             DualTexturedColored, DualTextured, Textured, ColoredTextured,
-            LitVertexLit, Lit, Colored
+            LitVertexLitUntextured, LitUntextured, LitVertexLit, Lit, Colored
         };
         static StockProgramShape SelectStockProgramShape(std::size_t stride,
-                                                          const GpuDrawParams& params);
-        Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
+                                                          const GpuDrawParams& params,
+                                                          const std::vector<VertexElement>& declaredElements);
+        Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params,
+                              const std::vector<VertexElement>& declaredElements);
         /// REMED-GFX-DECL-GUARD: throws `System::NotSupportedException` when @p declaredElements
         /// would bind an element to a stock attribute location that means something else. Runs
         /// before any program is selected, bound or drawn, and never touches a custom

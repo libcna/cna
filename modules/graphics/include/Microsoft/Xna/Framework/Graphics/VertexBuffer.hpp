@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
@@ -342,6 +343,26 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param elementCount Number of vertices to read.
          */
         CNAEXT void GetData(VertexPositionNormalTangentTextureSkinned* data, int startIndex, int elementCount);
+
+        /**
+         * @brief Uploads vertices of an application-defined XNA vertex type.
+         *
+         * This is the C++ equivalent of XNA's generic `SetData<T>(T[])` overload. The buffer's
+         * `VertexDeclaration` defines how the bytes are interpreted by the graphics device, and
+         * the C++ vertex type must therefore have the same stride and a directly copyable layout.
+         * Built-in XNA vertex types continue to use their dedicated packing overloads.
+         *
+         * @tparam TVertex Application-defined, trivially-copyable vertex type.
+         * @param data Pointer to the source vertex array.
+         * @param count Number of vertices to upload.
+         */
+        template<typename TVertex>
+        void SetData(const TVertex* data, int count)
+        {
+            static_assert(std::is_trivially_copyable_v<TVertex>,
+                          "VertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+            SetDataRaw(data, count, static_cast<int>(sizeof(TVertex)));
+        }
 
         /**
          * @brief Uploads raw vertex data with an explicit per-vertex byte stride.
