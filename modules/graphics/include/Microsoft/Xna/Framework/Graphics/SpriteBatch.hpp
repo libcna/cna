@@ -120,6 +120,22 @@ namespace Microsoft::Xna::Framework::Graphics
                    RasterizerState* rasterizerState);
 
         /**
+         * @brief Begins a sprite batch with nullable XNA state objects; transform defaults to
+         *        Identity.
+         *
+         * @param sortMode Sprite sort mode.
+         * @param blendState Blend state, or nullptr to use AlphaBlend.
+         * @param samplerState Sampler state, or nullptr to use LinearClamp.
+         * @param depthStencilState Depth-stencil state, or nullptr to use None.
+         * @param rasterizerState Rasterizer state, or nullptr to use CullCounterClockwise.
+         */
+        void Begin(SpriteSortMode sortMode,
+                   const BlendState* blendState,
+                   SamplerState* samplerState,
+                   DepthStencilState* depthStencilState,
+                   RasterizerState* rasterizerState);
+
+        /**
          * @brief Begins a sprite batch with a custom effect; transform defaults to Identity.
          *
          * @param sortMode         Sprite sort mode.
@@ -131,6 +147,24 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
+                   SamplerState* samplerState,
+                   DepthStencilState* depthStencilState,
+                   RasterizerState* rasterizerState,
+                   Effect* effect);
+
+        /**
+         * @brief Begins a sprite batch with nullable XNA state objects and a custom effect;
+         *        transform defaults to Identity.
+         *
+         * @param sortMode Sprite sort mode.
+         * @param blendState Blend state, or nullptr to use AlphaBlend.
+         * @param samplerState Sampler state, or nullptr to use LinearClamp.
+         * @param depthStencilState Depth-stencil state, or nullptr to use None.
+         * @param rasterizerState Rasterizer state, or nullptr to use CullCounterClockwise.
+         * @param effect Custom effect to apply, or nullptr to use the default sprite effect.
+         */
+        void Begin(SpriteSortMode sortMode,
+                   const BlendState* blendState,
                    SamplerState* samplerState,
                    DepthStencilState* depthStencilState,
                    RasterizerState* rasterizerState,
@@ -149,6 +183,25 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Begin(SpriteSortMode sortMode,
                    BlendState blendState,
+                   SamplerState* samplerState,
+                   DepthStencilState* depthStencilState,
+                   RasterizerState* rasterizerState,
+                   Effect* effect,
+                   Matrix transformMatrix);
+
+        /**
+         * @brief Begins a sprite batch with all XNA parameters and nullable state objects.
+         *
+         * @param sortMode Sprite sort mode.
+         * @param blendState Blend state, or nullptr to use AlphaBlend.
+         * @param samplerState Sampler state, or nullptr to use LinearClamp.
+         * @param depthStencilState Depth-stencil state, or nullptr to use None.
+         * @param rasterizerState Rasterizer state, or nullptr to use CullCounterClockwise.
+         * @param effect Custom effect, or nullptr for the default sprite effect.
+         * @param transformMatrix Matrix applied to all sprites before projection.
+         */
+        void Begin(SpriteSortMode sortMode,
+                   const BlendState* blendState,
                    SamplerState* samplerState,
                    DepthStencilState* depthStencilState,
                    RasterizerState* rasterizerState,

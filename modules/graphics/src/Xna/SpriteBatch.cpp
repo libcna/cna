@@ -108,8 +108,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin()
     {
-        Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, nullptr, nullptr, nullptr,
-              nullptr, Matrix::getIdentityProperty());
+        Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr), nullptr,
+              nullptr, nullptr, nullptr, Matrix::getIdentityProperty());
     }
 
     void SpriteBatch::Begin(SpriteSortMode sprite_sort_mode, BlendState blend_state)
@@ -120,6 +120,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
                             BlendState blendState,
+                            SamplerState* samplerState,
+                            DepthStencilState* depthStencilState,
+                            RasterizerState* rasterizerState)
+    {
+        Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
+              nullptr, Matrix::getIdentityProperty());
+    }
+
+    void SpriteBatch::Begin(SpriteSortMode sortMode,
+                            const BlendState* blendState,
                             SamplerState* samplerState,
                             DepthStencilState* depthStencilState,
                             RasterizerState* rasterizerState)
@@ -140,7 +150,30 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     void SpriteBatch::Begin(SpriteSortMode sortMode,
+                            const BlendState* blendState,
+                            SamplerState* samplerState,
+                            DepthStencilState* depthStencilState,
+                            RasterizerState* rasterizerState,
+                            Effect* effect)
+    {
+        Begin(sortMode, blendState, samplerState, depthStencilState, rasterizerState,
+              effect, Matrix::getIdentityProperty());
+    }
+
+    void SpriteBatch::Begin(SpriteSortMode sortMode,
                             BlendState blendState,
+                            SamplerState* samplerState,
+                            DepthStencilState* depthStencilState,
+                            RasterizerState* rasterizerState,
+                            Effect* effect,
+                            Matrix transformMatrix)
+    {
+        Begin(sortMode, &blendState, samplerState, depthStencilState, rasterizerState,
+              effect, transformMatrix);
+    }
+
+    void SpriteBatch::Begin(SpriteSortMode sortMode,
+                            const BlendState* blendState,
                             SamplerState* samplerState,
                             DepthStencilState* depthStencilState,
                             RasterizerState* rasterizerState,
@@ -152,7 +185,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (graphicsDevice_)
         {
-            graphicsDevice_->setBlendStateProperty(blendState);
+            graphicsDevice_->setBlendStateProperty(
+                blendState ? *blendState : BlendState::AlphaBlend);
             // Task 803 finding: this parameter was previously entirely unused -- SpriteBatch
             // draws silently inherited whatever DepthStencilState the game's own 3D rendering
             // last configured (or each renderer's own construction-time default), instead of

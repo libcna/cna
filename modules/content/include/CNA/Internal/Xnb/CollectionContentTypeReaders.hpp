@@ -48,6 +48,11 @@ namespace CNA::Internal::Xnb
         template <typename U>
         struct IsSharedPtr<std::shared_ptr<U>> : std::true_type {};
 
+        template <typename T>
+        struct IsSerializedReferenceType
+            : std::bool_constant<IsSharedPtr<T>::value ||
+                                 std::is_same_v<std::remove_cv_t<T>, std::string>> {};
+
         inline std::unique_ptr<ContentTypeReaderBase> RequireReader(const std::string& canonicalName)
         {
             auto reader = ContentTypeReaderManager::CreateReader(canonicalName);
@@ -96,11 +101,11 @@ namespace CNA::Internal::Xnb
             std::vector<T> array = existingInstance.value_or(std::vector<T>(count));
             if (array.size() != count) array.resize(count);
 
-            if constexpr (Detail::IsSharedPtr<T>::value)
+            if constexpr (Detail::IsSerializedReferenceType<T>::value)
             {
-                // Reference-type-like elements: each gets its own 1-based dispatch index
-                // (matches FNA's per-element polymorphic dispatch), handled by ReadObject<T>()'s
-                // own generic index read.
+                // XNB reference-type elements, including System.String, carry their own 1-based
+                // dispatch index. CNA represents String by value as std::string, so C++ pointer
+                // shape alone cannot identify this serialized distinction.
                 for (uint32_t i = 0; i < count; ++i)
                 {
                     array[i] = input.template ReadObject<T>();
@@ -150,7 +155,7 @@ namespace CNA::Internal::Xnb
             std::vector<T> list = existingInstance.value_or(std::vector<T>{});
             list.reserve(list.size() + static_cast<std::size_t>(count));
 
-            if constexpr (Detail::IsSharedPtr<T>::value)
+            if constexpr (Detail::IsSerializedReferenceType<T>::value)
             {
                 for (int32_t i = 0; i < count; ++i)
                 {
@@ -207,18 +212,36 @@ namespace CNA::Internal::Xnb
 
             std::unique_ptr<ContentTypeReaderBase> keyReader;
             std::unique_ptr<ContentTypeReaderBase> valueReader;
-            if constexpr (!Detail::IsSharedPtr<TKey>::value) keyReader = Detail::RequireReader(keyReaderCanonicalName_);
-            if constexpr (!Detail::IsSharedPtr<TValue>::value) valueReader = Detail::RequireReader(valueReaderCanonicalName_);
+            if constexpr (!Detail::IsSerializedReferenceType<TKey>::value)
+            {
+                keyReader = Detail::RequireReader(keyReaderCanonicalName_);
+            }
+            if constexpr (!Detail::IsSerializedReferenceType<TValue>::value)
+            {
+                valueReader = Detail::RequireReader(valueReaderCanonicalName_);
+            }
 
             for (int32_t i = 0; i < count; ++i)
             {
                 TKey key;
-                if constexpr (Detail::IsSharedPtr<TKey>::value) key = input.template ReadObject<TKey>();
-                else key = input.template ReadObject<TKey>(*keyReader);
+                if constexpr (Detail::IsSerializedReferenceType<TKey>::value)
+                {
+                    key = input.template ReadObject<TKey>();
+                }
+                else
+                {
+                    key = input.template ReadObject<TKey>(*keyReader);
+                }
 
                 TValue value;
-                if constexpr (Detail::IsSharedPtr<TValue>::value) value = input.template ReadObject<TValue>();
-                else value = input.template ReadObject<TValue>(*valueReader);
+                if constexpr (Detail::IsSerializedReferenceType<TValue>::value)
+                {
+                    value = input.template ReadObject<TValue>();
+                }
+                else
+                {
+                    value = input.template ReadObject<TValue>(*valueReader);
+                }
 
                 dictionary.emplace(std::move(key), std::move(value));
             }

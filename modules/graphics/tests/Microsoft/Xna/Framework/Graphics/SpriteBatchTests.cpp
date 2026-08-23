@@ -128,6 +128,55 @@ TEST(SpriteBatchTest, BeginSortBlendWithoutRendererDoesNotThrow)
     EXPECT_NO_THROW(batch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend));
 }
 
+TEST(SpriteBatchTest, BeginFiveParameterNullBlendUsesAlphaBlend)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    GraphicsDevice device;
+    device.setBlendStateProperty(BlendState::Opaque);
+    SpriteBatch batch(device);
+
+    batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
+                nullptr, nullptr, nullptr);
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
+              BlendState::AlphaBlend.getColorDestinationBlendProperty());
+    batch.End();
+}
+
+TEST(SpriteBatchTest, BeginSixParameterNullBlendUsesAlphaBlend)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    GraphicsDevice device;
+    device.setBlendStateProperty(BlendState::Opaque);
+    SpriteBatch batch(device);
+
+    batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
+                nullptr, nullptr, nullptr, nullptr);
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
+              BlendState::AlphaBlend.getColorDestinationBlendProperty());
+    batch.End();
+}
+
+TEST(SpriteBatchTest, BeginSevenParameterNullBlendUsesAlphaBlend)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Matrix;
+    GraphicsDevice device;
+    device.setBlendStateProperty(BlendState::Opaque);
+    SpriteBatch batch(device);
+
+    batch.Begin(SpriteSortMode::Deferred, static_cast<const BlendState*>(nullptr),
+                nullptr, nullptr, nullptr, nullptr, Matrix::getIdentityProperty());
+
+    EXPECT_EQ(device.getBlendStateProperty().getColorDestinationBlendProperty(),
+              BlendState::AlphaBlend.getColorDestinationBlendProperty());
+    batch.End();
+}
+
 // --- Draw guard: throws when called before Begin (no-renderer batch) ---
 
 TEST(SpriteBatchTest, DrawXYBeforeBeginThrows)

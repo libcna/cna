@@ -91,6 +91,33 @@ TEST_F(CollectionReaderTest, ArrayReaderResizesAMismatchedExistingInstance)
     EXPECT_EQ(result[1], 2);
 }
 
+TEST_F(CollectionReaderTest, ArrayReaderConsumesTypeIndicesForSystemStringElements)
+{
+    CNA::Internal::Xnb::ArrayReader<std::string> reader(
+        "System.String[]", "Microsoft.Xna.Framework.Content.StringReader");
+
+    auto contentReader = MakeReader([](auto& w) {
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        w.Write((int32_t)0);
+        w.Write7BitEncodedInt(0);
+
+        w.Write((uint32_t)2);
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("cat"));
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("glow1"));
+    });
+    contentReader->InitializeTypeReaders();
+
+    const auto result = std::any_cast<std::vector<std::string>>(
+        reader.ReadUntyped(*contentReader, std::any{}));
+
+    ASSERT_EQ(result.size(), 2u);
+    EXPECT_EQ(result[0], "cat");
+    EXPECT_EQ(result[1], "glow1");
+}
+
 TEST_F(CollectionReaderTest, ListReaderAppendsToExistingInstanceWithoutClearing)
 {
     CNA::Internal::Xnb::ListReader<Vector3> reader(
@@ -120,6 +147,34 @@ TEST_F(CollectionReaderTest, ListReaderCanDeserializeIntoExistingObjectIsTrue)
     EXPECT_TRUE(reader.getCanDeserializeIntoExistingObjectProperty());
 }
 
+TEST_F(CollectionReaderTest, ListReaderConsumesTypeIndicesForSystemStringElements)
+{
+    CNA::Internal::Xnb::ListReader<std::string> reader(
+        "System.Collections.Generic.List`1[[System.String]]",
+        "Microsoft.Xna.Framework.Content.StringReader");
+
+    auto contentReader = MakeReader([](auto& w) {
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        w.Write((int32_t)0);
+        w.Write7BitEncodedInt(0);
+
+        w.Write((int32_t)2);
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("cat"));
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("glow1"));
+    });
+    contentReader->InitializeTypeReaders();
+
+    const auto result = std::any_cast<std::vector<std::string>>(
+        reader.ReadUntyped(*contentReader, std::any{}));
+
+    ASSERT_EQ(result.size(), 2u);
+    EXPECT_EQ(result[0], "cat");
+    EXPECT_EQ(result[1], "glow1");
+}
+
 TEST_F(CollectionReaderTest, DictionaryReaderClearsExistingInstanceThenRepopulates)
 {
     CNA::Internal::Xnb::DictionaryReader<int32_t, int32_t> reader(
@@ -141,6 +196,38 @@ TEST_F(CollectionReaderTest, DictionaryReaderClearsExistingInstanceThenRepopulat
     EXPECT_EQ(result.at(1), 100);
     EXPECT_EQ(result.at(2), 200);
     EXPECT_EQ(result.find(999), result.end());
+}
+
+TEST_F(CollectionReaderTest, DictionaryReaderConsumesTypeIndicesForSystemStringKeys)
+{
+    CNA::Internal::Xnb::DictionaryReader<std::string, int32_t> reader(
+        "System.Collections.Generic.Dictionary`2[[System.String],[System.Int32]]",
+        "Microsoft.Xna.Framework.Content.StringReader",
+        "Microsoft.Xna.Framework.Content.Int32Reader");
+
+    auto contentReader = MakeReader([](auto& w) {
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("Microsoft.Xna.Framework.Content.StringReader"));
+        w.Write((int32_t)0);
+        w.Write7BitEncodedInt(0);
+
+        w.Write((int32_t)2);
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("cat"));
+        w.Write((int32_t)0);
+        w.Write7BitEncodedInt(1);
+        w.Write(std::string("glow1"));
+        w.Write((int32_t)1);
+    });
+    contentReader->InitializeTypeReaders();
+
+    const auto result =
+        std::any_cast<std::unordered_map<std::string, int32_t>>(
+            reader.ReadUntyped(*contentReader, std::any{}));
+
+    ASSERT_EQ(result.size(), 2u);
+    EXPECT_EQ(result.at("cat"), 0);
+    EXPECT_EQ(result.at("glow1"), 1);
 }
 
 TEST_F(CollectionReaderTest, NullableReaderReturnsNulloptWhenFlagIsFalse)
