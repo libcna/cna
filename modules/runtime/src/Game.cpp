@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 
 #include "CNA/Internal/Input/PlatformInputBridge.hpp"
+#include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
@@ -260,6 +261,11 @@ namespace Microsoft::Xna::Framework
             GraphicsDevice_.GetPlatformWindowInternal(),
             GraphicsDevice_.GetWindowHandleInternal());
         Content_.setGraphicsDevice(GraphicsDevice_);
+
+        // A real Game instance is the framework startup boundary. Keep ContentManager neutral for
+        // isolated use, but make every XNA game ready to load built-in XNB types before
+        // Initialize()/LoadContent() can run.
+        CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
 
         FrameworkDispatcher::Update();
 

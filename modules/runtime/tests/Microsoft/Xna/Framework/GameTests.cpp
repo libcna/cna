@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -126,6 +127,26 @@ namespace
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResetEvent() override { return DeviceResetEvt; }
         [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResettingEvent() override { return DeviceResettingEvt; }
     };
+}
+
+TEST(GameTest, ConstructionRegistersBuiltInXnbReadersBeforeLoadContent)
+{
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
+    {
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
+    }
+
+    using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
+    ContentTypeReaderManager::ClearTypeCreators();
+
+    LifecycleTestGame game;
+
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
+        "Microsoft.Xna.Framework.Content.ModelReader"));
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
+        "Microsoft.Xna.Framework.Content.EffectReader"));
+    EXPECT_TRUE(ContentTypeReaderManager::IsRegistered(
+        "Microsoft.Xna.Framework.Content.SpriteFontReader"));
 }
 
 TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)

@@ -208,7 +208,8 @@ if(EMSCRIPTEN)
     target_link_options(cna_build_flags INTERFACE
             -fexceptions
             -sDISABLE_EXCEPTION_CATCHING=0
-            -sASYNCIFY=1)
+            -sASYNCIFY=1
+            -sSTACK_SIZE=1048576)
 endif()
 
 # The current high-level mixer is SDL3_mixer based.  Do not advertise sound support in a
