@@ -17,7 +17,8 @@ endif()
 # (or deleting the build directory entirely) does NOT remove SDL artefacts.
 # SDL is built once and reused across all builds and build types.
 # To force a full SDL rebuild, delete this directory manually:
-#   rm -rf <source_dir>/.sdl-prebuilt
+#   rm -rf <the exact CNA_SDL_PREBUILT_ROOT reported by CMake>
+set(_cna_sdl_wayland_build_capable OFF)
 if(EMSCRIPTEN)
     set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-emscripten")
 else()
@@ -46,10 +47,62 @@ else()
         string(REPLACE "." "_" _cna_sdl_deployment_key "${CMAKE_OSX_DEPLOYMENT_TARGET}")
         set(_cna_sdl_key "${_cna_sdl_key}-min${_cna_sdl_deployment_key}")
     endif()
+
+    # SDL's Linux video-driver set is also a build-time capability. A persistent cache made
+    # before the Wayland development packages were installed contains only X11 forever: merely
+    # reconfiguring CNA cannot add the driver because the existing SDL library suppresses its own
+    # sub-build. This is particularly harmful in a Wayland desktop session, where every CNA game
+    # then depends on the health and window-placement policy of the X11 compatibility path.
+    #
+    # Give native Linux builds whose complete SDL Wayland prerequisite set is present a distinct
+    # cache key. Cross-builds must not probe host pkg-config data, and cache roots that differ
+    # from the former generated default remain authoritative below.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+        find_program(_cna_sdl_pkg_config NAMES pkg-config)
+        find_program(_cna_sdl_wayland_scanner NAMES wayland-scanner)
+        if(_cna_sdl_pkg_config AND _cna_sdl_wayland_scanner)
+            execute_process(
+                COMMAND "${_cna_sdl_pkg_config}" --exists
+                        "wayland-client >= 1.18" wayland-egl wayland-cursor egl
+                        "xkbcommon >= 0.5.0"
+                RESULT_VARIABLE _cna_sdl_wayland_deps_result
+                OUTPUT_QUIET
+                ERROR_QUIET)
+            if(_cna_sdl_wayland_deps_result EQUAL 0)
+                set(_cna_sdl_wayland_build_capable ON)
+            endif()
+        endif()
+        unset(_cna_sdl_pkg_config CACHE)
+        unset(_cna_sdl_wayland_scanner CACHE)
+    endif()
+
+    set(_cna_sdl_prebuilt_legacy_default
+        "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${_cna_sdl_key}")
+    if(_cna_sdl_wayland_build_capable)
+        set(_cna_sdl_key "${_cna_sdl_key}-wayland")
+    endif()
     set(_cna_sdl_prebuilt_default "${CMAKE_CURRENT_SOURCE_DIR}/.sdl-prebuilt-${_cna_sdl_key}")
 endif()
-set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}"
-    CACHE PATH "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)")
+
+# Migrate only a value equal to the old generated default. A distinct caller-supplied cache root
+# may intentionally contain a narrower SDL and must never be silently redirected. This makes an
+# already-configured native build pick up the new Wayland-capable key without requiring users to
+# discover and clear a CMake cache variable by hand.
+if(_cna_sdl_wayland_build_capable
+   AND DEFINED CNA_SDL_PREBUILT_ROOT
+   AND "${CNA_SDL_PREBUILT_ROOT}" STREQUAL "${_cna_sdl_prebuilt_legacy_default}")
+    set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}" CACHE PATH
+        "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)" FORCE)
+else()
+    set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}" CACHE PATH
+        "Persistent SDL3 install root (survives cmake --clean and build-tree deletion)")
+endif()
+
+set(_cna_sdl_wayland_required OFF)
+if(_cna_sdl_wayland_build_capable
+   AND "${CNA_SDL_PREBUILT_ROOT}" STREQUAL "${_cna_sdl_prebuilt_default}")
+    set(_cna_sdl_wayland_required ON)
+endif()
 
 # ---------------------------------------------------------------------------
 # Report which video drivers the vendored SDL actually ended up with.
@@ -62,8 +115,8 @@ set(CNA_SDL_PREBUILT_ROOT "${_cna_sdl_prebuilt_default}"
 # from a library that was never built with it.
 #
 # The generated build config is the only honest record of what was compiled in, so read it and say
-# so. This never fails the configure: an X11-only SDL is a perfectly good SDL, and a machine that
-# is on Wayland right now is the one case where the degradation is worth raising a voice over.
+# so. An explicitly selected X11-only cache remains valid and produces guidance; only a generated
+# cache whose capability-qualified key promises Wayland is rejected when that promise is false.
 # ---------------------------------------------------------------------------
 function(_cna_report_sdl_video_drivers)
     if(EMSCRIPTEN OR ANDROID OR APPLE OR WIN32)
@@ -98,11 +151,19 @@ function(_cna_report_sdl_video_drivers)
         return()
     endif()
 
+    if(_cna_sdl_wayland_required)
+        message(FATAL_ERROR
+            "The SDL3 cache key '${CNA_SDL_PREBUILT_ROOT}' promises native Wayland support, "
+            "but the resulting SDL build does not contain SDL_VIDEO_DRIVER_WAYLAND. "
+            "Remove only this incomplete cache and reconfigure.")
+    endif()
+
     # One string, not a joined list: a semicolon inside a CMake list element is a separator, and
     # rejoining the pieces silently swallows it.
     set(_wayland_advice
-"The vendored SDL3 in ${CNA_SDL_PREBUILT_ROOT} was built WITHOUT the Wayland video driver, because \
-its development packages were not installed when SDL was configured. SDL_VIDEODRIVER=wayland \
+"The vendored SDL3 in ${CNA_SDL_PREBUILT_ROOT} was built WITHOUT the Wayland video driver. Its \
+development packages may have been unavailable when this explicit/custom cache was created. \
+SDL_VIDEODRIVER=wayland \
 therefore fails with 'wayland not available', and with no SDL_VIDEODRIVER set SDL falls back to \
 x11, so a Wayland session runs the game through Xwayland instead. For a native Wayland client, \
 install the packages and rebuild SDL -- the cache is rebuilt only when it is absent:
