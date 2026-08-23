@@ -109,6 +109,7 @@ namespace Microsoft::Xna::Framework::Content
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
 
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
+        [[nodiscard]] std::string ResolveExistingAssetPath(const std::string& path) const;
         [[nodiscard]] std::string NormalizeKey(const std::string& assetName) const;
 
         void RegisterBuiltinLoaders();
@@ -325,7 +326,8 @@ namespace Microsoft::Xna::Framework::Content
             // loose-file path, .xnb dispatch needs no per-T reader registered on ContentManager
             // at all -- root-object dispatch is entirely driven by the file's own type-reader
             // table via the process-wide ContentTypeReaderManager registry (plans/plan_xnb.md XNB-17B).
-            const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
+            const std::string xnbCandidate =
+                ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
             if (std::filesystem::exists(xnbCandidate))
             {
                 T result = LoadXnbAsset<T>(xnbCandidate, assetName);
@@ -511,9 +513,10 @@ namespace Microsoft::Xna::Framework::Content
             // "Flag.en-US"), which has_extension() would otherwise
             // misinterpret as already-resolved and never try appending
             // a reader extension.
-            if (std::filesystem::exists(base))
+            const std::string literalPath = ResolveExistingAssetPath(base);
+            if (std::filesystem::exists(literalPath))
             {
-                return base;
+                return literalPath;
             }
 
             // .cnj is always tried before any native/reader-declared extension (cnj.md's "core
@@ -521,7 +524,7 @@ namespace Microsoft::Xna::Framework::Content
             // name resolves, even if a native file with the same name also exists). This makes
             // .cnj usable as an optional metadata sidecar (plans/plan_cnj.md CNB-4), not just a
             // mutually-exclusive alternative to a native file.
-            const std::string cnjCandidate = base + ".cnj";
+            const std::string cnjCandidate = ResolveExistingAssetPath(base + ".cnj");
             if (std::filesystem::exists(cnjCandidate))
             {
                 return cnjCandidate;
@@ -531,7 +534,7 @@ namespace Microsoft::Xna::Framework::Content
             const auto extensions = reader.GetExtensions();
             for (const auto& ext : extensions)
             {
-                const std::string candidate = base + ext;
+                const std::string candidate = ResolveExistingAssetPath(base + ext);
                 if (std::filesystem::exists(candidate))
                 {
                     return candidate;

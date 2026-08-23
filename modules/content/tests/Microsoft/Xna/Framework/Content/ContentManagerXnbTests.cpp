@@ -137,6 +137,18 @@ TEST_F(ContentManagerXnbTest, LoadFindsAndDeserializesARealXnbFile)
     EXPECT_EQ(result.value, 123);
 }
 
+TEST_F(ContentManagerXnbTest, LoadAcceptsWindowsSeparatorsAndXnaCaseInsensitiveAssetNames)
+{
+    ScratchContentRoot root;
+    std::filesystem::create_directories(root.path() / "Textures");
+    WriteBytes(root.path() / "Textures" / "background.xnb", BuildTestXnbFile(456));
+
+    ContentManager cm(nullptr, root.path().string());
+    const TestValue result = cm.Load<TestValue>("textures\\Background");
+
+    EXPECT_EQ(result.value, 456);
+}
+
 TEST_F(ContentManagerXnbTest, LoadCachesXnbAssetsLikeAnyOtherAsset)
 {
     ScratchContentRoot root;

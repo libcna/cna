@@ -296,16 +296,85 @@ namespace Microsoft::Xna::Framework::Content
 
     std::string ContentManager::BuildAssetPath(const std::string& assetName) const
     {
+        std::string normalizedRootDirectory = rootDirectory_;
+        std::replace(
+            normalizedRootDirectory.begin(), normalizedRootDirectory.end(), '\\', '/');
+        std::string normalizedAssetName = assetName;
+        std::replace(
+            normalizedAssetName.begin(), normalizedAssetName.end(), '\\', '/');
         if (assetName.empty())
         {
-            return rootDirectory_;
+            return normalizedRootDirectory;
         }
-        if (rootDirectory_.empty())
+        if (normalizedRootDirectory.empty())
         {
-            return assetName;
+            return normalizedAssetName;
         }
         namespace fs = std::filesystem;
-        return (fs::path(rootDirectory_) / assetName).string();
+        return (fs::path(normalizedRootDirectory) / normalizedAssetName).string();
+    }
+
+    std::string ContentManager::ResolveExistingAssetPath(const std::string& path) const
+    {
+        namespace fs = std::filesystem;
+
+        std::error_code ec;
+        const fs::path requested(path);
+        if (fs::exists(requested, ec) && !ec)
+        {
+            return requested.string();
+        }
+
+        fs::path resolved = requested.is_absolute() ? requested.root_path() : fs::path{};
+        for (const fs::path& component : requested.relative_path())
+        {
+            const fs::path exact = resolved / component;
+            ec.clear();
+            if (fs::exists(exact, ec) && !ec)
+            {
+                resolved = exact;
+                continue;
+            }
+
+            const fs::path parent = resolved.empty() ? fs::path(".") : resolved;
+            ec.clear();
+            fs::directory_iterator entry(parent, ec);
+            if (ec)
+            {
+                return requested.string();
+            }
+
+            std::string wanted = component.string();
+            std::transform(wanted.begin(), wanted.end(), wanted.begin(),
+                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            fs::path matchedComponent;
+            const fs::directory_iterator end;
+            for (; entry != end; entry.increment(ec))
+            {
+                if (ec)
+                {
+                    return requested.string();
+                }
+                std::string candidate = entry->path().filename().string();
+                std::transform(candidate.begin(), candidate.end(), candidate.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (candidate == wanted)
+                {
+                    if (!matchedComponent.empty())
+                    {
+                        return requested.string();
+                    }
+                    matchedComponent = entry->path().filename();
+                }
+            }
+            if (matchedComponent.empty())
+            {
+                return requested.string();
+            }
+            resolved /= matchedComponent;
+        }
+        return resolved.string();
     }
 
     std::string ContentManager::NormalizeKey(const std::string& assetName) const
@@ -5265,7 +5334,8 @@ namespace Microsoft::Xna::Framework::Content
         // as the generic Load<T>() template; this specialization needs its own copy since it
         // doesn't call that template body at all (weak-cache semantics require a bespoke
         // implementation here).
-        const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
+        const std::string xnbCandidate =
+            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
         if (std::filesystem::exists(xnbCandidate))
         {
             Graphics::Texture2D result = LoadXnbAsset<Graphics::Texture2D>(xnbCandidate, assetName);
@@ -5326,7 +5396,8 @@ namespace Microsoft::Xna::Framework::Content
         // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s
         // own specialisation; this one needs its own copy too since move-only types skip the
         // generic Load<T>() template's any-cache body entirely.
-        const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
+        const std::string xnbCandidate =
+            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
         if (std::filesystem::exists(xnbCandidate))
         {
             return LoadXnbAsset<Audio::SoundEffect>(xnbCandidate, assetName);
@@ -5369,7 +5440,8 @@ namespace Microsoft::Xna::Framework::Content
         // Load<SoundEffect>'s own specialisations above; this one needs its own copy too since
         // move-only types skip the generic Load<T>() template's any-cache body entirely
         // (plans/plan_xnb.md XNB-25).
-        const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
+        const std::string xnbCandidate =
+            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
         if (std::filesystem::exists(xnbCandidate))
         {
             return LoadXnbAsset<Graphics::TextureCube>(xnbCandidate, assetName);
