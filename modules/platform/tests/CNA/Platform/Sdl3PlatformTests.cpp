@@ -9,6 +9,7 @@
 #include "System/Environment.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 
+#include <SDL3/SDL.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -382,14 +383,62 @@ TEST_F(Sdl3PlatformTest, NotYetImplementedSurfacesRefuseInsteadOfReturningSometh
     EXPECT_THROW((void)platform_->CreateSurfacePresenter(window), PlatformException);
 }
 
+TEST(Sdl3PlatformLinuxHintsTest, ClassicJoystickDiscoveryIsTheDefaultButHostOverrideWins)
+{
+#if defined(__linux__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    if (!Sdl3IsAvailable())
+    {
+        GTEST_SKIP() << "built with CNA_PLATFORM != SDL3";
+    }
+
+    const char* previousValue = SDL_GetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC);
+    const bool hadPreviousValue = previousValue != nullptr;
+    const std::string previousCopy = hadPreviousValue ? previousValue : "";
+
+    SDL_ResetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC);
+    {
+        const std::unique_ptr<IPlatform> platform = PlatformFactory::Create("SDL3");
+        EXPECT_NE(platform, nullptr);
+        if (platform != nullptr)
+        {
+            EXPECT_STREQ(SDL_GetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC), "1")
+                << "CNA's Linux default must avoid blocking the first GamePad.GetState() on udev";
+        }
+    }
+
+    const bool overrideSet = SDL_SetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC, "0");
+    EXPECT_TRUE(overrideSet);
+    if (overrideSet)
+    {
+        const std::unique_ptr<IPlatform> platform = PlatformFactory::Create("SDL3");
+        EXPECT_NE(platform, nullptr);
+        if (platform != nullptr)
+        {
+            EXPECT_STREQ(SDL_GetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC), "0")
+                << "an embedding host's explicit SDL discovery policy must take precedence";
+        }
+    }
+
+    if (hadPreviousValue)
+    {
+        (void) SDL_SetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC, previousCopy.c_str());
+    }
+    else
+    {
+        SDL_ResetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC);
+    }
+#else
+    GTEST_SKIP() << "the joystick discovery choice is Linux-specific";
+#endif
+}
+
 TEST_F(Sdl3PlatformTest, TheControllerSubsystemStartsOnDemandRatherThanWithThePlatform)
 {
-    // The gamepad subsystem costs a full udev device enumeration to start -- ~1.9 seconds on this
-    // project's Linux reference machine. plans/plan_platform.md PLAT-83 had Game::DoInitialize()
-    // pay it before the first frame, so every game opened on a blank window for two seconds
-    // whether or not it ever read a controller. The platform starts it when something asks for
-    // the service instead, and this is that promise: constructing a platform must not start it,
-    // and asking for the gamepad must.
+    // The gamepad subsystem used to cost a full udev device enumeration to start -- ~1.9 seconds
+    // on this project's Linux reference machine. plans/plan_platform.md PLAT-83 first removed that
+    // work from Game::DoInitialize(), and CNA now also selects SDL's cheap classic discovery as its
+    // desktop-Linux default. The platform still starts the subsystem only when something asks for
+    // the service: constructing a platform must not start it, and asking for the gamepad must.
     //
     // A transition, not absolute state, per this fixture's own rule: SDL's refcount is
     // process-global and another test in this binary may already hold the subsystem up, in which

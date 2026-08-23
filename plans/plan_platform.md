@@ -465,6 +465,24 @@ re-points that seam at the platform contract rather than inventing a new one.
 | PLAT-90a | Retire the public `SetBackendForTesting` seams | ✅ | `MessageBox::SetBackendForTesting` and `FileDialog::SetBackendForTesting` — **public CNAEXT API whose only purpose was test injection** — are removed, along with `IMessageBoxBackend`, `IFileDialogBackend` and both `Platform*Backend` classes. Both surfaces now call the platform's dialog service directly, and their tests install `CannedDialogPlatform` instead. Approved as a deliberate breaking change per `CLAUDE.md`'s no-backward-compatibility rule. **This is what found that `CNA_DEVICES=OFF` in both existing build directories**, so every `modules/devices-ext` migration since PLAT-100 had been compiling to nothing and passing vacuously; a third build dir (`cmake-build-devices`) now covers it and all of them build and pass — 6412 tests. The **REMED-DEVICES-001 concurrency tests are deleted rather than ported**: they raced a caller against a backend swap, and with no swappable backend the race has no parts left to have. Porting one was tried and was the wrong shape — two threads through the recording service race on the *recording*, so it measured scaffolding, and making that scaffolding thread-safe would have been work done purely to keep a test of itself alive. |
 | PLAT-90 | Retire the `FakeSdl*Backend` doubles | ✅ | The gamepad and joystick doubles had already moved to `CannedGamepad`/`CannedJoystick`; the last generic `FakeSdl*Backend` identity is gone. The one deliberate PLAT-77/84 survivor is now named `RecordingHapticBackend`: it records the retained **28-method full-effect SDL seam**, which cannot be represented by the intentionally rumble-only `IPlatformHaptics`, while standalone enumeration/rumble still uses `CannedHaptics`. More importantly, the test architecture no longer needs `SdlInputBridge::ProcessEvent(SDL_Event)`: keyboard, mouse, text, fuzz, golden, candidate and touch suites all drive `PlatformEvent`; native keycode/wheel translation assertions live at `Sdl3EventMapper`. The public/internal bridge header is SDL-free and the **300+ line** non-SDL compatibility switch is deleted. `ctest` now selects `PlatformInputBridge*` explicitly, and the two truly native public-mouse tests skip honestly when the selected platform is HEADLESS/TERMINAL. Focused bridge coverage passes **98/98 SDL3** and **65/65 HEADLESS/TERMINAL** per shuffled iteration, five repeats; complete input/platform suites pass on all three selections. Contract/Doxygen (**496/496**), hot-path and inventory gates pass; the ratchet tightens from **182 files / 2676 references** to **181 / 2643**. |
 
+### PLAT-83 Linux controller startup correction — 2026-08-23
+
+The 2026-08-22 lazy-acquisition revision removed the controller cost for games that never query a
+controller, but did not solve faithful XNA games that call `GamePad.GetState()` in their first
+`Update()`. `PrimitivesSample` proved that the synchronous SDL udev enumeration merely moved after
+window creation: the measured interval from window availability to Escape-driven exit was 1,587 ms,
+so the first `Draw()` still showed a black-window delay.
+
+CNA's desktop-Linux SDL3 platform now defaults `SDL_JOYSTICK_LINUX_CLASSIC=1` before the controller
+subsystem starts, unless the embedding host already selected a value. SDL's `/dev/input/js*` path
+retains hotplug detection through its udev callback, or its inotify/fallback scanner where udev is
+unavailable, and reduced that measured interval to 38 ms while leaving the original synchronous XNA
+`GamePad.GetState()` call untouched. Retaining `/dev/input/event*` while forcing SDL's fallback
+scanner was also measured and rejected: that path took 2,769 ms after window availability on the
+same host. Hosts that need the event-device path can explicitly set
+`SDL_JOYSTICK_LINUX_CLASSIC=0`; CNA preserves that choice. Lazy subsystem ownership and the
+empty-device failure result remain unchanged.
+
 ---
 
 ## Phase 6 — Audio platform contract

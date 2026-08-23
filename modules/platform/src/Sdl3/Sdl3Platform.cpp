@@ -91,6 +91,23 @@ namespace CNA::Platform::Sdl3 {
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
+#if defined(__linux__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+        // SDL's default event-device joystick discovery performs a synchronous udev scan when
+        // SDL_INIT_GAMEPAD first starts. On the Linux reference host that blocks an ordinary
+        // GamePad.GetState() for about 1.6 seconds; XNA callers expect that query to be a cheap
+        // snapshot read, and PrimitivesSample legitimately makes it before its first Draw().
+        //
+        // The classic /dev/input/js* driver initializes in under a millisecond here and retains
+        // SDL hotplug detection through udev, or through the inotify/fallback scanner where udev
+        // integration is unavailable. Seed it as CNA's Linux default before the controller
+        // subsystem starts, while preserving an embedding host's explicit choice of the
+        // event-device path (`SDL_JOYSTICK_LINUX_CLASSIC=0`).
+        if (SDL_GetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC) == nullptr)
+        {
+            (void) SDL_SetHint(SDL_HINT_JOYSTICK_LINUX_CLASSIC, "1");
+        }
+#endif
+
         // plans/plan_apple.md APPLE-15. The orientation set is a pre-initialization hint: it has to be
         // in place before the video subsystem starts, which is earlier than any window exists and
         // therefore earlier than the game can have chosen anything. Seed the full XNA default set
@@ -430,12 +447,11 @@ namespace CNA::Platform::Sdl3 {
 
     IPlatformKeyboard* Sdl3Platform::GetKeyboard() { return &keyboard_; }
     IPlatformMouse* Sdl3Platform::GetMouse() { return &mouse_; }
-    // Acquiring SDL_INIT_GAMEPAD costs a full udev device enumeration -- measured at ~1.9 seconds
-    // on this project's Linux reference machine. plans/plan_platform.md PLAT-83 had Game::DoInitialize()
-    // pay that up front, before the first frame, so every CNA game opened on a blank window for
-    // about two seconds whether or not it ever read a controller. Deferring it to the first real
-    // request moves the cost onto the games that actually want controllers, and removes it
-    // entirely from the ones that do not.
+    // Acquiring SDL_INIT_GAMEPAD through SDL's default Linux event-device discovery costs a full
+    // udev enumeration. Sdl3Platform's constructor selects SDL's cheap classic Linux discovery by
+    // default, so an XNA-style first-frame GamePad.GetState() remains a cheap snapshot query. The
+    // acquisition is still lazy: games that never query a controller do no controller work, and
+    // a host that explicitly selects the event-device path accepts its platform-specific cost.
     //
     // Game::UpdateInput() deliberately does not reach these accessors until the subsystem is
     // already initialized, so its once-per-frame pump cannot be what triggers this.
