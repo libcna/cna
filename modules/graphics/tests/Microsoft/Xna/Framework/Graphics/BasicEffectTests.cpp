@@ -102,10 +102,9 @@ TEST_F(BasicEffectDefaultsTest, PreferPerPixelLightingDefaultsToFalse)
 }
 
 // -----------------------------------------------------------------------
-// Directional lights — FNA's DirectionalLight ctor defaults every field to
-// its C# default(T) (Vector3.Zero / false) unless a cloneSource is given;
-// BasicEffect's own ctor then explicitly flips DirectionalLight0.Enabled to
-// true (Task 361's 2nd fix), leaving light1/light2 disabled.
+// Directional lights — the Microsoft XNA 4.0 reference implementation initializes
+// each DirectionalLight to Down/One/Zero/disabled. BasicEffect's own constructor
+// then enables DirectionalLight0, leaving light1/light2 disabled.
 
 TEST_F(BasicEffectDefaultsTest, DirectionalLight0EnabledDefaultsToTrue)
 {
@@ -122,7 +121,7 @@ TEST_F(BasicEffectDefaultsTest, DirectionalLight2EnabledDefaultsToFalse)
     EXPECT_FALSE(fx.getDirectionalLight2Property().getEnabledProperty());
 }
 
-TEST_F(BasicEffectDefaultsTest, AllThreeDirectionalLightsDefaultColorsAndDirectionToZero)
+TEST_F(BasicEffectDefaultsTest, AllThreeDirectionalLightsUseXnaDefaultValues)
 {
     for (DirectionalLight* light : {
              &fx.getDirectionalLight0Property(),
@@ -130,9 +129,9 @@ TEST_F(BasicEffectDefaultsTest, AllThreeDirectionalLightsDefaultColorsAndDirecti
              &fx.getDirectionalLight2Property()
          })
     {
-        EXPECT_EQ(light->getDiffuseColorProperty(), Vector3::Zero);
+        EXPECT_EQ(light->getDiffuseColorProperty(), Vector3::One);
         EXPECT_EQ(light->getSpecularColorProperty(), Vector3::Zero);
-        EXPECT_EQ(light->getDirectionProperty(), Vector3::Zero);
+        EXPECT_EQ(light->getDirectionProperty(), Vector3::Down);
     }
 }
 

@@ -14,7 +14,7 @@ namespace Microsoft::Xna::Framework::Graphics
     class DirectionalLight
     {
     public:
-        /** @brief Constructs a default DirectionalLight (disabled, all colors black, direction zero). */
+        /** @brief Constructs a disabled white diffuse light pointing down with no specular contribution. */
         DirectionalLight();
 
         /**

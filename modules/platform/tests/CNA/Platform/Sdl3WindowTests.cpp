@@ -174,8 +174,17 @@ TEST_F(Sdl3WindowTest, FullscreenModeStartsWindowed)
     EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::Windowed);
 }
 
-TEST_F(Sdl3WindowTest, ExclusiveFullscreenNeverSilentlyCollapsesToBorderless)
+TEST_F(Sdl3WindowTest, ExclusiveFullscreenUsesThePlatformFaithfulMode)
 {
+#if defined(__EMSCRIPTEN__)
+    EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen));
+    // Browser fullscreen is asynchronous and waits for a user gesture, so the observable state
+    // may still be windowed here or may already be the mapped borderless browser mode.
+    const WindowFullscreenMode currentMode = window_->GetFullscreenMode();
+    EXPECT_TRUE(currentMode == WindowFullscreenMode::Windowed ||
+                currentMode == WindowFullscreenMode::BorderlessFullscreen);
+    EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::Windowed));
+#else
     try
     {
         window_->SetFullscreenMode(WindowFullscreenMode::ExclusiveFullscreen);
@@ -188,6 +197,7 @@ TEST_F(Sdl3WindowTest, ExclusiveFullscreenNeverSilentlyCollapsesToBorderless)
 
     EXPECT_EQ(window_->GetFullscreenMode(), WindowFullscreenMode::ExclusiveFullscreen);
     EXPECT_NO_THROW(window_->SetFullscreenMode(WindowFullscreenMode::Windowed));
+#endif
 }
 
 TEST_F(Sdl3WindowTest, VisibilityAndStateCallsAreAccepted)

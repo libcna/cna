@@ -4,11 +4,13 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     DirectionalLight::DirectionalLight()
-        : diffuseColor_(Vector3::Zero)
-        , direction_(Vector3::Zero)
+        : diffuseColor_(Vector3::One)
+        , direction_(Vector3::Down)
         , specularColor_(Vector3::Zero)
         , enabled_(false)
     {
+        // The Microsoft XNA 4.0 constructor initializes these cached property values explicitly.
+        // This intentionally differs from FNA's zero-initialized backing fields.
     }
 
     Vector3 DirectionalLight::getDiffuseColorProperty() const { return diffuseColor_; }

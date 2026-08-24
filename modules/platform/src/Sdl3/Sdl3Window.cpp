@@ -76,6 +76,24 @@ namespace CNA::Platform::Sdl3 {
             return NativeWindowSystem::Headless;
         }
 
+        void SetWebFullscreen(SDL_Window* window, const bool fullscreen,
+                              const char* operation)
+        {
+            // SDL's Emscripten driver defers fullscreen changes until a browser user gesture.
+            // A repeated request while that transition is pending returns false without setting
+            // an SDL error. Treat that specific result as the idempotent pending request it is;
+            // a real browser/SDL refusal supplies an error and remains an operational failure.
+            SDL_ClearError();
+            if (!SDL_SetWindowFullscreen(window, fullscreen))
+            {
+                const std::string error = LastSdlError();
+                if (!error.empty())
+                {
+                    throw PlatformException(operation, error);
+                }
+            }
+        }
+
     } // namespace
 
     Sdl3Window::Sdl3Window(SDL_Window* window, const bool ownsWindow)
@@ -253,6 +271,12 @@ namespace CNA::Platform::Sdl3 {
         switch (mode)
         {
             case WindowFullscreenMode::Windowed:
+                if (DetectSystem() == NativeWindowSystem::Web)
+                {
+                    SetWebFullscreen(window_, false,
+                                     "Window::SetFullscreenMode(Windowed/Web)");
+                    break;
+                }
                 RequireSdlSuccess(SDL_SetWindowFullscreen(window_, false),
                                   "Window::SetFullscreenMode(Windowed)");
                 break;
@@ -260,11 +284,31 @@ namespace CNA::Platform::Sdl3 {
                 // Null exclusive mode means "use the desktop mode", i.e. borderless fullscreen.
                 RequireSdlSuccess(SDL_SetWindowFullscreenMode(window_, nullptr),
                                   "Window::SetFullscreenMode(BorderlessFullscreen)");
+                if (DetectSystem() == NativeWindowSystem::Web)
+                {
+                    SetWebFullscreen(window_, true,
+                                     "Window::SetFullscreenMode(BorderlessFullscreen/Web)");
+                    break;
+                }
                 RequireSdlSuccess(SDL_SetWindowFullscreen(window_, true),
                                   "Window::SetFullscreenMode(BorderlessFullscreen)");
                 break;
             case WindowFullscreenMode::ExclusiveFullscreen:
             {
+                // Browsers do not expose monitor display modes, so an exclusive-mode lookup can
+                // never succeed under SDL's Emscripten video driver. XNA exposes only the boolean
+                // IsFullScreen property to games; mapping that request to browser fullscreen
+                // preserves the public XNA behavior while SDL defers the actual browser request
+                // until a user gesture, as required by the web platform.
+                if (DetectSystem() == NativeWindowSystem::Web)
+                {
+                    RequireSdlSuccess(SDL_SetWindowFullscreenMode(window_, nullptr),
+                                      "Window::SetFullscreenMode(ExclusiveFullscreen/Web)");
+                    SetWebFullscreen(window_, true,
+                                     "Window::SetFullscreenMode(ExclusiveFullscreen/Web)");
+                    break;
+                }
+
                 const WindowBounds bounds = GetClientBounds();
                 SetExclusiveMode(window_, bounds.width, bounds.height,
                                  "Window::SetFullscreenMode(ExclusiveFullscreen)");
