@@ -12,17 +12,74 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/IServiceProvider.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 namespace
 {
+    class GraphicsDeviceService final : public IGraphicsDeviceService
+    {
+    public:
+        explicit GraphicsDeviceService(GraphicsDevice* graphicsDevice)
+            : graphicsDevice_(graphicsDevice) {}
+
+        [[nodiscard]] GraphicsDevice* getGraphicsDeviceProperty() const override
+        {
+            return graphicsDevice_;
+        }
+
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceCreatedEvent() override
+        {
+            return deviceCreated_;
+        }
+
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceDisposingEvent() override
+        {
+            return deviceDisposing_;
+        }
+
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResetEvent() override
+        {
+            return deviceReset_;
+        }
+
+        [[nodiscard]] System::EventHandler<System::EventArgs>& getDeviceResettingEvent() override
+        {
+            return deviceResetting_;
+        }
+
+    private:
+        GraphicsDevice* graphicsDevice_;
+        System::EventHandler<System::EventArgs> deviceCreated_;
+        System::EventHandler<System::EventArgs> deviceDisposing_;
+        System::EventHandler<System::EventArgs> deviceReset_;
+        System::EventHandler<System::EventArgs> deviceResetting_;
+    };
+
+    class GraphicsDeviceServiceProvider final : public System::IServiceProvider
+    {
+    public:
+        explicit GraphicsDeviceServiceProvider(IGraphicsDeviceService* service)
+            : service_(service) {}
+
+        [[nodiscard]] void* GetService(const std::type_info& type) const override
+        {
+            return type == typeid(IGraphicsDeviceService) ? service_ : nullptr;
+        }
+
+    private:
+        IGraphicsDeviceService* service_;
+    };
+
     class ScratchContentRoot
     {
     public:
@@ -94,6 +151,20 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealMonoGameFixtureEndToEnd)
     EXPECT_EQ(pixel.getGProperty(), 0xFF);
     EXPECT_EQ(pixel.getBProperty(), 0xFF);
     EXPECT_EQ(pixel.getAProperty(), 0xFF);
+}
+
+TEST_F(ContentManagerTexture2DXnbTest, ResolvesGraphicsDeviceFromServiceProvider)
+{
+    ScratchContentRoot root;
+    CopyRealFixture(root.path(), "white-1.xnb");
+    GraphicsDeviceService graphicsService(&gd);
+    GraphicsDeviceServiceProvider services(&graphicsService);
+    ContentManager cm(&services, root.path().string());
+
+    Texture2D texture = cm.Load<Texture2D>("white-1");
+
+    EXPECT_EQ(texture.getWidthProperty(), 1);
+    EXPECT_EQ(texture.getHeightProperty(), 1);
 }
 
 TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)

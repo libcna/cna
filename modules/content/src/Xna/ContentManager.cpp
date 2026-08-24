@@ -22,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -115,13 +116,23 @@ namespace Microsoft::Xna::Framework::Content
 
     Graphics::GraphicsDevice& ContentManager::getGraphicsDeviceInternal() const
     {
-        if (graphicsDevice_ == nullptr)
+        Graphics::GraphicsDevice* graphicsDevice = graphicsDevice_;
+        if (graphicsDevice == nullptr && serviceProvider_ != nullptr)
+        {
+            auto* graphicsDeviceService = static_cast<Graphics::IGraphicsDeviceService*>(
+                serviceProvider_->GetService(typeid(Graphics::IGraphicsDeviceService)));
+            if (graphicsDeviceService != nullptr)
+            {
+                graphicsDevice = graphicsDeviceService->getGraphicsDeviceProperty();
+            }
+        }
+
+        if (graphicsDevice == nullptr)
         {
             throw ContentLoadException(
-                "ContentManager: GraphicsDevice is not set. "
-                "Call setGraphicsDevice() before loading GPU resources.");
+                "ContentManager: no GraphicsDevice is available from the service provider.");
         }
-        return *graphicsDevice_;
+        return *graphicsDevice;
     }
 
     void ContentManager::Dispose()
