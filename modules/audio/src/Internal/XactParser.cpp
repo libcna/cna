@@ -167,16 +167,17 @@ namespace CNA::Internal::Audio
 
     // ── Track event parser ────────────────────────────────────────────────────
 
-    /// Returns the (wavebankIndex, waveIndex, loopCount) from the first PlayWave
-    /// event in the track at absOffset, or {0xFF, 0xFFFF, 0} if none found.
+    /// Parses every event in the track at absOffset and returns the first PlayWave event, or
+    /// {0xFF, 0xFFFF, 0} if none exists. FACT leaves its shared sound-table cursor immediately
+    /// after the track's event block; valid XSB files may place the next sound there.
     static XsbWaveRef ParseFirstPlayWave(Ctx& ctx, uint32_t trackCodeAbs, float trackVol)
     {
-        uint32_t saved = ctx.pos();
         ctx.seek(trackCodeAbs);
 
         uint8_t eventCount = ctx.u8();
 
         XsbWaveRef result{0xFF, 0xFFFF, 0, trackVol};
+        bool foundPlayWave = false;
 
         for (uint8_t i = 0; i < eventCount; ++i)
         {
@@ -198,8 +199,11 @@ namespace CNA::Internal::Audio
                 uint8_t  loopCnt = ctx.u8();
                 ctx.u16(); // position
                 ctx.u16(); // angle
-                result = {wbIdx, waveIdx, loopCnt, trackVol};
-                break; // We only need the first play-wave event
+                if (!foundPlayWave)
+                {
+                    result = {wbIdx, waveIdx, loopCnt, trackVol};
+                    foundPlayWave = true;
+                }
             }
             else if (type == FACTEVENT_PLAYWAVEEFFECTVARIATION)
             {
@@ -222,17 +226,20 @@ namespace CNA::Internal::Audio
                 const float   maxQ     = ctx.f32();
                 const uint16_t variationFlags = ctx.u16();
 
-                result = {wbIdx, waveIdx, loopCnt, trackVol};
-                result.effectVariationFlags = variationFlags;
-                result.effectMinPitch     = minPitch;
-                result.effectMaxPitch     = maxPitch;
-                result.effectMinVolume    = minVol;
-                result.effectMaxVolume    = maxVol;
-                result.effectMinFrequency = minFreq;
-                result.effectMaxFrequency = maxFreq;
-                result.effectMinQFactor   = minQ;
-                result.effectMaxQFactor   = maxQ;
-                break;
+                if (!foundPlayWave)
+                {
+                    result = {wbIdx, waveIdx, loopCnt, trackVol};
+                    result.effectVariationFlags = variationFlags;
+                    result.effectMinPitch     = minPitch;
+                    result.effectMaxPitch     = maxPitch;
+                    result.effectMinVolume    = minVol;
+                    result.effectMaxVolume    = maxVol;
+                    result.effectMinFrequency = minFreq;
+                    result.effectMaxFrequency = maxFreq;
+                    result.effectMinQFactor   = minQ;
+                    result.effectMaxQFactor   = maxQ;
+                    foundPlayWave = true;
+                }
             }
             else if (type == FACTEVENT_PLAYWAVETRACKVARIATION ||
                      type == FACTEVENT_PLAYWAVETRACKEFFECTVARIATION)
@@ -288,22 +295,25 @@ namespace CNA::Internal::Audio
                     entries.push_back({wi, wb, static_cast<uint8_t>(maxWeight - minWeight)});
                     if (j == 0) { waveIdx = wi; wbIdx = wb; }
                 }
-                result = {wbIdx, waveIdx, loopCnt, trackVol};
-                result.trackVariationEntries = std::move(entries);
-                result.trackVariationType    = variationType;
-                if (hasEffect)
+                if (!foundPlayWave)
                 {
-                    result.effectVariationFlags = effFlags;
-                    result.effectMinPitch     = effMinPitch;
-                    result.effectMaxPitch     = effMaxPitch;
-                    result.effectMinVolume    = effMinVol;
-                    result.effectMaxVolume    = effMaxVol;
-                    result.effectMinFrequency = effMinFreq;
-                    result.effectMaxFrequency = effMaxFreq;
-                    result.effectMinQFactor   = effMinQ;
-                    result.effectMaxQFactor   = effMaxQ;
+                    result = {wbIdx, waveIdx, loopCnt, trackVol};
+                    result.trackVariationEntries = std::move(entries);
+                    result.trackVariationType    = variationType;
+                    if (hasEffect)
+                    {
+                        result.effectVariationFlags = effFlags;
+                        result.effectMinPitch     = effMinPitch;
+                        result.effectMaxPitch     = effMaxPitch;
+                        result.effectMinVolume    = effMinVol;
+                        result.effectMaxVolume    = effMaxVol;
+                        result.effectMinFrequency = effMinFreq;
+                        result.effectMaxFrequency = effMaxFreq;
+                        result.effectMinQFactor   = effMinQ;
+                        result.effectMaxQFactor   = effMaxQ;
+                    }
+                    foundPlayWave = true;
                 }
-                break;
             }
             else if (type == FACTEVENT_PITCH || type == FACTEVENT_VOLUME ||
                      type == FACTEVENT_PITCHREPEATING || type == FACTEVENT_VOLUMEREPEATING)
@@ -344,7 +354,6 @@ namespace CNA::Internal::Audio
             }
         }
 
-        ctx.seek(saved);
         return result;
     }
 

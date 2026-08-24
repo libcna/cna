@@ -945,12 +945,10 @@ namespace
     // bytes as track metadata and leaving the cursor desynced for every sound parsed afterward.
     // Regression fixture for IN-8.
     //
-    // Track event data is NOT contiguous with a sound's own header/metadata -- FACT's sequential
-    // sound-list cursor never walks through it (each track's events are reached only via the
-    // absolute `code` offset, from a *separate* region of the file); sound HEADERS are what must
-    // be contiguous from one sound to the next. So sound 1's header follows immediately after
-    // sound 0's per-track metadata, and sound 0's track-0 event array is placed after sound 1,
-    // referenced purely by absolute offset.
+    // FACT seeks its shared sound-list cursor to each complex track's absolute event code and
+    // leaves that cursor after the final event block. Real XACT output, including Spacewar,
+    // places the next sound there. Restoring the cursor to the end of the track metadata makes
+    // every sound after the first complex one start at the event-count byte instead.
     std::vector<uint8_t> BuildXsbWithComplexRpcThenSecondSound()
     {
         constexpr uint32_t headerSize   = 74;
@@ -961,9 +959,7 @@ namespace
         // RPC block: rpcDataLength(2, unused) + count(1) + one code(4) = 7 bytes.
         constexpr uint32_t trackMetaOffset = rpcBlockOffset + 7;
         // Per-track metadata (1 track): vol(1) + code(4) + filterData(2) + frequency(2) = 9 bytes.
-        constexpr uint32_t sound1Offset = trackMetaOffset + 9;
-        // Sound 1 (simple): flags+cat+vol+pitch+prio+len (9) + waveIdx(2) + wbIdx(1) = 12 bytes.
-        constexpr uint32_t trackEventsOffset = sound1Offset + 12;
+        constexpr uint32_t trackEventsOffset = trackMetaOffset + 9;
 
         std::vector<uint8_t> data;
 
@@ -1011,15 +1007,23 @@ namespace
         AppendU8(data, 1);
         AppendU32(data, 0xAAAAAAAAu);
 
-        // Per-track metadata (1 track): volume byte, code (absolute offset to event array,
-        // placed after sound 1 below), filterData, frequency.
+        // Per-track metadata (1 track): volume byte, code (absolute offset to the event array),
+        // filterData, frequency.
         AppendU8(data, 0xFF);
         AppendU32(data, trackEventsOffset);
         AppendU16(data, 0); // filterData
         AppendU16(data, 0); // frequency
 
-        // Sound 1: simple (non-complex), no flags, distinctive wave reference. Immediately
-        // follows sound 0's per-track metadata -- sound headers are contiguous.
+        // Sound 0's track-0 event array: the first PlayWave is the value CNA retains, but FACT
+        // still consumes the trailing event before it begins the next sound.
+        const auto playEvent = BuildPlayWaveEventBytes(42, 3, 0);
+        const auto trailingEvent = BuildPitchEventBytes();
+        AppendU8(data, 2);
+        data.insert(data.end(), playEvent.begin(), playEvent.end());
+        data.insert(data.end(), trailingEvent.begin(), trailingEvent.end());
+
+        // Sound 1: simple (non-complex), no flags, distinctive wave reference. FACT's track
+        // event parser leaves the shared cursor here after completing sound 0.
         AppendU8(data, 0x00);   // flags
         AppendU16(data, 0);     // categoryIndex
         AppendU8(data, 0xFF);   // volume byte
@@ -1028,11 +1032,6 @@ namespace
         AppendU16(data, 0);     // soundLength (skipped)
         AppendU16(data, 99);    // waveIdx
         AppendU8(data, 7);      // wbIdx
-
-        // Sound 0's track-0 event array, out-of-line: eventCount followed by one PlayWave event.
-        const auto event = BuildPlayWaveEventBytes(42, 3, 0);
-        AppendU8(data, 1);
-        data.insert(data.end(), event.begin(), event.end());
 
         return data;
     }
@@ -1093,17 +1092,22 @@ namespace
         AppendU32(data, 0xDEADBEEFu);
 
         // trackEventsOffset: soundOffset(138) + 9(fixed)+1(trackCount) + 7(DSP block)
-        //                    + 9(per-track meta) + 12(sound 1 header) = 176.
-        constexpr uint32_t trackEventsOffset = soundOffset + 9 + 1 + 7 + 9 + 12;
+        //                    + 9(per-track meta) = 164.
+        constexpr uint32_t trackEventsOffset = soundOffset + 9 + 1 + 7 + 9;
 
-        // Per-track metadata (1 track): code points past sound 1, to the out-of-line event array.
+        // Per-track metadata (1 track): code points to the following event array.
         AppendU8(data, 0xFF);
         AppendU32(data, trackEventsOffset);
         AppendU16(data, 0); // filterData
         AppendU16(data, 0); // frequency
 
-        // Sound 1: simple (non-complex), no flags, distinctive wave reference. Immediately
-        // follows sound 0's per-track metadata -- sound headers are contiguous.
+        // Sound 0's track-0 event array: eventCount followed by one PlayWave event.
+        const auto event = BuildPlayWaveEventBytes(55, 8, 0);
+        AppendU8(data, 1);
+        data.insert(data.end(), event.begin(), event.end());
+
+        // Sound 1: simple (non-complex), no flags, distinctive wave reference. FACT's track
+        // event parser leaves the shared cursor here after completing sound 0.
         AppendU8(data, 0x00);   // flags
         AppendU16(data, 0);     // categoryIndex
         AppendU8(data, 0xFF);   // volume byte
@@ -1112,11 +1116,6 @@ namespace
         AppendU16(data, 0);     // soundLength (skipped)
         AppendU16(data, 88);    // waveIdx
         AppendU8(data, 9);      // wbIdx
-
-        // Sound 0's track-0 event array, out-of-line: eventCount followed by one PlayWave event.
-        const auto event = BuildPlayWaveEventBytes(55, 8, 0);
-        AppendU8(data, 1);
-        data.insert(data.end(), event.begin(), event.end());
 
         return data;
     }
