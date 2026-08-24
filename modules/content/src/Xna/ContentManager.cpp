@@ -100,6 +100,7 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     ContentManager::ContentManager()
+        : rootDirectory_("Content")
     {
         RegisterBuiltinLoaders();
     }

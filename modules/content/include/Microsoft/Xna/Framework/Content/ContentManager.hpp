@@ -46,7 +46,7 @@ namespace Microsoft::Xna::Framework::Content
     class ContentManager : public System::IDisposable
     {
     private:
-        std::string rootDirectory_ = "Content";
+        std::string rootDirectory_;
         Graphics::GraphicsDevice* graphicsDevice_ = nullptr;
         System::IServiceProvider* serviceProvider_ = nullptr;
         bool disposed_ = false;

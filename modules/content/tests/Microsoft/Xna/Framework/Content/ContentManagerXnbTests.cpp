@@ -26,6 +26,15 @@ using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
 
 namespace
 {
+    class NullServiceProvider final : public System::IServiceProvider
+    {
+    public:
+        [[nodiscard]] void* GetService(const std::type_info&) const override
+        {
+            return nullptr;
+        }
+    };
+
     void WriteBytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
     {
         std::ofstream f(path, std::ios::binary);
@@ -124,6 +133,21 @@ namespace
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
     };
+}
+
+TEST(ContentManagerConstructorTest, ServiceProviderConstructorUsesXnaEmptyRootDirectory)
+{
+    NullServiceProvider services;
+    ContentManager content(&services);
+
+    EXPECT_TRUE(content.getRootDirectoryProperty().empty());
+}
+
+TEST(ContentManagerConstructorTest, CnaDefaultConstructorKeepsItsContentRootExtensionDefault)
+{
+    ContentManager content;
+
+    EXPECT_EQ(content.getRootDirectoryProperty(), "Content");
 }
 
 TEST_F(ContentManagerXnbTest, LoadFindsAndDeserializesARealXnbFile)
