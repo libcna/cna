@@ -32,7 +32,6 @@
 
 namespace Microsoft::Xna::Framework::Audio  { class SoundEffect; }
 namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; class Texture2D; class TextureCube; }
-namespace CNA::Internal::Renderers { class ITextureRenderer; }
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -85,14 +84,6 @@ namespace Microsoft::Xna::Framework::Content
         // requested type T (std::type_index), then by the .cnj document's own "type" string.
         // Populated by RegisterCnjLoader<T>(); consulted by GenericCnjTypeReader<T> below.
         std::unordered_map<std::type_index, std::unordered_map<std::string, std::any>> cnjNamedLoaders_;
-
-        struct WeakTextureEntry {
-            std::weak_ptr<CNA::Internal::Renderers::ITextureRenderer> renderer;
-            std::weak_ptr<std::vector<uint8_t>> cpuPixels;
-            Graphics::SurfaceFormat fmt;
-            int levelCount;
-        };
-        std::unordered_map<std::string, WeakTextureEntry> textureCache_;
 
         // plans/plan_xnb.md Phase B3 (XNB-65/66/67): a point-in-time snapshot of the content root,
         // built lazily on first access (or explicitly via RefreshContentManifest()). Additive
@@ -311,13 +302,17 @@ namespace Microsoft::Xna::Framework::Content
 
             const std::string key = NormalizeKey(assetName);
             const AssetCacheKey cacheKey{std::type_index(typeid(T)), key};
-            log::Debug(std::string("Loading asset: ") + assetName);
 
             auto cacheIt = loadedAssets_.find(cacheKey);
             if (cacheIt != loadedAssets_.end())
             {
                 return std::any_cast<T>(cacheIt->second);
             }
+
+            // A cache hit is not a load. Besides describing the operation accurately, keeping
+            // this after the lookup avoids per-frame console traffic in faithful XNA code that
+            // calls Content.Load from Draw and relies on ContentManager's cache (SAMPLE-014).
+            log::Debug(std::string("Loading asset: ") + assetName);
 
             // .xnb always wins first (cnj.md's "Core rule", 2026-07-16 decision): checked even
             // ahead of a literal caller-given path or a registered LooseFileContentTypeReader<T>
@@ -546,12 +541,6 @@ namespace Microsoft::Xna::Framework::Content
         }
     };
 
-    // Explicit specialisation: Texture2D assets use a weak cache so that the
-    // GPU renderer is freed as soon as the last external Texture2D copy is dropped,
-    // preventing per-world RAM growth when worlds load unique background textures.
-    template<>
-    Graphics::Texture2D ContentManager::Load<Graphics::Texture2D>(const std::string& assetName);
-
     // Explicit specialisation: SoundEffect is move-only with per-owner Dispose-cascade
     // semantics (T-3G) -- sharing one cached instance across unrelated Load<SoundEffect>()
     // call sites would let disposing one caller's copy silently cascade-stop another,
@@ -561,11 +550,4 @@ namespace Microsoft::Xna::Framework::Content
     template<>
     Audio::SoundEffect ContentManager::Load<Audio::SoundEffect>(const std::string& assetName);
 
-    // Explicit specialisation: TextureCube is move-only (CNAEXT, copy constructor deleted --
-    // unlike Texture2D, which supports reference-counted renderer sharing via its own weak-cache
-    // specialisation above), so it cannot be held in the generic strong (std::any-based) cache
-    // either. Mirrors SoundEffect's own identical not-cached specialisation: each call gets its
-    // own independently-decoded instance.
-    template<>
-    Graphics::TextureCube ContentManager::Load<Graphics::TextureCube>(const std::string& assetName);
 }

@@ -375,9 +375,9 @@ namespace Microsoft::Xna::Framework::Graphics
         // IRenderTargetRenderer pointer dangling. Update the existing level-0 resource instead.
         //
         // REMED-GFX-223: this in-place update must stay confined to render targets. An ordinary
-        // Texture2D's renderer is shareable -- ContentManager's weak texture cache hands the same
-        // ITextureRenderer to every wrapper reconstructed from a cache hit -- so updating it in
-        // place would publish this upload to every other holder of that texture, which is exactly
+        // Texture2D's renderer is shareable -- ContentManager hands the same ITextureRenderer to
+        // every cached value copy -- so updating it in place would publish this upload to every
+        // other holder of that texture, which is exactly
         // the aliasing CnjCacheIsolationTests pins (plans/plan_cnj.md CNB-33). Building a fresh renderer
         // detaches this wrapper, which is what a full-level upload has always done here.
         if (renderer_ && gpuOnlyContent_)

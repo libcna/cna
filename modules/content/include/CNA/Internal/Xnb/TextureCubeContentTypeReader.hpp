@@ -18,12 +18,9 @@ namespace CNA::Internal::Xnb
      *        CNA's renderer-neutral `TextureCube`/`GraphicsDevice` API -- never against any one
      *        renderer's internals directly.
      *
-     * `TextureCube` is move-only (matching `Texture2D::FromStream`-adjacent GPU-resource
-     * conventions elsewhere in this codebase); this reader targets a bare `TextureCube` (not
-     * `std::shared_ptr<TextureCube>`), relying on `ContentTypeReader<T>`'s existing
-     * move-only-type support (the same `if constexpr` branch `SoundEffectReader` already uses) --
-     * `TextureCube`, unlike `Texture3D`, already has a real move constructor, so no runtime
-     * class changes were needed to support this.
+     * This reader targets the same bare, copyable `TextureCube` value wrapper as
+     * `ContentManager::Load<TextureCube>`. Copies share the underlying renderer resource, which
+     * lets the ordinary strong ContentManager cache preserve XNA's load-once behavior.
      *
      * **Current coverage** (matching Texture2DReader's own scope exactly): `SurfaceFormat.Color`
      * uploads raw bytes directly; `Dxt1`/`Dxt3`/`Dxt5` are always software-decompressed to `Color`

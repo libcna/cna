@@ -24,14 +24,17 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -357,6 +360,98 @@ TEST(EasyGLCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARen
     EXPECT_NEAR(flatPixel.getGProperty(), 41, 3);
     EXPECT_NEAR(flatPixel.getBProperty(), 61, 3);
     EXPECT_NEAR(flatPixel.getAProperty(), 82, 3);
+}
+
+TEST(EasyGLCompiledEffectDrawTest, AShaderMaySampleANullTextureLikeFnaOpenGL)
+{
+    // SAMPLE-014/FX-113: XNA/FNA permits a texture parameter to remain null. FNA's Effect leaves
+    // the GraphicsDevice texture slot alone and FNA3D's OpenGL VerifySampler explicitly unbinds
+    // the slot when it is also null. Spacewar relies on this for its non-reflective shapes.
+    GraphicsDevice device;
+    EasyGLRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the EasyGL renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+    // Do not assign FxTexture (parameter 5), and leave GraphicsDevice.Textures[0] null.
+
+    const VertexDeclaration declaration(20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    struct Vertex { float x, y, z, u, v; };
+    const std::vector<Vertex> quad = {
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+        {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+        { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+    };
+    auto vb = renderer->CreateVertexBuffer(6);
+    vb->SetVertexDeclaration(declaration);
+    vb->SetData(quad.data(), 6, sizeof(Vertex));
+
+    RenderTarget2D rt(device, 8, 8);
+    device.SetRenderTarget(&rt);
+    device.Clear(Color(50, 50, 50, 255));
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);
+
+    GpuDrawParams params{};
+    params.compiledEffectRuntime = runtime.get();
+    EXPECT_NO_THROW(renderer->DrawPrimitivesEx(
+        *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+        Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, params));
+
+    device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+}
+
+TEST(EasyGLCompiledEffectTest, AppliedSamplerRetainsNativeTextureAfterValueWrapperReplacement)
+{
+    // SAMPLE-014/FX-114: XNA's Texture objects are managed references. Spacewar faithfully calls
+    // Content.Load<TextureCube>() in Render and replaces its C++ value wrapper even on a cache
+    // hit. The applied sampler must retain the cached native resource rather than dereference the
+    // wrapper address left in GraphicsDevice.Textures by the previous frame.
+    GraphicsDevice device;
+    auto runtime = CreateRuntime(device, "EnvironmentMapEffect.fxb");
+    ASSERT_NE(runtime, nullptr) << "this build did not select the EasyGL renderer";
+
+    const auto& parameters = runtime->GetDescription().parameters;
+    const auto environmentMap = std::find_if(
+        parameters.begin(), parameters.end(), [](const auto& parameter)
+        {
+            return parameter.name == "EnvironmentMap";
+        });
+    ASSERT_NE(environmentMap, parameters.end());
+
+    std::weak_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> nativeResource;
+    {
+        std::optional<TextureCube> cube;
+        cube.emplace(device, 1, false, SurfaceFormat::Color);
+        nativeResource = cube->GetRenderer().weak_from_this();
+        runtime->SetParameterTexture(environmentMap->runtimeIndex, &*cube);
+
+        CompiledEffectDeviceState deviceState;
+        CompiledEffectPassStateChanges changes;
+        runtime->ApplyPass(0, deviceState, changes);
+        cube.reset();
+    }
+
+    EXPECT_FALSE(nativeResource.expired());
+    runtime->SetParameterTexture(environmentMap->runtimeIndex, nullptr);
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    EXPECT_NO_THROW(runtime->ApplyPass(0, deviceState, changes));
+    EXPECT_FALSE(nativeResource.expired())
+        << "a null Effect parameter leaves the previously applied XNA sampler binding intact";
+
+    runtime.reset();
+    EXPECT_TRUE(nativeResource.expired());
 }
 
 TEST(EasyGLCompiledEffectTest, SharedBackendConformanceContract)

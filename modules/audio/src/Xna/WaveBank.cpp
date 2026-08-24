@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
@@ -123,7 +124,8 @@ namespace Microsoft::Xna::Framework::Audio
         // code either. The streaming ctor (InitStreaming) is unaffected: FNA's streaming path
         // never goes through TitleContainer at all, it opens the file with the native
         // FAudio_fopen instead, so a missing streaming file doesn't throw in FNA either.
-        std::ifstream f(filename, std::ios::binary | std::ios::ate);
+        const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
+        std::ifstream f(resolvedFilename, std::ios::binary | std::ios::ate);
         if (!f.is_open())
         {
             throw System::IO::FileNotFoundException(
@@ -152,7 +154,8 @@ namespace Microsoft::Xna::Framework::Audio
     {
         try
         {
-            auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeader(filename);
+            const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
+            auto xwb = CNA::Internal::Audio::ParseXwbStreamingHeader(resolvedFilename);
             std::cerr << "[WaveBank] Loaded XWB (streaming): " << filename
                       << " bank=\"" << xwb.bankName << "\""
                       << " entries=" << xwb.entries.size() << "\n";

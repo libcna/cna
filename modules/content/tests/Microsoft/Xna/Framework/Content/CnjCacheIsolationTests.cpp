@@ -2,15 +2,10 @@
 //
 // plans/plan_cnj.md CNB-33: a .cnj sidecar's metadata transform (colorKey) must never leak into a
 // separately-cached, separately-requested load of the same underlying native file, in either
-// load order. Investigation found the specific mechanism the task described -- ApplyColorKey's
-// SetData() mutating a texture renderer shared through the weak cache -- does not currently
-// reproduce: Texture2D::SetData(const Color*, int) reassigns renderer_/cpuPixels_ to freshly
-// created targets rather than mutating the existing shared objects in place, so a .cnj's
-// recursively-loaded source texture is already effectively detached before ApplyColorKey runs.
-// These tests pin that invariant as a permanent regression guard (including the case that
-// actually exercises the weak-cache reuse path, by keeping a live handle so the cached entry's
-// weak_ptr can still lock()) -- if a future change to SetData ever starts mutating in place
-// instead of reassigning, these tests will catch it.
+// load order. Texture2D::SetData(const Color*, int) reassigns renderer_/cpuPixels_ to freshly
+// created targets rather than mutating the shared objects in place, so a .cnj's recursively-loaded
+// source texture is detached before ApplyColorKey runs. These tests pin that invariant while the
+// XNA-faithful strong ContentManager cache keeps the source asset alive.
 
 #include <cstdint>
 #include <filesystem>
@@ -116,9 +111,8 @@ TEST_F(CnjCacheIsolationTest, NativeLoadedFirstWithLiveHandleUnaffectedBySidecar
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
-    // Keep a live handle so the weak texture cache's entry for "ahoj.png" can still lock() when
-    // the .cnj sidecar recursively loads it below -- this is what actually exercises the
-    // cache-reuse code path, not a fresh reload from disk.
+    // Keep a live handle while the .cnj sidecar recursively obtains the same strongly cached
+    // source asset below.
     Texture2D nativeHandle = cm.Load<Texture2D>("ahoj.png");
 
     Texture2D sidecar = cm.Load<Texture2D>("ahoj");

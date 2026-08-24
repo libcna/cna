@@ -196,6 +196,34 @@ TEST_F(Texture3DTextureCubeContentTypeReaderTest, TextureCubeReaderLoadsRealMono
     }
 }
 
+TEST_F(Texture3DTextureCubeContentTypeReaderTest, ContentManagerStronglyCachesTextureCubeUntilUnload)
+{
+    if (!CubeStorageSupported())
+    {
+        GTEST_SKIP() << "The active renderer has no cube texture storage.";
+    }
+
+    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/uncompressed");
+    cm.setGraphicsDevice(gd);
+
+    std::weak_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> cachedRenderer;
+    {
+        TextureCube first = cm.Load<TextureCube>("SampleCube64DXT1Mips");
+        cachedRenderer = first.GetRenderer().weak_from_this();
+    }
+
+    ASSERT_FALSE(cachedRenderer.expired())
+        << "ContentManager must own the loaded cube after caller wrappers are destroyed";
+    const auto originalRenderer = cachedRenderer.lock();
+
+    TextureCube cached = cm.Load<TextureCube>("SampleCube64DXT1Mips");
+    EXPECT_EQ(originalRenderer.get(), &cached.GetRenderer());
+
+    cm.Unload();
+    TextureCube reloaded = cm.Load<TextureCube>("SampleCube64DXT1Mips");
+    EXPECT_NE(originalRenderer.get(), &reloaded.GetRenderer());
+}
+
 // REMED-CONTENT-004: Texture3D is a documented, renderer-dependent capability -- Headless has no
 // real GPU resource of any kind, and Software's Texture3D support is an explicit v1 scope boundary
 // (plans/plan_software.md Boundaries). On a renderer that doesn't support it, reading now throws a clean

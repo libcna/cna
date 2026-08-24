@@ -42,7 +42,9 @@ the native asset cache.
 `cna_content_manager_load_texture2d` delegates resolution, decoding and caching to the canonical
 native `ContentManager::Load<Texture2D>`. The initial route accepts only a loaded
 `SurfaceFormat::Color` result. Each successful call returns a new owned C Texture2D handle, even
-when the native manager satisfies the load from its weak texture cache.
+when the native manager satisfies the load from its strong XNA-style asset cache. Handles for the
+same cached asset share the underlying texture resource while retaining independent C-handle
+lifetime.
 
 The returned C texture is an independently owned game child. It remains valid after
 `cna_content_manager_unload` or `cna_content_manager_destroy` and uses the same query, RGBA8
@@ -50,7 +52,7 @@ readback, SpriteBatch and destroy functions as a directly created C texture. It 
 before the parent game. Destroying or unloading the content manager does not implicitly destroy
 issued C resource handles.
 
-`cna_content_manager_unload` clears the manager's native asset and texture caches. Destroy performs
+`cna_content_manager_unload` clears the manager's native asset cache. Destroy performs
 the same native disposal and invalidates only the manager handle.
 
 ## Failures and unavailable types
@@ -69,9 +71,11 @@ below -- and an asset of a type CNA does not know at all is reachable through
 ## Typed loads beyond Texture2D
 
 `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect` map the
-canonical `Load<TextureCube>` and `Load<SoundEffect>` specializations. Neither is cached in the
-canonical implementation, so every successful call returns an independently owned handle; both
-resolve an extension-less asset name through their reader's own extension list.
+canonical `Load<TextureCube>` route and CNA's `Load<SoundEffect>` specialization. TextureCube uses
+the same strong XNA-style asset cache as Texture2D; SoundEffect remains deliberately uncached
+because CNA models its per-owner disposal cascade with move-only ownership. Every successful C call
+returns an independently owned handle, and handles for one cached cube share its underlying texture
+resource. Both routes resolve an extension-less asset name through their reader's extension list.
 
 Their failure results differ, and the difference is canonical rather than a C-layer choice: a cube
 asset that cannot be decoded or does not exist returns `CNA_RESULT_IO`, and a backend without cube

@@ -13,6 +13,7 @@
 
 #include "CNA/Platform/CurrentPlatform.hpp"
 
+#include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
 #include "System/IO/FileStream.hpp"
@@ -186,9 +187,10 @@ namespace Microsoft::Xna::Framework
     {
         if (IsPathRooted(name))
         {
-            return std::filesystem::path(name).lexically_normal().string();
+            return CNA::Internal::ResolveExistingXnaPath(
+                std::filesystem::path(name).lexically_normal().string());
         }
 
-        return CombineTitlePath(name);
+        return CNA::Internal::ResolveExistingXnaPath(CombineTitlePath(name));
     }
 }

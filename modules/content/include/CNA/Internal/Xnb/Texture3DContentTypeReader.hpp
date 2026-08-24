@@ -17,11 +17,11 @@ namespace CNA::Internal::Xnb
      *        CNA's renderer-neutral `Texture3D`/`GraphicsDevice` API -- never against any one
      *        renderer's internals directly.
      *
-     * Targets `std::shared_ptr<Texture3D>` rather than a bare `Texture3D`: unlike `Texture2D`
-     * (copy-constructible) or `SoundEffect`/`TextureCube` (move-only but movable), `Texture3D` had
-     * no move path at all before this reader needed one to return a freshly-decoded texture by
-     * value in the first place -- see `Texture3D`'s own new move constructor/assignment for why
-     * that gap is now closed, independent of this reader's own erasure choice.
+     * Targets `std::shared_ptr<Texture3D>` rather than a bare `Texture3D`: Texture2D and
+     * TextureCube are copy-constructible reference-resource wrappers, while Texture3D had no move
+     * path at all before this reader needed one to return a freshly-decoded texture by value in the
+     * first place -- see `Texture3D`'s own new move constructor/assignment for why that gap is now
+     * closed, independent of this reader's own erasure choice.
      *
      * **Current coverage** (matching Texture2DReader's own scope exactly): `SurfaceFormat.Color`
      * uploads raw bytes directly; `Dxt1`/`Dxt3`/`Dxt5` are always software-decompressed to `Color`

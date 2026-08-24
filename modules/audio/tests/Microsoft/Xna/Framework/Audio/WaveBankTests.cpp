@@ -983,6 +983,16 @@ TEST(WaveBankTest, ConstructorMissingFileThrowsFileNotFound)
     EXPECT_THROW(WaveBank wb(&SharedEngine(), missing), System::IO::FileNotFoundException);
 }
 
+TEST(WaveBankTest, ConstructorResolvesXnaCaseInsensitiveBankPath)
+{
+    const std::filesystem::path exact(XwbFixturePath());
+    const auto requested = exact.parent_path().parent_path() /
+                           "CNA_WAVEBANK_TEST" / "FIXTURE.XWB";
+
+    WaveBank bank(&SharedEngine(), requested.string());
+    EXPECT_TRUE(bank.getIsPreparedProperty());
+}
+
 // XA-13: a file that EXISTS but isn't a valid .xwb (bad magic/garbage) must behave the same as
 // a missing one -- construction doesn't throw, the bank just stays unprepared. (XA-9 decided to
 // keep this "silent stub" behavior rather than throw; this locks in that decision explicitly, on

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
 // REMED-GFX-223, ContentManager side. CnjCacheIsolationTests pins the .cnj colour-key case; these
-// pin the plain weak-texture-cache lifecycle underneath it -- hit, miss, repeated cycles, wrappers
-// outliving each other, and teardown while entries are still registered -- so a future change to
-// Texture2D's cache-reconstruction or upload semantics cannot pass by only satisfying the sidecar
-// scenario.
+// pin the XNA ContentManager-owned texture-cache lifecycle underneath it -- hits, repeated loads,
+// wrappers outliving each other, and teardown while entries are still registered.
 
 #include <gtest/gtest.h>
 
@@ -84,8 +82,7 @@ protected:
     GraphicsDevice gd;
 };
 
-// A cache HIT -- the first handle is still alive, so the entry's weak_ptrs still lock -- must
-// return the same pixels the first load did.
+// A cache hit must return the same pixels and renderer the first load did.
 TEST_F(ContentManagerTextureCacheCycleTest, CacheHitReturnsTheSamePixels)
 {
     ScratchContentRoot root;
@@ -99,11 +96,13 @@ TEST_F(ContentManagerTextureCacheCycleTest, CacheHitReturnsTheSamePixels)
 
     Texture2D hit = cm.Load<Texture2D>("tile.png");
     EXPECT_EQ(Read(hit), Expected());
+    EXPECT_EQ(first.GetRendererWeak().lock(), hit.GetRendererWeak().lock());
 }
 
-// A cache MISS -- every handle was dropped, so the entry expired and the asset is reloaded from
-// disk -- must also return the original pixels.
-TEST_F(ContentManagerTextureCacheCycleTest, CacheMissAfterHandlesExpireReloadsFromDisk)
+// XNA ContentManager strongly owns a loaded asset until Unload, even when every caller drops its
+// handle. A later Load must therefore return the original renderer without decoding or uploading
+// the texture again.
+TEST_F(ContentManagerTextureCacheCycleTest, CacheSurvivesCallerHandlesGoingOutOfScope)
 {
     ScratchContentRoot root;
     WriteFixture(gd, root.path());
@@ -111,17 +110,21 @@ TEST_F(ContentManagerTextureCacheCycleTest, CacheMissAfterHandlesExpireReloadsFr
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
+    std::weak_ptr<CNA::Internal::Renderers::ITextureRenderer> originalRenderer;
     {
         Texture2D first = cm.Load<Texture2D>("tile.png");
         ASSERT_EQ(Read(first), Expected());
+        originalRenderer = first.GetRendererWeak();
     }
+    ASSERT_FALSE(originalRenderer.expired());
 
-    Texture2D reloaded = cm.Load<Texture2D>("tile.png");
-    EXPECT_EQ(Read(reloaded), Expected());
+    Texture2D cached = cm.Load<Texture2D>("tile.png");
+    EXPECT_EQ(Read(cached), Expected());
+    EXPECT_EQ(originalRenderer.lock(), cached.GetRendererWeak().lock());
 }
 
-// Alternating hit and miss cycles must never accumulate stale state in either direction.
-TEST_F(ContentManagerTextureCacheCycleTest, RepeatedHitAndMissCyclesStayCorrect)
+// Repeated cache hits must never accumulate stale state.
+TEST_F(ContentManagerTextureCacheCycleTest, RepeatedLoadsStayCorrect)
 {
     ScratchContentRoot root;
     WriteFixture(gd, root.path());
@@ -132,7 +135,7 @@ TEST_F(ContentManagerTextureCacheCycleTest, RepeatedHitAndMissCyclesStayCorrect)
     for (int cycle = 0; cycle < 6; ++cycle)
     {
         Texture2D live = cm.Load<Texture2D>("tile.png");
-        ASSERT_EQ(Read(live), Expected()) << "miss cycle " << cycle;
+        ASSERT_EQ(Read(live), Expected()) << "load cycle " << cycle;
 
         Texture2D hit = cm.Load<Texture2D>("tile.png");
         ASSERT_EQ(Read(hit), Expected()) << "hit cycle " << cycle;
@@ -158,8 +161,8 @@ TEST_F(ContentManagerTextureCacheCycleTest, UploadThroughOneHandleDoesNotReachAn
     EXPECT_EQ(Read(keep), Expected());
 }
 
-// Tearing the ContentManager down while entries are registered, and then the device, must not
-// touch a freed renderer or a freed shadow. Meaningful chiefly under ASan/UBSan.
+// Tearing the ContentManager down while strong entries are registered, and then the device, must
+// not touch a freed renderer or a freed shadow. Meaningful chiefly under ASan/UBSan.
 TEST(ContentManagerTextureCacheTeardownTest, TeardownWithLiveCacheEntriesIsClean)
 {
     GraphicsDevice gd;
@@ -173,8 +176,8 @@ TEST(ContentManagerTextureCacheTeardownTest, TeardownWithLiveCacheEntriesIsClean
         Texture2D live = cm.Load<Texture2D>("tile.png");
         Texture2D hit = cm.Load<Texture2D>("tile.png");
         ASSERT_EQ(Read(hit), Expected());
-        // `cm` is destroyed with both entries still registered, then the two wrappers; `gd` is
-        // torn down last, after the cache that referenced its resources is already gone.
+        // `cm` is destroyed with its strong entry still registered, then the two wrappers; `gd`
+        // is torn down last, after the cache that referenced its resources is already gone.
     }
 
     SUCCEED();

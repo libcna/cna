@@ -2,9 +2,9 @@
 //
 // REMED-GFX-223. Texture2D::ReconstructFromCache() builds through the protected constructor
 // RenderTarget2D owns, which raises gpuOnlyContent_ -- the flag that declares "the live renderer
-// is the sole authority for this resource's pixels, trust no CPU shadow". A cache hit is not a
-// render target: it is an ordinary content texture whose shadow IS authoritative and whose
-// renderer is shared with every other wrapper reconstructed from the same cache entry.
+// is the sole authority for this resource's pixels, trust no CPU shadow". A reconstructed ordinary
+// texture is not a render target: its shadow IS authoritative and its renderer can be shared with
+// another value wrapper.
 //
 // These tests pin both halves of that contract, which no single-renderer suite exercised:
 //   * a reconstructed wrapper reads its own cached pixels rather than delegating to a renderer
@@ -51,8 +51,8 @@ namespace
         };
     }
 
-    /// Reproduces what ContentManager's weak texture cache does on a hit: hand the cached renderer
-    /// and cached CPU pixel buffer to ReconstructFromCache and wrap them in a new Texture2D.
+    /// Hands an existing renderer and CPU pixel buffer to the legacy reconstruction helper and
+    /// wraps them in a new Texture2D.
     Texture2D ReconstructLike(GraphicsDevice& device, const Texture2D& cached)
     {
         return Texture2D::ReconstructFromCache(

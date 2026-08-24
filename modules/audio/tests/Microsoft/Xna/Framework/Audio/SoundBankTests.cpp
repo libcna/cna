@@ -384,6 +384,16 @@ TEST(SoundBankTest, ConstructorLoadsValidFixture)
     EXPECT_FALSE(bank.getIsDisposedProperty());
 }
 
+TEST(SoundBankTest, ConstructorResolvesXnaCaseInsensitiveBankPath)
+{
+    const std::filesystem::path exact(XsbFixturePath());
+    const auto requested = exact.parent_path().parent_path() /
+                           "CNA_SOUNDBANK_TEST" / "FIXTURE.XSB";
+
+    SoundBank bank(&SharedEngine(), requested.string());
+    EXPECT_FALSE(bank.getIsDisposedProperty());
+}
+
 // ===================== IsDisposed / Dispose =====================
 
 TEST(SoundBankTest, IsDisposedFalseInitiallyAndTrueAfterDispose)

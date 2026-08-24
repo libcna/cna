@@ -213,6 +213,27 @@ TEST_F(TextureCubeTest, MipMapTrueNonPowerOfTwo)
     EXPECT_EQ(TextureCube(gd, 7, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
 }
 
+TEST_F(TextureCubeTest, CopyConstructorSharesTheUnderlyingRenderer)
+{
+    TextureCube source(gd, 4, false, SurfaceFormat::Color);
+    TextureCube copy(source);
+
+    EXPECT_EQ(copy.getSizeProperty(), source.getSizeProperty());
+    EXPECT_EQ(copy.getFormatProperty(), source.getFormatProperty());
+    EXPECT_EQ(&copy.GetRenderer(), &source.GetRenderer());
+}
+
+TEST_F(TextureCubeTest, CopyAssignmentSharesTheUnderlyingRenderer)
+{
+    TextureCube source(gd, 4, true, SurfaceFormat::Color);
+    TextureCube copy(gd, 2, false, SurfaceFormat::Color);
+    copy = source;
+
+    EXPECT_EQ(copy.getSizeProperty(), source.getSizeProperty());
+    EXPECT_EQ(copy.getLevelCountProperty(), source.getLevelCountProperty());
+    EXPECT_EQ(&copy.GetRenderer(), &source.GetRenderer());
+}
+
 // -----------------------------------------------------------------------
 // SetData(face, data, elementCount) / SetData(face, data, startIndex, elementCount)
 // — argument guards (both delegate to the 6-arg overload; guards live there)

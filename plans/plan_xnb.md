@@ -488,6 +488,15 @@ entirely the second one.
 | XNB-24 | `SurfaceFormat` capability inventory (not immediate blanket conversion): classify each `SurfaceFormat` as native-upload / CPU-conversion / GPU-transcode / unsupported / lossy-fallback per backend (`struct SurfaceFormatCapability{bool nativeUpload; optional<SurfaceFormat> fallback; ConversionFunction converter;}`); `Texture2DReader` only asks `GraphicsDevice`/a formats service for a compatible resource, it does not own per-backend conversion tables itself | ✅ | **Narrowed scope, implemented 2026-07-16**: rather than a full per-backend native-vs-CPU-conversion capability table, `Texture2DReader` always software-decompresses `Dxt1/3/5` to `Color` unconditionally (correct on every backend, just not always the most efficient path) and explicitly rejects every other format with a clear error. The fuller per-backend "does this backend accept compressed data natively" query (to skip decompression when unnecessary) remains a genuine follow-up, tracked here, not silently abandoned |
 | XNB-26 | End-to-end test: `content.Load<Texture2D>("foo.xnb")` on an uncompressed real fixture, going through the Phase B2 `ContentManager` slice (not a standalone parser call) | ✅ | **Reached 2026-07-16** — `ContentManagerTexture2DXnbTest.LoadRealMonoGameFixtureEndToEnd`: the real `white-1.xnb` fixture loads through `content.Load<Texture2D>("white-1")`, confirming exact pixel data. Required also wiring `.xnb` into `ContentManager::Load<Texture2D>()`'s own *specialization* (its weak-cache implementation doesn't call the generic `Load<T>()` template body at all, so needed its own `.xnb`-first check) — **M2 milestone reached**. **SAMPLE-013 correction 2026-08-24:** level-scoped `new ContentManager(game.Services, "Content")` now resolves `IGraphicsDeviceService` from its supplied service provider just like XNA, instead of requiring the non-XNA `setGraphicsDevice` extension. `ResolvesGraphicsDeviceFromServiceProvider` locks the real XNB load path. |
 
+> **SAMPLE-014 cache correction — 2026-08-24.** The weak Texture2D specialization described in
+> the historical XNB-26 closure diverged from FNA's `Dictionary<string, object> loadedAssets` and
+> XNA lifetime semantics. Texture2D now follows the generic strong cache through `Unload()`; the
+> XNB-first behavior remains in that single generic path. Ownership and unload tests were updated
+> to distinguish cache identity from external wrapper lifetime. The generic `Load<T>` diagnostic
+> now also runs only after a cache miss: Spacewar faithfully calls `Content.Load` from `Render()`,
+> and logging every cache hit generated two browser-console messages (with JavaScript stacks) per
+> frame even though no asset was actually loaded.
+
 ---
 
 ## Phase D — LZX decompression
@@ -522,6 +531,12 @@ entirely the second one.
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | XNB-25 | `Texture3DReader`/`TextureCubeReader`/base `TextureReader` | ✅ | **Implemented 2026-07-16; base-reader omission corrected by SAMPLE-005 on 2026-08-23.** `CNA::Internal::Xnb::Texture3DReader`/`TextureCubeReader` (`include`/`src`/`CNA/Internal/Xnb/Texture3DContentTypeReader.*`, `TextureCubeContentTypeReader.*`) implement the concrete volume/cube formats. The original closure text incorrectly claimed the inert FNA `TextureReader` base was registered too; `ReachGraphicsDemo_4_0/sky.xnb` proved it was absent because the reflective `Sky.Texture` field declares the abstract base in its reader manifest. Added the correctly named inert `ContentTypeReader<Texture*>`, which consumes no bytes and returns the existing instance exactly like FNA, plus registration/idempotence/behavior tests. `Texture3DReader` targets `std::shared_ptr<Texture3D>` because the asset is move-only; `TextureCubeReader` targets the move-only value directly. `TextureCubeReader` remains verified end-to-end against `SampleCube64DXT1Mips.xnb` (six faces, DXT1 mip chain 64→1), while no real volume fixture is available. `ContentManager::Load<TextureCube>()` also continues to probe `.xnb` before the loose DDS path. |
+
+> **SAMPLE-014 TextureCube correction — 2026-08-24.** TextureCube is now a copyable
+> shared-resource wrapper, so its reader's value target participates in generic strong caching.
+> Removing the uncached specialization preserves the XNB-first route while preventing repeated
+> decode/upload; a real cubemap fixture proves cache identity, retention and a fresh resource after
+> `Unload()`.
 
 ---
 
@@ -602,6 +617,11 @@ entirely the second one.
 | XNB-45 | Full developer documentation (`docs/xnb-content-pipeline-support.md`) covering exactly what is/isn't supported, mirroring the style of `docs/model-content-pipeline-support.md` | ✅ | **Implemented 2026-07-16**: supported-readers table, compression/platform/audio support matrices, the XNB-42 custom-reader extension point with a runnable example, the XNB-42A decision, the XNB-43 hardening summary, and the XNB-44 compatibility findings. Also corrected `docs/model-content-pipeline-support.md`, which had gone stale since Phase F added a real binary `ModelReader` (that doc only ever covered the older `.model.json` loose-file path) |
 | XNB-46 | Register every Phase A-F reader that ended up implemented into the single `ContentTypeReaderRegistry` first stood up in Phase B2, alongside the existing loose-file loaders | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders()` — before this, no single call site existed anywhere, even in production code, to register every built-in reader; a real game would have had to discover and call all thirteen individual `Register*XnbReader()` functions itself. Deliberately not auto-invoked from `ContentManager`'s constructor (would defeat many existing tests' `ClearTypeCreators()`-based isolation) |
 | XNB-47 | Final compliance audit against the per-reader checklist below: exact serialized layout confirmed from an authoritative implementation; ≥ 1 real externally-produced fixture; success test; truncated-input test; invalid-count/size test; wrong-reader-version test; asset ownership/unload verified; backend-independent behavior verified; supported producer/platform variants documented | ✅ | **Implemented 2026-07-16**: confirmed backend-independence by inspection (zero backend-specific references anywhere under `CNA::Internal::Xnb`); confirmed `Texture2D`'s own weak-cache `Unload()` path specifically (a different code path from the generic asset cache XNB-17D already covered) with a new dedicated test; broadened `XnbContainerFuzzTests.cpp` to fuzz `Texture2D` and `SoundEffect` directly as root dispatch targets, not just `Model` — this found and fixed **three more real heap-buffer-overflows**: `Texture2D`/`3D`/`CubeReader` never cross-checked their declared byteCount against width/height/depth (plus an always-broken, never-exercised bug in `Texture3DReader`'s compressed-volume-texture path, which decompressed a whole multi-slice level as one 2D image); `DxtUtil::DecompressDxt1/3/5` accepted a `dataSize` parameter but never actually bounds-checked against it; `ContentManager::LoadXnbAsset<T>()`'s Lzx branch used the file's own unvalidated `totalLength` header field to size a read from the just-read file buffer. All three confirmed fixed under `-DCNA_SANITIZE=address,undefined` |
+
+> **SAMPLE-014 ownership correction — 2026-08-24.** XNB-47's weak-cache wording is retained
+> above as historical evidence, but the current compliance result is the opposite: XNA/FNA keeps
+> Texture2D and TextureCube assets strongly reachable from ContentManager until `Unload()`.
+> Dedicated cycle, teardown and real-fixture tests now pin that behavior.
 
 > **Definition of Done for every reader task from Phase C onward:** a reader task may only be
 > marked ✅ once all of the following hold — do not wait until XNB-47 to check these for the first

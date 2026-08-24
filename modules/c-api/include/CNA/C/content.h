@@ -171,9 +171,10 @@ CNA_C_API CNA_Result cna_content_manager_load_sound_effect(
  * `CNA_RESULT_NOT_SUPPORTED` on a backend without cube storage, or a documented
  * argument/handle/thread failure.
  *
- * This maps the canonical `Load<TextureCube>` specialization, which is also uncached: every
- * successful call returns an independently owned cube texture. The returned handle uses the normal
- * `cna_texture_cube_*` operations and must be destroyed before the parent game.
+ * This maps canonical `Load<TextureCube>`, whose native resource is strongly cached until
+ * `ContentManager::Unload()`. Every call still returns an independently owned C handle; handles
+ * for the same cached asset share the underlying texture resource. The returned handle uses the
+ * normal `cna_texture_cube_*` operations and must be destroyed before the parent game.
  */
 CNA_C_API CNA_Result cna_content_manager_load_texture_cube(
     CNA_Handle content_manager,

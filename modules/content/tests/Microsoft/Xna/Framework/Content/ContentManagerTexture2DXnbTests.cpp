@@ -215,12 +215,9 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadCachesTheXnbTextureLikeAnyOtherTextur
     EXPECT_EQ(first.GetRendererWeak().lock(), second.GetRendererWeak().lock());
 }
 
-// plans/plan_xnb.md XNB-47: Texture2D uses its own weak-cache mechanism (textureCache_), a genuinely
-// different code path from the generic std::any-based loadedAssets_ cache Unload() also clears --
-// confirm Unload() actively evicts it too, not just relying on natural weak-pointer expiry (kept
-// `first` alive throughout, specifically so a passing result can't be explained by the old entry
-// having merely expired on its own).
-TEST_F(ContentManagerTexture2DXnbTest, UnloadClearsTheWeakTextureCache)
+// XNA ContentManager owns every loaded asset until Unload. Unload must release that strong cache
+// even while a caller keeps its own value wrapper alive.
+TEST_F(ContentManagerTexture2DXnbTest, UnloadClearsTheTextureCache)
 {
     ScratchContentRoot root;
     CopyRealFixture(root.path(), "white-1.xnb");

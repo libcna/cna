@@ -147,7 +147,6 @@ namespace Microsoft::Xna::Framework::Content
     void ContentManager::Unload()
     {
         loadedAssets_.clear();
-        textureCache_.clear();
     }
 
     // ---------------------------------------------------------------------------
@@ -5299,99 +5298,8 @@ namespace Microsoft::Xna::Framework::Content
 
 } // namespace Microsoft::Xna::Framework::Content
 
-// ---------------------------------------------------------------------------
-// Explicit specialisation: weak-cache for Texture2D
-// ---------------------------------------------------------------------------
-// Textures are NOT stored in loadedAssets_ (strong cache). Instead only weak
-// references are kept. When the last external Texture2D copy is destroyed its
-// GPU renderer is freed immediately, preventing per-world RAM growth caused by
-// world-specific background textures accumulating in the cache.
-// ---------------------------------------------------------------------------
-
 namespace Microsoft::Xna::Framework::Content
 {
-    template<>
-    Graphics::Texture2D ContentManager::Load<Graphics::Texture2D>(const std::string& assetName)
-    {
-        if (disposed_)
-            throw std::runtime_error("ContentManager has been disposed.");
-
-        const std::string key = NormalizeKey(assetName);
-        log::Debug(std::string("Loading texture: ") + assetName);
-
-        auto cacheIt = textureCache_.find(key);
-        if (cacheIt != textureCache_.end())
-        {
-            auto rendererSp   = cacheIt->second.renderer.lock();
-            auto cpuPixelsSp = cacheIt->second.cpuPixels.lock(); // may be null when context recovery disabled
-            if (rendererSp)
-            {
-                // Reuse the existing GPU renderer — no reload from disk needed.
-                const int w = rendererSp->GetWidth();
-                const int h = rendererSp->GetHeight();
-                return Graphics::Texture2D::ReconstructFromCache(
-                    getGraphicsDeviceInternal(),
-                    w, h,
-                    cacheIt->second.fmt,
-                    cacheIt->second.levelCount,
-                    std::move(rendererSp),
-                    std::move(cpuPixelsSp));
-            }
-            // Renderer expired — remove stale entry and fall through to reload.
-            textureCache_.erase(cacheIt);
-        }
-
-        // .xnb always wins first (cnj.md's "Core rule", 2026-07-16 decision) -- same reasoning
-        // as the generic Load<T>() template; this specialization needs its own copy since it
-        // doesn't call that template body at all (weak-cache semantics require a bespoke
-        // implementation here).
-        const std::string xnbCandidate =
-            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-        if (std::filesystem::exists(xnbCandidate))
-        {
-            Graphics::Texture2D result = LoadXnbAsset<Graphics::Texture2D>(xnbCandidate, assetName);
-
-            WeakTextureEntry entry;
-            entry.renderer    = result.GetRendererWeak();
-            entry.cpuPixels  = result.GetCpuPixelsWeak();
-            entry.fmt        = result.getFormatProperty();
-            entry.levelCount = result.getLevelCountProperty();
-            textureCache_[key] = std::move(entry);
-
-            return result;
-        }
-
-        // Load fresh from disk.
-        auto readerIt = typeReaders_.find(std::type_index(typeid(Graphics::Texture2D)));
-        if (readerIt == typeReaders_.end())
-            throw ContentLoadException(
-                std::string("ContentManager::Load<Texture2D>(): No reader registered, asset '")
-                + assetName + "'.");
-
-        auto* readerPtr = std::any_cast<
-            std::shared_ptr<LooseFileContentTypeReader<Graphics::Texture2D>>>(&readerIt->second);
-        if (!readerPtr || !*readerPtr)
-            throw ContentLoadException(
-                std::string("ContentManager::Load<Texture2D>(): Reader is null, asset '")
-                + assetName + "'.");
-
-        LooseFileContentTypeReader<Graphics::Texture2D>& reader = **readerPtr;
-        const std::string resolvedPath = ResolveAssetPath(assetName, reader);
-
-        Graphics::Texture2D result = reader.Read(resolvedPath, *this);
-
-        // Cache weak references so the GPU renderer is freed as soon as the
-        // caller drops all its Texture2D copies.
-        WeakTextureEntry entry;
-        entry.renderer    = result.GetRendererWeak();
-        entry.cpuPixels  = result.GetCpuPixelsWeak();
-        entry.fmt        = result.getFormatProperty();
-        entry.levelCount = result.getLevelCountProperty();
-        textureCache_[key] = std::move(entry);
-
-        return result;
-    }
-
     // See the declaration in ContentManager.hpp for why this type is not cached: SoundEffect
     // is move-only (T-3G), so there is no way to hand back "the same loaded instance" to a
     // second caller anyway -- reader.Read() below already does a fresh decode per call, which
@@ -5433,47 +5341,4 @@ namespace Microsoft::Xna::Framework::Content
         return reader.Read(resolvedPath, *this);
     }
 
-    // Task 934: TextureCube is move-only (CNAEXT, copy constructor deleted -- unlike Texture2D,
-    // which supports reference-counted renderer sharing via its own weak-cache specialisation
-    // above), so it cannot be held in the generic strong (std::any-based) cache either. Mirrors
-    // SoundEffect's own identical not-cached specialisation immediately above: reader.Read()
-    // already does a fresh decode per call, which is exactly what a cache MISS did before this
-    // specialisation existed.
-    template<>
-    Graphics::TextureCube ContentManager::Load<Graphics::TextureCube>(const std::string& assetName)
-    {
-        if (disposed_)
-            throw std::runtime_error("ContentManager has been disposed.");
-
-        log::Debug(std::string("Loading asset: ") + assetName);
-
-        // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s and
-        // Load<SoundEffect>'s own specialisations above; this one needs its own copy too since
-        // move-only types skip the generic Load<T>() template's any-cache body entirely
-        // (plans/plan_xnb.md XNB-25).
-        const std::string xnbCandidate =
-            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".xnb");
-        if (std::filesystem::exists(xnbCandidate))
-        {
-            return LoadXnbAsset<Graphics::TextureCube>(xnbCandidate, assetName);
-        }
-
-        auto readerIt = typeReaders_.find(std::type_index(typeid(Graphics::TextureCube)));
-        if (readerIt == typeReaders_.end())
-            throw ContentLoadException(
-                std::string("ContentManager::Load<T>(): No reader registered for type, asset '")
-                + assetName + "'.");
-
-        auto* readerPtr = std::any_cast<
-            std::shared_ptr<LooseFileContentTypeReader<Graphics::TextureCube>>>(&readerIt->second);
-        if (!readerPtr || !*readerPtr)
-            throw ContentLoadException(
-                std::string("ContentManager::Load<T>(): Reader is null for asset '")
-                + assetName + "'.");
-
-        LooseFileContentTypeReader<Graphics::TextureCube>& reader = **readerPtr;
-        const std::string resolvedPath = ResolveAssetPath(assetName, reader);
-
-        return reader.Read(resolvedPath, *this);
-    }
 } // namespace Microsoft::Xna::Framework::Content

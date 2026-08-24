@@ -83,6 +83,22 @@ TEST(TitleContainerTest, OpenStreamNormalizesBackslashes)
     std::filesystem::remove_all(tmpDir);
 }
 
+TEST(TitleContainerTest, OpenStreamMatchesXnaCaseInsensitiveTitlePaths)
+{
+    auto tmpDir = std::filesystem::temp_directory_path() / "cna_tc_test_case";
+    auto contentDir = tmpDir / "Content" / "Audio";
+    std::filesystem::create_directories(contentDir);
+    WriteTempFile(contentDir, "SpaceWar.xgs", "settings");
+
+    TitleLocation::setPathProperty(tmpDir.string());
+
+    auto stream = TitleContainer::OpenStream("content\\audio\\spacewar.xgs");
+    ASSERT_NE(stream, nullptr);
+    stream.reset();
+
+    std::filesystem::remove_all(tmpDir);
+}
+
 // -----------------------------------------------------------------------
 // OpenStream — missing file throws
 // -----------------------------------------------------------------------

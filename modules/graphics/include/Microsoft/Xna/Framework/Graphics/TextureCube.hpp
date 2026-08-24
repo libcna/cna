@@ -39,10 +39,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         CNAEXT ~TextureCube() override;
 
-        /** @brief Not copyable — owns a unique GPU renderer handle. */
-        CNAEXT TextureCube(const TextureCube&) = delete;
-        /** @brief Not copyable — owns a unique GPU renderer handle. */
-        CNAEXT TextureCube& operator=(const TextureCube&) = delete;
+        /** @brief Copy-constructs a value wrapper that shares the underlying texture resource. */
+        CNAEXT TextureCube(const TextureCube&) = default;
+        /** @brief Copy-assigns a value wrapper that shares the underlying texture resource. */
+        CNAEXT TextureCube& operator=(const TextureCube&) = default;
         /** @brief Movable — transfers ownership of the GPU renderer handle. */
         CNAEXT TextureCube(TextureCube&&) noexcept = default;
         /** @brief Movable — transfers ownership of the GPU renderer handle. */
@@ -186,10 +186,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     private:
         int size_;
-        // SKIA-149: shared (not unique) ownership so a SkiaEffectRenderer can hold a weak_ptr for
-        // cube-sampling lifetime tracking, matching Texture2D's identical ITextureRenderer pattern.
-        // TextureCube itself remains non-copyable; this only lets a second, weak observer outlive
-        // a single call without becoming the resource's owner.
+        // Shared ownership gives C++ value wrappers the reference-resource behavior used by CNA's
+        // Texture2D mapping and lets effect renderers observe cube lifetime through weak_ptr.
         std::shared_ptr<CNA::Internal::Renderers::ITextureCubeRenderer> renderer_;
         /// Level-0-only CPU-side pixel shadow, one per face, lazily created on first SetData()
         /// at level 0 and shared with the renderer via ITextureCubeRenderer::ShareCpuPixels() for

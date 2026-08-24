@@ -475,7 +475,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns a weak pointer to the GPU texture renderer.
          *
-         * Used by ContentManager's weak texture cache.
+         * Used by renderer lifetime observers and cache/resource tests.
          * @return A weak_ptr to the renderer; may be expired if the texture is destroyed.
          */
         CNAEXT std::weak_ptr<ITextureRenderer> GetRendererWeak() const { return renderer_; }
@@ -483,7 +483,7 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Returns a weak pointer to the CPU-side pixel buffer.
          *
-         * Used by ContentManager's weak texture cache.
+         * Used by context-recovery diagnostics and cache/resource tests.
          * @return A weak_ptr to the pixel buffer; may be expired if context recovery is disabled.
          */
         CNAEXT std::weak_ptr<std::vector<uint8_t>> GetCpuPixelsWeak() const { return cpuPixels_; }

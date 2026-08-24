@@ -43,6 +43,13 @@
 #include <unordered_map>
 #include <vector>
 
+namespace CNA::Internal::Renderers
+{
+    class ITextureRenderer;
+    class ITexture3DRenderer;
+    class ITextureCubeRenderer;
+}
+
 namespace CNA::Internal::Renderers::EasyGL
 {
     class EasyGLRenderer;
@@ -145,6 +152,8 @@ namespace CNA::Internal::Renderers::EasyGL
                                        bool& samplerAssigned) const;
 
     private:
+        friend class EasyGLRenderer;
+
         EasyGLCompiledEffect(EasyGLRenderer& renderer, const EasyGLCompiledEffect& cloneSource);
 
         EasyGLRenderer& renderer_;
@@ -163,6 +172,30 @@ namespace CNA::Internal::Renderers::EasyGL
             boundTextures_{};
         std::array<Texture*, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundVertexTextures_{};
+        // XNA texture objects are managed references. CNA currently exposes copyable C++ value
+        // wrappers for Texture2D/TextureCube, so a raw wrapper pointer published by Effect.Apply
+        // may cease to denote a live wrapper while the cached native resource is still valid.
+        // Keep the renderer resource selected by each non-null sampler assignment alive and bind
+        // it directly. A later null Effect parameter deliberately leaves these arrays unchanged,
+        // exactly as FNA leaves GraphicsDevice.Textures[slot] unchanged.
+        std::array<std::shared_ptr<ITextureRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundTexture2DResources_{};
+        std::array<std::shared_ptr<ITexture3DRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundTexture3DResources_{};
+        std::array<std::shared_ptr<ITextureCubeRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundTextureCubeResources_{};
+        std::array<std::shared_ptr<ITextureRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundVertexTexture2DResources_{};
+        std::array<std::shared_ptr<ITexture3DRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundVertexTexture3DResources_{};
+        std::array<std::shared_ptr<ITextureCubeRenderer>,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundVertexTextureCubeResources_{};
         std::array<Microsoft::Xna::Framework::Graphics::SamplerState,
                    Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
             boundSamplers_{};

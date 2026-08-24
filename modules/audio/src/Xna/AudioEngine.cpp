@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundBank.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
@@ -107,7 +108,9 @@ namespace Microsoft::Xna::Framework::Audio
         // TitleContainer.ReadToPointer, which does a File.Exists check and throws
         // FileNotFoundException before ever reaching FACT (TitleContainer.cs) -- match that here
         // (P9-HARDWARE-003) rather than silently continuing as a stub.
-        std::ifstream f(settingsFile, std::ios::binary | std::ios::ate);
+        const std::string resolvedSettingsFile =
+            CNA::Internal::ResolveExistingXnaPath(settingsFile);
+        std::ifstream f(resolvedSettingsFile, std::ios::binary | std::ios::ate);
         if (!f.is_open())
         {
             throw System::IO::FileNotFoundException(

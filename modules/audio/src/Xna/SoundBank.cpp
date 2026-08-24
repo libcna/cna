@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "CNA/Internal/CaseInsensitivePath.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
@@ -52,7 +53,8 @@ namespace Microsoft::Xna::Framework::Audio
         // FileNotFoundException on a missing file before ever reaching FACT (SoundBank.cs) --
         // match that here (P9-HARDWARE-003). Corrupt-but-existing content stays a silent stub
         // below: FNA never checks FACTAudioEngine_CreateSoundBank's return code either.
-        std::ifstream f(filename, std::ios::binary | std::ios::ate);
+        const std::string resolvedFilename = CNA::Internal::ResolveExistingXnaPath(filename);
+        std::ifstream f(resolvedFilename, std::ios::binary | std::ios::ate);
         if (!f.is_open())
         {
             throw System::IO::FileNotFoundException(

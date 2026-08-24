@@ -777,6 +777,15 @@ TEST(AudioEngineTest, ConstructorWithMissingFileThrowsFileNotFound)
     EXPECT_THROW(AudioEngine engine(missing), System::IO::FileNotFoundException);
 }
 
+TEST(AudioEngineTest, ConstructorResolvesXnaCaseInsensitiveSettingsPath)
+{
+    const std::filesystem::path exact(XgsFixturePath());
+    const auto requested = exact.parent_path().parent_path() /
+                           "CNA_AUDIO_ENGINE_TEST" / "FIXTURE.XGS";
+
+    EXPECT_NO_THROW(AudioEngine engine(requested.string()));
+}
+
 // XA-13/P9-HARDWARE-003: a file that EXISTS but isn't a valid .xgs (bad magic/garbage) matches
 // FNA's AudioEngine ctor, which checks FACTAudioEngine_Initialize's return code and throws
 // InvalidOperationException("Engine initialization failed!") (AudioEngine.cs) -- unlike a missing
