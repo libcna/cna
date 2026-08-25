@@ -64,6 +64,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
     GestureType TouchPanel::enabledGestures_ = GestureType::None;
     std::uintptr_t TouchPanel::windowHandle_ = 0;
     bool TouchPanel::touchDeviceExists_ = false;
+    bool TouchPanel::mouseTouchEmulationEnabled_ = false;
 
     std::queue<GestureSample> TouchPanel::gestures_;
     std::array<TouchLocation, TouchPanel::MAX_TOUCHES> TouchPanel::touches_{};
@@ -133,6 +134,16 @@ namespace Microsoft::Xna::Framework::Input::Touch
     void TouchPanel::setTouchDeviceExistsProperty(bool value)
     {
         touchDeviceExists_ = value;
+    }
+
+    bool TouchPanel::getMouseTouchEmulationEnabledEXT()
+    {
+        return mouseTouchEmulationEnabled_;
+    }
+
+    void TouchPanel::setMouseTouchEmulationEnabledEXT(bool value)
+    {
+        mouseTouchEmulationEnabled_ = value;
     }
 
     TouchPanelCapabilities TouchPanel::GetCapabilities()
@@ -371,6 +382,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         // coordinates by displayWidth_/displayHeight_ and early-returns when either is <= 0, so a
         // leaked display size from a prior test silently corrupts another test's touch/gesture
         // coordinates. These were previously worked around by save/restore in the touch tests.
+        mouseTouchEmulationEnabled_ = false;
         displayWidth_       = 0;
         displayHeight_      = 0;
         displayOrientation_ = DisplayOrientation::Default;

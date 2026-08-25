@@ -130,6 +130,31 @@ namespace Microsoft::Xna::Framework::Input::Touch
         CNAEXT static void setTouchDeviceExistsProperty(bool value);
 
         /**
+         * @brief Gets whether left-mouse-button input is reported as touch input.
+         *
+         * @note CNAEXT — not part of the XNA `TouchPanel` API, and off by default so that
+         *       the default behavior stays XNA's and FNA's: both feed `TouchPanel` from
+         *       real finger events only and neither synthesizes touches from a mouse. A
+         *       host that has no touch digitizer can switch this on to make a touch-only
+         *       game playable with a pointer; every other behavior is unchanged.
+         * @return True when mouse input is also reported as touch input.
+         */
+        CNAEXT [[nodiscard]] static bool getMouseTouchEmulationEnabledEXT();
+
+        /**
+         * @brief Sets whether left-mouse-button input is reported as touch input.
+         *
+         * While enabled, pressing the left mouse button begins a touch at the cursor,
+         * moving with it held reports a moved touch, and releasing it ends the touch.
+         * The synthesized touch travels the same path as a real one, so `GetState()`,
+         * the gesture recognizer and `TouchPanelCapabilities` all see it.
+         *
+         * @note CNAEXT — see getMouseTouchEmulationEnabledEXT().
+         * @param value True to report mouse input as touch input.
+         */
+        CNAEXT static void setMouseTouchEmulationEnabledEXT(bool value);
+
+        /**
          * @brief Returns touch panel capabilities.
          * @return The touch panel capabilities.
          */
@@ -226,6 +251,7 @@ namespace Microsoft::Xna::Framework::Input::Touch
         static GestureType enabledGestures_;
         static std::uintptr_t windowHandle_;
         static bool touchDeviceExists_;
+        static bool mouseTouchEmulationEnabled_;
 
         static std::queue<GestureSample> gestures_;
         static std::array<TouchLocation, MAX_TOUCHES> touches_;

@@ -392,6 +392,69 @@ namespace
             event.x * static_cast<float>(std::max(event.clientWidth, 1)),
             event.y * static_cast<float>(std::max(event.clientHeight, 1)));
     }
+
+    // TouchPanel::MouseTouchEmulationEnabledEXT reports the left mouse button as a touch.
+    // The synthesized finger goes through the same two entry points a real one does, so
+    // GetState(), the gesture recognizer and TouchPanelCapabilities cannot tell them
+    // apart. The sentinel finger key is the one value a platform finger identifier can
+    // never take, so the touch id it maps to comes from the same allocator as every real
+    // finger and can never collide with one.
+    constexpr std::uint64_t kEmulatedMouseFinger = ~static_cast<std::uint64_t>(0);
+
+    bool& emulated_mouse_touch_down()
+    {
+        static bool value = false;
+        return value;
+    }
+
+    Microsoft::Xna::Framework::Vector2& emulated_mouse_touch_position()
+    {
+        static Microsoft::Xna::Framework::Vector2 value{};
+        return value;
+    }
+
+    /**
+     * Reports one logical-space pointer position as a touch of the given state.
+     *
+     * INTERNAL_setTouchState takes an absolute position, INTERNAL_onTouchEvent takes a
+     * normalized one -- the same split the real touch path uses -- so the position is
+     * divided by the published display size here. With no display size yet there is
+     * nothing meaningful to normalize against, and the event is dropped exactly as
+     * INTERNAL_onTouchEvent would drop it.
+     */
+    void emit_emulated_mouse_touch(
+        const Microsoft::Xna::Framework::Input::Touch::TouchLocationState state,
+        const Microsoft::Xna::Framework::Vector2& position)
+    {
+        namespace Touch = Microsoft::Xna::Framework::Input::Touch;
+
+        const float width = static_cast<float>(Touch::TouchPanel::getDisplayWidthProperty());
+        const float height = static_cast<float>(Touch::TouchPanel::getDisplayHeightProperty());
+        if (width <= 0.0f || height <= 0.0f) return;
+
+        const bool released = state == Touch::TouchLocationState::Released;
+        const int id = released
+            ? find_touch_id(kEmulatedMouseFinger).value_or(get_or_create_touch_id(kEmulatedMouseFinger))
+            : get_or_create_touch_id(kEmulatedMouseFinger);
+
+        const Microsoft::Xna::Framework::Vector2 previous = emulated_mouse_touch_position();
+        const Microsoft::Xna::Framework::Vector2 delta =
+            state == Touch::TouchLocationState::Moved
+                ? Microsoft::Xna::Framework::Vector2(position.X - previous.X, position.Y - previous.Y)
+                : Microsoft::Xna::Framework::Vector2();
+        emulated_mouse_touch_position() = position;
+
+        if (state == Touch::TouchLocationState::Pressed)
+        {
+            Touch::TouchPanel::setTouchDeviceExistsProperty(true);
+        }
+
+        Touch::TouchPanel::INTERNAL_setTouchState(id, state, position, 1.0f);
+        Touch::TouchPanel::INTERNAL_onTouchEvent(
+            id, state, position.X / width, position.Y / height, delta.X / width, delta.Y / height);
+
+        if (released) touch_ids().erase(kEmulatedMouseFinger);
+    }
 }
 
 namespace CNA::Internal::Input
@@ -473,6 +536,8 @@ namespace CNA::Internal::Input
         for (bool& down : g_textInputControlDown) down = false;
         touch_ids().clear();
         next_touch_id() = 1;
+        emulated_mouse_touch_down() = false;
+        emulated_mouse_touch_position() = {};
         g_scancodeModeTestOverride.reset();
         announced_joysticks().clear();
     }
@@ -488,6 +553,12 @@ namespace CNA::Internal::Input
                 const auto position = to_logical_position(value.window, value.x, value.y);
                 InputManager::SetMousePosition(static_cast<int>(position.X), static_cast<int>(position.Y));
                 InputManager::AddMouseRelativeDelta(value.deltaX, value.deltaY);
+                if (Microsoft::Xna::Framework::Input::Touch::TouchPanel::
+                        getMouseTouchEmulationEnabledEXT() && emulated_mouse_touch_down())
+                {
+                    emit_emulated_mouse_touch(
+                        Microsoft::Xna::Framework::Input::Touch::TouchLocationState::Moved, position);
+                }
             }
             else if constexpr (std::is_same_v<Event, MouseButtonEvent>)
             {
@@ -506,6 +577,23 @@ namespace CNA::Internal::Input
                 if (value.pressed && value.button >= 1)
                 {
                     Microsoft::Xna::Framework::Input::Mouse::INTERNAL_onClicked(value.button - 1);
+                }
+                if (value.button == 1 &&
+                    Microsoft::Xna::Framework::Input::Touch::TouchPanel::
+                        getMouseTouchEmulationEnabledEXT())
+                {
+                    namespace Touch = Microsoft::Xna::Framework::Input::Touch;
+                    if (value.pressed && !emulated_mouse_touch_down())
+                    {
+                        emulated_mouse_touch_position() = position;
+                        emulated_mouse_touch_down() = true;
+                        emit_emulated_mouse_touch(Touch::TouchLocationState::Pressed, position);
+                    }
+                    else if (!value.pressed && emulated_mouse_touch_down())
+                    {
+                        emit_emulated_mouse_touch(Touch::TouchLocationState::Released, position);
+                        emulated_mouse_touch_down() = false;
+                    }
                 }
             }
             else if constexpr (std::is_same_v<Event, MouseWheelEvent>)
