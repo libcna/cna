@@ -48,7 +48,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 "The calculated SpriteBatch destination component must be within Int32 range.");
         }
 
-        intcs TruncateDestinationComponent(float value, const char* parameterName)
+        // XNA/FNA keep a sprite's destination in floating point all the way to the vertex data,
+        // so a component is validated here but never quantised. The Int32 window is still the
+        // documented boundary of a SpriteBatch destination, and rejecting outside it keeps the
+        // exception contract every renderer and test already relies on.
+        float ValidateDestinationComponent(float value, const char* parameterName)
         {
             const double widened = static_cast<double>(value);
             if (!std::isfinite(value) ||
@@ -57,7 +61,7 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 ThrowDestinationOutOfRange(parameterName);
             }
-            return static_cast<intcs>(value);
+            return value;
         }
 
         intcs RoundDestinationComponent(float value, const char* parameterName)
@@ -276,6 +280,18 @@ namespace Microsoft::Xna::Framework::Graphics
                                  Color color, float rotation, Vector2 origin,
                                  SpriteEffects effects, float layerDepth)
     {
+        pushSprite(texture,
+                   static_cast<float>(dest.X), static_cast<float>(dest.Y),
+                   static_cast<float>(dest.Width), static_cast<float>(dest.Height),
+                   src, color, rotation, origin, effects, layerDepth);
+    }
+
+    void SpriteBatch::pushSprite(const Texture2D& texture,
+                                 float destX, float destY, float destWidth, float destHeight,
+                                 const Rectangle& src,
+                                 Color color, float rotation, Vector2 origin,
+                                 SpriteEffects effects, float layerDepth)
+    {
         // Task 717 finding: without this guard, a fully-disposed Texture2D (its last shared_ptr
         // reference released, renderer_ now null) reaching flushSingle/flushBatch would dereference
         // a null ITextureRenderer& via GetRenderer() -- a guaranteed crash, not a graceful failure.
@@ -311,7 +327,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
         SpriteInfo info;
         info.texture    = std::move(textureRenderer);
-        info.destRect   = dest;
+        info.destX      = destX;
+        info.destY      = destY;
+        info.destWidth  = destWidth;
+        info.destHeight = destHeight;
         info.srcRect    = src;
         info.color      = color;
         info.rotation   = rotation;
@@ -333,7 +352,8 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!renderer_ || !s.texture) return;
         renderer_->Draw(*s.texture,
-                       s.destRect, s.srcRect, s.color,
+                       s.destX, s.destY, s.destWidth, s.destHeight,
+                       s.srcRect, s.color,
                        s.rotation, s.origin, s.effects, s.layerDepth);
     }
 
@@ -378,12 +398,13 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!renderer_) return;
         ValidateFinite(x, "x");
         ValidateFinite(y, "y");
-        const intcs destinationX = TruncateDestinationComponent(x, "x");
-        const intcs destinationY = TruncateDestinationComponent(y, "y");
+        const float destinationX = ValidateDestinationComponent(x, "x");
+        const float destinationY = ValidateDestinationComponent(y, "y");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
-                   Rectangle(destinationX, destinationY, w, h),
+                   destinationX, destinationY,
+                   static_cast<float>(w), static_cast<float>(h),
                    Rectangle(0, 0, w, h),
                    Color(255, 255, 255, 255),
                    0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
@@ -428,12 +449,13 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         ValidateFinite(position, "position");
-        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
-        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
+        const float destinationX = ValidateDestinationComponent(position.X, "position");
+        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         pushSprite(texture,
-                   Rectangle(destinationX, destinationY, w, h),
+                   destinationX, destinationY,
+                   static_cast<float>(w), static_cast<float>(h),
                    Rectangle(0, 0, w, h),
                    color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
@@ -444,15 +466,16 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
         ValidateFinite(position, "position");
-        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
-        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
+        const float destinationX = ValidateDestinationComponent(position.X, "position");
+        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
         pushSprite(texture,
-                   Rectangle(destinationX, destinationY, dw, dh),
+                   destinationX, destinationY,
+                   static_cast<float>(dw), static_cast<float>(dh),
                    src, color, 0.0f, Vector2::Zero, SpriteEffects::None, 0.0f);
     }
 
@@ -465,19 +488,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!renderer_) return;
         ValidateFinite(position, "position");
         ValidateFinite(scale, "scale");
-        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
-        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
+        const float destinationX = ValidateDestinationComponent(position.X, "position");
+        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
-        const intcs destinationWidth =
-            TruncateDestinationComponent(static_cast<float>(dw) * scale, "scale");
-        const intcs destinationHeight =
-            TruncateDestinationComponent(static_cast<float>(dh) * scale, "scale");
+        const float destinationWidth =
+            ValidateDestinationComponent(static_cast<float>(dw) * scale, "scale");
+        const float destinationHeight =
+            ValidateDestinationComponent(static_cast<float>(dh) * scale, "scale");
         pushSprite(texture,
-                   Rectangle(destinationX, destinationY, destinationWidth, destinationHeight),
+                   destinationX, destinationY, destinationWidth, destinationHeight,
                    src, color, rotation, origin, effects, layerDepth);
     }
 
@@ -490,19 +513,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (!renderer_) return;
         ValidateFinite(position, "position");
         ValidateFinite(scale, "scale");
-        const intcs destinationX = TruncateDestinationComponent(position.X, "position");
-        const intcs destinationY = TruncateDestinationComponent(position.Y, "position");
+        const float destinationX = ValidateDestinationComponent(position.X, "position");
+        const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
         const int h = texture.getHeightProperty();
         const Rectangle src = sourceRectangle.has_value() ? sourceRectangle.value() : Rectangle(0, 0, w, h);
         const int dw = sourceRectangle.has_value() ? src.Width  : w;
         const int dh = sourceRectangle.has_value() ? src.Height : h;
-        const intcs destinationWidth =
-            TruncateDestinationComponent(static_cast<float>(dw) * scale.X, "scale");
-        const intcs destinationHeight =
-            TruncateDestinationComponent(static_cast<float>(dh) * scale.Y, "scale");
+        const float destinationWidth =
+            ValidateDestinationComponent(static_cast<float>(dw) * scale.X, "scale");
+        const float destinationHeight =
+            ValidateDestinationComponent(static_cast<float>(dh) * scale.Y, "scale");
         pushSprite(texture,
-                   Rectangle(destinationX, destinationY, destinationWidth, destinationHeight),
+                   destinationX, destinationY, destinationWidth, destinationHeight,
                    src, color, rotation, origin, effects, layerDepth);
     }
 

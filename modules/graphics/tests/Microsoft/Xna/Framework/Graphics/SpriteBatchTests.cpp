@@ -902,6 +902,138 @@ namespace
 // destination bridge must be rejected before any undefined float-to-int cast.
 // -----------------------------------------------------------------------
 
+// -----------------------------------------------------------------------
+// XNA 4.0 and FNA carry a sprite's destination through the batch as floats
+// (FNA's SpriteBatch.PushSprite takes float destinationX/Y/W/H), so a sprite
+// drawn at a fractional position lands between pixels and the active sampler
+// filters its edges. CNA used to quantise the destination inside SpriteBatch,
+// which flattened every fractional sprite onto whole pixels.
+// -----------------------------------------------------------------------
+
+TEST(SpriteBatchSubPixelDestinationTest, VectorPositionDrawKeepsItsFractionalPosition)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
+
+    batch.Begin();
+    batch.Draw(texture, Vector2(12.25f, -9.75f), Color::White);
+    batch.Draw(texture, 3.5f, 7.125f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationX, 12.25f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationY, -9.75f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationWidth, 16.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationHeight, 16.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[1].destinationX, 3.5f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[1].destinationY, 7.125f);
+}
+
+TEST(SpriteBatchSubPixelDestinationTest, FractionalScaleKeepsItsFractionalDestinationSize)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
+
+    batch.Begin();
+    batch.Draw(texture, Vector2(1.5f, 2.5f), std::nullopt, Color::White,
+               0.0f, Vector2::Zero, 0.75f, SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2(1.5f, 2.5f), std::nullopt, Color::White,
+               0.0f, Vector2::Zero, Vector2(0.25f, 1.75f), SpriteEffects::None, 0.0f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 2u);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationWidth, 12.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationHeight, 12.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[1].destinationWidth, 4.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[1].destinationHeight, 28.0f);
+}
+
+TEST(SpriteBatchSubPixelDestinationTest, RectangleDestinationOverloadsStayExactlyOnPixels)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
+
+    batch.Begin();
+    batch.Draw(texture, Rectangle(5, 6, 7, 8), Color::White);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationX, 5.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationY, 6.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationWidth, 7.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationHeight, 8.0f);
+    EXPECT_EQ(rec->drawCalls[0].destinationRectangle, Rectangle(5, 6, 7, 8));
+}
+
+/** A renderer that has not adopted the sub-pixel overload must still be driven correctly. */
+namespace
+{
+    class IntegerOnlySpriteBatchRenderer : public CNA::Internal::Renderers::ISpriteBatchRenderer
+    {
+    public:
+        std::vector<Rectangle> destinations;
+
+        void Begin() override {}
+        void End() override {}
+        void Draw(const CNA::Internal::Renderers::ITextureRenderer&, float, float) override {}
+        void Draw(const CNA::Internal::Renderers::ITextureRenderer&,
+                  const Rectangle& destinationRectangle,
+                  const Rectangle&,
+                  const Color&) override
+        {
+            destinations.push_back(destinationRectangle);
+        }
+        void Draw(const CNA::Internal::Renderers::ITextureRenderer&,
+                  const Rectangle& destinationRectangle,
+                  const Rectangle&,
+                  const Color&,
+                  float,
+                  const Vector2&,
+                  SpriteEffects,
+                  float) override
+        {
+            destinations.push_back(destinationRectangle);
+        }
+    };
+}
+
+TEST(SpriteBatchSubPixelDestinationTest, ARendererWithoutTheSubPixelOverloadStillReceivesPixels)
+{
+    auto renderer = std::make_unique<IntegerOnlySpriteBatchRenderer>();
+    IntegerOnlySpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
+
+    batch.Begin();
+    batch.Draw(texture, Vector2(12.75f, -9.75f), Color::White);
+    batch.End();
+
+    ASSERT_EQ(rec->destinations.size(), 1u);
+    EXPECT_EQ(rec->destinations[0], Rectangle(12, -9, 16, 16));
+}
+
 TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncation)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();

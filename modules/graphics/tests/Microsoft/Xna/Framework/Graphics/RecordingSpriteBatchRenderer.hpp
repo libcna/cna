@@ -45,6 +45,13 @@ namespace CNA::Internal::Renderers
         struct DrawCall
         {
             const ITextureRenderer* texture = nullptr;
+            // The destination as SpriteBatch actually delivered it -- unrounded, matching
+            // XNA/FNA. destinationRectangle is the same value quantised, so the assertions
+            // written before sub-pixel destinations existed keep their meaning.
+            float destinationX = 0.0f;
+            float destinationY = 0.0f;
+            float destinationWidth = 0.0f;
+            float destinationHeight = 0.0f;
             Rectangle destinationRectangle;
             Rectangle sourceRectangle;
             Color color = Color(255, 255, 255, 255);
@@ -92,9 +99,35 @@ namespace CNA::Internal::Renderers
                   Microsoft::Xna::Framework::Graphics::SpriteEffects effects,
                   float layerDepth) override
         {
+            Draw(texture,
+                 static_cast<float>(destinationRectangle.X),
+                 static_cast<float>(destinationRectangle.Y),
+                 static_cast<float>(destinationRectangle.Width),
+                 static_cast<float>(destinationRectangle.Height),
+                 sourceRectangle, color, rotation, origin, effects, layerDepth);
+        }
+
+        void Draw(const ITextureRenderer& texture,
+                  float destinationX,
+                  float destinationY,
+                  float destinationWidth,
+                  float destinationHeight,
+                  const Rectangle& sourceRectangle,
+                  const Color& color,
+                  float rotation,
+                  const Vector2& origin,
+                  Microsoft::Xna::Framework::Graphics::SpriteEffects effects,
+                  float layerDepth) override
+        {
             DrawCall call;
             call.texture = &texture;
-            call.destinationRectangle = destinationRectangle;
+            call.destinationX = destinationX;
+            call.destinationY = destinationY;
+            call.destinationWidth = destinationWidth;
+            call.destinationHeight = destinationHeight;
+            call.destinationRectangle = Rectangle(
+                static_cast<int>(destinationX), static_cast<int>(destinationY),
+                static_cast<int>(destinationWidth), static_cast<int>(destinationHeight));
             call.sourceRectangle = sourceRectangle;
             call.color = color;
             call.rotation = rotation;

@@ -43,7 +43,12 @@ namespace Microsoft::Xna::Framework::Graphics
     private:
         struct SpriteInfo {
             std::shared_ptr<ITextureRenderer> texture;
-            Rectangle destRect       = {0, 0, 0, 0};
+            // Destination kept as XNA/FNA keep it: unrounded, so a sprite drawn at a fractional
+            // position stays between pixels all the way to the renderer.
+            float destX              = 0.0f;
+            float destY              = 0.0f;
+            float destWidth          = 0.0f;
+            float destHeight         = 0.0f;
             Rectangle srcRect        = {0, 0, 0, 0};
             Color color              = Color(255, 255, 255, 255);
             float rotation           = 0.0f;
@@ -59,6 +64,11 @@ namespace Microsoft::Xna::Framework::Graphics
         Effect* customEffect_       = nullptr;
         std::vector<SpriteInfo> spriteQueue_;
 
+        void pushSprite(const Texture2D& texture,
+                        float destX, float destY, float destWidth, float destHeight,
+                        const Rectangle& src,
+                        Color color, float rotation, Vector2 origin,
+                        SpriteEffects effects, float layerDepth);
         void pushSprite(const Texture2D& texture,
                         const Rectangle& dest, const Rectangle& src,
                         Color color, float rotation, Vector2 origin,

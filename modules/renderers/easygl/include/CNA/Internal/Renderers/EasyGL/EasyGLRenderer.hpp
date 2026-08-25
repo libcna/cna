@@ -664,6 +664,17 @@ namespace CNA::Internal::Renderers::EasyGL
                   const Vector2& origin,
                   SpriteEffects effects,
                   float layerDepth) override;
+        void Draw(const ITextureRenderer& texture,
+                  float destinationX,
+                  float destinationY,
+                  float destinationWidth,
+                  float destinationHeight,
+                  const Rectangle& sourceRectangle,
+                  const Color& color,
+                  float rotation,
+                  const Vector2& origin,
+                  SpriteEffects effects,
+                  float layerDepth) override;
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;

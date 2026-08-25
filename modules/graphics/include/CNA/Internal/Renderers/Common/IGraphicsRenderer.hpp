@@ -979,6 +979,50 @@ namespace CNA::Internal::Renderers
                           float layerDepth) = 0;
 
         /**
+         * @brief Draws one sprite whose destination keeps its sub-pixel position and size.
+         *
+         * XNA 4.0 and FNA carry a sprite's destination through the whole batch as floats -- FNA's
+         * `SpriteBatch.PushSprite` takes `float destinationX/Y/W/H` and writes them straight into
+         * the quad -- so a sprite drawn at a fractional position lands between pixels and its
+         * edges are filtered by the active SamplerState (LinearClamp by default). Only this
+         * overload can reproduce that; the integer-`Rectangle` overload above quantises the
+         * destination to whole pixels before the renderer ever sees it.
+         *
+         * The default implementation truncates and forwards to that integer overload, which is
+         * exactly the behaviour every renderer had before this overload existed. A renderer
+         * becomes sub-pixel accurate by overriding this method; one that does not is unchanged.
+         *
+         * @param texture             Texture to sample.
+         * @param destinationX        Destination left edge, in pixels, unrounded.
+         * @param destinationY        Destination top edge, in pixels, unrounded.
+         * @param destinationWidth    Destination width, in pixels, unrounded.
+         * @param destinationHeight   Destination height, in pixels, unrounded.
+         * @param sourceRectangle     Source region of @p texture, in texels.
+         * @param color               Tint colour.
+         * @param rotation            Rotation about @p origin, in radians.
+         * @param origin              Rotation/scale origin, in source-texel space.
+         * @param effects             Horizontal/vertical flip flags.
+         * @param layerDepth          Sort depth.
+         */
+        virtual void Draw(const ITextureRenderer& texture,
+                          float destinationX,
+                          float destinationY,
+                          float destinationWidth,
+                          float destinationHeight,
+                          const Rectangle& sourceRectangle,
+                          const Color& color,
+                          float rotation,
+                          const Vector2& origin,
+                          SpriteEffects effects,
+                          float layerDepth)
+        {
+            Draw(texture,
+                 Rectangle(static_cast<int>(destinationX), static_cast<int>(destinationY),
+                           static_cast<int>(destinationWidth), static_cast<int>(destinationHeight)),
+                 sourceRectangle, color, rotation, origin, effects, layerDepth);
+        }
+
+        /**
          * SKIA-157: draws a triangle-list 2D mesh through @p effect's own bound custom shader
          * (SKIA-144-156's bounded SkVertices/SkSL mesh ABI) -- an entirely different draw
          * primitive from every `Draw()` overload above, which always submits exactly one

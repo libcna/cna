@@ -3924,6 +3924,30 @@ if (ProfileUsesGlslEs100())
                                         SpriteEffects effects,
                                         float layerDepth)
     {
+        Draw(texture,
+             static_cast<float>(destinationRectangle.X),
+             static_cast<float>(destinationRectangle.Y),
+             static_cast<float>(destinationRectangle.Width),
+             static_cast<float>(destinationRectangle.Height),
+             sourceRectangle, color, rotation, origin, effects, layerDepth);
+    }
+
+    // The sub-pixel destination overload is the one that actually builds the quad: XNA and FNA
+    // keep a sprite's destination unrounded, so a sprite drawn at a fractional position lands
+    // between pixels and the active sampler filters its edges. Rounding here would flatten that
+    // to whole pixels and change what every 2D sample looks like.
+    void EasyGLSpriteBatchRenderer::Draw(const ITextureRenderer& texture,
+                                        float destinationX,
+                                        float destinationY,
+                                        float destinationWidth,
+                                        float destinationHeight,
+                                        const Rectangle& sourceRectangle,
+                                        const Color& color,
+                                        float rotation,
+                                        const Vector2& origin,
+                                        SpriteEffects effects,
+                                        float layerDepth)
+    {
         if (!begun) throw std::runtime_error("Draw called before Begin()");
 
         // Flush pending batch if texture changes
@@ -3974,10 +3998,10 @@ if (ProfileUsesGlslEs100())
         float b = (float)color.getBProperty() / 255.0f;
         float a = (float)color.getAProperty() / 255.0f;
 
-        float dx = (float)destinationRectangle.X;
-        float dy = (float)destinationRectangle.Y;
-        float dw = (float)destinationRectangle.Width;
-        float dh = (float)destinationRectangle.Height;
+        float dx = destinationX;
+        float dy = destinationY;
+        float dw = destinationWidth;
+        float dh = destinationHeight;
 
         float sw = (float)sourceRectangle.Width;
         float sh = (float)sourceRectangle.Height;
