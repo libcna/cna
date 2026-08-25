@@ -438,6 +438,34 @@ namespace Microsoft::Xna::Framework
         return *this;
     }
 
+    Vector2& Vector2::operator*=(const Vector2& value)
+    {
+        X *= value.X;
+        Y *= value.Y;
+        return *this;
+    }
+
+    Vector2& Vector2::operator*=(const float scaleFactor)
+    {
+        X *= scaleFactor;
+        Y *= scaleFactor;
+        return *this;
+    }
+
+    Vector2& Vector2::operator/=(const Vector2& value)
+    {
+        X /= value.X;
+        Y /= value.Y;
+        return *this;
+    }
+
+    Vector2& Vector2::operator/=(const float divider)
+    {
+        X /= divider;
+        Y /= divider;
+        return *this;
+    }
+
     Vector2 operator-(Vector2 value) { return Vector2::Negate(value); }
     bool operator==(Vector2 value1, Vector2 value2) { return value1.Equals(value2); }
     bool operator!=(Vector2 value1, Vector2 value2) { return !value1.Equals(value2); }

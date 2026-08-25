@@ -623,6 +623,46 @@ namespace Microsoft::Xna::Framework
         CNAEXT Vector2& operator-=(const Vector2& value);
 
         /**
+         * @brief Multiplies this vector by another vector, component by component, in place.
+         *
+         * The `*=` counterpart of operator+=; see its note for why this is CNAEXT.
+         *
+         * @param value The vector to multiply by.
+         * @return Reference to this vector after multiplication.
+         */
+        CNAEXT Vector2& operator*=(const Vector2& value);
+
+        /**
+         * @brief Multiplies this vector by a scalar in place.
+         *
+         * The scalar `*=` counterpart of operator+=; see its note for why this is CNAEXT.
+         *
+         * @param scaleFactor The scalar to multiply by.
+         * @return Reference to this vector after multiplication.
+         */
+        CNAEXT Vector2& operator*=(float scaleFactor);
+
+        /**
+         * @brief Divides this vector by another vector, component by component, in place.
+         *
+         * The `/=` counterpart of operator+=; see its note for why this is CNAEXT.
+         *
+         * @param value The vector to divide by.
+         * @return Reference to this vector after division.
+         */
+        CNAEXT Vector2& operator/=(const Vector2& value);
+
+        /**
+         * @brief Divides this vector by a scalar in place.
+         *
+         * The scalar `/=` counterpart of operator+=; see its note for why this is CNAEXT.
+         *
+         * @param divider The scalar to divide by.
+         * @return Reference to this vector after division.
+         */
+        CNAEXT Vector2& operator/=(float divider);
+
+        /**
          * @brief Negates all components of a vector.
          *
          * @param value Source vector.

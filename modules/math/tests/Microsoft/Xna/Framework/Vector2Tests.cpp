@@ -672,3 +672,59 @@ TEST(Vector2Test, CompoundOperatorsReturnThisSoTheyChain)
     EXPECT_FLOAT_EQ(value.X, 0.0f);
     EXPECT_FLOAT_EQ(value.Y, 0.0f);
 }
+
+// C# synthesises `*=` and `/=` from op_Multiply and op_Division, so XNA game code writes
+// `direction *= weight` without the type declaring anything. SAMPLE-024's flocking
+// behaviors do exactly that.
+TEST(Vector2Tests, CompoundMultiplyByVectorMultipliesComponentwise) {
+    Vector2 value(3.0f, 4.0f);
+    value *= Vector2(2.0f, 0.5f);
+    EXPECT_FLOAT_EQ(value.X, 6.0f);
+    EXPECT_FLOAT_EQ(value.Y, 2.0f);
+}
+
+TEST(Vector2Tests, CompoundMultiplyByScalarScalesBothComponents) {
+    Vector2 value(3.0f, -4.0f);
+    value *= 2.5f;
+    EXPECT_FLOAT_EQ(value.X, 7.5f);
+    EXPECT_FLOAT_EQ(value.Y, -10.0f);
+}
+
+TEST(Vector2Tests, CompoundDivideByVectorDividesComponentwise) {
+    Vector2 value(6.0f, 2.0f);
+    value /= Vector2(2.0f, 0.5f);
+    EXPECT_FLOAT_EQ(value.X, 3.0f);
+    EXPECT_FLOAT_EQ(value.Y, 4.0f);
+}
+
+TEST(Vector2Tests, CompoundDivideByScalarScalesBothComponents) {
+    Vector2 value(7.5f, -10.0f);
+    value /= 2.5f;
+    EXPECT_FLOAT_EQ(value.X, 3.0f);
+    EXPECT_FLOAT_EQ(value.Y, -4.0f);
+}
+
+TEST(Vector2Tests, CompoundOperatorsAgreeWithTheirBinaryForms) {
+    const Vector2 a(1.5f, -2.5f);
+    const Vector2 b(2.0f, 4.0f);
+
+    Vector2 mul = a; mul *= b;
+    EXPECT_FLOAT_EQ(mul.X, (a * b).X);
+    EXPECT_FLOAT_EQ(mul.Y, (a * b).Y);
+
+    Vector2 div = a; div /= b;
+    EXPECT_FLOAT_EQ(div.X, (a / b).X);
+    EXPECT_FLOAT_EQ(div.Y, (a / b).Y);
+
+    Vector2 scaled = a; scaled *= 3.0f;
+    EXPECT_FLOAT_EQ(scaled.X, (a * 3.0f).X);
+    EXPECT_FLOAT_EQ(scaled.Y, (a * 3.0f).Y);
+}
+
+TEST(Vector2Tests, CompoundOperatorsReturnAReferenceToThis) {
+    Vector2 value(1.0f, 1.0f);
+    EXPECT_EQ(&(value *= 2.0f), &value);
+    EXPECT_EQ(&(value /= 2.0f), &value);
+    EXPECT_EQ(&(value *= Vector2(1.0f, 1.0f)), &value);
+    EXPECT_EQ(&(value /= Vector2(1.0f, 1.0f)), &value);
+}
