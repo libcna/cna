@@ -4,7 +4,7 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     EffectMaterial::EffectMaterial(Effect& cloneSource)
-        : Effect(cloneSource.getGraphicsDeviceInternal())
+        : Effect(cloneSource)
     {
     }
 

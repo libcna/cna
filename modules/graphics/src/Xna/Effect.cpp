@@ -813,21 +813,50 @@ namespace Microsoft::Xna::Framework::Graphics
 
         if (cloneSource != nullptr)
         {
-            const int count = std::min(parameters_.getCountProperty(),
-                                       cloneSource->parameters_.getCountProperty());
-            for (int i = 0; i < count; ++i)
-            {
-                parameters_[i].CopyMutableValueFromInternal(cloneSource->parameters_[i]);
-            }
+            AdoptCloneState(*cloneSource);
+        }
+    }
 
-            for (int i = 0; i < cloneSource->techniques_.getCountProperty(); ++i)
+    Effect::Effect(const Effect& cloneSource)
+        : GraphicsResource(cloneSource.device_)
+        , device_(cloneSource.device_)
+    {
+        if (!cloneSource.compiledRuntime_)
+        {
+            // A source with no compiled runtime -- a stock effect, or one built by the
+            // device-only constructor -- has nothing for the renderer to clone, so the
+            // clone gets the same single "Default" technique a bare Effect has.
+            techniques_.Add(EffectTechnique(this, "Default"));
+            currentTechnique_ = &techniques_[0];
+            return;
+        }
+
+        compiledRuntime_ = cloneSource.compiledRuntime_->Clone();
+        if (!compiledRuntime_)
+        {
+            throw System::InvalidOperationException(
+                "The active graphics renderer failed to clone this compiled effect.");
+        }
+        BuildCompiledObjectGraph();
+        AdoptCloneState(cloneSource);
+    }
+
+    void Effect::AdoptCloneState(const Effect& cloneSource)
+    {
+        const int count = std::min(parameters_.getCountProperty(),
+                                   cloneSource.parameters_.getCountProperty());
+        for (int i = 0; i < count; ++i)
+        {
+            parameters_[i].CopyMutableValueFromInternal(cloneSource.parameters_[i]);
+        }
+
+        for (int i = 0; i < cloneSource.techniques_.getCountProperty(); ++i)
+        {
+            if (&cloneSource.techniques_[i] == cloneSource.currentTechnique_ &&
+                i < techniques_.getCountProperty())
             {
-                if (&cloneSource->techniques_[i] == cloneSource->currentTechnique_ &&
-                    i < techniques_.getCountProperty())
-                {
-                    setCurrentTechniqueProperty(&techniques_[i]);
-                    break;
-                }
+                setCurrentTechniqueProperty(&techniques_[i]);
+                break;
             }
         }
     }

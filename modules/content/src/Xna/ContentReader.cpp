@@ -9,6 +9,7 @@
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "System/IO/EndOfStreamException.hpp"
@@ -90,6 +91,10 @@ namespace Microsoft::Xna::Framework::Content
 
     template std::optional<Graphics::Texture2D> ContentReader::ReadExternalReference<Graphics::Texture2D>();
     template std::optional<Graphics::TextureCube> ContentReader::ReadExternalReference<Graphics::TextureCube>();
+    // An EffectMaterial names its compiled effect by external reference; the asset loads at
+    // the same erased shared_ptr<Effect> every effect reader targets.
+    template std::optional<std::shared_ptr<Graphics::Effect>>
+        ContentReader::ReadExternalReference<std::shared_ptr<Graphics::Effect>>();
 
     ContentReader::ContentReader(
         ContentManager* manager,

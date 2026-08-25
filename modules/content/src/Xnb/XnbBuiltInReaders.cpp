@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Xnb/EffectMaterialContentTypeReaders.hpp"
 #include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -38,6 +39,7 @@ namespace CNA::Internal::Xnb
         RegisterStockEffectXnbReaders();
         RegisterEffectXnbReader();
         RegisterModelXnbReaders();
+        RegisterEffectMaterialXnbReaders();
         Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders();
     }
 }

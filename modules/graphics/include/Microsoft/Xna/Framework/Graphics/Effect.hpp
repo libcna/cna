@@ -55,9 +55,6 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destroys the effect and releases its GPU resources. */
         CNAEXT ~Effect() override;
 
-        /** @brief Copying is not allowed. */
-        Effect(const Effect&) = delete;
-
         /** @brief Copy-assignment is not allowed. */
         Effect& operator=(const Effect&) = delete;
 
@@ -224,6 +221,23 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void Dispose(bool disposing) override;
 
+        /**
+         * @brief Constructs an effect that is a clone of @p cloneSource.
+         *
+         * XNA's `protected Effect(Effect cloneSource)`: the constructor a subclass such as
+         * EffectMaterial uses to become its own instance of an already-loaded effect. A
+         * compiled effect's renderer runtime is cloned, its object graph rebuilt, and the
+         * source's mutable parameter values and selected technique carried across, so the
+         * clone starts out where the source is. A source with no compiled runtime clones to
+         * the same single "Default" technique a bare Effect has.
+         *
+         * Protected rather than public, exactly as in XNA: an Effect is a reference type
+         * there and games never copy one, but subclasses must be able to.
+         *
+         * @param cloneSource The effect to clone.
+         */
+        Effect(const Effect& cloneSource);
+
         /** @brief The graphics device that owns this effect. */
         GraphicsDevice* device_;
 
@@ -233,6 +247,7 @@ namespace Microsoft::Xna::Framework::Graphics
                const Effect* cloneSource);
 
         void BuildCompiledObjectGraph();
+        void AdoptCloneState(const Effect& cloneSource);
         [[nodiscard]] EffectParameter BuildCompiledParameter(
             const CNA::Internal::Renderers::CompiledEffectParameterDescription& description);
         void ApplyPassInternal(std::uint32_t passIndex);
