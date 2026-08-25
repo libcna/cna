@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <limits>
+#include <vector>
 #include "Microsoft/Xna/Framework/Color.hpp"
 
 using Microsoft::Xna::Framework::Color;
@@ -8,6 +9,28 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
 
 // --- Construction ---
+
+TEST(ColorTest, DefaultConstructorIsTransparentBlack)
+{
+    Color c;
+    EXPECT_EQ(c.getRProperty(), 0);
+    EXPECT_EQ(c.getGProperty(), 0);
+    EXPECT_EQ(c.getBProperty(), 0);
+    EXPECT_EQ(c.getAProperty(), 0);
+    EXPECT_EQ(c.getPackedValueProperty(), 0u);
+    EXPECT_EQ(c, Color::Transparent);
+}
+
+TEST(ColorTest, DefaultConstructedArrayElementsAreTransparentBlack)
+{
+    // C# `new Color[n]` fills the array with default(Color); the C++ counterpart must
+    // give a value-initialized vector the same contents.
+    std::vector<Color> colors(4);
+    for (const Color& c : colors)
+    {
+        EXPECT_EQ(c.getPackedValueProperty(), 0u);
+    }
+}
 
 TEST(ColorTest, ByteRgbConstructorSetsComponentsAndOpaqueAlpha)
 {

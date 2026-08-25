@@ -256,6 +256,11 @@ namespace Microsoft::Xna::Framework
     // Constructors
     // ------------------------------------------------------------------
 
+    Color::Color()
+        : packedValue(0)
+    {
+    }
+
     Color::Color(UInt32 pv)
         : packedValue(pv)
     {

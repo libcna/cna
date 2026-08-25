@@ -365,6 +365,16 @@ namespace Microsoft::Xna::Framework
         // ------------------------------------------------------------------
 
         /**
+         * @brief Creates a transparent black color (R:0, G:0, B:0, A:0).
+         *
+         * Color is a value type, so its .NET default value — @c default(Color), @c new @c Color()
+         * and every element of a freshly allocated @c Color[] — is the all-zero packed value. This
+         * constructor is that default value, matching the same mapping already used by the other
+         * XNA value types such as Vector2, Point and Rectangle.
+         */
+        Color();
+
+        /**
          * @brief Constructs an RGBA color from the XYZW unit length components of a vector.
          *
          * Each component is clamped to [0,1] then scaled to [0,255].
