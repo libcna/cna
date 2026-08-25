@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "CNA/CNAHelper.hpp"
+
 namespace Microsoft::Xna::Framework
 {
     struct Matrix;
@@ -596,6 +598,29 @@ namespace Microsoft::Xna::Framework
          */
         static void TransformNormal(const std::vector<Vector2>& sourceArray, int sourceIndex, const Matrix& matrix,
                                     std::vector<Vector2>& destinationArray, int destinationIndex, int length);
+
+        /**
+         * @brief Adds another vector to this vector in place.
+         *
+         * C# synthesises `+=` from the declared `op_Addition`, so XNA game code writes
+         * `position += delta` without the type declaring anything; C++ has to spell it out.
+         * Marked CNAEXT because the XNA reference declares no such operator of its own --
+         * the same treatment Vector3 already gives its pair.
+         *
+         * @param value The vector to add.
+         * @return Reference to this vector after addition.
+         */
+        CNAEXT Vector2& operator+=(const Vector2& value);
+
+        /**
+         * @brief Subtracts another vector from this vector in place.
+         *
+         * The `-=` counterpart of operator+=; see its note for why this is CNAEXT.
+         *
+         * @param value The vector to subtract.
+         * @return Reference to this vector after subtraction.
+         */
+        CNAEXT Vector2& operator-=(const Vector2& value);
 
         /**
          * @brief Negates all components of a vector.

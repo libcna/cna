@@ -629,3 +629,46 @@ TEST(Vector2Test, InequalityOperator)
     EXPECT_FALSE(a == b);
     EXPECT_TRUE(a != b);
 }
+
+// C# synthesises `+=` and `-=` from the declared op_Addition/op_Subtraction, so XNA game
+// code writes `position += delta`. C++ has to declare them; Vector3 already did, Vector2
+// did not, which is what SAMPLE-020's `blocks[i].Position += new Vector2(0, BlockFallSpeed)`
+// exposed.
+
+TEST(Vector2Test, CompoundAddMatchesTheBinaryOperator)
+{
+    Vector2 accumulated(1.0f, 2.0f);
+    const Vector2 delta(0.25f, -3.5f);
+
+    accumulated += delta;
+
+    const Vector2 expected = Vector2(1.0f, 2.0f) + delta;
+    EXPECT_FLOAT_EQ(accumulated.X, expected.X);
+    EXPECT_FLOAT_EQ(accumulated.Y, expected.Y);
+}
+
+TEST(Vector2Test, CompoundSubtractMatchesTheBinaryOperator)
+{
+    Vector2 accumulated(1.0f, 2.0f);
+    const Vector2 delta(0.25f, -3.5f);
+
+    accumulated -= delta;
+
+    const Vector2 expected = Vector2(1.0f, 2.0f) - delta;
+    EXPECT_FLOAT_EQ(accumulated.X, expected.X);
+    EXPECT_FLOAT_EQ(accumulated.Y, expected.Y);
+}
+
+TEST(Vector2Test, CompoundOperatorsReturnThisSoTheyChain)
+{
+    Vector2 value(0.0f, 0.0f);
+    const Vector2 one(1.0f, 1.0f);
+
+    (value += one) += one;
+    EXPECT_FLOAT_EQ(value.X, 2.0f);
+    EXPECT_FLOAT_EQ(value.Y, 2.0f);
+
+    (value -= one) -= one;
+    EXPECT_FLOAT_EQ(value.X, 0.0f);
+    EXPECT_FLOAT_EQ(value.Y, 0.0f);
+}
