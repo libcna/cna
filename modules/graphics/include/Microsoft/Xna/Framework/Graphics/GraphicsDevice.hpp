@@ -1568,6 +1568,34 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void ResetViewportAndScissorForRenderTarget(int width, int height);
 
+        /**
+         * @brief Maps a game-supplied Viewport/ScissorRectangle into the rectangle the renderer
+         *        seam expects.
+         *
+         * `GraphicsDevice.Viewport` and `GraphicsDevice.ScissorRectangle` are public XNA state in
+         * the game's LOGICAL (virtual-resolution) space, but `IGraphicsRenderer::SetViewport` and
+         * `SetScissorRect` are drawable-space seams for the renderers that present the logical
+         * content into a sub-rectangle of the window — EasyGL, Magnum and OpenGL2 all Y-flip
+         * against their physical size and program the rectangle verbatim. Only
+         * `UpdateViewportFromWindow()` used to perform that mapping, so a game that assigned
+         * either property (split-screen, a scissored HUD, or simply re-applying the value it just
+         * read) programmed the GPU in logical space and bypassed the letterbox/scale placement.
+         *
+         * The mapping is derived from the same pair `UpdateViewportFromWindow()` uses:
+         * `GetViewportSize()` (logical) and `GetDefaultViewportRect()` (physical). It is the
+         * identity whenever those agree, which is exactly the case for every renderer that does
+         * not override `GetDefaultViewportRect()` — including the family that deliberately treats
+         * the pushed rectangle as logical and rescales internally (Diligent, Sokol, LLGL, SDL_GPU,
+         * WebGPU). It is also the identity while a render target is bound, because a render
+         * target's viewport and scissor are in that target's own pixel space.
+         *
+         * @param x       Logical left edge; receives the mapped left edge.
+         * @param y       Logical top edge; receives the mapped top edge.
+         * @param width   Logical width; receives the mapped width.
+         * @param height  Logical height; receives the mapped height.
+         */
+        void MapLogicalRectToPresentation(int& x, int& y, int& width, int& height) const;
+
         friend class Texture2D;
         friend class RenderTargetCube;
         friend class ShaderEffect;

@@ -7,6 +7,7 @@
 #include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/IndirectDrawArguments.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
+#include "CNA/Internal/Graphics/PresentationRect.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Platform/CurrentPlatform.hpp"
 #include "CNA/Platform/IPlatform.hpp"
@@ -28,6 +29,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -356,12 +358,22 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setViewportProperty(const Viewport& value)
     {
         if (renderer_)
-            renderer_->SetViewport(value.getXProperty(), value.getYProperty(),
-                                   value.getWidthProperty(), value.getHeightProperty(),
+        {
+            // The public Viewport is logical; the renderer seam is not. See
+            // MapLogicalRectToPresentation for why, and for the cases where it is the identity.
+            int x = value.getXProperty();
+            int y = value.getYProperty();
+            int width = value.getWidthProperty();
+            int height = value.getHeightProperty();
+            MapLogicalRectToPresentation(x, y, width, height);
+            renderer_->SetViewport(x, y, width, height,
                                    value.getMinDepthProperty(), value.getMaxDepthProperty());
+        }
         // Commit the public cache only after the native/renderer operation succeeds.  In particular,
         // D3D9's checked SetViewport path may reject a bad/lost device; retaining the old viewport
-        // prevents CNA from claiming the failed dimensions are active.
+        // prevents CNA from claiming the failed dimensions are active. The cache keeps the LOGICAL
+        // rectangle the caller supplied -- GraphicsDevice.Viewport must read back what the game
+        // assigned, not the drawable rectangle it was mapped onto.
         viewport_ = value;
     }
 
@@ -3585,7 +3597,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::setScissorRectangleProperty(const Rectangle& value)
     {
         if (renderer_)
-            renderer_->SetScissorRect(value.X, value.Y, value.Width, value.Height);
+        {
+            // Same logical-versus-drawable split as the Viewport setter above: EasyGL, Magnum and
+            // OpenGL2 all Y-flip SetScissorRect against their physical size and program it
+            // verbatim, so a logical rectangle would clip the wrong pixels under Letterbox or
+            // Overscan.
+            int x = value.X;
+            int y = value.Y;
+            int width = value.Width;
+            int height = value.Height;
+            MapLogicalRectToPresentation(x, y, width, height);
+            renderer_->SetScissorRect(x, y, width, height);
+        }
         scissorRectangle_ = value;
     }
 
@@ -3702,6 +3725,39 @@ namespace Microsoft::Xna::Framework::Graphics
             const uint8_t* p = buf.data() + i * 4;
             data[startIndex + i] = Color(p[0], p[1], p[2], p[3]);
         }
+    }
+
+    void GraphicsDevice::MapLogicalRectToPresentation(int& x, int& y, int& width, int& height) const
+    {
+        if (renderer_ == nullptr)
+            return;
+
+        // A render target's viewport and scissor are expressed in that target's own pixel space,
+        // which the presentation rectangle says nothing about.
+        // ResetViewportAndScissorForRenderTarget() relies on this: it assigns the target's own
+        // dimensions through the public setters.
+        if (renderTargetBound_)
+            return;
+
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        renderer_->GetViewportSize(logicalWidth, logicalHeight);
+
+        CNA::Internal::Graphics::PresentationRect presentation;
+        presentation.width = logicalWidth;
+        presentation.height = logicalHeight;
+        renderer_->GetDefaultViewportRect(presentation.x, presentation.y,
+                                          presentation.width, presentation.height);
+
+        const CNA::Internal::Graphics::PresentationRect mapped =
+            CNA::Internal::Graphics::MapLogicalRectToPresentation(
+                CNA::Internal::Graphics::PresentationRect{x, y, width, height},
+                logicalWidth, logicalHeight, presentation);
+
+        x = mapped.x;
+        y = mapped.y;
+        width = mapped.width;
+        height = mapped.height;
     }
 
     void GraphicsDevice::ResetViewportAndScissorForRenderTarget(int width, int height)
