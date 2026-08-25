@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include "CNA/Internal/DefaultWindowTitle.hpp"
+
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/PlatformException.hpp"
@@ -362,7 +364,7 @@ TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindo
         GTEST_SKIP() << "The selected renderer intentionally creates no platform window.";
     }
 
-    EXPECT_EQ(window.getTitleProperty(), "Game");
+    EXPECT_EQ(window.getTitleProperty(), CNA::Internal::GetDefaultWindowTitle());
     EXPECT_TRUE(window.getAllowUserResizingProperty());
     EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 800, 480));
 

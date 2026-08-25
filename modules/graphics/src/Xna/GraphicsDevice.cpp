@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
+#include "CNA/Internal/DefaultWindowTitle.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
@@ -2830,7 +2831,7 @@ namespace Microsoft::Xna::Framework::Graphics
                                : 768;
 
         CNA::Platform::WindowDescription description;
-        description.title = "Game";
+        description.title = CNA::Internal::GetDefaultWindowTitle();
         description.width = width;
         description.height = height;
 

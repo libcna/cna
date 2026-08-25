@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/Internal/DefaultWindowTitle.hpp"
 #include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
@@ -174,7 +175,11 @@ TEST(GraphicsDevicePlatformWindowTests,
 
     {
         GraphicsDevice device;
-        EXPECT_EQ(trace.description.title, "Game");
+        // The window title is no longer a literal: it is the declared assembly title,
+        // then the running executable's own name, then "Game". This test binary supplies
+        // the middle one, so the assertion is against the same derivation the product
+        // uses rather than against a hardcoded string.
+        EXPECT_EQ(trace.description.title, CNA::Internal::GetDefaultWindowTitle());
         EXPECT_EQ(trace.description.width, 800);
         EXPECT_EQ(trace.description.height, 480);
         EXPECT_TRUE(trace.description.resizable);
