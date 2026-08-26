@@ -57,11 +57,22 @@ static int validate_standalone_light(void)
     CNA_DirectionalLightHandle light = CNA_INVALID_HANDLE;
     CNA_Vector3 value = {9.0F, 9.0F, 9.0F};
     CNA_Bool enabled = CNA_TRUE;
+    /*
+     * A new light carries XNA's own defaults, not FNA's zero-initialized fields. Measured on a
+     * live XNA 4.0 build: a freshly constructed BasicEffect, before EnableDefaultLighting() has
+     * touched anything, reports DiffuseColor (1,1,1), Direction (0,-1,0) and SpecularColor
+     * (0,0,0) on all three of its lights. This test used to pin the zeros, which is what FNA
+     * leaves behind and what XNA does not.
+     *
+     * Enabled is false here because XNA enables only DirectionalLight0, and it does that from
+     * BasicEffect rather than from the light: lights 1 and 2 come up disabled, which is the
+     * right default for a standalone light with no effect behind it.
+     */
     REQUIRE(cna_directional_light_create(&light) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_directional_light_get_diffuse_color(light, &value) ==
-                CNA_RESULT_SUCCESS && vector_equals(value, 0, 0, 0));
+                CNA_RESULT_SUCCESS && vector_equals(value, 1, 1, 1));
     REQUIRE(cna_directional_light_get_direction(light, &value) ==
-                CNA_RESULT_SUCCESS && vector_equals(value, 0, 0, 0));
+                CNA_RESULT_SUCCESS && vector_equals(value, 0, -1, 0));
     REQUIRE(cna_directional_light_get_specular_color(light, &value) ==
                 CNA_RESULT_SUCCESS && vector_equals(value, 0, 0, 0));
     REQUIRE(cna_directional_light_get_enabled(light, &enabled) ==

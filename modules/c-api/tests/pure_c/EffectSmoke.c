@@ -507,8 +507,16 @@ static int validate_shader_effect(const CNA_Handle device)
     REQUIRE(cna_shader_effect_set_texture_cube(shader, 1, cube) == CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture2d) == CNA_RESULT_SUCCESS &&
             cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
-    REQUIRE(cna_texture3d_create(device, &volume_info, &texture3d) ==
-                CNA_RESULT_NOT_SUPPORTED && texture3d == CNA_INVALID_HANDLE);
+    /*
+     * Texture3D used to be refused outright, and this pinned the refusal. It is implemented now
+     * (CnaCApiTextureVolume.cpp, and CApi_TextureVolumeSmoke exercises it in full), so a Color
+     * volume creates like any other texture. NOT_SUPPORTED is still the answer for a format the
+     * native contract does not carry, which is a separate claim and not this one.
+     */
+    REQUIRE(cna_texture3d_create(device, &volume_info, &texture3d) == CNA_RESULT_SUCCESS &&
+            texture3d != CNA_INVALID_HANDLE);
+    REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_SUCCESS);
+    /* A cube handle in a Texture3D slot is still the wrong kind of handle. */
     REQUIRE(cna_shader_effect_set_texture3d(shader, 2, cube) ==
             CNA_RESULT_INVALID_HANDLE);
 
