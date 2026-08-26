@@ -52,17 +52,45 @@ def run(command: list[str], description: str) -> str:
     return completed.stdout
 
 
-def read_link_line(module_dir: Path) -> tuple[list[str], list[str], list[str]]:
-    """Split CMake's own link line into objects, archives and external libraries."""
+def link_line_tokens(module_dir: Path, build_dir: Path) -> tuple[list[str], Path]:
+    """The link command for cna_c_api, plus the directory its relative paths are based on.
+
+    Only the Makefile generator writes `link.txt`. Under Ninja the link command lives in
+    `build.ninja`, and reading it needs `ninja -t commands` -- which is why this used to fail the
+    whole build with "link.txt does not exist; build the cna_c_api target before the static
+    archive" on a Ninja tree where cna_c_api had in fact just been built. The two generators also
+    differ in what their relative paths are relative to: link.txt's are relative to the module's
+    binary directory, build.ninja's to the build root, so the base is returned alongside.
+    """
     path = module_dir / LINK_LINE
-    if not path.exists():
+    if path.exists():
+        return path.read_text(encoding="utf-8").split(), module_dir.resolve()
+
+    if not (build_dir / "build.ninja").exists():
         raise SystemExit(
-            f"{path} does not exist; build the cna_c_api target before the static archive.")
-    working = module_dir.resolve()
+            f"{path} does not exist and {build_dir / 'build.ninja'} does not either; "
+            "build the cna_c_api target before the static archive.")
+    ninja = shutil.which("ninja") or shutil.which("ninja-build")
+    if ninja is None:
+        raise SystemExit(
+            "this is a Ninja build tree, so the link line comes from build.ninja, but no ninja "
+            "executable was found to read it.")
+    # The link is the last command Ninja reports for the target; CMake wraps it as ": && <cmd> && :".
+    output = run([ninja, "-C", str(build_dir), "-t", "commands", "cna_c_api"],
+                 "reading the cna_c_api link command from build.ninja")
+    lines = [line for line in output.splitlines() if line.strip()]
+    if not lines:
+        raise SystemExit("ninja reported no commands for cna_c_api; build it first.")
+    return lines[-1].split(), build_dir.resolve()
+
+
+def read_link_line(module_dir: Path, build_dir: Path) -> tuple[list[str], list[str], list[str]]:
+    """Split CMake's own link line into objects, archives and external libraries."""
+    tokens, working = link_line_tokens(module_dir, build_dir)
     objects: list[str] = []
     archives: list[str] = []
     external: list[str] = []
-    for token in path.read_text(encoding="utf-8").split():
+    for token in tokens:
         if token.startswith("-") or token.endswith("link.txt"):
             if token.startswith("-l"):
                 external.append(token)
@@ -114,7 +142,7 @@ def main() -> int:
     work.mkdir(parents=True, exist_ok=True)
 
     linker, objcopy, archiver, nm = (require(tool) for tool in ("ld", "objcopy", "ar", "nm"))
-    objects, archives, external = read_link_line(module_dir)
+    objects, archives, external = read_link_line(module_dir, build_dir)
 
     combined = work / "cna_c_api_combined.o"
     run([linker, "-r", "--whole-archive", *archives, "--no-whole-archive", *objects,
