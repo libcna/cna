@@ -115,7 +115,13 @@ native and Emscripten, exactly as `cna_diag_easygl`/`cna_diag_software` do.
 extracts its dump out of MEMFS, and diffs it against another backend's dump with `cna_diag_compare`.
 Against the native SOFTWARE CPU rasterizer's dump of the same scene the max per-channel difference is
 1 and the mean 0.139 across the whole frame (both have the identical 1682 non-black pixels) -- well
-inside the tool's default tolerance of 40.
+inside the tool's default tolerance of 40. A native `OPENGL33` (EasyGL) dump, produced headless under
+Xvfb + Mesa `llvmpipe`, was compared too: WebGPU matches the CPU reference essentially exactly (0
+pixels over tolerance), whereas EasyGL differs from BOTH WebGPU and SOFTWARE at the same 57
+triangle-edge coverage pixels -- a GL fill-rule / pixel-centre convention difference at the triangle
+boundary, not a WebGPU defect (WebGPU is on the reference-matching side). Strict per-pixel edge
+parity is therefore not universal across rasterizers; WebGPU's happens to agree with the CPU
+reference.
 
 ## Automated native smoke test
 
