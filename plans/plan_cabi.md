@@ -739,7 +739,10 @@ place, and a slot token would report an alternation that does not happen.
 ## Sanitizer status (fixcnacs P8, fixcnats)
 
 Both orders ask for sanitizer evidence and warn against claiming any that was not produced.
-`build-asan/` is configured `-DCNA_SANITIZE=address,undefined` (Debug, OPENGLES3, ccache).
+`build-asan/` is `-DCNA_SANITIZE=address,undefined`; `build-tsan/` is `-DCNA_SANITIZE=thread`.
+Both Debug, OPENGLES3, ccache, run on Xvfb `:101`.
+
+### C-API suites — clean
 
 | Test | ASan + UBSan |
 | --- | --- |
@@ -749,11 +752,49 @@ Both orders ask for sanitizer evidence and warn against claiming any that was no
 | `CApi_OwnedGraphicsDeviceSmoke` | clean |
 | `CApi_GraphicsDeviceSmoke` | clean |
 
-Zero AddressSanitizer reports and zero UBSan runtime errors across all five, on Xvfb `:101`. The
-owned-device suite passing clean matters most: [[CABI-13]]'s owner-token change touched 25
-accounting sites and the lifetime of every C-created resource.
+Zero AddressSanitizer reports, zero UBSan runtime errors. The owned-device suite passing clean
+matters most: [[CABI-13]]'s owner-token change touched 25 accounting sites and the lifetime of
+every C-created resource.
 
-Not run: the full 9000-test C++ suite under sanitizers, and TSan.
+### Why the full 9000-test suite is not run under ASan
+
+It was started and measured rather than assumed impractical. Under ASan the GPU-heavy conformance
+tests take **19-21 seconds each** (`GltfConformanceL6.ViewAndProjectionReachEveryDrawUnaltered`:
+19 067 ms). At that rate the full suite is roughly **48 hours**, so it was stopped at 823 tests —
+**zero sanitizer reports** in those — and replaced with a filter over what this milestone actually
+changed: SpriteBatch, VideoPlayer, ContentLost, RenderTarget, GraphicsDevice, Storage and the
+dynamic buffers.
+
+### A real defect the focused run found
+
+225 tests in, ASan aborted on a genuine **heap-use-after-free**:
+
+```
+ERROR: AddressSanitizer: heap-use-after-free, READ of size 8
+  #0 EasyGLRenderTargetCubeRenderer::~EasyGLRenderTargetCubeRenderer()  EasyGLRenderer.cpp:3054
+freed by:
+  #1 EasyGLRenderer::~EasyGLRenderer()                                  EasyGLRenderer.cpp:4306
+  #5 GraphicsDevice::destroyNativeResources()                           GraphicsDevice.cpp:3289
+  #7 GraphicsDevice::~GraphicsDevice()                                  GraphicsDevice.cpp:332
+```
+
+Test: `MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove`
+(`MetalResourceHealthTests.cpp:234-239`).
+
+The test **deliberately documents** the escape — its own message reads *"the base-moved TextureCube
+can publish a renderer that outlives its device"* — and it passes, because it only asserts that the
+renderer pointer survives. What no assertion could see is what happens when that survivor is
+finally released: `~EasyGLRenderTargetCubeRenderer` calls `DetachFromBindingEXT()` and
+`registry_->remove(this)`, both reading the `EasyGLRenderer` the device already freed.
+
+So a known, tested escape turns out to be **unsafe at teardown**, not merely untidy. That is
+precisely the class of defect a sanitizer exists to surface and a green suite cannot.
+
+**Not from this milestone.** Neither `EasyGLRenderer.cpp` nor `MetalResourceHealthTests.cpp` is
+touched by any commit on this branch, and the destructor reads EasyGL's own back-pointers, not
+anything [[CABI-15]] added to `RenderTargetCube`. It needs its own ticket against EasyGL's teardown
+ordering: either the cube renderer must not hold raw back-pointers into its owner, or
+`~EasyGLRenderer` must detach its children before freeing itself.
 
 ## CABI-4 continued — two fixed, and what fixing them revealed
 
