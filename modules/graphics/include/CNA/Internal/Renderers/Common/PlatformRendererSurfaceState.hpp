@@ -30,7 +30,14 @@ namespace CNA::Internal::Renderers
                 throw CNA::Platform::PlatformException(
                     rendererName_ + "::Surface", "missing platform window id");
             }
-            if (!CNA::Platform::HasNativeWindow(nativeHandle_))
+            // A Web surface is a browser <canvas> chosen by a CSS selector, not a native window
+            // pointer, so HasNativeWindow() is deliberately false for it (see NativeWindowHandle.cpp)
+            // -- yet it is a real drawable a renderer can target. Accept it here; only genuinely
+            // surfaceless systems (Unknown/Headless/Terminal) are rejected. In practice this only
+            // ever reaches the WebGPU renderer, the one native-window family that also builds for
+            // Emscripten; it creates its surface from the canvas selector, needing no handle pointer.
+            if (!CNA::Platform::HasNativeWindow(nativeHandle_)
+                && nativeHandle_.system != CNA::Platform::NativeWindowSystem::Web)
             {
                 throw CNA::Platform::PlatformException(
                     rendererName_ + "::Surface",

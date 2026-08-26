@@ -2490,6 +2490,10 @@ namespace CNA::Internal::Renderers::WebGPU
         descriptor.defaultQueue.label = StringView("CNA WebGPU Queue");
         descriptor.uncapturedErrorCallbackInfo.callback = OnUncapturedError;
         descriptor.uncapturedErrorCallbackInfo.userdata1 = &uncapturedErrorCount_;
+        // WGPUDeviceLostCallbackInfo carries a completion mode that must be a valid enumerant: the
+        // browser's emdawnwebgpu rejects a zero-initialised mode ("Invalid WGPUCallbackMode 0"),
+        // where wgpu-native tolerates it. Set it to the same mode used for the other async callbacks.
+        descriptor.deviceLostCallbackInfo.mode = kCnaWebGpuCallbackMode;
         descriptor.deviceLostCallbackInfo.callback = OnDeviceLost;
         WGPURequestDeviceCallbackInfo callback{};
         callback.mode = kCnaWebGpuCallbackMode;
@@ -6492,6 +6496,27 @@ struct VSOut {
             acquiredTexture_ = surfaceTexture.texture;
             hasAcquiredTexture_ = true;
             framePending_ = true;
+
+#if defined(__EMSCRIPTEN__)
+            // In the browser the surface's backing store follows the <canvas>'s own width/height,
+            // which SDL updates on a resize independently of the size ConfigureSurface() requested.
+            // wgpuSurfaceGetCurrentTexture() therefore returns the canvas size, not surfaceConfig_'s,
+            // so a resize leaves the depth/MSAA attachments (sized from physicalWidth_/physicalHeight_
+            // via ConfigureSurface) mismatched against the colour attachment -- a render-pass
+            // attachment-size validation error. Sync them, and the viewport, to the texture we
+            // actually got. Native surfaces are app-driven and always already agree, so this is web
+            // only.
+            const int acquiredWidth = static_cast<int>(wgpuTextureGetWidth(acquiredTexture_));
+            const int acquiredHeight = static_cast<int>(wgpuTextureGetHeight(acquiredTexture_));
+            if (acquiredWidth > 0 && acquiredHeight > 0 &&
+                (acquiredWidth != physicalWidth_ || acquiredHeight != physicalHeight_))
+            {
+                physicalWidth_ = acquiredWidth;
+                physicalHeight_ = acquiredHeight;
+                RecreateDepthTexture();
+                RecreateMsaaColorTexture();
+            }
+#endif
         }
 
         if (!framePending_)
@@ -6757,7 +6782,13 @@ struct VSOut {
     {
         if (!EnsureFrameRendered())
             return;
+#if !defined(__EMSCRIPTEN__)
+        // In the browser there is no explicit present: emdawnwebgpu aborts on wgpuSurfacePresent
+        // ("use requestAnimationFrame instead"). The canvas's current texture is shown automatically
+        // once control returns to the event loop, which Game::RunLoop() does every frame by awaiting
+        // requestAnimationFrame. The queue submit in EnsureFrameRendered() above is the whole frame.
         wgpuSurfacePresent(surface_);
+#endif
         wgpuTextureRelease(acquiredTexture_);
         acquiredTexture_ = nullptr;
         hasAcquiredTexture_ = false;

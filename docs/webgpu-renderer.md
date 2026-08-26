@@ -71,11 +71,25 @@ of `WebGPURenderer.cpp` and every WGSL shader; only three seams differ, each beh
   exposes, which is why the shared code compiles unchanged. (The older `-sUSE_WEBGPU=1` built-in was
   removed in Emscripten 4.0.10 and is not used.)
 
-Select it under `emcmake` with `-DCNA_GRAPHICS_RENDERER=WEBGPU`. As of 2026-08-26 the renderer
-translation unit and a canvas-surface existence-gate spike (`spikes/webgpu-web-spike/`) compile and
-link to WebAssembly against the real emdawnwebgpu header. The in-browser present loop, WGSL
-compile check and a headless-Chrome 2D smoke run (`plans/plan_webgpu.md` `WEBGPU-121`/`122`) are not
-done yet, so this is not a usable browser renderer at this stage — it is a verified build path.
+Two further web-only seams the first browser run required:
+
+- **Present.** `Present()` skips `wgpuSurfacePresent()` under Emscripten — emdawnwebgpu aborts on it
+  ("use requestAnimationFrame instead"). The canvas is shown automatically when `Game::RunLoop()`
+  yields to `requestAnimationFrame` each frame; the queue submit is the whole frame.
+- **Resize.** The browser sizes the surface from the `<canvas>` backing store, not from
+  `wgpuSurfaceConfigure()`, so on a canvas resize `wgpuSurfaceGetCurrentTexture()` returns the new
+  size while the configured depth/MSAA attachments still hold the old one. After acquiring the frame
+  texture the renderer resyncs `physicalWidth_/physicalHeight_` (and the depth/MSAA textures) to the
+  texture it actually got. One shared guard, `PlatformRendererSurfaceState`, was relaxed to accept
+  the `Web` surface, which is a canvas selector rather than a native window pointer.
+
+Select it under `emcmake` with `-DCNA_GRAPHICS_RENDERER=WEBGPU`. As of 2026-08-26 the **2D path runs
+in a real browser**: `cna_demo_2d` renders 120 SpriteBatch frames in headless Chrome (over the real
+AMD Vulkan WebGPU path — SwiftShader exposes no WebGPU adapter here) with audio, no WebGPU
+validation error, a mid-run canvas resize, and clean teardown. Reproduce with
+`scripts/run-webgpu-browser-test.sh` (`plans/plan_webgpu.md` `WEBGPU-122`). Still open: the 3D/effect
+WGSL shaders have not been exercised in a browser (`WEBGPU-121`), and the `--webgpu-2d-validation`
+scene's `MinimizeEXT()` refuses on web (a native-only `GameWindow` operation, not a renderer limit).
 
 ## Automated native smoke test
 

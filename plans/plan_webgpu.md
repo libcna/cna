@@ -36,18 +36,25 @@
 >   (debug marker no-op doc, simulated context loss, `IsFullScreen`), `WEBGPU-115`/`116` (wireframe
 >   deviation doc, vertex-format-from-`VertexElementFormat` helper), `WEBGPU-118`
 >   (Vulkan-deviations doc) — all `⬜`, all small/standalone.
-> - **Emscripten/browser target (`WEBGPU-119`–`122`)** — STARTED 2026-08-26. `WEBGPU-119`/`120` are
->   now 🟨: the renderer builds for the browser as the *same* `WEBGPU` identity (not a new renderer),
->   sharing all of `WebGPURenderer.cpp` and every WGSL shader. Three `#ifdef __EMSCRIPTEN__` seams
->   carry the only real differences — a `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` surface
->   (`"#canvas"`), `WGPUCallbackMode_AllowSpontaneous` + `emscripten_sleep` (Asyncify) instead of the
->   native `wgpuInstanceProcessEvents` pump, and an `if(EMSCRIPTEN)` branch in `ThirdPartyWebGPU.cmake`
->   that links Emscripten's **emdawnwebgpu** port (NOT the removed `-sUSE_WEBGPU=1`) with no
->   wgpu-native download. Both the full renderer TU (`-fsyntax-only`) and a canvas-surface
->   existence-gate spike (`spikes/webgpu-web-spike/`) compile and link to wasm against the real
->   emdawnwebgpu header. Still ⬜: the in-browser present loop/canvas sizing, WGSL compile check
->   (`WEBGPU-121`) and the headless-Chrome 2D smoke run (`WEBGPU-122`) — those are the acceptance
->   gates, so this is not yet "done".
+> - **Emscripten/browser target (`WEBGPU-119`–`122`)** — the 2D path RUNS IN A REAL BROWSER as of
+>   2026-08-26. `WEBGPU-119`/`120`/`122` are ✅; `WEBGPU-121` is 🟨 (2D shaders verified in-browser,
+>   3D not yet). The renderer builds for the browser as the *same* `WEBGPU` identity (not a new
+>   renderer), sharing all of `WebGPURenderer.cpp` and every WGSL shader. Five `#if defined(__EMSCRIPTEN__)`
+>   seams carry the only real differences: a `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` surface
+>   (`"#canvas"`); `WGPUCallbackMode_AllowSpontaneous` + `emscripten_sleep` (Asyncify) instead of the
+>   native `wgpuInstanceProcessEvents` pump (and the device-lost callback needs that same mode, which
+>   emdawnwebgpu validates but wgpu-native did not); no explicit `wgpuSurfacePresent` (the browser
+>   presents the canvas on the `requestAnimationFrame` yield `Game::RunLoop` already does); a
+>   depth/MSAA resync to the acquired texture's real size, because the browser sizes the surface from
+>   the `<canvas>` backing store, not from `wgpuSurfaceConfigure`; and an `if(EMSCRIPTEN)` branch in
+>   `ThirdPartyWebGPU.cmake` that links Emscripten's **emdawnwebgpu** port (NOT the removed
+>   `-sUSE_WEBGPU=1`) with no wgpu-native download. One shared guard was relaxed:
+>   `PlatformRendererSurfaceState` now accepts the `Web` (canvas) surface, which exposes no native
+>   window pointer. `cna_demo_2d` runs 120 SpriteBatch frames in headless Chrome (real AMD Vulkan
+>   WebGPU) with audio, no WebGPU validation error, clean teardown, and a mid-run canvas resize —
+>   verified by `scripts/run-webgpu-browser-test.sh`. Still open: `WEBGPU-121` (the 3D/effect WGSL
+>   shaders have not been exercised in-browser), and the `--webgpu-2d-validation` scene's frame-45
+>   `MinimizeEXT()` refuses on web (a native-only GameWindow op, not a renderer concern).
 > - **Cross-backend pixel-parity test (`WEBGPU-123`)** — same scene on EasyGL/Vulkan/Bgfx/WebGPU,
 >   not started.
 > - Everything else in the row table below not listed here is ✅ or an honestly-scoped 🟨 (read
@@ -525,8 +532,8 @@ mark it ✅ from source inspection alone.
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-117 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | 🟨 | Document exists but must be revised after `WEBGPU-124`–`WEBGPU-131` with only verified claims and exact test commands. |
 | WEBGPU-118 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
-| WEBGPU-119 | Emscripten target: configure CNA for `emcc` build; WebGPU backend routes to browser `navigator.gpu` | 🟨 | 2026-08-26. `ThirdPartyWebGPU.cmake` `if(EMSCRIPTEN)` links Emscripten's **emdawnwebgpu** port (`--use-port=emdawnwebgpu`). **Deviation:** the task said `-sUSE_WEBGPU=1`; that built-in was removed in Emscripten 4.0.10 and replaced by the emdawnwebgpu port, whose `webgpu.h` matches wgpu-native v29's unified header. Configure + wasm link verified via `spikes/webgpu-web-spike/`. Remaining: browser present loop + smoke run (`WEBGPU-122`). |
-| WEBGPU-120 | Emscripten: SDL3 Emscripten port + WebGPU surface (canvas selector) | 🟨 | 2026-08-26. `WebGPURenderer::CreateSurface()` gains a `#elif defined(__EMSCRIPTEN__)` branch using `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` on `"#canvas"` (the SDL3 Emscripten default canvas). **Deviation:** the task named `emscripten_webgpu_get_device()`; instead the existing synchronous `wgpuInstanceRequestAdapter`/`wgpuAdapterRequestDevice` path is reused with an `emscripten_sleep`/Asyncify yield in `WaitForCompletion()`, keeping one device-acquisition code path for native and web. Compiles against the real port header; end-to-end canvas present in a browser still pending. |
-| WEBGPU-121 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
-| WEBGPU-122 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
+| WEBGPU-119 | Emscripten target: configure CNA for `emcc` build; WebGPU backend routes to browser `navigator.gpu` | ✅ | 2026-08-26. `ThirdPartyWebGPU.cmake` `if(EMSCRIPTEN)` links Emscripten's **emdawnwebgpu** port (`--use-port=emdawnwebgpu`). **Deviation:** the task said `-sUSE_WEBGPU=1`; that built-in was removed in Emscripten 4.0.10 and replaced by the emdawnwebgpu port, whose `webgpu.h` matches wgpu-native v29's unified header. Verified end-to-end: `cna_demo_2d` links and runs in headless Chrome, reaching `navigator.gpu` through the port (see `WEBGPU-122`). |
+| WEBGPU-120 | Emscripten: SDL3 Emscripten port + WebGPU surface (canvas selector) | ✅ | 2026-08-26. `CreateSurface()` `#elif defined(__EMSCRIPTEN__)` uses `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` on `"#canvas"` (SDL3's default canvas). **Deviations:** the task named `emscripten_webgpu_get_device()`; instead the existing `wgpuInstanceRequestAdapter`/`wgpuAdapterRequestDevice` path is reused with an `emscripten_sleep`/Asyncify yield, one code path for native and web. Web-only follow-ons found by the browser run and fixed here: device-lost callback needs a valid `mode` (emdawnwebgpu rejects 0); no `wgpuSurfacePresent` (browser presents on rAF); depth/MSAA resync to the acquired canvas-sized texture on resize; and `PlatformRendererSurfaceState` relaxed to accept the pointerless `Web` surface. |
+| WEBGPU-121 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | 🟨 | 2026-08-26. The 2D sprite WGSL pair compiles and renders in-browser (no `createShaderModule` error over 120 frames). The 3D/effect shader pairs have not yet been exercised in a browser -- needs a 3D demo page. |
+| WEBGPU-122 | Emscripten: run 2D smoke test in headless Chrome | ✅ | 2026-08-26. `scripts/run-webgpu-browser-test.sh` serves the build and drives `cna_demo_2d --smoke 120` through headless Chrome (`--enable-features=Vulkan,WebGPU --use-angle=vulkan --enable-unsafe-webgpu`; SwiftShader has no WebGPU adapter here, the real AMD Vulkan path does). PASS = 120 SpriteBatch frames, audio, no WebGPU validation error, clean teardown; a canvas resize mid-run is covered by the opt-in `CNA_WEBGPU_VALIDATION_SCENE=1` variant. |
 | WEBGPU-123 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |
