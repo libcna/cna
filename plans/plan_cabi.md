@@ -20,8 +20,8 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-1 | Baseline: HEAD, ABI version, C-API build, test inventory | both P1 | DONE |
 | CABI-2 | Bound-render-target destroy refusal, pinned from C | fixcnats P2 | DONE |
 | CABI-3 | Renderer C/C++ identity parity | fixcnacs P1-2, fixcnats P1 | DONE (upstream) |
-| CABI-4 | Triage the 6 red C-API tests | prerequisite | OPEN |
-| CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | OPEN |
+| CABI-4 | Triage the 6 red C-API tests | prerequisite | TRIAGED, handed off |
+| CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | DONE |
 | CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED |
 | CABI-7 | SpriteBatch unknown sort mode / non-finite values | fixcnacs P5 | OPEN |
 | CABI-8 | Resource-loss model: investigate, design or document | fixcnats P3 | OPEN |
@@ -98,3 +98,33 @@ Whoever adjudicates: the question is only what XNA 4.0's
 `SoundEffectInstance.Apply3D(AudioListener[], AudioEmitter)` does with a count other than one.
 Everything needed to implement either answer is already in place, and the ABI shape
 (`cna_sound_effect_instance_apply_3d_multi_ext`) is sufficient for both.
+
+## CABI-4 — The six red C-API tests (TRIAGED, not fixed here)
+
+83 C-API ctest cases at this HEAD, 77 passing. The six failures predate this branch — they
+reproduce identically in `../cnanext` at `6319f30c5` — and they do **not** share one cause.
+None of them is a defect in the contracts these work orders target; every one is drift from
+another lane, most of it from the sample-porting lane that is actively working in EasyGL.
+
+| Test | Root cause | Owner |
+| --- | --- | --- |
+| `CApi_TextureVolumeSmoke` | Asserts `supports_texture3d == CNA_FALSE` (line 393) and then a blanket `validate_texture3d_rejection`. EasyGL gained `EasyGLTexture3DRenderer` in `975156d14` (SAMPLE-014), so the device now reports Texture3D supported and the test fails at stage 1. | renderer/sample lane |
+| `CApi_EffectSmoke` | Same drift, line 510: `REQUIRE(cna_texture3d_create(...) == CNA_RESULT_NOT_SUPPORTED)`. | renderer/sample lane |
+| `CApi_BasicEffectSmoke` | Unrelated: `cna_directional_light_get_diffuse_color` no longer answers `(0,0,0)` at line 61. Not a Texture3D problem. | graphics lane |
+| `CApi_Draw3DSmoke` | Exits 2 with no diagnostic on either stream. Needs instrumenting before it can be attributed. | unattributed |
+| `CApi_MediaPlayerSmoke` | **Passes in isolation, fails in the full run.** A test-isolation/ordering defect — shared fixture or audio-device state — not a code defect. | test infrastructure |
+| `CApi_InstalledConsumer` | Fails in `modules/c-api/cmake/RunInstalledConsumer.cmake:34`; needs the install step, which building the `cna_c_api_*` targets alone does not produce. | build/packaging |
+
+Worth separating, because the file's own comment claims otherwise: `TextureVolumeSmoke.c` says it
+"branches on the reported capabilities instead and runs unchanged on any backend", but line 393
+*requires* the capability to be absent. It does not branch; it asserts a negative. That is why a
+renderer growing a capability turned it red instead of routing it to a support path, and the fix
+is to make it do what its comment already promises.
+
+Not fixed on this branch on purpose. Two of the six turn on whether the C API should now expose
+Texture3D support at all, which is the renderer lane's call, and `modules/renderers/easygl/` is
+where the sample-porting agent is working right now. Repairing them here would collide with
+in-flight work and would decide a capability question that does not belong to this milestone.
+
+`CApi_MediaPlayerSmoke` is the one that should not wait: an ordering-dependent failure that
+passes alone is the kind that gets re-diagnosed from scratch every time somebody sees it.
