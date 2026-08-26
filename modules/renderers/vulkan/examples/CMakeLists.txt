@@ -42,6 +42,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
         enable_testing()
 
+        # plans/plan_webgpu.md WEBGPU-123: the shared cross-renderer diagnostic scene built for
+        # VULKAN, exactly as EASYGL's cna_diag_easygl / SOFTWARE's cna_diag_software / WEBGPU's
+        # cna_diag_webgpu. Deliberately NOT a CTest (a two-build pixel comparison, not a single-run
+        # pass/fail): it writes a 64x64 RGBA8 dump for cna_diag_compare.
+        cna_vulkan_test(cna_diag_vulkan ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+
         # Task 88: 3-frame smoke test for the Vulkan renderer
         cna_register_renderer_test(NAME Vulkan_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")

@@ -119,9 +119,11 @@ inside the tool's default tolerance of 40. A native `OPENGL33` (EasyGL) dump, pr
 Xvfb + Mesa `llvmpipe`, was compared too: WebGPU matches the CPU reference essentially exactly (0
 pixels over tolerance), whereas EasyGL differs from BOTH WebGPU and SOFTWARE at the same 57
 triangle-edge coverage pixels -- a GL fill-rule / pixel-centre convention difference at the triangle
-boundary, not a WebGPU defect (WebGPU is on the reference-matching side). Strict per-pixel edge
-parity is therefore not universal across rasterizers; WebGPU's happens to agree with the CPU
-reference.
+boundary, not a WebGPU defect (WebGPU is on the reference-matching side). Finally a native VULKAN dump
+(`cna_diag_vulkan` on the real AMD Radeon 780M / RADV) was compared: it is **byte-identical to the
+browser WebGPU dump (max diff 0)** -- unsurprising, since Chrome's WebGPU is Dawn on the same AMD
+Vulkan. So strict per-pixel edge parity is not universal across rasterizers, but the two Vulkan-backed
+paths (native Vulkan and browser WebGPU) are exact, and both agree with the CPU reference to within 1.
 
 ## Automated native smoke test
 
