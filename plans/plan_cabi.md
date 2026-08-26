@@ -52,6 +52,8 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-37 | Browser probe for the wasm artifact | fixcnats P7 | DONE |
 | CABI-38 | Non-finite sprite values accepted, as the reference does | fixcnacs P5 | DONE |
 | CABI-39 | The wasm tests were never registered, only run by hand | second review | DONE |
+| CABI-40 | UBSan, once it could fail: NaN-to-int casts | fixcnacs P8 | DONE |
+| CABI-41 | Artifact contract defined; callbacks and FS made reachable | fixcnats P7 | DONE |
 | CABI-28 | Render-target ContentLost was set and never cleared | external review | DONE |
 | CABI-29 | Wasm export list did not depend on the headers | external review | DONE |
 | CABI-30 | ABI 0.8.0 -> 0.9.0, history and baseline | external review | DONE |
@@ -744,10 +746,38 @@ runner. Those are the same directory today, because `CMAKE_RUNTIME_OUTPUT_DIRECT
 with `missing built page` rather than silently testing nothing, which is why this is a note and not
 a defect.
 
-Still open, and deliberately not claimed: nothing here drives a **canvas** or a game loop from the
-browser, which is what a renderer needs and what `cna_demo_2d`/`cna_house3d_demo` are the precedent
-for. `cna-ts` also does not yet track this artifact -- its ABI audit still reports
-`TRACKED_WASM_ARTIFACTS=0` -- and that is downstream work this run may not do.
+### CABI-41 — the artifact contract, written down and two items made to work
+
+Phase 7 asks the contract to **define** eleven things. Re-reading it that way rather than as a
+demand for demonstrations is what turned up the real gap: two of the eleven were not merely
+undocumented, they did not function.
+
+- **Callbacks and function tables.** `addFunction` and `removeFunction` were not in
+  `EXPORTED_RUNTIME_METHODS`, so a JavaScript consumer could not construct a function pointer at
+  all. The artifact exported 2,872 routes and no way to hand any of them a callback -- and this ABI
+  is callback-driven throughout. Added, with `-sALLOW_TABLE_GROWTH=1`, and the browser probe now
+  registers a JavaScript log sink and is invoked by compiled C with a real formatted message.
+- **Filesystem and title content.** `FORCE_FILESYSTEM=1` was set and `FS` was not exported, so the
+  item had a build flag and no reachable implementation. Added.
+
+**Canvas and the game loop were never missing capabilities**, which the earlier note here implied.
+`cna_demo_2d` from this same tree brings up an 800x480 canvas with a live WebGL2 context in
+headless Chrome and renders -- 23,775 distinct colours in a screenshot of it. What was missing was
+the evidence and the write-up.
+
+`docs/c-api/WASM_ARTIFACT.md` is the contract, all eleven items, measured against a built module.
+Two items are recorded as **not pinned** rather than guessed: how a `CNA_StringView` passed by
+value is expanded in wasm32, and the wasm32 layout of `CNA_GameCreateInfo` (which differs from the
+native `abi_baseline.json` because pointers are four bytes -- hand-rolling it from JavaScript is
+how a binding earns an unexplained `CNA_RESULT_INVALID_ARGUMENT`).
+
+One measurement trap is recorded with it, because it cost time here: `gl.readPixels` on the default
+framebuffer after a frame returns zeros unless the context was made with `preserveDrawingBuffer`,
+which looks exactly like "nothing rendered". Screenshot the canvas.
+
+Still open and deliberately not claimed: the artifact is `BUILT`, not `PLATFORM_QUALIFIED`.
+`cna-ts` does not track it -- its ABI audit still reports `TRACKED_WASM_ARTIFACTS=0` -- and that is
+downstream work this run may not do.
 
 ## CABI-15 — ContentLost, raised only where loss is real (DONE)
 

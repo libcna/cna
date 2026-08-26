@@ -150,7 +150,15 @@ if(EMSCRIPTEN)
         "-sALLOW_MEMORY_GROWTH=1"
         "-sSTACK_SIZE=1048576"
         "-sFORCE_FILESYSTEM=1"
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAP8','HEAP16','HEAPU16','HEAP32','HEAPU32','HEAPF32','HEAPF64','getValue','setValue']"
+        # CABI-41: addFunction/removeFunction and a growable table, without which a JavaScript
+        # consumer cannot make a function pointer at all -- and this ABI is callback-driven
+        # (game callbacks, ContentLost, storage disposing, resource events). The artifact was
+        # exporting 2,872 routes and no way to hand any of them a callback. FS goes with it:
+        # FORCE_FILESYSTEM was already set, but the object was not reachable from JS, so
+        # "filesystem/title content" in the fixcnats.md Phase 7 contract had no implementation
+        # on the consumer's side either.
+        "-sALLOW_TABLE_GROWTH=1"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAP8','HEAP16','HEAPU16','HEAP32','HEAPU32','HEAPF32','HEAPF64','getValue','setValue','addFunction','removeFunction','FS']"
         "SHELL:-sEXPORTED_FUNCTIONS=@${CNA_C_API_WASM_EXPORTS}"
     )
 

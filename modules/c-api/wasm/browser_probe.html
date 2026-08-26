@@ -18,7 +18,7 @@
 //
 // Reports in the same shape as every other CNA browser page, so
 // scripts/run_pixijs_browser_tests.mjs runs it unchanged.
-const EXPECTED = 4;
+const EXPECTED = 5;
 let passed = 0;
 const out = document.getElementById('out');
 const lines = [];
@@ -63,6 +63,37 @@ try {
         check('UTF-8 is exchanged through the heap', copied === 0 && name === 'Web',
               `"${name}" (result=${copied})`);
     } finally { cna._free(buffer); cna._free(copyOut); }
+    // CABI-41: a callback made in JavaScript, handed to the C ABI, and invoked by it. This ABI is
+    // callback-driven, and until CABI-41 the module exported no addFunction, so a consumer could
+    // not construct a function pointer at all -- 2,872 routes and no way to give any of them a
+    // callback. Worth a check of its own rather than trusting the export list.
+    let fired = 0;
+    let sunkText = '';
+    const sink = cna.addFunction((level, category, view) => {
+        fired += 1;
+        // CNA_StringView in wasm32: pointer at word 0, and byte_length is a uint64 that lands at
+        // word 2 after the padding, not word 1.
+        const pointer = cna.HEAPU32[view >> 2];
+        const length = cna.HEAPU32[(view >> 2) + 2];
+        try { sunkText = cna.UTF8ToString(pointer, length); } catch { /* reported by the check */ }
+    }, 'viiii');
+    try {
+        const installed = cna._cna_logger_set_sink_ext(sink, 0);
+        const message = 'browser probe';
+        const buffer = cna._malloc(message.length + 1);
+        const view = cna._malloc(16);
+        try {
+            cna.stringToUTF8(message, buffer, message.length + 1);
+            cna.HEAPU32[view >> 2] = buffer;
+            cna.HEAPU32[(view >> 2) + 1] = message.length;
+            cna.HEAPU32[(view >> 2) + 2] = 0;
+            cna._cna_logger_info(view, 0);
+        } finally { cna._free(buffer); cna._free(view); }
+        cna._cna_logger_reset_sink_ext();
+        check('a JavaScript callback is invoked by the C ABI',
+              installed === 0 && fired === 1 && sunkText.length > 0,
+              `installed=${installed} fired=${fired} text=${JSON.stringify(sunkText)}`);
+    } finally { cna.removeFunction(sink); }
 } catch (error) {
     say(`[FAIL] the probe threw: ${error && error.message ? error.message : error}`);
 }
