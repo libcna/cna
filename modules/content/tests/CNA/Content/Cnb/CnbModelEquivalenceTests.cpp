@@ -580,3 +580,67 @@ TEST(CnbModelEquivalenceTest, CompilingAModelReducesItsFileCountAndItsFileOpens)
 
     EXPECT_GE(measured, 3) << "too few fixtures were measured for this to mean anything";
 }
+
+// --------------------------------------------------------------------------------------------
+// The hierarchy-less shape, which no glTF-derived fixture can reach
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbModelEquivalenceTest, AHandWrittenHierarchylessModelLoadsIdenticallyFromCnjAndFromCnb)
+{
+    // Every fixture the glTF tool produces is cnjVersion 2, so the sweep above never exercises
+    // the OTHER shape a Model .cnj can have: a hand-written version-1 document with no "bones"
+    // array at all, where the runtime reader synthesises a root plus one child bone per mesh and
+    // leaves XNA's own lighting defaults alone. The compiled form has to reproduce both, and
+    // whether it does is not something the corpus can answer.
+    ScratchDir dir("v1");
+
+    // Two triangles' worth of stride-32 vertices (position, normal, uv) and their indices.
+    std::vector<std::uint8_t> vertexBytes(32u * 6u);
+    for (std::size_t i = 0; i < vertexBytes.size(); ++i)
+    {
+        vertexBytes[i] = static_cast<std::uint8_t>((i * 7u + 3u) & 0xFFu);
+    }
+    std::vector<std::uint8_t> indexBytes(2u * 6u);
+    for (std::uint16_t i = 0; i < 6u; ++i)
+    {
+        indexBytes[i * 2u] = static_cast<std::uint8_t>(i);
+        indexBytes[i * 2u + 1u] = 0u;
+    }
+    WriteBytes(dir.path() / "hand_verts.bin", vertexBytes);
+    WriteBytes(dir.path() / "hand_idx.bin", indexBytes);
+
+    {
+        std::ofstream cnj(dir.path() / "hand.cnj", std::ios::binary);
+        cnj << R"({
+  "cnjVersion": 1,
+  "type": "Model",
+  "meshes": [
+    { "name": "Hull", "vertices": "hand_verts.bin", "indices": "hand_idx.bin",
+      "vertexStride": 32, "effect": "BasicEffect", "diffuseColor": [0.25, 0.5, 0.75],
+      "alpha": 0.5 }
+  ]
+})";
+    }
+
+    GraphicsDevice device;
+    ContentManager cnjManager(nullptr, dir.path().string());
+    cnjManager.setGraphicsDevice(device);
+    const Model fromCnj = cnjManager.Load<Model>("hand");
+
+    // The shape this test exists for: a synthesised root plus one bone per mesh.
+    ASSERT_EQ(fromCnj.getBonesProperty().getCountProperty(), 2);
+    EXPECT_EQ(fromCnj.getBonesProperty()[0]->getNameProperty(), "Root");
+    EXPECT_EQ(fromCnj.getBonesProperty()[1]->getNameProperty(), "Hull");
+
+    const CnjToCnbResult compiled = CompileCnjToCnb((dir.path() / "hand.cnj").string());
+    ASSERT_EQ(compiled.absorbedFiles.size(), 3u);
+    EXPECT_TRUE(compiled.externalReferences.empty());
+
+    ScratchDir cnbDir("v1_cnb");
+    WriteBytes(cnbDir.path() / "hand.cnb", compiled.bytes);
+    ContentManager cnbManager(nullptr, cnbDir.path().string());
+    cnbManager.setGraphicsDevice(device);
+    const Model fromCnb = cnbManager.Load<Model>("hand");
+
+    ExpectModelsEquivalent(fromCnj, fromCnb);
+}

@@ -521,7 +521,18 @@ namespace CNA::Content::Cnb
         {
             // The runtime reader synthesises a single "Root" bone for a document with no "bones"
             // array at all; the compiled form carries that bone explicitly so both paths agree.
-            result.model.bones.push_back(CnbModelBone{"Root", -1, {}});
+            //
+            // Default-constructed rather than brace-initialised: CnbModelBone's transform member
+            // has an identity default-member-initialiser, and an aggregate initialiser that
+            // supplies `{}` for that member SUPPRESSES it and value-initialises the matrix to all
+            // zeros instead. That is not a hypothetical -- it is the bug
+            // AHandWrittenHierarchylessModelLoadsIdenticallyFromCnjAndFromCnb caught, where a
+            // synthesised bone reached the runtime with a zero matrix while the .cnj path gave it
+            // ModelBone's own identity default.
+            CnbModelBone root;
+            root.name = "Root";
+            root.parent = -1;
+            result.model.bones.push_back(std::move(root));
         }
         result.model.hasBoneHierarchy = result.model.bones.size() > 1u;
         // cnjVersion 2 is what gltf_to_cnj writes, and it is the version whose materials were
@@ -957,7 +968,10 @@ namespace CNA::Content::Cnb
                 // the root named after the mesh. The compiled form carries those bones explicitly
                 // so the decoded model needs no such synthesis step.
                 const auto boneIndex = static_cast<std::int32_t>(result.model.bones.size());
-                result.model.bones.push_back(CnbModelBone{mesh.name, 0, {}});
+                CnbModelBone meshBone;          // see the note above on why this is not braced
+                meshBone.name = mesh.name;
+                meshBone.parent = 0;
+                result.model.bones.push_back(std::move(meshBone));
                 mesh.parentBone = boneIndex;
             }
 

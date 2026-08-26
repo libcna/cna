@@ -548,7 +548,7 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 |---|---|---|---|
 | CNBF-090 | `docs/cnb-format.md` — authoritative spec incl. annotated hex | ✅ | pinned by `CnbSpecConformanceTests.cpp`, verified to fail on a doc-only edit |
 | CNBF-091 | file-count / byte-size / open-count measurement, CNJ vs CNB | ✅ | §8 |
-| CNBF-092 | final architectural review pass | ✅ | §10; found and fixed three real issues |
+| CNBF-092 | final architectural review pass | ✅ | §10; found and fixed four real issues, one of them a compiler defect |
 
 ### Out of scope for v1 (recorded, not started)
 
@@ -626,7 +626,7 @@ against each.
 |---|---|
 | every container invariant in §4 has a dedicated negative test | ✅ 63 container tests, one per invariant |
 | at least three real CNA asset types implemented end to end | ✅ `Curve`, `AnimationClip`, `Model` |
-| a real (not synthetic) asset compiles and loads equivalently | ✅ 15 real corpus fixtures, `CNBF-075` |
+| a real (not synthetic) asset compiles and loads equivalently | ✅ 15 real corpus fixtures plus a hand-written hierarchy-less one, `CNBF-075` |
 | writer output is byte-deterministic in-process and cross-process | ✅ `CNBF-033`, `CNBF-064` |
 | documentation matches the bytes the implementation writes | ✅ `CnbSpecConformanceTests.cpp`, verified to fail on a doc-only edit |
 | container fuzzing finds no crash | ✅ 17 000 mutated inputs + 3 000 noise inputs, clean under ASan+UBSan |
@@ -648,8 +648,9 @@ fails two of the eight conformance tests by name.
 
 ## 10. Final review (`CNBF-092`)
 
-Worked through against the implementation, not from memory. Three real issues were found and
-fixed rather than written down.
+Worked through against the implementation, not from memory. Four real issues were found and
+fixed rather than written down — one of them a defect in the compiler that no existing test could
+have caught.
 
 | question | answer |
 |---|---|
@@ -681,7 +682,17 @@ fixed rather than written down.
    read — turning a silently-ignored bad path into a load failure. Real, narrow, and not this
    task's call to make. The helper now takes a resolver callback and each field is resolved at
    exactly the point the original code resolved it.
-3. **An overstated claim in the specification.** §12 said *every* `count × elementSize` computation
+3. **A real defect in the compiler, found by closing a coverage gap the review noticed.** Every
+   fixture `cna_tool_gltf_to_cnj` produces is `cnjVersion` 2 with an explicit `bones` array, so the
+   equivalence sweep never exercised the other shape a Model `.cnj` can have: a hand-written
+   version-1 document with no hierarchy, where the runtime reader synthesises a root plus one child
+   bone per mesh. A test for that shape was added — and it failed. `CnbModelBone{name, parent, {}}`
+   is aggregate initialisation, and supplying `{}` for the transform member **suppresses** that
+   member's identity default-member-initialiser and value-initialises the matrix to all zeros
+   instead. Every synthesised bone therefore reached the runtime with a zero transform where the
+   `.cnj` path gave it `ModelBone`'s identity. Fixed at both construction sites, with the reason
+   written into the source so the pattern is not copied.
+4. **An overstated claim in the specification.** §12 said *every* `count × elementSize` computation
    goes through `CheckedMultiply`; the constant-stride ones do not, because they cannot overflow.
    Corrected to say what is actually true and why.
 
