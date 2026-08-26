@@ -8,6 +8,19 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     }
 
+    void EffectMaterial::RetainParameterTextureEXT(std::shared_ptr<Texture> texture)
+    {
+        if (texture != nullptr)
+        {
+            retainedParameterTextures_.push_back(std::move(texture));
+        }
+    }
+
+    std::size_t EffectMaterial::GetRetainedParameterTextureCountEXT() const
+    {
+        return retainedParameterTextures_.size();
+    }
+
     const std::string& EffectMaterial::GetTypeName() const
     {
         static const std::string name =

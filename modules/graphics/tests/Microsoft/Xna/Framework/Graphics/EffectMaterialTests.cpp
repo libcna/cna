@@ -16,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
@@ -148,4 +149,41 @@ TEST(EffectMaterialTest, TheCloneIsIndependentOfItsSource)
 
     EXPECT_NE(&a.getParametersProperty()[0], &source.getParametersProperty()[0]);
     EXPECT_NE(&a.getParametersProperty()[0], &b.getParametersProperty()[0]);
+}
+
+// SAMPLE-032: EffectParameter stores a raw Texture*, so a material whose parameters name
+// textures has to own them. The XNB reader loads them into a value table it then discards,
+// which left every textured material dereferencing freed memory at its first draw -- a segfault
+// inside dynamic_cast, reached from Effect::SyncCompiledParameters. Ownership is asserted here
+// rather than inferred from a read through a pointer that may merely happen to still be
+// readable.
+TEST(EffectMaterialTest, RetainedParameterTexturesOutliveTheCallersHandle)
+{
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "renderer does not support compiled effects";
+
+    const auto bytes = LoadCompiledEffectFixture();
+    ASSERT_FALSE(bytes.empty());
+    CompiledSourceEffect source(gd, bytes);
+    EffectMaterial material(source);
+    EXPECT_EQ(material.GetRetainedParameterTextureCountEXT(), 0u);
+
+    Microsoft::Xna::Framework::Graphics::Texture* raw = nullptr;
+    std::weak_ptr<Microsoft::Xna::Framework::Graphics::Texture> observer;
+    {
+        auto texture = std::make_shared<Microsoft::Xna::Framework::Graphics::Texture2D>(gd, 2, 2);
+        raw = texture.get();
+        observer = std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::Texture>(texture);
+        material.RetainParameterTextureEXT(texture);
+    }
+
+    EXPECT_EQ(material.GetRetainedParameterTextureCountEXT(), 1u);
+    EXPECT_FALSE(observer.expired())
+        << "the material must keep the texture alive after the loader's handle is gone";
+    EXPECT_EQ(observer.lock().get(), raw);
+
+    // A null retains nothing rather than growing the list with an unusable entry.
+    material.RetainParameterTextureEXT(nullptr);
+    EXPECT_EQ(material.GetRetainedParameterTextureCountEXT(), 1u);
 }
