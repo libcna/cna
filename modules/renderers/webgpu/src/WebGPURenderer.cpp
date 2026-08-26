@@ -5589,7 +5589,21 @@ struct VSOut {
         // capture the Viewport into the SpriteCommand so RenderSprites can set the rasterizer viewport
         // to it per draw. Only a genuine sub-region (differs from the target extent) overrides -- the
         // default full-target viewport keeps the existing letterbox/1:1 NDC path byte-identical.
+        // WEBGPU-141 (A): a genuine custom Viewport (REMED-GFX-072's feature) is one the caller set to
+        // a proper sub-region of the render target, in the target's own pixel space -- so it must be
+        // CONTAINED within [0,targetWidth] x [0,targetHeight]. Comparing only "differs from the target
+        // extent", as this once did (REMED-GFX-072), mis-fired for a letterboxed backbuffer: the
+        // default GraphicsDevice.Viewport there is a LOGICAL rectangle that can exceed the physical
+        // surface (e.g. 107x64 over a 64x64 backbuffer), so every ordinary sprite was squished through
+        // the viewport-local path and its sampled UV shifted -- the WebGPU_Clear_Readback Wrap/Mirror
+        // regression. Requiring containment keeps the genuine sub-Viewport case (which fits inside the
+        // target) while excluding that spurious oversized default, restoring the pre-GFX-072 NDC path
+        // for the full-target backbuffer.
+        const bool viewportIsContainedSubRegion =
+            viewportX_ >= 0 && viewportY_ >= 0 &&
+            viewportX_ + viewportW_ <= targetWidth && viewportY_ + viewportH_ <= targetHeight;
         const bool customViewport = viewportSet_ && viewportW_ > 0 && viewportH_ > 0 &&
+            viewportIsContainedSubRegion &&
             (viewportX_ != 0 || viewportY_ != 0 || viewportW_ != targetWidth || viewportH_ != targetHeight);
 
         const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
