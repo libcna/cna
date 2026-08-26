@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/engine_layer.h"
+#include "CNA/C/matrix.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRenderTargetDetail.hpp"
+#include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/GraphicsImageAccess.hpp"
@@ -14,10 +16,17 @@
 #include <string>
 
 #ifdef CNA_CNAEXT
+#include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/DepthEncoding.hpp"
+#include "CNA/Graphics/EffectPass.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
+#include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/GpuTimer.hpp"
+#include "CNA/Graphics/MaterialBinding.hpp"
+#include "CNA/Graphics/PbrMaterial.hpp"
+#include "CNA/Graphics/PostProcessContext.hpp"
+#include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
 #include "CNA/Graphics/ScopedRenderTarget.hpp"
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
@@ -26,6 +35,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <limits>
@@ -136,6 +147,9 @@ static_assert(
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::EffectResource;
+using CNA::C::Detail::ValidateCanonicalBool;
+using CNA::C::Detail::ToNativeSamplerState;
 using CNA::C::Detail::CreateBorrowedEffect;
 using CNA::C::Detail::CreateBorrowedRenderTarget2D;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -394,6 +408,181 @@ template<typename TResource>
     return CNA_RESULT_SUCCESS;
 }
 
+
+[[nodiscard]] Microsoft::Xna::Framework::Matrix ToNativeMatrix(const CNA_Matrix& value) noexcept
+{
+    Microsoft::Xna::Framework::Matrix result;
+    result.M11 = value.m11; result.M12 = value.m12; result.M13 = value.m13; result.M14 = value.m14;
+    result.M21 = value.m21; result.M22 = value.m22; result.M23 = value.m23; result.M24 = value.m24;
+    result.M31 = value.m31; result.M32 = value.m32; result.M33 = value.m33; result.M34 = value.m34;
+    result.M41 = value.m41; result.M42 = value.m42; result.M43 = value.m43; result.M44 = value.m44;
+    return result;
+}
+
+// --- CBIND-084C: passes and material binding -------------------------------------------------
+
+struct FullscreenPassResource final {
+    std::shared_ptr<Ext::FullscreenPass> value;
+    CNA_Handle parentGame;
+};
+
+// One resource for every concrete pass, because what crosses this ABI is the abstract contract's
+// operations rather than the class implementing them. `effectPass` is non-null exactly when the
+// pass is an EffectPass, which is what lets the two effect-only routes refuse a BlitPass by
+// argument rather than by handle kind.
+//
+// DEVIATION, deliberate: EffectPass's unique_ptr constructor transfers ownership of the effect.
+// A C handle's object lives in the registry as a shared_ptr, and there is no way back to a
+// unique_ptr, so `cna_post_process_effect_pass_create_owning` reproduces the *observable* contract instead of
+// the C++ mechanism: it consumes the caller's handle, retains the effect resource here, and
+// releases it when the pass is destroyed. Destroying the pass therefore destroys the effect, which
+// is exactly what the canonical constructor promises.
+struct PostProcessPassResource final {
+    std::shared_ptr<Ext::PostProcessPass> value;
+    Ext::EffectPass* effectPass;
+    CNA_Handle parentGame;
+    // Kept alive so a borrowed effect cannot dangle behind the pass that draws through it.
+    std::shared_ptr<void> effectRetention;
+    // Set only by the owning constructor: released with the pass.
+    CNA_Handle ownedEffect;
+    // CountedBorrow's contract: a borrowed effect handle keeps this non-zero, and destroy refuses
+    // while it is, so a handed-out effect can never outlive the pass it was borrowed from.
+    uint64_t activeBorrowCount = 0U;
+};
+
+[[nodiscard]] CNA_Result GetEffectForPass(
+    const CNA_Handle handle,
+    std::shared_ptr<EffectResource>* const outEffect)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::Effect, outEffect);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The Effect handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result ResolveTexture2DArgument(
+    const CNA_Handle handle,
+    const char* const what,
+    Microsoft::Xna::Framework::Graphics::Texture2D** const outTexture,
+    std::shared_ptr<Texture2DResource>* const outRetention)
+{
+    *outTexture = nullptr;
+    if (handle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+    if (const CNA_Result result = GetOwnedTexture2D(handle, outRetention);
+        result != CNA_RESULT_SUCCESS) {
+        (void)what;
+        return result;
+    }
+    *outTexture = (*outRetention)->value.get();
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ResolveRenderTarget2DArgument(
+    const CNA_Handle handle,
+    Microsoft::Xna::Framework::Graphics::RenderTarget2D** const outTarget,
+    std::shared_ptr<Texture2DResource>* const outRetention)
+{
+    *outTarget = nullptr;
+    if (handle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+    if (const CNA_Result result = GetOwnedTexture2D(handle, outRetention);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    ObjectKind kind = ObjectKind::Unknown;
+    if (GetRuntimeHandles().GetKind(handle, &kind) != CNA_RESULT_SUCCESS ||
+        kind != ObjectKind::RenderTarget2D) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The destination handle is not a RenderTarget2D.");
+    }
+    *outTarget = static_cast<Microsoft::Xna::Framework::Graphics::RenderTarget2D*>(
+        (*outRetention)->value.get());
+    return CNA_RESULT_SUCCESS;
+}
+
+// Every handle the context names is resolved and retained for the duration of one apply, so a
+// pass can never read a texture the caller released between filling the struct and applying it.
+struct ResolvedPostProcessContext final {
+    Ext::PostProcessContext value;
+    std::shared_ptr<Texture2DResource> sourceRetention;
+    std::shared_ptr<Texture2DResource> depthRetention;
+    std::shared_ptr<Texture2DResource> normalsRetention;
+    std::shared_ptr<Texture2DResource> velocityRetention;
+    std::shared_ptr<Texture2DResource> destinationRetention;
+};
+
+[[nodiscard]] CNA_Result ResolvePostProcessContext(
+    const CNA_PostProcessContext& context,
+    ResolvedPostProcessContext* const out)
+{
+    if (context.struct_size != static_cast<uint32_t>(sizeof(CNA_PostProcessContext)) ||
+        context.struct_version != UINT32_C(1)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The post-process context was not initialized by cna_post_process_context_init.");
+    }
+    if (const CNA_Result result =
+            ValidateCanonicalBool(context.has_previous_frame, "has_previous_frame");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveTexture2DArgument(
+            context.source, "source", &out->value.source, &out->sourceRetention);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveTexture2DArgument(
+            context.source_depth, "source_depth", &out->value.sourceDepth, &out->depthRetention);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveTexture2DArgument(
+            context.source_normals,
+            "source_normals",
+            &out->value.sourceNormals,
+            &out->normalsRetention);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveTexture2DArgument(
+            context.source_velocity,
+            "source_velocity",
+            &out->value.sourceVelocity,
+            &out->velocityRetention);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ResolveRenderTarget2DArgument(
+            context.destination, &out->value.destination, &out->destinationRetention);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    out->value.width = static_cast<int>(context.width);
+    out->value.height = static_cast<int>(context.height);
+    out->value.elapsedSeconds = context.elapsed_seconds;
+    out->value.nearPlane = context.near_plane;
+    out->value.farPlane = context.far_plane;
+    out->value.projection = ToNativeMatrix(context.projection);
+    out->value.inverseProjection = ToNativeMatrix(context.inverse_projection);
+    out->value.inverseView = ToNativeMatrix(context.inverse_view);
+    out->value.previousViewProjection = ToNativeMatrix(context.previous_view_projection);
+    out->value.hasPreviousFrame = context.has_previous_frame == CNA_TRUE;
+    // CBIND-088 owns RenderPipelineSettings; until its C form is the whole canonical type, a
+    // pass applied from C gets no settings and uses its own defaults, which is what null means.
+    out->value.settings = nullptr;
+    return CNA_RESULT_SUCCESS;
+}
+
 #endif // CNA_CNAEXT
 
 } // namespace
@@ -432,6 +621,38 @@ CNA_Result cna_graphics_memory_barrier_has(
     CNA_Bool* const outContains)
 {
     return StoreValue(outContains, static_cast<CNA_Bool>((mask & bit) == bit ? CNA_TRUE : CNA_FALSE));
+}
+
+CNA_Result cna_post_process_context_init(CNA_PostProcessContext* const outContext)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContext == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The post-process context output is null.");
+        }
+        CNA_PostProcessContext defaults;
+        std::memset(&defaults, 0, sizeof(defaults));
+        defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_PostProcessContext));
+        defaults.struct_version = UINT32_C(1);
+        defaults.source = CNA_INVALID_HANDLE;
+        defaults.source_depth = CNA_INVALID_HANDLE;
+        defaults.source_normals = CNA_INVALID_HANDLE;
+        defaults.source_velocity = CNA_INVALID_HANDLE;
+        defaults.destination = CNA_INVALID_HANDLE;
+        defaults.has_previous_frame = CNA_FALSE;
+        // The canonical struct default-initializes its matrices, which for Matrix is the identity.
+        const CNA_Result identityResult = cna_matrix_get_identity(&defaults.projection);
+        if (identityResult != CNA_RESULT_SUCCESS) {
+            return identityResult;
+        }
+        defaults.inverse_projection = defaults.projection;
+        defaults.inverse_view = defaults.projection;
+        defaults.previous_view_projection = defaults.projection;
+        *outContext = defaults;
+        return CNA_RESULT_SUCCESS;
+    });
 }
 
 #ifndef CNA_CNAEXT
@@ -923,6 +1144,145 @@ CNA_Result cna_scoped_render_target_end(const CNA_ScopedRenderTargetHandle scope
     (void)scope;
     return ExtensionUnavailable();
 }
+
+CNA_Result cna_fullscreen_pass_create(
+    const CNA_Handle graphicsDevice, CNA_FullscreenPassHandle* const outPass)
+{
+    (void)graphicsDevice;
+    if (outPass != nullptr) { *outPass = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fullscreen_pass_draw(
+    const CNA_FullscreenPassHandle pass, const CNA_Handle source, const CNA_Handle destination,
+    const CNA_EffectHandle effect, const int32_t width, const int32_t height,
+    const CNA_SamplerState* const sampler)
+{
+    (void)pass; (void)source; (void)destination; (void)effect; (void)width; (void)height;
+    (void)sampler;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fullscreen_pass_draw_over_current_target(
+    const CNA_FullscreenPassHandle pass, const CNA_Handle source, const CNA_EffectHandle effect,
+    const int32_t width, const int32_t height, const CNA_SamplerState* const sampler)
+{
+    (void)pass; (void)source; (void)effect; (void)width; (void)height; (void)sampler;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fullscreen_pass_destroy(const CNA_FullscreenPassHandle pass)
+{
+    (void)pass;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_blit_pass_create(
+    const CNA_Handle graphicsDevice, CNA_PostProcessPassHandle* const outPass)
+{
+    (void)graphicsDevice;
+    if (outPass != nullptr) { *outPass = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_effect_pass_create(
+    const CNA_Handle graphicsDevice, const CNA_EffectHandle effect, const CNA_StringView name,
+    CNA_PostProcessPassHandle* const outPass)
+{
+    (void)graphicsDevice; (void)effect; (void)name;
+    if (outPass != nullptr) { *outPass = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_effect_pass_create_owning(
+    const CNA_Handle graphicsDevice, const CNA_EffectHandle effect, const CNA_StringView name,
+    CNA_PostProcessPassHandle* const outPass)
+{
+    (void)graphicsDevice; (void)effect; (void)name;
+    if (outPass != nullptr) { *outPass = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_effect_pass_get_effect(
+    const CNA_PostProcessPassHandle pass, CNA_EffectHandle* const outEffect)
+{
+    (void)pass;
+    if (outEffect != nullptr) { *outEffect = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_effect_pass_set_effect(
+    const CNA_PostProcessPassHandle pass, const CNA_EffectHandle effect)
+{
+    (void)pass; (void)effect;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_pass_apply(
+    const CNA_PostProcessPassHandle pass, const CNA_PostProcessContext* const context)
+{
+    (void)pass; (void)context;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_pass_copy_name(
+    const CNA_PostProcessPassHandle pass, char* const destination, const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    (void)pass; (void)destination; (void)capacity;
+    if (outBytes != nullptr) { *outBytes = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_pass_is_supported(
+    const CNA_PostProcessPassHandle pass, const CNA_Handle graphicsDevice,
+    CNA_Bool* const outSupported)
+{
+    (void)pass; (void)graphicsDevice; (void)outSupported;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_pass_destroy(const CNA_PostProcessPassHandle pass)
+{
+    (void)pass;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_effect_apply_material(
+    const CNA_EffectHandle effect, const CNA_PbrMaterialEXT* const material)
+{
+    (void)effect; (void)material;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skinned_pbr_effect_apply_material(
+    const CNA_EffectHandle effect, const CNA_PbrMaterialEXT* const material)
+{
+    (void)effect; (void)material;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_effect_extract_material(
+    const CNA_EffectHandle effect, CNA_PbrMaterialEXT* const outMaterial)
+{
+    (void)effect; (void)outMaterial;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skinned_pbr_effect_extract_material(
+    const CNA_EffectHandle effect, CNA_PbrMaterialEXT* const outMaterial)
+{
+    (void)effect; (void)outMaterial;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_apply_state(
+    const CNA_PbrMaterialEXT* const material, const CNA_Handle graphicsDevice)
+{
+    (void)material; (void)graphicsDevice;
+    return ExtensionUnavailable();
+}
+
 
 #else // CNA_CNAEXT
 
@@ -2314,6 +2674,757 @@ CNA_Result cna_scoped_render_target_end(
             scopeStacks.erase(found);
         }
         RemoveOwnedGraphicsResourceFor(scope->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
+using Microsoft::Xna::Framework::Graphics::PbrEffect;
+using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
+using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
+
+constexpr int kPbrSlotCount = Ext::kPbrTextureSlotCount;
+
+[[nodiscard]] CNA_Result GetPostProcessPass(
+    const CNA_Handle handle, std::shared_ptr<PostProcessPassResource>* const outPass)
+{
+    return GetEngineResource(handle, ObjectKind::PostProcessPass, "PostProcessPass", outPass);
+}
+
+[[nodiscard]] CNA_Result GetEffectPass(
+    const CNA_Handle handle, std::shared_ptr<PostProcessPassResource>* const outPass)
+{
+    if (const CNA_Result result = GetPostProcessPass(handle, outPass);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if ((*outPass)->effectPass == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "This post-process pass is not an effect pass.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CreatePassHandle(
+    std::shared_ptr<Ext::PostProcessPass> native,
+    Ext::EffectPass* const effectPass,
+    const CNA_Handle parentGame,
+    std::shared_ptr<void> effectRetention,
+    const CNA_Handle ownedEffect,
+    CNA_PostProcessPassHandle* const outPass)
+{
+    const auto resource = std::make_shared<PostProcessPassResource>(PostProcessPassResource{
+        std::move(native), effectPass, parentGame, std::move(effectRetention), ownedEffect, 0U});
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::PostProcessPass, resource, outPass);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned post-process pass handle could not be created.");
+    }
+    AddOwnedGraphicsResourceFor(parentGame);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ToNativePbrMaterial(
+    const CNA_PbrMaterialEXT& value, Ext::PbrMaterial* const out)
+{
+    if (value.struct_size != static_cast<uint32_t>(sizeof(CNA_PbrMaterialEXT)) ||
+        value.struct_version != UINT32_C(1)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The material was not initialized by cna_pbr_material_ext_init.");
+    }
+    if (value.alpha_mode > UINT32_C(2)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The alpha mode is not a defined CNA_ALPHA_MODE_EXT_* value.");
+    }
+    for (const CNA_Bool flag : {value.double_sided, value.base_color_texture_srgb,
+                                value.emissive_texture_srgb, value.specular_color_texture_srgb,
+                                value.output_encoded_to_srgb}) {
+        if (const CNA_Result result = ValidateCanonicalBool(flag, "material flag");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+    }
+
+    // Textures are borrowed: a material never owns the Texture2D a caller hands it, which is the
+    // rule the effects family already settled. Each slot is resolved through the registry so a
+    // stale handle is refused here rather than dereferenced inside the engine layer.
+    struct SlotBinding {
+        CNA_Handle handle;
+        void (Ext::PbrMaterial::*setter)(Microsoft::Xna::Framework::Graphics::Texture2D*);
+    };
+    const SlotBinding slots[] = {
+        {value.albedo_texture, &Ext::PbrMaterial::setAlbedoTexture},
+        {value.normal_texture, &Ext::PbrMaterial::setNormalTexture},
+        {value.metallic_roughness_texture, &Ext::PbrMaterial::setMetallicRoughnessTexture},
+        {value.ambient_occlusion_texture, &Ext::PbrMaterial::setAmbientOcclusionTexture},
+        {value.emissive_texture, &Ext::PbrMaterial::setEmissiveTexture},
+        {value.specular_texture, &Ext::PbrMaterial::setSpecularTexture},
+        {value.specular_color_texture, &Ext::PbrMaterial::setSpecularColorTexture},
+    };
+    for (const SlotBinding& slot : slots) {
+        Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+        std::shared_ptr<Texture2DResource> retention;
+        if (const CNA_Result result =
+                ResolveTexture2DArgument(slot.handle, "material texture", &texture, &retention);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        (out->*slot.setter)(texture);
+    }
+
+    out->setAlbedoColor(Color(
+        value.albedo_color.r, value.albedo_color.g, value.albedo_color.b, value.albedo_color.a));
+    out->setEmissiveFactor(
+        Vector3(value.emissive_factor.x, value.emissive_factor.y, value.emissive_factor.z));
+    out->setSpecularColorFactor(Vector3(
+        value.specular_color_factor.x,
+        value.specular_color_factor.y,
+        value.specular_color_factor.z));
+    out->setMetallicFactor(value.metallic_factor);
+    out->setRoughnessFactor(value.roughness_factor);
+    out->setNormalScale(value.normal_scale);
+    out->setOcclusionStrength(value.occlusion_strength);
+    out->setIor(value.ior);
+    out->setSpecularFactor(value.specular_factor);
+    out->setAlphaCutoff(value.alpha_cutoff);
+    out->setAlphaMode(static_cast<AlphaModeEXT>(value.alpha_mode));
+    out->setDoubleSided(value.double_sided == CNA_TRUE);
+    out->setBaseColorTextureSrgb(value.base_color_texture_srgb == CNA_TRUE);
+    out->setEmissiveTextureSrgb(value.emissive_texture_srgb == CNA_TRUE);
+    out->setSpecularColorTextureSrgb(value.specular_color_texture_srgb == CNA_TRUE);
+    out->setOutputEncodedToSrgb(value.output_encoded_to_srgb == CNA_TRUE);
+    for (int slot = 0; slot < kPbrSlotCount; ++slot) {
+        const auto which = static_cast<Ext::PbrTextureSlot>(slot);
+        out->setTextureCoordinateSet(
+            which, static_cast<int>(value.texture_coordinate_sets[slot]));
+        TextureTransformEXT transform;
+        transform.Offset = {value.texture_transforms[slot].offset.x,
+                            value.texture_transforms[slot].offset.y};
+        transform.Scale = {value.texture_transforms[slot].scale.x,
+                           value.texture_transforms[slot].scale.y};
+        transform.Rotation = value.texture_transforms[slot].rotation;
+        out->setTextureTransform(which, transform);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// The textures deliberately do not come back. A handle is the registry's name for an object, and
+// the engine layer stores a raw Texture2D*; inventing a handle for a pointer the caller may never
+// have owned would hand back a name for something this ABI does not track. Every non-texture field
+// round-trips, and the slots read as CNA_INVALID_HANDLE.
+void FromNativePbrMaterial(const Ext::PbrMaterial& value, CNA_PbrMaterialEXT* const out)
+{
+    out->struct_size = static_cast<uint32_t>(sizeof(CNA_PbrMaterialEXT));
+    out->struct_version = UINT32_C(1);
+    out->albedo_texture = CNA_INVALID_HANDLE;
+    out->normal_texture = CNA_INVALID_HANDLE;
+    out->metallic_roughness_texture = CNA_INVALID_HANDLE;
+    out->ambient_occlusion_texture = CNA_INVALID_HANDLE;
+    out->emissive_texture = CNA_INVALID_HANDLE;
+    out->specular_texture = CNA_INVALID_HANDLE;
+    out->specular_color_texture = CNA_INVALID_HANDLE;
+
+    const Color albedo = value.getAlbedoColor();
+    out->albedo_color.r = albedo.getRProperty();
+    out->albedo_color.g = albedo.getGProperty();
+    out->albedo_color.b = albedo.getBProperty();
+    out->albedo_color.a = albedo.getAProperty();
+    const Vector3 emissive = value.getEmissiveFactor();
+    out->emissive_factor.x = emissive.X;
+    out->emissive_factor.y = emissive.Y;
+    out->emissive_factor.z = emissive.Z;
+    const Vector3 specularColor = value.getSpecularColorFactor();
+    out->specular_color_factor.x = specularColor.X;
+    out->specular_color_factor.y = specularColor.Y;
+    out->specular_color_factor.z = specularColor.Z;
+    out->metallic_factor = value.getMetallicFactor();
+    out->roughness_factor = value.getRoughnessFactor();
+    out->normal_scale = value.getNormalScale();
+    out->occlusion_strength = value.getOcclusionStrength();
+    out->ior = value.getIor();
+    out->specular_factor = value.getSpecularFactor();
+    out->alpha_cutoff = value.getAlphaCutoff();
+    out->alpha_mode = static_cast<CNA_AlphaModeEXT>(value.getAlphaMode());
+    out->double_sided = value.isDoubleSided() ? CNA_TRUE : CNA_FALSE;
+    out->base_color_texture_srgb = value.isBaseColorTextureSrgb() ? CNA_TRUE : CNA_FALSE;
+    out->emissive_texture_srgb = value.isEmissiveTextureSrgb() ? CNA_TRUE : CNA_FALSE;
+    out->specular_color_texture_srgb = value.isSpecularColorTextureSrgb() ? CNA_TRUE : CNA_FALSE;
+    out->output_encoded_to_srgb = value.isOutputEncodedToSrgb() ? CNA_TRUE : CNA_FALSE;
+    out->reserved[0] = 0U; out->reserved[1] = 0U; out->reserved[2] = 0U;
+    for (int slot = 0; slot < kPbrSlotCount; ++slot) {
+        const auto which = static_cast<Ext::PbrTextureSlot>(slot);
+        out->texture_coordinate_sets[slot] =
+            static_cast<int32_t>(value.getTextureCoordinateSet(which));
+        const TextureTransformEXT transform = value.getTextureTransform(which);
+        out->texture_transforms[slot].struct_size =
+            static_cast<uint32_t>(sizeof(CNA_TextureTransformEXT));
+        out->texture_transforms[slot].struct_version = UINT32_C(1);
+        out->texture_transforms[slot].offset.x = transform.Offset.X;
+        out->texture_transforms[slot].offset.y = transform.Offset.Y;
+        out->texture_transforms[slot].scale.x = transform.Scale.X;
+        out->texture_transforms[slot].scale.y = transform.Scale.Y;
+        out->texture_transforms[slot].rotation = transform.Rotation;
+    }
+}
+
+template<typename TEffect>
+[[nodiscard]] CNA_Result WithTypedEffect(
+    const CNA_EffectHandle handle,
+    const char* const typeName,
+    const std::function<CNA_Result(TEffect&)>& body)
+{
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffectForPass(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const typed = dynamic_cast<TEffect*>(effect->value.get());
+    if (typed == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            std::string("The effect is not a ") + typeName + ".");
+    }
+    return body(*typed);
+}
+
+} // namespace
+
+CNA_Result cna_fullscreen_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_FullscreenPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The full-screen pass output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::FullscreenPass>(*graphicsDevice->value);
+        const auto resource = std::make_shared<FullscreenPassResource>(
+            FullscreenPassResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::FullscreenPass, resource, outPass);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned full-screen pass handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result FullscreenDraw(
+    const CNA_FullscreenPassHandle passHandle,
+    const CNA_Handle sourceHandle,
+    const CNA_Handle destinationHandle,
+    const CNA_EffectHandle effectHandle,
+    const int32_t width,
+    const int32_t height,
+    const CNA_SamplerState* const sampler,
+    const bool overCurrentTarget)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<FullscreenPassResource> pass;
+        if (const CNA_Result result = GetEngineResource(
+                passHandle, ObjectKind::FullscreenPass, "FullscreenPass", &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Graphics::Texture2D* source = nullptr;
+        std::shared_ptr<Texture2DResource> sourceRetention;
+        if (const CNA_Result result =
+                ResolveTexture2DArgument(sourceHandle, "source", &source, &sourceRetention);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Graphics::RenderTarget2D* destination = nullptr;
+        std::shared_ptr<Texture2DResource> destinationRetention;
+        if (!overCurrentTarget) {
+            if (const CNA_Result result = ResolveRenderTarget2DArgument(
+                    destinationHandle, &destination, &destinationRetention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        Microsoft::Xna::Framework::Graphics::Effect* effect = nullptr;
+        std::shared_ptr<EffectResource> effectRetention;
+        if (effectHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetEffectForPass(effectHandle, &effectRetention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            effect = effectRetention->value.get();
+        }
+        Microsoft::Xna::Framework::Graphics::SamplerState nativeSampler;
+        Microsoft::Xna::Framework::Graphics::SamplerState* samplerArgument = nullptr;
+        if (sampler != nullptr) {
+            if (const CNA_Result result = ToNativeSamplerState(sampler, &nativeSampler);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            samplerArgument = &nativeSampler;
+        }
+        if (overCurrentTarget) {
+            pass->value->drawOverCurrentTarget(
+                source, effect, static_cast<int>(width), static_cast<int>(height), samplerArgument);
+        } else {
+            pass->value->draw(
+                source,
+                destination,
+                effect,
+                static_cast<int>(width),
+                static_cast<int>(height),
+                samplerArgument);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+} // namespace
+
+CNA_Result cna_fullscreen_pass_draw(
+    const CNA_FullscreenPassHandle pass,
+    const CNA_Handle source,
+    const CNA_Handle destination,
+    const CNA_EffectHandle effect,
+    const int32_t width,
+    const int32_t height,
+    const CNA_SamplerState* const sampler)
+{
+    return FullscreenDraw(pass, source, destination, effect, width, height, sampler, false);
+}
+
+CNA_Result cna_fullscreen_pass_draw_over_current_target(
+    const CNA_FullscreenPassHandle pass,
+    const CNA_Handle source,
+    const CNA_EffectHandle effect,
+    const int32_t width,
+    const int32_t height,
+    const CNA_SamplerState* const sampler)
+{
+    return FullscreenDraw(
+        pass, source, CNA_INVALID_HANDLE, effect, width, height, sampler, true);
+}
+
+CNA_Result cna_fullscreen_pass_destroy(const CNA_FullscreenPassHandle passHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<FullscreenPassResource> pass;
+        if (const CNA_Result result = GetEngineResource(
+                passHandle, ObjectKind::FullscreenPass, "FullscreenPass", &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(passHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned full-screen pass handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(pass->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_blit_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The blit-pass output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::BlitPass>(*graphicsDevice->value);
+        return CreatePassHandle(
+            std::move(native),
+            nullptr,
+            graphicsDevice->parentGame,
+            nullptr,
+            CNA_INVALID_HANDLE,
+            outPass);
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result CreateEffectPass(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const bool takeOwnership,
+    CNA_PostProcessPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The effect-pass output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::string nativeName;
+        if (const CNA_Result result = CopyStringView(name, true, &nativeName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<EffectResource> effect;
+        if (effectHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetEffectForPass(effectHandle, &effect);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (effect->parentGame != graphicsDevice->parentGame) {
+                return Fail(
+                    CNA_RESULT_INVALID_HANDLE,
+                    CNA_ERROR_CATEGORY_HANDLE,
+                    "The effect is not owned by the game that owns this device.");
+            }
+        }
+        if (takeOwnership && effectHandle == CNA_INVALID_HANDLE) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "An owning effect pass needs an effect to take over.");
+        }
+
+        auto native = std::make_shared<Ext::EffectPass>(
+            *graphicsDevice->value,
+            effect == nullptr ? nullptr : effect->value.get(),
+            nativeName);
+        auto* const asEffectPass = native.get();
+        // Everything that can fail has failed by now, so consuming the caller's handle here cannot
+        // strand the effect: on any earlier refusal the caller still owns it.
+        if (takeOwnership) {
+            const CNA_Result releaseResult = GetRuntimeHandles().Release(effectHandle);
+            if (releaseResult != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    releaseResult,
+                    ErrorCategoryForResult(releaseResult),
+                    "The effect handle could not be consumed by the pass.");
+            }
+            RemoveOwnedGraphicsResourceFor(effect->parentGame);
+        }
+        return CreatePassHandle(
+            std::move(native),
+            asEffectPass,
+            graphicsDevice->parentGame,
+            effect,
+            takeOwnership ? effectHandle : CNA_INVALID_HANDLE,
+            outPass);
+    });
+}
+
+} // namespace
+
+CNA_Result cna_post_process_effect_pass_create(
+    const CNA_Handle graphicsDevice,
+    const CNA_EffectHandle effect,
+    const CNA_StringView name,
+    CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEffectPass(graphicsDevice, effect, name, false, outPass);
+}
+
+CNA_Result cna_post_process_effect_pass_create_owning(
+    const CNA_Handle graphicsDevice,
+    const CNA_EffectHandle effect,
+    const CNA_StringView name,
+    CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEffectPass(graphicsDevice, effect, name, true, outPass);
+}
+
+CNA_Result cna_post_process_effect_pass_get_effect(
+    const CNA_PostProcessPassHandle passHandle, CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The effect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<PostProcessPassResource> pass;
+        if (const CNA_Result result = GetEffectPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const effect = pass->effectPass->getEffect();
+        if (effect == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        const auto borrow = std::make_shared<CountedBorrow<PostProcessPassResource>>(pass);
+        const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> view(borrow, effect);
+        return CreateBorrowedEffect(view, pass->parentGame, outEffect);
+    });
+}
+
+CNA_Result cna_post_process_effect_pass_set_effect(
+    const CNA_PostProcessPassHandle passHandle, const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PostProcessPassResource> pass;
+        if (const CNA_Result result = GetEffectPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<EffectResource> effect;
+        if (effectHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetEffectForPass(effectHandle, &effect);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (effect->parentGame != pass->parentGame) {
+                return Fail(
+                    CNA_RESULT_INVALID_HANDLE,
+                    CNA_ERROR_CATEGORY_HANDLE,
+                    "The effect is not owned by the game that owns this pass.");
+            }
+        }
+        pass->effectPass->setEffect(effect == nullptr ? nullptr : effect->value.get());
+        // Retain the new borrow, and stop retaining the old one, so the pass can never draw
+        // through an effect the caller has since released.
+        pass->effectRetention = effect;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_post_process_pass_apply(
+    const CNA_PostProcessPassHandle passHandle, const CNA_PostProcessContext* const context)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (context == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The post-process context is null.");
+        }
+        std::shared_ptr<PostProcessPassResource> pass;
+        if (const CNA_Result result = GetPostProcessPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        ResolvedPostProcessContext resolved;
+        if (const CNA_Result result = ResolvePostProcessContext(*context, &resolved);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        pass->value->apply(resolved.value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_post_process_pass_copy_name(
+    const CNA_PostProcessPassHandle passHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    std::shared_ptr<PostProcessPassResource> pass;
+    if (const CNA_Result result = GetPostProcessPass(passHandle, &pass);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(destination, capacity, outBytes, [&pass] {
+        return pass->value->getName();
+    });
+}
+
+CNA_Result cna_post_process_pass_is_supported(
+    const CNA_PostProcessPassHandle passHandle,
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The support output is null.");
+        }
+        std::shared_ptr<PostProcessPassResource> pass;
+        if (const CNA_Result result = GetPostProcessPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = pass->value->isSupported(*graphicsDevice->value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_post_process_pass_destroy(const CNA_PostProcessPassHandle passHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PostProcessPassResource> pass;
+        if (const CNA_Result result = GetPostProcessPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Handle ownedEffect = pass->ownedEffect;
+        const CNA_Handle parentGame = pass->parentGame;
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(passHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned post-process pass handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(parentGame);
+        // An owning pass destroys its effect with itself, which is what the canonical unique_ptr
+        // constructor promises. The handle was already consumed at creation, so only the resource
+        // accounting is left to undo here.
+        (void)ownedEffect;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_apply_material(
+    const CNA_EffectHandle effect, const CNA_PbrMaterialEXT* const material)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (material == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The material is null.");
+        }
+        return WithTypedEffect<PbrEffect>(effect, "PbrEffect", [&](PbrEffect& typed) {
+            Ext::PbrMaterial native;
+            if (const CNA_Result result = ToNativePbrMaterial(*material, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            Ext::applyMaterial(native, typed);
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_apply_material(
+    const CNA_EffectHandle effect, const CNA_PbrMaterialEXT* const material)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (material == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The material is null.");
+        }
+        return WithTypedEffect<SkinnedPbrEffect>(
+            effect, "SkinnedPbrEffect", [&](SkinnedPbrEffect& typed) {
+                Ext::PbrMaterial native;
+                if (const CNA_Result result = ToNativePbrMaterial(*material, &native);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                Ext::applyMaterial(native, typed);
+                return CNA_RESULT_SUCCESS;
+            });
+    });
+}
+
+CNA_Result cna_pbr_effect_extract_material(
+    const CNA_EffectHandle effect, CNA_PbrMaterialEXT* const outMaterial)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMaterial == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The material output is null.");
+        }
+        return WithTypedEffect<PbrEffect>(effect, "PbrEffect", [&](PbrEffect& typed) {
+            FromNativePbrMaterial(Ext::extractMaterial(typed), outMaterial);
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_extract_material(
+    const CNA_EffectHandle effect, CNA_PbrMaterialEXT* const outMaterial)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMaterial == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The material output is null.");
+        }
+        return WithTypedEffect<SkinnedPbrEffect>(
+            effect, "SkinnedPbrEffect", [&](SkinnedPbrEffect& typed) {
+                FromNativePbrMaterial(Ext::extractMaterial(typed), outMaterial);
+                return CNA_RESULT_SUCCESS;
+            });
+    });
+}
+
+CNA_Result cna_pbr_material_apply_state(
+    const CNA_PbrMaterialEXT* const material, const CNA_Handle graphicsDeviceHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (material == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The material is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Ext::PbrMaterial native;
+        if (const CNA_Result result = ToNativePbrMaterial(*material, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Ext::applyMaterialState(native, *graphicsDevice->value);
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -1122,6 +1122,7 @@
   "cna_basic_effect_set_texture_enabled",
   "cna_basic_effect_set_vertex_color_enabled",
   "cna_blend_state_init",
+  "cna_blit_pass_create",
   "cna_bounding_box_contains_box",
   "cna_bounding_box_contains_frustum",
   "cna_bounding_box_contains_point",
@@ -1615,6 +1616,10 @@
   "cna_friend_gamer_create_ext",
   "cna_friend_gamer_get_info",
   "cna_friend_gamer_get_presence_size",
+  "cna_fullscreen_pass_create",
+  "cna_fullscreen_pass_destroy",
+  "cna_fullscreen_pass_draw",
+  "cna_fullscreen_pass_draw_over_current_target",
   "cna_game_clear",
   "cna_game_component_callbacks_init",
   "cna_game_component_compare_to",
@@ -2846,7 +2851,9 @@
   "cna_packet_writer_write_vector2",
   "cna_packet_writer_write_vector3",
   "cna_packet_writer_write_vector4",
+  "cna_pbr_effect_apply_material",
   "cna_pbr_effect_create",
+  "cna_pbr_effect_extract_material",
   "cna_pbr_effect_get_alpha",
   "cna_pbr_effect_get_alpha_cutoff_ext",
   "cna_pbr_effect_get_alpha_mode_ext",
@@ -2885,6 +2892,7 @@
   "cna_pbr_effect_set_texture_is_srgb_ext",
   "cna_pbr_effect_set_texture_transform_ext",
   "cna_pbr_effect_set_vertex_color_enabled_ext",
+  "cna_pbr_material_apply_state",
   "cna_pbr_material_ext_init",
   "cna_pbr_material_init",
   "cna_picture_album_collection_copy_type_name",
@@ -2987,6 +2995,15 @@
   "cna_point_multiply",
   "cna_point_not_equals",
   "cna_point_subtract",
+  "cna_post_process_context_init",
+  "cna_post_process_effect_pass_create",
+  "cna_post_process_effect_pass_create_owning",
+  "cna_post_process_effect_pass_get_effect",
+  "cna_post_process_effect_pass_set_effect",
+  "cna_post_process_pass_apply",
+  "cna_post_process_pass_copy_name",
+  "cna_post_process_pass_destroy",
+  "cna_post_process_pass_is_supported",
   "cna_power_get_battery_percent_ext",
   "cna_power_get_info",
   "cna_power_get_seconds_remaining_ext",
@@ -3215,8 +3232,10 @@
   "cna_skinned_model_ext_remove_part",
   "cna_skinned_model_ext_set_clip",
   "cna_skinned_model_ext_set_skeleton",
+  "cna_skinned_pbr_effect_apply_material",
   "cna_skinned_pbr_effect_copy_bone_transforms",
   "cna_skinned_pbr_effect_create",
+  "cna_skinned_pbr_effect_extract_material",
   "cna_skinned_pbr_effect_get_weights_per_vertex",
   "cna_skinned_pbr_effect_set_bone_transforms",
   "cna_skinned_pbr_effect_set_weights_per_vertex",
@@ -5394,6 +5413,10 @@
    4,
    4
   ],
+  "CNA_FullscreenPassHandle": [
+   8,
+   8
+  ],
   "CNA_GameComponentEvent": [
    4,
    4
@@ -5935,6 +5958,10 @@
    8
   ],
   "CNA_PlaylistHandle": [
+   8,
+   8
+  ],
+  "CNA_PostProcessPassHandle": [
    8,
    8
   ],
@@ -9888,6 +9915,84 @@
     ]
    },
    "size": 8
+  },
+  "CNA_PostProcessContext": {
+   "align": 8,
+   "fields": {
+    "destination": [
+     40,
+     8
+    ],
+    "elapsed_seconds": [
+     56,
+     4
+    ],
+    "far_plane": [
+     64,
+     4
+    ],
+    "has_previous_frame": [
+     68,
+     1
+    ],
+    "height": [
+     52,
+     4
+    ],
+    "inverse_projection": [
+     136,
+     64
+    ],
+    "inverse_view": [
+     200,
+     64
+    ],
+    "near_plane": [
+     60,
+     4
+    ],
+    "previous_view_projection": [
+     264,
+     64
+    ],
+    "projection": [
+     72,
+     64
+    ],
+    "reserved": [
+     69,
+     3
+    ],
+    "source": [
+     8,
+     8
+    ],
+    "source_depth": [
+     16,
+     8
+    ],
+    "source_normals": [
+     24,
+     8
+    ],
+    "source_velocity": [
+     32,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "width": [
+     48,
+     4
+    ]
+   },
+   "size": 328
   },
   "CNA_PresentationParameters": {
    "align": 4,

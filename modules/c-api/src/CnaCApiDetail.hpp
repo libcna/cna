@@ -197,6 +197,11 @@ enum class ObjectKind : uint32_t {
     RenderTargetPool = 128,
     ShaderEffectFactory = 129,
     ScopedRenderTarget = 130,
+    // plans/plan_binding.md CBIND-084C: the full-screen drawer, and one kind for every concrete
+    // post-process pass. A pass is one kind rather than one per concrete type because what crosses
+    // this ABI is the abstract contract's operations, not the class that implements them.
+    FullscreenPass = 131,
+    PostProcessPass = 132,
     Test = UINT32_MAX
 };
 

@@ -137,6 +137,85 @@ static int validate_version(const CNA_Bool available)
 
 /* --- the layer-absent build: every object route refuses and writes nothing ----------------- */
 
+/* CBIND-084C. The pass machinery and the material binding refuse the same way the resources do,
+ * and a refused creation must leave the output handle invalid rather than merely unwritten. */
+static int validate_passes_unavailable(const CNA_Handle graphics_device)
+{
+    CNA_FullscreenPassHandle fullscreen = (CNA_FullscreenPassHandle)UINT64_C(0x5A5A5A5A);
+    CNA_PostProcessPassHandle pass = (CNA_PostProcessPassHandle)UINT64_C(0x5A5A5A5A);
+    CNA_EffectHandle effect = (CNA_EffectHandle)UINT64_C(0x5A5A5A5A);
+    CNA_PostProcessContext context;
+    CNA_PbrMaterialEXT material;
+    static const char name[] = "pass";
+    const CNA_StringView name_view = {name, sizeof(name) - 1U};
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t bytes = UINT64_C(7);
+    char text[8];
+
+    /* The two value routes work in every build, so they must succeed even here. */
+    if (cna_post_process_context_init(&context) != CNA_RESULT_SUCCESS ||
+        cna_pbr_material_ext_init(&material) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (cna_fullscreen_pass_create(graphics_device, &fullscreen) != CNA_RESULT_NOT_SUPPORTED ||
+        fullscreen != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_fullscreen_pass_draw(
+            fullscreen, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
+            INT32_C(4), INT32_C(4), 0) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_fullscreen_pass_draw_over_current_target(
+            fullscreen, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, INT32_C(4), INT32_C(4), 0) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_fullscreen_pass_destroy(fullscreen) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+
+    if (cna_blit_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+        pass != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    pass = (CNA_PostProcessPassHandle)UINT64_C(0x5A5A5A5A);
+    if (cna_post_process_effect_pass_create(graphics_device, effect, name_view, &pass) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        pass != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    pass = (CNA_PostProcessPassHandle)UINT64_C(0x5A5A5A5A);
+    if (cna_post_process_effect_pass_create_owning(graphics_device, effect, name_view, &pass) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        pass != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_post_process_effect_pass_get_effect(pass, &effect) != CNA_RESULT_NOT_SUPPORTED ||
+        effect != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_post_process_effect_pass_set_effect(pass, effect) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_post_process_pass_apply(pass, &context) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_post_process_pass_copy_name(pass, text, sizeof(text), &bytes) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_post_process_pass_is_supported(pass, graphics_device, &flag) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_post_process_pass_destroy(pass) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+
+    if (cna_pbr_effect_apply_material(effect, &material) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_skinned_pbr_effect_apply_material(effect, &material) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_pbr_effect_extract_material(effect, &material) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_skinned_pbr_effect_extract_material(effect, &material) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_pbr_material_apply_state(&material, graphics_device) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    /* The CNA_Bool output must be untouched by a refusal. `bytes` deliberately is not asserted:
+     * a copy route reports a required byte count of zero when it refuses, which is the shape the
+     * resource copy routes already established, and zero is not a value a caller can mistake for
+     * a successful measurement. */
+    return flag == UINT8_C(9) && bytes == UINT64_C(0);
+}
+
 static int validate_unavailable(const CNA_Handle graphics_device)
 {
     CNA_StorageBufferHandle buffer = (CNA_StorageBufferHandle)UINT64_C(0x5A5A5A5A);
@@ -280,6 +359,9 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             cna_scoped_render_target_end(scope) != CNA_RESULT_NOT_SUPPORTED) {
             return 0;
         }
+    }
+    if (!validate_passes_unavailable(graphics_device)) {
+        return 0;
     }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
@@ -747,6 +829,202 @@ static int validate_shader_effect_factory(const CNA_Handle graphics_device)
         factory == CNA_INVALID_HANDLE;
 }
 
+
+/* CBIND-084C. Passes need no compute, so unlike the storage/compute families this arm runs on any
+ * renderer that has the layer -- which is what makes it worth asserting the real behaviour rather
+ * than a refusal. */
+static int validate_pass_machinery(const CNA_Handle graphics_device)
+{
+    CNA_PostProcessPassHandle blit = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle effect_pass = CNA_INVALID_HANDLE;
+    CNA_FullscreenPassHandle fullscreen = CNA_INVALID_HANDLE;
+    CNA_EffectHandle basic = CNA_INVALID_HANDLE;
+    CNA_EffectHandle read_back = (CNA_EffectHandle)UINT64_C(0x5A5A5A5A);
+    CNA_PostProcessContext context;
+    static const char name[] = "CApiPass";
+    const CNA_StringView name_view = {name, sizeof(name) - 1U};
+    CNA_Bool supported = UINT8_C(9);
+    uint64_t bytes = UINT64_C(0);
+    char text[128];
+
+    if (cna_post_process_context_init(&context) != CNA_RESULT_SUCCESS ||
+        context.struct_size != (uint32_t)sizeof(CNA_PostProcessContext) ||
+        context.source != CNA_INVALID_HANDLE || context.destination != CNA_INVALID_HANDLE ||
+        context.has_previous_frame != CNA_FALSE) {
+        return 0;
+    }
+    /* Defaulted matrices are the identity, exactly as the canonical struct's are. */
+    if (context.projection.m11 != 1.0F || context.projection.m12 != 0.0F ||
+        context.projection.m44 != 1.0F) {
+        return 0;
+    }
+    /* An uninitialized context is refused rather than read. */
+    {
+        CNA_PostProcessContext raw;
+        memset(&raw, 0, sizeof(raw));
+        if (cna_blit_pass_create(graphics_device, &blit) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_post_process_pass_apply(blit, &raw) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_post_process_pass_apply(blit, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+
+    /* The abstract contract's three operations, driven through the concrete pass. */
+    if (cna_post_process_pass_copy_name(blit, 0, UINT64_C(0), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes == UINT64_C(0) || bytes > sizeof(text)) {
+        return 0;
+    }
+    if (cna_post_process_pass_copy_name(blit, text, sizeof(text), &bytes) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_post_process_pass_is_supported(blit, graphics_device, &supported) !=
+            CNA_RESULT_SUCCESS ||
+        (supported != CNA_TRUE && supported != CNA_FALSE)) {
+        return 0;
+    }
+    /* A blit pass is not an effect pass, and the two effect-only routes must say so by argument
+     * rather than by handle kind -- both are the same ObjectKind. */
+    if (cna_post_process_effect_pass_get_effect(blit, &read_back) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_post_process_effect_pass_set_effect(blit, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_post_process_pass_destroy(blit) != CNA_RESULT_SUCCESS ||
+        cna_post_process_pass_destroy(blit) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* A borrowed effect: the pass does not own it, so destroying the pass leaves it alive. */
+    if (cna_basic_effect_create(graphics_device, &basic) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_post_process_effect_pass_create(graphics_device, basic, name_view, &effect_pass) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    read_back = CNA_INVALID_HANDLE;
+    if (cna_post_process_effect_pass_get_effect(effect_pass, &read_back) != CNA_RESULT_SUCCESS ||
+        read_back == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_effect_destroy(read_back) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_post_process_pass_copy_name(effect_pass, text, sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)(sizeof(name) - 1U) || memcmp(text, name, sizeof(name) - 1U) != 0) {
+        return 0;
+    }
+    if (cna_post_process_effect_pass_set_effect(effect_pass, CNA_INVALID_HANDLE) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_post_process_pass_destroy(effect_pass) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Borrowed, so it survived its pass and the caller still owns it. */
+    if (cna_effect_destroy(basic) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* An owning pass consumes the handle: it must be invalid afterwards, and destroying the pass
+     * must not leave the effect stranded -- cna_game_destroy would refuse if it did. */
+    basic = CNA_INVALID_HANDLE;
+    if (cna_basic_effect_create(graphics_device, &basic) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_post_process_effect_pass_create_owning(
+            graphics_device, basic, name_view, &effect_pass) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_effect_destroy(basic) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_post_process_pass_destroy(effect_pass) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* An owning pass needs something to take over. */
+    if (cna_post_process_effect_pass_create_owning(
+            graphics_device, CNA_INVALID_HANDLE, name_view, &effect_pass) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_fullscreen_pass_create(graphics_device, &fullscreen) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_fullscreen_pass_destroy(fullscreen) != CNA_RESULT_SUCCESS ||
+        cna_fullscreen_pass_destroy(fullscreen) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
+/* Every non-texture field of the full material round-trips; the texture slots deliberately read
+ * back invalid, because the engine layer stores raw pointers this ABI does not name. */
+static int validate_material_binding(const CNA_Handle graphics_device)
+{
+    CNA_EffectHandle pbr = CNA_INVALID_HANDLE;
+    CNA_EffectHandle basic = CNA_INVALID_HANDLE;
+    CNA_PbrMaterialEXT material;
+    CNA_PbrMaterialEXT round_trip;
+
+    if (cna_pbr_material_ext_init(&material) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    material.metallic_factor = 0.25F;
+    material.roughness_factor = 0.75F;
+    material.ior = 1.75F;
+    material.alpha_cutoff = 0.125F;
+    material.double_sided = CNA_TRUE;
+    material.texture_coordinate_sets[1] = INT32_C(1);
+    material.texture_transforms[1].rotation = 0.5F;
+
+    if (cna_pbr_effect_create(graphics_device, &pbr) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_pbr_effect_apply_material(pbr, &material) != CNA_RESULT_SUCCESS ||
+        cna_pbr_effect_apply_material(pbr, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_pbr_effect_extract_material(pbr, &round_trip) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (round_trip.metallic_factor != 0.25F || round_trip.roughness_factor != 0.75F ||
+        round_trip.double_sided != CNA_TRUE ||
+        round_trip.albedo_texture != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_pbr_material_apply_state(&material, graphics_device) != CNA_RESULT_SUCCESS ||
+        cna_pbr_material_apply_state(0, graphics_device) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* An uninitialized material is refused rather than reinterpreted. */
+    {
+        CNA_PbrMaterialEXT raw;
+        memset(&raw, 0, sizeof(raw));
+        if (cna_pbr_effect_apply_material(pbr, &raw) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+    /* The wrong concrete effect type is an argument error, not a silent no-op. */
+    if (cna_basic_effect_create(graphics_device, &basic) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_pbr_effect_apply_material(basic, &material) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_skinned_pbr_effect_apply_material(pbr, &material) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_pbr_effect_extract_material(basic, &round_trip) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_skinned_pbr_effect_extract_material(pbr, &round_trip) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    return cna_effect_destroy(basic) == CNA_RESULT_SUCCESS &&
+        cna_effect_destroy(pbr) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -778,6 +1056,14 @@ static CNA_Result on_load(
             return CNA_RESULT_INVALID_STATE;
         }
         state->had_compute = compute;
+        if (!validate_pass_machinery(graphics_device)) {
+            state->failed_stage = 9;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_material_binding(graphics_device)) {
+            state->failed_stage = 10;
+            return CNA_RESULT_INVALID_STATE;
+        }
         if (compute != CNA_TRUE) {
             if (!validate_compute_absent(graphics_device)) {
                 state->failed_stage = 7;

@@ -6,6 +6,7 @@
 #include "CNA/C/effects.h"
 #include "CNA/C/graphics.h"
 #include "CNA/C/graphics_ext.h"
+#include "CNA/C/graphics_state.h"
 #include "CNA/C/math_values.h"
 #include "CNA/C/render_target.h"
 
@@ -796,6 +797,347 @@ CNA_C_API CNA_Result cna_scoped_render_target_get_has_recorded_previous(
  * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or another documented result.
  */
 CNA_C_API CNA_Result cna_scoped_render_target_end(CNA_ScopedRenderTargetHandle scope);
+
+/* ---------------------------------------------------------------------------------------------
+ * Full-screen drawing
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Owned handle for one engine-layer full-screen pass.
+ *
+ * Release it with @ref cna_fullscreen_pass_destroy before destroying the game that owns its device.
+ */
+typedef CNA_Handle CNA_FullscreenPassHandle;
+
+/**
+ * @brief Creates a full-screen pass.
+ *
+ * @param graphics_device The device to draw on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fullscreen_pass_create(
+    CNA_Handle graphics_device,
+    CNA_FullscreenPassHandle* out_pass);
+
+/**
+ * @brief Draws a source texture over a destination target, through an optional effect.
+ *
+ * @param pass The pass.
+ * @param source The source texture, or `CNA_INVALID_HANDLE` for none; borrowed.
+ * @param destination The destination render target, or `CNA_INVALID_HANDLE` for the back buffer.
+ * @param effect The effect to draw through, or `CNA_INVALID_HANDLE` for a straight copy; borrowed.
+ * @param width Destination width in pixels.
+ * @param height Destination height in pixels.
+ * @param sampler The sampler state to use, or null for the pass's own default.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fullscreen_pass_draw(
+    CNA_FullscreenPassHandle pass,
+    CNA_Handle source,
+    CNA_Handle destination,
+    CNA_EffectHandle effect,
+    int32_t width,
+    int32_t height,
+    const CNA_SamplerState* sampler);
+
+/**
+ * @brief Draws a source texture over whatever target is already bound.
+ *
+ * @param pass The pass.
+ * @param source The source texture, or `CNA_INVALID_HANDLE` for none; borrowed.
+ * @param effect The effect to draw through, or `CNA_INVALID_HANDLE` for a straight copy; borrowed.
+ * @param width Destination width in pixels.
+ * @param height Destination height in pixels.
+ * @param sampler The sampler state to use, or null for the pass's own default.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fullscreen_pass_draw_over_current_target(
+    CNA_FullscreenPassHandle pass,
+    CNA_Handle source,
+    CNA_EffectHandle effect,
+    int32_t width,
+    int32_t height,
+    const CNA_SamplerState* sampler);
+
+/**
+ * @brief Releases the full-screen pass.
+ *
+ * @param pass The pass; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fullscreen_pass_destroy(CNA_FullscreenPassHandle pass);
+
+/* ---------------------------------------------------------------------------------------------
+ * Post-process passes
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief One frame's worth of inputs to a post-process pass.
+ *
+ * The canonical struct holds raw C++ pointers to the frame's textures and to the pipeline
+ * settings; here each texture becomes a handle. Fill it with
+ * @ref cna_post_process_context_init before setting the fields your pass reads; initializing
+ * is not optional, because a later engine-layer revision may add a field and a zero-filled
+ * struct would then mean something different from a defaulted one.
+ *
+ * **The canonical `settings` pointer is not here yet, and that is deliberate.** It points at a
+ * `RenderPipelineSettings`, whose C form is still a subset of the canonical type; carrying that
+ * subset would silently apply engine defaults for every field the subset omits. Until
+ * `CBIND-088` binds the settings type in full, a pass applied from C sees no settings and uses
+ * its own defaults, which is exactly what the canonical struct means by a null `settings`.
+ */
+typedef struct CNA_PostProcessContext {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief The colour input, or `CNA_INVALID_HANDLE` for none; borrowed. */
+    CNA_Handle source;
+    /** @brief The linear-depth input, or `CNA_INVALID_HANDLE` when the pass reads no depth. */
+    CNA_Handle source_depth;
+    /** @brief The normals input, or `CNA_INVALID_HANDLE` when the pass reads no normals. */
+    CNA_Handle source_normals;
+    /** @brief The velocity input, or `CNA_INVALID_HANDLE` when the pass reads no velocity. */
+    CNA_Handle source_velocity;
+    /** @brief The destination render target, or `CNA_INVALID_HANDLE` for the back buffer. */
+    CNA_Handle destination;
+    /** @brief Destination width in pixels. */
+    int32_t width;
+    /** @brief Destination height in pixels. */
+    int32_t height;
+    /** @brief Seconds elapsed since the previous frame. */
+    float elapsed_seconds;
+    /** @brief The camera's near plane distance. */
+    float near_plane;
+    /** @brief The camera's far plane distance. */
+    float far_plane;
+    /** @brief `CNA_TRUE` when @ref previous_view_projection describes a real previous frame. */
+    CNA_Bool has_previous_frame;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[3];
+    /** @brief The camera's projection matrix. */
+    CNA_Matrix projection;
+    /** @brief The inverse of @ref projection. */
+    CNA_Matrix inverse_projection;
+    /** @brief The inverse of the camera's view matrix. */
+    CNA_Matrix inverse_view;
+    /** @brief The previous frame's view-projection matrix, for reprojection. */
+    CNA_Matrix previous_view_projection;
+} CNA_PostProcessContext;
+
+/**
+ * @brief Fills a post-process context with the canonical defaults.
+ *
+ * @param out_context Receives the defaults: no textures, zero size, identity matrices, no settings
+ * and no previous frame.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_post_process_context_init(CNA_PostProcessContext* out_context);
+
+/**
+ * @brief Owned handle for one engine-layer post-process pass.
+ *
+ * A pass is created by one of the concrete constructors -- @ref cna_blit_pass_create,
+ * @ref cna_post_process_effect_pass_create, @ref cna_post_process_effect_pass_create_owning -- and then driven through the
+ * shared operations below, which are the C form of the abstract `PostProcessPass` contract. C
+ * cannot derive from that contract, so what crosses this ABI is the set of operations it declares
+ * rather than the base type itself.
+ */
+typedef CNA_Handle CNA_PostProcessPassHandle;
+
+/**
+ * @brief Creates a pass that copies its source to its destination unchanged.
+ *
+ * @param graphics_device The device to draw on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_blit_pass_create(
+    CNA_Handle graphics_device,
+    CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Creates a pass that draws its source through a **borrowed** effect.
+ *
+ * The effect is not owned: it must outlive the pass, and destroying the pass leaves it alive.
+ *
+ * @param graphics_device The device to draw on.
+ * @param effect The effect to draw through, or `CNA_INVALID_HANDLE` for none; borrowed.
+ * @param name The pass's name as UTF-8, used in diagnostics.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_effect_pass_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Creates a pass that **takes ownership** of an effect.
+ *
+ * The C form of the canonical constructor taking a `unique_ptr`. On success the effect handle is
+ * **consumed**: it stops being valid, the caller must not destroy it, and the pass releases the
+ * effect when it is itself destroyed. On failure the caller keeps the effect and its handle stays
+ * valid, so a refused call never strands a resource.
+ *
+ * @param graphics_device The device to draw on.
+ * @param effect The effect to take over; consumed on success.
+ * @param name The pass's name as UTF-8, used in diagnostics.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_effect_pass_create_owning(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the effect an effect pass draws through.
+ *
+ * The returned handle is borrowed from the pass; do not destroy it.
+ *
+ * @param pass The pass; must be an effect pass.
+ * @param out_effect Receives the borrowed effect handle, or `CNA_INVALID_HANDLE` when the pass has
+ * no effect.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a pass that is not an effect
+ * pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_effect_pass_get_effect(
+    CNA_PostProcessPassHandle pass,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Replaces the effect an effect pass draws through, borrowing the new one.
+ *
+ * A pass created by @ref cna_post_process_effect_pass_create_owning still owns the effect it was given; setting
+ * a new one does not release it, exactly as the canonical setter does not.
+ *
+ * @param pass The pass; must be an effect pass.
+ * @param effect The effect to draw through, or `CNA_INVALID_HANDLE` to draw nothing; borrowed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a pass that is not an effect
+ * pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_effect_pass_set_effect(
+    CNA_PostProcessPassHandle pass,
+    CNA_EffectHandle effect);
+
+/**
+ * @brief Runs the pass over one frame's inputs.
+ *
+ * @param pass The pass.
+ * @param context The frame's inputs.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_pass_apply(
+    CNA_PostProcessPassHandle pass,
+    const CNA_PostProcessContext* context);
+
+/**
+ * @brief Copies the pass's name as UTF-8 bytes, without a terminator.
+ *
+ * @param pass The pass.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_post_process_pass_copy_name(
+    CNA_PostProcessPassHandle pass,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether the pass can do its real work on a device.
+ *
+ * A pass that answers `CNA_FALSE` is not broken. This layer's contract is that such a pass degrades
+ * -- typically to a copy -- rather than failing, so a chain may still run it and get the documented
+ * fallback. Ask this to know which you will get, not to decide whether calling is safe.
+ *
+ * @param pass The pass.
+ * @param graphics_device The device to ask about.
+ * @param out_supported Receives `CNA_TRUE` when the pass can do its real work there.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_pass_is_supported(
+    CNA_PostProcessPassHandle pass,
+    CNA_Handle graphics_device,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Releases the pass, and the effect it owns if it owns one.
+ *
+ * @param pass The pass; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_pass_destroy(CNA_PostProcessPassHandle pass);
+
+/* ---------------------------------------------------------------------------------------------
+ * PBR material binding
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Applies a material's values to a PBR effect.
+ *
+ * @param effect A `PbrEffect` handle.
+ * @param material The material to apply; every field of the full material crosses.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when @p effect is not a `PbrEffect`,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_apply_material(
+    CNA_EffectHandle effect,
+    const CNA_PbrMaterialEXT* material);
+
+/**
+ * @brief Applies a material's values to a skinned PBR effect.
+ *
+ * @param effect A `SkinnedPbrEffect` handle.
+ * @param material The material to apply; every field of the full material crosses.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when @p effect is not a
+ * `SkinnedPbrEffect`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skinned_pbr_effect_apply_material(
+    CNA_EffectHandle effect,
+    const CNA_PbrMaterialEXT* material);
+
+/**
+ * @brief Reads a material back out of a PBR effect.
+ *
+ * @param effect A `PbrEffect` handle.
+ * @param out_material Receives the material the effect currently carries.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when @p effect is not a `PbrEffect`,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_extract_material(
+    CNA_EffectHandle effect,
+    CNA_PbrMaterialEXT* out_material);
+
+/**
+ * @brief Reads a material back out of a skinned PBR effect.
+ *
+ * @param effect A `SkinnedPbrEffect` handle.
+ * @param out_material Receives the material the effect currently carries.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when @p effect is not a
+ * `SkinnedPbrEffect`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skinned_pbr_effect_extract_material(
+    CNA_EffectHandle effect,
+    CNA_PbrMaterialEXT* out_material);
+
+/**
+ * @brief Applies the device state a material implies -- blending, depth write and culling.
+ *
+ * @param material The material whose state to apply.
+ * @param graphics_device The device to set state on.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_apply_state(
+    const CNA_PbrMaterialEXT* material,
+    CNA_Handle graphics_device);
 
 #ifdef __cplusplus
 }

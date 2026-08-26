@@ -667,7 +667,20 @@ CNAEXT_SLICE_OWNERS: dict[str, str] = {
 }
 
 
+# CBIND-084C, 2026-08-26. One symbol whose owner is not its header's slice. PostProcessContext's
+# `settings` field points at a RenderPipelineSettings, and the C form of that type is still a
+# subset of the canonical one; binding the field now would silently apply engine defaults for
+# every field the subset omits. The field therefore waits for CBIND-088, which owns the settings
+# type, while the rest of the struct is bound by CBIND-084C.
+SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
+    "CNA::Graphics::PostProcessContext::settings": "CBIND-088",
+}
+
+
 def owner_task(symbol: Symbol) -> str:
+    override = SYMBOL_OWNER_OVERRIDES.get(symbol.qualified_name)
+    if override is not None:
+        return override
     header = Path(symbol.header)
     slice_owner = CNAEXT_SLICE_OWNERS.get(f"{header.parts[1]}/{header.stem}")
     if slice_owner is not None:

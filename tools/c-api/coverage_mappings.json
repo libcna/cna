@@ -14724,6 +14724,174 @@
         "CPP-FB827308E0B0",
         "CPP-FEB5A82E6B6A"
       ]
+    },
+    {
+      "id": "engine-post-process-context",
+      "qualified_name_regex": "^CNA::Graphics::PostProcessContext(?:::(?!settings$)[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_PostProcessContext` plus `cna_post_process_context_init`, a fixed-layout struct whose texture and target pointers become handles resolved and **retained for the duration of one apply**, so a pass cannot read a texture the caller released between filling the struct and applying it. `struct_size`/`struct_version` make an uninitialized context a refusal rather than a misreading.",
+      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through",
+      "status": "implemented",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-0A895A43D66D",
+        "CPP-0F77E23DA409",
+        "CPP-181B8FD63E74",
+        "CPP-1E0240F5B177",
+        "CPP-2F226BBDCB64",
+        "CPP-2F686B5D63FF",
+        "CPP-4921091B8C2B",
+        "CPP-915CA718724C",
+        "CPP-9687BB9276A7",
+        "CPP-9A606EB52E19",
+        "CPP-A59A0BD5AE78",
+        "CPP-B290C06B1C76",
+        "CPP-DB9125A9C0CE",
+        "CPP-E0EFF5D3F2BD",
+        "CPP-E695A5CB57C9",
+        "CPP-FAC423A8A009"
+      ]
+    },
+    {
+      "id": "engine-post-process-pass-contract",
+      "qualified_name_regex": "^CNA::Graphics::PostProcessPass(?:::(?:~PostProcessPass|apply|getName|isSupported))?$",
+      "kinds": [
+        "class",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`CNA_PostProcessPassHandle` plus `cna_post_process_pass_apply`, `_copy_name`, `_is_supported` and `_destroy`. C cannot derive from an abstract base, so what crosses is the set of operations the contract declares rather than the type: one handle kind carries every concrete pass, and the concrete constructors are what produce it.",
+      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through",
+      "status": "implemented",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-304645C81BD3",
+        "CPP-5447EDF8429B",
+        "CPP-BFEA6DAE8A75",
+        "CPP-CD6D772A858F",
+        "CPP-F2805C4FEB35"
+      ]
+    },
+    {
+      "id": "engine-post-process-pass-protected-constructor",
+      "qualified_name_regex": "^CNA::Graphics::PostProcessPass::PostProcessPass$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "No C mapping: the protected default constructor exists so a derived pass can construct its base, and C cannot derive from the contract. Every concrete constructor this ABI does bind runs it.",
+      "tests": "Doxygen declaration inventory; the operation has no caller outside a derived class",
+      "status": "not-applicable",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-7FE9F745F613"
+      ]
+    },
+    {
+      "id": "engine-blit-pass",
+      "qualified_name_regex": "^CNA::Graphics::BlitPass(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_blit_pass_create`, and then the shared `cna_post_process_pass_*` operations, which are the C form of the overrides this class declares.",
+      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through",
+      "status": "implemented",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-1E9D8B76FE19",
+        "CPP-3F05A27E0953",
+        "CPP-64457E7E07C7",
+        "CPP-6B151EAA77C1",
+        "CPP-AB054B3A1AAE",
+        "CPP-EDA866D3A19D"
+      ]
+    },
+    {
+      "id": "engine-effect-pass",
+      "qualified_name_regex": "^CNA::Graphics::EffectPass(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_post_process_effect_pass_create` (borrowed) and `_create_owning` (the `unique_ptr` overload), plus `_get_effect`/`_set_effect` and the shared `cna_post_process_pass_*` operations. The names carry `post_process_` because XNA's own `EffectPass` already owns `cna_effect_pass_*`. **Deviation, deliberate:** a C handle's object lives in the registry as a `shared_ptr` and cannot become a `unique_ptr`, so the owning route reproduces the *observable* contract instead of the mechanism -- it consumes the caller's handle, retains the effect, and releases it with the pass, so destroying the pass destroys the effect exactly as the canonical constructor promises.",
+      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through",
+      "status": "implemented",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-05CEF37BB165",
+        "CPP-12865E0E9782",
+        "CPP-26B7A686E86C",
+        "CPP-287776B8CF3F",
+        "CPP-4F859A234C9D",
+        "CPP-5F00C8546CF0",
+        "CPP-7E40EC579306",
+        "CPP-D090F40523A5",
+        "CPP-E59DA8263589"
+      ]
+    },
+    {
+      "id": "engine-fullscreen-pass",
+      "qualified_name_regex": "^CNA::Graphics::FullscreenPass(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_fullscreen_pass_create`, `_draw`, `_draw_over_current_target` and `_destroy`. The defaulted `sampler` argument becomes an explicit nullable `const CNA_SamplerState*`, so the C caller expresses \"the pass's own default\" the same way the canonical default does.",
+      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through",
+      "status": "implemented",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-250C77C905BC",
+        "CPP-34CEE84FB830",
+        "CPP-3D499DDEC242",
+        "CPP-8E7F6438445E",
+        "CPP-BECE9C021CB6"
+      ]
+    },
+    {
+      "id": "engine-material-binding",
+      "qualified_name_regex": "^CNA::Graphics::(?:applyMaterial|extractMaterial|applyMaterialState)$",
+      "kinds": [
+        "function",
+        "method"
+      ],
+      "mapping": "`cna_pbr_effect_apply_material` and `cna_skinned_pbr_effect_apply_material` for the two `applyMaterial` overloads, `cna_pbr_effect_extract_material` and `cna_skinned_pbr_effect_extract_material` for the two `extractMaterial` overloads, and `cna_pbr_material_apply_state`. Each carries the **full** `CNA_PbrMaterialEXT`, not the smaller `CNA_PbrMaterial`, so every canonical field crosses. The overloads become named routes because C has none, and the concrete effect type is checked at the boundary: applying a PBR material to a `BasicEffect` is an argument error rather than a silent no-op. Extraction returns every non-texture field; the texture slots read back invalid, because the engine layer holds raw pointers this ABI does not name.",
+      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through",
+      "status": "implemented",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-2D4F2A3305F5",
+        "CPP-46F52FB1F56D",
+        "CPP-4DD106C49700",
+        "CPP-803339979C50",
+        "CPP-D29CC3CE684F"
+      ]
+    },
+    {
+      "id": "engine-layer-detail-entry-points",
+      "qualified_name_regex": "^CNA::Graphics::detail::(?:nameOfCapability|requireCapability|reportShaderCompileFailure)$",
+      "kinds": [
+        "function",
+        "method"
+      ],
+      "mapping": "No C mapping: a `CNA::Graphics::detail` entry point, declared in a public header for the compiler's convenience. These are the engine layer's own choke points -- a subsystem asking whether the renderer can do something, and a pass reporting once that its shader did not compile. A C caller observes their effect as a refusal or a log line and never calls them; the questions they answer are already reachable through `cna_graphics_device_supports_capability` and the shader routes' own validity reporting.",
+      "tests": "Doxygen declaration inventory; the operations are internal to the engine layer",
+      "status": "not-applicable",
+      "task": "CBIND-084C",
+      "approved_symbols": [
+        "CPP-5E37390D97E9",
+        "CPP-B9B8CD9E9730",
+        "CPP-EEE21C48B72E"
+      ]
     }
   ]
 }

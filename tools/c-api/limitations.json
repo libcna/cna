@@ -159,11 +159,12 @@
     },
     {
       "id": "internal-entry-points-in-public-headers",
-      "title": "`CNA::Internal` entry points declared in a public header",
+      "title": "`CNA::Internal` and `CNA::Graphics::detail` entry points declared in a public header",
       "match": [
-        "a `CNA::Internal` entry point"
+        "a `CNA::Internal` entry point",
+        "a `CNA::Graphics::detail` entry point"
       ],
-      "note": "The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D)."
+      "note": "The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D). The engine layer adds the same shape under its own `detail` namespace: `requireCapability`, `nameOfCapability` and `reportShaderCompileFailure` are the choke points its subsystems call, and a C caller sees their effect as a refusal or a log line rather than calling them. The questions they answer are already reachable -- `cna_graphics_device_supports_capability` for the capability, and each shader route's own validity reporting for the compile."
     },
     {
       "id": "renderer-private-interfaces",
@@ -183,7 +184,7 @@
     },
     {
       "subject": "The static archive keeps 83 C++ statics visible",
-      "impact": "A static CNA exists and exports exactly the same 2,923 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
+      "impact": "A static CNA exists and exports exactly the same 2,942 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
       "status": "by design",
       "owner": "CONSUMING.md"
     },
