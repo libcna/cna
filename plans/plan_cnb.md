@@ -548,7 +548,7 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 |---|---|---|---|
 | CNBF-090 | `docs/cnb-format.md` — authoritative spec incl. annotated hex | ✅ | pinned by `CnbSpecConformanceTests.cpp`, verified to fail on a doc-only edit |
 | CNBF-091 | file-count / byte-size / open-count measurement, CNJ vs CNB | ✅ | §8 |
-| CNBF-092 | final architectural review pass | 🚧 | §9 |
+| CNBF-092 | final architectural review pass | ✅ | §10; found and fixed three real issues |
 
 ### Out of scope for v1 (recorded, not started)
 
@@ -624,10 +624,77 @@ against each.
 
 | criterion | status |
 |---|---|
-| every container invariant in §4 has a dedicated negative test | ⬜ |
-| at least three real CNA asset types implemented end to end | ⬜ Curve, AnimationClip, Model |
-| a real (not synthetic) asset compiles and loads equivalently | ⬜ `CNBF-075` |
-| writer output is byte-deterministic in-process and cross-process | ⬜ `CNBF-033`, `CNBF-064` |
-| documentation matches the bytes the implementation writes | ⬜ `CNBF-090` + `CnbSpecConformanceTests.cpp` |
-| container fuzzing finds no crash | ⬜ `CNBF-034` |
+| every container invariant in §4 has a dedicated negative test | ✅ 63 container tests, one per invariant |
+| at least three real CNA asset types implemented end to end | ✅ `Curve`, `AnimationClip`, `Model` |
+| a real (not synthetic) asset compiles and loads equivalently | ✅ 15 real corpus fixtures, `CNBF-075` |
+| writer output is byte-deterministic in-process and cross-process | ✅ `CNBF-033`, `CNBF-064` |
+| documentation matches the bytes the implementation writes | ✅ `CnbSpecConformanceTests.cpp`, verified to fail on a doc-only edit |
+| container fuzzing finds no crash | ✅ 17 000 mutated inputs + 3 000 noise inputs, clean under ASan+UBSan |
 
+**Verdict: the implemented parts of CNB are v1-stable.** The container layout (§3–§6 of
+`docs/cnb-format.md`), the asset-type identifier ranges and the three implemented schemas are
+frozen: a future CNA must keep reading a file written today. What is *not* frozen — because it does
+not exist — is every schema in §15 of that document; those identifiers are reserved and their
+layouts are undesigned.
+
+Two things earn that verdict rather than merely accompanying it. Every invariant has a negative
+test that makes a valid file and breaks exactly that one thing, so "the reader rejected it" can
+never be confused with "the fixture was never valid". And two of the gates were checked for teeth
+by deliberately breaking them: making the Model loader apply an identity bone transform instead of
+the stored one fails the equivalence tests, and editing two numbers in the specification alone
+fails two of the eight conformance tests by name.
+
+---
+
+## 10. Final review (`CNBF-092`)
+
+Worked through against the implementation, not from memory. Three real issues were found and
+fixed rather than written down.
+
+| question | answer |
+|---|---|
+| Is the format tied to the C++ ABI? | No. Every value is assembled from individual bytes; the only `sizeof` uses are `static_assert(sizeof(float) == 4)` guards; no `std::type_index`, no struct `memcpy`, no padding dependency. |
+| Are all serialized widths explicit? | Yes — `u8`/`u16`/`u32`/`u64`/`i32`/`f32`/`f64` and a length-prefixed UTF-8 `String`, nothing else. |
+| Is endianness explicit? | Yes, little-endian, asserted byte-for-byte by `PrimitiveEncodingIsLittleEndianAndAbiIndependent`. |
+| Are integer operations overflow-safe? | Yes. Two file-declared values are always combined through `CheckedAdd`/`CheckedMultiply`; a `u32` count times a compile-time stride is widened to `u64` first, where no overflow is representable. |
+| Can malformed files cause excessive allocations? | **Found and fixed.** Three allocation sites were bounded only by the generic 16-million-element array limit while their in-memory footprint was many times their encoded size. Morph target and morph weight-key counts gained schema-level ceilings matching `ContentManager`'s own `.cnj` readers, and the Model part count is now cross-checked against the actual `MVTX`/`MIDX` chunk count *before* any per-part allocation — which is both a stronger correctness check and a much tighter bound. Three tests added. |
+| Are unknown chunks handled correctly? | Yes: unknown + optional is skipped, unknown + mandatory is refused by name. Both tested, at container level and per schema. |
+| Can future schema versions evolve? | Yes. A higher container *minor* version is accepted; real incompatibility travels as a mandatory chunk. `RequireAsset` accepts a range of schema versions per type. |
+| Is container versioning separate from asset schema versioning? | Yes, two independent header fields, tested. |
+| Are type IDs stable? | Yes, frozen and pinned by `CnbSpecConformanceTests`. Custom-id collisions are refused at registration rather than resolved silently. |
+| Is writing deterministic? | Yes, in-process and across two OS processes. |
+| Did CNB stay independent of XNB? | Yes. `grep` over the whole CNB subsystem finds two *comments* naming XNB and zero includes, symbols or types. |
+| Did CNJ remain usable? | Yes. `.cnj` still loads on its own with no `.cnb` present (asserted in `ACurveCnbOutranksASameNamedCurveCnj`), and the whole content-module suite is 1077 passing with the same two pre-existing failures as before this work. |
+| Did we avoid binary JSON? | Yes. A Model `.cnb` is flat fixed-stride descriptor tables plus raw geometry chunks; there is no JSON DOM anywhere in the file or the reader. |
+| Did we avoid unnecessary `ContentManager` churn? | Mostly. The public surface grew by two additive members and one `if` in `Load<T>`. One ~200-line block was *moved* out of `ModelTypeReader` into a shared helper — justified in `D9`, and the reason the alternative was worse. |
+| Are embedded versus external resources coherent? | Yes. Data the asset owns is embedded; shared assets stay external through `XREF`, which is discoverable without understanding the schema. |
+| Can Model `.cnb` actually eliminate the sidecars? | Yes, proven by loading the compiled asset from a directory that contains nothing else. |
+| Are the tests enough to freeze what is implemented? | Yes — see §9. |
+| Does the documentation match the bytes? | Yes, and the check fails if either side moves alone. |
+
+### Issues found by this pass and fixed
+
+1. **Unbounded-ish allocation on three Model decode paths** (above). Fixed, with three tests.
+2. **A behaviour change smuggled in by the effect-block extraction.** The first version of
+   `BuildPartEffectEXT` took eight *pre-resolved* texture asset names, which meant the `.cnj` path
+   started resolving (and therefore containment-checking) fields the constructed effect would never
+   read — turning a silently-ignored bad path into a load failure. Real, narrow, and not this
+   task's call to make. The helper now takes a resolver callback and each field is resolved at
+   exactly the point the original code resolved it.
+3. **An overstated claim in the specification.** §12 said *every* `count × elementSize` computation
+   goes through `CheckedMultiply`; the constant-stride ones do not, because they cannot overflow.
+   Corrected to say what is actually true and why.
+
+### Known limitations, stated rather than implied
+
+* Only three asset types have schemas. Eight more identifiers are reserved with no layout.
+* The Model schema does not express glTF material variants or the glTF import diagnostic report.
+  The compiler refuses the former by name and drops the latter; both are documented.
+* The compiler's Model front end is the one place that re-reads a `.cnj` shape rather than going
+  through the reader that already understands it (`D9`). The drift risk is real and is mitigated by
+  the equivalence tests rather than removed.
+* Byte size is not a measured win on small assets (§8). File count and opens-per-load are.
+* Load *time* has not been measured at all, and no claim is made about it.
+* The `.clip.bin`/`.skeleton.bin`/`_morph.bin` sidecar readers CNB's compiler front end contains
+  assume little-endian, where the pre-existing `.cnj` readers use native order. Identical on every
+  target CNA supports; noted because it is a difference rather than an accident.

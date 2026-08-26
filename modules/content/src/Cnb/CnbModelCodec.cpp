@@ -44,6 +44,20 @@ namespace CNA::Content::Cnb
         /// gets a chance to reject it.
         constexpr std::uint32_t kMaxVertexStride = 4096u;
 
+        /// Schema-level ceilings on the two counts whose in-memory footprint is many times their
+        /// encoded size. The container's generic array limit alone would let a 64 MB chunk of
+        /// four-byte presence words expand into a gigabyte of CnbMorphTarget objects, which is
+        /// technically bounded and still not something a content loader should attempt. Both
+        /// numbers match the ceilings ContentManager's own .cnj morph/skeleton readers already
+        /// apply, so nothing a .cnj can express is refused here.
+        constexpr std::uint32_t kMaxMorphTargets = 100000u;
+        constexpr std::uint32_t kMaxMorphWeightKeys = 1000000u;
+
+        /// The smallest number of bytes one morph weight key can occupy: an f64 time plus three
+        /// zero-length stream counts. Passing the true minimum to ReadCount is what makes its fit
+        /// check meaningful for a variable-length record.
+        constexpr std::uint32_t kMinMorphWeightKeyBytes = 20u;
+
         /// Interns names into one deduplicated table. Deterministic by construction: an index is
         /// assigned the first time a string is seen, in encode order, so the same model always
         /// produces the same table.
@@ -333,6 +347,12 @@ namespace CNA::Content::Cnb
             morph.recomputeFlatNormals = (flags & kMorphFlagRecomputeFlatNormals) != 0u;
 
             const std::uint32_t targetCount = reader.ReadCount(4u, "morph targets");
+            if (targetCount > kMaxMorphTargets)
+            {
+                reader.Fail("declares " + std::to_string(targetCount) +
+                            " morph targets, above this schema's ceiling of " +
+                            std::to_string(kMaxMorphTargets) + ".");
+            }
             std::vector<std::uint32_t> presence;
             presence.reserve(targetCount);
             for (std::uint32_t t = 0; t < targetCount; ++t)
@@ -381,7 +401,14 @@ namespace CNA::Content::Cnb
             morph.weightTrackStepInterpolation = (trackFlags & kMorphTrackStepInterpolation) != 0u;
             morph.weightTrackCubicSpline = (trackFlags & kMorphTrackCubicSpline) != 0u;
 
-            const std::uint32_t keyCount = reader.ReadCount(12u, "morph weight keys");
+            const std::uint32_t keyCount =
+                reader.ReadCount(kMinMorphWeightKeyBytes, "morph weight keys");
+            if (keyCount > kMaxMorphWeightKeys)
+            {
+                reader.Fail("declares " + std::to_string(keyCount) +
+                            " morph weight keys, above this schema's ceiling of " +
+                            std::to_string(kMaxMorphWeightKeys) + ".");
+            }
             morph.weightTrackKeys.resize(keyCount);
             for (std::uint32_t k = 0; k < keyCount; ++k)
             {
@@ -831,6 +858,18 @@ namespace CNA::Content::Cnb
         const std::vector<std::size_t> indexChunks = document.FindAll(CnbModelChunk::IndexData);
         const std::vector<std::size_t> morphChunks = document.FindAll(CnbModelChunk::MorphData);
 
+        // Checked before anything is allocated per part, not after: it is the strongest statement
+        // available about partCount (a chunk count can never exceed the table-of-contents limit),
+        // and it is also the correctness check that an unreferenced geometry chunk means the
+        // file's tables and its payload disagree.
+        if (vertexChunks.size() != partCount || indexChunks.size() != partCount)
+        {
+            throw ContentLoadException(
+                "'" + document.Origin() + "' has " + std::to_string(vertexChunks.size()) +
+                " vertex and " + std::to_string(indexChunks.size()) + " index chunk(s) for " +
+                std::to_string(partCount) + " part(s).");
+        }
+
         {
             CnbByteReader reader = document.OpenChunk(document.RequireSingle(CnbModelChunk::Meshes));
             const std::uint64_t fixed =
@@ -1025,16 +1064,6 @@ namespace CNA::Content::Cnb
                                         slots.begin() + static_cast<std::ptrdiff_t>(end));
                 model.meshes.push_back(std::move(mesh));
             }
-        }
-
-        // Every geometry chunk must belong to some part: an unreferenced one means the file's
-        // tables and its payload disagree, which is a corrupt file rather than dead weight.
-        if (vertexChunks.size() != partCount || indexChunks.size() != partCount)
-        {
-            throw ContentLoadException(
-                "'" + document.Origin() + "' has " + std::to_string(vertexChunks.size()) +
-                " vertex and " + std::to_string(indexChunks.size()) + " index chunk(s) for " +
-                std::to_string(partCount) + " part(s).");
         }
 
         // --- MSKL ---------------------------------------------------------------------------

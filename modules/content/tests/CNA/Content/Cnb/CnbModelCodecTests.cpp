@@ -776,3 +776,55 @@ TEST(CnbModelCodecTest, DecoderRejectsAnOutOfRangeAlphaModeOrTexCoordSet)
         EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
     }
 }
+
+// --------------------------------------------------------------------------------------------
+// Schema-level allocation ceilings (plans/plan_cnb.md CNBF-092 review)
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbModelCodecTest, DecoderRefusesAMorphTargetCountAboveTheSchemaCeiling)
+{
+    // The container's generic array limit alone would let a chunk of four-byte presence words
+    // expand into orders of magnitude more CnbMorphTarget objects. This ceiling matches the one
+    // ContentManager's own .cnj morph reader already applies, so nothing a .cnj can express is
+    // refused -- but a crafted .cnb cannot ask for a gigabyte of morph targets either.
+    CnbModelData model = MakeSmallModel();
+    CnbMorphData morph;
+    morph.vertexCount = 0u;
+    model.parts[0].morph = morph;
+    const ModelFileEditor editor{model};
+
+    std::vector<std::uint8_t> chunk = editor.Chunk(CnbModelChunk::MorphData);
+    PatchU32(chunk, 8u, 200000u);           // targetCount, above the 100000 ceiling
+    chunk.resize(12u + 200000u * 4u, 0u);   // ... and actually supply that many presence words
+    const CnbDocument doc = Parse(editor.Rebuild(CnbModelChunk::MorphData, chunk));
+    EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
+}
+
+TEST(CnbModelCodecTest, DecoderRefusesAMorphWeightKeyCountAboveTheSchemaCeiling)
+{
+    CnbModelData model = MakeSmallModel();
+    CnbMorphData morph;
+    morph.vertexCount = 0u;
+    model.parts[0].morph = morph;
+    const ModelFileEditor editor{model};
+
+    // Layout with zero targets and zero weights: vertexCount, flags, targetCount, weightCount,
+    // trackFlags, keyCount -- six u32s, the last of which is the key count.
+    std::vector<std::uint8_t> chunk = editor.Chunk(CnbModelChunk::MorphData);
+    ASSERT_EQ(chunk.size(), 24u);
+    PatchU32(chunk, 20u, 2000000u);                     // keyCount, above the 1000000 ceiling
+    chunk.resize(24u + 2000000u * 20u, 0u);             // ... with room for that many minimal keys
+    const CnbDocument doc = Parse(editor.Rebuild(CnbModelChunk::MorphData, chunk));
+    EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
+}
+
+TEST(CnbModelCodecTest, DecoderRefusesAPartCountThatDisagreesWithTheGeometryChunkCount)
+{
+    // Checked before any per-part allocation, so it is both the correctness check for an
+    // unreferenced geometry chunk and the real bound on how many parts a file can ask for.
+    const ModelFileEditor editor{MakeSmallModel()};
+    std::vector<std::uint8_t> header = editor.Chunk(CnbModelChunk::Header);
+    PatchU32(header, 8u, 100000u); // partCount, with only one MVTX/MIDX chunk present
+    const CnbDocument doc = Parse(editor.Rebuild(CnbModelChunk::Header, header));
+    EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
+}

@@ -537,14 +537,31 @@ defaults:
 | `maxArrayElementCount` | 16777216 |
 | `maxChunkAlignment` | 4096 |
 
-Every `offset + size` and `count × elementSize` computation goes through `CheckedAdd`/
-`CheckedMultiply`, which test before performing the operation, so an overflow never occurs. Unsigned
-wrap-around is well-defined in C++ but produces a *small* result from two huge inputs, which then
-passes a naive bound check — that is exactly how a bounds-checked parser still reads out of range.
+Arithmetic that combines two *file-declared* values — `offset + storedSize`,
+`vertexStride × vertexCount`, `firstKey + keyCount` — goes through `CheckedAdd`/`CheckedMultiply`,
+which test before performing the operation, so the overflow never occurs. Unsigned wrap-around is
+well-defined in C++ but produces a *small* result from two huge inputs, which then passes a naive
+bound check — that is exactly how a bounds-checked parser still reads out of range. Arithmetic that
+multiplies one `u32` count by a *compile-time* stride (`keyCount × 48`, `boneCount × 72`, …) is
+widened to `u64` first, where the largest possible product is under 2⁴¹ and no overflow is
+representable.
 
 Every count is also checked against how many elements could physically fit in the bytes that
 remain, so a declared count of four billion in a twelve-byte chunk fails immediately rather than
 after an enormous allocation.
+
+Two counts additionally carry a **schema-level** ceiling, because their in-memory footprint is many
+times their encoded size and the generic array limit alone would still allow an unreasonable
+allocation. Both match the ceilings `ContentManager`'s own `.cnj` readers already apply, so nothing
+a `.cnj` can express is refused:
+
+| count | ceiling |
+|---|---|
+| a part's morph targets (`MMRP`) | 100000 |
+| a part's morph weight keys (`MMRP`) | 1000000 |
+
+A `Model`'s part count is bounded by a stronger check still: it must equal the number of `MVTX` and
+`MIDX` chunks the file actually holds, which the table-of-contents limit already caps.
 
 ---
 

@@ -2459,25 +2459,22 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
-         * @brief Every texture a mesh part's material names, already resolved to logical asset
-         *        names ContentManager can load. An empty string means the slot is unused.
+         * @brief Resolves one of a mesh part's material texture fields to a logical asset name
+         *        ContentManager can load, returning empty when that slot is unused.
          *
          * @note CNAEXT -- plans/plan_cnb.md `CNBF-074`. Introduced when the compiled `.cnb` Model path
          * needed the same effect construction the `.cnj` path already had: the two differ only in
-         * how they arrive at these eight names, so resolving them first and sharing everything
-         * after that is what keeps one effect/material policy instead of two.
+         * how they arrive at these eight names, so resolving through one callback and sharing
+         * everything after it is what keeps one effect/material policy instead of two.
+         *
+         * A callback rather than a pre-resolved struct on purpose. Each field is resolved at
+         * exactly the point the original code resolved it, so a field the constructed effect never
+         * reads is still never resolved and never diagnosed -- unifying the two paths must not
+         * quietly turn an ignored bad path into a load failure. The argument is the field's name
+         * in the source document (`"texture"`, `"normalMap"`, …), which the `.cnj` resolver also
+         * uses to name the offending field in an error message.
          */
-        struct ResolvedMaterialAssetsEXT
-        {
-            std::string texture;
-            std::string texture2;
-            std::string normalMap;
-            std::string metallicRoughnessMap;
-            std::string emissiveMap;
-            std::string occlusionMap;
-            std::string specularMap;
-            std::string specularColorMap;
-        };
+        using MaterialAssetResolverEXT = std::function<std::string(const char* field)>;
 
         /**
          * @brief Builds one mesh part's Effect and applies its complete material state.
@@ -2492,7 +2489,7 @@ namespace Microsoft::Xna::Framework::Content
          *                               "DualTextureEffect", "PbrEffect", "SkinnedPbrEffect".
          *                               Ignored when @p customEffectAssetName is non-empty.
          * @param customEffectAssetName  Logical asset name of a game-supplied Effect, or empty.
-         * @param textures               The part's resolved texture asset names.
+         * @param resolveAsset           Resolves one of the part's texture fields by name.
          * @param material               The part's material state.
          * @param vertexColorEnabled     Whether the effect should sample per-vertex colour.
          * @param unlit                  Whether the material is KHR_materials_unlit.
@@ -2505,7 +2502,7 @@ namespace Microsoft::Xna::Framework::Content
         std::shared_ptr<Graphics::Effect> BuildPartEffectEXT(
             Graphics::GraphicsDevice& device, ContentManager& cm,
             const std::string& stockEffectName, const std::string& customEffectAssetName,
-            const ResolvedMaterialAssetsEXT& textures,
+            const MaterialAssetResolverEXT& resolveAsset,
             const CNA::Internal::GltfImport::MaterialOut& material,
             bool vertexColorEnabled, bool unlit, bool applyPunctualLights,
             const std::vector<CNA::Internal::GltfImport::LightOut>& lights,
@@ -2553,9 +2550,10 @@ namespace Microsoft::Xna::Framework::Content
                 // explicitly turned on; SkinnedEffect's real XNA shader is always
                 // textured (no such toggle exists on it). A custom effect loaded
                 // via "effect" has no standard texture slot to bind through here.
-                if (!textures.texture.empty()) {
+                if (const std::string textureAsset = resolveAsset("texture");
+                    !textureAsset.empty()) {
                     auto tex = std::make_unique<Graphics::Texture2D>(
-                        cm.Load<Graphics::Texture2D>(textures.texture));
+                        cm.Load<Graphics::Texture2D>(textureAsset));
                     if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
                         basicFx->setTextureProperty(tex.get());
                         basicFx->setTextureEnabledProperty(true);
@@ -2578,10 +2576,11 @@ namespace Microsoft::Xna::Framework::Content
                 // CNB-73: the second (layer-1) texture slot -- only meaningful for
                 // DualTextureEffect, which is the only stock effect with a Texture2
                 // parameter.
-                if (!textures.texture2.empty()) {
+                if (const std::string texture2Asset = resolveAsset("texture2");
+                    !texture2Asset.empty()) {
                     if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
                         auto tex2 = std::make_unique<Graphics::Texture2D>(
-                            cm.Load<Graphics::Texture2D>(textures.texture2));
+                            cm.Load<Graphics::Texture2D>(texture2Asset));
                         dualFx->setTexture2Property(tex2.get());
                         res.textureOwners.push_back(std::move(tex2));
                     }
@@ -2590,7 +2589,8 @@ namespace Microsoft::Xna::Framework::Content
                 // GLTF-236/237: apply the complete material carrier reconstructed
                 // above, including the four PBR maps and every factor/scalar.
                 if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                    auto loadPbrMap = [&](const std::string& assetName) -> Graphics::Texture2D* {
+                    auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
+                        const std::string assetName = resolveAsset(field);
                         if (assetName.empty()) { return nullptr; }
                         auto tex = std::make_unique<Graphics::Texture2D>(
                             cm.Load<Graphics::Texture2D>(assetName));
@@ -2598,17 +2598,17 @@ namespace Microsoft::Xna::Framework::Content
                         res.textureOwners.push_back(std::move(tex));
                         return texPtr;
                     };
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.normalMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
                         pbrFx->setNormalMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.metallicRoughnessMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("metallicRoughnessMap"))
                         pbrFx->setMetallicRoughnessMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.emissiveMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("emissiveMap"))
                         pbrFx->setEmissiveMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.occlusionMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("occlusionMap"))
                         pbrFx->setOcclusionMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.specularMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("specularMap"))
                         pbrFx->setSpecularMapEXTProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.specularColorMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("specularColorMap"))
                         pbrFx->setSpecularColorMapEXTProperty(t);
                     pbrFx->setMetallicFactorProperty(material.metallicFactor);
                     pbrFx->setRoughnessFactorProperty(material.roughnessFactor);
@@ -2645,7 +2645,8 @@ namespace Microsoft::Xna::Framework::Content
                     pbrFx->setAlphaCutoffEXTProperty(material.alphaCutoff);
                     pbrFx->setDoubleSidedEXTProperty(material.doubleSided);
                 } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                    auto loadPbrMap = [&](const std::string& assetName) -> Graphics::Texture2D* {
+                    auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
+                        const std::string assetName = resolveAsset(field);
                         if (assetName.empty()) { return nullptr; }
                         auto tex = std::make_unique<Graphics::Texture2D>(
                             cm.Load<Graphics::Texture2D>(assetName));
@@ -2653,17 +2654,17 @@ namespace Microsoft::Xna::Framework::Content
                         res.textureOwners.push_back(std::move(tex));
                         return texPtr;
                     };
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.normalMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
                         skinnedPbrFx->setNormalMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.metallicRoughnessMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("metallicRoughnessMap"))
                         skinnedPbrFx->setMetallicRoughnessMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.emissiveMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("emissiveMap"))
                         skinnedPbrFx->setEmissiveMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.occlusionMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("occlusionMap"))
                         skinnedPbrFx->setOcclusionMapProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.specularMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("specularMap"))
                         skinnedPbrFx->setSpecularMapEXTProperty(t);
-                    if (Graphics::Texture2D* t = loadPbrMap(textures.specularColorMap))
+                    if (Graphics::Texture2D* t = loadPbrMap("specularColorMap"))
                         skinnedPbrFx->setSpecularColorMapEXTProperty(t);
                     skinnedPbrFx->setMetallicFactorProperty(material.metallicFactor);
                     skinnedPbrFx->setRoughnessFactorProperty(material.roughnessFactor);
@@ -4952,26 +4953,26 @@ namespace Microsoft::Xna::Framework::Content
                             // TankOnAHeightMap's wheel/turret/cannon/hatch lookups) via
                             // Model.Bones["PartName"].
                             // Load effect and register it in the mesh's effect collection.
-                            ResolvedMaterialAssetsEXT resolvedTextures;
-                            const auto resolveTexture = [&](const std::string& file,
-                                                            const char* field) -> std::string
+                            // Resolved on demand, so a field this part's effect never reads keeps
+                            // being ignored rather than becoming a containment error.
+                            const MaterialAssetResolverEXT resolveAsset =
+                                [&](const char* field) -> std::string
                             {
+                                const std::string file =
+                                    std::strcmp(field, "texture") == 0 ? textureFile
+                                    : std::strcmp(field, "texture2") == 0 ? texture2File
+                                    : std::strcmp(field, "normalMap") == 0 ? normalMapFile
+                                    : std::strcmp(field, "metallicRoughnessMap") == 0
+                                          ? metallicRoughnessMapFile
+                                    : std::strcmp(field, "emissiveMap") == 0 ? emissiveMapFile
+                                    : std::strcmp(field, "occlusionMap") == 0 ? occlusionMapFile
+                                    : std::strcmp(field, "specularMap") == 0 ? specularMapFile
+                                    : std::strcmp(field, "specularColorMap") == 0
+                                          ? specularColorMapFile
+                                                                              : std::string();
                                 if (file.empty()) { return {}; }
                                 return ResolveRootRelativeAssetName(cm, path, field, file);
                             };
-                            resolvedTextures.texture = resolveTexture(textureFile, "texture");
-                            resolvedTextures.texture2 = resolveTexture(texture2File, "texture2");
-                            resolvedTextures.normalMap = resolveTexture(normalMapFile, "normalMap");
-                            resolvedTextures.metallicRoughnessMap =
-                                resolveTexture(metallicRoughnessMapFile, "metallicRoughnessMap");
-                            resolvedTextures.emissiveMap =
-                                resolveTexture(emissiveMapFile, "emissiveMap");
-                            resolvedTextures.occlusionMap =
-                                resolveTexture(occlusionMapFile, "occlusionMap");
-                            resolvedTextures.specularMap =
-                                resolveTexture(specularMapFile, "specularMap");
-                            resolvedTextures.specularColorMap =
-                                resolveTexture(specularColorMapFile, "specularColorMap");
 
                             const bool isStockEffect =
                                 effectStr.empty() || effectStr == "BasicEffect" ||
@@ -4982,7 +4983,7 @@ namespace Microsoft::Xna::Framework::Content
                                 isStockEffect
                                     ? std::string()
                                     : ResolveRootRelativeAssetName(cm, path, "effect", effectStr),
-                                resolvedTextures, material, vertexColorEnabled, unlit,
+                                resolveAsset, material, vertexColorEnabled, unlit,
                                 /*applyPunctualLights=*/envelope.cnjVersion >= 2, punctualLights,
                                 *res);
 
@@ -5397,15 +5398,25 @@ namespace Microsoft::Xna::Framework::Content
                     res->morphOwners.push_back(std::move(morph));
                 }
 
-                ResolvedMaterialAssetsEXT textures;
-                textures.texture = source.material.baseColorTexture;
-                textures.texture2 = source.material.texture2;
-                textures.normalMap = source.material.normalMap;
-                textures.metallicRoughnessMap = source.material.metallicRoughnessMap;
-                textures.emissiveMap = source.material.emissiveMap;
-                textures.occlusionMap = source.material.occlusionMap;
-                textures.specularMap = source.material.specularMap;
-                textures.specularColorMap = source.material.specularColorMap;
+                // Already resolved: the compiled file's external-reference table holds the
+                // logical names, so this resolver is a lookup rather than a path computation.
+                const MaterialAssetResolverEXT resolveAsset =
+                    [&source](const char* field) -> std::string
+                {
+                    const Cnb::CnbMaterial& m = source.material;
+                    if (std::strcmp(field, "texture") == 0) { return m.baseColorTexture; }
+                    if (std::strcmp(field, "texture2") == 0) { return m.texture2; }
+                    if (std::strcmp(field, "normalMap") == 0) { return m.normalMap; }
+                    if (std::strcmp(field, "metallicRoughnessMap") == 0)
+                    {
+                        return m.metallicRoughnessMap;
+                    }
+                    if (std::strcmp(field, "emissiveMap") == 0) { return m.emissiveMap; }
+                    if (std::strcmp(field, "occlusionMap") == 0) { return m.occlusionMap; }
+                    if (std::strcmp(field, "specularMap") == 0) { return m.specularMap; }
+                    if (std::strcmp(field, "specularColorMap") == 0) { return m.specularColorMap; }
+                    return {};
+                };
 
                 const bool custom = source.effectKind == Cnb::CnbEffectKind::External;
                 std::shared_ptr<Graphics::Effect> fx = BuildPartEffectEXT(
@@ -5413,7 +5424,7 @@ namespace Microsoft::Xna::Framework::Content
                     custom ? std::string()
                            : std::string(kStockEffectNames[
                                  static_cast<std::size_t>(source.effectKind)]),
-                    custom ? source.externalEffect : std::string(), textures,
+                    custom ? source.externalEffect : std::string(), resolveAsset,
                     MaterialFromCnbEXT(source.material), source.vertexColorEnabled, source.unlit,
                     data.appliesGltfLightingPolicy, lights, *res);
 

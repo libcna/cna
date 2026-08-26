@@ -3,6 +3,7 @@
 #include "CNA/Content/Cnb/CnbModelFromCnj.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -70,9 +71,9 @@ namespace CNA::Content::Cnb
 
             [[nodiscard]] std::size_t Remaining() const { return bytes_.size() - position_; }
 
-            std::int32_t I32() { return static_cast<std::int32_t>(Raw<std::uint32_t>()); }
-            float F32() { const auto bits = Raw<std::uint32_t>(); float v; std::memcpy(&v, &bits, 4); return v; }
-            double F64() { const auto bits = Raw<std::uint64_t>(); double v; std::memcpy(&v, &bits, 8); return v; }
+            std::int32_t I32() { return std::bit_cast<std::int32_t>(Raw<std::uint32_t>()); }
+            float F32() { return std::bit_cast<float>(Raw<std::uint32_t>()); }
+            double F64() { return std::bit_cast<double>(Raw<std::uint64_t>()); }
 
             std::array<float, 16> Matrix()
             {
@@ -95,6 +96,11 @@ namespace CNA::Content::Cnb
             }
 
         private:
+            // Assembled from individual bytes as little-endian rather than memcpy'd natively.
+            // The legacy sidecars were written by a native memcpy, so on a big-endian host the two
+            // would disagree -- but every CNA target is little-endian, the sidecars carry no
+            // byte-order marker of their own, and being explicit here is what makes this reader's
+            // behaviour a stated property rather than an accident of the build machine.
             template <typename T>
             T Raw()
             {
