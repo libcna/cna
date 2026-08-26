@@ -6124,6 +6124,13 @@ struct VSOut {
         // shape a capability query exists to prevent.
         if (capability == CNA::GraphicsCapability::WireFrame)
             return false;
+        // WEBGPU-134: multiple simultaneous render targets. SetRenderTargets() below refuses any
+        // count > 1 (WEBGPU-85/86/87 -- MRT infrastructure -- are still open), so reporting the
+        // shared permissive default here would promise a frame the renderer then throws on. Same
+        // defect class WEBGPU-115 ruled on for WireFrame: a renderer must not claim a capability it
+        // silently refuses.
+        if (capability == CNA::GraphicsCapability::MultipleRenderTargets)
+            return false;
         return IGraphicsRenderer::SupportsCapability(capability);
     }
 
@@ -7242,9 +7249,12 @@ struct VSOut {
             return;
         }
         if (count > 1)
-            throw std::runtime_error(
-                "CNA WebGPU: multiple simultaneous render targets are not implemented "
-                "on this renderer yet.");
+            throw System::NotSupportedException(
+                "WebGPU: multiple simultaneous render targets are not supported on this renderer, so "
+                "binding " + std::to_string(count) + " targets is refused rather than silently "
+                "drawing into only the first. MRT infrastructure (WEBGPU-85/86/87) is not built yet. "
+                "Query GraphicsDevice::SupportsCapability(GraphicsCapability::MultipleRenderTargets) "
+                "-- it reports false here -- and bind a single render target instead.");
         if (renderTargets[0].IsRenderTargetCubeFace())
             SetRenderTargetCubeFace(
                 renderTargets[0].GetRenderTargetCube(),

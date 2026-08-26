@@ -279,11 +279,13 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
         << "WebGPU claims WireFrame support again -- the capability override is gone, and the "
            "draws below will silently render solid geometry instead of refusing";
 
-    // The surrounding capability answers must not move with it. MultiStreamVertexInput is the one
-    // entry whose shared default is false (REMED-GFX-201); everything else is genuinely supported.
+    // The surrounding capability answers must not move with it. MultiStreamVertexInput,
+    // MultipleRenderTargets (WEBGPU-134) and OcclusionQuery (WEBGPU-135) are the entries this
+    // renderer reports false for -- the first by shared default (REMED-GFX-201), the other two by
+    // their own overrides, for the same reason as WireFrame; the rest below are genuinely supported.
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::CustomEffects));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::Texture3D));
