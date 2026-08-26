@@ -765,6 +765,24 @@ tests take **19-21 seconds each** (`GltfConformanceL6.ViewAndProjectionReachEver
 changed: SpriteBatch, VideoPlayer, ContentLost, RenderTarget, GraphicsDevice, Storage and the
 dynamic buffers.
 
+### ThreadSanitizer
+
+`build-tsan/` (`-DCNA_SANITIZE=thread`), same three C-API suites:
+
+| Test | Data races |
+| --- | --- |
+| `CApi_StorageSmoke` | **0** |
+| `CApi_LifecycleSmoke` | **0** |
+| `CApi_OwnedGraphicsDeviceSmoke` | **0** |
+
+`CApi_LifecycleSmoke` then crashed **inside TSan itself** — `SEGV on unknown address 0x18`,
+"nested bug in the same thread, aborting" — on a worker thread, with the faulting PC in a shared
+library and **no CNA frame in the trace**. The same binary passes cleanly in the ordinary build.
+
+Recorded as a TSan/driver limitation rather than a finding: there is no evidence pointing at CNA
+code, and claiming one would be exactly the false sanitizer evidence both orders warn against. The
+data-race result above stands on its own.
+
 ### A real defect the focused run found
 
 225 tests in, ASan aborted on a genuine **heap-use-after-free**:
