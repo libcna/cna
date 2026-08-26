@@ -1139,6 +1139,201 @@ CNA_C_API CNA_Result cna_pbr_material_apply_state(
     const CNA_PbrMaterialEXT* material,
     CNA_Handle graphics_device);
 
+/* ---------------------------------------------------------------------------------------------
+ * Lights
+ *
+ * Every type below is a pure value, so all of these routes work in **both** builds: filling a
+ * light with its canonical defaults needs no engine-layer object. `PunctualLightEXT` and
+ * `ShadowCascadeStateEXT` are not behind `CNA_CNAEXT` at all -- they live in `modules/graphics` --
+ * and the other three are, but only their defaults are checked against the canonical structures,
+ * which is a compile-time assertion rather than a call.
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief A directional light: colour and intensity arriving from one direction, everywhere. */
+typedef struct CNA_DirectionalLightEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief The direction the light travels; the default points straight down. */
+    CNA_Vector3 direction;
+    /** @brief Linear RGB colour; the default is white. */
+    CNA_Vector3 color;
+    /** @brief Scalar multiplier on @ref color. */
+    float intensity;
+    /** @brief `CNA_TRUE` when this light should be given a shadow map. */
+    CNA_Bool casts_shadows;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[3];
+} CNA_DirectionalLightEXT;
+
+/**
+ * @brief Fills a directional light with the canonical defaults.
+ *
+ * @param out_light Receives direction (0, -1, 0), white, intensity 1 and no shadows.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_directional_light_ext_init(CNA_DirectionalLightEXT* out_light);
+
+/** @brief A point light: colour radiating from a position, falling off to a range. */
+typedef struct CNA_PointLightEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief World-space position. */
+    CNA_Vector3 position;
+    /** @brief Linear RGB colour; the default is white. */
+    CNA_Vector3 color;
+    /** @brief Scalar multiplier on @ref color. */
+    float intensity;
+    /** @brief Distance at which the light stops contributing. */
+    float range;
+    /** @brief `CNA_TRUE` when this light should be given a shadow cube. */
+    CNA_Bool casts_shadows;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[3];
+} CNA_PointLightEXT;
+
+/**
+ * @brief Fills a point light with the canonical defaults.
+ *
+ * @param out_light Receives the origin, white, intensity 1, range 20 and no shadows.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_point_light_ext_init(CNA_PointLightEXT* out_light);
+
+/** @brief A spot light: a point light restricted to a cone. */
+typedef struct CNA_SpotLightEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief World-space position. */
+    CNA_Vector3 position;
+    /** @brief The direction the cone points; the default points straight down. */
+    CNA_Vector3 direction;
+    /** @brief Linear RGB colour; the default is white. */
+    CNA_Vector3 color;
+    /** @brief Scalar multiplier on @ref color. */
+    float intensity;
+    /** @brief Distance at which the light stops contributing. */
+    float range;
+    /** @brief Half-angle in radians inside which the light is at full strength. */
+    float inner_angle;
+    /** @brief Half-angle in radians at which the light has fallen to nothing. */
+    float outer_angle;
+    /** @brief `CNA_TRUE` when this light should be given a shadow map. */
+    CNA_Bool casts_shadows;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[3];
+} CNA_SpotLightEXT;
+
+/**
+ * @brief Fills a spot light with the canonical defaults.
+ *
+ * @param out_light Receives the origin, direction (0, -1, 0), white, intensity 1, range 20, inner
+ * angle 0.35, outer angle 0.5 and no shadows.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_spot_light_ext_init(CNA_SpotLightEXT* out_light);
+
+/** @brief Fixed-width identity of which kind of punctual light a `CNA_PunctualLightEXT` carries. */
+typedef uint32_t CNA_PunctualLightKindEXT;
+
+/** @brief No light; the slot contributes nothing. */
+#define CNA_PUNCTUAL_LIGHT_KIND_EXT_NONE UINT32_C(0)
+/** @brief A point light. */
+#define CNA_PUNCTUAL_LIGHT_KIND_EXT_POINT UINT32_C(1)
+/** @brief A spot light. */
+#define CNA_PUNCTUAL_LIGHT_KIND_EXT_SPOT UINT32_C(2)
+
+/**
+ * @brief One punctual light as an effect consumes it, with its shadow resources attached.
+ *
+ * This is the shape the stock effects read, which is why it carries both a cube and a 2D shadow
+ * texture: a point light shadows into the cube and a spot light into the map, and @ref kind says
+ * which one is meaningful.
+ */
+typedef struct CNA_PunctualLightEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief Which kind of light this is; `NONE` means the slot is unused. */
+    CNA_PunctualLightKindEXT kind;
+    /** @brief Padding; write zero. */
+    uint32_t reserved;
+    /** @brief World-space position. */
+    CNA_Vector3 position;
+    /** @brief The direction a spot light points; the default points straight down. */
+    CNA_Vector3 direction;
+    /** @brief Linear RGB diffuse colour; the default is white. */
+    CNA_Vector3 diffuse_color;
+    /** @brief Distance at which the light stops contributing. */
+    float range;
+    /** @brief Half-angle in radians inside which a spot light is at full strength. */
+    float inner_angle;
+    /** @brief Half-angle in radians at which a spot light has fallen to nothing. */
+    float outer_angle;
+    /** @brief Depth bias applied when sampling this light's shadow. */
+    float shadow_depth_bias;
+    /** @brief Borrowed TextureCube handle for a point light's shadow, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle shadow_cube;
+    /** @brief Borrowed Texture2D handle for a spot light's shadow, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle shadow_map;
+    /** @brief The transform that takes world space into this light's shadow space. */
+    CNA_Matrix shadow_view_projection;
+} CNA_PunctualLightEXT;
+
+/**
+ * @brief Fills a punctual light with the canonical defaults.
+ *
+ * @param out_light Receives kind `NONE`, the origin, direction (0, -1, 0), white, range 20, inner
+ * angle 0.35, outer angle 0.5, depth bias 0.004, no shadow textures and an identity transform.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_punctual_light_ext_init(CNA_PunctualLightEXT* out_light);
+
+/** @brief The greatest number of cascades a `CNA_ShadowCascadeStateEXT` can describe. */
+#define CNA_SHADOW_CASCADE_MAX_EXT 4
+
+/**
+ * @brief The cascaded-shadow state an effect reads for one frame.
+ *
+ * @ref count says how many entries of @ref world_to_atlas and @ref split_distance are meaningful;
+ * the rest are left at their defaults rather than removed, so the array stays a fixed layout.
+ */
+typedef struct CNA_ShadowCascadeStateEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief How many cascades are in use; zero disables cascaded shadows. */
+    int32_t count;
+    /** @brief Width in world units over which neighbouring cascades cross-fade. */
+    float blend_band;
+    /** @brief Transform from world space into each cascade's atlas region. */
+    CNA_Matrix world_to_atlas[CNA_SHADOW_CASCADE_MAX_EXT];
+    /** @brief View-space distance at which each cascade ends. */
+    float split_distance[CNA_SHADOW_CASCADE_MAX_EXT];
+    /** @brief The camera view the splits were computed against. */
+    CNA_Matrix camera_view;
+    /** @brief `CNA_TRUE` to tint each cascade differently, for diagnosing split placement. */
+    CNA_Bool debug_tint;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[3];
+} CNA_ShadowCascadeStateEXT;
+
+/**
+ * @brief Fills a cascaded-shadow state with the canonical defaults.
+ *
+ * @param out_state Receives zero cascades, identity transforms, zero splits, no blend band and no
+ * debug tint -- which is the state that disables cascaded shadows.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_shadow_cascade_state_ext_init(CNA_ShadowCascadeStateEXT* out_state);
+
 #ifdef __cplusplus
 }
 #endif

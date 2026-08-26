@@ -1422,6 +1422,7 @@
   "cna_devices_ext_is_available",
   "cna_directional_light_create",
   "cna_directional_light_destroy",
+  "cna_directional_light_ext_init",
   "cna_directional_light_get_diffuse_color",
   "cna_directional_light_get_direction",
   "cna_directional_light_get_enabled",
@@ -2992,6 +2993,7 @@
   "cna_point_get_zero",
   "cna_point_init",
   "cna_point_init_xy",
+  "cna_point_light_ext_init",
   "cna_point_multiply",
   "cna_point_not_equals",
   "cna_point_subtract",
@@ -3040,6 +3042,7 @@
   "cna_property_dictionary_set_string",
   "cna_property_dictionary_set_time_span_ticks",
   "cna_property_dictionary_try_get_value_kind_ext",
+  "cna_punctual_light_ext_init",
   "cna_quality_of_service_init",
   "cna_quality_of_service_init_measured",
   "cna_quaternion_add",
@@ -3162,6 +3165,7 @@
   "cna_shader_effect_set_uniform_vector4",
   "cna_shader_effect_set_view",
   "cna_shader_effect_set_world",
+  "cna_shadow_cascade_state_ext_init",
   "cna_signed_in_gamer_award_achievement",
   "cna_signed_in_gamer_begin_award_achievement",
   "cna_signed_in_gamer_begin_get_achievements",
@@ -3343,6 +3347,7 @@
   "cna_sound_effect_set_master_volume",
   "cna_sound_effect_set_name",
   "cna_sound_effect_set_speed_of_sound",
+  "cna_spot_light_ext_init",
   "cna_sprite_batch_begin",
   "cna_sprite_batch_begin_with_effect",
   "cna_sprite_batch_begin_with_states",
@@ -4825,6 +4830,9 @@
   "CNA_PROPERTY_VALUE_KIND_STRING": 8,
   "CNA_PROPERTY_VALUE_KIND_TIME_SPAN": 9,
   "CNA_PROPERTY_VALUE_KIND_UNKNOWN": 0,
+  "CNA_PUNCTUAL_LIGHT_KIND_EXT_NONE": 0,
+  "CNA_PUNCTUAL_LIGHT_KIND_EXT_POINT": 1,
+  "CNA_PUNCTUAL_LIGHT_KIND_EXT_SPOT": 2,
   "CNA_RACING_CAMERA_ANGLE_BACK": 0,
   "CNA_RACING_CAMERA_ANGLE_FRONT": 1,
   "CNA_RACING_CAMERA_ANGLE_INSIDE": 2,
@@ -4947,6 +4955,7 @@
   "CNA_SHADER_DIALECT_WGSL": 6,
   "CNA_SHADER_STAGE_PIXEL": 0,
   "CNA_SHADER_STAGE_VERTEX": 1,
+  "CNA_SHADOW_CASCADE_MAX_EXT": 4,
   "CNA_SHADOW_QUALITY_DISABLED": 0,
   "CNA_SHADOW_QUALITY_HIGH": 3,
   "CNA_SHADOW_QUALITY_LOW": 1,
@@ -5988,6 +5997,10 @@
    8
   ],
   "CNA_PropertyValueKind": [
+   4,
+   4
+  ],
+  "CNA_PunctualLightKindEXT": [
    4,
    4
   ],
@@ -7319,6 +7332,40 @@
     ]
    },
    "size": 64
+  },
+  "CNA_DirectionalLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     36,
+     1
+    ],
+    "color": [
+     20,
+     12
+    ],
+    "direction": [
+     8,
+     12
+    ],
+    "intensity": [
+     32,
+     4
+    ],
+    "reserved": [
+     37,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
   },
   "CNA_DisplayMode": {
    "align": 4,
@@ -9918,6 +9965,44 @@
    },
    "size": 8
   },
+  "CNA_PointLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     40,
+     1
+    ],
+    "color": [
+     20,
+     12
+    ],
+    "intensity": [
+     32,
+     4
+    ],
+    "position": [
+     8,
+     12
+    ],
+    "range": [
+     36,
+     4
+    ],
+    "reserved": [
+     41,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 44
+  },
   "CNA_PostProcessContext": {
    "align": 8,
    "fields": {
@@ -10053,6 +10138,68 @@
     ]
    },
    "size": 44
+  },
+  "CNA_PunctualLightEXT": {
+   "align": 8,
+   "fields": {
+    "diffuse_color": [
+     40,
+     12
+    ],
+    "direction": [
+     28,
+     12
+    ],
+    "inner_angle": [
+     56,
+     4
+    ],
+    "kind": [
+     8,
+     4
+    ],
+    "outer_angle": [
+     60,
+     4
+    ],
+    "position": [
+     16,
+     12
+    ],
+    "range": [
+     52,
+     4
+    ],
+    "reserved": [
+     12,
+     4
+    ],
+    "shadow_cube": [
+     72,
+     8
+    ],
+    "shadow_depth_bias": [
+     64,
+     4
+    ],
+    "shadow_map": [
+     80,
+     8
+    ],
+    "shadow_view_projection": [
+     88,
+     64
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 152
   },
   "CNA_QualityOfService": {
    "align": 8,
@@ -10560,6 +10707,40 @@
    },
    "size": 16
   },
+  "CNA_ShadowCascadeStateEXT": {
+   "align": 4,
+   "fields": {
+    "blend_band": [
+     12,
+     4
+    ],
+    "camera_view": [
+     288,
+     64
+    ],
+    "count": [
+     8,
+     4
+    ],
+    "debug_tint": [
+     352,
+     1
+    ],
+    "reserved": [
+     353,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 356
+  },
   "CNA_SignedInGamerEventInfo": {
    "align": 8,
    "fields": {
@@ -10725,6 +10906,56 @@
     ]
    },
    "size": 32
+  },
+  "CNA_SpotLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     60,
+     1
+    ],
+    "color": [
+     32,
+     12
+    ],
+    "direction": [
+     20,
+     12
+    ],
+    "inner_angle": [
+     52,
+     4
+    ],
+    "intensity": [
+     44,
+     4
+    ],
+    "outer_angle": [
+     56,
+     4
+    ],
+    "position": [
+     8,
+     12
+    ],
+    "range": [
+     48,
+     4
+    ],
+    "reserved": [
+     61,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 64
   },
   "CNA_SpriteBatchBeginInfo": {
    "align": 4,

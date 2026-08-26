@@ -9,6 +9,8 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/GraphicsImageAccess.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PunctualLightEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShadowCascadeStateEXT.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
 
 #include <cstring>
@@ -19,6 +21,9 @@
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/DepthEncoding.hpp"
+#include "CNA/Graphics/DirectionalLightEXT.hpp"
+#include "CNA/Graphics/PointLightEXT.hpp"
+#include "CNA/Graphics/SpotLightEXT.hpp"
 #include "CNA/Graphics/EffectPass.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
 #include "CNA/Graphics/FullscreenPass.hpp"
@@ -642,17 +647,173 @@ CNA_Result cna_post_process_context_init(CNA_PostProcessContext* const outContex
         defaults.source_velocity = CNA_INVALID_HANDLE;
         defaults.destination = CNA_INVALID_HANDLE;
         defaults.has_previous_frame = CNA_FALSE;
-        // The canonical struct default-initializes its matrices, which for Matrix is the identity.
-        const CNA_Result identityResult = cna_matrix_get_identity(&defaults.projection);
-        if (identityResult != CNA_RESULT_SUCCESS) {
-            return identityResult;
-        }
-        defaults.inverse_projection = defaults.projection;
-        defaults.inverse_view = defaults.projection;
-        defaults.previous_view_projection = defaults.projection;
+        // The canonical struct value-initializes its matrices, and `Matrix()` is **all zeros** --
+        // not the identity. An earlier draft of this route wrote the identity because that reads
+        // like the friendlier default; it is the wrong one, because a pass reading a defaulted
+        // context would then see a different projection from the C++ caller's. The memset above
+        // already leaves the zeros, so nothing more is needed here.
         *outContext = defaults;
         return CNA_RESULT_SUCCESS;
     });
+}
+
+namespace {
+
+// The canonical structs are aggregates with member initializers, so a default-constructed value is
+// the defaults themselves. Where the layer is present these are checked against it rather than
+// transcribed; where it is not, the values below are the only copy and the assertions are absent
+// -- the same arrangement cna_pbr_material_init already uses.
+[[nodiscard]] CNA_Vector3 Vec3(const float x, const float y, const float z) noexcept
+{
+    CNA_Vector3 value;
+    value.x = x;
+    value.y = y;
+    value.z = z;
+    return value;
+}
+
+} // namespace
+
+CNA_Result cna_directional_light_ext_init(CNA_DirectionalLightEXT* const outLight)
+{
+    CNA_DirectionalLightEXT defaults;
+    std::memset(&defaults, 0, sizeof(defaults));
+    defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_DirectionalLightEXT));
+    defaults.struct_version = UINT32_C(1);
+    defaults.direction = Vec3(0.0F, -1.0F, 0.0F);
+    defaults.color = Vec3(1.0F, 1.0F, 1.0F);
+    defaults.intensity = 1.0F;
+    defaults.casts_shadows = CNA_FALSE;
+#ifdef CNA_CNAEXT
+    {
+        const CNA::Graphics::DirectionalLightEXT canonical;
+        if (canonical.Direction.X != defaults.direction.x ||
+            canonical.Direction.Y != defaults.direction.y ||
+            canonical.Direction.Z != defaults.direction.z ||
+            canonical.Color.X != defaults.color.x || canonical.Color.Y != defaults.color.y ||
+            canonical.Color.Z != defaults.color.z || canonical.Intensity != defaults.intensity ||
+            canonical.CastsShadows != (defaults.casts_shadows == CNA_TRUE)) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The C directional-light defaults disagree with the canonical structure.");
+        }
+    }
+#endif
+    return StoreValue(outLight, defaults);
+}
+
+CNA_Result cna_point_light_ext_init(CNA_PointLightEXT* const outLight)
+{
+    CNA_PointLightEXT defaults;
+    std::memset(&defaults, 0, sizeof(defaults));
+    defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_PointLightEXT));
+    defaults.struct_version = UINT32_C(1);
+    defaults.position = Vec3(0.0F, 0.0F, 0.0F);
+    defaults.color = Vec3(1.0F, 1.0F, 1.0F);
+    defaults.intensity = 1.0F;
+    defaults.range = 20.0F;
+    defaults.casts_shadows = CNA_FALSE;
+#ifdef CNA_CNAEXT
+    {
+        const CNA::Graphics::PointLightEXT canonical;
+        if (canonical.Position.X != defaults.position.x ||
+            canonical.Color.X != defaults.color.x || canonical.Intensity != defaults.intensity ||
+            canonical.Range != defaults.range ||
+            canonical.CastsShadows != (defaults.casts_shadows == CNA_TRUE)) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The C point-light defaults disagree with the canonical structure.");
+        }
+    }
+#endif
+    return StoreValue(outLight, defaults);
+}
+
+CNA_Result cna_spot_light_ext_init(CNA_SpotLightEXT* const outLight)
+{
+    CNA_SpotLightEXT defaults;
+    std::memset(&defaults, 0, sizeof(defaults));
+    defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_SpotLightEXT));
+    defaults.struct_version = UINT32_C(1);
+    defaults.position = Vec3(0.0F, 0.0F, 0.0F);
+    defaults.direction = Vec3(0.0F, -1.0F, 0.0F);
+    defaults.color = Vec3(1.0F, 1.0F, 1.0F);
+    defaults.intensity = 1.0F;
+    defaults.range = 20.0F;
+    defaults.inner_angle = 0.35F;
+    defaults.outer_angle = 0.5F;
+    defaults.casts_shadows = CNA_FALSE;
+#ifdef CNA_CNAEXT
+    {
+        const CNA::Graphics::SpotLightEXT canonical;
+        if (canonical.Direction.Y != defaults.direction.y ||
+            canonical.Intensity != defaults.intensity || canonical.Range != defaults.range ||
+            canonical.InnerAngle != defaults.inner_angle ||
+            canonical.OuterAngle != defaults.outer_angle ||
+            canonical.CastsShadows != (defaults.casts_shadows == CNA_TRUE)) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The C spot-light defaults disagree with the canonical structure.");
+        }
+    }
+#endif
+    return StoreValue(outLight, defaults);
+}
+
+CNA_Result cna_punctual_light_ext_init(CNA_PunctualLightEXT* const outLight)
+{
+    using Microsoft::Xna::Framework::Graphics::PunctualLightEXT;
+    using Microsoft::Xna::Framework::Graphics::PunctualLightKindEXT;
+    static_assert(
+        static_cast<uint32_t>(PunctualLightKindEXT::None) == CNA_PUNCTUAL_LIGHT_KIND_EXT_NONE &&
+        static_cast<uint32_t>(PunctualLightKindEXT::Point) == CNA_PUNCTUAL_LIGHT_KIND_EXT_POINT &&
+        static_cast<uint32_t>(PunctualLightKindEXT::Spot) == CNA_PUNCTUAL_LIGHT_KIND_EXT_SPOT);
+
+    CNA_PunctualLightEXT defaults;
+    std::memset(&defaults, 0, sizeof(defaults));
+    defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_PunctualLightEXT));
+    defaults.struct_version = UINT32_C(1);
+    const PunctualLightEXT canonical;
+    defaults.kind = static_cast<CNA_PunctualLightKindEXT>(canonical.Kind);
+    defaults.position = Vec3(canonical.Position.X, canonical.Position.Y, canonical.Position.Z);
+    defaults.direction = Vec3(canonical.Direction.X, canonical.Direction.Y, canonical.Direction.Z);
+    defaults.diffuse_color =
+        Vec3(canonical.DiffuseColor.X, canonical.DiffuseColor.Y, canonical.DiffuseColor.Z);
+    defaults.range = canonical.Range;
+    defaults.inner_angle = canonical.InnerAngle;
+    defaults.outer_angle = canonical.OuterAngle;
+    defaults.shadow_depth_bias = canonical.ShadowDepthBias;
+    // Both shadow textures default to null, and a handle's spelling of null is the invalid handle.
+    defaults.shadow_cube = CNA_INVALID_HANDLE;
+    defaults.shadow_map = CNA_INVALID_HANDLE;
+    // `ShadowViewProjection{}` is a value-initialized Matrix, which is all zeros; the memset above
+    // already left exactly that.
+    return StoreValue(outLight, defaults);
+}
+
+CNA_Result cna_shadow_cascade_state_ext_init(CNA_ShadowCascadeStateEXT* const outState)
+{
+    using Microsoft::Xna::Framework::Graphics::ShadowCascadeStateEXT;
+    static_assert(ShadowCascadeStateEXT::kMaxCascades == CNA_SHADOW_CASCADE_MAX_EXT);
+
+    CNA_ShadowCascadeStateEXT defaults;
+    std::memset(&defaults, 0, sizeof(defaults));
+    defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_ShadowCascadeStateEXT));
+    defaults.struct_version = UINT32_C(1);
+    const ShadowCascadeStateEXT canonical;
+    defaults.count = static_cast<int32_t>(canonical.Count);
+    defaults.blend_band = canonical.BlendBand;
+    defaults.debug_tint = canonical.DebugTint ? CNA_TRUE : CNA_FALSE;
+    // The canonical arrays are value-initialized, and `Matrix()` is all zeros -- so these stay
+    // zero. That matters: with `count` at 0 no cascade transform is read at all, and inventing an
+    // identity here would make a defaulted C state differ from a defaulted C++ one for no gain.
+    for (int cascade = 0; cascade < CNA_SHADOW_CASCADE_MAX_EXT; ++cascade) {
+        defaults.split_distance[cascade] = canonical.SplitDistance[cascade];
+    }
+    return StoreValue(outState, defaults);
 }
 
 #ifndef CNA_CNAEXT

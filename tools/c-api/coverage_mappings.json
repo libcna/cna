@@ -15100,6 +15100,123 @@
       "approved_symbols": [
         "CPP-47B2645A163C"
       ]
+    },
+    {
+      "id": "engine-directional-light",
+      "qualified_name_regex": "^CNA::Graphics::DirectionalLightEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_DirectionalLightEXT` and `cna_directional_light_ext_init`, a fixed-layout struct whose defaults are checked against the canonical aggregate at run time wherever the layer is compiled in. Being a pure value, the route works in **both** builds: filling a light with its defaults needs no engine-layer object.",
+      "tests": "`EngineLayerSmoke.c`, which asserts every default in **both** builds and is proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085A",
+      "approved_symbols": [
+        "CPP-23F221C0B743",
+        "CPP-32F3598DC77C",
+        "CPP-3B8F993E0459",
+        "CPP-91BF9F52FB68",
+        "CPP-A6D924B61EAC"
+      ]
+    },
+    {
+      "id": "engine-point-light",
+      "qualified_name_regex": "^CNA::Graphics::PointLightEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_PointLightEXT` and `cna_point_light_ext_init`, on the same terms as the directional light: fixed layout, defaults checked against the canonical aggregate, and available in both builds.",
+      "tests": "`EngineLayerSmoke.c`, which asserts every default in **both** builds and is proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085A",
+      "approved_symbols": [
+        "CPP-2ED97326AFCA",
+        "CPP-52C07579BE37",
+        "CPP-67CC7C6FA3B0",
+        "CPP-967C600FB6B0",
+        "CPP-AD7C035C2188",
+        "CPP-FBC3F2DFC00D"
+      ]
+    },
+    {
+      "id": "engine-spot-light",
+      "qualified_name_regex": "^CNA::Graphics::SpotLightEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_SpotLightEXT` and `cna_spot_light_ext_init`, on the same terms as the other two. The test additionally asserts the defaults satisfy the cone's own invariant -- the inner half-angle inside the outer -- because a default that did not would be useless without failing anything.",
+      "tests": "`EngineLayerSmoke.c`, which asserts every default in **both** builds and is proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085A",
+      "approved_symbols": [
+        "CPP-06DA15384D02",
+        "CPP-0D76DC524AA8",
+        "CPP-116D64E8292B",
+        "CPP-3E6354F5185C",
+        "CPP-3E954B672DD6",
+        "CPP-53EF96B56905",
+        "CPP-AD811088AE02",
+        "CPP-D619D846245D",
+        "CPP-FEEA15418D04"
+      ]
+    },
+    {
+      "id": "punctual-light-value",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:PunctualLightEXT(?:::[A-Za-z0-9_]+)?|PunctualLightKindEXT(?:::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field",
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_PunctualLightEXT`, `CNA_PunctualLightKindEXT` with its three constants at the canonical ordinals, and `cna_punctual_light_ext_init`. The two shadow textures become borrowed handles whose default is `CNA_INVALID_HANDLE` -- a handle's spelling of the canonical null pointer -- and `ShadowViewProjection` defaults to a **zero** matrix, because the canonical field is value-initialized and `Matrix()` is zero-filled. The header is not behind `CNA_CNAEXT`, so this whole family exists in every build.",
+      "tests": "`EngineLayerSmoke.c`, which asserts every default in **both** builds and is proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085A",
+      "approved_symbols": [
+        "CPP-158317FE7912",
+        "CPP-25C48B82CC2F",
+        "CPP-759F673C597F",
+        "CPP-789E97A2B0CE",
+        "CPP-8A6A7D0733D1",
+        "CPP-96AD1DDB5CB9",
+        "CPP-B9A5B58798D0",
+        "CPP-C15A4D7385A3",
+        "CPP-CD41E330122B",
+        "CPP-D21000827A61",
+        "CPP-DCA664268B30",
+        "CPP-E51115051753",
+        "CPP-E832BBBD6AC8",
+        "CPP-F446B4BA2E1F",
+        "CPP-F5AF2681075C",
+        "CPP-FE90D9845583"
+      ]
+    },
+    {
+      "id": "shadow-cascade-state-value",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ShadowCascadeStateEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field",
+        "constant"
+      ],
+      "mapping": "`CNA_ShadowCascadeStateEXT` and `cna_shadow_cascade_state_ext_init`, with `kMaxCascades` as `CNA_SHADOW_CASCADE_MAX_EXT` and a compile-time assertion tying the two together, so growing the canonical array cannot silently leave the C form behind. The transforms and splits default to zeros, matching the canonical value-initialized arrays; with `count` at 0 none of them is read, so a defaulted C state and a defaulted C++ one describe the same thing.",
+      "tests": "`EngineLayerSmoke.c`, which asserts every default in **both** builds and is proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085A",
+      "approved_symbols": [
+        "CPP-26D79B7CB351",
+        "CPP-278FB8F2A9E5",
+        "CPP-342302A8E216",
+        "CPP-5345B3FCE8DD",
+        "CPP-9E01A95663B7",
+        "CPP-CF49FFFD6BC7",
+        "CPP-E49013926690",
+        "CPP-E828EEB62B9E"
+      ]
     }
   ]
 }

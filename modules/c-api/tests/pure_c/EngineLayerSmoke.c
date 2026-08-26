@@ -46,6 +46,111 @@ static int current_render_target_is(
 
 /* --- identities and pure values, which work in either build ------------------------------- */
 
+/* CBIND-085A. The light value types are pure values, so unlike every other engine-layer family
+ * these routes must succeed in BOTH builds -- filling a light with its defaults needs no
+ * engine-layer object. That is asserted unconditionally rather than behind the availability
+ * branch, which is what makes a build that accidentally guarded them fail here. */
+static int near_float(const float left, const float right)
+{
+    const float difference = left - right;
+    return (difference < 0.0001F) && (difference > -0.0001F);
+}
+
+static int validate_light_values(void)
+{
+    CNA_DirectionalLightEXT directional;
+    CNA_PointLightEXT point;
+    CNA_SpotLightEXT spot;
+    CNA_PunctualLightEXT punctual;
+    CNA_ShadowCascadeStateEXT cascades;
+    int cascade = 0;
+
+    memset(&directional, 0x5A, sizeof(directional));
+    if (cna_directional_light_ext_init(&directional) != CNA_RESULT_SUCCESS ||
+        directional.struct_size != (uint32_t)sizeof(CNA_DirectionalLightEXT) ||
+        directional.struct_version != UINT32_C(1) ||
+        !near_float(directional.direction.x, 0.0F) ||
+        !near_float(directional.direction.y, -1.0F) ||
+        !near_float(directional.direction.z, 0.0F) ||
+        !near_float(directional.color.x, 1.0F) || !near_float(directional.intensity, 1.0F) ||
+        directional.casts_shadows != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_directional_light_ext_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    memset(&point, 0x5A, sizeof(point));
+    if (cna_point_light_ext_init(&point) != CNA_RESULT_SUCCESS ||
+        !near_float(point.position.x, 0.0F) || !near_float(point.color.z, 1.0F) ||
+        !near_float(point.intensity, 1.0F) || !near_float(point.range, 20.0F) ||
+        point.casts_shadows != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_point_light_ext_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    memset(&spot, 0x5A, sizeof(spot));
+    if (cna_spot_light_ext_init(&spot) != CNA_RESULT_SUCCESS ||
+        !near_float(spot.direction.y, -1.0F) || !near_float(spot.range, 20.0F) ||
+        !near_float(spot.inner_angle, 0.35F) || !near_float(spot.outer_angle, 0.5F) ||
+        spot.casts_shadows != CNA_FALSE) {
+        return 0;
+    }
+    /* The cone is only meaningful while the inner half-angle is inside the outer one, and the
+       defaults must satisfy their own invariant. */
+    if (!(spot.inner_angle < spot.outer_angle)) {
+        return 0;
+    }
+    if (cna_spot_light_ext_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    memset(&punctual, 0x5A, sizeof(punctual));
+    if (cna_punctual_light_ext_init(&punctual) != CNA_RESULT_SUCCESS ||
+        punctual.kind != CNA_PUNCTUAL_LIGHT_KIND_EXT_NONE ||
+        !near_float(punctual.direction.y, -1.0F) || !near_float(punctual.range, 20.0F) ||
+        !near_float(punctual.shadow_depth_bias, 0.004F)) {
+        return 0;
+    }
+    /* Both shadow textures default to null, and a handle's spelling of null is the invalid
+       handle -- not zero-filled memory, which is what memset above would have left. */
+    if (punctual.shadow_cube != CNA_INVALID_HANDLE ||
+        punctual.shadow_map != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    /* A value-initialized Matrix is all zeros, so the defaulted transform is too. */
+    if (!near_float(punctual.shadow_view_projection.m11, 0.0F) ||
+        !near_float(punctual.shadow_view_projection.m44, 0.0F)) {
+        return 0;
+    }
+    if (cna_punctual_light_ext_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    memset(&cascades, 0x5A, sizeof(cascades));
+    if (cna_shadow_cascade_state_ext_init(&cascades) != CNA_RESULT_SUCCESS ||
+        cascades.count != INT32_C(0) || !near_float(cascades.blend_band, 0.0F) ||
+        cascades.debug_tint != CNA_FALSE) {
+        return 0;
+    }
+    /* Every cascade transform defaults to a zero matrix, matching the canonical value-initialized
+       array. With `count` at 0 none of them is read, so a defaulted C state and a defaulted C++
+       one describe the same thing -- which is the property worth asserting. */
+    for (cascade = 0; cascade < CNA_SHADOW_CASCADE_MAX_EXT; ++cascade) {
+        if (!near_float(cascades.world_to_atlas[cascade].m11, 0.0F) ||
+            !near_float(cascades.world_to_atlas[cascade].m44, 0.0F) ||
+            !near_float(cascades.split_distance[cascade], 0.0F)) {
+            return 0;
+        }
+    }
+    if (!near_float(cascades.camera_view.m11, 0.0F)) {
+        return 0;
+    }
+    return cna_shadow_cascade_state_ext_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
 static int validate_identities(void)
 {
     return CNA_DEPTH_ENCODING_AUTOMATIC == UINT32_C(0) &&
@@ -853,9 +958,11 @@ static int validate_pass_machinery(const CNA_Handle graphics_device)
         context.has_previous_frame != CNA_FALSE) {
         return 0;
     }
-    /* Defaulted matrices are the identity, exactly as the canonical struct's are. */
-    if (context.projection.m11 != 1.0F || context.projection.m12 != 0.0F ||
-        context.projection.m44 != 1.0F) {
+    /* Defaulted matrices are ALL ZEROS, because the canonical struct value-initializes them and
+       Matrix() is zero-filled -- not the identity. Asserting the identity here is what caught an
+       earlier draft of cna_post_process_context_init inventing a friendlier default. */
+    if (context.projection.m11 != 0.0F || context.projection.m44 != 0.0F ||
+        context.inverse_view.m11 != 0.0F) {
         return 0;
     }
     /* An uninitialized context is refused rather than read. */
@@ -1132,6 +1239,9 @@ int main(void)
     }
     if (!validate_barrier_containment()) {
         return 2;
+    }
+    if (!validate_light_values()) {
+        return 14;
     }
     {
         int stage = 0;
