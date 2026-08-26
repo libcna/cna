@@ -20,7 +20,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-1 | Baseline: HEAD, ABI version, C-API build, test inventory | both P1 | DONE |
 | CABI-2 | Bound-render-target destroy refusal, pinned from C | fixcnats P2 | DONE |
 | CABI-3 | Renderer C/C++ identity parity | fixcnacs P1-2, fixcnats P1 | DONE (upstream) |
-| CABI-4 | Triage the 6 red C-API tests | prerequisite | TRIAGED, handed off |
+| CABI-4 | Triage the 6 red C-API tests | prerequisite | 2 of 6 fixed; the rest attributed |
 | CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | DONE |
 | CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED |
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
@@ -752,3 +752,55 @@ owned-device suite passing clean matters most: [[CABI-13]]'s owner-token change 
 accounting sites and the lifetime of every C-created resource.
 
 Not run: the full 9000-test C++ suite under sanitizers, and TSan.
+
+## CABI-4 continued — two fixed, and what fixing them revealed
+
+`CApi_MediaPlayerSmoke` stopped reproducing earlier in this milestone.
+`CApi_TextureVolumeSmoke` is now green. The suite is **84 tests, 80 passing**, down from six
+failures to four.
+
+### TextureVolumeSmoke (fixed)
+
+Two stale expectations of the same class, both caused by a backend gaining a capability the test
+asserted it lacked:
+
+- It required `supports_texture3d == CNA_FALSE` and then a blanket rejection, despite its own
+  comment promising it "branches on the reported capabilities and runs unchanged on any backend".
+  It now actually branches: argument validation always, then either a support path (create,
+  describe, refuse a second format, destroy, double destroy) or the rejection path.
+- `cna_texturecube_set_data` on a render-target cube face was required to answer
+  `CNA_RESULT_NOT_SUPPORTED`; it now answers `CNA_RESULT_SUCCESS` on this backend. Measured, not
+  assumed: `PROBE create=0 size=2 levels=1 get=0 set=0 (NOT_SUP=6)`. Both answers are now accepted
+  and any third one still fails, matching the pattern `validate_cube_failures` in the same file
+  already used.
+
+### EffectSmoke (advanced, then blocked on a real pre-existing defect)
+
+The Texture3D expectation at line 510 was the same stale class and is fixed the same way. Past it,
+the test reaches a **second, independent failure that the first one had been masking**:
+
+```
+P stage=6 dev=1 pass=1 cube=1 destroy1=3 apply=0
+P cubedestroy1=0 passdestroy=0 cubedestroy2=3 destroy2=3
+```
+
+`create_retained_descendant` sets a TextureCube on a ShaderEffect, takes an `EffectPass` out of it,
+then **destroys the effect** and keeps only the pass. The test expects the retained pass to keep the
+effect's texture slots alive, so destroying the cube should answer `CNA_RESULT_INVALID_STATE`
+(3). It answers `CNA_RESULT_SUCCESS` (0): the cube is released when the effect is destroyed.
+
+**Not mine.** Verified by rebuilding against the pre-[[CABI-13]] `CnaCApiEffects.cpp` and getting
+the identical probe output. It is a genuine disagreement about whether a descendant handle
+(`EffectPass`) outliving its parent effect keeps that effect's retained textures alive — a contract
+question in the effects lifetime layer, not a stale capability assertion, and not something to
+guess at from here.
+
+### Still attributed elsewhere
+
+`CApi_Draw3DSmoke` (exits 2, no diagnostic), `CApi_BasicEffectSmoke` (DirectionalLight's diffuse
+colour no longer `(0,0,0)`) and `CApi_InstalledConsumer` (needs the install step) are unchanged from
+the original triage.
+
+One correction to that triage: the `[ShaderEffect] Compile error: illegal use of reserved word
+'this'` line is **not** a defect and not the renderer lane's. `EffectSmoke.c:434` deliberately
+compiles `"this is not a shader"` to check the refusal path; the message is expected output.

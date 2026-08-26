@@ -507,8 +507,22 @@ static int validate_shader_effect(const CNA_Handle device)
     REQUIRE(cna_shader_effect_set_texture_cube(shader, 1, cube) == CNA_RESULT_SUCCESS &&
             cna_texture2d_destroy(texture2d) == CNA_RESULT_SUCCESS &&
             cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
-    REQUIRE(cna_texture3d_create(device, &volume_info, &texture3d) ==
-                CNA_RESULT_NOT_SUPPORTED && texture3d == CNA_INVALID_HANDLE);
+    /*
+     * Volume-texture storage is backend-dependent. This used to require CNA_RESULT_NOT_SUPPORTED,
+     * so a renderer gaining Texture3D support turned the suite red -- the same stale expectation
+     * TextureVolumeSmoke carried. What is contract here is the handle discipline either way: a
+     * refusal writes CNA_INVALID_HANDLE, and a success gives a handle that must be released.
+     */
+    const CNA_Result volume_created =
+        cna_texture3d_create(device, &volume_info, &texture3d);
+    if (volume_created == CNA_RESULT_SUCCESS) {
+        REQUIRE(texture3d != CNA_INVALID_HANDLE);
+        REQUIRE(cna_shader_effect_set_texture3d(shader, 2, texture3d) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_INVALID_STATE);
+    } else {
+        REQUIRE(volume_created == CNA_RESULT_NOT_SUPPORTED && texture3d == CNA_INVALID_HANDLE);
+    }
+    /* A handle of the wrong family is refused whichever way the above went. */
     REQUIRE(cna_shader_effect_set_texture3d(shader, 2, cube) ==
             CNA_RESULT_INVALID_HANDLE);
 
