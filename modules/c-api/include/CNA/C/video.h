@@ -424,6 +424,61 @@ CNA_C_API CNA_Result cna_video_player_set_volume(CNA_VideoPlayerHandle player, f
  * Asking before playback has produced a frame is an ordinary answer of `CNA_FALSE`, not a failure:
  * the canonical implementation deliberately returns null there where the original API would fault.
  */
+/** @brief Version of @ref CNA_VideoFrameEXT understood by this header. */
+#define CNA_VIDEO_FRAME_EXT_STRUCT_VERSION UINT32_C(1)
+
+/**
+ * @brief A borrowed view of the frame a VideoPlayer currently holds.
+ *
+ * `cna_video_player_get_texture` hands back a fresh handle on every call, so two calls against one
+ * undecoded frame are indistinguishable from two calls across a frame advance. This descriptor
+ * answers that: `generation` changes only when a frame is actually decoded.
+ *
+ * There is deliberately **no slot or buffer index**. XNA owns two frame textures and alternates
+ * between them, so its callers can rely on two stable identities; CNA decodes into a single
+ * texture in place. A slot field here would report an alternation that does not happen, so a
+ * binding modelling XNA's two slots must map both onto this one frame and use `generation` for
+ * change detection.
+ */
+typedef struct CNA_VideoFrameEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief Borrowed frame texture, or `CNA_INVALID_HANDLE` when no frame exists. */
+    CNA_Handle texture;
+    /** @brief Frames decoded since playback started; zero before the first. */
+    uint64_t generation;
+    /** @brief Presentation timestamp of the held frame in seconds; negative when none. */
+    double presentation_time;
+    /** @brief Whether a frame texture exists. */
+    CNA_Bool available;
+    /** @brief Reserved bytes; must be zero. */
+    uint8_t reserved[3];
+} CNA_VideoFrameEXT;
+
+/**
+ * @brief Reads the current frame together with the identity a caller needs to track it.
+ *
+ * The texture is borrowed on exactly the terms @ref cna_video_player_get_texture documents: valid
+ * only until the next call on this player, after which the handle fails with
+ * `CNA_RESULT_INVALID_HANDLE` rather than touching freed memory.
+ *
+ * `generation` is what this route adds. Equal across two calls means the same pixels; a higher
+ * value means the frame advanced. `Stop` and playing a different video restart it, so a stale
+ * generation can never compare equal across a change.
+ *
+ * @param player Owned player handle.
+ * @param out_frame Receives the descriptor. Its `struct_size`/`struct_version` must be set by the
+ *        caller before the call.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed descriptor,
+ *         `CNA_RESULT_INVALID_STATE` when the player has been disposed, or a documented
+ *         handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_video_player_get_frame_ext(
+    CNA_VideoPlayerHandle player,
+    CNA_VideoFrameEXT* out_frame);
+
 CNA_C_API CNA_Result cna_video_player_get_texture(
     CNA_VideoPlayerHandle player,
     CNA_Handle* out_texture,

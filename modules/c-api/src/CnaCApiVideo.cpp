@@ -732,6 +732,49 @@ CNA_Result cna_video_player_set_volume(const CNA_VideoPlayerHandle player, const
     });
 }
 
+CNA_Result cna_video_player_get_frame_ext(
+    const CNA_VideoPlayerHandle player,
+    CNA_VideoFrameEXT* const outFrame)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFrame == nullptr || outFrame->struct_size < sizeof(CNA_VideoFrameEXT) ||
+            outFrame->struct_version != CNA_VIDEO_FRAME_EXT_STRUCT_VERSION) {
+            return InvalidInput("The video frame descriptor is null or malformed.");
+        }
+        outFrame->texture = CNA_INVALID_HANDLE;
+        outFrame->generation = 0U;
+        outFrame->presentation_time = -1.0;
+        outFrame->available = CNA_FALSE;
+        outFrame->reserved[0] = 0U;
+        outFrame->reserved[1] = 0U;
+        outFrame->reserved[2] = 0U;
+
+        std::shared_ptr<VideoPlayerResource> resource;
+        if (const CNA_Result result = BorrowPlayerForCall(player, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Read the identity before the texture: GetTexture() is what advances the frame, so
+        // asking afterwards would report the generation of a frame the caller was not handed.
+        Texture2D* const frame = resource->value->GetTexture();
+        outFrame->generation = resource->value->GetFrameGenerationEXT();
+        outFrame->presentation_time = resource->value->GetFramePresentationTimeEXT();
+        if (frame == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        // Same borrow as cna_video_player_get_texture: the player owns the texture and this keeps
+        // it alive while the handle exists; the next call on the player releases it.
+        const std::shared_ptr<Texture2D> borrowed(resource, frame);
+        if (const CNA_Result result = CreateStandaloneTexture2D(borrowed, &outFrame->texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->frameTexture = outFrame->texture;
+        outFrame->available = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_video_player_get_texture(
     const CNA_VideoPlayerHandle player,
     CNA_Handle* const outTexture,

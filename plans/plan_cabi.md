@@ -24,10 +24,10 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | DONE |
 | CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED |
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
-| CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | BLOCKED by a real crash |
+| CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | RESOLVED: a standing CNA policy, with one gap closed |
 | CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE |
 | CABI-15 | ContentLost raised where loss is real | fixcnats P3 | DONE |
-| CABI-9 | VideoPlayer frame identity/generation | fixcnats P4 | DESIGN COMPLETE |
+| CABI-9 | VideoPlayer frame identity/generation | fixcnats P4 | DONE |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
 | CABI-13 | Owned GraphicsDevice bound into the C ABI | fixcnats P5 | DONE |
 | CABI-11 | Reproducible artifacts + provenance manifest | fixcnats P6 | DONE (measured reproducible) |
@@ -690,3 +690,65 @@ Nothing changes on OPENGLES3, which is the point: it never reports a loss, so it
 The C ABI still has no `cna_render_target_subscribe_content_lost`; the buffers have their
 subscribe routes and render targets expose only `is_content_lost` in `CNA_RenderTargetInfo`.
 Adding it is additive (**ABI class C**) and now has a real event behind it.
+
+## CABI-7b — Resolved: the refusal is CNA's standing policy, and one float escaped it
+
+The earlier reading was incomplete. Removing the C-API `isfinite` guards did produce a crash, but
+the reason is not that CNA's sprite path merely cannot carry non-finite values — it is that CNA
+**deliberately refuses them**, and the crash was reachable only through the one float that had been
+missed.
+
+`SpriteBatch` validates finiteness in 16 places, throws `System::ArgumentOutOfRangeException`,
+documents it with `@throws` on the public overloads, and has tests asserting it
+(`SpriteBatchTests.cpp:887`). That is a standing, documented CNA decision that predates this
+milestone: a conscious departure from XNA, which validates nothing.
+
+**The gap:** every `Draw` overload validated its floats; `DrawString` validated `position`,
+`rotation`, `origin` and `scale` — but never `layerDepth`. That is precisely the value
+`flushBatch`'s `BackToFront`/`FrontToBack` comparators order by, and a NaN there breaks the strict
+weak ordering `std::stable_sort` requires. That is undefined behaviour, not a wrong sort order.
+
+**Fixed:** `ValidateFinite(layerDepth, "layerDepth")` in `DrawString`, and the four `@throws`
+blocks that list the validated parameters now name it.
+
+So the answer to `fixcnacs.md` Phase 5's second half is not "align with XNA": CNA has already
+decided, in the open, not to. What was wrong was that the decision had a hole in it. The C-API
+guards stay, because they mirror a documented C++ contract rather than inventing one.
+
+## CABI-9 — Video frame identity, implemented
+
+The design in this file is now built:
+
+- `VideoPlayer` carries `frameGeneration_`, incremented at **both** decode sites — the only places
+  a frame actually reaches the texture — and reset by `Play` and `Stop`, so a generation from a
+  previous playback can never compare equal to one from this.
+- `GetFrameGenerationEXT()` / `GetFramePresentationTimeEXT()` expose it.
+- `cna_video_player_get_frame_ext(player, CNA_VideoFrameEXT*)` returns the borrowed texture on
+  exactly the terms `cna_video_player_get_texture` documents, plus `generation` and
+  `presentation_time`. **ABI class C, additive**; the old route is untouched.
+
+One ordering detail worth keeping: the generation is read **after** `GetTexture()`, because
+`GetTexture()` is what advances the frame. Reading it first would report the generation of a frame
+the caller was never handed.
+
+Still no `slot` field, for the reason recorded in the design: CNA decodes into one texture in
+place, and a slot token would report an alternation that does not happen.
+
+## Sanitizer status (fixcnacs P8, fixcnats)
+
+Both orders ask for sanitizer evidence and warn against claiming any that was not produced.
+`build-asan/` is configured `-DCNA_SANITIZE=address,undefined` (Debug, OPENGLES3, ccache).
+
+| Test | ASan + UBSan |
+| --- | --- |
+| `CApi_StorageSmoke` | clean |
+| `CApi_LifecycleSmoke` | clean |
+| `CApi_RenderTargetLifetimeSmoke` | clean |
+| `CApi_OwnedGraphicsDeviceSmoke` | clean |
+| `CApi_GraphicsDeviceSmoke` | clean |
+
+Zero AddressSanitizer reports and zero UBSan runtime errors across all five, on Xvfb `:101`. The
+owned-device suite passing clean matters most: [[CABI-13]]'s owner-token change touched 25
+accounting sites and the lifetime of every C-created resource.
+
+Not run: the full 9000-test C++ suite under sanitizers, and TSan.

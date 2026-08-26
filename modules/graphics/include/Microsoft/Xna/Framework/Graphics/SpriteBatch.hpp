@@ -399,7 +399,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param layerDepth Depth value for sort ordering.
          * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
          *         render and no defaultCharacter is set.
-         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin,
+         *         @p layerDepth, or
          *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
          *         range.
          */
@@ -427,7 +428,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param layerDepth Depth value for sort ordering.
          * @throws std::invalid_argument if @p text contains a character @p spriteFont cannot
          *         render and no defaultCharacter is set.
-         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin,
+         *         @p layerDepth, or
          *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
          *         range.
          */
@@ -467,7 +469,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Uniform scale factor.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin,
+         *         @p layerDepth, or
          *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
          *         range.
          */
@@ -492,7 +495,8 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param scale      Non-uniform scale vector.
          * @param effects    Sprite flipping flags.
          * @param layerDepth Depth value for sort ordering.
-         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin, or
+         * @throws System::ArgumentOutOfRangeException if @p position, @p rotation, @p origin,
+         *         @p layerDepth, or
          *         @p scale is non-finite, or if a calculated Int32 glyph destination is out of
          *         range.
          */

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <cstdint>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -200,6 +201,31 @@ namespace Microsoft::Xna::Framework::Media
         /** @brief Returns the fully-qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
+    public:
+        /**
+         * @brief Number of frames this player has decoded since it started.
+         *
+         * Zero before playback. Equal across two calls means the same pixels; a higher value means
+         * the frame advanced. Reset by Stop and by playing a different video, so a stale value can
+         * never compare equal across a change.
+         *
+         * @return The current frame generation.
+         */
+        CNAEXT [[nodiscard]] std::uint64_t GetFrameGenerationEXT() const noexcept
+        {
+            return frameGeneration_;
+        }
+
+        /**
+         * @brief Presentation timestamp of the frame currently in the texture, in seconds.
+         *
+         * @return The timestamp, or a negative value when no frame has been decoded.
+         */
+        CNAEXT [[nodiscard]] double GetFramePresentationTimeEXT() const noexcept
+        {
+            return lastFramePts_;
+        }
+
     private:
         void OpenDecoder(Video* video);
         void CloseDecoder();
@@ -250,6 +276,15 @@ namespace Microsoft::Xna::Framework::Media
         Clock::time_point startTime_;
         double            pauseOffset_ = 0.0; // elapsed seconds at last pause
         double            lastFramePts_= -1.0;
+        /**
+         * @brief Counts decoded frames, so a caller can tell a new frame from the same one again.
+         *
+         * plans/plan_cabi.md CABI-9. GetTexture() hands back the same single frameTexture_ every
+         * time, so pointer identity answers nothing: two calls against one undecoded frame look
+         * exactly like two calls across a frame advance. This increments only where a frame is
+         * actually decoded into the texture, which is the question a consumer is really asking.
+         */
+        std::uint64_t     frameGeneration_ = 0U;
 
         std::vector<uint8_t> rgbaBuffer_;
         std::vector<float>   audioBuffer_;

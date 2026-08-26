@@ -241,6 +241,10 @@ namespace Microsoft::Xna::Framework::Media
                 frameTexture_->SetDataRGBA(rgbaBuffer_.data(),
                                            static_cast<int>(rgbaBuffer_.size() / 4));
                 lastFramePts_ = pts;
+                // CABI-9: only where a frame is actually decoded into the texture. Counting
+                // GetTexture() calls instead would make "same frame again" indistinguishable
+                // from "the frame advanced", which is the whole question this answers.
+                ++frameGeneration_;
             }
             DrainAndFlushAudioBuffer();
         }
@@ -307,6 +311,9 @@ namespace Microsoft::Xna::Framework::Media
 
     void VideoPlayer::Play(Video* video)
     {
+        // CABI-9: a generation from a previous playback must never compare equal to one from this
+        // playback, so Play restarts the count.
+        frameGeneration_ = 0U;
         CheckDisposed(isDisposed_);
         if (!video) return;
         // CNA's optional-backend profile intentionally keeps VideoPlayer's state/configuration API
@@ -324,6 +331,9 @@ namespace Microsoft::Xna::Framework::Media
 
     void VideoPlayer::Stop()
     {
+        // CABI-9: a generation from a previous playback must never compare equal to one from this
+        // playback, so Stop restarts the count.
+        frameGeneration_ = 0U;
         CheckDisposed(isDisposed_);
         CloseDecoder();
         state_ = MediaState::Stopped;
@@ -461,6 +471,7 @@ namespace Microsoft::Xna::Framework::Media
             frameTexture_->SetDataRGBA(rgbaBuffer_.data(),
                                        static_cast<int>(rgbaBuffer_.size() / 4));
             lastFramePts_ = pts;
+            ++frameGeneration_;   // CABI-9, see the note on the other decode site.
         }
 
         return frameTexture_.get();

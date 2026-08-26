@@ -618,6 +618,11 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateFinite(rotation, "rotation");
         ValidateFinite(origin, "origin");
         ValidateFinite(scale, "scale");
+        // CABI-7b: layerDepth was the one float every DrawString overload let through, while every
+        // Draw overload refused it. It is also the value flushBatch's BackToFront/FrontToBack
+        // comparators order by, and a NaN there breaks the strict weak ordering std::stable_sort
+        // requires -- undefined behaviour, not a wrong sort.
+        ValidateFinite(layerDepth, "layerDepth");
 
         const float sinR = std::sin(rotation);
         const float cosR = std::cos(rotation);
