@@ -15301,6 +15301,84 @@
       "approved_symbols": [
         "CPP-7BD9B1CAA0A8"
       ]
+    },
+    {
+      "id": "engine-cascaded-shadow-map",
+      "qualified_name_regex": "^CNA::Graphics::CascadedShadowMap(?:::(?!applyToReceiver$)[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_cascaded_shadow_map_*` over an owned handle, with the atlas and the caster effect as borrows that refuse destruction while outstanding. Two shapes the 2D maps did not need: `computeSplitDistances` returns a vector, so it takes the campaign's count/copy form -- a null destination reports the count and writes nothing -- and `computeFrustumCorners` returns a fixed `std::array<Vector3, 8>`, so its C form takes a destination of exactly `CNA_FRUSTUM_CORNER_COUNT_EXT` with a `static_assert` tying the two counts together, rather than a capacity the caller could get wrong. `computeBoundingSphere` returns its radius and fills its centre through two outputs, because C has no out-parameter-plus-return idiom worth preserving. **Deviation:** the canonical constructor clamps a cascade count the atlas cannot hold; the C route refuses it, so a caller learns that the map it gets is not the map it asked for.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085B2",
+      "approved_symbols": [
+        "CPP-009000EB0924",
+        "CPP-0E0841454034",
+        "CPP-2582491D4784",
+        "CPP-3159A68B87A6",
+        "CPP-31892ABA9BAB",
+        "CPP-46A83FFC9E5E",
+        "CPP-4B55E9EAE2A7",
+        "CPP-4F619ED24A1C",
+        "CPP-59024257E77C",
+        "CPP-71C72EA6FEEB",
+        "CPP-79F973A9B31C",
+        "CPP-865172E289D0",
+        "CPP-8A5D8C1C5DCA",
+        "CPP-9B24501CADA0",
+        "CPP-9E75ABB531FE",
+        "CPP-B7938601C4B8",
+        "CPP-C699F1B6AE72",
+        "CPP-CAF98A8ABD0B",
+        "CPP-CC413E095ABB",
+        "CPP-DDCA9DD4FF98",
+        "CPP-E4C2144CAAF2",
+        "CPP-E712381D72FC",
+        "CPP-EF84766D919E",
+        "CPP-F254141537C0",
+        "CPP-FCDF90D51C20"
+      ]
+    },
+    {
+      "id": "engine-cube-shadow-map",
+      "qualified_name_regex": "^CNA::Graphics::CubeShadowMap(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_cube_shadow_map_*` over an owned handle, with `kFaceCount` as `CNA_CUBE_SHADOW_FACE_COUNT_EXT`. The cube texture is borrowed and released with `cna_texturecube_destroy`, which releases the handle **without disposing** the object -- checked in that route rather than assumed, because disposing a map's own cube from underneath it is the crash this borrow shape exists to avoid. `computeFaceView` validates its `CNA_CubeMapFace` against the defined values instead of casting through.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085B2",
+      "approved_symbols": [
+        "CPP-0777EBC674DE",
+        "CPP-0FC68EED1002",
+        "CPP-29F43A48E3E3",
+        "CPP-376F4477173E",
+        "CPP-482C80F74260",
+        "CPP-4F5684C7105B",
+        "CPP-596439EDF509",
+        "CPP-79FCF1F35227",
+        "CPP-7E3319F0AED8",
+        "CPP-824F9826BA86",
+        "CPP-898FAC401611",
+        "CPP-B07102845F50",
+        "CPP-CA8D8CAFF7A5",
+        "CPP-CD444E51902B",
+        "CPP-DB8C7D234D4D",
+        "CPP-DC9643D08AC5",
+        "CPP-E583C0DF9DCD",
+        "CPP-E8BED23AA010",
+        "CPP-F3E9FC1B2587"
+      ]
     }
   ]
 }

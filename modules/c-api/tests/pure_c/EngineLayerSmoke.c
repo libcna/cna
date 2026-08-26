@@ -1370,6 +1370,221 @@ static int validate_shadow_maps(const CNA_Handle graphics_device)
     return cna_spot_shadow_map_destroy(spot_map) == CNA_RESULT_SUCCESS;
 }
 
+
+/* CBIND-085B2. The cascaded map brings two shapes the 2D maps did not need -- a count/copy result
+ * and a fixed eight-element one -- and both are asserted for their size behaviour, not just their
+ * values. Every exit goes through one cleanup, for the reason CBIND-085B1 learned. */
+static int validate_cascaded_and_cube(const CNA_Handle graphics_device)
+{
+    CNA_CascadedShadowMapHandle cascaded = CNA_INVALID_HANDLE;
+    CNA_CubeShadowMapHandle cube = CNA_INVALID_HANDLE;
+    CNA_DirectionalLightEXT light;
+    CNA_PointLightEXT point;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Vector3 corners[CNA_FRUSTUM_CORNER_COUNT_EXT];
+    CNA_Vector3 centre;
+    float splits[CNA_SHADOW_CASCADE_MAX_EXT];
+    uint64_t count = UINT64_C(0);
+    float radius = 0.0F;
+    int ok = 1;
+    int cascade = 0;
+
+    if (cna_directional_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
+        cna_point_light_ext_init(&point) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The split distances are a count/copy result: asking with no room reports the count and
+       refuses, and it must not have written anything. */
+    splits[0] = -1.0F;
+    if (cna_cascaded_shadow_map_compute_split_distances(
+            1.0F, 100.0F, INT32_C(4), 0.5F, 0, UINT64_C(0), &count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        count == UINT64_C(0) || count > (uint64_t)CNA_SHADOW_CASCADE_MAX_EXT ||
+        splits[0] != -1.0F) {
+        return 0;
+    }
+    if (cna_cascaded_shadow_map_compute_split_distances(
+            1.0F, 100.0F, INT32_C(4), 0.5F, splits, (uint64_t)CNA_SHADOW_CASCADE_MAX_EXT,
+            &count) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Splits must increase away from the camera; a set that did not would place cascades in an
+       order the selector cannot use. */
+    for (cascade = 1; cascade < (int)count; ++cascade) {
+        if (!(splits[cascade] > splits[cascade - 1])) {
+            return 0;
+        }
+    }
+    /* The eight corners are a fixed count, so there is no capacity to get wrong -- only the
+       null destination to refuse. */
+    if (cna_cascaded_shadow_map_compute_frustum_corners(&view, &projection, corners) !=
+            CNA_RESULT_SUCCESS ||
+        cna_cascaded_shadow_map_compute_frustum_corners(&view, &projection, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_cascaded_shadow_map_compute_frustum_corners(0, &projection, corners) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_cascaded_shadow_map_compute_bounding_sphere(corners, &centre, &radius) !=
+            CNA_RESULT_SUCCESS ||
+        radius < 0.0F) {
+        return 0;
+    }
+    /* Snapping must not move the centre further than one texel of the cascade. */
+    {
+        CNA_Vector3 snapped;
+        if (cna_cascaded_shadow_map_snap_to_texel_grid(&centre, radius, INT32_C(1024), &snapped) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    /* A cascade count outside the atlas is refused rather than clamped, so a caller learns that
+       the map it gets is not the map it asked for. */
+    if (cna_cascaded_shadow_map_create(graphics_device, CNA_SHADOW_QUALITY_LOW, INT32_C(0),
+                                       &cascaded) != CNA_RESULT_INVALID_ARGUMENT ||
+        cascaded != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_cascaded_shadow_map_create(
+            graphics_device, CNA_SHADOW_QUALITY_LOW, CNA_SHADOW_CASCADE_MAX_EXT + 1, &cascaded) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cascaded != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_cascaded_shadow_map_create(
+            graphics_device, CNA_SHADOW_QUALITY_LOW, INT32_C(3), &cascaded) !=
+            CNA_RESULT_SUCCESS ||
+        cascaded == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    {
+        CNA_Bool supported = UINT8_C(9);
+        CNA_Bool tint = UINT8_C(9);
+        int32_t value = -1;
+        float scalar = -1.0F;
+
+        ok = cna_cascaded_shadow_map_is_supported(cascaded, &supported) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_get_cascade_count(cascaded, &value) ==
+            CNA_RESULT_SUCCESS && value == INT32_C(3);
+        ok = ok && cna_cascaded_shadow_map_get_cascade_size(cascaded, &value) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_update(cascaded, &light, &view, &projection) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_update(cascaded, &light, 0, &projection) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_cascaded_shadow_map_begin(cascaded, INT32_C(0)) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_end(cascaded) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_get_cascade_matrix(cascaded, INT32_C(0), &view) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_get_split_distance(cascaded, INT32_C(0), &scalar) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_set_blend_band(cascaded, 2.0F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_get_blend_band(cascaded, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == 2.0F;
+        ok = ok && cna_cascaded_shadow_map_set_split_lambda(cascaded, 0.25F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_get_split_lambda(cascaded, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == 0.25F;
+        ok = ok && cna_cascaded_shadow_map_set_debug_tint_enabled(cascaded, CNA_TRUE) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_cascaded_shadow_map_is_debug_tint_enabled(cascaded, &tint) ==
+            CNA_RESULT_SUCCESS && tint == CNA_TRUE;
+        /* A non-canonical boolean is refused rather than read as true. */
+        ok = ok && cna_cascaded_shadow_map_set_debug_tint_enabled(cascaded, UINT8_C(2)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_cascaded_shadow_map_select_cascade(cascaded, 5.0F, &value) ==
+            CNA_RESULT_SUCCESS && value >= INT32_C(0);
+
+        if (ok) {
+            CNA_EffectHandle caster = CNA_INVALID_HANDLE;
+            CNA_Handle atlas = CNA_INVALID_HANDLE;
+            ok = cna_cascaded_shadow_map_get_caster_effect(cascaded, &caster) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_cascaded_shadow_map_get_shadow_texture(cascaded, &atlas) ==
+                CNA_RESULT_SUCCESS;
+            if (ok && caster != CNA_INVALID_HANDLE) {
+                /* A borrow keeps the map alive, so destroying it is refused until released. */
+                ok = cna_cascaded_shadow_map_destroy(cascaded) != CNA_RESULT_SUCCESS;
+                ok = ok && cna_effect_destroy(caster) == CNA_RESULT_SUCCESS;
+            }
+            if (ok && atlas != CNA_INVALID_HANDLE) {
+                ok = ok && cna_render_target_destroy(atlas) == CNA_RESULT_SUCCESS;
+            }
+        }
+        if (!ok) {
+            (void)cna_cascaded_shadow_map_destroy(cascaded);
+            return 0;
+        }
+    }
+    if (cna_cascaded_shadow_map_destroy(cascaded) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (cna_cube_shadow_map_create(graphics_device, CNA_SHADOW_QUALITY_LOW, &cube) !=
+            CNA_RESULT_SUCCESS ||
+        cube == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    {
+        CNA_Bool supported = UINT8_C(9);
+        CNA_ShadowQuality quality = UINT32_C(99);
+        int32_t size = -1;
+        float scalar = -1.0F;
+        CNA_Vector3 position;
+
+        ok = cna_cube_shadow_map_is_supported(cube, &supported) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cube_shadow_map_get_quality(cube, &quality) == CNA_RESULT_SUCCESS &&
+            quality == CNA_SHADOW_QUALITY_LOW;
+        ok = ok && cna_cube_shadow_map_get_size(cube, &size) == CNA_RESULT_SUCCESS;
+        /* The instance's face size must agree with the static answer for the same preset. */
+        {
+            int32_t expected = -1;
+            ok = ok && cna_cube_shadow_map_size_for_quality(CNA_SHADOW_QUALITY_LOW, &expected) ==
+                CNA_RESULT_SUCCESS && expected == size;
+        }
+        ok = ok && cna_cube_shadow_map_update(cube, &point) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cube_shadow_map_begin(cube, INT32_C(0)) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cube_shadow_map_end(cube) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cube_shadow_map_get_light_position(cube, &position) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cube_shadow_map_get_light_range(cube, &scalar) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cube_shadow_map_set_depth_bias(cube, 0.125F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_cube_shadow_map_get_depth_bias(cube, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 0.125F;
+        ok = ok && cna_cube_shadow_map_compute_face_view(
+            CNA_CUBE_MAP_FACE_POSITIVE_X, &position, &view) == CNA_RESULT_SUCCESS;
+        /* An undefined face identity is refused rather than cast through. */
+        ok = ok && cna_cube_shadow_map_compute_face_view(
+            UINT32_C(9), &position, &view) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_cube_shadow_map_compute_face_projection(20.0F, &projection) ==
+            CNA_RESULT_SUCCESS;
+
+        if (ok) {
+            CNA_EffectHandle caster = CNA_INVALID_HANDLE;
+            CNA_Handle texture = CNA_INVALID_HANDLE;
+            ok = cna_cube_shadow_map_get_caster_effect(cube, &caster) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_cube_shadow_map_get_shadow_texture(cube, &texture) ==
+                CNA_RESULT_SUCCESS;
+            if (ok && texture != CNA_INVALID_HANDLE) {
+                ok = cna_cube_shadow_map_destroy(cube) != CNA_RESULT_SUCCESS;
+                ok = ok && cna_texturecube_destroy(texture) == CNA_RESULT_SUCCESS;
+            }
+            if (ok && caster != CNA_INVALID_HANDLE) {
+                ok = ok && cna_effect_destroy(caster) == CNA_RESULT_SUCCESS;
+            }
+        }
+        if (!ok) {
+            (void)cna_cube_shadow_map_destroy(cube);
+            return 0;
+        }
+    }
+    return cna_cube_shadow_map_destroy(cube) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -1411,6 +1626,10 @@ static CNA_Result on_load(
         }
         if (!validate_shadow_maps(graphics_device)) {
             state->failed_stage = 11;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_cascaded_and_cube(graphics_device)) {
+            state->failed_stage = 12;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

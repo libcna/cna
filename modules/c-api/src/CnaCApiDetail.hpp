@@ -205,6 +205,9 @@ enum class ObjectKind : uint32_t {
     // plans/plan_binding.md CBIND-085B1: the two 2D shadow maps.
     ShadowMap = 133,
     SpotShadowMap = 134,
+    // plans/plan_binding.md CBIND-085B2: the cascaded atlas and the cube.
+    CascadedShadowMap = 135,
+    CubeShadowMap = 136,
     Test = UINT32_MAX
 };
 

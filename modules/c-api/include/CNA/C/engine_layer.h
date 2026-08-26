@@ -1777,6 +1777,516 @@ CNA_C_API CNA_Result cna_spot_shadow_map_compute_light_projection(
  */
 CNA_C_API CNA_Result cna_spot_shadow_map_destroy(CNA_SpotShadowMapHandle shadow_map);
 
+/* ---------------------------------------------------------------------------------------------
+ * Cascaded and cube shadow maps
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Owned handle for one cascaded directional-light shadow map.
+ *
+ * Release it with @ref cna_cascaded_shadow_map_destroy. Its atlas texture and caster effect are
+ * borrows that keep it alive, and destroying it is refused while one is outstanding.
+ */
+typedef CNA_Handle CNA_CascadedShadowMapHandle;
+
+/**
+ * @brief Creates a cascaded shadow map.
+ *
+ * @param graphics_device The device to render on.
+ * @param quality One `CNA_SHADOW_QUALITY_*` identity.
+ * @param cascade_count How many cascades, from 1 to `CNA_SHADOW_CASCADE_MAX_EXT`.
+ * @param out_shadow_map Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_create(
+    CNA_Handle graphics_device,
+    CNA_ShadowQuality quality,
+    int32_t cascade_count,
+    CNA_CascadedShadowMapHandle* out_shadow_map);
+
+/**
+ * @brief Reports whether this renderer can cast into the atlas.
+ *
+ * @param shadow_map The map.
+ * @param out_supported Receives `CNA_TRUE` when the caster shader exists and links.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_is_supported(
+    CNA_CascadedShadowMapHandle shadow_map,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Recomputes every cascade's transform and split for a light and a camera.
+ *
+ * Call this once per frame before opening any cascade.
+ *
+ * @param shadow_map The map.
+ * @param light The directional light to cast from.
+ * @param camera_view The camera's view matrix.
+ * @param camera_projection The camera's projection matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_update(
+    CNA_CascadedShadowMapHandle shadow_map,
+    const CNA_DirectionalLightEXT* light,
+    const CNA_Matrix* camera_view,
+    const CNA_Matrix* camera_projection);
+
+/**
+ * @brief Opens the pass for one cascade's region of the atlas.
+ *
+ * @param shadow_map The map.
+ * @param cascade_index Which cascade, from zero to the count given at creation.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_begin(
+    CNA_CascadedShadowMapHandle shadow_map,
+    int32_t cascade_index);
+
+/**
+ * @brief Closes the cascade pass opened by @ref cna_cascaded_shadow_map_begin.
+ *
+ * @param shadow_map The map.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_end(CNA_CascadedShadowMapHandle shadow_map);
+
+/**
+ * @brief Returns how many cascades the map holds.
+ *
+ * @param shadow_map The map.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_cascade_count(
+    CNA_CascadedShadowMapHandle shadow_map,
+    int32_t* out_count);
+
+/**
+ * @brief Returns one cascade's edge length in texels.
+ *
+ * @param shadow_map The map.
+ * @param out_size Receives the size.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_cascade_size(
+    CNA_CascadedShadowMapHandle shadow_map,
+    int32_t* out_size);
+
+/**
+ * @brief Returns the atlas texture, borrowed from the map.
+ *
+ * Release the borrow with @ref cna_render_target_destroy, which does not dispose the map's own
+ * atlas. The map refuses to be destroyed while a borrow is outstanding.
+ *
+ * @param shadow_map The map.
+ * @param out_texture Receives the borrowed Texture2D, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_shadow_texture(
+    CNA_CascadedShadowMapHandle shadow_map,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the caster effect, borrowed from the map.
+ *
+ * @param shadow_map The map.
+ * @param out_effect Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_caster_effect(
+    CNA_CascadedShadowMapHandle shadow_map,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Returns one cascade's world-to-atlas transform.
+ *
+ * @param shadow_map The map.
+ * @param cascade_index Which cascade.
+ * @param out_matrix Receives the transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_cascade_matrix(
+    CNA_CascadedShadowMapHandle shadow_map,
+    int32_t cascade_index,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Returns the view-space distance at which one cascade ends.
+ *
+ * @param shadow_map The map.
+ * @param cascade_index Which cascade.
+ * @param out_distance Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_split_distance(
+    CNA_CascadedShadowMapHandle shadow_map,
+    int32_t cascade_index,
+    float* out_distance);
+
+/**
+ * @brief Returns the width in world units over which neighbouring cascades cross-fade.
+ *
+ * @param shadow_map The map.
+ * @param out_band Receives the band.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_blend_band(
+    CNA_CascadedShadowMapHandle shadow_map,
+    float* out_band);
+
+/**
+ * @brief Sets the cascade cross-fade width.
+ *
+ * @param shadow_map The map.
+ * @param band The width in world units.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_set_blend_band(
+    CNA_CascadedShadowMapHandle shadow_map,
+    float band);
+
+/**
+ * @brief Reports whether each cascade is tinted differently for diagnosis.
+ *
+ * @param shadow_map The map.
+ * @param out_enabled Receives `CNA_TRUE` when debug tinting is on.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_is_debug_tint_enabled(
+    CNA_CascadedShadowMapHandle shadow_map,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Turns per-cascade debug tinting on or off.
+ *
+ * @param shadow_map The map.
+ * @param enabled `CNA_TRUE` to tint each cascade differently.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_set_debug_tint_enabled(
+    CNA_CascadedShadowMapHandle shadow_map,
+    CNA_Bool enabled);
+
+/**
+ * @brief Returns which cascade covers a view-space depth.
+ *
+ * @param shadow_map The map.
+ * @param view_depth The depth to place.
+ * @param out_index Receives the cascade index.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_select_cascade(
+    CNA_CascadedShadowMapHandle shadow_map,
+    float view_depth,
+    int32_t* out_index);
+
+/**
+ * @brief Returns the blend between uniform and logarithmic split placement.
+ *
+ * @param shadow_map The map.
+ * @param out_lambda Receives the lambda.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_get_split_lambda(
+    CNA_CascadedShadowMapHandle shadow_map,
+    float* out_lambda);
+
+/**
+ * @brief Sets the blend between uniform and logarithmic split placement.
+ *
+ * @param shadow_map The map.
+ * @param lambda Zero for uniform splits, one for logarithmic.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_set_split_lambda(
+    CNA_CascadedShadowMapHandle shadow_map,
+    float lambda);
+
+/**
+ * @brief Computes the split distances for a frustum, without a map.
+ *
+ * The canonical function returns a vector, so the C form is a caller-owned array and a required
+ * count: pass a null destination with zero capacity to learn the count first.
+ *
+ * @param near_plane The camera's near plane.
+ * @param far_plane The camera's far plane.
+ * @param cascade_count How many cascades to place.
+ * @param lambda Zero for uniform splits, one for logarithmic.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives the number of distances the call produces.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_compute_split_distances(
+    float near_plane,
+    float far_plane,
+    int32_t cascade_count,
+    float lambda,
+    float* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief How many corners @ref cna_cascaded_shadow_map_compute_frustum_corners writes. */
+#define CNA_FRUSTUM_CORNER_COUNT_EXT 8
+
+/**
+ * @brief Computes the eight world-space corners of a view-projection frustum.
+ *
+ * The canonical function returns a fixed-size array, so the C form takes a destination of exactly
+ * @ref CNA_FRUSTUM_CORNER_COUNT_EXT elements rather than a count the caller could get wrong.
+ *
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @param out_corners Destination for eight corners.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_compute_frustum_corners(
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    CNA_Vector3* out_corners);
+
+/**
+ * @brief Computes the bounding sphere of eight frustum corners.
+ *
+ * @param corners Eight corners, as @ref cna_cascaded_shadow_map_compute_frustum_corners writes.
+ * @param out_centre Receives the sphere's centre.
+ * @param out_radius Receives the sphere's radius.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_compute_bounding_sphere(
+    const CNA_Vector3* corners,
+    CNA_Vector3* out_centre,
+    float* out_radius);
+
+/**
+ * @brief Snaps a cascade centre to the shadow map's texel grid.
+ *
+ * Without this a cascade's contents shimmer as the camera moves, because the same world position
+ * lands on a slightly different texel each frame.
+ *
+ * @param centre The cascade centre.
+ * @param radius The cascade's bounding radius.
+ * @param cascade_size The cascade's edge length in texels.
+ * @param out_centre Receives the snapped centre.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_snap_to_texel_grid(
+    const CNA_Vector3* centre,
+    float radius,
+    int32_t cascade_size,
+    CNA_Vector3* out_centre);
+
+/**
+ * @brief Releases the cascaded shadow map, its atlas and its effect.
+ *
+ * @param shadow_map The map; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_destroy(CNA_CascadedShadowMapHandle shadow_map);
+
+/** @brief How many faces a cube shadow map renders. */
+#define CNA_CUBE_SHADOW_FACE_COUNT_EXT 6
+
+/**
+ * @brief Owned handle for one point-light cube shadow map.
+ *
+ * Release it with @ref cna_cube_shadow_map_destroy. Its cube texture and caster effect are borrows
+ * that keep it alive, and destroying it is refused while one is outstanding.
+ */
+typedef CNA_Handle CNA_CubeShadowMapHandle;
+
+/**
+ * @brief Creates a point-light cube shadow map.
+ *
+ * @param graphics_device The device to render on.
+ * @param quality One `CNA_SHADOW_QUALITY_*` identity.
+ * @param out_shadow_map Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_create(
+    CNA_Handle graphics_device,
+    CNA_ShadowQuality quality,
+    CNA_CubeShadowMapHandle* out_shadow_map);
+
+/**
+ * @brief Reports whether this renderer can cast into the cube.
+ *
+ * @param shadow_map The map.
+ * @param out_supported Receives `CNA_TRUE` when the caster shader exists and links.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_is_supported(
+    CNA_CubeShadowMapHandle shadow_map,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Recomputes all six face transforms for a point light.
+ *
+ * Call this once per frame before opening any face.
+ *
+ * @param shadow_map The map.
+ * @param light The point light to cast from.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_update(
+    CNA_CubeShadowMapHandle shadow_map,
+    const CNA_PointLightEXT* light);
+
+/**
+ * @brief Opens the pass for one cube face.
+ *
+ * @param shadow_map The map.
+ * @param face_index Which face, from zero to `CNA_CUBE_SHADOW_FACE_COUNT_EXT` minus one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_begin(
+    CNA_CubeShadowMapHandle shadow_map,
+    int32_t face_index);
+
+/**
+ * @brief Closes the face pass opened by @ref cna_cube_shadow_map_begin.
+ *
+ * @param shadow_map The map.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_end(CNA_CubeShadowMapHandle shadow_map);
+
+/**
+ * @brief Returns the cube texture, borrowed from the map.
+ *
+ * Release the borrow with @ref cna_texturecube_destroy, which does not dispose the map's own cube.
+ *
+ * @param shadow_map The map.
+ * @param out_texture Receives the borrowed TextureCube, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_get_shadow_texture(
+    CNA_CubeShadowMapHandle shadow_map,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the caster effect, borrowed from the map.
+ *
+ * @param shadow_map The map.
+ * @param out_effect Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_get_caster_effect(
+    CNA_CubeShadowMapHandle shadow_map,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Returns one face's edge length in texels.
+ *
+ * @param shadow_map The map.
+ * @param out_size Receives the size.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_get_size(
+    CNA_CubeShadowMapHandle shadow_map,
+    int32_t* out_size);
+
+/**
+ * @brief Returns the quality preset the map was created with.
+ *
+ * @param shadow_map The map.
+ * @param out_quality Receives the preset.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_get_quality(
+    CNA_CubeShadowMapHandle shadow_map,
+    CNA_ShadowQuality* out_quality);
+
+/**
+ * @brief Returns the position of the light the map last updated for.
+ *
+ * @param shadow_map The map.
+ * @param out_position Receives the position.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_get_light_position(
+    CNA_CubeShadowMapHandle shadow_map,
+    CNA_Vector3* out_position);
+
+/**
+ * @brief Returns the range of the light the map last updated for.
+ *
+ * @param shadow_map The map.
+ * @param out_range Receives the range.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_get_light_range(
+    CNA_CubeShadowMapHandle shadow_map,
+    float* out_range);
+
+/**
+ * @brief Returns the depth bias applied when casting.
+ *
+ * @param shadow_map The map.
+ * @param out_bias Receives the bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_get_depth_bias(
+    CNA_CubeShadowMapHandle shadow_map,
+    float* out_bias);
+
+/**
+ * @brief Sets the depth bias applied when casting.
+ *
+ * @param shadow_map The map.
+ * @param bias The bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_set_depth_bias(
+    CNA_CubeShadowMapHandle shadow_map,
+    float bias);
+
+/**
+ * @brief Computes one cube face's view transform, without a map.
+ *
+ * @param face One `CNA_CUBE_MAP_FACE_*` identity.
+ * @param position The light's world-space position.
+ * @param out_matrix Receives the view transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_compute_face_view(
+    CNA_CubeMapFace face,
+    const CNA_Vector3* position,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Computes the projection every cube face shares, from the light's range.
+ *
+ * @param range The light's range.
+ * @param out_matrix Receives the projection.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_compute_face_projection(
+    float range,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Returns the face size a quality preset selects.
+ *
+ * @param quality One `CNA_SHADOW_QUALITY_*` identity.
+ * @param out_size Receives the edge length in texels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_size_for_quality(
+    CNA_ShadowQuality quality,
+    int32_t* out_size);
+
+/**
+ * @brief Releases the cube shadow map, its cube and its effect.
+ *
+ * @param shadow_map The map; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_shadow_map_destroy(CNA_CubeShadowMapHandle shadow_map);
+
 #ifdef __cplusplus
 }
 #endif

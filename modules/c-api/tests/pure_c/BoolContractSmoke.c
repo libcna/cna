@@ -147,6 +147,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_cascaded_shadow_map_set_debug_tint_enabled(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_cascaded_shadow_map_set_debug_tint_enabled\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_compass_set_test_backend_ext(0, UINT8_C(9), UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -743,6 +750,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 97 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 98 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }
