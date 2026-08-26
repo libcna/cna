@@ -93,7 +93,8 @@ static int validate_structure_refusals(const CNA_Handle instance)
 }
 
 /* The process-wide 3D settings are what Apply3D reads, so they are moved before positioning. */
-static int validate_positioning(const CNA_Handle game, const CNA_Handle instance)
+static int validate_positioning(const CNA_Handle game, const CNA_Handle sound_effect,
+                                const CNA_Handle instance)
 {
     CNA_AudioEmitter emitter;
     CNA_AudioListener listener;
@@ -133,6 +134,36 @@ static int validate_positioning(const CNA_Handle game, const CNA_Handle instance
     }
     if (cna_sound_effect_instance_stop(instance, CNA_TRUE) != CNA_RESULT_SUCCESS) {
         return 0;
+    }
+
+    /*
+     * CABI-32: the refusal itself, at the C boundary. The comment above describes the order XNA
+     * requires; this asserts what happens when a caller gets it wrong, which is the half a
+     * consumer actually has to handle. A never-positioned instance that is already playing refuses
+     * with CNA_RESULT_INVALID_STATE, and stopping it releases the choice again.
+     */
+    {
+        CNA_Handle unaimed = CNA_INVALID_HANDLE;
+        if (cna_sound_effect_create_instance(sound_effect, &unaimed) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_sound_effect_instance_play(unaimed) != CNA_RESULT_SUCCESS ||
+            cna_sound_effect_instance_apply_3d(unaimed, &listener, &emitter) !=
+                CNA_RESULT_INVALID_STATE ||
+            cna_sound_effect_instance_apply_3d_multi_ext(unaimed, &listener, 1U, &emitter) !=
+                CNA_RESULT_INVALID_STATE) {
+            (void)cna_sound_effect_instance_destroy(unaimed);
+            return 0;
+        }
+        if (cna_sound_effect_instance_stop(unaimed, CNA_TRUE) != CNA_RESULT_SUCCESS ||
+            cna_sound_effect_instance_apply_3d(unaimed, &listener, &emitter) !=
+                CNA_RESULT_SUCCESS) {
+            (void)cna_sound_effect_instance_destroy(unaimed);
+            return 0;
+        }
+        if (cna_sound_effect_instance_destroy(unaimed) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
     }
 
     /* Positioning latches spatial gain, pan and pitch inside the instance; the instance's own
@@ -265,7 +296,7 @@ int main(void)
     if (!validate_structure_refusals(instance)) {
         return 5;
     }
-    if (!validate_positioning(game, instance)) {
+    if (!validate_positioning(game, sound_effect, instance)) {
         return 6;
     }
     if (!validate_multi_listener(instance)) {

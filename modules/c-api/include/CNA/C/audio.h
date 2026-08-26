@@ -1173,8 +1173,15 @@ CNA_C_API CNA_Result cna_audio_listener_init(CNA_AudioListener* out_listener);
  * @param instance Owned instance handle.
  * @param listener Where the ears are.
  * @param emitter Where the sound is.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed instance or for one that
+ *         is playing without having been positioned first (see below), or a documented
  *         argument/handle/thread/native failure.
+ *
+ * **Aim before you play.** Starting playback fixes the choice between 3D and pan for the rest of
+ * that playback: the reference implementation submits its audio packet on the first `..._play`, and
+ * this route refuses with `CNA_RESULT_INVALID_STATE` on an instance that is playing and was never
+ * positioned. Position it first and then play, or stop it, position it, and play again. An instance
+ * already positioned before playback keeps accepting this route while it plays.
  *
  * The distance attenuation this applies is a **computed inverse law beyond the process-wide distance
  * scale and full volume within it**, not a falloff that starts at zero distance — the canonical
@@ -1199,8 +1206,15 @@ CNA_C_API CNA_Result cna_sound_effect_instance_apply_3d(
  * @param listener_count Number of listeners.
  * @param emitter Where the sound is.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null array or a count of
- *         zero, `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
+ *         zero, `CNA_RESULT_INVALID_STATE` for a disposed instance or for one that is playing
+ *         without having been positioned first (see below), or a documented
  *         argument/handle/thread/native failure.
+ *
+ * **Aim before you play.** Starting playback fixes the choice between 3D and pan for the rest of
+ * that playback: the reference implementation submits its audio packet on the first `..._play`, and
+ * this route refuses with `CNA_RESULT_INVALID_STATE` on an instance that is playing and was never
+ * positioned. Position it first and then play, or stop it, position it, and play again. An instance
+ * already positioned before playback keeps accepting this route while it plays.
  *
  * Any count of one or more is accepted, as in XNA, which copies the whole listener array to XACT
  * with no count restriction.
