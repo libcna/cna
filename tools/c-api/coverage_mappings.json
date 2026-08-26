@@ -14974,6 +14974,39 @@
       "approved_symbols": [
         "CPP-FFE25DBCD3E6"
       ]
+    },
+    {
+      "id": "vector2-compound-assignment",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Vector2::operator(?:\\+=|-=|\\*=|/=)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_vector2_add`, `_subtract`, `_multiply`, `_multiply_scalar`, `_divide` and `_divide_scalar`, one per overload. C has no operator overloading and no compound assignment on a struct, so `a += b` is the binary route with the destination naming the left operand: every one of these takes its vectors **by value**, which is what makes `cna_vector2_add(a, b, &a)` well defined rather than an aliasing hazard.",
+      "tests": "`VectorSmoke.c` Vector2 arithmetic coverage",
+      "status": "implemented",
+      "task": "CBIND-081",
+      "approved_symbols": [
+        "CPP-400BEE050E6E",
+        "CPP-4E073E5BFC25",
+        "CPP-5BF79D31E93F",
+        "CPP-6D78CD60B08D",
+        "CPP-AD8F89984F83",
+        "CPP-D4F80E1E22ED"
+      ]
+    },
+    {
+      "id": "color-default-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Color::Color$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "the zero-initialized `CNA_Color`. The canonical default constructor sets `packedValue` to 0 -- transparent black -- and the C form of that is the struct's own zero value, which a caller writes directly or reaches through `cna_color_set_packed_value` with 0. A `cna_color_init` route would add a second spelling for what C already expresses in a declaration.",
+      "tests": "`ColorSmoke.c` packed-value coverage",
+      "status": "implemented",
+      "task": "CBIND-081",
+      "approved_symbols": [
+        "CPP-EEEA0BCE0D4D"
+      ]
     }
   ]
 }

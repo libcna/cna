@@ -683,7 +683,11 @@ The same commit gates the invariant it restores, because a correction nobody re-
 The rest: `Effect`'s protected copy constructor is what `Clone()` calls, so it maps to `cna_effect_clone`; `VertexBuffer::SetData<TVertex>` maps to `cna_vertex_buffer_set_data`, the same operation with the element type selected by a versioned descriptor rather than a template parameter (the `IPackedVectorT` flattening again); and `TextureCube`'s copy constructor and copy assignment are `not-applicable`, because the canonical copy is a value wrapper sharing one resource and in this ABI **the handle already is that shared reference** — minting a second name for it would create a second owner the registry must reconcile at destroy.
 
 **Every test this row cites was checked to exist and to call the route it is cited for**, after a first draft named files from memory. 96/96 and all seven gates green; exports unchanged at 2,942, which is what a slice that adds no routes should do. |
-| CBIND-081 | Bind the math tail | 7 | ⬜ | `Vector2`'s six compound-assignment operators (`+=`, `-=`, `*=` by vector and by scalar, `/=` by vector and by scalar) and `Color`'s default constructor. The value types are already POD in the ABI, so these are the cheapest rows in the phase — and the ones most likely to be quietly skipped as "obvious", which is how they got here. |
+| CBIND-081 | Bind the math tail | 7 | ✅ | **Done 2026-08-26**, and like `CBIND-080` it needed no new routes — the row called these "the cheapest rows in the phase, and the ones most likely to be quietly skipped as obvious", and the reason they are cheap is that C already expresses them.
+
+`Vector2`'s six compound-assignment operators map to `cna_vector2_add`, `_subtract`, `_multiply`, `_multiply_scalar`, `_divide` and `_divide_scalar`, one per overload. C has neither operator overloading nor compound assignment on a struct, so `a += b` is the binary route with the destination naming the left operand — and that is well defined rather than an aliasing hazard precisely because every one of those routes takes its vectors **by value**. Checked, not assumed.
+
+`Color::Color()` sets `packedValue` to 0, so its C form is the zero-initialized `CNA_Color` a caller writes in a declaration, or reaches through `cna_color_set_packed_value` with 0. A `cna_color_init` route would add a second spelling for something C already has syntax for. |
 | CBIND-082 | Bind the media identity tail | 23 | ⬜ | `Equals`, `GetHashCode` and `ToString` on `Album`, `Artist`, `Genre`, `Picture`, `PictureAlbum`, `Playlist` and `Song`, plus `MediaSource::ToString` and two `VideoPlayer` rows. `CBIND-037C` closed the media module's behaviour and left its `System::Object` overrides unbound; the campaign's settled shape for these is a value comparison plus a UTF-8 copy-out, not a bound `System::Object`. Closing this and `CBIND-083` is what finally lets `CBIND-037`'s parent row go ✅. |
 | CBIND-083 | Bind the runtime, input and content tail | 5 | ⬜ | `DrawableGameComponent`'s `getDrawOrderProperty`/`getVisibleProperty` overrides, two `TouchPanel` rows and `ContentManager::ResolveExistingAssetPath`. The `ResolveExistingAssetPath` row wants the campaign's existing path/UTF-8 copy-out contract, not a new one. |
 | CBIND-084 | Bind the engine-layer foundations, resources and diagnostics | 140 | 🟨 | The layer's substrate, and the slice every other CNAEXT slice depends on. **Decomposed into `CBIND-084A`–`CBIND-084C` below; the parent closes only when all three rows and every `CBIND-084` inventory row are closed.** It grew from 121 rows to 140 when `CBIND-084A` discovered that `ComputeShader::bindImage` and `::barrier` cannot be bound without the `CNA::GraphicsImageAccess` and `CNA::GraphicsMemoryBarrier` identities, which the first draft had parked in `CBIND-092`. An identity belongs with the first route that needs it, so the 19 rows moved here and `CBIND-092` dropped from 157 to 138. |
@@ -786,8 +790,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-26, after `CBIND-080`):** 513 headers / 8,306 symbols —
-**6,536 implemented, 15 approved partial, 1,297 planned, 458 not applicable.** ABI `0.9.0`, 2,942
+**Snapshot (2026-08-26, after `CBIND-081`):** 513 headers / 8,306 symbols —
+**6,543 implemented, 15 approved partial, 1,290 planned, 458 not applicable.** ABI `0.9.0`, 2,942
 exported symbols — the same 2,942 with `CNA_CNAEXT` on and off, which is the engine layer's ABI
 promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
