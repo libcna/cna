@@ -91,12 +91,13 @@ validation error, a mid-run canvas resize, and clean teardown. Reproduce with
 path (perspective, depth test, texturing) through the same harness, also green in-browser, and
 `CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d}_page` confirm the `PbrEffect`, cube-map
 `EnvironmentMapEffect` and bone-palette `SkinnedEffect` WGSL compile and render in-browser too
-(`plans/plan_webgpu.md` `WEBGPU-122`/`121`). Two known follow-ups: **`WEBGPU-133`** -- the browser's
-Dawn validates texture lifetime stricter than native wgpu-native, so a `Texture2D` released while a
-deferred draw still references it raises `Destroyed texture ... used in a submit` (harmless natively;
-in the browser it corrupts those effect pages' readback-based later checks, though not the shader
-compilation or the 2D/3D demos); and the `--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on
-web (a native-only `GameWindow` operation, not a renderer limit).
+(`plans/plan_webgpu.md` `WEBGPU-122`/`121`). Two known follow-ups: **`WEBGPU-133`** -- under a
+**multiple-`ReadBackbuffer`-per-frame** pattern (which the effect suites use, but real rendering does
+not), the browser's Dawn rejects the released-then-referenced backbuffer surface texture with
+`Destroyed texture ... used in a submit`, where wgpu-native tolerates it. It corrupts those pages'
+readback-based later checks only; the shader compilation and the once-per-frame 2D/3D demos are
+unaffected. And the `--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on web (a native-only
+`GameWindow` operation, not a renderer limit).
 
 ## Automated native smoke test
 
