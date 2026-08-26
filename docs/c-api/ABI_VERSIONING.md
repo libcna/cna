@@ -9,7 +9,7 @@ The ABI is `0.9.0`. It adds the owned-`GraphicsDevice` routes
 `cna_video_player_get_frame_ext` with its `CNA_VideoFrameEXT` descriptor and
 `CNA_VIDEO_FRAME_EXT_STRUCT_VERSION`.
 
-Those additions alone would be additive. The minor moves because `0.9.0` also **changes six
+Those additions alone would be additive. The minor moves because `0.9.0` also **changes seven
 documented contracts**. A consumer that read the `0.8.0` headers was told something other than what
 now happens in each case, so each is worth reading before adopting this generation:
 
@@ -22,6 +22,12 @@ now happens in each case, so each is worth reading before adopting this generati
   count but one. The reference implementation has no count restriction; where several listeners are
   given, the nearest to the emitter decides the applied attenuation, pan and Doppler, because this
   runtime's mixer has a single stereo gain pair and no per-listener output matrices.
+- **Non-finite sprite values are accepted.** NaN and the infinities in a position, rotation,
+  origin, scale, layer depth or transform component were refused with
+  `CNA_RESULT_INVALID_ARGUMENT`; they are now carried into the vertex path, which is what the
+  reference implementation does -- it validates none of them. The Int32 destination range check is
+  unchanged and still refuses a finite value too large to be a representable destination.
+  `cna_sprite_batch_draw_mesh_ext` keeps its own finiteness check, having no reference counterpart.
 - **An unnamed `SpriteSortMode` value is accepted.** Values outside the named set previously came
   back as `CNA_RESULT_INVALID_ARGUMENT`; they now pass through and run as `Deferred`, which is what
   the reference implementation does.
@@ -37,8 +43,8 @@ now happens in each case, so each is worth reading before adopting this generati
   player. `Play` and `Stop` previously reset it, which gave the first frame of every playback the
   same generation and so defeated the one comparison the value exists to support.
 
-Three of those six -- the two `Apply3D` changes and the sort mode -- landed while the version still
-read `0.8.0` and so were briefly unversioned. That is the defect this bump repairs: `0.9.0` is the
+Four of those seven -- the two `Apply3D` changes, the sort mode and the layer-depth half of the
+non-finite change -- landed while the version still read `0.8.0` and so were briefly unversioned. That is the defect this bump repairs: `0.9.0` is the
 first version number a consumer can use to tell any of them apart.
 
 `0.8.0` added the NanoVG renderer identity and the five engine-layer capability identities for
