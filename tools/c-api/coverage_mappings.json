@@ -15056,6 +15056,50 @@
         "CPP-1582FB71B5D8",
         "CPP-93E13B8D0C45"
       ]
+    },
+    {
+      "id": "drawable-game-component-overrides",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::DrawableGameComponent::(?:getDrawOrderProperty|getVisibleProperty)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_drawable_game_component_get_draw_order` and `cna_drawable_game_component_get_visible`, which the component family already carries. These rows are the `override` declarations the merge added; the operations they override were already bound, and an override is the same operation seen through the derived type.",
+      "tests": "`RuntimeComponentsSmoke.c` draw-order and visibility coverage",
+      "status": "implemented",
+      "task": "CBIND-083",
+      "approved_symbols": [
+        "CPP-8B95B3A7DA74",
+        "CPP-BDE50B524521"
+      ]
+    },
+    {
+      "id": "touch-panel-mouse-emulation",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::(?:getMouseTouchEmulationEnabledEXT|setMouseTouchEmulationEnabledEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_touch_panel_get_mouse_touch_emulation_enabled_ext` and `cna_touch_panel_set_mouse_touch_emulation_enabled_ext`, taking the active game the way every other `TouchPanel` static does. The setter validates its boolean, so a non-canonical byte is refused rather than read as true.",
+      "tests": "`InputSnapshotsSmoke.c`, which asserts the XNA-matching default of off before toggling and restores it afterwards",
+      "status": "implemented",
+      "task": "CBIND-083",
+      "approved_symbols": [
+        "CPP-34743F275105",
+        "CPP-77634E9D81C6"
+      ]
+    },
+    {
+      "id": "content-manager-resolve-existing-asset-path",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::ResolveExistingAssetPath$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a private implementation helper. `ContentManager` declares `private:` and then uses a property macro, after which Doxygen reports the following members as public; this one is the loader's own search for which extension of an asset exists on disk. What a caller can ask -- the path an asset name builds to -- is `cna_content_manager_get_asset_path_size`/`_copy_asset_path`.",
+      "tests": "Doxygen declaration inventory; the operation has no caller outside the loader",
+      "status": "not-applicable",
+      "task": "CBIND-083",
+      "approved_symbols": [
+        "CPP-47B2645A163C"
+      ]
     }
   ]
 }

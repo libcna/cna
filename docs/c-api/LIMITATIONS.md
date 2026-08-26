@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,566 | A C route exists and is tested. |
+| Fully mapped | 6,570 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 458 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 459 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -114,6 +114,10 @@ The inventory excludes `CNA::Internal` and `Detail` by path, because those names
 
 A few engine-layer resources expose the renderer object behind them through an `*EXT` accessor -- `StorageBuffer::getRendererEXT` is the example, returning `CNA::Internal::Renderers::IStorageBufferRenderer*`. That type is an abstract C++ interface with virtual dispatch whose shape is a contract between CNA and its renderers, not between CNA and an application. Handing a C caller that pointer would put a renderer-private vtable into the ABI, and every operation reachable through it is already reachable through the resource's own routes. This is the same argument the inventory's `Internal`/`Detail` path exclusion makes, applied to a return type rather than a declaration site.
 
+### Private implementation helpers the inventory reports as public — 1 symbols
+
+`ContentManager` declares `private:` and then uses a `DEF_PROP` property macro, after which Doxygen reports the following members as public. `ResolveExistingAssetPath` is one: it is a private helper the loader calls to find which extension of an asset actually exists on disk, and CNA's visibility rules say a private member is not C API surface. Its neighbour `BuildAssetPath` is in the same private block and is currently recorded as implemented against `cna_content_manager_copy_asset_path`; that route really does call `BuildAssetPath`, so the mapping is not false, but the two rows disagree about whether a private member is bindable. Whoever revisits that row should settle it for both.
+
 ## Limitations that are not about symbols
 
 An inventory cannot record these, because they are properties of the package and the
@@ -122,7 +126,7 @@ promise rather than of any declaration.
 | Subject | What it means | Status |
 |---|---|---|
 | **FFmpeg stays a system dependency** | The package installs the SDL3, SDL3_image and SDL3_mixer libraries this project builds, beside `libcna_c_api.so`, whose RPATH is `$ORIGIN` -- so an installed CNA links and runs with no environment variable. FFmpeg is different: libavcodec, libavformat, libavutil and libswresample come from the distribution. Copying a distribution's binaries into this package would take on their redistribution terms, freeze their soname against future security updates and drag in the transitive libraries they were linked against, so they remain a system dependency a deployment installs the ordinary way. | by design (CONSUMING.md) |
-| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,942 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
+| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,944 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
 | **One active CNA runtime per process** | A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design. | by design (HANDLES.md) |
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |

@@ -648,6 +648,37 @@ CNA_C_API CNA_Result cna_touch_panel_get_is_gesture_available(
     CNA_Bool* out_available);
 
 /**
+ * @brief Reports whether left-mouse-button input is also reported as touch input.
+ *
+ * CNAEXT, and off by default so the default behaviour stays XNA's and FNA's: both feed the touch
+ * panel from real finger events only. A host with no digitizer can switch this on to make a
+ * touch-only game playable with a pointer.
+ *
+ * @param game Active game handle.
+ * @param out_enabled Receives `CNA_TRUE` when mouse input is also reported as touch input.
+ * @return `CNA_RESULT_SUCCESS`, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_touch_panel_get_mouse_touch_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets whether left-mouse-button input is reported as touch input.
+ *
+ * While enabled, pressing the left mouse button begins a touch at the cursor, moving with it held
+ * reports a moved touch, and releasing it ends the touch. A synthesized touch travels the same
+ * path as a real one, so every read of the panel sees it exactly as it sees a finger.
+ *
+ * @param game Active game handle.
+ * @param enabled `CNA_TRUE` to report mouse input as touch input.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean, or a
+ *         documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_touch_panel_set_mouse_touch_emulation_enabled_ext(
+    CNA_Handle game,
+    CNA_Bool enabled);
+
+/**
  * @brief Reads the native window handle the touch panel is bound to.
  *
  * @param game Active owned or callback-borrowed game handle.
