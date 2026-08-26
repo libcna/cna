@@ -34,20 +34,25 @@
 >   started. The capability no longer LIES about it: `WEBGPU-134` made
 >   `SupportsCapability(MultipleRenderTargets)` return false and turned the `count > 1` refusal into a
 >   `System::NotSupportedException`.
-> - **Buffer-disposal/vertex-format tests (`WEBGPU-99`)** and **`SetDataWithOptions`/disposed guards
->   (`WEBGPU-44`/`47`)** — smaller device/buffer-API gaps, none blocking real game code today, still
->   `⬜`. **`OcclusionQuery` (`WEBGPU-84`)** is unimplemented (`⬜`), but `WEBGPU-135` made
->   `SupportsCapability(OcclusionQuery)` report false so the renderer no longer claims a query it
->   no-ops. **`vertexStart`/`baseVertex` sub-ranging (`WEBGPU-70`)** is 🟨, not ⬜: the ordinary
->   indexed/non-indexed routes honour `startIndex`/`baseVertex` already (`WebGPURenderer.cpp` applies a
->   `vertexStart * stride` byte offset on those routes); only the instanced route
->   (`DrawInstancedPrimitivesEx`) still ignores `vertexStart`, as its own comment records.
+> - **Buffer/device-API gaps — now closed (2026-08-26):** `WEBGPU-44` (`SetDataWithOptions`),
+>   `WEBGPU-47` (disposed-buffer guard) and `WEBGPU-99` (their tests) are ✅ -- see `WebGPU_SetDataOptions`
+>   and `WebGPU_DisposedGuard`. **`OcclusionQuery` (`WEBGPU-84`)** is unimplemented (`⬜`), but
+>   `WEBGPU-135` made `SupportsCapability(OcclusionQuery)` report false so the renderer no longer
+>   claims a query it no-ops. **`vertexStart`/`baseVertex` sub-ranging (`WEBGPU-70`)** is 🟨, not ⬜:
+>   the ordinary indexed/non-indexed routes honour `startIndex`/`baseVertex` already; the only
+>   unapplied case is `vertexStart` on the instanced route, which is **unreachable through any XNA
+>   API** (XNA's `DrawInstancedPrimitives` has no `vertexStart` parameter -- see its row), so it stays
+>   documented-not-done rather than force-fixed.
 > - **`ShaderEffect` custom WGSL (`WEBGPU-76`)** — CNAEXT extension, not started.
-> - **Misc small items**: `WEBGPU-28` (compile-time WGSL validation), `WEBGPU-106`/`107`/`109`
->   (debug marker no-op doc, simulated context loss, `IsFullScreen`), `WEBGPU-116`
->   (vertex-format-from-`VertexElementFormat` helper), `WEBGPU-118` (Vulkan-deviations doc) — all
->   `⬜`, all small/standalone. (`WEBGPU-115` — the wireframe refusal + its doc + its contract test —
->   is ✅, see its row; it is no longer open.)
+> - **Misc small items — mostly closed (2026-08-26):** `WEBGPU-106` (debug-marker no-op, inherited +
+>   documented), `WEBGPU-109` (`IsFullScreen`, platform-level), `WEBGPU-116` (vertex-format helper,
+>   now single-sourcing all pipeline formats), `WEBGPU-118` (the `docs/webgpu-vs-vulkan-deviations.md`
+>   doc), and `WEBGPU-63` (SpriteBatch sort-mode verification) are all ✅. Still `⬜`: `WEBGPU-28`
+>   (a startup WGSL pre-validation pass + `webgpu_shaders.hpp` extraction -- the shaders are already
+>   verified-compiling, only the early-startup mechanism is deferred) and `WEBGPU-107`
+>   (`DebugSimulateContextLoss`, an inherited no-op; a real device destroy+recreate is a large,
+>   GL-flavoured feature Vulkan also does not implement). (`WEBGPU-115` — the wireframe refusal + its
+>   doc + its contract test — is ✅, see its row; it is no longer open.)
 > - **Emscripten/browser target (`WEBGPU-119`–`122`)** — the 2D path RUNS IN A REAL BROWSER as of
 >   2026-08-26. `WEBGPU-119`/`120`/`121`/`122`/`133` are ✅ -- 2D, 3D BasicEffect and every stock
 >   effect shader compile and render in a real browser, and the effect suites' own readback pixel
@@ -130,8 +135,9 @@
 2. ~~`WEBGPU-88`~~ – ~~`WEBGPU-91`~~ — automated CTest coverage and reusable GPU readback, all ✅
    2026-07-12 (`WebGPU_Clear_Readback`).
 3. ~~`WEBGPU-92`~~ — ✅ 2026-07-12, sampler address-mode (Wrap/Clamp/Mirror) pixel assertions closed
-   the last gap. `WEBGPU-99` — buffer disposal/`SetDataOptions`/vertex-format tests, not yet
-   started.
+   the last gap. ~~`WEBGPU-99`~~ — buffer disposal/`SetDataOptions`/vertex-format tests, ✅ 2026-08-26
+   (`WebGPU_DisposedGuard`, `WebGPU_SetDataOptions`, and the `WebGPUVertexFormatFromVEF` rewire
+   verified by the full 3D/sprite suite).
 4. 3D backlog (Phases 57–66) is now underway, all landed 2026-07-12:
    - First vertical slice — `WEBGPU-11`/`13`/`14` (UBO + bind group), `WEBGPU-19`
      (`colored3d.wgsl`), `WEBGPU-32` (pipeline, with genuine depth-test verification),

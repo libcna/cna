@@ -616,4 +616,9 @@ line-by-line Vulkan translation:
 - Native surface creation is performed directly from SDL3 window properties; CNA does not require
   the separate `sdl3webgpu` compatibility library.
 
+The deliberate, collected departures from the Vulkan renderer — push constants → UBO, wireframe
+refusal, async → synchronous callback pumping, `Color` → `Unorm8x4` vertex format, the
+`SetStringMarkerEXT` no-op, and windowing handled by the shared platform — are documented in
+`docs/webgpu-vs-vulkan-deviations.md`.
+
 See `plans/plan_webgpu.md` for task-level status and the remaining parity work.
