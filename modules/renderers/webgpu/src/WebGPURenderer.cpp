@@ -31,12 +31,15 @@
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
 namespace CNA::Internal::Renderers::WebGPU
 {
     namespace
     {
+        using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+
         constexpr std::uint64_t kMinimumBufferSize = 4;
         constexpr std::uint64_t kRequestTimeoutNanoseconds = 10'000'000'000ULL;
 
@@ -556,6 +559,35 @@ namespace CNA::Internal::Renderers::WebGPU
                 case 2: return WGPUCullMode_Front;  // CullCounterClockwiseFace
                 default: return WGPUCullMode_None;
             }
+        }
+
+        // WEBGPU-116: the WebGPU spelling of every XNA VertexElementFormat, mirroring
+        // VulkanRenderer's own ToVkVertexFormat. Every pipeline builder selects its per-attribute
+        // WGPUVertexFormat through this one map, so each attribute names the XNA format it means and
+        // the ordinal->format table lives in exactly one place instead of ~55 scattered literals.
+        // Color is Unorm8x4, not a BGRA vertex format: WebGPU has no B8G8R8A8 vertex format, and this
+        // renderer's packed layouts already store colour as RGBA the shader reads straight -- unlike
+        // Vulkan, which picks VK_FORMAT_B8G8R8A8_UNORM to swizzle during the fetch.
+        [[nodiscard]] WGPUVertexFormat WebGPUVertexFormatFromVEF(VertexElementFormat format)
+        {
+            switch (format)
+            {
+                case VertexElementFormat::Single:  return WGPUVertexFormat_Float32;
+                case VertexElementFormat::Vector2: return WGPUVertexFormat_Float32x2;
+                case VertexElementFormat::Vector3: return WGPUVertexFormat_Float32x3;
+                case VertexElementFormat::Vector4: return WGPUVertexFormat_Float32x4;
+                case VertexElementFormat::Color:   return WGPUVertexFormat_Unorm8x4;
+                case VertexElementFormat::Byte4:   return WGPUVertexFormat_Uint8x4;
+                case VertexElementFormat::Short2:  return WGPUVertexFormat_Sint16x2;
+                case VertexElementFormat::Short4:  return WGPUVertexFormat_Sint16x4;
+                case VertexElementFormat::NormalizedShort2: return WGPUVertexFormat_Snorm16x2;
+                case VertexElementFormat::NormalizedShort4: return WGPUVertexFormat_Snorm16x4;
+                case VertexElementFormat::HalfVector2: return WGPUVertexFormat_Float16x2;
+                case VertexElementFormat::HalfVector4: return WGPUVertexFormat_Float16x4;
+            }
+            throw std::invalid_argument(
+                "CNA WebGPU: unrecognized VertexElementFormat ordinal " +
+                std::to_string(static_cast<int>(format)));
         }
 
         // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. This renderer selects its
@@ -2841,13 +2873,13 @@ struct VertexOutput {
             throw std::runtime_error("CNA WebGPU: invalid SpriteBatch pipeline compatibility state");
 
         std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(SpriteVertex, position);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x2;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[1].offset = offsetof(SpriteVertex, uv);
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x4;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         attributes[2].offset = offsetof(SpriteVertex, color);
         attributes[2].shaderLocation = 2;
         WGPUVertexBufferLayout vertexBufferLayout{};
@@ -3018,10 +3050,10 @@ struct VertexOutput {
 
         struct ColoredVertex { float x, y, z; std::uint8_t r, g, b, a; };
         std::array<WGPUVertexAttribute, 2> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(ColoredVertex, x);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Unorm8x4;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
         attributes[1].offset = offsetof(ColoredVertex, r);
         attributes[1].shaderLocation = 1;
         WGPUVertexBufferLayout vertexBufferLayout{};
@@ -3252,10 +3284,10 @@ struct VertexOutput {
 
         struct TexturedVertex { float x, y, z; float u, v; };
         std::array<WGPUVertexAttribute, 2> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(TexturedVertex, x);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x2;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[1].offset = offsetof(TexturedVertex, u);
         attributes[1].shaderLocation = 1;
         WGPUVertexBufferLayout vertexBufferLayout{};
@@ -3337,13 +3369,13 @@ struct VertexOutput {
 
         struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
         std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(ColoredTexturedVertex, x);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Unorm8x4;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
         attributes[1].offset = offsetof(ColoredTexturedVertex, r);
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[2].offset = offsetof(ColoredTexturedVertex, u);
         attributes[2].shaderLocation = 2;
         WGPUVertexBufferLayout vertexBufferLayout{};
@@ -3687,13 +3719,13 @@ struct VertexOutput {
 
         struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
         std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(LitTexturedVertex, x);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[1].offset = offsetof(LitTexturedVertex, nx);
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[2].offset = offsetof(LitTexturedVertex, u);
         attributes[2].shaderLocation = 2;
         WGPUVertexBufferLayout vertexBufferLayout{};
@@ -3774,13 +3806,13 @@ struct VertexOutput {
 
         struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
         std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(LitTexturedVertex, x);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[1].offset = offsetof(LitTexturedVertex, nx);
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[2].offset = offsetof(LitTexturedVertex, u);
         attributes[2].shaderLocation = 2;
         WGPUVertexBufferLayout vertexBufferLayout{};
@@ -4009,13 +4041,13 @@ struct VertexOutput {
         if (stride == 24)
         {
             struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
             attributes[0].offset = offsetof(ColoredTexturedVertex, x);
             attributes[0].shaderLocation = 0;
-            attributes[1].format = WGPUVertexFormat_Unorm8x4;
+            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
             attributes[1].offset = offsetof(ColoredTexturedVertex, r);
             attributes[1].shaderLocation = 1;
-            attributes[2].format = WGPUVertexFormat_Float32x2;
+            attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
             attributes[2].offset = offsetof(ColoredTexturedVertex, u);
             attributes[2].shaderLocation = 2;
             attributeCount = 3;
@@ -4028,10 +4060,10 @@ struct VertexOutput {
             // 12-byte normal) -- one shared shader for strides 20 and 32, only the vertex buffer
             // layout differs.
             struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
-            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
             attributes[0].offset = offsetof(LitTexturedVertex, x);
             attributes[0].shaderLocation = 0;
-            attributes[1].format = WGPUVertexFormat_Float32x2;
+            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
             attributes[1].offset = offsetof(LitTexturedVertex, u);
             attributes[1].shaderLocation = 1;
             attributeCount = 2;
@@ -4040,10 +4072,10 @@ struct VertexOutput {
         else
         {
             struct TexturedVertex { float x, y, z; float u, v; };
-            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
             attributes[0].offset = offsetof(TexturedVertex, x);
             attributes[0].shaderLocation = 0;
-            attributes[1].format = WGPUVertexFormat_Float32x2;
+            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
             attributes[1].offset = offsetof(TexturedVertex, u);
             attributes[1].shaderLocation = 1;
             attributeCount = 2;
@@ -4309,13 +4341,13 @@ struct VertexOutput {
         if (stride == 24)
         {
             struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
-            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
             attributes[0].offset = offsetof(ColoredTexturedVertex, x);
             attributes[0].shaderLocation = 0;
-            attributes[1].format = WGPUVertexFormat_Unorm8x4;
+            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
             attributes[1].offset = offsetof(ColoredTexturedVertex, r);
             attributes[1].shaderLocation = 1;
-            attributes[2].format = WGPUVertexFormat_Float32x2;
+            attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
             attributes[2].offset = offsetof(ColoredTexturedVertex, u);
             attributes[2].shaderLocation = 2;
             attributeCount = 3;
@@ -4325,10 +4357,10 @@ struct VertexOutput {
         else
         {
             struct TexturedVertex { float x, y, z; float u, v; };
-            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
             attributes[0].offset = offsetof(TexturedVertex, x);
             attributes[0].shaderLocation = 0;
-            attributes[1].format = WGPUVertexFormat_Float32x2;
+            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
             attributes[1].offset = offsetof(TexturedVertex, u);
             attributes[1].shaderLocation = 1;
             attributeCount = 2;
@@ -4630,13 +4662,13 @@ struct VertexOutput {
 
         struct EnvMapVertex { float x, y, z, nx, ny, nz, u, v; };
         std::array<WGPUVertexAttribute, 3> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(EnvMapVertex, x);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[1].offset = offsetof(EnvMapVertex, nx);
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[2].offset = offsetof(EnvMapVertex, u);
         attributes[2].shaderLocation = 2;
         WGPUVertexBufferLayout vertexBufferLayout{};
@@ -5046,7 +5078,7 @@ struct VertexOutput {
         const bool hasPackedColor = InstancedPackedColorOffsetForStride(pvStride, packedColorOffset);
         std::array<WGPUVertexAttribute, 2> vertexAttrs{};
         std::size_t vertexAttrCount = 0;
-        vertexAttrs[vertexAttrCount].format = WGPUVertexFormat_Float32x3;
+        vertexAttrs[vertexAttrCount].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         vertexAttrs[vertexAttrCount].offset = 0;
         vertexAttrs[vertexAttrCount].shaderLocation = 0;
         ++vertexAttrCount;
@@ -5054,23 +5086,23 @@ struct VertexOutput {
         {
             // The same normalized R8G8B8A8 element colored3d.wgsl's own pipeline binds for this
             // stride -- WGPUVertexFormat_Unorm8x4 is WebGPU's spelling of VertexElementFormat::Color.
-            vertexAttrs[vertexAttrCount].format = WGPUVertexFormat_Unorm8x4;
+            vertexAttrs[vertexAttrCount].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
             vertexAttrs[vertexAttrCount].offset = packedColorOffset;
             vertexAttrs[vertexAttrCount].shaderLocation = 1;
             ++vertexAttrCount;
         }
 
         std::array<WGPUVertexAttribute, 4> instanceAttrs{};
-        instanceAttrs[0].format = WGPUVertexFormat_Float32x4;
+        instanceAttrs[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         instanceAttrs[0].offset = 0;
         instanceAttrs[0].shaderLocation = 4;
-        instanceAttrs[1].format = WGPUVertexFormat_Float32x4;
+        instanceAttrs[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         instanceAttrs[1].offset = 16;
         instanceAttrs[1].shaderLocation = 5;
-        instanceAttrs[2].format = WGPUVertexFormat_Float32x4;
+        instanceAttrs[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         instanceAttrs[2].offset = 32;
         instanceAttrs[2].shaderLocation = 6;
-        instanceAttrs[3].format = WGPUVertexFormat_Float32x4;
+        instanceAttrs[3].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         instanceAttrs[3].offset = 48;
         instanceAttrs[3].shaderLocation = 7;
 
@@ -8967,21 +8999,21 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         struct PbrVertex { float x, y, z, nx, ny, nz, tx, ty, tz, tw, u, v; };
         static_assert(sizeof(PbrVertex) == 48, "PbrVertex must be 48 bytes");
         std::array<WGPUVertexAttribute, 5> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = offsetof(PbrVertex, x);
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[1].offset = offsetof(PbrVertex, nx);
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x4;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         attributes[2].offset = offsetof(PbrVertex, tx);
         attributes[2].shaderLocation = 2;
-        attributes[3].format = WGPUVertexFormat_Float32x2;
+        attributes[3].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[3].offset = offsetof(PbrVertex, u);
         attributes[3].shaderLocation = 3;
         if (colored)
         {
-            attributes[4].format = WGPUVertexFormat_Unorm8x4;
+            attributes[4].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
             attributes[4].offset = 56;
             attributes[4].shaderLocation = 4;
         }
@@ -9923,26 +9955,26 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         // strides). BlendIndices (Byte4/Uint8x4) is read as a true unsigned integer, not
         // normalized -- matches EasyGLRenderer::ApplyLayout's glVertexAttribIPointer path.
         std::array<WGPUVertexAttribute, 6> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = 0;
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[1].offset = 12;
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[2].offset = 24;
         attributes[2].shaderLocation = 2;
-        attributes[3].format = WGPUVertexFormat_Float32x4;
+        attributes[3].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         attributes[3].offset = 32;
         attributes[3].shaderLocation = 3;
-        attributes[4].format = WGPUVertexFormat_Uint8x4;
+        attributes[4].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Byte4);
         attributes[4].offset = 48;
         attributes[4].shaderLocation = 4;
         std::uint32_t attributeCount = 5;
         std::uint64_t arrayStride = 52;
         if (hasVertexColor)
         {
-            attributes[5].format = WGPUVertexFormat_Unorm8x4;
+            attributes[5].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
             attributes[5].offset = 52;
             attributes[5].shaderLocation = 5;
             attributeCount = 6;
@@ -10580,27 +10612,27 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // plans/plan_gltf.md GLTF-463/GLTF-465: stride 80 is this record with TEXCOORD_1 at 68 and a
         // packed, normalized COLOR_0 at 76. The second UV set stays unbound, as on the rigid twin.
         std::array<WGPUVertexAttribute, 7> attributes{};
-        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[0].offset = 0;
         attributes[0].shaderLocation = 0;
-        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
         attributes[1].offset = 12;
         attributes[1].shaderLocation = 1;
-        attributes[2].format = WGPUVertexFormat_Float32x4;
+        attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         attributes[2].offset = 24;
         attributes[2].shaderLocation = 2;
-        attributes[3].format = WGPUVertexFormat_Float32x2;
+        attributes[3].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
         attributes[3].offset = 40;
         attributes[3].shaderLocation = 3;
-        attributes[4].format = WGPUVertexFormat_Float32x4;
+        attributes[4].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
         attributes[4].offset = 48;
         attributes[4].shaderLocation = 4;
-        attributes[5].format = WGPUVertexFormat_Uint8x4;
+        attributes[5].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Byte4);
         attributes[5].offset = 64;
         attributes[5].shaderLocation = 5;
         if (colored)
         {
-            attributes[6].format = WGPUVertexFormat_Unorm8x4;
+            attributes[6].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Color);
             attributes[6].offset = 76;
             attributes[6].shaderLocation = 6;
         }
