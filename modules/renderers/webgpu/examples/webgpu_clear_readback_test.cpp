@@ -16,14 +16,18 @@
 // Check F -- a sourceRectangle selecting only the right half of a 2x1 (red|blue) texture must
 //   sample blue, not red or an unpredictable blend -- proves source-rectangle cropping, not just
 //   whole-texture sampling.
-// Check G -- a 50%-alpha sprite over black must land strictly between "fully transparent" (black)
-//   and "alpha ignored" (full brightness) -- this test found and fixed a real bug: the sprite
-//   pipeline's blend factors (ONE/ONE_MINUS_SRC_ALPHA, a premultiplied-alpha equation) didn't
-//   match its own shader's straight/non-premultiplied output, so any alpha strictly between 0 and
-//   255 was silently ignored for colour. Fixed to match Vulkan's sprite2d.frag.glsl pairing
-//   (SRC_ALPHA/ONE_MINUS_SRC_ALPHA). The exact resulting value depends on whether the chosen
-//   swapchain format blends in linear or sRGB-encoded space (both are legitimate, renderer/
-//   platform-dependent choices), so this asserts direction and magnitude, not an exact value.
+// Check G -- a 50%-alpha sprite drawn with BlendState::NonPremultiplied over black must land
+//   strictly between "fully transparent" (black) and "alpha ignored" (full brightness) -- proves
+//   alpha genuinely attenuates colour. WEBGPU-141 (B): this MUST use NonPremultiplied
+//   (SrcAlpha/InvSrcAlpha), the blend that attenuates a straight-alpha texture. SpriteBatch's DEFAULT
+//   blend is AlphaBlend, which is PREMULTIPLIED in XNA/FNA (One/InverseSourceAlpha,
+//   FNA/src/Graphics/States/BlendState.cs), and FNA's sprite shader outputs straight colour -- so a
+//   straight-alpha texture under default AlphaBlend gives FULL brightness, not partway (WebGPU,
+//   EasyGL and SOFTWARE all honour the device BlendState and agree). An earlier version of this check
+//   used the default Begin() and expected partway, which asserted non-FNA behaviour; it passed only
+//   while WEBGPU-132 hardcoded a straight sprite blend, and correctly began failing once
+//   REMED-GFX-102 made WebGPU honour the BlendState. The exact partway value depends on linear-vs-sRGB
+//   swapchain blending, so this asserts direction and magnitude, not an exact value.
 //
 // Checks H/I/J (WEBGPU-92's remaining scope) -- sampler address-mode (Wrap/Clamp/Mirror) pixel
 //   assertions. A sourceRectangle wider than the texture (4 texels requested against a 2x1
@@ -161,9 +165,14 @@ protected:
               "sourceRectangle selecting the right texel samples blue, not red");
 
         // Check G: 50%-alpha green sprite over black must land strictly between black and full
-        // green -- proves alpha genuinely attenuates colour, not just an on/off gate.
+        // green -- proves alpha genuinely attenuates colour, not just an on/off gate. WEBGPU-141 (B):
+        // this uses BlendState::NonPremultiplied (SrcAlpha/InvSrcAlpha), the blend that attenuates a
+        // straight-alpha texture. The DEFAULT SpriteBatch blend is AlphaBlend, which is PREMULTIPLIED
+        // in XNA/FNA (One/InverseSourceAlpha) -- a straight-alpha texture under it gives FULL
+        // brightness, not partway (every renderer + FNA agree), so testing attenuation requires
+        // NonPremultiplied here, not the default.
         dev.Clear(Color::Black);
-        spriteBatch_->Begin();
+        spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied);
         spriteBatch_->Draw(greenTex_, Rectangle(0, 0, kSize, kSize), Color(255, 255, 255, 128));
         spriteBatch_->End();
         {
