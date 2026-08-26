@@ -88,11 +88,15 @@ in a real browser**: `cna_demo_2d` renders 120 SpriteBatch frames in headless Ch
 AMD Vulkan WebGPU path — SwiftShader exposes no WebGPU adapter here) with audio, no WebGPU
 validation error, a mid-run canvas resize, and clean teardown. Reproduce with
 `scripts/run-webgpu-browser-test.sh`; `CNA_WEBGPU_DEMO=cna_house3d_demo` drives the 3D `BasicEffect`
-path (perspective, depth test, texturing) through the same harness, also green in-browser
-(`plans/plan_webgpu.md` `WEBGPU-122`/`121`). Still open: the non-`BasicEffect` effect shaders
-(`PbrEffect`/`SkinnedEffect`/`EnvironmentMapEffect`/dual-texture/alpha-test) have no browser demo
-yet, and the `--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on web (a native-only
-`GameWindow` operation, not a renderer limit).
+path (perspective, depth test, texturing) through the same harness, also green in-browser, and
+`CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d}_page` confirm the `PbrEffect`, cube-map
+`EnvironmentMapEffect` and bone-palette `SkinnedEffect` WGSL compile and render in-browser too
+(`plans/plan_webgpu.md` `WEBGPU-122`/`121`). Two known follow-ups: **`WEBGPU-133`** -- the browser's
+Dawn validates texture lifetime stricter than native wgpu-native, so a `Texture2D` released while a
+deferred draw still references it raises `Destroyed texture ... used in a submit` (harmless natively;
+in the browser it corrupts those effect pages' readback-based later checks, though not the shader
+compilation or the 2D/3D demos); and the `--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on
+web (a native-only `GameWindow` operation, not a renderer limit).
 
 ## Automated native smoke test
 

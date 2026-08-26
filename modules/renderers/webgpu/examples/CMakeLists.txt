@@ -809,6 +809,32 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 300 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
+# plans/plan_webgpu.md WEBGPU-121: browser shader coverage. The native effect suites above prove
+# every WGSL pair compiles under wgpu-native; this block builds a curated set of the same Game
+# programs for the browser so their WGSL is compiled by emdawnwebgpu's Tint path via
+# createShaderModule too. The set is the shaders with features BasicEffect (already browser-verified
+# by cna_house3d_demo) does not exercise: PbrEffect's metallic-roughness BRDF, EnvironmentMapEffect's
+# cube-map sampling, and SkinnedEffect's bone palette. dual-texture and alpha-test are narrow
+# variants of the already-verified textured3d path. Each is a self-contained procedural Game (no
+# preloaded assets); drive them with scripts/run-webgpu-browser-test.sh (CNA_WEBGPU_DEMO=<target>).
+if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
+    macro(cna_webgpu_effect_page target src)
+        add_executable(${target} ${src})
+        set_target_properties(${target} PROPERTIES SUFFIX ".html")
+        target_link_libraries(${target} PRIVATE
+            CNA ${RENDERER_TARGET} SDL3::SDL3-static SHARP_RUNTIME)
+        target_link_options(${target} PRIVATE
+            -sALLOW_MEMORY_GROWTH=1
+            -sSTACK_SIZE=1048576
+            -sINITIAL_MEMORY=67108864
+            -sFORCE_FILESYSTEM=1)
+    endmacro()
+
+    cna_webgpu_effect_page(cna_webgpu_pbr3d_page     webgpu_pbr3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_envmap3d_page  webgpu_envmap3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_skinned3d_page webgpu_skinned3d_test.cpp)
+endif()
+
 # Module-local tests get the same headless-safe skip convention the root one-shot
 # gives root-registered tests (see cmake/TestHelpers.cmake).
 cna_apply_skip_convention()
