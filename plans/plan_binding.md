@@ -688,7 +688,11 @@ The rest: `Effect`'s protected copy constructor is what `Clone()` calls, so it m
 `Vector2`'s six compound-assignment operators map to `cna_vector2_add`, `_subtract`, `_multiply`, `_multiply_scalar`, `_divide` and `_divide_scalar`, one per overload. C has neither operator overloading nor compound assignment on a struct, so `a += b` is the binary route with the destination naming the left operand — and that is well defined rather than an aliasing hazard precisely because every one of those routes takes its vectors **by value**. Checked, not assumed.
 
 `Color::Color()` sets `packedValue` to 0, so its C form is the zero-initialized `CNA_Color` a caller writes in a declaration, or reaches through `cna_color_set_packed_value` with 0. A `cna_color_init` route would add a second spelling for something C already has syntax for. |
-| CBIND-082 | Bind the media identity tail | 23 | ⬜ | `Equals`, `GetHashCode` and `ToString` on `Album`, `Artist`, `Genre`, `Picture`, `PictureAlbum`, `Playlist` and `Song`, plus `MediaSource::ToString` and two `VideoPlayer` rows. `CBIND-037C` closed the media module's behaviour and left its `System::Object` overrides unbound; the campaign's settled shape for these is a value comparison plus a UTF-8 copy-out, not a bound `System::Object`. Closing this and `CBIND-083` is what finally lets `CBIND-037`'s parent row go ✅. |
+| CBIND-082 | Bind the media identity tail | 23 | ✅ | **Done 2026-08-26**, and the third tail slice in a row that needed no new routes.
+
+The 21 `System::Object` overrides on `Album`, `Artist`, `Genre`, `Picture`, `PictureAlbum`, `Playlist`, `Song` and `MediaSource` map to the `cna_<type>_equals`, `_get_hash_code` and `_copy_name` routes each identity already carries. **`ToString` maps to the name rather than to a new route because that is literally what these overrides return** — every one of the seven bodies is `return name_;`, read rather than assumed — so a `_copy_to_string` route would be a second spelling of `_copy_name` that could later drift from it. `MediaSource` has only `ToString`, matching the canonical type, which declares no equality.
+
+`VideoPlayer::GetFrameGenerationEXT` and `GetFramePresentationTimeEXT` map to `cna_video_player_get_frame_ext`, whose `CNA_VideoFrameEXT` already carries `generation` and `presentation_time` beside the texture. One descriptor rather than two accessors is the point of that route: a caller reading the generation and the texture through separate calls could be interrupted between them and pair a generation with the wrong frame. |
 | CBIND-083 | Bind the runtime, input and content tail | 5 | ⬜ | `DrawableGameComponent`'s `getDrawOrderProperty`/`getVisibleProperty` overrides, two `TouchPanel` rows and `ContentManager::ResolveExistingAssetPath`. The `ResolveExistingAssetPath` row wants the campaign's existing path/UTF-8 copy-out contract, not a new one. |
 | CBIND-084 | Bind the engine-layer foundations, resources and diagnostics | 140 | 🟨 | The layer's substrate, and the slice every other CNAEXT slice depends on. **Decomposed into `CBIND-084A`–`CBIND-084C` below; the parent closes only when all three rows and every `CBIND-084` inventory row are closed.** It grew from 121 rows to 140 when `CBIND-084A` discovered that `ComputeShader::bindImage` and `::barrier` cannot be bound without the `CNA::GraphicsImageAccess` and `CNA::GraphicsMemoryBarrier` identities, which the first draft had parked in `CBIND-092`. An identity belongs with the first route that needs it, so the 19 rows moved here and `CBIND-092` dropped from 157 to 138. |
 | CBIND-084A | Establish the engine layer's ABI shape, and bind its version, identities, exception and compute resources | 59 | ✅ | **Done 2026-08-26.** `CNA/C/engine_layer.h` and `CnaCApiEngineLayer.cpp` add 25 routes over two new handle kinds (`StorageBuffer` = 125, `ComputeShader` = 126). What this slice settles, and what the rest of Phase B9 inherits:
@@ -790,8 +794,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-26, after `CBIND-081`):** 513 headers / 8,306 symbols —
-**6,543 implemented, 15 approved partial, 1,290 planned, 458 not applicable.** ABI `0.9.0`, 2,942
+**Snapshot (2026-08-26, after `CBIND-082`):** 513 headers / 8,306 symbols —
+**6,566 implemented, 15 approved partial, 1,267 planned, 458 not applicable.** ABI `0.9.0`, 2,942
 exported symbols — the same 2,942 with `CNA_CNAEXT` on and off, which is the engine layer's ABI
 promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.

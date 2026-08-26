@@ -15007,6 +15007,55 @@
       "approved_symbols": [
         "CPP-EEEA0BCE0D4D"
       ]
+    },
+    {
+      "id": "media-identity-object-overrides",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::(?:Album|Artist|Genre|Picture|PictureAlbum|Playlist|Song|MediaSource)::(?:Equals|GetHashCode|ToString)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "the `cna_<type>_equals`, `cna_<type>_get_hash_code` and `cna_<type>_copy_name` routes each identity already carries. `ToString` maps to the **name** rather than to a new route because that is literally what these overrides return -- every one of the seven is `return name_;` -- so a `_copy_to_string` route would be a second spelling of `_copy_name` that could drift from it. `MediaSource` has only `ToString`, matching the canonical type, which declares no equality.",
+      "tests": "`MediaLibrarySmoke.c` and `MediaSmoke.c` identity, equality and hash coverage",
+      "status": "implemented",
+      "task": "CBIND-082",
+      "approved_symbols": [
+        "CPP-0585A87AD282",
+        "CPP-12ACFD662D10",
+        "CPP-28DDFEA42E83",
+        "CPP-2E5E313D99C7",
+        "CPP-34211CE4D0CC",
+        "CPP-42725E32DA65",
+        "CPP-4B824ADD9CA5",
+        "CPP-4DDBA91CB248",
+        "CPP-57EF959FA695",
+        "CPP-61094C45E2DC",
+        "CPP-6D3F7B4A8138",
+        "CPP-719F0424C01B",
+        "CPP-81120C1EF595",
+        "CPP-864AF2E53DC0",
+        "CPP-97745122E561",
+        "CPP-9F15A0E656FB",
+        "CPP-A0789DA6189C",
+        "CPP-CE037A036819",
+        "CPP-CF3E5BEB7323",
+        "CPP-DFF81644A148",
+        "CPP-FF674703E2EC"
+      ]
+    },
+    {
+      "id": "video-player-frame-identity-accessors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::VideoPlayer::(?:GetFrameGenerationEXT|GetFramePresentationTimeEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_video_player_get_frame_ext`, whose `CNA_VideoFrameEXT` descriptor carries `generation` and `presentation_time` beside the texture. One descriptor rather than two accessors is deliberate and is the point of the route: a caller that read the generation and the texture through separate calls could be interrupted between them and pair a generation with the wrong frame.",
+      "tests": "`VideoSmoke.c` frame-descriptor coverage",
+      "status": "implemented",
+      "task": "CBIND-082",
+      "approved_symbols": [
+        "CPP-1582FB71B5D8",
+        "CPP-93E13B8D0C45"
+      ]
     }
   ]
 }
