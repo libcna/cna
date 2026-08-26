@@ -278,6 +278,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_SpriteBatch_SortMode COMMAND cna_test_webgpu_spritebatch_sortmode
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-84: real GPU occlusion queries -- the same quad reads back 0 samples behind an occluder
+    # and a full target of samples in front, with two independent per-slot query results.
+    cna_webgpu_test(cna_test_webgpu_occlusion_query webgpu_occlusion_query_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_OcclusionQuery COMMAND cna_test_webgpu_occlusion_query
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-114: WebGPURenderTargetCubeRenderer / CreateRenderTargetCube() -- this renderer's first
     # real render-into-a-cube-face support (previously IGraphicsRenderer's own nullptr-returning
     # default). Direct face-to-face switching (no intervening backbuffer bind), a real BasicEffect

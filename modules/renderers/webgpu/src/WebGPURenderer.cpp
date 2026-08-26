@@ -2424,6 +2424,10 @@ namespace CNA::Internal::Renderers::WebGPU
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
         if (readbackBuffer_ != nullptr) wgpuBufferRelease(readbackBuffer_);
+        // WEBGPU-84: the shared occlusion query set and its resolve/readback buffers.
+        if (occlusionReadbackBuffer_ != nullptr) wgpuBufferRelease(occlusionReadbackBuffer_);
+        if (occlusionResolveBuffer_ != nullptr) wgpuBufferRelease(occlusionResolveBuffer_);
+        if (occlusionQuerySet_ != nullptr) wgpuQuerySetRelease(occlusionQuerySet_);
         if (hasAcquiredTexture_ && acquiredTexture_ != nullptr) wgpuTextureRelease(acquiredTexture_);
         if (surfaceConfigured_ && surface_ != nullptr) wgpuSurfaceUnconfigure(surface_);
         if (queue_ != nullptr) wgpuQueueRelease(queue_);
@@ -5848,8 +5852,12 @@ struct VSOut {
             std::fprintf(stderr, "[wgpu-order] enqueue #%zu family=%s slot=%zu\n",
                          drawOrder_.size(), DrawFamilyName(family), index);
         }
-        drawOrder_.push_back(DrawOrderEntry{family, static_cast<std::uint32_t>(index),
-                                            static_cast<std::uint32_t>(drawOrder_.size())});
+        DrawOrderEntry entry{family, static_cast<std::uint32_t>(index),
+                             static_cast<std::uint32_t>(drawOrder_.size())};
+        // WEBGPU-84: tag the draw with the occlusion query open at queue time (nullptr if none), so
+        // replay can wrap exactly this query's draws in BeginOcclusionQuery/EndOcclusionQuery.
+        entry.occlusionQuery = activeOcclusionQuery_;
+        drawOrder_.push_back(entry);
         // WEBGPU-115: the cumulative counterpart of drawOrder_.size(), which a flush drains.
         ++queuedDrawCommandCount_;
     }
@@ -5942,6 +5950,12 @@ struct VSOut {
     void WebGPURenderer::ReplayOrderedSegments(WGPUCommandEncoder encoder,
                                                        const PassDestination& destination)
     {
+        // WEBGPU-84: consume any occlusion results a prior flush resolved but nothing has read yet,
+        // before this flush's own resolve overwrites the shared readback buffer. A no-op unless a
+        // previous flush left a pending result (and the prior encoder is already submitted, so the
+        // map completes at once). Polling IsComplete()/PixelCount() drains it the same way.
+        ReadbackOcclusionResults();
+
         // One upload for the whole bind cycle, before any pass opens: wgpuQueueWriteBuffer is not
         // legal inside a render pass, and every segment reads the same shared sprite buffer.
         UploadSpriteVertices();
@@ -5993,6 +6007,10 @@ struct VSOut {
             passDescriptor.colorAttachments = &colorAttachment;
             passDescriptor.depthStencilAttachment =
                 destination.depthView != nullptr ? &depthAttachment : nullptr;
+            // WEBGPU-84: BeginOcclusionQuery is only valid on a pass whose descriptor names the
+            // query set. occlusionQuerySet_ is null until the first OcclusionQuery is created, so a
+            // frame with none leaves this at the default null -- the pass is created exactly as before.
+            passDescriptor.occlusionQuerySet = occlusionQuerySet_;
             WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
 
             if (trace)
@@ -6032,6 +6050,22 @@ struct VSOut {
             wgpuRenderPassEncoderRelease(pass);
         }
 
+        // WEBGPU-84: every query recorded this flush had its samples counted into occlusionQuerySet_
+        // by the passes above; resolve the whole set into a GPU buffer and copy that into a
+        // mappable one, both on this same (not-yet-submitted) encoder. The lazy readback in
+        // ReadbackOcclusionResults() maps it once the caller has submitted. No queries -> no work.
+        if (!occlusionResolvedThisFlush_.empty() && occlusionQuerySet_ != nullptr)
+        {
+            const std::uint64_t bytes =
+                static_cast<std::uint64_t>(kMaxOcclusionSlots) * sizeof(std::uint64_t);
+            wgpuCommandEncoderResolveQuerySet(encoder, occlusionQuerySet_, 0,
+                                              static_cast<std::uint32_t>(kMaxOcclusionSlots),
+                                              occlusionResolveBuffer_, 0);
+            wgpuCommandEncoderCopyBufferToBuffer(encoder, occlusionResolveBuffer_, 0,
+                                                 occlusionReadbackBuffer_, 0, bytes);
+            occlusionReadbackPending_ = true;
+        }
+
         DiscardQueuedCommands();
     }
 
@@ -6059,6 +6093,145 @@ struct VSOut {
         skinnedPbrDrawCommands_.clear();
     }
 
+    // ---- WEBGPU-84: occlusion queries -----------------------------------------------------------
+
+    std::unique_ptr<IOcclusionQueryRenderer> WebGPURenderer::CreateOcclusionQuery()
+    {
+        return std::make_unique<WebGPUOcclusionQueryRenderer>(this);
+    }
+
+    void WebGPURenderer::EnsureOcclusionResources()
+    {
+        if (occlusionQuerySet_ != nullptr) return;
+
+        WGPUQuerySetDescriptor querySetDescriptor{};
+        querySetDescriptor.label = StringView("CNA WebGPU OcclusionQuerySet");
+        querySetDescriptor.type = WGPUQueryType_Occlusion;
+        querySetDescriptor.count = static_cast<std::uint32_t>(kMaxOcclusionSlots);
+        occlusionQuerySet_ = wgpuDeviceCreateQuerySet(Device(), &querySetDescriptor);
+
+        const std::uint64_t bytes =
+            static_cast<std::uint64_t>(kMaxOcclusionSlots) * sizeof(std::uint64_t);
+
+        WGPUBufferDescriptor resolveDescriptor{};
+        resolveDescriptor.label = StringView("CNA WebGPU OcclusionResolve");
+        resolveDescriptor.usage = WGPUBufferUsage_QueryResolve | WGPUBufferUsage_CopySrc;
+        resolveDescriptor.size = bytes;
+        occlusionResolveBuffer_ = wgpuDeviceCreateBuffer(Device(), &resolveDescriptor);
+
+        WGPUBufferDescriptor readbackDescriptor{};
+        readbackDescriptor.label = StringView("CNA WebGPU OcclusionReadback");
+        readbackDescriptor.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        readbackDescriptor.size = bytes;
+        occlusionReadbackBuffer_ = wgpuDeviceCreateBuffer(Device(), &readbackDescriptor);
+    }
+
+    int WebGPURenderer::AllocateOcclusionSlot(WebGPUOcclusionQueryRenderer* query)
+    {
+        for (int i = 0; i < kMaxOcclusionSlots; ++i)
+        {
+            if (occlusionSlots_[static_cast<std::size_t>(i)] == nullptr)
+            {
+                occlusionSlots_[static_cast<std::size_t>(i)] = query;
+                return i;
+            }
+        }
+        return -1;  // Every slot in use: this query never records, so its PixelCount stays 0.
+    }
+
+    void WebGPURenderer::FreeOcclusionSlot(int slot)
+    {
+        if (slot >= 0 && slot < kMaxOcclusionSlots)
+            occlusionSlots_[static_cast<std::size_t>(slot)] = nullptr;
+    }
+
+    void WebGPURenderer::PurgeOcclusionQuery(WebGPUOcclusionQueryRenderer* query)
+    {
+        if (activeOcclusionQuery_ == query) activeOcclusionQuery_ = nullptr;
+        occlusionResolvedThisFlush_.erase(
+            std::remove(occlusionResolvedThisFlush_.begin(), occlusionResolvedThisFlush_.end(), query),
+            occlusionResolvedThisFlush_.end());
+        FreeOcclusionSlot(query->slot_);
+    }
+
+    void WebGPURenderer::ReadbackOcclusionResults()
+    {
+        if (!occlusionReadbackPending_) return;
+        occlusionReadbackPending_ = false;
+
+        const std::size_t bytes =
+            static_cast<std::size_t>(kMaxOcclusionSlots) * sizeof(std::uint64_t);
+        BufferMapState mapState;
+        WGPUBufferMapCallbackInfo callbackInfo{};
+        callbackInfo.mode = kCnaWebGpuCallbackMode;
+        callbackInfo.callback = OnBufferMap;
+        callbackInfo.userdata1 = &mapState;
+        wgpuBufferMapAsync(occlusionReadbackBuffer_, WGPUMapMode_Read, 0, bytes, callbackInfo);
+        WaitForCompletion(Instance(), mapState.completed, "OcclusionQuery readback buffer map");
+        if (mapState.status == WGPUMapAsyncStatus_Success)
+        {
+            const auto* counts = static_cast<const std::uint64_t*>(
+                wgpuBufferGetConstMappedRange(occlusionReadbackBuffer_, 0, bytes));
+            if (counts != nullptr)
+            {
+                for (WebGPUOcclusionQueryRenderer* q : occlusionResolvedThisFlush_)
+                {
+                    if (q == nullptr || q->slot_ < 0 || q->slot_ >= kMaxOcclusionSlots) continue;
+                    const std::uint64_t c = counts[static_cast<std::size_t>(q->slot_)];
+                    q->pixelCount_ = static_cast<int>(std::min<std::uint64_t>(
+                        c, static_cast<std::uint64_t>(std::numeric_limits<int>::max())));
+                    q->complete_ = true;
+                }
+            }
+            wgpuBufferUnmap(occlusionReadbackBuffer_);
+        }
+        // The slots are free to be re-recorded next flush whether or not the map succeeded.
+        for (WebGPUOcclusionQueryRenderer* q : occlusionResolvedThisFlush_)
+            if (q != nullptr) q->recordedThisFlush_ = false;
+        occlusionResolvedThisFlush_.clear();
+    }
+
+    WebGPUOcclusionQueryRenderer::WebGPUOcclusionQueryRenderer(WebGPURenderer* owner)
+        : owner_(owner)
+    {
+        owner_->EnsureOcclusionResources();
+        slot_ = owner_->AllocateOcclusionSlot(this);
+    }
+
+    WebGPUOcclusionQueryRenderer::~WebGPUOcclusionQueryRenderer()
+    {
+        if (owner_ != nullptr) owner_->PurgeOcclusionQuery(this);
+    }
+
+    void WebGPUOcclusionQueryRenderer::Begin()
+    {
+        // A fresh measurement: drop any previous result and become the active query.
+        complete_ = false;
+        ended_ = false;
+        recordedThisFlush_ = false;
+        pixelCount_ = 0;
+        owner_->activeOcclusionQuery_ = this;
+    }
+
+    void WebGPUOcclusionQueryRenderer::End()
+    {
+        ended_ = true;
+        if (owner_->activeOcclusionQuery_ == this)
+            owner_->activeOcclusionQuery_ = nullptr;
+    }
+
+    bool WebGPUOcclusionQueryRenderer::IsComplete() const
+    {
+        const_cast<WebGPURenderer*>(owner_)->ReadbackOcclusionResults();
+        return complete_;
+    }
+
+    int WebGPUOcclusionQueryRenderer::PixelCount() const
+    {
+        const_cast<WebGPURenderer*>(owner_)->ReadbackOcclusionResults();
+        return pixelCount_;
+    }
+
     void WebGPURenderer::ReplayDrawsInOrder(WGPURenderPassEncoder pass,
                                                     WGPUTextureFormat targetFormat,
                                                     std::uint32_t targetSampleCount,
@@ -6069,10 +6242,35 @@ struct VSOut {
 
         ReplayState state{};
         std::size_t issued = 0;
+        // WEBGPU-84: the occlusion query whose BeginOcclusionQuery is currently open on this pass.
+        WebGPUOcclusionQueryRenderer* openQuery = nullptr;
         for (std::size_t e = firstEntry; e < firstEntry + entryCount; ++e)
         {
             const DrawOrderEntry& entry = drawOrder_[e];
             const std::size_t i = entry.index;
+
+            // WEBGPU-84: wrap this query's contiguous run of draws in one BeginOcclusionQuery/
+            // EndOcclusionQuery pair. A run ends when the tagged query changes (including to none);
+            // only a query's FIRST run this flush is recorded, since a query slot may be written just
+            // once per resolve -- the same policy VulkanRenderer applies.
+            WebGPUOcclusionQueryRenderer* drawQuery =
+                (entry.kind == OrderedKind::Draw) ? entry.occlusionQuery : nullptr;
+            if (drawQuery != openQuery)
+            {
+                if (openQuery != nullptr)
+                {
+                    wgpuRenderPassEncoderEndOcclusionQuery(pass);
+                    openQuery = nullptr;
+                }
+                if (drawQuery != nullptr && drawQuery->slot_ >= 0 && !drawQuery->recordedThisFlush_)
+                {
+                    wgpuRenderPassEncoderBeginOcclusionQuery(
+                        pass, static_cast<std::uint32_t>(drawQuery->slot_));
+                    drawQuery->recordedThisFlush_ = true;
+                    occlusionResolvedThisFlush_.push_back(drawQuery);
+                    openQuery = drawQuery;
+                }
+            }
             if (trace)
             {
                 std::fprintf(stderr,
@@ -6106,6 +6304,9 @@ struct VSOut {
             case DrawFamily::SkinnedPbr:  IssueSkinnedPbrDraw(pass, skinnedPbrDrawCommands_[i], state); break;
             }
         }
+        // WEBGPU-84: a query whose run reached the end of this pass is closed here.
+        if (openQuery != nullptr)
+            wgpuRenderPassEncoderEndOcclusionQuery(pass);
     }
 
     void WebGPURenderer::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
@@ -6177,13 +6378,12 @@ struct VSOut {
         // silently refuses.
         if (capability == CNA::GraphicsCapability::MultipleRenderTargets)
             return false;
-        // WEBGPU-135: occlusion queries. CreateOcclusionQuery() is not overridden, so it returns the
-        // base nullptr and OcclusionQuery::IsComplete stays false / PixelCount 0 with no diagnostic
-        // (WEBGPU-84 -- real occlusion queries -- is open). Reporting the permissive default would
-        // claim a feature the renderer silently no-ops, the same WEBGPU-115 defect class as above.
-        // This arm only stops the false claim; it does not implement the query.
-        if (capability == CNA::GraphicsCapability::OcclusionQuery)
-            return false;
+        // WEBGPU-84: occlusion queries are now real -- CreateOcclusionQuery() returns a
+        // WebGPUOcclusionQueryRenderer that records a genuine BeginOcclusionQuery/EndOcclusionQuery
+        // pair around its draws and resolves an exact sample count (WebGPU_OcclusionQuery proves a
+        // fully occluded quad reads 0 and a visible one a full target of samples). The WEBGPU-135
+        // false arm that stood here while the feature was a no-op is therefore gone, and the
+        // capability falls through to the shared permissive default, which reports true.
         return IGraphicsRenderer::SupportsCapability(capability);
     }
 

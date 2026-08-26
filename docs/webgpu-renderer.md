@@ -547,8 +547,6 @@ open** in `plans/plan_webgpu.md`:
 - **Multiple simultaneous render targets (MRT)** -- infrastructure not built (`WEBGPU-85`/`86`/`87`).
   The capability now truthfully reports false and a `count > 1` bind throws a
   `System::NotSupportedException` (`WEBGPU-134`), rather than claiming MRT and then refusing it.
-- **Occlusion queries** -- unimplemented (`WEBGPU-84`). `SupportsCapability(OcclusionQuery)` now
-  reports false (`WEBGPU-135`) instead of returning a query that silently never completes.
 - **Real GPU-native compressed texture formats** (`WEBGPU-111`) -- a cross-renderer/XNA-layer gap,
   not WebGPU-specific: no CNA renderer does real block-compressed GPU upload today (`Texture2D`
   CPU-decompresses DXT to RGBA8 first, and the common `ImageData` struct has no compressed-format
@@ -561,9 +559,15 @@ open** in `plans/plan_webgpu.md`:
   accepts the stock effects but does not compile user-provided WGSL source.
 - `TextureCube`/`RenderTargetCube` mip regeneration.
 
-`FillMode::WireFrame` is deliberately **not** on this list: it is not "unimplemented" but **reported
-unsupported and refused** (`WEBGPU-115`) -- the same shape as the MRT (`WEBGPU-134`) and occlusion
-(`WEBGPU-135`) capability answers above.
+**Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
+`CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`, and the sample count is
+exact -- a fully occluded draw reads back 0 and a visible one a full target of samples
+(`WebGPU_OcclusionQuery`). A query whose draws span more than one render-pass segment records only its
+first segment.
+
+`FillMode::WireFrame` is deliberately **not** on the open list: it is not "unimplemented" but
+**reported unsupported and refused** (`WEBGPU-115`) -- the same shape as the MRT (`WEBGPU-134`)
+capability answer above.
 
 `GetBackBufferData()` and a first real 3D draw path (`DrawColoredPrimitives`/
 `DrawIndexedColoredPrimitives`, with genuine depth testing) are implemented — see below. Interface

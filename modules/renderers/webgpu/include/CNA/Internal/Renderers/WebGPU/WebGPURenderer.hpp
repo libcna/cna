@@ -532,6 +532,44 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
+     * @brief WEBGPU-84: a GPU occlusion query — counts the samples that pass depth/stencil for the
+     *        draws issued between `OcclusionQuery.Begin()` and `End()`.
+     *
+     * The renderer drives the real GPU recording (a slot in a shared occlusion `WGPUQuerySet`,
+     * `BeginOcclusionQuery`/`EndOcclusionQuery` around this query's tagged draws, and the resolve +
+     * readback), so `WebGPURenderer` is a one-directional `friend` — the same idiom
+     * `VulkanOcclusionQueryRenderer` uses. Every code path is gated on an active query, so a frame
+     * that uses none records exactly what it did before this type existed.
+     */
+    class WebGPUOcclusionQueryRenderer final : public IOcclusionQueryRenderer
+    {
+        friend class WebGPURenderer;
+
+    public:
+        /** @brief Constructs the query and reserves its slot in the renderer's occlusion query set. */
+        explicit WebGPUOcclusionQueryRenderer(WebGPURenderer* owner);
+        /** @brief Frees the slot and detaches from every pending renderer reference. */
+        ~WebGPUOcclusionQueryRenderer() override;
+
+        /** @brief Makes subsequent draws count toward this query until `End()`. */
+        void Begin() override;
+        /** @brief Stops tagging draws for this query. */
+        void End() override;
+        /** @brief Whether a resolved sample count is available. */
+        [[nodiscard]] bool IsComplete() const override;
+        /** @brief The number of samples that passed for the tagged draws (0 until resolved). */
+        [[nodiscard]] int PixelCount() const override;
+
+    private:
+        WebGPURenderer* owner_ = nullptr;
+        int slot_ = -1;                    ///< Fixed slot in the shared occlusion `WGPUQuerySet`.
+        bool ended_ = false;               ///< `End()` seen since the last `Begin()`.
+        bool recordedThisFlush_ = false;   ///< Its first contiguous draw run this flush is wrapped.
+        bool complete_ = false;            ///< A resolved result is available.
+        mutable int pixelCount_ = 0;       ///< The last resolved sample count.
+    };
+
+    /**
      * @brief REMED-GFX-102 normalized, by-value state for one SpriteBatch Begin/End cycle.
      *
      * The six blend factors/functions, attachment write mask, coverage mask, and target
@@ -1032,12 +1070,16 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
 
+        /** @brief WEBGPU-84: creates a GPU occlusion query backed by a slot in the shared query set. */
+        std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
+
     private:
         friend class WebGPURenderTargetRenderer;
         friend class WebGPURenderTargetCubeRenderer;
         friend class WebGPUTextureRenderer;
         friend class WebGPUTextureCubeRenderer;
         friend class WebGPUSpriteBatchRenderer;
+        friend class WebGPUOcclusionQueryRenderer;
         struct LogicalViewport
         {
             float x = 0.0f;
@@ -1160,6 +1202,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// REMED-GFX-156: draw or ordered Clear(). Trailing, so existing three-field
             /// aggregate initialisations at the eleven draw-recording sites keep their meaning.
             OrderedKind kind = OrderedKind::Draw;
+            /// WEBGPU-84: the occlusion query active when this draw was queued (nullptr = none).
+            /// Trailing with a default, so the same three-field aggregate inits stay valid.
+            WebGPUOcclusionQueryRenderer* occlusionQuery = nullptr;
         };
 
         /**
@@ -1693,6 +1738,24 @@ namespace CNA::Internal::Renderers::WebGPU
         std::size_t queuedDrawCommandCount_ = 0;
         /// WEBGPU-115: see GetNativeDrawIssueCountEXT().
         std::size_t nativeDrawIssueCount_ = 0;
+
+        // WEBGPU-84: occlusion query state. Every field is inert until the first OcclusionQuery is
+        // created (EnsureOcclusionResources), and every replay path is gated on activeOcclusionQuery_
+        // / DrawOrderEntry::occlusionQuery, so a frame with no query behaves exactly as before.
+        static constexpr int kMaxOcclusionSlots = 32;
+        WGPUQuerySet occlusionQuerySet_ = nullptr;
+        WGPUBuffer occlusionResolveBuffer_ = nullptr;    ///< QueryResolve|CopySrc, kMaxOcclusionSlots * u64.
+        WGPUBuffer occlusionReadbackBuffer_ = nullptr;   ///< MapRead|CopyDst, same size.
+        WebGPUOcclusionQueryRenderer* activeOcclusionQuery_ = nullptr;  ///< Set between Begin()/End().
+        std::array<WebGPUOcclusionQueryRenderer*, kMaxOcclusionSlots> occlusionSlots_{};  ///< slot -> query.
+        std::vector<WebGPUOcclusionQueryRenderer*> occlusionResolvedThisFlush_;  ///< queries to read back.
+        bool occlusionReadbackPending_ = false;
+
+        void EnsureOcclusionResources();
+        int AllocateOcclusionSlot(WebGPUOcclusionQueryRenderer* query);
+        void FreeOcclusionSlot(int slot);
+        void PurgeOcclusionQuery(WebGPUOcclusionQueryRenderer* query);
+        void ReadbackOcclusionResults();
         float blendFactorR_ = 1.0f;
         float blendFactorG_ = 1.0f;
         float blendFactorB_ = 1.0f;

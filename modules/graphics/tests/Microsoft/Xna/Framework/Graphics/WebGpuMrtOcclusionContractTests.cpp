@@ -11,10 +11,12 @@
 // bind still renders unchanged; a two-target bind throws a catchable System::NotSupportedException
 // that points at the capability query; and the next single-target draw still renders.
 //
-// WEBGPU-135 (OcclusionQuery): CreateOcclusionQuery() is not overridden, so it returns the base
-// nullptr and OcclusionQuery::IsComplete is permanently false with no diagnostic. The capability
-// must therefore report false too. This task does NOT implement occlusion queries (WEBGPU-84 stays
-// open); it only stops the renderer claiming a feature it no-ops.
+// WEBGPU-84 (OcclusionQuery): occlusion queries are now IMPLEMENTED. CreateOcclusionQuery() returns
+// a real WebGPUOcclusionQueryRenderer that records a BeginOcclusionQuery/EndOcclusionQuery pair
+// around its tagged draws and resolves an exact sample count, so SupportsCapability(OcclusionQuery)
+// now reports true. (This superseded WEBGPU-135's temporary false arm, which stood only while the
+// feature was a no-op.) The exact-count behaviour is proven by the WebGPU_OcclusionQuery pixel test;
+// the check below asserts the capability is truthful and the query object is real.
 // ============================================================================
 
 // Compiled only into a build that holds the WebGPU renderer's own headers; each test then checks at
@@ -38,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -166,18 +169,23 @@ TEST(WebGpuMrtOcclusionContract, TwoTargetBindThrowsNotSupportedAndDeviceRecover
 }
 
 // ---------------------------------------------------------------------------
-// WEBGPU-135: the occlusion-query capability answers false. The renderer does not override
-// CreateOcclusionQuery(), so a created query would be a permanent no-op (IsComplete false forever,
-// PixelCount 0) with no diagnostic; the capability must not claim otherwise. WEBGPU-84 (implementing
-// the query) stays open -- this only stops the false claim.
+// WEBGPU-84: the occlusion-query capability now answers TRUE, and CreateOcclusionQuery() returns a
+// real query (not the base nullptr). The WEBGPU-135 arm that reported false while the feature was a
+// no-op is gone. The exact-sample-count behaviour (0 behind an occluder, a full target in front) is
+// proven by the WebGPU_OcclusionQuery pixel test; this contract check asserts the capability is
+// truthful and the query object is real.
 // ---------------------------------------------------------------------------
-TEST(WebGpuMrtOcclusionContract, OcclusionQueryCapabilityIsFalse)
+TEST(WebGpuMrtOcclusionContract, OcclusionQueryCapabilityIsTrue)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery))
-        << "WebGPU claims OcclusionQuery support while CreateOcclusionQuery() returns the base "
-           "nullptr -- the WEBGPU-135 override is gone and a game's query silently never completes";
+    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery))
+        << "WebGPU implements occlusion queries (WEBGPU-84) but SupportsCapability reports false";
+    // The query object must be real: constructing and running Begin()/End() must not throw, and a
+    // fresh query reports not-complete with a zero count before any frame resolves it.
+    OcclusionQuery query(gd);
+    EXPECT_NO_THROW({ query.Begin(); query.End(); });
+    EXPECT_EQ(0, query.getPixelCountProperty());
 }
 
 #endif  // CNA_RENDERER_WEBGPU
