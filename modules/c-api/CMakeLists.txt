@@ -156,21 +156,37 @@ if(EMSCRIPTEN)
 
     # CABI-37: the browser probe is a hand-written page, not one Emscripten emits, so nothing put
     # it beside the module it imports. It was being copied by hand, which is exactly the kind of
-    # step that works once and is gone at the next clean build -- external review caught it. The
-    # copy is now part of building the module.
-    add_custom_command(TARGET cna_c_api_wasm POST_BUILD
+    # step that works once and is gone at the next clean build -- external review caught it.
+    #
+    # An OUTPUT rule rather than POST_BUILD, and the difference matters: POST_BUILD only runs when
+    # the target relinks, so editing the page alone left a stale copy staged. This depends on the
+    # page, so the page is what triggers it.
+    # A plain path, not $<TARGET_FILE_DIR:>: a generator expression naming a target is not usable
+    # in a custom command's OUTPUT here. The module lands in this module's own binary directory,
+    # which is the same place.
+    set(CNA_C_API_BROWSER_PROBE "${CMAKE_CURRENT_BINARY_DIR}/browser_probe.html")
+    add_custom_command(
+        OUTPUT "${CNA_C_API_BROWSER_PROBE}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${CMAKE_CURRENT_SOURCE_DIR}/wasm/browser_probe.html"
-                "$<TARGET_FILE_DIR:cna_c_api_wasm>/browser_probe.html"
+                "${CNA_C_API_BROWSER_PROBE}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/wasm/browser_probe.html"
         COMMENT "Staging the C ABI browser probe beside the wasm module"
         VERBATIM)
+    add_custom_target(cna_c_api_browser_probe ALL DEPENDS "${CNA_C_API_BROWSER_PROBE}")
+    add_dependencies(cna_c_api_browser_probe cna_c_api_wasm)
 
     # CABI-39: NODE_JS_EXECUTABLE was read here and set nowhere, so this guard was always false and
-    # neither wasm test was ever registered -- they were only ever run by hand. Emscripten already
-    # knows where node is; fall back to whatever is on PATH so a non-emsdk toolchain still works.
+    # neither wasm test was ever registered -- they were only ever run by hand.
+    #
+    # The cause is worth writing down, because the symptom is misleading. Emscripten.cmake does set
+    # NODE_JS_EXECUTABLE, but only inside `if (NOT DEFINED CMAKE_CROSSCOMPILING_EMULATOR)` -- and
+    # `emcmake` passes CMAKE_CROSSCOMPILING_EMULATOR on the command line, so that branch never runs
+    # and the variable is never defined. The emulator it passes *is* node, which makes it the right
+    # thing to use. It may carry arguments, so take the first element.
     if(NOT NODE_JS_EXECUTABLE)
-        if(DEFINED NODE_JS_EXECUTABLE_FOR_EMSCRIPTEN)
-            set(NODE_JS_EXECUTABLE "${NODE_JS_EXECUTABLE_FOR_EMSCRIPTEN}")
+        if(CMAKE_CROSSCOMPILING_EMULATOR)
+            list(GET CMAKE_CROSSCOMPILING_EMULATOR 0 NODE_JS_EXECUTABLE)
         elseif(DEFINED ENV{EMSDK_NODE})
             set(NODE_JS_EXECUTABLE "$ENV{EMSDK_NODE}")
         else()
@@ -196,17 +212,28 @@ if(EMSCRIPTEN)
         # its own WebAssembly pipeline. Registered only where Playwright resolves, since a browser
         # is an environment fact rather than a build one -- and reported as a skipped test rather
         # than silently absent, so a machine that cannot run it says so.
-        # Playwright is usually a global install, which a bare `require` from an arbitrary working
-        # directory will not find, so the global module root is resolved once here and handed to
-        # both the availability check and the test itself.
-        execute_process(
-            COMMAND "${NODE_JS_EXECUTABLE}" -e "console.log(require('node:child_process').execSync('npm root -g').toString().trim())"
-            OUTPUT_VARIABLE _cna_node_global_modules
-            OUTPUT_STRIP_TRAILING_WHITESPACE
-            ERROR_QUIET)
+        # Playwright is usually a global install that a bare `require` will not find, so NODE_PATH
+        # is pointed at the module root belonging to *this* node -- `npm root -g` answers for
+        # whichever npm is on PATH, which need not be the same installation.
+        get_filename_component(_cna_node_bin_dir "${NODE_JS_EXECUTABLE}" DIRECTORY)
+        get_filename_component(_cna_node_prefix "${_cna_node_bin_dir}" DIRECTORY)
+        set(_cna_node_global_modules "${_cna_node_prefix}/lib/node_modules")
+        if(NOT IS_DIRECTORY "${_cna_node_global_modules}")
+            execute_process(
+                COMMAND "${NODE_JS_EXECUTABLE}" -e "console.log(require('node:child_process').execSync('npm root -g').toString().trim())"
+                OUTPUT_VARIABLE _cna_node_global_modules
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET)
+        endif()
+
+        # The gate asks the runner itself, so the two cannot disagree about what is resolvable. A
+        # separate search here was narrower than the runner's own and would report a skip on a
+        # machine where the test would have passed.
         execute_process(
             COMMAND ${CMAKE_COMMAND} -E env "NODE_PATH=${_cna_node_global_modules}"
-                    "${NODE_JS_EXECUTABLE}" -e "require(require('node:path').join(process.env.NODE_PATH,'playwright'))"
+                    "${NODE_JS_EXECUTABLE}"
+                    "${PROJECT_SOURCE_DIR}/scripts/run_pixijs_browser_tests.mjs"
+                    --check-playwright
             RESULT_VARIABLE _cna_playwright_missing
             OUTPUT_QUIET ERROR_QUIET)
         find_program(CNA_BROWSER_FOR_WASM_PROBE
@@ -224,11 +251,15 @@ if(EMSCRIPTEN)
                         "browser_probe.html")
             set_tests_properties(CApi_WasmBrowserProbe PROPERTIES TIMEOUT 300)
         else()
+            # SKIP_REGULAR_EXPRESSION, not PASS_REGULAR_EXPRESSION: the latter reports Passed, which
+            # would fold a test that did nothing into the suite's pass count -- the very thing this
+            # branch exists to avoid. Matches the convention in modules/renderers/webgpu and
+            # modules/renderers/diligent.
             add_test(NAME CApi_WasmBrowserProbe
                 COMMAND ${CMAKE_COMMAND} -E echo
-                        "SKIPPED: Playwright is not resolvable from this node, so the browser probe cannot run here.")
+                        "[SKIP] Playwright is not resolvable from this node, so the browser probe cannot run here.")
             set_tests_properties(CApi_WasmBrowserProbe PROPERTIES
-                PASS_REGULAR_EXPRESSION "SKIPPED")
+                SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
         endif()
     endif()
 endif()

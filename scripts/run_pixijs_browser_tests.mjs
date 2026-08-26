@@ -96,8 +96,23 @@ async function runPage(browser, origin, page_name, timeoutMs) {
 
 async function main() {
     const [buildDir, ...requested] = process.argv.slice(2);
+
+    // Lets a build system ask "can this machine run these pages?" using the *same* resolution the
+    // run itself uses. A gate with its own separate search can be narrower than the runner and
+    // report a skip where the test would have passed, which is exactly what happened to
+    // CApi_WasmBrowserProbe (plans/plan_cabi.md CABI-39).
+    if (buildDir === '--check-playwright') {
+        try {
+            loadPlaywright();
+            return 0;
+        } catch {
+            return 1;
+        }
+    }
+
     if (!buildDir) {
         console.error('usage: run_pixijs_browser_tests.mjs <build-dir> [page.html ...]');
+        console.error('       run_pixijs_browser_tests.mjs --check-playwright');
         return 2;
     }
     const root = resolve(buildDir);

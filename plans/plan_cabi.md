@@ -1077,7 +1077,9 @@ It is not, however, a loosening that can simply be applied, and that is the part
 
 So matching XNA here is a real design decision across the whole framework -- 17 sites, their tests,
 and the sort contract underneath them -- not a C-binding change. It is left to the owner rather than
-taken unilaterally, with the evidence above. [[CABI-7b]] already closed the one part of it that was
+taken unilaterally, with the evidence above. (One detail in this analysis was refined once the work
+was done: the total order CNA needed is **FNA's**, not XNA's. XNA's own comparers return 0 when
+neither `>` nor `<` holds, which would have kept the undefined behaviour. See the section below.) [[CABI-7b]] already closed the one part of it that was
 a live defect rather than a policy: `DrawString` never validated `layerDepth` at all, so a NaN there
 reached exactly the undefined behaviour described above.
 
@@ -1166,7 +1168,7 @@ re-recorded.
 | --- | --- | --- |
 | CABI-2, CABI-5, CABI-4 | none | tests only |
 | CABI-7a unnamed sort mode accepted | **D** | semantic; shape unchanged; needs downstream re-review |
-| CABI-7b `layerDepth` validated in `DrawString` | none at the C boundary | the C guard already refused it |
+| CABI-7b `layerDepth` validated in `DrawString` | none, and **superseded by CABI-38** | it was classified none because the C guard already refused a non-finite `layerDepth`; CABI-38 removed both that guard and this validation, so the two cancel within this same milestone and a consumer reading the 0.8.0 -> 0.9.0 diff should not expect either |
 | CABI-12 ELF link options skipped under Emscripten | none | build-system only |
 | CABI-13 `cna_graphics_device_create`/`_destroy` | **C** | additive |
 | CABI-14 wasm module target | none | new artifact, no ABI surface change |
