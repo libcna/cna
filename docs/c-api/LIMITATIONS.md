@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,415 | A C route exists and is tested. |
+| Fully mapped | 6,397 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 446 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 443 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -62,7 +62,7 @@ The platform layer hands input its window and its touch state through methods wh
 
 Interfaces a backend implements and the value types they exchange -- audio devices, recording devices, their formats. The C ABI is built ON this layer rather than exposing it: a C caller reaches the behaviour through the routes that use it, never through a C++ interface it would have to implement. The platform module itself is excluded from the inventory for the same reason (CBIND-047).
 
-### Operations the C++ class deletes — 136 symbols
+### Operations the C++ class deletes — 133 symbols
 
 A deleted copy constructor or assignment operator has no behavior to expose. Its absence from the C ABI is the same statement the C++ class already makes.
 
