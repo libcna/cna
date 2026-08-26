@@ -9,18 +9,37 @@ The ABI is `0.9.0`. It adds the owned-`GraphicsDevice` routes
 `cna_video_player_get_frame_ext` with its `CNA_VideoFrameEXT` descriptor and
 `CNA_VIDEO_FRAME_EXT_STRUCT_VERSION`.
 
-Those additions alone would be additive. The minor moves because `0.9.0` also **changes two
-documented contracts**, and a consumer that read the previous headers was told the opposite of what
-now happens:
+Those additions alone would be additive. The minor moves because `0.9.0` also **changes six
+documented contracts**. A consumer that read the `0.8.0` headers was told something other than what
+now happens in each case, so each is worth reading before adopting this generation:
 
+- **`SoundEffectInstance.Apply3D` refuses on a playing instance that was never positioned.** This
+  is the one most likely to be hit, and the only one that turns a succeeding call into a failing
+  one: it returns `CNA_RESULT_INVALID_STATE`. Starting playback fixes the choice between 3D and
+  pan, which is the reference behaviour -- the packet is submitted on the first play. Position the
+  instance first and then play it, or stop it, position it, and play again.
+- **`SoundEffectInstance.Apply3D` accepts any positive listener count.** It previously refused every
+  count but one. The reference implementation has no count restriction; where several listeners are
+  given, the nearest to the emitter decides the applied attenuation, pan and Doppler, because this
+  runtime's mixer has a single stereo gain pair and no per-listener output matrices.
+- **An unnamed `SpriteSortMode` value is accepted.** Values outside the named set previously came
+  back as `CNA_RESULT_INVALID_ARGUMENT`; they now pass through and run as `Deferred`, which is what
+  the reference implementation does.
 - **ContentLost is raised.** Through `0.8.0` the dynamic vertex- and index-buffer headers stated
   that CNA never raises the event and that registration existed only to preserve the shape of the
   public contract. It is now raised for real on the renderers whose API can lose a device
   (DirectX9, Direct2D, Skia). A consumer that registered a callback expecting it to be dead will
   now see it called.
+- **A render target's ContentLost flag is cleared again.** It was set on a device reset and never
+  cleared, so a target that lost its content reported `IsContentLost` for the rest of its life.
+  Binding it as a render target now clears it; see the note under that route for exactly when.
 - **A video frame generation is never restarted.** The counter is monotonic for the lifetime of the
   player. `Play` and `Stop` previously reset it, which gave the first frame of every playback the
   same generation and so defeated the one comparison the value exists to support.
+
+Three of those six -- the two `Apply3D` changes and the sort mode -- landed while the version still
+read `0.8.0` and so were briefly unversioned. That is the defect this bump repairs: `0.9.0` is the
+first version number a consumer can use to tell any of them apart.
 
 `0.8.0` added the NanoVG renderer identity and the five engine-layer capability identities for
 float and half-float render targets, half-float texture filtering, compute shaders, and indirect

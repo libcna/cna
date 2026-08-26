@@ -1104,16 +1104,21 @@ re-recorded.
 | CABI-14 wasm module target | none | new artifact, no ABI surface change |
 | CABI-15 ContentLost raised | **D** | an event that never fired now can, on three renderers |
 | CABI-9 `cna_video_player_get_frame_ext` | **C** | additive |
-
-`CNA_ABI_VERSION` moved 0.8.0 -> **0.9.0** because of the two class-D rows; see the section above
-for why leaving it unchanged was wrong. Those two rows are what a downstream review must look at.
-
-Two later corrections belong in this table:
-
-| Change | Class | Note |
-| --- | --- | --- |
-| CABI-28 render-target ContentLost is now cleared on binding | **D** | the flag was set and never cleared, so it reported "lost" forever |
+| CABI-6 Apply3D accepts any positive listener count | **D** | a count this ABI refused now succeeds |
+| CABI-25 Apply3D refuses on a playing, never-aimed instance | **D** | a call that used to succeed now returns `CNA_RESULT_INVALID_STATE` |
+| CABI-28 render-target ContentLost is cleared again | **D** | the flag was set and never cleared, so it reported "lost" forever |
 | CABI-31 video frame generation never restarts | **D** | `Play`/`Stop` reset it, giving every playback's first frame the same value |
+| CABI-32 the `apply_3d` routes document the gate | none | the refusal already existed; the headers did not say so |
+| CABI-29/CABI-30/CABI-33/CABI-34 | none | build, baseline, registration and test coverage |
+
+`CNA_ABI_VERSION` moved 0.8.0 -> **0.9.0**. **Six** rows are class D, not the two an earlier
+revision of this table listed: it was written before CABI-25 through CABI-31 landed and was never
+extended, and CABI-6 was missing from it even then. External review caught the omission in the
+public history; it was the same omission here.
+
+Of the six, **CABI-25 is the one a consumer is most likely to hit**, and it is the only one that
+turns a succeeding call into a failing one. The rest either accept something previously refused or
+change a value's meaning.
 
 ## CABI-6 resolved — the XNA reference settled it
 
