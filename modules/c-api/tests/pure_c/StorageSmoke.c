@@ -617,6 +617,25 @@ static void on_disposing_observed(void* const context)
         observer->container, &observer->seen_disposed);
 }
 
+/* CABI-34: the other ordering half the work order asks for -- Disposing relative to the container's
+   own file cleanup. Asked from inside the callback, because that is the only moment at which the
+   answer distinguishes "the event arrives before the container tears its contents down" from
+   "after". */
+typedef struct FileVisibilityObserver {
+    CNA_StorageContainerHandle container;
+    int calls;
+    CNA_Result query_result;
+    CNA_Bool seen_file;
+} FileVisibilityObserver;
+
+static void on_disposing_checks_files(void* const context)
+{
+    FileVisibilityObserver* const observer = (FileVisibilityObserver*)context;
+    observer->calls += 1;
+    observer->query_result = cna_storage_container_file_exists(
+        observer->container, view("cabi-ordering.bin"), &observer->seen_file);
+}
+
 static int validate_disposal_edges(const CNA_StorageDeviceHandle device)
 {
     CNA_StorageContainerHandle container = CNA_INVALID_HANDLE;
@@ -699,6 +718,62 @@ static int validate_disposal_edges(const CNA_StorageDeviceHandle device)
                 CNA_RESULT_SUCCESS ||
             cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS ||
             calls != 1) {
+            return 0;
+        }
+    }
+
+    /* CABI-34: double dispose. The second call must be accepted and must not raise again --
+       "exactly once" has to survive a caller that disposes defensively. */
+    {
+        int calls = 0;
+        if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_container_subscribe_disposing(container, on_completed, &calls, &first) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS ||
+            calls != 1) {
+            return 0;
+        }
+        if (cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS || calls != 1) {
+            return 0;
+        }
+        /* And destroying an already-disposed container does not raise a third time either. */
+        if (cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS || calls != 1) {
+            return 0;
+        }
+        if (cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    /* CABI-34: ordering against the container's own file cleanup. The event must arrive while the
+       container's contents are still there, for the same reason it must arrive while the handle is
+       still answerable: a subscriber whose whole purpose is to flush or inspect state cannot do it
+       after the state is gone. */
+    {
+        FileVisibilityObserver observer = {CNA_INVALID_HANDLE, 0, CNA_RESULT_SUCCESS, CNA_FALSE};
+        CNA_StorageStreamHandle file = CNA_INVALID_HANDLE;
+        if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        observer.container = container;
+        if (cna_storage_container_create_file(container, view("cabi-ordering.bin"), &file) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_stream_close(file) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_storage_container_subscribe_disposing(
+                container, on_disposing_checks_files, &observer, &first) != CNA_RESULT_SUCCESS ||
+            cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (observer.calls != 1 || observer.query_result != CNA_RESULT_SUCCESS ||
+            observer.seen_file != CNA_TRUE) {
+            return 0;
+        }
+        if (cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS ||
+            cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS) {
             return 0;
         }
     }
