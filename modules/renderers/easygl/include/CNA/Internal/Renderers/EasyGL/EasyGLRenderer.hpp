@@ -152,7 +152,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int width = 0;
         int height = 0;
 
-        EasyGLTextureRenderer(const ImageData& data, ::easygl::ResourceRegistry* registry);
+        EasyGLTextureRenderer(const ImageData& data, std::shared_ptr<::easygl::ResourceRegistry> registry);
         ~EasyGLTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
@@ -181,7 +181,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void AllocateDeclaredLevels();
 
         std::shared_ptr<std::vector<uint8_t>> pixels_;
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
         int surfaceFormat_ = 0;
         // Task 924: real mip level count this texture was created with -- GL_TEXTURE_MAX_LEVEL
         // must be clamped to match it (mipLevels_-1), or a mipmap-requiring TextureFilter (e.g.
@@ -214,7 +214,7 @@ namespace CNA::Internal::Renderers::EasyGL
          *                         real R/RG/RGBA 16F/32F storage, which is what lets an HDR scene
          *                         keep values above 1.0 instead of clamping them at draw time.
          */
-        EasyGLRenderTargetRenderer(int w, int h, int depthFormat, ::easygl::ResourceRegistry* registry,
+        EasyGLRenderTargetRenderer(int w, int h, int depthFormat, std::shared_ptr<::easygl::ResourceRegistry> registry,
                                    std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                    bool mipMap = false, int multiSampleCount = 0,
                                    int surfaceFormat = 0);
@@ -274,7 +274,7 @@ namespace CNA::Internal::Renderers::EasyGL
         bool mipMap_           = false;
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
         /// REMED-GFX-168: the creating renderer's binding record, so the destructor can detach.
         std::weak_ptr<EasyGLBoundTargetEXT> binding_;
     };
@@ -295,7 +295,7 @@ namespace CNA::Internal::Renderers::EasyGL
          * @param mipMap           Whether a full mip chain is allocated and regenerated on unbind.
          * @param multiSampleCount Requested sample count, clamped to `GL_MAX_SAMPLES`.
          */
-        EasyGLRenderTargetCubeRenderer(int size, int depthFormat, ::easygl::ResourceRegistry* registry,
+        EasyGLRenderTargetCubeRenderer(int size, int depthFormat, std::shared_ptr<::easygl::ResourceRegistry> registry,
                                        std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                        bool mipMap = false, int multiSampleCount = 0,
                                        int surfaceFormat = 0);
@@ -385,7 +385,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int  levelCount_       = 1;
         int  multiSampleCount_ = 0;
         int  lastFace_         = 0;  ///< Most recently bound face, used by UnbindAsRenderTarget's resolve.
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
         /// REMED-GFX-168: the creating renderer's binding record, so the destructor can detach.
         std::weak_ptr<EasyGLBoundTargetEXT> binding_;
     };
@@ -558,7 +558,7 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLOcclusionQueryRenderer : public IOcclusionQueryRenderer, public ::easygl::RecoverableResource
     {
     public:
-        explicit EasyGLOcclusionQueryRenderer(::easygl::ResourceRegistry* registry);
+        explicit EasyGLOcclusionQueryRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry);
         ~EasyGLOcclusionQueryRenderer() override;
 
         void Begin() override;
@@ -571,7 +571,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
     private:
         ::easygl::Query query_;
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };
 
     /// plans/plan_modern.md MOD-2163. A GL_TIME_ELAPSED query, which metagl's QueryTarget does not name
@@ -581,7 +581,7 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLGpuTimerRenderer : public IGpuTimerRenderer, public ::easygl::RecoverableResource
     {
     public:
-        explicit EasyGLGpuTimerRenderer(::easygl::ResourceRegistry* registry);
+        explicit EasyGLGpuTimerRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry);
         ~EasyGLGpuTimerRenderer() override;
 
         void Begin() override;
@@ -598,7 +598,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ::metagl::QueryId id_{};
         bool created_ = false;
         bool open_    = false;
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
     };
 
     class EasyGLSpriteBatchRenderer : public ISpriteBatchRenderer, public ::easygl::RecoverableResource
@@ -613,7 +613,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ::easygl::Buffer vbo_;
         ::easygl::Buffer ibo_;
         bool begun = false;
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
         EasyGLRenderer* graphicsRenderer_ = nullptr;
 
         // Batching state: quads are accumulated between Begin()/End() and
@@ -641,7 +641,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int pendingAddressV_  = 1; // TextureAddressMode::Clamp
 
     public:
-        explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
+        explicit EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
                                           EasyGLRenderer* renderer = nullptr);
         ~EasyGLSpriteBatchRenderer() override;
 
@@ -711,7 +711,7 @@ namespace CNA::Internal::Renderers::EasyGL
         int vertex_count = 0;
         int capacity = 0;
 
-        explicit EasyGLVertexBufferRenderer(int vertex_capacity, ::easygl::ResourceRegistry* registry);
+        explicit EasyGLVertexBufferRenderer(int vertex_capacity, std::shared_ptr<::easygl::ResourceRegistry> registry);
         ~EasyGLVertexBufferRenderer() override;
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
@@ -743,7 +743,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void InitializeLayout();
         void ApplyLayout(std::size_t stride);
         void uploadWithOptions(const void* data, std::size_t byte_count, SetDataOptions options);
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
         std::vector<uint8_t> cpu_data_;
         std::size_t stride_in_bytes_ = 0;
         bool gpu_allocated_ = false;
@@ -765,7 +765,7 @@ namespace CNA::Internal::Renderers::EasyGL
         bool thirtyTwoBit = false;
 
         explicit EasyGLIndexBufferRenderer(int index_capacity, bool thirtyTwoBit,
-                                          ::easygl::ResourceRegistry* registry);
+                                          std::shared_ptr<::easygl::ResourceRegistry> registry);
         ~EasyGLIndexBufferRenderer() override;
         void SetData16(const void* data, int index_count) override;
         void SetData32(const void* data, int index_count) override;
@@ -782,7 +782,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void recreate_gl_resource() override;
 
     private:
-        ::easygl::ResourceRegistry* registry_ = nullptr;
+        std::weak_ptr<::easygl::ResourceRegistry> registry_;
         std::vector<uint8_t> cpu_data_;
     };
 
@@ -835,7 +835,14 @@ namespace CNA::Internal::Renderers::EasyGL
 #endif
         EasyGLSurfaceState surfaceState_;
         ::easygl::Device device;
-        ::easygl::ResourceRegistry registry_;
+        // CABI-20: shared rather than a by-value member. A child renderer can outlive this one
+        // (a base-moved TextureCube publishes shared_from_this()), and its destructor calls
+        // registry_->remove(this). With the registry owned by value that read landed in freed
+        // memory -- a heap-use-after-free ASan caught in
+        // MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove. Children
+        // now hold a weak_ptr and simply skip the removal when the registry is gone.
+        std::shared_ptr<::easygl::ResourceRegistry> registry_ =
+            std::make_shared<::easygl::ResourceRegistry>();
 
         /// Raw XNA ColorWriteChannels values for MRT slots 0..3 (bit0=R..bit3=A).
         /// GLES 3.2 applies these with glColorMaski; Clear temporarily forces every active slot
@@ -867,9 +874,10 @@ namespace CNA::Internal::Renderers::EasyGL
         void BindDefaultFramebuffer();
         void ResolveMsaa();
 
-        /// Returns &registry_ when context recovery is enabled, nullptr otherwise.
-        [[nodiscard]] ::easygl::ResourceRegistry* RegistryPtr() noexcept
-        { return contextRecoveryEnabled_ ? &registry_ : nullptr; }
+        /// Returns the shared registry when context recovery is enabled, an empty pointer
+        /// otherwise. Children keep only a weak reference to what this returns.
+        [[nodiscard]] std::shared_ptr<::easygl::ResourceRegistry> RegistryPtr() noexcept
+        { return contextRecoveryEnabled_ ? registry_ : nullptr; }
 
         // 3D pipeline state — one program per vertex layout
         struct Prog3D {

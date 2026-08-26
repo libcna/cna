@@ -2157,7 +2157,7 @@ if (ProfileIsEs2ApiGeneration())
 
     // --- EasyGLOcclusionQueryRenderer ---
 
-    EasyGLOcclusionQueryRenderer::EasyGLOcclusionQueryRenderer(::easygl::ResourceRegistry* registry)
+    EasyGLOcclusionQueryRenderer::EasyGLOcclusionQueryRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry)
         : registry_(registry)
     {
 if (!ProfileIsEs2ApiGeneration())
@@ -2169,12 +2169,12 @@ if (!ProfileIsEs2ApiGeneration())
         // PixelCount stays 0).
         query_.create();
 }
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
     }
 
     EasyGLOcclusionQueryRenderer::~EasyGLOcclusionQueryRenderer()
     {
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     void EasyGLOcclusionQueryRenderer::Begin()
@@ -2224,16 +2224,16 @@ if (!ProfileIsEs2ApiGeneration())
         constexpr ::metagl::QueryTarget kTimeElapsed = static_cast<::metagl::QueryTarget>(0x88BF);
     }
 
-    EasyGLGpuTimerRenderer::EasyGLGpuTimerRenderer(::easygl::ResourceRegistry* registry)
+    EasyGLGpuTimerRenderer::EasyGLGpuTimerRenderer(std::shared_ptr<::easygl::ResourceRegistry> registry)
         : registry_(registry)
     {
         create();
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
     }
 
     EasyGLGpuTimerRenderer::~EasyGLGpuTimerRenderer()
     {
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
         if (created_ && !metagl::IsContextLost())
         {
             ::metagl::glDeleteQueries(1, &id_);
@@ -2295,7 +2295,7 @@ if (!ProfileIsEs2ApiGeneration())
 
     // --- EasyGLTextureRenderer ---
 
-    EasyGLTextureRenderer::EasyGLTextureRenderer(const ImageData& data, ::easygl::ResourceRegistry* registry)
+    EasyGLTextureRenderer::EasyGLTextureRenderer(const ImageData& data, std::shared_ptr<::easygl::ResourceRegistry> registry)
         : registry_(registry), surfaceFormat_(data.surfaceFormat),
           mipLevels_(data.mipLevels > 0 ? data.mipLevels : 1)
     {
@@ -2320,7 +2320,7 @@ else
         texture.set_parameter(::easygl::TextureTarget::Texture2D, ::easygl::TextureParameterSetter::MaxLevel,
                                mipLevels_ - 1);
 }
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
     }
 
     void EasyGLTextureRenderer::UploadLevel(int level, int levelWidth, int levelHeight,
@@ -2384,7 +2384,7 @@ if (ProfileIsEs2ApiGeneration())
         // GL reuses deleted names; drop the level registration before texture's destructor frees it.
         Es2UnregisterTexture(texture.native_handle());
 }
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     void EasyGLTextureRenderer::release_gl_handle_only()
@@ -2435,7 +2435,7 @@ else
 
     void EasyGLTextureRenderer::ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels)
     {
-        if (registry_) pixels_ = std::move(pixels);
+        if (!registry_.expired()) pixels_ = std::move(pixels);
     }
 
     void EasyGLTextureRenderer::UpdatePixels(const uint8_t* rgba, int /*stride*/)
@@ -2550,7 +2550,7 @@ else
     }
 
     EasyGLRenderTargetRenderer::EasyGLRenderTargetRenderer(int w, int h, int depthFormat,
-                                                          ::easygl::ResourceRegistry* registry,
+                                                          std::shared_ptr<::easygl::ResourceRegistry> registry,
                                                           std::weak_ptr<EasyGLBoundTargetEXT> binding,
                                                           bool mipMap, int multiSampleCount,
                                                           int surfaceFormat)
@@ -2560,7 +2560,7 @@ else
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(w, h) : 1;
         CreateResources();
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
         TargetTrace("rt2d.create", this, TraceNativeDetailEXT());
     }
 
@@ -2573,7 +2573,7 @@ if (ProfileIsEs2ApiGeneration())
         // GL reuses deleted names; drop the level registration before colorTex_ is freed.
         Es2UnregisterTexture(colorTex_.native_handle());
 }
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     /**
@@ -3030,7 +3030,7 @@ if (ProfileIsEs2ApiGeneration())
     // --- EasyGLRenderTargetCubeRenderer ---
 
     EasyGLRenderTargetCubeRenderer::EasyGLRenderTargetCubeRenderer(
-        int size, int depthFormat, ::easygl::ResourceRegistry* registry,
+        int size, int depthFormat, std::shared_ptr<::easygl::ResourceRegistry> registry,
         std::weak_ptr<EasyGLBoundTargetEXT> binding, bool mipMap, int multiSampleCount,
         int surfaceFormat)
         : size_(size), depthFormat_(depthFormat), surfaceFormat_(surfaceFormat), mipMap_(mipMap),
@@ -3038,7 +3038,7 @@ if (ProfileIsEs2ApiGeneration())
     {
         levelCount_ = mipMap_ ? CalculateRenderTargetMipLevels(size, size) : 1;
         CreateResources();
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
         TargetTrace("cube.create", this, TraceNativeDetailEXT());
     }
 
@@ -3051,7 +3051,7 @@ if (ProfileIsEs2ApiGeneration())
         // GL reuses deleted names; drop the level registration before cubeTex_ is freed.
         Es2UnregisterTexture(cubeTex_.native_handle());
 }
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     /**
@@ -3392,7 +3392,7 @@ if (ProfileIsEs2ApiGeneration())
 
     // --- EasyGLSpriteBatchRenderer ---
 
-    EasyGLSpriteBatchRenderer::EasyGLSpriteBatchRenderer(::easygl::Device& device, ::easygl::ResourceRegistry* registry,
+    EasyGLSpriteBatchRenderer::EasyGLSpriteBatchRenderer(::easygl::Device& device, std::shared_ptr<::easygl::ResourceRegistry> registry,
                                                        EasyGLRenderer* renderer)
         : device_(device)
         , registry_(registry)
@@ -3421,12 +3421,12 @@ if (ProfileIsEs2ApiGeneration())
             spriteMatrixParameterIndex_ = matrix->runtimeIndex;
         }
 #endif
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
     }
 
     EasyGLSpriteBatchRenderer::~EasyGLSpriteBatchRenderer()
     {
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     void EasyGLSpriteBatchRenderer::release_gl_handle_only()
@@ -4199,7 +4199,7 @@ if (ProfileUsesGlslEs100())
 
         platformContext_->SetSwapInterval(swapInterval);
 
-        registry_.register_with_meta_gl();
+        registry_->register_with_meta_gl();
 
         if (sampleCount_ > 1)
         {
@@ -6572,18 +6572,18 @@ else
             vao.unbind();
     }
 
-    EasyGLVertexBufferRenderer::EasyGLVertexBufferRenderer(int vertex_capacity, ::easygl::ResourceRegistry* registry)
+    EasyGLVertexBufferRenderer::EasyGLVertexBufferRenderer(int vertex_capacity, std::shared_ptr<::easygl::ResourceRegistry> registry)
         : capacity(vertex_capacity)
         , registry_(registry)
     {
         InitializeLayout();
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
         CNA_RENDER_LOG("VertexBuffer created: capacity=" << capacity);
     }
 
     EasyGLVertexBufferRenderer::~EasyGLVertexBufferRenderer()
     {
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     void EasyGLVertexBufferRenderer::release_gl_handle_only()
@@ -6632,7 +6632,7 @@ else
         vertex_count = count;
         stride_in_bytes_ = stride_in_bytes;
         const std::size_t byte_count = static_cast<std::size_t>(count) * stride_in_bytes;
-        if (registry_)
+        if (!registry_.expired())
         {
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);
@@ -6650,7 +6650,7 @@ else
         vertex_count = count;
         stride_in_bytes_ = stride_in_bytes;
         const std::size_t byte_count = static_cast<std::size_t>(count) * stride_in_bytes;
-        if (registry_)
+        if (!registry_.expired())
         {
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);
@@ -6662,19 +6662,19 @@ else
     }
 
     EasyGLIndexBufferRenderer::EasyGLIndexBufferRenderer(int index_capacity, bool is32bit,
-                                                       ::easygl::ResourceRegistry* registry)
+                                                       std::shared_ptr<::easygl::ResourceRegistry> registry)
         : thirtyTwoBit(is32bit)
         , capacity(index_capacity)
         , registry_(registry)
     {
         ibo.create();
-        if (registry_) registry_->add(this);
+        if (auto reg = registry_.lock()) reg->add(this);
         CNA_RENDER_LOG("IndexBuffer created: capacity=" << capacity << " 32bit=" << is32bit);
     }
 
     EasyGLIndexBufferRenderer::~EasyGLIndexBufferRenderer()
     {
-        if (registry_) registry_->remove(this);
+        if (auto reg = registry_.lock()) reg->remove(this);
     }
 
     void EasyGLIndexBufferRenderer::release_gl_handle_only()
@@ -6696,7 +6696,7 @@ else
     {
         index_count = count;
         const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint16_t);
-        if (registry_)
+        if (!registry_.expired())
         {
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);
@@ -6710,7 +6710,7 @@ else
     {
         index_count = count;
         const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint32_t);
-        if (registry_)
+        if (!registry_.expired())
         {
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);
@@ -6725,7 +6725,7 @@ else
     {
         index_count = count;
         const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint16_t);
-        if (registry_)
+        if (!registry_.expired())
         {
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);
@@ -6752,7 +6752,7 @@ else
     {
         index_count = count;
         const std::size_t byte_count = static_cast<std::size_t>(count) * sizeof(std::uint32_t);
-        if (registry_)
+        if (!registry_.expired())
         {
             const auto* bytes = static_cast<const uint8_t*>(data);
             cpu_data_.assign(bytes, bytes + byte_count);

@@ -783,7 +783,7 @@ Recorded as a TSan/driver limitation rather than a finding: there is no evidence
 code, and claiming one would be exactly the false sanitizer evidence both orders warn against. The
 data-race result above stands on its own.
 
-### A real defect the focused run found
+### A real defect the focused run found — now fixed (CABI-20)
 
 225 tests in, ASan aborted on a genuine **heap-use-after-free**:
 
@@ -793,26 +793,32 @@ ERROR: AddressSanitizer: heap-use-after-free, READ of size 8
 freed by:
   #1 EasyGLRenderer::~EasyGLRenderer()                                  EasyGLRenderer.cpp:4306
   #5 GraphicsDevice::destroyNativeResources()                           GraphicsDevice.cpp:3289
-  #7 GraphicsDevice::~GraphicsDevice()                                  GraphicsDevice.cpp:332
 ```
 
-Test: `MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove`
-(`MetalResourceHealthTests.cpp:234-239`).
+Test: `MetalResourceHealth.RenderTargetCubeRendererEscapesThroughTextureCubeBaseMove`.
 
-The test **deliberately documents** the escape — its own message reads *"the base-moved TextureCube
-can publish a renderer that outlives its device"* — and it passes, because it only asserts that the
-renderer pointer survives. What no assertion could see is what happens when that survivor is
-finally released: `~EasyGLRenderTargetCubeRenderer` calls `DetachFromBindingEXT()` and
-`registry_->remove(this)`, both reading the `EasyGLRenderer` the device already freed.
+**Root cause.** `EasyGLRenderer` owned its `easygl::ResourceRegistry` **by value** and handed child
+renderers a raw `ResourceRegistry*`. A child can outlive the renderer — the test exists precisely
+to document that, via a base-moved `TextureCube` publishing `shared_from_this()` — and its
+destructor then runs `registry_->remove(this)` against a registry that died with the renderer.
 
-So a known, tested escape turns out to be **unsafe at teardown**, not merely untidy. That is
-precisely the class of defect a sanitizer exists to surface and a green suite cannot.
+Note the direction of the bug. `ResourceRegistry`'s own contract permits this: *"the pointer must
+remain valid until remove() is called **or the registry is destroyed**"*. It is the child reaching
+back into a dead registry that is wrong, not the registry going away.
 
-**Not from this milestone.** Neither `EasyGLRenderer.cpp` nor `MetalResourceHealthTests.cpp` is
-touched by any commit on this branch, and the destructor reads EasyGL's own back-pointers, not
-anything [[CABI-15]] added to `RenderTargetCube`. It needs its own ticket against EasyGL's teardown
-ordering: either the cube renderer must not hold raw back-pointers into its owner, or
-`~EasyGLRenderer` must detach its children before freeing itself.
+**Fix.** The renderer now owns the registry through a `std::shared_ptr`, and every child holds a
+`std::weak_ptr`. `add`/`remove` go through a `lock()`, so a child that outlives its renderer simply
+skips the removal instead of reading freed memory. 8 members, 16 constructor parameters and 8
+add/remove pairs converted; `easy-gl` itself — a separate sibling repository — is untouched.
+
+**Verified.** Under ASan+UBSan on Xvfb `:101`:
+
+| Filter | Result |
+| --- | --- |
+| `MetalResourceHealth.*` | 7 passed, **0 reports** (previously aborted here) |
+| `*EasyGL*:*ResourceHealth*:*RenderTarget*:*TextureCube*:*ContentLost*` | **153 passed, 0 reports** |
+
+The ordinary suite is unchanged at 84 C-API tests, 80 passing.
 
 ## CABI-4 continued — two fixed, and what fixing them revealed
 
