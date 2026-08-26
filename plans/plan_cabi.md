@@ -47,6 +47,11 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-25 | XNA's `is3d`/`isPacketSubmitted` gate | follow-up | DONE |
 | CABI-26 | `CApi_RuntimeGameSmoke` does not hang | follow-up | CLOSED |
 | CABI-27 | The last three red tests, traced | follow-up | 1 fixed, 2 attributed |
+| CABI-35 | Video frame identity against a real decode, from C | second review | DONE |
+| CABI-36 | `CApi_Draw3DSmoke` read an uncleared depth buffer | follow-up | DONE |
+| CABI-37 | Browser probe for the wasm artifact | fixcnats P7 | DONE |
+| CABI-38 | Non-finite sprite values accepted, as the reference does | fixcnacs P5 | DONE |
+| CABI-39 | The wasm tests were never registered, only run by hand | second review | DONE |
 | CABI-28 | Render-target ContentLost was set and never cleared | external review | DONE |
 | CABI-29 | Wasm export list did not depend on the headers | external review | DONE |
 | CABI-30 | ABI 0.8.0 -> 0.9.0, history and baseline | external review | DONE |
@@ -1024,7 +1029,8 @@ All on Xvfb `:101` with `SDL_VIDEODRIVER=x11`, confirmed by the EasyGL banner re
     changed areas              309 / 309    ContentLost, VideoPlayer, SoundEffectInstance,
                                             Cue, SoundBank, DynamicSoundEffectInstance
     wasm module                2874 / 2874 exports present, reports ABI 0.9.0
-    wasm in a browser          4 / 4        headless Chrome, via the repository's own runner
+    wasm in a browser          4 / 4        headless Chrome, now a registered ctest
+                                            (CApi_WasmBrowserProbe), not a hand-run script
     CNA.NET                    759 passed; 117/119 integration against an admitted label
     full native suite          8212 / 8240
 
