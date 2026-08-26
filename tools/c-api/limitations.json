@@ -168,13 +168,13 @@
   ],
   "environment": [
     {
-      "subject": "FFmpeg stays a system dependency",
-      "impact": "The package installs the SDL3, SDL3_image and SDL3_mixer libraries this project builds, beside `libcna_c_api.so`, whose RPATH is `$ORIGIN` -- so an installed CNA links and runs with no environment variable. FFmpeg is different: libavcodec, libavformat, libavutil and libswresample come from the distribution. Copying a distribution's binaries into this package would take on their redistribution terms, freeze their soname against future security updates and drag in the transitive libraries they were linked against, so they remain a system dependency a deployment installs the ordinary way.",
+      "subject": "Enabled FFmpeg stays a system dependency",
+      "impact": "`CNA_ENABLE_VIDEO=OFF` omits FFmpeg entirely while preserving the C video ABI with deterministic `CNA_RESULT_NOT_SUPPORTED` playback. When `AUTO/ON` selects video, libavcodec, libavformat, libavutil and libswresample come from the distribution rather than being copied into the package: copying them would take on their redistribution terms, freeze their soname against security updates and drag in their transitive libraries.",
       "status": "by design",
       "owner": "CONSUMING.md"
     },
     {
-      "subject": "The static archive keeps 83 C++ statics visible",
+      "subject": "The static archive keeps 130 C++ statics visible",
       "impact": "A static CNA exists and exports exactly the same 2,867 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
       "status": "by design",
       "owner": "CONSUMING.md"

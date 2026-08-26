@@ -10,7 +10,7 @@ This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the p
 
 **Not ready.** 1 criteria are unmet.
 
-- ❌ **No public C++ symbol is unaccounted for** — 1396 public symbols are still unmapped.
+- ❌ **No public C++ symbol is unaccounted for** — 1424 public symbols are still unmapped.
 
 This verdict is measured on every run, not written down once. A criterion recorded as met
 that stops being met fails the check; so does a criterion recorded as blocked that has
@@ -23,8 +23,8 @@ decided not to ship.
 |---|---|---|---|
 | ✅ | **The compatibility matrix is real, current and honest** | Every public header compiles on its own, in every declared language mode of every installed toolchain, and the published matrix matches its declaration. | 23 declared cells across 7 toolchains |
 | ✅ | **No unreviewed ABI break** | Every struct layout, field offset, scalar width, constant value and exported symbol is recorded, and a change to any of them arrives as a reviewable diff. | 177 struct layouts and 2867 exported symbols recorded |
-| ❌ | **No public C++ symbol is unaccounted for** | The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason. | 1396 public symbols are still unmapped |
-| ✅ | **A known-limitations matrix a reader can act on** | What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task. | docs/c-api/LIMITATIONS.md is current: 15 partially mapped symbols in 9 groups, 446 unmapped in 68 groups |
+| ❌ | **No public C++ symbol is unaccounted for** | The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason. | 1424 public symbols are still unmapped |
+| ✅ | **A known-limitations matrix a reader can act on** | What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task. | docs/c-api/LIMITATIONS.md is current: 15 partially mapped symbols in 9 groups, 443 unmapped in 68 groups |
 | ✅ | **A real C application, built the way a consumer builds one** | A complete C program exists, is built from outside the source tree against an installed CNA through find_package, and is run. | hello_cna is built from an installed prefix and run by CApi_InstalledConsumer |
 | ✅ | **The package is installable and findable** | `find_package(CNA CONFIG)` resolves from an installed prefix and yields one target, and the package version is the C ABI version. | CNAConfig.cmake, a version file from abi.h, and a CNACApi component |
 | ✅ | **The consumer documentation exists** | Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented. | 13 documents present |
@@ -86,12 +86,7 @@ The stress suite found a heap use-after-free on its first run; that is what this
 
 *Evidence:* the CNACApi install component, proved by CApi_InstalledConsumer
 
-Ruled on by the project owner on 2026-08-16: the package ships the SDL libraries CNA builds. When
-the optional video backend is enabled, FFmpeg stays a system dependency for reasons that are not
-convenience -- redistribution terms, soname freezing against security updates, and the transitive
-libraries a distribution build was linked against. `CNA_ENABLE_VIDEO=OFF` now omits FFmpeg while
-preserving the ABI. CApi_InstalledConsumer passes no `-rpath-link` and no `LD_LIBRARY_PATH`, so a
-regression here fails a test rather than surprising a consumer.
+Ruled on by the project owner on 2026-08-16: the package ships the SDL libraries CNA builds. When the optional video backend is enabled, FFmpeg stays a system dependency for reasons that are not convenience -- redistribution terms, soname freezing against security updates, and the transitive libraries a distribution build was linked against. `CNA_ENABLE_VIDEO=OFF` now omits FFmpeg while preserving the ABI. CApi_InstalledConsumer passes no `-rpath-link` and no `LD_LIBRARY_PATH`, so a regression here fails a test rather than surprising a consumer.
 
 ### ✅ A static configuration that keeps the same ABI promise
 
