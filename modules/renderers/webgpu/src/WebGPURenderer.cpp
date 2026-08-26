@@ -2159,6 +2159,17 @@ namespace CNA::Internal::Renderers::WebGPU
         SetDataWithOptions(data, vertexCount, strideInBytes, SetDataOptions{});
     }
 
+    // WEBGPU-44: the SetDataOptions argument (None/Discard/NoOverwrite) is intentionally not
+    // branched on. Discard exists so an immediate-mode renderer can orphan a buffer the GPU is
+    // still reading, and NoOverwrite so it can append without a stall. Neither hazard reaches this
+    // renderer: every draw SNAPSHOTS its vertex bytes into its own ColoredDrawCommand/
+    // InstancedDrawCommand at queue time (QueueColoredDraw/DrawInstancedPrimitivesEx copy
+    // ShadowData()) and uploads that snapshot into a fresh per-draw WGPUBuffer at replay, so two
+    // draws issued between two SetData calls already hold independent copies -- a stronger
+    // guarantee than orphaning. And wgpuQueueWriteBuffer is a queue-ordered, non-stalling copy, so
+    // there is no CPU stall for Discard to avoid. All three options therefore produce identical,
+    // correct results (verified by WebGPU_SetDataOptions); mirrors VulkanRenderer, which likewise
+    // does not branch buffer uploads on the option.
     void WebGPUVertexBufferRenderer::SetDataWithOptions(const void* data,
                                                         int vertexCount,
                                                         std::size_t strideInBytes,
@@ -2226,6 +2237,9 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPUIndexBufferRenderer::SetData16(const void* data, int indexCount) { Upload(data, indexCount, false); }
     void WebGPUIndexBufferRenderer::SetData32(const void* data, int indexCount) { Upload(data, indexCount, true); }
+    // WEBGPU-44: index uploads ignore SetDataOptions for the same reason vertex uploads do -- each
+    // draw snapshots its index bytes (command.indexData = ShadowData()) at queue time, and the
+    // queue write is non-stalling; see WebGPUVertexBufferRenderer::SetDataWithOptions above.
     void WebGPUIndexBufferRenderer::SetData16WithOptions(const void* data, int indexCount, SetDataOptions) { Upload(data, indexCount, false); }
     void WebGPUIndexBufferRenderer::SetData32WithOptions(const void* data, int indexCount, SetDataOptions) { Upload(data, indexCount, true); }
 

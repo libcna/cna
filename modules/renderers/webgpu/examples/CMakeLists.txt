@@ -263,6 +263,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_DisposedGuard COMMAND cna_test_webgpu_disposed_guard
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-44/99: SetDataWithOptions (None/Discard/NoOverwrite) uploads correctly for every option,
+    # and a Discard re-upload between two already-queued draws does not corrupt the first (this
+    # renderer snapshots each draw's vertices at queue time, so the immediate-mode Discard hazard
+    # cannot occur).
+    cna_webgpu_test(cna_test_webgpu_setdataoptions webgpu_setdataoptions_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SetDataOptions COMMAND cna_test_webgpu_setdataoptions
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-114: WebGPURenderTargetCubeRenderer / CreateRenderTargetCube() -- this renderer's first
     # real render-into-a-cube-face support (previously IGraphicsRenderer's own nullptr-returning
     # default). Direct face-to-face switching (no intervening backbuffer bind), a real BasicEffect
