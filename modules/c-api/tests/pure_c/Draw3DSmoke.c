@@ -3,7 +3,15 @@
 #include <CNA/C/cna.h>
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+
+/*
+ * Every route below is a separate claim, and a bare exit code cannot say which one broke.
+ * REPORT names the stage the moment it fails, the way the sibling smoke programs do.
+ */
+#define REPORT(condition) ((condition) ? 1 : (fprintf(stderr, \
+    "Draw3DSmoke failure at line %d: %s\n", __LINE__, #condition), 0))
 
 typedef struct Draw3DState {
     CNA_Bool supports_3d;
@@ -129,9 +137,18 @@ static int clear_and_confirm(
     CNA_Color clear_color)
 {
     CNA_Color pixel = {0U, 0U, 0U, 0U};
+    /*
+     * The depth buffer is cleared with the target, which is what XNA's own Clear(Color) does
+     * and what every draw below depends on: DepthStencilState.Default keeps depth testing on,
+     * and a backbuffer's depth contents before the first clear are undefined in both D3D and
+     * GL. Clearing only the target left every triangle to be tested against whatever the
+     * driver happened to leave there, so the draws returned success and changed nothing on a
+     * driver that starts it at 0.
+     */
     if (cna_graphics_device_clear_options(
-            graphics_device, CNA_CLEAR_OPTION_TARGET, clear_color, 1.0F, 0) !=
-        CNA_RESULT_SUCCESS) {
+            graphics_device,
+            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL,
+            clear_color, 1.0F, 0) != CNA_RESULT_SUCCESS) {
         return 0;
     }
     if (!state->has_readback) {
@@ -180,9 +197,9 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
         const CNA_UserPrimitives primitives = {
             sizeof(CNA_UserPrimitives), UINT32_C(1), CNA_PRIMITIVE_TRIANGLE_LIST,
             CNA_USER_VERTEX_SOURCE_POSITION_COLOR, Triangle, CNA_INVALID_HANDLE, 0, 3, 1, 0U};
-        ok = cna_graphics_device_draw_user_primitives(graphics_device, &primitives) ==
-                CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+        ok = REPORT(cna_graphics_device_draw_user_primitives(
+                        graphics_device, &primitives) == CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_user_primitives = ok;
     }
 
@@ -194,10 +211,10 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
         const CNA_UserIndices indices = {
             sizeof(CNA_UserIndices), UINT32_C(1), CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, 0,
             TriangleIndices};
-        ok = clear_and_confirm(graphics_device, state, clear_color) &&
-            cna_graphics_device_draw_user_indexed_primitives(
-                graphics_device, &primitives, &indices) == CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+        ok = REPORT(clear_and_confirm(graphics_device, state, clear_color)) &&
+            REPORT(cna_graphics_device_draw_user_indexed_primitives(
+                       graphics_device, &primitives, &indices) == CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_indexed = ok;
     }
 
@@ -239,16 +256,17 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
                 CNA_RESULT_SUCCESS &&
             cna_graphics_device_set_index_buffer(graphics_device, index_buffer) ==
                 CNA_RESULT_SUCCESS &&
-            cna_graphics_device_draw_primitives(
-                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 1) == CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+            REPORT(cna_graphics_device_draw_primitives(
+                       graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 1) ==
+                   CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
     }
     if (ok) {
         ok = clear_and_confirm(graphics_device, state, clear_color) &&
-            cna_graphics_device_draw_indexed_primitives(
-                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 0, 3, 0, 1) ==
-                CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+            REPORT(cna_graphics_device_draw_indexed_primitives(
+                       graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 0, 3, 0, 1) ==
+                   CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_geometry = ok;
     }
 
@@ -277,8 +295,9 @@ static int validate_real_output(CNA_Handle graphics_device, Draw3DState* state)
     }
     if (ok) {
         ok = clear_and_confirm(graphics_device, state, clear_color) &&
-            cna_model_draw(model, Identity, Identity, Identity) == CNA_RESULT_SUCCESS &&
-            confirm_drawn(graphics_device, state, clear_color);
+            REPORT(cna_model_draw(model, Identity, Identity, Identity) ==
+                   CNA_RESULT_SUCCESS) &&
+            REPORT(confirm_drawn(graphics_device, state, clear_color));
         state->drew_model = ok;
     }
 

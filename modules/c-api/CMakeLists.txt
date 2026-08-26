@@ -427,9 +427,14 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_draw3d_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_draw3d_smoke)
     add_test(NAME CApi_Draw3DSmoke COMMAND cna_c_api_draw3d_smoke)
-    set_tests_properties(CApi_Draw3DSmoke PROPERTIES
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-    )
+    # SDL's dummy video driver has no OpenGL, so a GL renderer cannot create a device under it
+    # and the game never starts. Every other graphics smoke here already scopes the override to
+    # the one backend it suits; this one did not, and failed on every GL build.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_Draw3DSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
 
     add_executable(cna_c_api_graphics_ext_smoke
         tests/pure_c/GraphicsExtSmoke.c
