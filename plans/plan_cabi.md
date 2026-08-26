@@ -22,7 +22,7 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-1 | Baseline: HEAD, ABI version, C-API build, test inventory | both P1 | DONE |
 | CABI-2 | Bound-render-target destroy refusal, pinned from C | fixcnats P2 | DONE |
 | CABI-3 | Renderer C/C++ identity parity | fixcnacs P1-2, fixcnats P1 | DONE (upstream) |
-| CABI-4 | Triage the 6 red C-API tests | prerequisite | 2 of 6 fixed; the rest attributed |
+| CABI-4 | Triage the 6 red C-API tests | prerequisite | 4 of 6 green; 2 attributed elsewhere |
 | CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | DONE |
 | CABI-6 | Apply3D multi-listener | fixcnacs P4 | RESOLVED against XNA |
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
@@ -35,6 +35,31 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-11 | Reproducible artifacts + provenance manifest | fixcnats P6 | DONE (measured reproducible) |
 | CABI-12 | Emscripten C-ABI artifact | fixcnats P7 | superseded by CABI-14 |
 | CABI-14 | Wasm ESM artifact | fixcnats P7 | DONE (built and executed) |
+| CABI-16 | Per-blocker handoff (fixcnacs P10) | fixcnacs P10 | DONE |
+| CABI-17 | Downstream verification, all four bindings | fixcnacs P9 | DONE |
+| CABI-18 | Sanitizers; found a real use-after-free | fixcnacs P8 | DONE |
+| CABI-19 | ThreadSanitizer | fixcnacs P8 | DONE |
+| CABI-20 | Fix that use-after-free in EasyGL teardown | follow-up | DONE |
+| CABI-21 | EffectPass lifetime: no defect, my probe was wrong | follow-up | CLOSED |
+| CABI-22 | Release the Texture3D CABI-4 leaked | follow-up | DONE |
+| CABI-23 | Merge probe: `next` itself does not build | follow-up | BLOCKED on the sample lane |
+| CABI-24 | `cna_render_target_subscribe_content_lost` | fixcnats P3 | DONE |
+| CABI-25 | XNA's `is3d`/`isPacketSubmitted` gate | follow-up | DONE |
+| CABI-26 | `CApi_RuntimeGameSmoke` does not hang | follow-up | CLOSED |
+| CABI-27 | The last three red tests, traced | follow-up | 1 fixed, 2 attributed |
+
+### Both work orders are complete
+
+`fixcnacs.md` phases 1-10 and `fixcnats.md` phases 1-7 are all addressed. What remains below is
+work this milestone *found*, not work it was asked to do.
+
+| Open, and whose | Why it is not mine |
+| --- | --- |
+| `next` does not build (`b718f950a`, SAMPLE-028) | The sample lane's commit; blocks any merge. |
+| `CApi_Draw3DSmoke` | The user-primitive draw returns success and renders nothing. 3D draw path. |
+| `CApi_InstalledConsumer` | `generate_static_archive.py` reads a Makefile-only `link.txt`. Packaging. |
+| Merging this branch | Textually clean, needs a compile probe -- after `next` builds again. |
+
 
 ## CABI-1 — Baseline (DONE)
 
