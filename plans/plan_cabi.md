@@ -1070,6 +1070,39 @@ that pass in isolation and fail only under `-j4` -- the set changes between runs
 signature of the parallel-isolation flake this suite has had for a while, and no SpriteBatch or
 SpriteFont case is among them.
 
+### CABI-40 — what UBSan found once it was asked the right question
+
+`fixcnacs.md` Phase 8 wants sanitizer evidence and says not to claim it if it was not run. The
+milestone's ASan/UBSan/TSan runs ([[CABI-18]], [[CABI-19]]) predate [[CABI-38]], which is precisely
+the change that could introduce fresh undefined behaviour: a non-finite float reaching something
+that casts it to `int` is UB, and CABI-38 is what lets non-finite floats travel that far.
+
+The first re-run came back clean, and that was worthless. `-fsanitize=undefined` **does not enable
+`float-cast-overflow` on this GCC**, so the one class of UB worth looking for was not instrumented.
+A one-file control (`build-probe/cabi38_ubsan_control.cpp`) casting a NaN to `int` proved it:
+silent under `undefined`, reported under `undefined,float-cast-overflow`. A clean sanitizer run
+means nothing until the sanitizer has been shown able to fail.
+
+Re-run with the flag, the sprite suite reported **four** errors, all in the test double
+(`RecordingSpriteBatchRenderer.hpp:129-130`) quantising a NaN or `-inf` destination. Fixed: the
+float fields already keep the exact value, so the integer convenience copy now yields 0 for a
+non-finite component rather than whatever the cast produced. **0 errors, 98/98 after the fix.**
+
+**Two production sites take the same cast and are not fixed here**, because neither is buildable on
+this host and neither is verifiable by guessing:
+
+| Site | What it does | Why it matters now |
+| --- | --- | --- |
+| `modules/renderers/igl/src/IglSpriteBatchRenderer.cpp:82` | `static_cast<int>(std::lround(x))` | `std::lround` of a NaN is itself undefined, before the cast |
+| `modules/renderers/fna3d/src/Fna3dSpriteBatch.cpp:103` | `static_cast<int>(x)` on the float destination | direct NaN-to-int |
+
+Both are in the `Draw(texture, float x, float y)` path, so both now receive values that CABI-38
+made reachable. The GPU renderers are unaffected: they hand the floats to a vertex buffer, which is
+exactly what XNA does. The right fix belongs in the renderers that quantise to integer pixels --
+for them a non-finite destination has no pixel, so declining to draw is the honest answer, matching
+what a GPU does with a NaN vertex. `GdiPresentation.cpp:344` looked like a third site and is not:
+its destination is integer-sourced and already range-checked.
+
 ### Non-finite sprite values -- the last work-order item, now satisfied
 
 `fixcnacs.md` Phase 5 asks for XNA's behaviour on NaN and Infinity, and says to preserve only those
