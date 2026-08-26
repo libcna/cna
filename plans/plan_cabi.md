@@ -26,7 +26,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
 | CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | BLOCKED by a real crash |
 | CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE, implementation scoped |
-| CABI-9 | VideoPlayer frame identity/generation contract | fixcnats P4 | OPEN |
+| CABI-9 | VideoPlayer frame identity/generation | fixcnats P4 | DESIGN COMPLETE |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
 | CABI-11 | Reproducible artifacts + provenance manifest | fixcnats P6 | DONE (measured reproducible) |
 | CABI-12 | Emscripten C-ABI ESM/Wasm artifact | fixcnats P7 | OPEN |
@@ -401,3 +401,68 @@ python3 tools/c-api/generate_artifact_manifest.py \
   --library cmake-build-debug/modules/c-api/libcna_c_api.so \
   --build-dir cmake-build-debug
 ```
+
+## CABI-9 — VideoPlayer frame identity (DESIGN COMPLETE)
+
+`fixcnats.md` Phase 4 asks for a frame identity/generation/lifetime contract, and says to derive
+the shape from CNA's actual video internals rather than from the struct it sketches.
+
+### What the ABI already promises
+
+More than the blocker row credits. `video.h:414-425` documents the handle as borrowed, valid only
+until the next call on that player, and — the part that matters — using it afterwards fails with
+`CNA_RESULT_INVALID_HANDLE` **rather than touching freed memory**. The implementation backs that
+up: `CnaCApiVideo.cpp:759` builds an aliasing `shared_ptr` that keeps the player alive for as long
+as the handle exists, and the next call on the player releases it before anything can replace the
+frame. Lifetime is safe and already specified.
+
+### What is genuinely missing
+
+Identity. `cna_video_player_get_texture` calls `CreateStandaloneTexture2D` on **every** call, so two
+consecutive calls against the same undecoded frame hand back two different handles. A caller cannot
+distinguish "the same frame again" from "a new frame", which is exactly what `cna-cs` reports.
+
+### The internal fact that decides the shape
+
+**CNA has one frame buffer, not two.** `VideoPlayer` owns a single `frameTexture_`
+(`VideoPlayer.cpp:398-423`) that is decoded into in place; `lastFramePts_` tracks which frame is
+currently in it. XNA owns two managed `Texture2D` frame buffers and alternates between them, so its
+callers can rely on two stable alternating identities.
+
+That difference is not reconcilable by an ABI descriptor, and must not be faked. A slot token
+invented over a single buffer would report an alternation that does not happen.
+
+### Design
+
+Add one additive route rather than changing `get_texture` in place:
+
+```c
+typedef struct CNA_VideoFrameEXT {
+    uint32_t   struct_size;
+    uint32_t   struct_version;
+    CNA_Handle texture;      /* borrowed, same lifetime rule as cna_video_player_get_texture */
+    uint64_t   generation;   /* increments only when a new frame is actually decoded */
+    double     presentation_time;  /* lastFramePts_, the frame's own timestamp */
+    CNA_Bool   available;
+} CNA_VideoFrameEXT;
+
+CNA_C_API CNA_Result cna_video_player_get_frame_ext(
+    CNA_VideoPlayerHandle player, CNA_VideoFrameEXT* out_frame);
+```
+
+- `generation` is a counter on the player, incremented where `NextFrame` succeeds — not per call.
+  Equal generation across two calls means the same pixels; a higher one means the frame advanced.
+  This is the question callers actually ask, and CNA can answer it truthfully.
+- `presentation_time` exposes `lastFramePts_`, which the decoder already maintains.
+- **No slot or buffer-index field.** CNA has one buffer; a slot token would be a fabricated
+  alternation. Downstream bindings that model XNA's two-texture identity must map both XNA slots
+  onto one CNA frame and rely on `generation` for change detection.
+- Stop/replace/dispose reset `generation` to zero and report `available = CNA_FALSE`, so a stale
+  generation can never compare equal across a video change.
+
+**ABI classification: C, additive.** `cna_video_player_get_texture` keeps its shape and meaning; a
+caller that does not need identity is unaffected.
+
+Not implemented here: it is new ABI surface, and this milestone's remaining budget went to
+finishing the existing-contract rows. The design is derived from the internals rather than from the
+work order's sketch, which is what Phase 4 asked for.
