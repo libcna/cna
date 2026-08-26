@@ -529,6 +529,16 @@ namespace CNA::Internal::Renderers
          * complete GetData for every valid rectangle of that level without fabricating bytes.
          */
         [[nodiscard]] virtual bool HasDefinedMipLevel(int /*level*/) const noexcept { return false; }
+        /**
+         * The raw `SurfaceFormat` ordinal this texture's storage was created with.
+         *
+         * A renderer that samples one- and two-channel formats through GL's own expansion rule
+         * needs this to restore Direct3D 9's: D3D9 hands a shader `(R, 1, 1, 1)` for a
+         * single-channel format and `(R, G, 1, 1)` for a two-channel one, where GL yields
+         * `(R, 0, 0, 1)` and `(R, G, 0, 1)`. The default is `SurfaceFormat::Color` (0), which
+         * expands identically under both, so a renderer that has no such rule needs no override.
+         */
+        [[nodiscard]] virtual int GetSurfaceFormatEXT() const noexcept { return 0; }
         /// Binds the underlying GL texture handle to the requested unit (no-op on non-GL renderers).
         virtual void BindGL(int unit = 0) const {}
         /// Shares a reference to the CPU pixel buffer owned by Texture2D::cpuPixels_.

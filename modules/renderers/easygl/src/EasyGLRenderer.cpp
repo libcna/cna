@@ -3455,6 +3455,40 @@ if (ProfileIsEs2ApiGeneration())
         InitializeResources();
     }
 
+    void EasyGLSpriteBatchRenderer::ApplyChannelExpansion(::easygl::Program* prog,
+                                                          int surfaceFormat) const
+    {
+        if (prog == nullptr) return;
+        const int maskLocation = prog->uniform_location("uChannelMask");
+        const int fillLocation = prog->uniform_location("uChannelFill");
+        if (maskLocation < 0 || fillLocation < 0) return;
+
+        using ::Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+        // D3D9's own expansion rule, per channel count of the stored format. Everything not
+        // listed stores all four channels and expands identically under GL, so it takes the
+        // identity pair.
+        float mask[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        float fill[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        switch (static_cast<SurfaceFormat>(surfaceFormat))
+        {
+        case SurfaceFormat::Single:
+        case SurfaceFormat::HalfSingle:
+            mask[1] = mask[2] = mask[3] = 0.0f;
+            fill[1] = fill[2] = fill[3] = 1.0f;
+            break;
+        case SurfaceFormat::Vector2:
+        case SurfaceFormat::HalfVector2:
+        case SurfaceFormat::NormalizedByte2:
+            mask[2] = mask[3] = 0.0f;
+            fill[2] = fill[3] = 1.0f;
+            break;
+        default:
+            break;
+        }
+        prog->set_uniform(maskLocation, mask[0], mask[1], mask[2], mask[3]);
+        prog->set_uniform(fillLocation, fill[0], fill[1], fill[2], fill[3]);
+    }
+
     void EasyGLSpriteBatchRenderer::InitializeResources()
     {
         const char* vertexShaderSource = R"(#version 300 es
@@ -3487,9 +3521,20 @@ out vec4 FragColor;
 
 uniform sampler2D texture1;
 
+// Direct3D 9 expands a texture's missing channels when a shader samples it: a one-channel
+// format arrives as (R, 1, 1, 1) and a two-channel one as (R, G, 1, 1). OpenGL expands the
+// same storage to (R, 0, 0, 1) and (R, G, 0, 1), so an XNA game that draws a
+// SurfaceFormat.Single texture -- a shadow map, a depth visualisation -- gets a red image
+// here where it got a white one there. GL_TEXTURE_SWIZZLE_G/B/A = GL_ONE is exactly D3D9's
+// rule and is core in ES 3.0 and desktop GL 3.3, but WebGL 2 exposes neither the constants
+// nor the parameter (measured: texParameteri raises INVALID_ENUM), so the expansion is done
+// here instead, where every profile this renderer targets can do it identically.
+uniform vec4 uChannelMask;
+uniform vec4 uChannelFill;
+
 void main()
 {
-    FragColor = texture(texture1, TexCoord) * Color;
+    FragColor = (texture(texture1, TexCoord) * uChannelMask + uChannelFill) * Color;
 }
 )";
 
@@ -3745,6 +3790,7 @@ if (ProfileUsesGlslEs100())
             prog->set_uniform_matrix4(projLoc, ortho);
 
         current_texture_->BindGL();
+        ApplyChannelExpansion(prog, current_texture_->GetSurfaceFormatEXT());
         if (graphicsRenderer_)
             graphicsRenderer_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
 
