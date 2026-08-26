@@ -830,9 +830,13 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
             -sFORCE_FILESYSTEM=1)
     endmacro()
 
-    cna_webgpu_effect_page(cna_webgpu_pbr3d_page     webgpu_pbr3d_test.cpp)
-    cna_webgpu_effect_page(cna_webgpu_envmap3d_page  webgpu_envmap3d_test.cpp)
-    cna_webgpu_effect_page(cna_webgpu_skinned3d_page webgpu_skinned3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_pbr3d_page       webgpu_pbr3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_envmap3d_page    webgpu_envmap3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_skinned3d_page   webgpu_skinned3d_test.cpp)
+    # The last two shader pairs: narrow variants of the already-verified textured3d path, built to
+    # close the "all 9" WEBGPU-121 question with real in-browser evidence rather than by inference.
+    cna_webgpu_effect_page(cna_webgpu_dualtexture3d_page webgpu_dualtexture3d_test.cpp)
+    cna_webgpu_effect_page(cna_webgpu_alphatest3d_page   webgpu_alphatest3d_test.cpp)
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

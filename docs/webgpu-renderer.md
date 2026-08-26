@@ -89,9 +89,10 @@ AMD Vulkan WebGPU path — SwiftShader exposes no WebGPU adapter here) with audi
 validation error, a mid-run canvas resize, and clean teardown. Reproduce with
 `scripts/run-webgpu-browser-test.sh`; `CNA_WEBGPU_DEMO=cna_house3d_demo` drives the 3D `BasicEffect`
 path (perspective, depth test, texturing) through the same harness, also green in-browser, and
-`CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d}_page` confirm the `PbrEffect`, cube-map
-`EnvironmentMapEffect` and bone-palette `SkinnedEffect` WGSL compile and render in-browser too
-(`plans/plan_webgpu.md` `WEBGPU-122`/`121`). Two known follow-ups: **`WEBGPU-133`** -- under a
+`CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d,dualtexture3d,alphatest3d}_page` confirm every
+stock effect shader -- `PbrEffect`, cube-map `EnvironmentMapEffect`, bone-palette `SkinnedEffect`,
+`DualTextureEffect` and `AlphaTestEffect` -- compiles and renders in-browser (`plans/plan_webgpu.md`
+`WEBGPU-121`/`122`, both ✅). Two known follow-ups: **`WEBGPU-133`** -- under a
 **multiple-`ReadBackbuffer`-per-frame** pattern (which the effect suites use, but real rendering does
 not), the browser's Dawn rejects the released-then-referenced backbuffer surface texture with
 `Destroyed texture ... used in a submit`, where wgpu-native tolerates it. It corrupts those pages'
