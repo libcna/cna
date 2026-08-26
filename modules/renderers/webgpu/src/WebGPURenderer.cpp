@@ -6463,6 +6463,16 @@ struct VSOut {
 
     bool WebGPURenderer::EnsureFrameRendered()
     {
+#if defined(__EMSCRIPTEN__)
+        // WEBGPU-133: a prior readback marked the acquired surface texture stale (the browser
+        // invalidated it during the readback's event-loop yield). Reusing it for another read-only
+        // re-read of the same frame is fine -- readbackBuffer_ already holds the captured pixels --
+        // but an actual RENDER must not resubmit the destroyed texture. framePending_ is what
+        // distinguishes "about to render" from a read-only flush; discard here so the block below
+        // re-acquires a fresh current texture only when we are really going to draw.
+        if (hasAcquiredTexture_ && acquiredBackbufferStale_ && framePending_)
+            DiscardAcquiredBackbuffer();
+#endif
         if (!hasAcquiredTexture_)
         {
             ConfigureSurface(false);
@@ -6498,6 +6508,7 @@ struct VSOut {
             framePending_ = true;
 
 #if defined(__EMSCRIPTEN__)
+            acquiredBackbufferStale_ = false;   // WEBGPU-133: freshly acquired, valid for a render.
             // In the browser the surface's backing store follows the <canvas>'s own width/height,
             // which SDL updates on a resize independently of the size ConfigureSurface() requested.
             // wgpuSurfaceGetCurrentTexture() therefore returns the canvas size, not surfaceConfig_'s,
@@ -6916,13 +6927,15 @@ struct VSOut {
 #if defined(__EMSCRIPTEN__)
         // WEBGPU-133: the buffer map above yielded to the browser event loop (emscripten_sleep,
         // Asyncify), which lets the browser present and invalidate the canvas's current surface
-        // texture. Code that reads the backbuffer several times in one logical frame (the effect
-        // suites Clear/draw/ReadBackbuffer per check) must re-acquire a fresh current texture on the
-        // next flush rather than reuse this now-destroyed one, or Dawn rejects the reused texture
-        // with "Destroyed texture ... used in a submit". Native wgpu-native keeps the swapchain image
-        // valid across the wait, so this is web only. The content was already copied into
-        // readbackBuffer_ before the yield, so dropping the surface texture here loses nothing.
-        DiscardAcquiredBackbuffer();
+        // texture. Mark it stale rather than release it now: a subsequent same-frame read (the
+        // skinned suite reads two points per check) must still reuse the already-captured
+        // readbackBuffer_ without forcing a re-acquire, while the next actual RENDER must re-acquire a
+        // fresh texture instead of resubmitting this destroyed one (Dawn rejects that as "Destroyed
+        // texture ... used in a submit"; wgpu-native tolerates it, so this is web only).
+        // EnsureFrameRendered() consumes the flag: it discards the stale texture only when it is
+        // about to render. The frame content was already copied into readbackBuffer_ before the
+        // yield, so nothing is lost.
+        acquiredBackbufferStale_ = true;
 #endif
     }
 
@@ -6932,6 +6945,7 @@ struct VSOut {
             wgpuTextureRelease(acquiredTexture_);
         acquiredTexture_ = nullptr;
         hasAcquiredTexture_ = false;
+        acquiredBackbufferStale_ = false;
     }
 
     void WebGPURenderer::GetViewportSize(int& width, int& height)

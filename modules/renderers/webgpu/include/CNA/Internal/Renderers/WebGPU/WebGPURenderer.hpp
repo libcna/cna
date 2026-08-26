@@ -1740,6 +1740,10 @@ namespace CNA::Internal::Renderers::WebGPU
 
         bool hasAcquiredTexture_ = false;
         WGPUTexture acquiredTexture_ = nullptr;
+        // WEBGPU-133 (Emscripten): set when a readback's browser-yielding map has let the browser
+        // invalidate the acquired surface texture; the next render discards and re-acquires, while a
+        // same-frame re-read still reuses readbackBuffer_. Always false on native.
+        bool acquiredBackbufferStale_ = false;
         bool framePending_ = true;
 
         // WEBGPU-53/54: the currently bound RenderTarget2D renderer, or nullptr for the swapchain

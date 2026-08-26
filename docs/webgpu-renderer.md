@@ -97,12 +97,16 @@ suites use), `ReadBackbuffer()`'s buffer-map wait yields to the browser event lo
 Asyncify), and the browser presents and invalidates the canvas's current surface texture during that
 yield. The renderer cached the acquired texture across the yield, so a later same-frame flush re-
 submitted a now-destroyed texture -- which wgpu-native tolerates and Dawn rejects with
-`Destroyed texture ... used in a submit`. `ReadBackbuffer()` now calls `DiscardAcquiredBackbuffer()`
-after its map (Emscripten only), so the next flush re-acquires a fresh current texture; the effect
-pages' readback checks pass in-browser and the 2D/3D smokes are unregressed. Two small residuals: the
-`--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on web (a native-only `GameWindow`
-operation), and one `SkinnedEffect` multi-weight-blend check (D2) fails in-browser with no texture
-error (a separate item).
+`Destroyed texture ... used in a submit`. Fixed with a *lazy discard*: a readback marks the acquired
+texture stale (`acquiredBackbufferStale_`), and `EnsureFrameRendered()` discards and re-acquires a
+fresh one only when it is about to render again -- while a same-frame re-READ still reuses the
+already-captured `readbackBuffer_`. This handles both browser readback patterns (draw/read per check,
+and several reads of one frame). All five effect pages pass in-browser (`PbrEffect` 5/5,
+`EnvironmentMapEffect` 4/4, `SkinnedEffect` 9/9, `DualTextureEffect` 4/4, `AlphaTestEffect` 4/4) and
+the 2D/3D smokes are unregressed. (The earlier `SkinnedEffect` D2 failure was this same multi-read
+artifact, not a skinning bug: per-render probing confirmed the WeightsPerVertex=2 quad shifts right
+correctly.) The one remaining web-specific refusal is the `--webgpu-2d-validation` scene's
+`MinimizeEXT()` (a native-only `GameWindow` operation, not a renderer limit).
 
 ## Automated native smoke test
 
