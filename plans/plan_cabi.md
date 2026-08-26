@@ -28,7 +28,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE, implementation scoped |
 | CABI-9 | VideoPlayer frame identity/generation contract | fixcnats P4 | OPEN |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
-| CABI-11 | Reproducible qualified artifacts + provenance manifest | fixcnats P6 | OPEN |
+| CABI-11 | Reproducible artifacts + provenance manifest | fixcnats P6 | DONE (measured reproducible) |
 | CABI-12 | Emscripten C-ABI ESM/Wasm artifact | fixcnats P7 | OPEN |
 
 ## CABI-1 — Baseline (DONE)
@@ -345,3 +345,59 @@ for the duration of a callback (`cna_game_get_graphics_device`). To close the do
 Not implemented here: item 2 touches every resource route in the C API, and it is a wider change
 than the rest of this milestone. The feasibility question Phase 5 actually asked is answered, with
 a committed probe that keeps the answer honest.
+
+## CABI-11 — Artifact provenance and reproducibility (DONE)
+
+`fixcnats.md` Phase 6 asks for a provenance manifest, a reproducibility measurement, and a
+qualification ladder that does not call a thing "supported" merely because it built.
+
+### What already existed
+
+More than the work order assumes. `tools/c-api/check_release_gate.py` measures the publish
+decision against a declaration in `release_gate.json` and enforces it **in both directions** —
+a criterion recorded as met that stops being met fails, and so does one recorded as blocked that
+has quietly become met. `abi_baseline.json` records 177 struct layouts and 2867 exported symbols;
+`compatibility_matrix.json` covers 23 cells across 7 toolchains. The qualification ladder Phase 6
+asks for is that gate's job, and it already refuses to call ABI 0.8.0 ready.
+
+### What was missing
+
+A description of an individual **file**. Bindings pin a hand-retained library by revision and hash
+written down in prose, which answers "which file is this" and nothing else — not the renderer, not
+the audio backend, not the compiler.
+
+`tools/c-api/generate_artifact_manifest.py` emits it as JSON, read from the artifact and its build
+cache rather than retyped: SHA-256, ELF build ID, exported `cna_*` route count, size, source
+revision **and whether the tree was dirty**, ABI version, OS/arch, renderer, platform, audio
+backend, CNAEXT and video settings, compiler path and version.
+
+Its `status` field is `BUILT` and never anything more. The ladder above it — `ABI_VERIFIED`,
+`INTEGRATION_VERIFIED`, `PLATFORM_QUALIFIED`, `RELEASED` — is measured elsewhere and must not be
+stamped by a tool that has only looked at a file.
+
+### Reproducibility: measured, and better than expected
+
+Phase 6 anticipates that byte-identical native binaries may not be realistic because of build IDs
+and toolchain metadata. On this configuration they are:
+
+| Experiment | Result |
+| --- | --- |
+| Relink from identical objects | **byte-identical**, build ID stable |
+| Full recompile of all 59 C-API TUs with `CCACHE_DISABLE=1`, then relink | **byte-identical**, build ID stable |
+
+The second is the real test: every object rebuilt from source by the compiler, and the resulting
+143 MB shared library hashed to the same SHA-256, `2fff47c6…`.
+
+**The boundary this does not cross.** Both runs used the same host, the same toolchain and the same
+absolute build directory. `__FILE__` and debug paths are baked in, so a build at a different path
+will differ; that is untested here and must not be claimed. Reproducing across machines needs
+`-ffile-prefix-map`/`-fdebug-prefix-map` and a pinned toolchain, which is the next step for anyone
+who needs cross-machine identity rather than same-host determinism.
+
+Recipe:
+
+```bash
+python3 tools/c-api/generate_artifact_manifest.py \
+  --library cmake-build-debug/modules/c-api/libcna_c_api.so \
+  --build-dir cmake-build-debug
+```
