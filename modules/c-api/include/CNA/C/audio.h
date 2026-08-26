@@ -1198,13 +1198,21 @@ CNA_C_API CNA_Result cna_sound_effect_instance_apply_3d(
  * @param listeners Array of @p listener_count listeners, borrowed for the duration of the call.
  * @param listener_count Number of listeners.
  * @param emitter Where the sound is.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` for any count other than one,
- *         `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null array or a count of
+ *         zero, `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
  *         argument/handle/thread/native failure.
  *
- * **This runtime supports exactly one listener.** The canonical overload accepts the array XNA's
- * split-screen API needs and then refuses every count but one, which is reported here as it is
- * rather than smoothed into a silent single-listener fallback.
+ * Any count of one or more is accepted, as in XNA, which copies the whole listener array to XACT
+ * with no count restriction.
+ *
+ * **How several listeners combine is an approximation, and worth knowing before relying on it.**
+ * XACT computes per-listener output matrices; this runtime's mixer has a single stereo gain pair
+ * and no equivalent. So every listener is evaluated and the **nearest** one -- the listener that
+ * hears the emitter loudest -- decides the applied attenuation, pan and Doppler. Moving a second,
+ * closer listener does change the result; this is not a silent fallback to `listeners[0]`.
+ *
+ * A count of zero is refused rather than guessed at: XNA reaches its native call with zero and
+ * surfaces whatever XACT returns, an outcome not established here.
  */
 CNA_C_API CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
     CNA_Handle instance,

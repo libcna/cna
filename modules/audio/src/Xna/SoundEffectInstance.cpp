@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <exception>
 #include <numbers>
 #include <utility>
@@ -1082,16 +1083,61 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Apply3D(const AudioListener* listeners, int listenerCount,
                                       const AudioEmitter& emitter)
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
+        // XNA copies every listener into a native array and hands XACT the whole thing with
+        // listeners.Length -- there is no count restriction anywhere in
+        // Microsoft.Xna.Framework.Audio.SoundEffectInstance.UnsafeApply3D. FNA refuses any count
+        // but one; CNA followed FNA here until the XNA reference settled it.
+        //
+        // What CNA cannot reproduce is XACT's own multi-listener DSP: the mixer has a single
+        // stereo gain pair, not per-listener output matrices (CHECKLIST.md CP-19). So every
+        // listener is evaluated and the **dominant** one -- the one that hears the emitter
+        // loudest, i.e. the nearest -- decides the applied attenuation, pan and Doppler. That is
+        // an approximation of XACT's calculation, and it is deliberately not "use listeners[0]":
+        // moving a second, closer listener changes the result.
+        if (listenerCount < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "listenerCount", "The listener count cannot be negative.");
+        }
         if (listeners == nullptr)
         {
+            // XNA dereferences the array to read Length, so a null array faults there. A C++
+            // reference cannot be null, but this overload takes a pointer.
             throw System::ArgumentNullException("listeners");
         }
-        if (listenerCount == 1)
+        if (listenerCount == 0)
         {
-            Apply3D(listeners[0], emitter);
-            return;
+            // XNA reaches its native Apply3D with a count of zero and surfaces whatever XACT
+            // returns; that outcome is not established here, so the refusal is explicit rather
+            // than guessed at. See plans/plan_cabi.md CABI-6.
+            throw System::ArgumentOutOfRangeException(
+                "listenerCount", "At least one AudioListener is required.");
         }
-        throw System::NotSupportedException("Only one listener is supported.");
+
+        int dominant = 0;
+        if (listenerCount > 1)
+        {
+            const auto& ep = emitter.getPositionProperty();
+            float nearest = std::numeric_limits<float>::max();
+            for (int index = 0; index < listenerCount; ++index)
+            {
+                const auto& lp = listeners[index].getPositionProperty();
+                const float dx = ep.X - lp.X;
+                const float dy = ep.Y - lp.Y;
+                const float dz = ep.Z - lp.Z;
+                const float distanceSquared = dx * dx + dy * dy + dz * dz;
+                if (distanceSquared < nearest)
+                {
+                    nearest = distanceSquared;
+                    dominant = index;
+                }
+            }
+        }
+        Apply3D(listeners[dominant], emitter);
     }
 
     bool SoundEffectInstance::getIsDisposedProperty() const

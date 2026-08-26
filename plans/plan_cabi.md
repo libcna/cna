@@ -24,7 +24,7 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-3 | Renderer C/C++ identity parity | fixcnacs P1-2, fixcnats P1 | DONE (upstream) |
 | CABI-4 | Triage the 6 red C-API tests | prerequisite | 2 of 6 fixed; the rest attributed |
 | CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | DONE |
-| CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED (searched, not shrugged) |
+| CABI-6 | Apply3D multi-listener | fixcnacs P4 | RESOLVED against XNA |
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
 | CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | RESOLVED: a standing CNA policy, with one gap closed |
 | CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE |
@@ -935,3 +935,64 @@ This milestone did **not** change `CNA_ABI_VERSION`.
 
 `CNA_ABI_VERSION` is unchanged at 0.8.0. Two class-D rows are the ones a downstream review must
 look at.
+
+## CABI-6 resolved — the XNA reference settled it
+
+The owner supplied decompiled XNA 4.0 at `/rv/data/development/github.com/openeggbert/xna4-decomp`,
+which is the evidence this row was blocked on. It answers the question outright.
+
+`Microsoft.Xna.Framework.Audio.SoundEffectInstance` (`SoundEffectInstance.cs:347-402`):
+
+```csharp
+public void Apply3D(AudioListener listener, AudioEmitter emitter)
+    => SafeApply3D(new AudioListener[1] { listener }, emitter);
+
+public void Apply3D(AudioListener[] listeners, AudioEmitter emitter)
+    => SafeApply3D(listeners, emitter);
+
+private unsafe void UnsafeApply3D(AudioListener[] listeners, AudioEmitter emitter) {
+    ...
+    for (int i = 0; i < listeners.Length; i++) { listenerData[i] = listeners[i].listenerData; }
+    ... SoundEffectUnsafeNativeMethods.Apply3D(voiceHandle, pListeners, listeners.Length, emitterData) ...
+}
+```
+
+**XNA has no count restriction anywhere.** Both overloads funnel into one path that copies every
+listener into a native array and hands XACT the whole thing with `listeners.Length`. The
+single-listener overload is just a one-element array. So FNA's `NotSupportedException` — which CNA
+faithfully reproduced — is FNA's own limitation, not XNA's, and CNA was diverging from XNA by
+copying it.
+
+### What CNA now does
+
+Any count of one or more is accepted. What CNA **cannot** reproduce is XACT's per-listener output
+matrices: the mixer has a single stereo gain pair (`CHECKLIST.md` CP-19). So every listener is
+evaluated and the **nearest** one — the listener that hears the emitter loudest — decides the
+applied attenuation, pan and Doppler.
+
+That is an approximation, documented as one on the route itself. It is deliberately **not** the
+"silently use `listeners[0]`" the work order forbids: moving a second, closer listener changes
+which listener wins.
+
+A count of zero stays refused, now as `ArgumentOutOfRangeException` rather than "not supported".
+XNA reaches its native call with zero and surfaces whatever XACT returns; that outcome is not
+established here, and the owner's note that XNA itself can be *run* under a prefix is the way to
+settle it if it ever matters.
+
+**ABI classification: D.** A count this ABI refused now succeeds, with the shape unchanged.
+`CApi_Audio3DSmoke` covers it, including an arrangement where the second listener is the dominant
+one — while stating plainly that the ABI exposes no spatial readback, so *which* listener won is
+not observable from C.
+
+### A second XNA divergence this reading turned up, not fixed here
+
+`UnsafeApply3D` carries a state machine CNA has no equivalent for:
+
+```csharp
+if (!isPacketSubmitted) { is3d = true; }
+if (!is3d) { throw new InvalidOperationException(FrameworkResources.InvalidApply3DCall); }
+```
+
+XNA refuses `Apply3D` on an instance that already submitted a non-3D packet. CNA sets `is3D_ = true`
+unconditionally. Recorded rather than changed: it is a separate behaviour from the listener-count
+blocker, and it wants its own test matrix over play/pause/submit ordering.

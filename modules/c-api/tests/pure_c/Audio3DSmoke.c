@@ -162,13 +162,40 @@ static int validate_multi_listener(const CNA_Handle instance)
         CNA_RESULT_SUCCESS) {
         return 0;
     }
+    /*
+     * CABI-6: two listeners are accepted, as in XNA, whose UnsafeApply3D copies the whole array to
+     * XACT with no count restriction. This used to require CNA_RESULT_NOT_SUPPORTED.
+     */
     if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(2), &emitter) !=
-        CNA_RESULT_NOT_SUPPORTED) {
+        CNA_RESULT_SUCCESS) {
         return 0;
     }
-    /* An empty array is a count the canonical overload refuses, not a null array. */
+    /*
+     * An arrangement where the *second* listener is the dominant one: the first is far away, the
+     * second sits on the emitter. This exercises the path that picks a listener other than
+     * listeners[0].
+     *
+     * It cannot assert *which* listener won: this ABI exposes no spatial readback -- no pan,
+     * attenuation or Doppler getter -- so the choice is not observable from C. That is stated
+     * rather than dressed up, and it is why the dominant-listener rule is documented on
+     * cna_sound_effect_instance_apply_3d_multi_ext itself.
+     */
+    {
+        CNA_AudioListener nearest[2];
+        if (cna_audio_listener_init(&nearest[0]) != CNA_RESULT_SUCCESS ||
+            cna_audio_listener_init(&nearest[1]) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        nearest[0].position.x = 1000.0F;   /* far away */
+        nearest[1].position.z = 5.0F;      /* on top of the emitter */
+        if (cna_sound_effect_instance_apply_3d_multi_ext(
+                instance, nearest, UINT64_C(2), &emitter) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    /* A count of zero is refused: XNA's own outcome there is not established. */
     if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(0), &emitter) !=
-        CNA_RESULT_NOT_SUPPORTED) {
+        CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
     if (cna_sound_effect_instance_apply_3d_multi_ext(instance, 0, UINT64_C(1), &emitter) !=
