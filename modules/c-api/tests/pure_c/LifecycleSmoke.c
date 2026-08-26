@@ -392,8 +392,10 @@ static CNA_Result on_draw(
                 CNA_RESULT_SUCCESS) {
             return CNA_RESULT_INVALID_STATE;
         }
-        /* Every field is validated before anything is submitted: an undefined effect bit, a
-           non-finite scale and a handle of the wrong family are all refused. */
+        /* The structure's own shape is validated before anything is submitted: an undefined effect
+           bit, an unknown struct version and a handle of the wrong family are all refused.
+           CABI-38: a non-finite scale is not among them any more -- it is XNA-valid and travels
+           into the vertex path -- so the case below submits successfully. */
         scaled[0].effects = UINT32_C(4);
         if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
             CNA_RESULT_INVALID_ARGUMENT) {
@@ -402,7 +404,7 @@ static CNA_Result on_draw(
         scaled[0].effects = CNA_SPRITE_EFFECT_NONE;
         scaled[0].scale.x = 1.0f / 0.0f;
         if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
-            CNA_RESULT_INVALID_ARGUMENT) {
+            CNA_RESULT_SUCCESS) {
             return CNA_RESULT_INVALID_STATE;
         }
         scaled[0].scale.x = 3.0f;

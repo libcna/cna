@@ -1420,15 +1420,17 @@ static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
         CNA_SPRITE_EFFECT_NONE, 0.0F};
 
     if (ok) {
-        /* Text outside a begin/end interval is refused, and malformed commands never reach it. */
-        CNA_SpriteTextCommand malformed = command;
-        malformed.rotation = NAN;
+        /* Text outside a begin/end interval is refused, and structurally malformed commands never
+           reach it. CABI-38: a non-finite rotation is no longer malformed -- it is XNA-valid and
+           travels into the vertex path -- so the command below is refused for being outside the
+           interval, the same as a well-formed one, and not for its rotation. */
+        CNA_SpriteTextCommand non_finite = command;
+        non_finite.rotation = NAN;
         CNA_SpriteTextCommand unknown_effects = command;
         unknown_effects.effects = UINT32_C(8);
         ok = cna_sprite_batch_draw_string(sprite_batch, &command) == CNA_RESULT_INVALID_STATE &&
             cna_sprite_batch_draw_string(sprite_batch, 0) == CNA_RESULT_INVALID_ARGUMENT &&
-            cna_sprite_batch_draw_string(sprite_batch, &malformed) ==
-                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_sprite_batch_draw_string(sprite_batch, &non_finite) == CNA_RESULT_INVALID_STATE &&
             cna_sprite_batch_draw_string(sprite_batch, &unknown_effects) ==
                 CNA_RESULT_INVALID_ARGUMENT;
     }

@@ -26,19 +26,28 @@ namespace Microsoft::Xna::Framework::Graphics
 
     namespace
     {
-        void ValidateFinite(float value, const char* parameterName)
+        /**
+         * Total order over float, matching .NET's `float.CompareTo`: NaN sorts below everything,
+         * including negative infinity, and NaN compares equal to NaN.
+         *
+         * XNA needs no such helper because it sorts through `IComparable<float>`, which already
+         * defines that order -- which is exactly why XNA can carry a NaN layer depth into its sort
+         * and CNA could not. A bare `<` on NaN makes both `a < b` and `b < a` false, violating the
+         * strict weak ordering `std::stable_sort` requires: undefined behaviour, not a surprising
+         * order. This is the ordering CNA needed before it could accept non-finite values at all.
+         */
+        [[nodiscard]] int CompareOrdered(float a, float b) noexcept
         {
-            if (!std::isfinite(value))
+            const bool aNaN = std::isnan(a);
+            const bool bNaN = std::isnan(b);
+            if (aNaN || bNaN)
             {
-                throw System::ArgumentOutOfRangeException(
-                    parameterName, "SpriteBatch floating-point arguments must be finite.");
+                if (aNaN && bNaN) return 0;
+                return aNaN ? -1 : 1;
             }
-        }
-
-        void ValidateFinite(Vector2 value, const char* parameterName)
-        {
-            ValidateFinite(value.X, parameterName);
-            ValidateFinite(value.Y, parameterName);
+            if (a < b) return -1;
+            if (a > b) return 1;
+            return 0;
         }
 
         [[noreturn]] void ThrowDestinationOutOfRange(const char* parameterName)
@@ -52,11 +61,17 @@ namespace Microsoft::Xna::Framework::Graphics
         // so a component is validated here but never quantised. The Int32 window is still the
         // documented boundary of a SpriteBatch destination, and rejecting outside it keeps the
         // exception contract every renderer and test already relies on.
+        // CABI-38: a non-finite component is not outside the Int32 window, it is outside the
+        // number line, and XNA carries it into the vertex path rather than refusing it. The range
+        // check therefore only asks the question of values that have an answer.
         float ValidateDestinationComponent(float value, const char* parameterName)
         {
+            if (!std::isfinite(value))
+            {
+                return value;
+            }
             const double widened = static_cast<double>(value);
-            if (!std::isfinite(value) ||
-                widened < static_cast<double>(std::numeric_limits<intcs>::lowest()) ||
+            if (widened < static_cast<double>(std::numeric_limits<intcs>::lowest()) ||
                 widened > static_cast<double>(std::numeric_limits<intcs>::max()))
             {
                 ThrowDestinationOutOfRange(parameterName);
@@ -64,11 +79,14 @@ namespace Microsoft::Xna::Framework::Graphics
             return value;
         }
 
-        intcs RoundDestinationComponent(float value, const char* parameterName)
+        // Rounds a glyph destination component, carrying a non-finite one through untouched.
+        // Returns a float rather than an `intcs` precisely so NaN and the infinities survive the
+        // trip; finite values are rounded exactly as before, so no glyph moves by a pixel.
+        float RoundDestinationComponent(float value, const char* parameterName)
         {
             if (!std::isfinite(value))
             {
-                ThrowDestinationOutOfRange(parameterName);
+                return value;
             }
 
             // Round in floating point first, then range-check the rounded value. Calling lround
@@ -80,7 +98,7 @@ namespace Microsoft::Xna::Framework::Graphics
             {
                 ThrowDestinationOutOfRange(parameterName);
             }
-            return static_cast<intcs>(rounded);
+            return static_cast<float>(rounded);
         }
     }
 
@@ -365,14 +383,14 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return a.layerDepth > b.layerDepth;
+                    return CompareOrdered(a.layerDepth, b.layerDepth) > 0;
                 });
         }
         else if (sortMode_ == SpriteSortMode::FrontToBack)
         {
             std::stable_sort(spriteQueue_.begin(), spriteQueue_.end(),
                 [](const SpriteInfo& a, const SpriteInfo& b) {
-                    return a.layerDepth < b.layerDepth;
+                    return CompareOrdered(a.layerDepth, b.layerDepth) < 0;
                 });
         }
         else if (sortMode_ == SpriteSortMode::Texture)
@@ -396,8 +414,6 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        ValidateFinite(x, "x");
-        ValidateFinite(y, "y");
         const float destinationX = ValidateDestinationComponent(x, "x");
         const float destinationY = ValidateDestinationComponent(y, "y");
         const int w = texture.getWidthProperty();
@@ -448,7 +464,6 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        ValidateFinite(position, "position");
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
@@ -465,7 +480,6 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        ValidateFinite(position, "position");
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
@@ -486,8 +500,6 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        ValidateFinite(position, "position");
-        ValidateFinite(scale, "scale");
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
@@ -511,8 +523,6 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!begun) throw std::runtime_error("SpriteBatch::Draw called before Begin().");
         if (!renderer_) return;
-        ValidateFinite(position, "position");
-        ValidateFinite(scale, "scale");
         const float destinationX = ValidateDestinationComponent(position.X, "position");
         const float destinationY = ValidateDestinationComponent(position.Y, "position");
         const int w = texture.getWidthProperty();
@@ -614,15 +624,10 @@ namespace Microsoft::Xna::Framework::Graphics
         const Texture2D& texture = spriteFont.textureValue_;
         if (texture.getWidthProperty() == 0) return;
 
-        ValidateFinite(position, "position");
-        ValidateFinite(rotation, "rotation");
-        ValidateFinite(origin, "origin");
-        ValidateFinite(scale, "scale");
         // CABI-7b: layerDepth was the one float every DrawString overload let through, while every
         // Draw overload refused it. It is also the value flushBatch's BackToFront/FrontToBack
         // comparators order by, and a NaN there breaks the strict weak ordering std::stable_sort
         // requires -- undefined behaviour, not a wrong sort.
-        ValidateFinite(layerDepth, "layerDepth");
 
         const float sinR = std::sin(rotation);
         const float cosR = std::cos(rotation);
@@ -717,19 +722,17 @@ namespace Microsoft::Xna::Framework::Graphics
             const float rotX    = scaledX * cosR - scaledY * sinR;
             const float rotY    = scaledX * sinR + scaledY * cosR;
 
-            const intcs destinationX =
-                RoundDestinationComponent(position.X + rotX, "position");
-            const intcs destinationY =
-                RoundDestinationComponent(position.Y + rotY, "position");
-            const intcs destinationWidth =
-                RoundDestinationComponent(static_cast<float>(cGlyph.Width) * scale.X, "scale");
-            const intcs destinationHeight =
-                RoundDestinationComponent(static_cast<float>(cGlyph.Height) * scale.Y, "scale");
-            const Rectangle dest(
-                destinationX, destinationY, destinationWidth, destinationHeight);
-
-            pushSprite(texture, dest, cGlyph, color,
-                       rotation, Vector2::Zero, effects, layerDepth);
+            // The float overload, not the Rectangle one: an integer Rectangle cannot carry a
+            // non-finite destination, and since CABI-38 those are XNA-valid and must reach the
+            // vertex path. Finite components are still rounded, so glyph placement is unchanged.
+            pushSprite(texture,
+                       RoundDestinationComponent(position.X + rotX, "position"),
+                       RoundDestinationComponent(position.Y + rotY, "position"),
+                       RoundDestinationComponent(
+                           static_cast<float>(cGlyph.Width) * scale.X, "scale"),
+                       RoundDestinationComponent(
+                           static_cast<float>(cGlyph.Height) * scale.Y, "scale"),
+                       cGlyph, color, rotation, Vector2::Zero, effects, layerDepth);
 
             curOffset.X += cKern.Y + cKern.Z;
         }

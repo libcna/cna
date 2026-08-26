@@ -1421,20 +1421,12 @@ CNA_Result cna_sprite_batch_begin_with_effect(
             return result;
         }
 
-        // The transform is read before any handle is touched, so a non-finite matrix is refused as
-        // an argument failure rather than after the batch has begun.
+        // CABI-38: a non-finite transform component is carried through, not refused. XNA validates
+        // nothing here and propagates the bits into the vertex path; this boundary used to refuse
+        // them, which was the observable divergence fixcnacs.md Phase 5 asked about.
         Microsoft::Xna::Framework::Matrix nativeTransform =
             Microsoft::Xna::Framework::Matrix::getIdentityProperty();
         if (transformMatrix != nullptr) {
-            const float* const components = &transformMatrix->m11;
-            for (std::size_t index = 0U; index < 16U; ++index) {
-                if (!std::isfinite(components[index])) {
-                    return Fail(
-                        CNA_RESULT_INVALID_ARGUMENT,
-                        CNA_ERROR_CATEGORY_ARGUMENT,
-                        "The SpriteBatch transform matrix has a non-finite component.");
-                }
-            }
             nativeTransform = Microsoft::Xna::Framework::Matrix(
                 transformMatrix->m11, transformMatrix->m12,
                 transformMatrix->m13, transformMatrix->m14,
@@ -1536,16 +1528,16 @@ CNA_Result cna_sprite_batch_submit_many(
             CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
         for (uint64_t index = 0U; index < commandCount; ++index) {
             const CNA_SpriteCommand& command = commands[index];
+            // CABI-38: the structure's own shape is still checked; its floating-point values are
+            // not. A non-finite rotation, origin or layer depth is XNA-valid and travels into the
+            // vertex path, so refusing it here was a divergence rather than a safety check.
             if (command.struct_size != sizeof(CNA_SpriteCommand) ||
                 command.struct_version != StructureVersion ||
-                (command.effects & ~ValidEffects) != 0U ||
-                !std::isfinite(command.rotation) || !std::isfinite(command.origin.x) ||
-                !std::isfinite(command.origin.y) || !std::isfinite(command.layer_depth)) {
+                (command.effects & ~ValidEffects) != 0U) {
                 return Fail(
                     CNA_RESULT_INVALID_ARGUMENT,
                     CNA_ERROR_CATEGORY_ARGUMENT,
-                    "A SpriteBatch command contains an invalid version, effect or "
-                    "floating-point value.");
+                    "A SpriteBatch command contains an invalid version or effect value.");
             }
 
             std::shared_ptr<Texture2DResource> texture;
@@ -1643,18 +1635,14 @@ CNA_Result cna_sprite_batch_submit_scaled_many(
             CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
         for (uint64_t index = 0U; index < commandCount; ++index) {
             const CNA_SpriteScaledCommand& command = commands[index];
+            // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
             if (command.struct_size != sizeof(CNA_SpriteScaledCommand) ||
                 command.struct_version != StructureVersion ||
-                (command.effects & ~ValidEffects) != 0U ||
-                !std::isfinite(command.rotation) || !std::isfinite(command.layer_depth) ||
-                !std::isfinite(command.position.x) || !std::isfinite(command.position.y) ||
-                !std::isfinite(command.origin.x) || !std::isfinite(command.origin.y) ||
-                !std::isfinite(command.scale.x) || !std::isfinite(command.scale.y)) {
+                (command.effects & ~ValidEffects) != 0U) {
                 return Fail(
                     CNA_RESULT_INVALID_ARGUMENT,
                     CNA_ERROR_CATEGORY_ARGUMENT,
-                    "A SpriteBatch scaled command contains an invalid version, effect or "
-                    "floating-point value.");
+                    "A SpriteBatch scaled command contains an invalid version or effect value.");
             }
 
             std::shared_ptr<Texture2DResource> texture;
@@ -1814,14 +1802,11 @@ CNA_Result cna_sprite_batch_draw_string(
     const CNA_SpriteTextCommand* const command)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
         if (command == nullptr || command->struct_size < sizeof(CNA_SpriteTextCommand) ||
             command->struct_version != StructureVersion ||
             (command->effects & ~(CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY |
-                                  CNA_SPRITE_EFFECT_FLIP_VERTICALLY)) != 0U ||
-            !std::isfinite(command->position.x) || !std::isfinite(command->position.y) ||
-            !std::isfinite(command->rotation) || !std::isfinite(command->origin.x) ||
-            !std::isfinite(command->origin.y) || !std::isfinite(command->scale.x) ||
-            !std::isfinite(command->scale.y) || !std::isfinite(command->layer_depth)) {
+                                  CNA_SPRITE_EFFECT_FLIP_VERTICALLY)) != 0U) {
             return Fail(
                 CNA_RESULT_INVALID_ARGUMENT,
                 CNA_ERROR_CATEGORY_ARGUMENT,

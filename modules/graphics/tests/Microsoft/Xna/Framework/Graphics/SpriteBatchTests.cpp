@@ -1052,15 +1052,11 @@ TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncatio
         std::nextafter(negativeLimit, -std::numeric_limits<float>::infinity());
 
     batch.Begin();
-    expectNumericArgumentOutOfRange("x", [&] {
-        batch.Draw(texture, std::numeric_limits<float>::quiet_NaN(), 0.0f);
-    });
-    expectNumericArgumentOutOfRange("x", [&] {
-        batch.Draw(texture, std::numeric_limits<float>::infinity(), 0.0f);
-    });
-    expectNumericArgumentOutOfRange("y", [&] {
-        batch.Draw(texture, 0.0f, -std::numeric_limits<float>::infinity());
-    });
+    // CABI-38: non-finite coordinates are XNA-valid and travel through; only finite values too
+    // large to be a representable destination are refused.
+    batch.Draw(texture, std::numeric_limits<float>::quiet_NaN(), 0.0f);
+    batch.Draw(texture, std::numeric_limits<float>::infinity(), 0.0f);
+    batch.Draw(texture, 0.0f, -std::numeric_limits<float>::infinity());
     expectNumericArgumentOutOfRange("x", [&] {
         batch.Draw(texture, std::numeric_limits<float>::max(), 0.0f);
     });
@@ -1077,11 +1073,15 @@ TEST(SpriteBatchNumericInputTest, DrawXYDefinesFiniteInt32BoundariesAndTruncatio
     batch.Draw(texture, 12.75f, -9.75f);
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 3u);
-    EXPECT_EQ(rec->drawCalls[0].destinationRectangle,
+    ASSERT_EQ(rec->drawCalls.size(), 6u);
+    // The three non-finite draws arrive first, and arrive unaltered.
+    EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationX));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationX));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationY));
+    EXPECT_EQ(rec->drawCalls[3].destinationRectangle,
               Rectangle(2147483520, -2147483647 - 1, 16, 16));
-    EXPECT_EQ(rec->drawCalls[1].destinationRectangle, Rectangle(0, 0, 16, 16));
-    EXPECT_EQ(rec->drawCalls[2].destinationRectangle, Rectangle(12, -9, 16, 16));
+    EXPECT_EQ(rec->drawCalls[4].destinationRectangle, Rectangle(0, 0, 16, 16));
+    EXPECT_EQ(rec->drawCalls[5].destinationRectangle, Rectangle(12, -9, 16, 16));
 }
 
 TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoordinates)
@@ -1097,22 +1097,18 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
     const std::optional<Rectangle> source(Rectangle(2, 3, 8, 6));
 
     batch.Begin();
-    expectNumericArgumentOutOfRange("position", [&] {
-        batch.Draw(texture,
-                   Vector2(std::numeric_limits<float>::quiet_NaN(), 0.0f),
-                   Color::White);
-    });
-    expectNumericArgumentOutOfRange("position", [&] {
-        batch.Draw(texture,
-                   Vector2(0.0f, std::numeric_limits<float>::infinity()),
-                   source, Color::White);
-    });
-    expectNumericArgumentOutOfRange("position", [&] {
-        batch.Draw(texture,
-                   Vector2(-std::numeric_limits<float>::infinity(), 0.0f),
-                   source, Color::White, 0.0f, Vector2::Zero, 1.0f,
-                   SpriteEffects::None, 0.0f);
-    });
+    // CABI-38: the three non-finite positions are carried through; only the finite value too large
+    // to be a representable destination is refused.
+    batch.Draw(texture,
+               Vector2(std::numeric_limits<float>::quiet_NaN(), 0.0f),
+               Color::White);
+    batch.Draw(texture,
+               Vector2(0.0f, std::numeric_limits<float>::infinity()),
+               source, Color::White);
+    batch.Draw(texture,
+               Vector2(-std::numeric_limits<float>::infinity(), 0.0f),
+               source, Color::White, 0.0f, Vector2::Zero, 1.0f,
+               SpriteEffects::None, 0.0f);
     expectNumericArgumentOutOfRange("position", [&] {
         batch.Draw(texture,
                    Vector2(0.0f, std::numeric_limits<float>::max()),
@@ -1121,7 +1117,11 @@ TEST(SpriteBatchNumericInputTest, EveryVectorPositionDrawFamilyRejectsInvalidCoo
     });
     batch.End();
 
-    EXPECT_TRUE(rec->drawCalls.empty());
+    ASSERT_EQ(rec->drawCalls.size(), 3u);
+    EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationX));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationY));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationX));
+    rec->drawCalls.clear();
 
     // A rejected Draw leaves the Begin/End state balanced and reusable.
     batch.Begin();
@@ -1160,37 +1160,30 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
         std::nextafter(scalarNegativeLimit, -std::numeric_limits<float>::infinity());
 
     batch.Begin();
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.Draw(texture, Vector2::Zero, source, Color::White,
-                   0.0f, Vector2::Zero, std::numeric_limits<float>::quiet_NaN(),
-                   SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.Draw(texture, Vector2::Zero, source, Color::White,
-                   0.0f, Vector2::Zero, std::numeric_limits<float>::infinity(),
-                   SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.Draw(texture, Vector2::Zero, source, Color::White,
-                   0.0f, Vector2::Zero, -std::numeric_limits<float>::infinity(),
-                   SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.Draw(texture, Vector2::Zero, source, Color::White,
-                   0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
-                   SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.Draw(texture, Vector2::Zero, source, Color::White,
-                   0.0f, Vector2::Zero, Vector2(1.0f, std::numeric_limits<float>::quiet_NaN()),
-                   SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.Draw(texture, Vector2::Zero, source, Color::White,
-                   0.0f, Vector2::Zero,
-                   Vector2(std::numeric_limits<float>::infinity(), 1.0f),
-                   SpriteEffects::None, 0.0f);
-    });
+    // CABI-38: a non-finite scale is XNA-valid and reaches the vertex path; the refusals below are
+    // the finite-but-unrepresentable ones, which is a separate contract and unchanged.
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, std::numeric_limits<float>::quiet_NaN(),
+               SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, std::numeric_limits<float>::infinity(),
+               SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, -std::numeric_limits<float>::infinity(),
+               SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, Vector2(1.0f, std::numeric_limits<float>::quiet_NaN()),
+               SpriteEffects::None, 0.0f);
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero,
+               Vector2(std::numeric_limits<float>::infinity(), 1.0f),
+               SpriteEffects::None, 0.0f);
+    // float::max() as a scale is finite, but the 16-pixel source multiplies it to infinity, and an
+    // infinite destination is now carried through rather than refused. The refusal below is the
+    // real remaining case: a value whose product stays finite and is still unrepresentable.
+    batch.Draw(texture, Vector2::Zero, source, Color::White,
+               0.0f, Vector2::Zero, std::numeric_limits<float>::max(),
+               SpriteEffects::None, 0.0f);
     expectNumericArgumentOutOfRange("scale", [&] {
         batch.Draw(texture, Vector2::Zero, source, Color::White,
                    0.0f, Vector2::Zero, Vector2(1.0f, belowScalarNegativeLimit),
@@ -1214,14 +1207,22 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
                SpriteEffects::FlipHorizontally, 0.75f);
     batch.End();
 
-    ASSERT_EQ(rec->drawCalls.size(), 4u);
-    EXPECT_EQ(rec->drawCalls[0].destinationRectangle, Rectangle(0, 0, 0, 0));
-    EXPECT_EQ(rec->drawCalls[1].destinationRectangle,
+    ASSERT_EQ(rec->drawCalls.size(), 10u);
+    // The five non-finite scales arrive first, unaltered, and so does the one that overflowed.
+    EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationWidth));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationWidth));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationWidth));
+    EXPECT_TRUE(std::isnan(rec->drawCalls[3].destinationHeight));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[4].destinationWidth));
+    EXPECT_TRUE(std::isinf(rec->drawCalls[5].destinationWidth));
+
+    EXPECT_EQ(rec->drawCalls[6].destinationRectangle, Rectangle(0, 0, 0, 0));
+    EXPECT_EQ(rec->drawCalls[7].destinationRectangle,
               Rectangle(0, 0, 2147483520, 2147483520));
-    EXPECT_EQ(rec->drawCalls[2].destinationRectangle,
+    EXPECT_EQ(rec->drawCalls[8].destinationRectangle,
               Rectangle(0, 0, -2147483647 - 1, -2147483647 - 1));
 
-    const auto& ordinary = rec->drawCalls[3];
+    const auto& ordinary = rec->drawCalls[9];
     EXPECT_EQ(ordinary.destinationRectangle, Rectangle(10, -20, -24, 8));
     EXPECT_EQ(ordinary.sourceRectangle, source.value());
     EXPECT_EQ(ordinary.color, tint);
@@ -1231,7 +1232,61 @@ TEST(SpriteBatchNumericInputTest, ScalarAndVectorScaleDistinguishInvalidFromRepr
     EXPECT_FLOAT_EQ(ordinary.layerDepth, 0.75f);
 }
 
-TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInputsAndRemainsReusable)
+// CABI-38: non-finite values are XNA-valid and reach the vertex path.
+//
+// This case asserted the opposite until CABI-38 -- that NaN and the infinities were refused with
+// ArgumentOutOfRangeException. fixcnacs.md Phase 5 asked for XNA's behaviour, and the decompiled
+// XNA SpriteBatch validates nothing at all: no IsNaN, no IsInfinity, no finiteness check anywhere.
+// The refusal was a CNA invention.
+//
+// Accepting them is not enough on its own, so this checks they arrive: the recorder keeps the
+// unrounded float destination SpriteBatch actually delivered, and a value that were silently
+// clamped or dropped on the way would show up here as a finite number.
+TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyCarriesNonFiniteValuesThrough)
+{
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    SpriteFont font = makeUnitGlyphFontWithRenderer(texRenderer);
+    System::Text::StringBuilder builder;
+    builder.Append("A");
+
+    batch.Begin();
+    batch.DrawString(font, std::string("A"), Vector2(nan, 0.0f), Color::White);
+    batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, inf, SpriteEffects::None, 0.0f);
+    batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, Vector2(1.0f, -inf), SpriteEffects::None, 0.0f);
+    batch.DrawString(font, builder, Vector2(0.0f, inf), Color::White);
+    batch.DrawString(font, builder, Vector2::Zero, Color::White,
+                     nan, Vector2::Zero, 1.0f, SpriteEffects::None, 0.0f);
+    batch.DrawString(font, builder, Vector2::Zero, Color::White,
+                     0.0f, Vector2(inf, 0.0f), Vector2::One, SpriteEffects::None, 0.0f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 6u);
+    EXPECT_TRUE(std::isnan(rec->drawCalls[0].destinationX)) << "a NaN position must survive";
+    EXPECT_TRUE(std::isinf(rec->drawCalls[1].destinationWidth)) << "an infinite scale must survive";
+    EXPECT_TRUE(std::isinf(rec->drawCalls[2].destinationHeight))
+        << "a negative infinite scale component must survive";
+    EXPECT_TRUE(std::isinf(rec->drawCalls[3].destinationY)) << "an infinite position must survive";
+    EXPECT_TRUE(std::isnan(rec->drawCalls[4].rotation)) << "a NaN rotation must survive";
+    // An infinite origin rotates into the destination rather than staying in the origin field.
+    EXPECT_FALSE(std::isfinite(rec->drawCalls[5].destinationX))
+        << "an infinite origin must reach the destination";
+}
+
+// The Int32 destination range is a separate contract from finiteness, and it survives CABI-38: a
+// finite value too large to be a representable destination is still refused, with the parameter
+// named. Only the non-finite refusals went away.
+TEST(SpriteBatchNumericInputTest, DrawStringStillRefusesUnrepresentableFiniteDestinations)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
     RecordingSpriteBatchRenderer* rec = renderer.get();
@@ -1247,37 +1302,6 @@ TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInpu
     batch.Begin();
     expectNumericArgumentOutOfRange("position", [&] {
         batch.DrawString(font, std::string("A"),
-                         Vector2(std::numeric_limits<float>::quiet_NaN(), 0.0f),
-                         Color::White);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
-                         0.0f, Vector2::Zero, std::numeric_limits<float>::infinity(),
-                         SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("scale", [&] {
-        batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
-                         0.0f, Vector2::Zero,
-                         Vector2(1.0f, -std::numeric_limits<float>::infinity()),
-                         SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("position", [&] {
-        batch.DrawString(font, builder,
-                         Vector2(0.0f, std::numeric_limits<float>::infinity()),
-                         Color::White);
-    });
-    expectNumericArgumentOutOfRange("rotation", [&] {
-        batch.DrawString(font, builder, Vector2::Zero, Color::White,
-                         std::numeric_limits<float>::quiet_NaN(), Vector2::Zero, 1.0f,
-                         SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("origin", [&] {
-        batch.DrawString(font, builder, Vector2::Zero, Color::White,
-                         0.0f, Vector2(std::numeric_limits<float>::infinity(), 0.0f),
-                         Vector2::One, SpriteEffects::None, 0.0f);
-    });
-    expectNumericArgumentOutOfRange("position", [&] {
-        batch.DrawString(font, std::string("A"),
                          Vector2(std::numeric_limits<float>::max(), 0.0f),
                          Color::White);
     });
@@ -1290,6 +1314,7 @@ TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInpu
 
     EXPECT_TRUE(rec->drawCalls.empty());
 
+    // A rejected DrawString leaves the Begin/End state balanced and reusable.
     batch.Begin();
     batch.DrawString(font, std::string("A"), Vector2(10.25f, -4.25f), Color::White);
     batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
@@ -1318,6 +1343,66 @@ TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInpu
     EXPECT_EQ(rec->drawCalls[5].destinationRectangle, Rectangle(0, 0, 1, -2));
     EXPECT_EQ(rec->drawCalls[5].effects, SpriteEffects::FlipVertically);
     EXPECT_FLOAT_EQ(rec->drawCalls[5].layerDepth, 0.75f);
+}
+
+// CABI-38: a NaN layer depth must sort, not corrupt.
+//
+// This is the reason CNA could not simply accept non-finite values before. Both depth sorts used a
+// bare `<` on layerDepth, and NaN compares false against everything: `a < b` and `b < a` are both
+// false, which violates the strict weak ordering std::stable_sort requires. That is undefined
+// behaviour -- libstdc++ can walk off the end of the range -- not merely a surprising order. XNA
+// has no such hazard because it sorts through IComparable<float>, which defines a total order with
+// NaN below everything.
+//
+// CompareOrdered gives CNA the same total order, so this exercises what used to be UB: enough
+// sprites to take stable_sort's real (non-insertion) path, with NaN depths scattered among finite
+// ones, in both sort modes.
+TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsSortWithoutCorruptingTheQueue)
+{
+    using Microsoft::Xna::Framework::Graphics::BlendState;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float inf = std::numeric_limits<float>::infinity();
+
+    for (const SpriteSortMode mode : {SpriteSortMode::BackToFront, SpriteSortMode::FrontToBack})
+    {
+        auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+        RecordingSpriteBatchRenderer* rec = renderer.get();
+        SpriteBatch batch(std::move(renderer));
+
+        DummyTextureRenderer texRendererRaw(16, 16);
+        auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+            &texRendererRaw, [](auto*) {});
+        Texture2D texture = Texture2D::CreateWithRendererForTests(16, 16, texRenderer);
+
+        // Well past stable_sort's insertion-sort threshold, so the merge path really runs.
+        constexpr int kCount = 64;
+        batch.Begin(mode, BlendState::AlphaBlend);
+        for (int index = 0; index < kCount; ++index)
+        {
+            const float depth = (index % 4 == 0) ? nan
+                              : (index % 4 == 1) ? -inf
+                              : (index % 4 == 2) ? inf
+                                                 : static_cast<float>(index) / kCount;
+            batch.Draw(texture, Vector2(static_cast<float>(index), 0.0f), std::nullopt,
+                       Color::White, 0.0f, Vector2::Zero, 1.0f, SpriteEffects::None, depth);
+        }
+        batch.End();
+
+        // Nothing lost, nothing duplicated: the queue survived the sort.
+        ASSERT_EQ(rec->drawCalls.size(), static_cast<std::size_t>(kCount));
+
+        // Every NaN depth is at one end -- the total order puts NaN below everything, so they lead
+        // in FrontToBack and trail in BackToFront.
+        const std::size_t nanCount = static_cast<std::size_t>((kCount + 3) / 4);
+        for (std::size_t index = 0; index < nanCount; ++index)
+        {
+            const std::size_t at = (mode == SpriteSortMode::FrontToBack)
+                                 ? index
+                                 : rec->drawCalls.size() - 1 - index;
+            EXPECT_TRUE(std::isnan(rec->drawCalls[at].layerDepth))
+                << "NaN depths must gather at one end, index " << at;
+        }
+    }
 }
 
 TEST(SpriteBatchNumericInputTest, DrawStringAcceptsExactInt32RoundedBoundaries)

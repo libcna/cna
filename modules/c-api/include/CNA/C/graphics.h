@@ -665,7 +665,7 @@ typedef struct CNA_SpriteCommand {
     /** @brief Clockwise rotation in radians. Must be finite. */
     float rotation;
 
-    /** @brief Rotation origin in source-texture pixels. Both components must be finite. */
+    /** @brief Rotation origin in source-texture pixels. Non-finite components are accepted. */
     CNA_Vector2 origin;
 
     /** @brief Zero or more `CNA_SPRITE_EFFECT_*` bits. */
@@ -715,10 +715,10 @@ typedef struct CNA_SpriteScaledCommand {
     /** @brief Clockwise rotation in radians. Must be finite. */
     float rotation;
 
-    /** @brief Rotation and scale origin in source-texture pixels. Both components must be finite. */
+    /** @brief Rotation and scale origin in source-texture pixels. Non-finite components are accepted. */
     CNA_Vector2 origin;
 
-    /** @brief Per-axis scale. Both components must be finite; equal components are uniform scale. */
+    /** @brief Per-axis scale; equal components are uniform scale. Non-finite components are accepted. */
     CNA_Vector2 scale;
 
     /** @brief Zero or more `CNA_SPRITE_EFFECT_*` bits. */
@@ -1103,7 +1103,7 @@ typedef struct CNA_SpriteTextCommand {
     /** @brief UTF-8 text copied during this call. */
     CNA_StringView text;
 
-    /** @brief Screen-space position of the text origin. Both components must be finite. */
+    /** @brief Screen-space position of the text origin. Non-finite components are accepted. */
     CNA_Vector2 position;
 
     /** @brief Per-glyph tint. */
@@ -1112,7 +1112,7 @@ typedef struct CNA_SpriteTextCommand {
     /** @brief Clockwise rotation in radians. Must be finite. */
     float rotation;
 
-    /** @brief Rotation origin in unscaled text pixels. Both components must be finite. */
+    /** @brief Rotation origin in unscaled text pixels. Non-finite components are accepted. */
     CNA_Vector2 origin;
 
     /** @brief Per-axis scale; use equal components for the uniform-scale overloads. */
