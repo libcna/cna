@@ -390,6 +390,14 @@ TEST(VulkanCompiledEffectDrawTest, SharedRenderTargetSourceContract)
     CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
 }
 
+TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchRenderTargetSourceContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device);
+}
+
 TEST(VulkanCompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
 {
     GraphicsDevice device;

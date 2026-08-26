@@ -3587,12 +3587,36 @@ if (ProfileUsesGlslEs100())
         transform_ = m;
     }
 
+    bool EasyGLSpriteBatchRenderer::BatchFlushesThroughCompiledEffect() const
+    {
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+        return customEffect_ != nullptr && customEffect_->GetCompiledRuntimePtr() != nullptr;
+#else
+        return false;
+#endif
+    }
+
+    void EasyGLSpriteBatchRenderer::ResolveCurrentTextureRowOrder()
+    {
+        // plans/plan_fx.md FX-118: the compiled route corrects a bottom-up source per sampler slot
+        // (AcquireCompiledEffectFlippedSourceEXT), so the sprite's own V must be left alone there.
+        // Doing both mirrors the image -- and only the compiled route can correct a slot the
+        // sprite quad does not own, such as the base image a bloom combine reads from slot 1.
+        current_texture_bottom_up_ = current_texture_ != nullptr &&
+                                     !BatchFlushesThroughCompiledEffect() &&
+                                     SampledRowOrderIsBottomUp(current_texture_);
+    }
+
     void EasyGLSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
         if (customEffect_ != effect)
         {
             FlushBatch();
             customEffect_ = effect;
+            // FlushBatch() is a no-op for an empty batch and then leaves current_texture_ in
+            // place, so a Begin() that only changes the effect would otherwise keep the previous
+            // batch's answer.
+            ResolveCurrentTextureRowOrder();
         }
     }
 
@@ -3957,7 +3981,7 @@ if (ProfileUsesGlslEs100())
             current_texture_ = &texture;
             // REMED-GFX-147: resolved once per bound source rather than once per sprite -- a
             // batch is by construction one texture, so this is a binding-time decision.
-            current_texture_bottom_up_ = SampledRowOrderIsBottomUp(&texture);
+            ResolveCurrentTextureRowOrder();
         }
 
         const float texW = static_cast<float>(texture.GetWidth());

@@ -624,6 +624,10 @@ namespace CNA::Internal::Renderers::EasyGL
         /// REMED-GFX-147: cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
         /// texture by construction, so the answer is resolved when the source is bound, not once
         /// per sprite. Meaningless while current_texture_ is null.
+        ///
+        /// plans/plan_fx.md FX-118: false for a batch that flushes through the compiled-effect
+        /// route, which corrects row order per sampler slot instead. See
+        /// ResolveCurrentTextureRowOrder().
         bool current_texture_bottom_up_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
@@ -682,6 +686,28 @@ namespace CNA::Internal::Renderers::EasyGL
     private:
         void InitializeResources();
         void FlushBatch();
+
+        /**
+         * @brief Answers whether the batch currently being built will flush through the
+         *        compiled-Effect route.
+         *
+         * plans/plan_fx.md FX-118. The two routes correct a render target's row order in two
+         * different places -- the stock route mirrors V in the sprite's own vertex data
+         * (REMED-GFX-147), the compiled route binds a row-reversed copy of the source per sampler
+         * slot (FX-099) -- and applying both to one draw flips the image. The route is fixed for
+         * the whole batch, because SetCustomEffect() flushes whenever the effect changes.
+         *
+         * @return True when a compiled XNA Effect is set on this batch.
+         */
+        [[nodiscard]] bool BatchFlushesThroughCompiledEffect() const;
+
+        /**
+         * @brief Recomputes current_texture_bottom_up_ for the currently bound source.
+         *
+         * plans/plan_fx.md FX-118. Called when the source changes and when the effect changes,
+         * because either one can change the answer.
+         */
+        void ResolveCurrentTextureRowOrder();
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         /// plans/plan_fx.md FX-080: the compiled-Effect half of FlushBatch(). Separate because it shares
         /// nothing with the stock/ShaderEffect route -- different program, different vertex array,

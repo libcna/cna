@@ -597,6 +597,14 @@ TEST(EasyGLCompiledEffectDrawTest, SharedRenderTargetSourceContract)
     CNA::TestSupport::RunCompiledEffectRenderTargetSourceContract(device);
 }
 
+TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchRenderTargetSourceContract)
+{
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectSpriteBatchRenderTargetSourceContract(device);
+}
+
 TEST(EasyGLCompiledEffectDrawTest, SharedSpriteBatchMultiPassContract)
 {
     GraphicsDevice device;

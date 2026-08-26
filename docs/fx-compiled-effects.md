@@ -360,6 +360,35 @@ it. `EasyGLCompiledEffectDrawTest.IsDepthTestedOnTheSameScaleAsStockGeometry` pi
 This is EasyGL-specific: `FNA3D` runs MojoShader's own OpenGL device end to end, and
 `SDL_GPU` and `VULKAN` have their own conventions.
 
+### 10.2 Row order when a compiled effect samples a render target, on EasyGL
+
+An OpenGL framebuffer object stores its first row at the **bottom** of the image, so a
+`RenderTarget2D`'s colour texture is upside down relative to an uploaded `Texture2D`. EasyGL
+corrects that when the target is sampled rather than when it is drawn, and it has two ways of
+doing so:
+
+* **Stock and `ShaderEffect` sprites** mirror V in the sprite's own vertex data, because
+  `SpriteBatch.Begin` may substitute a user shader whose GLSL this renderer does not own.
+* **Compiled effects** get a row-reversed **copy** of the source, made per sampler slot, because
+  MojoShader's generated GLSL cannot be given the renderer's own sampling-time correction at all.
+
+Only one of the two may apply to any one draw. A `SpriteBatch` batch flushing through the
+compiled route therefore leaves its sprite V alone and relies on the copy — which is also the
+only one of the two that can correct a slot the sprite quad does not own, such as
+`GraphicsDevice.Textures[1]`. This matters to any game whose postprocess is a chain of
+fullscreen `SpriteBatch` quads reading each other's render targets; getting it wrong turns the
+frame upside down while leaving the intermediate buffers individually correct.
+
+The copy costs a `glBlitFramebuffer` per bottom-up slot per flush, and is refused by name on
+the ES 2 profiles, which have no `glBlitFramebuffer`, and when the source is the target
+currently being drawn into.
+
+Found on `BloomSample_4_0`. `RunCompiledEffectSpriteBatchRenderTargetSourceContract` pins it —
+one hop, two hops, and a plain `Texture2D` that must stay untouched.
+
+This is EasyGL-specific: `SDL_GPU`, `VULKAN` and `FNA3D` store render-target rows the same way
+up as an uploaded texture and need no correction on either route.
+
 ## 11. Error guide
 
 | Symptom | Exception | Cause |
