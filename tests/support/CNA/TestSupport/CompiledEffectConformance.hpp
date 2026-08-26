@@ -1593,6 +1593,33 @@ namespace CNA::TestSupport
         expectRedOverBlue(secondHop,
                           "the same, twice: a per-hop flip would be visible here");
 
+        // plans/plan_fx.md FX-120: the same SpriteBatch flushed TWICE. The compiled route records its
+        // geometry in one long-lived vertex array object, and it used to create and destroy that
+        // geometry inside every flush, leaving the array object holding a deleted element buffer
+        // for the next draw to read. Desktop GL tolerates that and draws anyway, which is why
+        // this case cannot fail here -- it was observable only on WEBGL2, where the draw is
+        // refused outright with "glDrawElements: Insufficient buffer size" and every flush after
+        // a batch's first produced nothing. It is pinned so a backend that validates its bindings
+        // has something to fail on.
+        {
+            RenderTarget2D first(device, kSize, kSize);
+            RenderTarget2D second(device, kSize, kSize);
+            SpriteBatch batch(device);
+            SamplerState pointClamp = SamplerState::PointClamp;
+            for (RenderTarget2D* destination : {&first, &second})
+            {
+                device.SetRenderTarget(destination);
+                device.Clear(background);
+                batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp,
+                            nullptr, nullptr, &effect);
+                batch.Draw(source, Rectangle(0, 0, kSize, kSize), Color::White);
+                batch.End();
+                device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+            }
+            expectRedOverBlue(first, "the first flush of a reused SpriteBatch");
+            expectRedOverBlue(second, "the second flush of the SAME SpriteBatch");
+        }
+
         // The other direction: an ordinary Texture2D source must be untouched by any correction.
         {
             Texture2D plain(device, kSize, kSize);

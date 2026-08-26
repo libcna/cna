@@ -634,6 +634,11 @@ namespace CNA::Internal::Renderers::EasyGL
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         std::unique_ptr<EasyGLCompiledEffect> spriteCompiledEffect_;
         std::uint32_t spriteMatrixParameterIndex_ = 0;
+        /// plans/plan_fx.md FX-120: the compiled route's own geometry, retained rather than created
+        /// per flush. The shared vertex array object records them, so a per-flush buffer would
+        /// leave it holding a deleted name -- which WebGL 2 refuses to draw with.
+        std::unique_ptr<IVertexBufferRenderer> compiledSpriteVertexBuffer_;
+        std::unique_ptr<IIndexBufferRenderer> compiledSpriteIndexBuffer_;
 #endif
 
         // Raw TextureFilter/TextureAddressMode values set via SetSamplerFilter/SetSamplerAddressMode

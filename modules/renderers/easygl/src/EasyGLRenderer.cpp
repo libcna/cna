@@ -3865,14 +3865,35 @@ if (ProfileUsesGlslEs100())
 
         const int vertexCount = static_cast<int>(pending_vertices_.size());
         const int indexCount = static_cast<int>(pending_indices_.size());
-        auto vertexBuffer = graphicsRenderer_->CreateVertexBuffer(vertexCount);
-        vertexBuffer->SetVertexDeclaration(kSpriteDeclaration);
-        vertexBuffer->SetData(pending_vertices_.data(), vertexCount, sizeof(Vertex));
-        auto indexBuffer = graphicsRenderer_->CreateIndexBuffer16(indexCount);
-        indexBuffer->SetData16(pending_indices_.data(), indexCount);
+
+        // plans/plan_fx.md FX-120: these two buffers are RETAINED, not created per flush.
+        //
+        // The compiled route records them in a single long-lived vertex array object
+        // (EnsureCompiledEffectVaoEXT), so a buffer created and destroyed inside one flush
+        // leaves that array object holding a deleted name -- for the element buffer, which is
+        // part of a VAO's own state, that name is what the next flush's draw reads. Desktop GL
+        // tolerates it and draws; WebGL 2 validates the binding and refuses the whole draw with
+        // "glDrawElements: Insufficient buffer size", so on WEBGL2 the first flush of a batch
+        // drew and every later one silently produced nothing.
+        //
+        // Keeping them alive also removes two buffer creations and two deletions from every
+        // flush of every compiled-effect sprite batch.
+        if (compiledSpriteVertexBuffer_ == nullptr)
+        {
+            compiledSpriteVertexBuffer_ = graphicsRenderer_->CreateVertexBuffer(vertexCount);
+            compiledSpriteVertexBuffer_->SetVertexDeclaration(kSpriteDeclaration);
+        }
+        if (compiledSpriteIndexBuffer_ == nullptr)
+        {
+            compiledSpriteIndexBuffer_ = graphicsRenderer_->CreateIndexBuffer16(indexCount);
+        }
+        compiledSpriteVertexBuffer_->SetData(pending_vertices_.data(), vertexCount,
+                                             sizeof(Vertex));
+        compiledSpriteIndexBuffer_->SetData16(pending_indices_.data(), indexCount);
         auto* easyVertexBuffer =
-            static_cast<EasyGLVertexBufferRenderer*>(vertexBuffer.get());
-        auto* easyIndexBuffer = static_cast<EasyGLIndexBufferRenderer*>(indexBuffer.get());
+            static_cast<EasyGLVertexBufferRenderer*>(compiledSpriteVertexBuffer_.get());
+        auto* easyIndexBuffer =
+            static_cast<EasyGLIndexBufferRenderer*>(compiledSpriteIndexBuffer_.get());
 
         // The viewport is still this renderer's own business: a batch drawn into a RenderTarget2D
         // rasterizes at the target's size, not the window's, whatever shader runs.
