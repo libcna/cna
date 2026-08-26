@@ -35,17 +35,56 @@ namespace CNA::Content::Cnb
         const double kMaxRepresentableSeconds =
             static_cast<double>(std::numeric_limits<std::int64_t>::max()) / kTicksPerSecond;
 
-        double DecodeSeconds(CnbByteReader& reader, const char* what)
+    }
+
+    double ReadCnbSeconds(CnbByteReader& reader, const char* what)
+    {
+        const double seconds = reader.ReadF64();
+        if (!std::isfinite(seconds) || seconds < -kMaxRepresentableSeconds ||
+            seconds > kMaxRepresentableSeconds)
         {
-            const double seconds = reader.ReadF64();
-            if (!std::isfinite(seconds) || seconds < -kMaxRepresentableSeconds ||
-                seconds > kMaxRepresentableSeconds)
-            {
-                reader.Fail(std::string(what) + " is " + std::to_string(seconds) +
-                            " seconds, which is not representable as a System::TimeSpan.");
-            }
-            return seconds;
+            reader.Fail(std::string(what) + " is " + std::to_string(seconds) +
+                        " seconds, which is not representable as a System::TimeSpan.");
         }
+        return seconds;
+    }
+
+    void WriteCnbKeyframe(CnbByteWriter& writer, const KeyframeEXT& key)
+    {
+        writer.WriteF64(key.Time.getTotalSecondsProperty());
+        writer.WriteF32(key.Translation.X);
+        writer.WriteF32(key.Translation.Y);
+        writer.WriteF32(key.Translation.Z);
+        writer.WriteF32(key.Rotation.X);
+        writer.WriteF32(key.Rotation.Y);
+        writer.WriteF32(key.Rotation.Z);
+        writer.WriteF32(key.Rotation.W);
+        writer.WriteF32(key.Scale.X);
+        writer.WriteF32(key.Scale.Y);
+        writer.WriteF32(key.Scale.Z);
+    }
+
+    KeyframeEXT ReadCnbKeyframe(CnbByteReader& reader)
+    {
+        KeyframeEXT key;
+        key.Time = System::TimeSpan::FromSeconds(ReadCnbSeconds(reader, "a keyframe time"));
+        // Each component into its own named local before the constructor call: C++ does not
+        // sequence a call's arguments, and the .clip.bin reader this mirrors was once bitten by
+        // exactly that (a keyframe's rotation read back scrambled under right-to-left evaluation).
+        const float tx = reader.ReadF32();
+        const float ty = reader.ReadF32();
+        const float tz = reader.ReadF32();
+        key.Translation = Vector3(tx, ty, tz);
+        const float qx = reader.ReadF32();
+        const float qy = reader.ReadF32();
+        const float qz = reader.ReadF32();
+        const float qw = reader.ReadF32();
+        key.Rotation = Quaternion(qx, qy, qz, qw);
+        const float sx = reader.ReadF32();
+        const float sy = reader.ReadF32();
+        const float sz = reader.ReadF32();
+        key.Scale = Vector3(sx, sy, sz);
+        return key;
     }
 
     std::vector<std::uint8_t> EncodeAnimationClipToCnb(const AnimationClipEXT& clip,
@@ -79,20 +118,7 @@ namespace CNA::Content::Cnb
             tracks.WriteU32(static_cast<std::uint32_t>(track.Keys.size()));
             firstKey += static_cast<std::uint32_t>(track.Keys.size());
 
-            for (const KeyframeEXT& key : track.Keys)
-            {
-                keys.WriteF64(key.Time.getTotalSecondsProperty());
-                keys.WriteF32(key.Translation.X);
-                keys.WriteF32(key.Translation.Y);
-                keys.WriteF32(key.Translation.Z);
-                keys.WriteF32(key.Rotation.X);
-                keys.WriteF32(key.Rotation.Y);
-                keys.WriteF32(key.Rotation.Z);
-                keys.WriteF32(key.Rotation.W);
-                keys.WriteF32(key.Scale.X);
-                keys.WriteF32(key.Scale.Y);
-                keys.WriteF32(key.Scale.Z);
-            }
+            for (const KeyframeEXT& key : track.Keys) { WriteCnbKeyframe(keys, key); }
         }
 
         CnbWriter writer(CnbAssetTypeId::AnimationClip, CnbAnimationClipSchemaVersion);
@@ -113,7 +139,7 @@ namespace CNA::Content::Cnb
         CnbByteReader header =
             document.OpenChunk(document.RequireSingle(CnbAnimationClipChunk::Header));
         AnimationClipEXT clip;
-        clip.Duration = System::TimeSpan::FromSeconds(DecodeSeconds(header, "the clip duration"));
+        clip.Duration = System::TimeSpan::FromSeconds(ReadCnbSeconds(header, "the clip duration"));
         const std::uint32_t targetSpace = header.ReadU32();
         if (targetSpace > kMaxClipTargetSpace)
         {
@@ -191,22 +217,7 @@ namespace CNA::Content::Cnb
         allKeys.reserve(totalKeyCount);
         for (std::uint32_t k = 0; k < totalKeyCount; ++k)
         {
-            KeyframeEXT key;
-            key.Time = System::TimeSpan::FromSeconds(DecodeSeconds(keyReader, "a keyframe time"));
-            const float tx = keyReader.ReadF32();
-            const float ty = keyReader.ReadF32();
-            const float tz = keyReader.ReadF32();
-            key.Translation = Vector3(tx, ty, tz);
-            const float qx = keyReader.ReadF32();
-            const float qy = keyReader.ReadF32();
-            const float qz = keyReader.ReadF32();
-            const float qw = keyReader.ReadF32();
-            key.Rotation = Quaternion(qx, qy, qz, qw);
-            const float sx = keyReader.ReadF32();
-            const float sy = keyReader.ReadF32();
-            const float sz = keyReader.ReadF32();
-            key.Scale = Vector3(sx, sy, sz);
-            allKeys.push_back(key);
+            allKeys.push_back(ReadCnbKeyframe(keyReader));
         }
         keyReader.RequireExhausted();
 

@@ -517,13 +517,13 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
-| CNBF-070 | `CnbModelData` neutral structs | ⬜ | |
-| CNBF-071 | `Model` schema v1 chunk set + codec | ⬜ | `MDLH/MSTR/MBON/MMSH/MVTX/MIDX/MMRP/MSKL/MANM/MLIT` |
-| CNBF-072 | codec round-trip + corruption tests (no GraphicsDevice needed) | ⬜ | |
-| CNBF-073 | compiler: `.cnj` Model + all binary sidecars → one `.cnb` | ⬜ | |
-| CNBF-074 | runtime adapter `CnbModelData` → `Graphics::Model` in `ContentManager.cpp` | ⬜ | |
-| CNBF-075 | CNJ-vs-CNB observable-equivalence tests on a real compiled asset | ⬜ | |
-| CNBF-084 | compiler refuses (loudly) the documented out-of-scope `.cnj` fields | ⬜ | material variants |
+| CNBF-070 | `CnbModelData` neutral structs | ✅ | |
+| CNBF-071 | `Model` schema v1 chunk set + codec | ✅ | `MDLH/MSTR/MBON/MMSH/MVTX/MIDX/MMRP/MSKL/MANM/MLIT` |
+| CNBF-072 | codec round-trip + corruption tests (no GraphicsDevice needed) | ✅ | |
+| CNBF-073 | compiler: `.cnj` Model + all binary sidecars → one `.cnb` | ✅ | |
+| CNBF-074 | runtime adapter `CnbModelData` → `Graphics::Model` in `ContentManager.cpp` | ✅ | |
+| CNBF-075 | CNJ-vs-CNB observable-equivalence tests on a real compiled asset | ✅ | |
+| CNBF-084 | compiler refuses (loudly) the documented out-of-scope `.cnj` fields | ✅ | material variants |
 
 ### Phase G — `ContentManager` integration
 
@@ -539,7 +539,7 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 | ID | Task | Status | Notes |
 |---|---|---|---|
 | CNBF-090 | `docs/cnb-format.md` — authoritative spec incl. annotated hex | ⬜ | |
-| CNBF-091 | file-count / byte-size / open-count measurement, CNJ vs CNB | ⬜ | §8 |
+| CNBF-091 | file-count / byte-size / open-count measurement, CNJ vs CNB | ✅ | §8 |
 | CNBF-092 | final architectural review pass | ⬜ | §9 |
 
 ### Out of scope for v1 (recorded, not started)
@@ -581,7 +581,31 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 
 ## 8. Measurements
 
-Recorded by `CNBF-091`; see §8 of the final report and `docs/cnb-format.md` §12.
+Recorded by `CnbModelEquivalenceTest.CompilingAModelReducesItsFileCountAndItsFileOpens`, which
+prints every row it measures so a run of the suite *is* the record. Machine: this repository's
+`cmake-build-debug` (GCC 14.2, Debug). Assets: real fixtures from the committed glTF conformance
+corpus, converted by the real `cna_tool_gltf_to_cnj` and then compiled by `CompileCnjToCnb`.
+
+| asset | `.cnj` form | `.cnb` form | file opens per load |
+|---|---|---|---|
+| `skin-four-weighted` | 4 files / 2666 B | 1 file / 2704 B | 4 → 1 |
+| `morph-eight-targets` | 4 files / 2048 B | 1 file / 1808 B | 4 → 1 |
+| `two-primitives-one-buffer` | 5 files / 1482 B | 1 file / 1718 B | 5 → 1 |
+| `mat-normal-occlusion-scale` | 4 files / 1197 B | 2 files / 1468 B | 4 → 2 |
+| `anim-two-clips` | 5 files / 1834 B | 1 file / 1712 B | 5 → 1 |
+
+**What this shows, stated no more strongly than it supports.** The file count and the number of
+filesystem opens per load fall for every asset measured, which is the property CNB was built for
+and the one that scales with asset complexity rather than with asset size. The **byte size is a
+wash** on fixtures this small: they carry a handful of vertices each, so the fixed-stride material
+record (368 B per distinct material) and the container's own 64-byte header plus 48 bytes per chunk
+are a large fraction of the file, and two of the five got bigger. On an asset where geometry
+dominates -- which is every real model -- the compiled form's geometry chunks are the same bytes
+the sidecars held, so the difference converges to the JSON descriptor that is no longer there. That
+larger measurement has **not** been taken here and is not claimed.
+
+Load *time* was deliberately not measured: on assets this small the numbers would be dominated by
+process and device setup, and a timing claim that cannot be reproduced is worse than no claim.
 
 ---
 

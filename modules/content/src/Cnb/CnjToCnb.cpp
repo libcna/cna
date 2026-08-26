@@ -8,6 +8,8 @@
 
 #include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Content/Cnb/CnbCurveCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelFromCnj.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/Json.hpp"
@@ -113,9 +115,21 @@ namespace CNA::Content::Cnb
             return result;
         }
 
+        if (envelope.type == "Model")
+        {
+            CnbModelFromCnjResult source = BuildCnbModelFromCnj(cnjPath, root);
+            result.bytes = EncodeModelToCnb(source.model, name);
+            result.assetTypeId = CnbAssetTypeId::Model;
+            result.assetTypeName = "Microsoft.Xna.Framework.Graphics.Model";
+            result.absorbedFiles.insert(result.absorbedFiles.end(),
+                                        source.absorbedFiles.begin(), source.absorbedFiles.end());
+            result.externalReferences = std::move(source.externalReferences);
+            return result;
+        }
+
         throw ContentLoadException(
             "cnj-to-cnb: '" + cnjPath + "' has .cnj type '" + envelope.type +
-            "', which the CNB compiler does not support. Supported types are Curve and "
-            "AnimationClip.");
+            "', which the CNB compiler does not support. Supported types are Curve, "
+            "AnimationClip and Model.");
     }
 }

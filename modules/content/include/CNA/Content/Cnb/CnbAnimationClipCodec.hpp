@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbByteReader.hpp"
+#include "CNA/Content/Cnb/CnbByteWriter.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
@@ -35,6 +37,46 @@ namespace CNA::Content::Cnb
 
     /** @brief Bytes one serialized keyframe occupies in the `ACLK` chunk. */
     inline constexpr std::uint32_t CnbAnimationKeyStride = 48u;
+
+    /**
+     * @brief Reads a `f64` seconds value and rejects anything a `System::TimeSpan` cannot hold.
+     *
+     * `System::TimeSpan::FromSeconds` throws `System::ArgumentException`/`OverflowException` for a
+     * NaN or out-of-range value. Those are perfectly good exceptions, but they are not what the
+     * content subsystem's callers catch, and a malformed file must surface as a
+     * `ContentLoadException` naming the file. This checks the range before the value can reach
+     * `TimeSpan` at all.
+     *
+     * @param reader Cursor positioned at the `f64`.
+     * @param what   Noun used in the exception message, e.g. `"the clip duration"`.
+     * @return The value, guaranteed convertible with `System::TimeSpan::FromSeconds`.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the value is not finite
+     *         or is out of `TimeSpan`'s range.
+     */
+    [[nodiscard]] double ReadCnbSeconds(CnbByteReader& reader, const char* what);
+
+    /**
+     * @brief Writes one keyframe in the canonical 48-byte `.cnb` layout.
+     *
+     * Shared by the standalone `AnimationClip` schema and by a `Model`'s embedded clips, so both
+     * store keyframes identically -- there is exactly one keyframe encoding in CNB.
+     *
+     * @param writer Destination.
+     * @param key    The keyframe to write.
+     */
+    void WriteCnbKeyframe(CnbByteWriter& writer,
+                          const Microsoft::Xna::Framework::Graphics::KeyframeEXT& key);
+
+    /**
+     * @brief Reads one keyframe written by WriteCnbKeyframe().
+     *
+     * @param reader Cursor positioned at the keyframe.
+     * @return The decoded keyframe.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException on truncation or a time
+     *         value no `System::TimeSpan` can hold.
+     */
+    [[nodiscard]] Microsoft::Xna::Framework::Graphics::KeyframeEXT ReadCnbKeyframe(
+        CnbByteReader& reader);
 
     /**
      * @brief Encodes an `AnimationClipEXT` as a complete `.cnb` byte image.

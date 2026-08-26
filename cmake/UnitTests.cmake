@@ -218,6 +218,9 @@ if(CNA_BUILD_TESTS)
         # same POSIX-only posix_spawn/sys-wait APIs, so it is excluded on exactly the same
         # platforms and for exactly the same reasons.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbCompilerToolTests\\.cpp$")
+        # CnbModelEquivalenceTests.cpp spawns cna_tool_gltf_to_cnj the same way, for the same
+        # reason: it needs a REAL converted asset, not a hand-built approximation of one.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbModelEquivalenceTests\\.cpp$")
     endif()
 
     # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
