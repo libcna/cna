@@ -29,7 +29,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-9 | VideoPlayer frame identity/generation | fixcnats P4 | DESIGN COMPLETE |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
 | CABI-11 | Reproducible artifacts + provenance manifest | fixcnats P6 | DONE (measured reproducible) |
-| CABI-12 | Emscripten C-ABI ESM/Wasm artifact | fixcnats P7 | OPEN |
+| CABI-12 | Emscripten C-ABI artifact | fixcnats P7 | COMPILES; link needs a shape change |
 
 ## CABI-1 — Baseline (DONE)
 
@@ -466,3 +466,68 @@ caller that does not need identity is unaffected.
 Not implemented here: it is new ABI surface, and this milestone's remaining budget went to
 finishing the existing-contract rows. The design is derived from the internals rather than from the
 work order's sketch, which is what Phase 4 asked for.
+
+## CABI-12 — Emscripten C ABI artifact (compiles; the link needs a shape change)
+
+`fixcnats.md` Phase 7 says to build a real artifact if the toolchain exists and to record
+`NOT_RUN` only if it does not. It exists — `emcc` 6.0.3 at `~/emsdk` — so it was run.
+
+### Result
+
+`CNA_BUILD_C_API=ON` under `emcmake` **configures**, and after the fixes below every one of the
+~60 C-API translation units and the whole engine beneath them **compiles** for wasm32. The link is
+the only thing left, and it fails structurally rather than for a missing flag.
+
+### What clang found that GCC never did
+
+Emscripten's clang runs the same `-Wall -Wextra -Werror` this project already uses, and caught 18
+latent defects GCC does not diagnose. All are real, all are fixed here, and all remain correct for
+the native build:
+
+| Defect | Count | Where |
+| --- | --- | --- |
+| `override` missing on a member that overrides `System::Object` | 15 | `modules/media`, `modules/runtime` |
+| Type forward-declared `class` but defined `struct` (`-Wmismatched-tags`) | 2 | `AudioCategory`, `BoundingFrustum` |
+| Unused `constexpr` in a macro expansion | 1 | `CnaCApiMediaLibrary.cpp` |
+
+The `override` family matters beyond the warning: `CLAUDE.md` requires concrete `System::Object`
+subclasses to override `GetTypeName()`, and these are the same pattern one step removed —
+`GetHashCode()` and `ToString()` that silently were **not** overriding what their authors assumed.
+A second toolchain is the cheapest way this project has found to surface that class of bug.
+
+A repo-wide sweep for mismatched tags found only those two genuine cases; `DisplayInfo`,
+`DisplayMode` and `PowerInfo` appear mismatched to a naive scan but are distinct types in
+`CNA::Platform` versus `CNA::Devices`/`Graphics`.
+
+### The remaining blocker, and why it is not a flag
+
+`modules/c-api/CMakeLists.txt` guards its link options with `if(UNIX AND NOT APPLE)`. Emscripten
+satisfies that, so wasm-ld received `--exclude-libs,ALL` and `--version-script` — ELF
+symbol-visibility mechanisms with no wasm counterpart. That guard now excludes Emscripten, which is
+correct regardless: a wasm build controls its surface with `-sEXPORTED_FUNCTIONS`.
+
+Past that, the real problem appears:
+
+```
+wasm-ld: error: relocation R_WASM_MEMORY_ADDR_SLEB cannot be used against symbol
+`SDL_hint_props`; recompile with -fPIC     [libSDL3.a(SDL_hints.c.o)]
+```
+
+`cna_c_api` is declared `SHARED`. Under Emscripten that means a **side module** — PIC, dynamically
+linked — and the vendored SDL3 static library is built non-PIC. Nothing links.
+
+That is the right error to get, because a side module is not what a wasm consumer wants anyway.
+`cna-ts` needs an ESM factory plus a `.wasm`, which is a different target shape:
+
+1. `cna_c_api` becomes `STATIC` under Emscripten.
+2. A separate link target produces the module, with `--no-entry`,
+   `-sMODULARIZE=1 -sEXPORT_ES6=1`, and `-sEXPORTED_FUNCTIONS` fed from the export list that
+   `CnaCApiExports.map` already declares for ELF.
+3. `-sALLOW_MEMORY_GROWTH`, `-sFORCE_FILESYSTEM` and the canvas/main-loop options the existing web
+   demos already pass (`modules/graphics/examples/CMakeLists.txt` is the working precedent).
+
+Nothing discovered here suggests that will not work; the engine already ships two working
+Emscripten demos (`cna_demo_2d`, `cna_house3d_demo`). It is a target-shape change plus an export
+list, which wants its own branch rather than the tail of this one.
+
+**Status: `BUILT` is not yet claimable.** Compiles, does not link, no artifact, no browser probe.

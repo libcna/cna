@@ -84,7 +84,11 @@ set_target_properties(cna_c_api PROPERTIES
     INSTALL_RPATH "$ORIGIN"
 )
 
-if(UNIX AND NOT APPLE)
+# plans/plan_cabi.md CABI-12: Emscripten satisfies UNIX AND NOT APPLE, and then wasm-ld rejects
+# both of these -- they are ELF symbol-visibility mechanisms with no wasm counterpart
+# ("unknown argument: --exclude-libs"). A wasm build controls its surface with
+# -sEXPORTED_FUNCTIONS instead, so the export list is declared there rather than lost.
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     target_link_options(cna_c_api PRIVATE
         "LINKER:--exclude-libs,ALL"
         "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.map"

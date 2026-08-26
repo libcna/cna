@@ -114,14 +114,14 @@ namespace Microsoft::Xna::Framework::Media
          * @brief Gets the hash code for this Album instance.
          * @return Hash code of the object.
          */
-        [[nodiscard]] int GetHashCode() const;
+        [[nodiscard]] int GetHashCode() const override;
 
         /**
          * @brief Returns a string representation of this album.
          *
          * @return Album name string.
          */
-        [[nodiscard]] std::string ToString() const;
+        [[nodiscard]] std::string ToString() const override;
 
         /** @brief Returns the fully-qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

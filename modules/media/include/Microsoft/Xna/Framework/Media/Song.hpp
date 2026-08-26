@@ -190,7 +190,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @return Hash code of the object.
          */
-        [[nodiscard]] int GetHashCode() const;
+        [[nodiscard]] int GetHashCode() const override;
 
         /**
          * @brief Returns a String representation of the Song.

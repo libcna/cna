@@ -15,7 +15,7 @@ namespace Microsoft::Xna::Framework
     enum class ContainmentType;
     enum class PlaneIntersectionType;
 
-    struct BoundingFrustum;
+    class BoundingFrustum;
     struct BoundingSphere;
     struct Plane;
     struct Ray;
