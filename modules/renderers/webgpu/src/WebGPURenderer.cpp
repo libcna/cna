@@ -6912,6 +6912,26 @@ struct VSOut {
             }
         }
         wgpuBufferUnmap(readbackBuffer_);
+
+#if defined(__EMSCRIPTEN__)
+        // WEBGPU-133: the buffer map above yielded to the browser event loop (emscripten_sleep,
+        // Asyncify), which lets the browser present and invalidate the canvas's current surface
+        // texture. Code that reads the backbuffer several times in one logical frame (the effect
+        // suites Clear/draw/ReadBackbuffer per check) must re-acquire a fresh current texture on the
+        // next flush rather than reuse this now-destroyed one, or Dawn rejects the reused texture
+        // with "Destroyed texture ... used in a submit". Native wgpu-native keeps the swapchain image
+        // valid across the wait, so this is web only. The content was already copied into
+        // readbackBuffer_ before the yield, so dropping the surface texture here loses nothing.
+        DiscardAcquiredBackbuffer();
+#endif
+    }
+
+    void WebGPURenderer::DiscardAcquiredBackbuffer()
+    {
+        if (hasAcquiredTexture_ && acquiredTexture_ != nullptr)
+            wgpuTextureRelease(acquiredTexture_);
+        acquiredTexture_ = nullptr;
+        hasAcquiredTexture_ = false;
     }
 
     void WebGPURenderer::GetViewportSize(int& width, int& height)

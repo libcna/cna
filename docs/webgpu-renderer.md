@@ -92,13 +92,17 @@ path (perspective, depth test, texturing) through the same harness, also green i
 `CNA_WEBGPU_DEMO=cna_webgpu_{pbr3d,envmap3d,skinned3d,dualtexture3d,alphatest3d}_page` confirm every
 stock effect shader -- `PbrEffect`, cube-map `EnvironmentMapEffect`, bone-palette `SkinnedEffect`,
 `DualTextureEffect` and `AlphaTestEffect` -- compiles and renders in-browser (`plans/plan_webgpu.md`
-`WEBGPU-121`/`122`, both ✅). Two known follow-ups: **`WEBGPU-133`** -- under a
-**multiple-`ReadBackbuffer`-per-frame** pattern (which the effect suites use, but real rendering does
-not), the browser's Dawn rejects the released-then-referenced backbuffer surface texture with
-`Destroyed texture ... used in a submit`, where wgpu-native tolerates it. It corrupts those pages'
-readback-based later checks only; the shader compilation and the once-per-frame 2D/3D demos are
-unaffected. And the `--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on web (a native-only
-`GameWindow` operation, not a renderer limit).
+`WEBGPU-121`/`122`, both ✅). **`WEBGPU-133` (fixed).** Under a **multiple-`ReadBackbuffer`-per-frame** pattern (which the effect
+suites use), `ReadBackbuffer()`'s buffer-map wait yields to the browser event loop (`emscripten_sleep`,
+Asyncify), and the browser presents and invalidates the canvas's current surface texture during that
+yield. The renderer cached the acquired texture across the yield, so a later same-frame flush re-
+submitted a now-destroyed texture -- which wgpu-native tolerates and Dawn rejects with
+`Destroyed texture ... used in a submit`. `ReadBackbuffer()` now calls `DiscardAcquiredBackbuffer()`
+after its map (Emscripten only), so the next flush re-acquires a fresh current texture; the effect
+pages' readback checks pass in-browser and the 2D/3D smokes are unregressed. Two small residuals: the
+`--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on web (a native-only `GameWindow`
+operation), and one `SkinnedEffect` multi-weight-blend check (D2) fails in-browser with no texture
+error (a separate item).
 
 ## Automated native smoke test
 

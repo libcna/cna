@@ -1453,6 +1453,10 @@ namespace CNA::Internal::Renderers::WebGPU
         // matching the Vulkan/Bgfx renderers' own on-demand-submit readback semantics. Returns
         // false if the surface isn't presentable right now (minimized, lost, etc).
         bool EnsureFrameRendered();
+        // WEBGPU-133: releases the currently acquired canvas surface texture and marks it re-
+        // acquirable. Used on Emscripten after a readback wait yields to the browser (which presents
+        // and invalidates the current texture), so the next flush obtains a fresh one.
+        void DiscardAcquiredBackbuffer();
         // WEBGPU-53/54: renders every currently queued Clear()/3D-draw/SpriteBatch command into a
         // single render pass targeting the given RenderTarget2D's own colour+depth attachments,
         // then submits and clears every per-frame draw-command queue -- the RT-targeting sibling
