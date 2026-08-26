@@ -1306,9 +1306,20 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_media_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_media_smoke)
     add_test(NAME CApi_MediaSmoke COMMAND cna_c_api_media_smoke)
+    # CBIND-094. This test builds its song fixture through a real StorageContainer, so it writes
+    # to the user storage root -- which resolves under $XDG_DATA_HOME, or $HOME when that is
+    # unset. Left to the ambient environment it fails outright wherever $HOME is not writable,
+    # which is a statement about the machine and not about the media routes. Pin the storage root
+    # into the build tree the way CApi_StorageSmoke and CApi_ContentSmoke already do, and take
+    # dummy audio unconditionally: loading a song reaches the audio device, and a test must not
+    # depend on a reachable sound server to report on the media ABI.
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_MediaSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
+        )
+    else()
+        set_tests_properties(CApi_MediaSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
         )
     endif()
 
@@ -1517,6 +1528,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_gamers_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_gamers_smoke)
     add_test(NAME CApi_GamersSmoke COMMAND cna_c_api_gamers_smoke)
+    # CBIND-094. The gamer routes bring SDL up, and a default audio driver blocks where no sound
+    # server answers -- the test hung rather than failing, which is the worse of the two. It had
+    # no ENVIRONMENT at all; every neighbouring registration already takes dummy drivers.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_GamersSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
+        )
+    else()
+        set_tests_properties(CApi_GamersSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+        )
+    endif()
 
     add_executable(cna_c_api_gamer_identities_smoke
         tests/pure_c/GamerIdentitiesSmoke.c
