@@ -22,7 +22,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-3 | Renderer C/C++ identity parity | fixcnacs P1-2, fixcnats P1 | DONE (upstream) |
 | CABI-4 | Triage the 6 red C-API tests | prerequisite | 2 of 6 fixed; the rest attributed |
 | CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | DONE |
-| CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED |
+| CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED (searched, not shrugged) |
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
 | CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | RESOLVED: a standing CNA policy, with one gap closed |
 | CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE |
@@ -804,3 +804,65 @@ the original triage.
 One correction to that triage: the `[ShaderEffect] Compile error: illegal use of reserved word
 'this'` line is **not** a defect and not the renderer lane's. `EffectSmoke.c:434` deliberately
 compiles `"this is not a shader"` to check the refusal path; the message is expected output.
+
+## CABI-6 closed as unadjudicable, with the search recorded
+
+The verdict stands, but it is now backed by a search rather than an absence of one.
+
+`/rv/data/library/github.com/SimonDarksideJ/XNAGameStudio` — the official XNA sample archive,
+17.5 MB of C# — contains **8 occurrences of `Apply3D`**. Every one is
+`Cue.Apply3D(listener, emitter)`: a single listener, and on XACT's `Cue` rather than
+`SoundEffectInstance`. The `AudioListener[]` array overload is **never used anywhere in the
+archive**.
+
+So the two reimplementations remain the only evidence, and they disagree — FNA throws
+`NotSupportedException`, MonoGame loops over the listeners — with no XNA behaviour available here
+to break the tie. CNA matches FNA, which `CLAUDE.md` makes its behavioural reference.
+
+Implementing MonoGame's loop would be a guess that diverges from the stated reference on no
+evidence. The row stays `STILL_BLOCKED` pending XNA IL or a captured Windows runtime, which is the
+outcome `fixcnacs.md` Phase 4 explicitly permits.
+
+## Downstream read-only verification (fixcnacs P9, fixcnats)
+
+Both orders ask for read-only downstream checks. What this environment can actually run:
+
+| Binding | Toolchain | Result |
+| --- | --- | --- |
+| cna-rust | `cargo` present | `cargo check --offline --workspace` **passes** |
+| cna-cs | no `dotnet` | **not run** |
+| cna-java | no `mvn` | **not run** |
+| cna-ts | no `npm` | **not run** |
+
+The finding that matters more than the compile:
+
+- **`cna-rust` pins `CNA_ABI_VERSION = 0x0000_0700`** (`crates/cna-sys/src/lib.rs:14`) and
+  compares it for exact equality (`crates/cna/src/native/api.rs:601`). CNA is at **0.8.0**. That
+  binding therefore rejects the current library, and did so before this milestone began.
+- **`cna-cs`'s reviewed policy names 0.6.0, 0.7.0 and 0.8.0**, so it admits the current generation.
+
+This milestone did **not** change `CNA_ABI_VERSION`; every change is class C (additive) except
+[[CABI-7a]], which is class D — a value the ABI refused now succeeds, with the shape unchanged.
+So cna-cs's admission of 0.8.0 still holds structurally, but the reviewed entry for 0.8.0 now
+describes different behaviour for one route.
+
+    CNA_NEW_ABI_REQUIRES_DOWNSTREAM_REVIEW=false (no version change)
+    CNA_0_8_0_SEMANTICS_CHANGED=true (cna_sprite_batch_begin* accepts an unnamed sort mode)
+
+Per both orders, no downstream loader was weakened and no binding was modified.
+
+## ABI classification, all changes in this milestone
+
+| Change | Class | Note |
+| --- | --- | --- |
+| CABI-2, CABI-5, CABI-4 | none | tests only |
+| CABI-7a unnamed sort mode accepted | **D** | semantic; shape unchanged; needs downstream re-review |
+| CABI-7b `layerDepth` validated in `DrawString` | none at the C boundary | the C guard already refused it |
+| CABI-12 ELF link options skipped under Emscripten | none | build-system only |
+| CABI-13 `cna_graphics_device_create`/`_destroy` | **C** | additive |
+| CABI-14 wasm module target | none | new artifact, no ABI surface change |
+| CABI-15 ContentLost raised | **D** | an event that never fired now can, on three renderers |
+| CABI-9 `cna_video_player_get_frame_ext` | **C** | additive |
+
+`CNA_ABI_VERSION` is unchanged at 0.8.0. Two class-D rows are the ones a downstream review must
+look at.
