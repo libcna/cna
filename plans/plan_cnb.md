@@ -587,6 +587,52 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 
 ---
 
+## 7a. Test and build state at the end of this work
+
+**Suites.** 168 CNB tests across 11 gtest suites, all passing:
+
+| suite | tests | what it holds |
+|---|---|---|
+| `CnbContainerTest` + `CnbCrc32cTest` | 65 | one negative test per container invariant, plus CRC known answers |
+| `CnbCurveCodecTest` | 16 | `Curve` schema |
+| `CnbAnimationClipCodecTest` | 13 | `AnimationClip` schema |
+| `CnbModelCodecTest` | 28 | `Model` schema, device-free |
+| `CnbContentManagerTest` | 13 | the `.cnb` tier, resolution order, custom types |
+| `CnbCompilerTest` + `CnbCompilerToolTest` | 11 | the compiler, as a library and as a real process |
+| `CnbModelEquivalenceTest` | 5 | `.cnj`-versus-`.cnb` on real assets, plus the measurement sweep |
+| `CnbSpecConformanceTest` | 8 | the document against the implementation |
+| `CnbContainerFuzzTest` | 4 | 17 000 mutated inputs + 3 000 noise inputs |
+
+**Sanitizers.** `build-asan` (`-DCNA_SANITIZE=address,undefined`): all 163 device-independent CNB
+tests and all 380 content-module tests pass with **zero** sanitizer reports.
+
+**Regression.** Full `ctest -j8` on `cmake-build-debug`: **8321 tests, 37 failures**. The
+pre-existing baseline for this branch, measured before any CNB code existed, was **8157 tests, 29
+failures** — 25 of which are the same tests. The difference is accounted for and none of it is CNB:
+
+* +164 tests are CNB's own.
+* 9 `EasyGL_*` failures were `(Not Run)` in the baseline because that measurement built only
+  `CnaTests`; the final run builds everything, so those renderer executables now actually run.
+  They are llvmpipe/Mesa-under-Xvfb failures in code CNB does not touch.
+* 3 (`LeaderboardReaderTest`, `StorageDeviceDeleteContainerTest`, one `CueTest`) **pass in
+  isolation** — parallel-run flakes in unrelated modules.
+* 4 baseline failures (2 `ENetDiscoveryServiceTest`, 1 `WaveBankTest`, 1 `CueTest`) passed this
+  time, which is the same networking/audio flakiness from the other direction.
+
+The whole content-module test surface — 1077 tests — passes with exactly the two failures it had
+before this work (`GltfLimitationsDoc.CnaextSection32DoesNotClaimMoreThanTheRegistry`,
+`GltfRendererPbrFallbackPolicy.EveryPbrRendererHonorsCallerOwnedCullState`).
+
+**Platform boundary gates.** 4 of 5 pass. `tools/platform/sdl_inventory.py --check` reports
+`plans/plan_platform.md` §2 out of date — **pre-existing**: that file is byte-identical to its state
+at this branch's fork point, no CNB file contains the string `SDL`, and the drift includes one
+*fewer* SDL-referencing file, which an addition cannot cause. Left alone as unrelated scope.
+
+**Build artifacts.** `build-asan/` is 3.8 GB and exists only for the sanitizer run above; it can be
+deleted. `cmake-build-debug/` is 27 GB and is the normal incremental build directory.
+
+---
+
 ## 8. Measurements
 
 Recorded by `CnbModelEquivalenceTest.CompilingAModelReducesItsFileCountAndItsFileOpens`, which
