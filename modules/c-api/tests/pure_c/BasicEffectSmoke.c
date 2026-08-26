@@ -57,11 +57,18 @@ static int validate_standalone_light(void)
     CNA_DirectionalLightHandle light = CNA_INVALID_HANDLE;
     CNA_Vector3 value = {9.0F, 9.0F, 9.0F};
     CNA_Bool enabled = CNA_TRUE;
+    /*
+     * A new DirectionalLight carries XNA's own constructor defaults -- Direction = Vector3.Down,
+     * DiffuseColor = Vector3.One, SpecularColor = Vector3.Zero (DirectionalLight.cs:127-132 in the
+     * decompiled reference). This used to assert all three were zero, which was FNA's
+     * zero-initialised backing fields; CNA moved to XNA's values in 14ff4be7c (SAMPLE-016) and this
+     * test was left behind.
+     */
     REQUIRE(cna_directional_light_create(&light) == CNA_RESULT_SUCCESS);
     REQUIRE(cna_directional_light_get_diffuse_color(light, &value) ==
-                CNA_RESULT_SUCCESS && vector_equals(value, 0, 0, 0));
+                CNA_RESULT_SUCCESS && vector_equals(value, 1, 1, 1));
     REQUIRE(cna_directional_light_get_direction(light, &value) ==
-                CNA_RESULT_SUCCESS && vector_equals(value, 0, 0, 0));
+                CNA_RESULT_SUCCESS && vector_equals(value, 0, -1, 0));
     REQUIRE(cna_directional_light_get_specular_color(light, &value) ==
                 CNA_RESULT_SUCCESS && vector_equals(value, 0, 0, 0));
     REQUIRE(cna_directional_light_get_enabled(light, &enabled) ==

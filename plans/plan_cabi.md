@@ -1203,3 +1203,70 @@ then 12 — the extra nine a scattered mix of GL-using tests (`GraphicsExtSmoke`
 `GraphicsDeviceManagerSmoke`, `DevicesSmoke`, `TextureVolumeSmoke`) rather than anything
 attributable. A single run's number is not trustworthy here; the 3-failure result is the one that
 reproduces.
+
+## CABI-27 — What the three remaining red tests actually are
+
+Each traced to a cause. One is fixed; the other two are real and belong elsewhere.
+
+### `CApi_BasicEffectSmoke` — stale test, fixed
+
+`validate_standalone_light` asserted a fresh `DirectionalLight` reads back
+`DiffuseColor`, `Direction` and `SpecularColor` all as `(0,0,0)`.
+
+The XNA reference settles it — `DirectionalLight.cs:127-132`, the no-clone branch:
+
+```csharp
+Direction = Vector3.Down;      // (0,-1,0)
+DiffuseColor = Vector3.One;    // (1,1,1)
+SpecularColor = Vector3.Zero;  // (0,0,0)
+```
+
+CNA already matches that exactly, and its constructor comment says so, noting the deliberate
+difference from FNA's zero-initialised fields. The **test** was the stale half: CNA adopted XNA's
+values in `14ff4be7c (SAMPLE-016)` — the sample lane, correctly — and `BasicEffectSmoke`, last
+touched by `CBIND-035D6`, kept asserting the old zeros. Same shape as the Texture3D staleness in
+[[CABI-4]]: the sample lane corrected CNA toward XNA and a C-API test was left behind.
+
+Fixed. **Not a code change** — the expectations now match XNA and CNA both.
+
+### `CApi_Draw3DSmoke` — a real draw producing no output
+
+Characterised, not fixed. Instrumented down to the first guarded block of `validate_real_output`:
+
+```
+CLEAR ok=1                        the clear lands and reads back
+DRAW result=0 confirmed=0         the draw SUCCEEDS and the centre pixel is unchanged
+```
+
+`cna_graphics_device_draw_user_primitives` returns `CNA_RESULT_SUCCESS`, backbuffer readback works
+(`hasReadback=1`), 3D is supported (`supports3d=1`) — and the centre pixel still equals the clear
+colour, so `confirm_drawn` fails and every later block is skipped.
+
+**Not a software-rasteriser artefact**: identical on Xvfb `:101` (llvmpipe) and on the host GPU
+at `:0`. Either the user-primitive draw path renders nothing, or the test's geometry/state
+expectation is stale. It belongs to whoever owns the 3D draw path.
+
+### `CApi_InstalledConsumer` — the static archive cannot be built under Ninja
+
+Root-caused. The test installs the `CNACApi` component and builds a consumer against it. The
+install fails:
+
+```
+file INSTALL cannot find ".../modules/c-api/libcna_c_api_static.a": No such file or directory
+```
+
+That archive is produced by the `cna_c_api_static` target, which fails with:
+
+```
+CMakeFiles/cna_c_api.dir/link.txt does not exist; build the cna_c_api target before the static archive
+```
+
+The message misdiagnoses itself: `cna_c_api` **is** built. `tools/c-api/generate_static_archive.py`
+reads the link closure from `CMakeFiles/cna_c_api.dir/link.txt` (line 38) — and **`link.txt` is a
+Makefile-generator artefact that Ninja never writes**. There is no `link.txt` anywhere in this build
+tree.
+
+So the static archive, and therefore `CApi_InstalledConsumer`, can only work under
+`-G "Unix Makefiles"`. Nothing documents that, and every build recipe in `CLAUDE.md` uses Ninja.
+The fix is to obtain the closure a generator-independent way; it is build tooling and belongs with
+whoever owns the packaging target.
