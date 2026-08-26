@@ -447,7 +447,8 @@ typedef struct CNA_VideoFrameEXT {
     uint32_t struct_version;
     /** @brief Borrowed frame texture, or `CNA_INVALID_HANDLE` when no frame exists. */
     CNA_Handle texture;
-    /** @brief Frames decoded since playback started; zero before the first. */
+    /** @brief Frames decoded since the player was created; zero before the first. Monotonic:
+     *         never restarted by `Stop` or by playing a different video. */
     uint64_t generation;
     /** @brief Presentation timestamp of the held frame in seconds; negative when none. */
     double presentation_time;
@@ -465,8 +466,10 @@ typedef struct CNA_VideoFrameEXT {
  * `CNA_RESULT_INVALID_HANDLE` rather than touching freed memory.
  *
  * `generation` is what this route adds. Equal across two calls means the same pixels; a higher
- * value means the frame advanced. `Stop` and playing a different video restart it, so a stale
- * generation can never compare equal across a change.
+ * value means the frame advanced. It is monotonic for the lifetime of the player and is never
+ * restarted -- neither `Stop` nor playing a different video resets it -- which is precisely what
+ * lets a caller treat inequality as "the frame changed". Restarting the count would give the first
+ * frame of a second playback the same generation as the first frame of the first.
  *
  * @param player Owned player handle.
  * @param out_frame Receives the descriptor. Its `struct_size`/`struct_version` must be set by the

@@ -312,8 +312,10 @@ namespace Microsoft::Xna::Framework::Media
     void VideoPlayer::Play(Video* video)
     {
         // CABI-9: a generation from a previous playback must never compare equal to one from this
-        // playback, so Play restarts the count.
-        frameGeneration_ = 0U;
+        // playback. That is why the count is **never** restarted: it rises for the lifetime of the
+        // player, across every Play/Stop and every video. Restarting it here would hand playback B's
+        // first frame the same generation as playback A's -- the exact collision the contract in
+        // CNA/C/video.h forbids.
         CheckDisposed(isDisposed_);
         if (!video) return;
         // CNA's optional-backend profile intentionally keeps VideoPlayer's state/configuration API
@@ -331,9 +333,9 @@ namespace Microsoft::Xna::Framework::Media
 
     void VideoPlayer::Stop()
     {
-        // CABI-9: a generation from a previous playback must never compare equal to one from this
-        // playback, so Stop restarts the count.
-        frameGeneration_ = 0U;
+        // CABI-9: the generation is monotonic for the player's lifetime; see Play. Stop must not
+        // restart it either, or a generation captured before Stop would compare equal to one
+        // handed out after the next Play.
         CheckDisposed(isDisposed_);
         CloseDecoder();
         state_ = MediaState::Stopped;

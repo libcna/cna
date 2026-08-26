@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <thread>
@@ -597,3 +598,37 @@ TEST(VideoPlayerTest, SelectingAnOutOfRangeAudioTrackDoesNotTearDownTheStream)
     EXPECT_EQ(VideoPlayerTestAccess::GetAudioStreamPtr(player), before);
 }
 #endif  // SOUND_ENABLED
+
+// CABI-31: the frame generation is monotonic for the player's lifetime.
+//
+// This is the regression test for a contract that was documented and then implemented backwards.
+// Play() and Stop() each reset the counter to zero, under a comment that stated the goal correctly
+// -- "a generation from a previous playback must never compare equal to one from this playback" --
+// while the reset is precisely what makes them equal: every playback's first frame came back as
+// generation 1. A caller comparing generations to decide "did the frame change?" was told "no"
+// across a Stop/Play boundary, which is the one question the value exists to answer.
+//
+// The assertion that discriminates is the last one. With the resets in place `second` and `first`
+// are both 1 and EXPECT_GT fails; the earlier EXPECT_GE would pass either way, since 0 >= 0.
+TEST(VideoPlayerTest, FrameGenerationNeverRestartsAcrossStopAndReplay)
+{
+    GraphicsDevice gd;
+    Video video(kFixture, &gd);
+    VideoPlayer player;
+
+    EXPECT_EQ(player.GetFrameGenerationEXT(), 0U) << "nothing has been decoded yet";
+
+    player.Play(&video);
+    player.GetTexture();
+    const std::uint64_t first = player.GetFrameGenerationEXT();
+    ASSERT_GT(first, 0U) << "decoding a frame must advance the generation";
+
+    player.Stop();
+    EXPECT_GE(player.GetFrameGenerationEXT(), first) << "Stop must not restart the count";
+
+    player.Play(&video);
+    player.GetTexture();
+    const std::uint64_t second = player.GetFrameGenerationEXT();
+    EXPECT_GT(second, first)
+        << "the first frame of a second playback must not reuse a generation from the first";
+}

@@ -376,6 +376,74 @@ int main(void)
         (void)remove(FixturePath);
         return 4;
     }
+    /* CABI-31: the frame-identity route, exercised directly from C rather than only through the
+       C++ side. The descriptor is versioned, so the refusals matter as much as the success. */
+    if (cna_video_player_get_frame_ext(player, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        (void)remove(FixturePath);
+        return 7;
+    }
+    {
+        CNA_VideoFrameEXT bad_size = {0};
+        bad_size.struct_size = UINT32_C(1);
+        bad_size.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
+        if (cna_video_player_get_frame_ext(player, &bad_size) != CNA_RESULT_INVALID_ARGUMENT) {
+            (void)remove(FixturePath);
+            return 8;
+        }
+    }
+    {
+        CNA_VideoFrameEXT bad_version = {0};
+        bad_version.struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
+        bad_version.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION + UINT32_C(1);
+        if (cna_video_player_get_frame_ext(player, &bad_version) != CNA_RESULT_INVALID_ARGUMENT) {
+            (void)remove(FixturePath);
+            return 9;
+        }
+    }
+    {
+        CNA_VideoFrameEXT frame = {0};
+        CNA_VideoFrameEXT again = {0};
+        uint64_t before_stop = UINT64_C(0);
+
+        frame.struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
+        frame.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
+        if (cna_video_player_get_frame_ext(player, &frame) != CNA_RESULT_SUCCESS) {
+            (void)remove(FixturePath);
+            return 10;
+        }
+        /* Nothing has played, so there is no frame -- an ordinary answer, not a failure. */
+        if (frame.available != CNA_FALSE || frame.texture != CNA_INVALID_HANDLE ||
+            frame.generation != UINT64_C(0)) {
+            (void)remove(FixturePath);
+            return 11;
+        }
+
+        /* Two calls with no decode between them must report the same generation: that is what
+           lets a caller treat inequality as "the frame changed". */
+        again.struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
+        again.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
+        if (cna_video_player_get_frame_ext(player, &again) != CNA_RESULT_SUCCESS ||
+            again.generation != frame.generation) {
+            (void)remove(FixturePath);
+            return 12;
+        }
+
+        /* And Stop must not wind it back. It used to: Stop reset the counter, so a generation
+           captured before it compared equal to one handed out after the next Play. */
+        before_stop = again.generation;
+        if (cna_video_player_stop(player) != CNA_RESULT_SUCCESS) {
+            (void)remove(FixturePath);
+            return 13;
+        }
+        again.struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
+        again.struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
+        if (cna_video_player_get_frame_ext(player, &again) != CNA_RESULT_SUCCESS ||
+            again.generation < before_stop) {
+            (void)remove(FixturePath);
+            return 14;
+        }
+    }
+
     if (cna_video_player_destroy(player) != CNA_RESULT_SUCCESS) {
         (void)remove(FixturePath);
         return 5;

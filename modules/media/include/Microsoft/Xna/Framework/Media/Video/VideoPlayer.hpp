@@ -203,11 +203,12 @@ namespace Microsoft::Xna::Framework::Media
 
     public:
         /**
-         * @brief Number of frames this player has decoded since it started.
+         * @brief Number of frames this player has decoded since it was constructed.
          *
-         * Zero before playback. Equal across two calls means the same pixels; a higher value means
-         * the frame advanced. Reset by Stop and by playing a different video, so a stale value can
-         * never compare equal across a change.
+         * Zero before the first decoded frame. Equal across two calls means the same pixels; a
+         * higher value means the frame advanced. It is monotonic for the lifetime of the player and
+         * is **never** reset -- not by Stop, and not by playing a different video -- so a value
+         * captured before any such change can never compare equal to one handed out after it.
          *
          * @return The current frame generation.
          */
