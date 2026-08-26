@@ -23,7 +23,8 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-4 | Triage the 6 red C-API tests | prerequisite | TRIAGED, handed off |
 | CABI-5 | StorageContainer disposing: enumerated edge cases | fixcnacs P3 | DONE |
 | CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED |
-| CABI-7 | SpriteBatch unknown sort mode / non-finite values | fixcnacs P5 | OPEN |
+| CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
+| CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | BLOCKED by a real crash |
 | CABI-8 | Resource-loss model: investigate, design or document | fixcnats P3 | OPEN |
 | CABI-9 | VideoPlayer frame identity/generation contract | fixcnats P4 | OPEN |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | OPEN |
@@ -128,3 +129,61 @@ in-flight work and would decide a capability question that does not belong to th
 
 `CApi_MediaPlayerSmoke` is the one that should not wait: an ordering-dependent failure that
 passes alone is the kind that gets re-diagnosed from scratch every time somebody sees it.
+
+## Test environment
+
+All results on this branch are measured on **Xvfb `:101`** (`-screen 0 1920x1080x24 +extension GLX
++render -noreset`), with `CNA_TEST_DISPLAY=:101` in the build cache. Verified equivalent to the
+real display: 83 C-API tests, 5 failing, identical set on both.
+
+One trap worth recording, because it cost a wrong conclusion here. Forcing `SDL_VIDEODRIVER=x11`
+on the ctest invocation raises the failure count from 5 to **45** — it overrides the per-test
+`SDL_VIDEODRIVER=dummy` that several cases set for themselves. Set `DISPLAY` and let each test
+choose its own driver.
+
+## CABI-7b — Non-finite sprite values (BLOCKED by a real crash)
+
+The other half of `fixcnacs.md` Phase 5. XNA does not validate sprite floats — FNA's `SpriteBatch`
+raises `ArgumentException` only for unresolvable font characters (`SpriteBatch.cs:782`, `:978`),
+and `PushSprite` writes the caller's values straight into the vertex path. CNA's C API refuses
+them at three sites in `CnaCApiGraphics.cpp` (`submit_many`, the scaled variant, and
+`draw_string`), which is a genuine divergence.
+
+**It is not safe to remove those guards today.** Measured, with the guards removed and a begun
+batch drawing NaN, `+INF`, `-INF` and `-0.0`:
+
+```
+P1 nan            P5 all-drawn        P8 before-batch-destroy
+P2 +inf           P6 before-end       P9 after-batch-destroy
+P3 -inf           P7 after-end        -> SIGSEGV
+P4 -0
+```
+
+Every C API call **succeeds** — all four draws, `End`, the font/atlas/batch destroys — and the
+process then segfaults later. Deterministic, 3 runs of 3. That is the worst available failure
+mode: the ABI reports success and the process dies after the caller has been told everything
+worked.
+
+So the `isfinite` guards are not merely a divergence from XNA; they are holding back a real crash
+in CNA's own sprite path. Both work orders' own rules point the same way here —
+`fixcnats.md` Phase 2 ("never process abort for ordinary invalid public API state") and
+`fixcnacs.md` Phase 5 ("preserve valid CNA-specific safety checks") — so the guards stay, and the
+divergence is recorded rather than traded for an abort.
+
+**The real defect is upstream of the C boundary** and needs its own ticket: CNA's sprite/flush
+path cannot carry non-finite vertex values without crashing. Until that is fixed, no amount of
+C-API work can make this row XNA-faithful.
+
+Reproducer, ~3 lines on top of this HEAD:
+
+1. Delete the `std::isfinite` clauses from the three sprite-command guards in
+   `modules/c-api/src/CnaCApiGraphics.cpp` (keep the struct/effects checks).
+2. Inside a begun batch in `GraphicsDeviceSmoke.c`, `cna_sprite_batch_draw_string` a command with
+   `rotation = NAN`.
+3. `DISPLAY=:101 ctest -R "^CApi_GraphicsDeviceSmoke$"` → SEGFAULT, after every call has returned
+   success.
+
+Note the C++ layer is not the culprit by itself: `SpriteBatch::Begin`/`Draw` hold the values
+without dereferencing anything by them. The crash is downstream of the draw calls and outlives
+`End` and the resource destroys, which points at the renderer's vertex submission rather than at
+the front end.
