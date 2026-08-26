@@ -6131,6 +6131,13 @@ struct VSOut {
         // silently refuses.
         if (capability == CNA::GraphicsCapability::MultipleRenderTargets)
             return false;
+        // WEBGPU-135: occlusion queries. CreateOcclusionQuery() is not overridden, so it returns the
+        // base nullptr and OcclusionQuery::IsComplete stays false / PixelCount 0 with no diagnostic
+        // (WEBGPU-84 -- real occlusion queries -- is open). Reporting the permissive default would
+        // claim a feature the renderer silently no-ops, the same WEBGPU-115 defect class as above.
+        // This arm only stops the false claim; it does not implement the query.
+        if (capability == CNA::GraphicsCapability::OcclusionQuery)
+            return false;
         return IGraphicsRenderer::SupportsCapability(capability);
     }
 

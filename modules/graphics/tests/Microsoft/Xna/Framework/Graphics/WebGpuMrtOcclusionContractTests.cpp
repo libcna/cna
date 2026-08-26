@@ -165,4 +165,19 @@ TEST(WebGpuMrtOcclusionContract, TwoTargetBindThrowsNotSupportedAndDeviceRecover
         << "the device did not recover to single-target rendering after a refused MRT bind";
 }
 
+// ---------------------------------------------------------------------------
+// WEBGPU-135: the occlusion-query capability answers false. The renderer does not override
+// CreateOcclusionQuery(), so a created query would be a permanent no-op (IsComplete false forever,
+// PixelCount 0) with no diagnostic; the capability must not claim otherwise. WEBGPU-84 (implementing
+// the query) stays open -- this only stops the false claim.
+// ---------------------------------------------------------------------------
+TEST(WebGpuMrtOcclusionContract, OcclusionQueryCapabilityIsFalse)
+{
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
+    GraphicsDevice gd;
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery))
+        << "WebGPU claims OcclusionQuery support while CreateOcclusionQuery() returns the base "
+           "nullptr -- the WEBGPU-135 override is gone and a game's query silently never completes";
+}
+
 #endif  // CNA_RENDERER_WEBGPU

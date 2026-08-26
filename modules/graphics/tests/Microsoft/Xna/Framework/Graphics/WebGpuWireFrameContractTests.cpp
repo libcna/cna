@@ -286,7 +286,7 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery));
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::CustomEffects));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::Texture3D));
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultiStreamVertexInput));
