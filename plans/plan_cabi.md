@@ -1002,3 +1002,59 @@ if (!is3d) { throw new InvalidOperationException(FrameworkResources.InvalidApply
 XNA refuses `Apply3D` on an instance that already submitted a non-3D packet. CNA sets `is3D_ = true`
 unconditionally. Recorded rather than changed: it is a separate behaviour from the listener-count
 blocker, and it wants its own test matrix over play/pause/submit ordering.
+
+## CABI-21 — The EffectPass lifetime question was mine, not CNA's
+
+I twice reported that an `EffectPass` outliving its `Effect` fails to keep the effect's retained
+textures alive, and framed it as a contract question needing an owner decision. **Both readings
+were wrong, and the cause was my own probe.**
+
+### What the measurements actually say
+
+Sequenced one statement at a time — which matters, because C leaves function-argument evaluation
+order unspecified, and my first "measurement" put all six calls in one `fprintf` argument list:
+
+```
+SEQ gameDestroy1=3 (want 3)     SEQ passDestroy=0  (want 0)
+SEQ passApply=0    (want 0)     SEQ cubeDestroy2=0 (want 0)
+SEQ cubeDestroy1=3 (want 3)     SEQ gameDestroy2=3 (want 0)   <-- the only mismatch
+```
+
+GCC evaluated that argument list right-to-left, so `cna_effect_pass_destroy` ran **before**
+`cna_texturecube_destroy`. The retention had already been released by the time the cube was
+destroyed, and I read the resulting `SUCCESS` as "the pass does not retain".
+
+The contract holds in every combination actually measured:
+
+| Situation | `cna_texturecube_destroy(retained_cube)` |
+| --- | --- |
+| Effect alive | `INVALID_STATE` — retained |
+| Effect destroyed, pass alive | `INVALID_STATE` — **still retained** |
+| After `cna_effect_pass_apply` | `INVALID_STATE` — still retained |
+| After the frame returns | `INVALID_STATE` — still retained |
+| Effect never destroyed, across the frame | `INVALID_STATE` — still retained |
+
+`PassResource::effectOwnership` → `EffectLifetime` → `RetainedTextureSlot` works exactly as
+designed. **There is no design decision to make here**, and none of the five options I set out for
+the owner applies.
+
+### What the EffectSmoke failure actually is
+
+The final `cna_game_destroy` returns `CNA_RESULT_INVALID_STATE` where the test wants `SUCCESS`:
+something the test created is still counted as an owned resource when the game should be
+destroyable. That is a leak in the test or in the accounting, not a lifetime contract.
+
+**Not from this milestone.** Verified by rebuilding the whole C API from `424a73950~1`
+(pre-[[CABI-13]]) and re-running the *sequenced* probe: byte-identical output, including
+`gameDestroy2=3`. The owner-token accounting change is not responsible.
+
+### The lesson worth keeping
+
+A probe that packs several state-changing calls into one argument list is not a measurement. C
+sequences arguments however it likes, and the order it picked here inverted the conclusion twice.
+Sequenced statements, one result printed per line.
+
+Suite unchanged: **84 C-API tests, 80 passing** on Xvfb `:101`. `CApi_RuntimeGameSmoke` hung once
+during a full run and passes in isolation twice — the same transient display flakiness this
+environment already shows, not a regression; running ctest with `--timeout 90` keeps one hang from
+blocking the suite.
