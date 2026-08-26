@@ -52,20 +52,56 @@ def run(command: list[str], description: str) -> str:
     return completed.stdout
 
 
-def read_link_line(module_dir: Path) -> tuple[list[str], list[str], list[str]]:
+def ninja_link_line(build_dir: Path, module_dir: Path) -> str | None:
+    """The same link line, asked of Ninja, which writes no link.txt.
+
+    `link.txt` is a Makefile-generator artifact. Under Ninja the link command lives in
+    build.ninja, and `ninja -t commands` prints it; the last command needed to produce the
+    library is the link itself. Its paths are relative to the build root rather than to the
+    module directory, which is why the caller is told which root to resolve against.
+    """
+    ninja = shutil.which("ninja")
+    if ninja is None or not (build_dir / "build.ninja").exists():
+        return None
+    try:
+        relative = (module_dir / "libcna_c_api.so").resolve().relative_to(build_dir)
+    except ValueError:
+        return None
+    completed = subprocess.run(
+        [ninja, "-C", str(build_dir), "-t", "commands", str(relative)],
+        capture_output=True, text=True)
+    if completed.returncode != 0 or not completed.stdout.strip():
+        return None
+    return completed.stdout.strip().splitlines()[-1]
+
+
+def read_link_line(
+    module_dir: Path, build_dir: Path) -> tuple[list[str], list[str], list[str]]:
     """Split CMake's own link line into objects, archives and external libraries."""
     path = module_dir / LINK_LINE
-    if not path.exists():
-        raise SystemExit(
-            f"{path} does not exist; build the cna_c_api target before the static archive.")
-    working = module_dir.resolve()
+    if path.exists():
+        working = module_dir.resolve()
+        tokens = path.read_text(encoding="utf-8").split()
+    else:
+        command = ninja_link_line(build_dir, module_dir)
+        if command is None:
+            raise SystemExit(
+                f"{path} does not exist and no Ninja link line could be read; build the "
+                "cna_c_api target before the static archive.")
+        # Ninja wraps the link in a shell command; its paths are build-root relative.
+        working = build_dir.resolve()
+        tokens = command.split()
     objects: list[str] = []
     archives: list[str] = []
     external: list[str] = []
-    for token in path.read_text(encoding="utf-8").split():
+    for token in tokens:
         if token.startswith("-") or token.endswith("link.txt"):
             if token.startswith("-l"):
                 external.append(token)
+            continue
+        # Shell punctuation and the compiler driver itself are not inputs. Ninja's form is
+        # ": && /usr/bin/c++ ... && :", and neither generator names an input this way.
+        if token in {":", "&&", "cd"} or token.endswith("/c++") or token.endswith("/cc"):
             continue
         resolved = token if Path(token).is_absolute() else str((working / token).resolve())
         if token.endswith(".o"):
@@ -114,7 +150,7 @@ def main() -> int:
     work.mkdir(parents=True, exist_ok=True)
 
     linker, objcopy, archiver, nm = (require(tool) for tool in ("ld", "objcopy", "ar", "nm"))
-    objects, archives, external = read_link_line(module_dir)
+    objects, archives, external = read_link_line(module_dir, build_dir)
 
     combined = work / "cna_c_api_combined.o"
     run([linker, "-r", "--whole-archive", *archives, "--no-whole-archive", *objects,

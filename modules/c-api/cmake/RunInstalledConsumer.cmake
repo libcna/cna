@@ -97,11 +97,24 @@ else()
         "CNA_C_API_BUILD_STATIC=OFF")
 endif()
 
+# SDL's dummy video driver has no OpenGL, so a GL renderer cannot create a window under it and the
+# consumer dies before it reaches the graphics device this test exists to reach. Only a backend
+# that needs no GL context can be run headless this way; every other one inherits the environment's
+# own driver, which under ctest is whatever display the suite was pointed at.
+set(_consumer_env)
+if(NOT CNA_GRAPHICS_RENDERER OR
+   CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER" OR
+   CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" OR
+   CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE" OR
+   CNA_GRAPHICS_RENDERER STREQUAL "STUB")
+    list(APPEND _consumer_env "SDL_VIDEODRIVER=dummy")
+endif()
+
 # Deliberately no LD_LIBRARY_PATH: the consumer is run in an environment that knows nothing about
 # where CNA or SDL live, which is the only way to prove the installed package stands on its own.
 execute_process(
     COMMAND ${CMAKE_COMMAND} -E env
-        "SDL_VIDEODRIVER=dummy"
+        ${_consumer_env}
         "${_consumer_program}"
     RESULT_VARIABLE _run_code
     OUTPUT_VARIABLE _run_output
@@ -126,7 +139,7 @@ endforeach()
 # behave identically. A difference here is an ABI difference between the two halves of the package.
 if(CNA_EXPECT_STATIC AND _static_program)
 execute_process(
-    COMMAND ${CMAKE_COMMAND} -E env "SDL_VIDEODRIVER=dummy" "${_static_program}"
+    COMMAND ${CMAKE_COMMAND} -E env ${_consumer_env} "${_static_program}"
     RESULT_VARIABLE _static_code
     OUTPUT_VARIABLE _static_output
     ERROR_VARIABLE _static_error)

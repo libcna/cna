@@ -1652,6 +1652,7 @@ if(CNA_BUILD_TESTS)
                 -DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
                 -DCNA_SANITIZE=${CNA_SANITIZE}
                 -DCNA_EXPECT_STATIC=$<BOOL:${CNA_C_API_BUILD_STATIC}>
+                -DCNA_GRAPHICS_RENDERER=${CNA_GRAPHICS_RENDERER}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
         # It installs, configures, compiles and runs; it is by far the slowest test here, and the
         # steady-state cost is small because cmake --install rewrites nothing that has not changed.
