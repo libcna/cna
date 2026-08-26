@@ -1019,11 +1019,14 @@ Nothing downstream was modified and no loader was weakened.
 All on Xvfb `:101` with `SDL_VIDEODRIVER=x11`, confirmed by the EasyGL banner reporting `MSAA up to
 4x` (llvmpipe) rather than `8x` (host GPU).
 
-    C API + ABI gates          95 / 96      only CApi_Draw3DSmoke red
+    C API + ABI gates          96 / 96
+    SpriteBatch / SpriteFont   98 / 98      including the non-finite and NaN-sort cases
     changed areas              309 / 309    ContentLost, VideoPlayer, SoundEffectInstance,
                                             Cue, SoundBank, DynamicSoundEffectInstance
     wasm module                2874 / 2874 exports present, reports ABI 0.9.0
-    full native suite          8209 / 8238
+    wasm in a browser          4 / 4        headless Chrome, via the repository's own runner
+    CNA.NET                    759 passed; 117/119 integration against an admitted label
+    full native suite          8212 / 8240
 
 All eight C API documentation and ABI gates are green, including the two that were red on
 `2177a043b`.
@@ -1039,6 +1042,13 @@ runs, which is the signature of the parallel-isolation flake this suite has had 
 `CApi_Draw3DSmoke` was the one red test at that point, and [[CABI-36]] closed it: the failure was
 in the test, which cleared colour but not depth and so drew against an undefined depth buffer. The
 C API and ABI suite is **96 / 96**.
+
+The 28 remaining native failures are the same population as before, minus the two that were fixed.
+Ten declaration/layout cases were controlled against a full revert of [[CABI-28]] and fail
+identically without it; eight are EasyGL goldens, three glTF, two ENet. The rest are timing cases
+that pass in isolation and fail only under `-j4` -- the set changes between runs, which is the
+signature of the parallel-isolation flake this suite has had for a while, and no SpriteBatch or
+SpriteFont case is among them.
 
 ### Non-finite sprite values -- the last work-order item, now satisfied
 
