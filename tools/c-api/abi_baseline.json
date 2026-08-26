@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 2048,
+  "encoded": 2304,
   "major": 0,
-  "minor": 8,
+  "minor": 9,
   "patch": 0,
-  "runtime": 2048
+  "runtime": 2304
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1872,6 +1872,8 @@
   "cna_graphics_device_copy_renderer_name",
   "cna_graphics_device_copy_type_name",
   "cna_graphics_device_copy_vertex_buffers",
+  "cna_graphics_device_create",
+  "cna_graphics_device_destroy",
   "cna_graphics_device_dispose",
   "cna_graphics_device_draw_indexed_primitives",
   "cna_graphics_device_draw_instanced_primitives",
@@ -3067,6 +3069,8 @@
   "cna_render_target_cube_create",
   "cna_render_target_destroy",
   "cna_render_target_get_info",
+  "cna_render_target_subscribe_content_lost",
+  "cna_render_target_unsubscribe_content_lost",
   "cna_render_target_usage_preserves_contents",
   "cna_sampler_state_init",
   "cna_sensor_info_equals",
@@ -3677,6 +3681,7 @@
   "cna_video_player_create",
   "cna_video_player_destroy",
   "cna_video_player_dispose",
+  "cna_video_player_get_frame_ext",
   "cna_video_player_get_is_disposed",
   "cna_video_player_get_is_looped",
   "cna_video_player_get_is_muted",
@@ -3724,9 +3729,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 2048,
+  "CNA_ABI_VERSION": 2304,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 8,
+  "CNA_ABI_VERSION_MINOR": 9,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -5005,6 +5010,7 @@
   "CNA_VERTEX_TYPE_POSITION_NORMAL_TEXTURE": 4,
   "CNA_VERTEX_TYPE_POSITION_NORMAL_TEXTURE_SKINNED": 5,
   "CNA_VERTEX_TYPE_POSITION_TEXTURE": 6,
+  "CNA_VIDEO_FRAME_EXT_STRUCT_VERSION": 1,
   "CNA_VIDEO_SOUNDTRACK_TYPE_DIALOG": 1,
   "CNA_VIDEO_SOUNDTRACK_TYPE_MAXIMUM": 2,
   "CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC": 0,
@@ -5887,6 +5893,10 @@
   "CNA_RenderQuality": [
    4,
    4
+  ],
+  "CNA_RenderTargetEventRegistrationHandle": [
+   8,
+   8
   ],
   "CNA_RenderTargetKind": [
    4,
@@ -11940,6 +11950,40 @@
     ]
    },
    "size": 48
+  },
+  "CNA_VideoFrameEXT": {
+   "align": 8,
+   "fields": {
+    "available": [
+     32,
+     1
+    ],
+    "generation": [
+     16,
+     8
+    ],
+    "presentation_time": [
+     24,
+     8
+    ],
+    "reserved": [
+     33,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "texture": [
+     8,
+     8
+    ]
+   },
+   "size": 40
   },
   "CNA_VideoInfo": {
    "align": 8,

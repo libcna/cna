@@ -2,11 +2,30 @@
 
 ## ABI identity
 
-The ABI is `0.8.0`. It adds the NanoVG renderer identity and the five engine-layer capability
-identities for float and half-float render targets, half-float texture filtering, compute shaders,
-and indirect drawing. Appending those identities moves the two public `MAXIMUM` sentinels, so this
-is a reviewed incompatible change under the experimental `0.x` policy rather than an additive
-patch to `0.7.0`.
+The ABI is `0.9.0`. It adds the owned-`GraphicsDevice` routes
+(`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
+(`cna_render_target_subscribe_content_lost`/`_unsubscribe_content_lost` and the
+`CNA_RenderTargetEventRegistrationHandle` they hand back), and the frame-identity route
+`cna_video_player_get_frame_ext` with its `CNA_VideoFrameEXT` descriptor and
+`CNA_VIDEO_FRAME_EXT_STRUCT_VERSION`.
+
+Those additions alone would be additive. The minor moves because `0.9.0` also **changes two
+documented contracts**, and a consumer that read the previous headers was told the opposite of what
+now happens:
+
+- **ContentLost is raised.** Through `0.8.0` the dynamic vertex- and index-buffer headers stated
+  that CNA never raises the event and that registration existed only to preserve the shape of the
+  public contract. It is now raised for real on the renderers whose API can lose a device
+  (DirectX9, Direct2D, Skia). A consumer that registered a callback expecting it to be dead will
+  now see it called.
+- **A video frame generation is never restarted.** The counter is monotonic for the lifetime of the
+  player. `Play` and `Stop` previously reset it, which gave the first frame of every playback the
+  same generation and so defeated the one comparison the value exists to support.
+
+`0.8.0` added the NanoVG renderer identity and the five engine-layer capability identities for
+float and half-float render targets, half-float texture filtering, compute shaders, and indirect
+drawing. Appending those identities moves the two public `MAXIMUM` sentinels, so it too was a
+reviewed incompatible change rather than an additive patch to `0.7.0`.
 
 `0.7.0` added the six PBR and morph-target routes from `CBIND-078`; `0.6.0` standardized empty
 shader-source refusal in `CBIND-075`; `0.5.0` added the portable native-window handle routes from
@@ -162,6 +181,6 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 2,867 symbols. That is itself part of the contract:
+All four build configurations export the same 2,872 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer or with `CNA_DEVICES` — only the answers do. A
 route whose backend is absent exists and refuses, rather than disappearing from the library.
