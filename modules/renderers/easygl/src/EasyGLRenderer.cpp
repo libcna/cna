@@ -2327,14 +2327,23 @@ else
                                             const void* pixels)
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        if (static_cast<SurfaceFormat>(surfaceFormat_) == SurfaceFormat::NormalizedByte4)
+        const SurfaceFormat uploadFormat = static_cast<SurfaceFormat>(surfaceFormat_);
+        // The two signed-normalized byte formats differ only in channel count. NormalizedByte2 is
+        // what a content pipeline picks for a 2D displacement map, where a third and fourth
+        // channel would carry nothing (SAMPLE-032's DisplacementMapProcessor ends with exactly
+        // that conversion).
+        if (uploadFormat == SurfaceFormat::NormalizedByte4 ||
+            uploadFormat == SurfaceFormat::NormalizedByte2)
         {
+            const bool twoChannel = uploadFormat == SurfaceFormat::NormalizedByte2;
             texture.bind(::easygl::TextureTarget::Texture2D);
             ::metagl::glPixelStorei(::metagl::PixelStoreParam::UnpackAlignment, 1);
             texture.set_image_2d(::easygl::TextureTarget::Texture2D, level,
-                                 ::easygl::InternalFormat::Rgba8Snorm,
+                                 twoChannel ? ::easygl::InternalFormat::Rg8Snorm
+                                            : ::easygl::InternalFormat::Rgba8Snorm,
                                  levelWidth, levelHeight,
-                                 ::easygl::PixelFormat::Rgba,
+                                 twoChannel ? ::easygl::PixelFormat::Rg
+                                            : ::easygl::PixelFormat::Rgba,
                                  ::easygl::PixelType::Byte, pixels);
             texture.set_parameter(::easygl::TextureTarget::Texture2D,
                                   ::easygl::TextureParameterSetter::MinFilter,
@@ -4212,7 +4221,7 @@ if (ProfileUsesGlslEs100())
                       << "; texture SurfaceFormat: Color"
                       << (ProfileIsEs2ApiGeneration()
                               ? " only"
-                              : " + NormalizedByte4 (RGBA8_SNORM)")
+                              : " + NormalizedByte4 (RGBA8_SNORM) + NormalizedByte2 (RG8_SNORM)")
                       // plans/plan_modern.md MOD-117: render targets are no longer Color-only, and the
                       // answer is driver-dependent, so it is probed rather than asserted.
                       << "; render-target SurfaceFormat: Color"
@@ -4749,7 +4758,8 @@ if (!ProfileIsEs2ApiGeneration())
         const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
         if (format == SurfaceFormat::Color)
             return RendererFormatVerdict::Supported;
-        if (format == SurfaceFormat::NormalizedByte4)
+        // Both signed-normalized byte formats need the ES 3 sized-internal-format set.
+        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
         {
             return ProfileIsEs2ApiGeneration()
                 ? RendererFormatVerdict::Unsupported
@@ -4761,7 +4771,8 @@ if (!ProfileIsEs2ApiGeneration())
     RendererFormatVerdict EasyGLRenderer::ClassifyColorTransferFormatEXT(int surfaceFormat) const
     {
         using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
-        if (static_cast<SurfaceFormat>(surfaceFormat) == SurfaceFormat::NormalizedByte4)
+        const SurfaceFormat format = static_cast<SurfaceFormat>(surfaceFormat);
+        if (format == SurfaceFormat::NormalizedByte4 || format == SurfaceFormat::NormalizedByte2)
             return RendererFormatVerdict::Unsupported;
         return RendererFormatVerdict::Defer;
     }

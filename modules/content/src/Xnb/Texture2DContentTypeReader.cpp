@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/NormalizedByte4.hpp"
 
 namespace CNA::Internal::Xnb
@@ -18,6 +19,7 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Content::ContentLoadException;
     using Microsoft::Xna::Framework::Content::ContentReader;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2;
     using Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
     using Microsoft::Xna::Framework::Graphics::Texture;
@@ -108,19 +110,27 @@ namespace CNA::Internal::Xnb
         {
             throw ContentLoadException("Texture2DReader: invalid width/height.");
         }
-        input.CheckDecodedByteSize(
-            CheckedMultiplyOrThrow({width, height, 4}, "Texture2DReader"), "Texture2DReader");
-
         // Always decompress DXT to Color -- see this reader's class docs for why (XNB-24's
         // fuller per-renderer capability query is deferred, not required for correctness).
         const SurfaceFormat uploadFormat = IsCompressed(surfaceFormat) ? SurfaceFormat::Color : surfaceFormat;
         if (uploadFormat != SurfaceFormat::Color &&
-            uploadFormat != SurfaceFormat::NormalizedByte4)
+            uploadFormat != SurfaceFormat::NormalizedByte4 &&
+            uploadFormat != SurfaceFormat::NormalizedByte2)
         {
             throw ContentLoadException(
                 "Texture2DReader: SurfaceFormat is not yet supported by CNA's .xnb reader "
-                "(only Color/NormalizedByte4/Dxt1/Dxt3/Dxt5 are implemented so far).");
+                "(only Color/NormalizedByte2/NormalizedByte4/Dxt1/Dxt3/Dxt5 are implemented "
+                "so far).");
         }
+
+        // Not every supported format is four bytes per pixel: NormalizedByte2 carries only the
+        // X and Y channels, which is exactly why a content pipeline picks it for a 2D
+        // displacement map. The decoded-byte bound has to follow the format rather than assume.
+        const int32_t bytesPerPixel =
+            uploadFormat == SurfaceFormat::NormalizedByte2 ? 2 : 4;
+        input.CheckDecodedByteSize(
+            CheckedMultiplyOrThrow({width, height, bytesPerPixel}, "Texture2DReader"),
+            "Texture2DReader");
 
         GraphicsDevice* device = input.getContentManagerProperty()
             ? &input.getContentManagerProperty()->getGraphicsDeviceInternal()
@@ -222,18 +232,34 @@ namespace CNA::Internal::Xnb
 
             const int32_t pixelCount = levelWidth * levelHeight;
             // The compressed branch above always produces exactly pixelCount*4 bytes by
-            // construction; either uncompressed four-byte format can still disagree here, if the
-            // file's own declared byteCount does not match levelWidth/levelHeight (a
-            // truncated/adversarial file) -- catch that before indexing into bytes below.
-            if (bytes.size() != static_cast<std::size_t>(pixelCount) * 4)
+            // construction; an uncompressed format can still disagree here, if the file's own
+            // declared byteCount does not match levelWidth/levelHeight (a truncated/adversarial
+            // file) -- catch that before indexing into bytes below. The expected size follows
+            // the format's own bytes per pixel, which is 2 for NormalizedByte2.
+            const std::size_t expectedLevelBytes =
+                static_cast<std::size_t>(pixelCount) * static_cast<std::size_t>(bytesPerPixel);
+            if (bytes.size() != expectedLevelBytes)
             {
                 throw ContentLoadException(
                     "Texture2DReader: level " + std::to_string(level) + " byte count (" +
                     std::to_string(bytes.size()) + ") does not match " + std::to_string(levelWidth) +
                     "x" + std::to_string(levelHeight) + "'s required " +
-                    std::to_string(static_cast<std::size_t>(pixelCount) * 4) + " bytes.");
+                    std::to_string(expectedLevelBytes) + " bytes.");
             }
-            if (uploadFormat == SurfaceFormat::NormalizedByte4)
+            if (uploadFormat == SurfaceFormat::NormalizedByte2)
+            {
+                std::vector<NormalizedByte2> normals(static_cast<std::size_t>(pixelCount));
+                for (int32_t i = 0; i < pixelCount; ++i)
+                {
+                    const std::size_t o = static_cast<std::size_t>(i) * 2;
+                    const uint16_t packed = static_cast<uint16_t>(
+                        static_cast<uint16_t>(bytes[o]) |
+                        static_cast<uint16_t>(static_cast<uint16_t>(bytes[o + 1]) << 8u));
+                    normals[static_cast<std::size_t>(i)].setPackedValueProperty(packed);
+                }
+                texture.SetData(level, nullptr, normals.data(), 0, pixelCount);
+            }
+            else if (uploadFormat == SurfaceFormat::NormalizedByte4)
             {
                 std::vector<NormalizedByte4> normals(static_cast<std::size_t>(pixelCount));
                 for (int32_t i = 0; i < pixelCount; ++i)
