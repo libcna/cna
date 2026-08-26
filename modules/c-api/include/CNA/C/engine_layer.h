@@ -456,6 +456,347 @@ CNA_C_API CNA_Result cna_compute_shader_copy_compile_error(
  */
 CNA_C_API CNA_Result cna_compute_shader_destroy(CNA_ComputeShaderHandle shader);
 
+/* ---------------------------------------------------------------------------------------------
+ * GPU timers
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief Owned handle for one non-blocking engine-layer GPU timer. */
+typedef CNA_Handle CNA_GpuTimerHandle;
+
+/**
+ * @brief Creates a GPU timer for a device.
+ *
+ * Creation also succeeds where the renderer has no timer query; use
+ * @ref cna_gpu_timer_is_supported and @ref cna_gpu_timer_copy_unsupported_reason to inspect that
+ * state.
+ *
+ * @param graphics_device The device to measure on.
+ * @param out_timer Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_create(
+    CNA_Handle graphics_device,
+    CNA_GpuTimerHandle* out_timer);
+
+/**
+ * @brief Reports whether the renderer supplied a GPU timer query.
+ *
+ * @param timer The timer.
+ * @param out_supported Receives the support state.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_is_supported(
+    CNA_GpuTimerHandle timer,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Copies why the timer is unsupported as UTF-8 bytes, without a terminator.
+ *
+ * A supported timer reports zero bytes.
+ *
+ * @param timer The timer.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_copy_unsupported_reason(
+    CNA_GpuTimerHandle timer,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Opens the timed range, or does nothing when unsupported or already open.
+ *
+ * @param timer The timer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_begin(CNA_GpuTimerHandle timer);
+
+/**
+ * @brief Closes the timed range, or does nothing when unsupported or not open.
+ *
+ * @param timer The timer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_end(CNA_GpuTimerHandle timer);
+
+/**
+ * @brief Reports whether the last closed range can be collected without blocking.
+ *
+ * @param timer The timer.
+ * @param out_available Receives the availability state.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_is_result_available(
+    CNA_GpuTimerHandle timer,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Collects a finished result without blocking.
+ *
+ * @param timer The timer.
+ * @param out_collected Receives `CNA_TRUE` only when a new result was collected.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_poll(
+    CNA_GpuTimerHandle timer,
+    CNA_Bool* out_collected);
+
+/**
+ * @brief Gets the most recently collected GPU time in milliseconds.
+ *
+ * @param timer The timer.
+ * @param out_milliseconds Receives the elapsed time, or zero before the first result.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_get_last_milliseconds(
+    CNA_GpuTimerHandle timer,
+    double* out_milliseconds);
+
+/**
+ * @brief Gets how many results have been collected.
+ *
+ * @param timer The timer.
+ * @param out_sample_count Receives the sample count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_get_sample_count(
+    CNA_GpuTimerHandle timer,
+    int32_t* out_sample_count);
+
+/**
+ * @brief Reports whether a timed range is currently open.
+ *
+ * @param timer The timer.
+ * @param out_open Receives the open state.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_is_open(
+    CNA_GpuTimerHandle timer,
+    CNA_Bool* out_open);
+
+/**
+ * @brief Releases a GPU timer and its query object.
+ *
+ * @param timer The timer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_timer_destroy(CNA_GpuTimerHandle timer);
+
+/* ---------------------------------------------------------------------------------------------
+ * Render-target pools
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief Owned handle for one engine-layer render-target pool. */
+typedef CNA_Handle CNA_RenderTargetPoolHandle;
+
+/**
+ * @brief Creates an empty render-target pool for one device.
+ *
+ * @param graphics_device The device every pooled target is created on.
+ * @param out_pool Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_target_pool_create(
+    CNA_Handle graphics_device,
+    CNA_RenderTargetPoolHandle* out_pool);
+
+/**
+ * @brief Acquires a pool-owned two-dimensional render target.
+ *
+ * The returned handle is a borrowed view. Release that view with
+ * @ref cna_render_target_destroy; doing so does not dispose the pool-owned target. The pool refuses
+ * reset or destruction until every borrowed view has been released.
+ *
+ * @param pool The pool.
+ * @param width Positive width in pixels.
+ * @param height Positive height in pixels.
+ * @param format One `CNA_SURFACE_FORMAT_*` identity.
+ * @param depth_format One `CNA_DEPTH_FORMAT_*` identity.
+ * @param slot Distinguishes targets having the same shape.
+ * @param out_render_target Receives the borrowed view; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_target_pool_acquire(
+    CNA_RenderTargetPoolHandle pool,
+    int32_t width,
+    int32_t height,
+    CNA_SurfaceFormat format,
+    CNA_DepthFormat depth_format,
+    int32_t slot,
+    CNA_Handle* out_render_target);
+
+/**
+ * @brief Releases every pooled target.
+ *
+ * @param pool The pool.
+ * @return `CNA_RESULT_INVALID_STATE` while a borrowed target view is outstanding,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or another documented result.
+ */
+CNA_C_API CNA_Result cna_render_target_pool_reset(CNA_RenderTargetPoolHandle pool);
+
+/**
+ * @brief Gets how many targets the pool owns.
+ *
+ * @param pool The pool.
+ * @param out_target_count Receives the target count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_target_pool_get_target_count(
+    CNA_RenderTargetPoolHandle pool,
+    uint64_t* out_target_count);
+
+/**
+ * @brief Gets the pool's estimated colour-storage size in bytes.
+ *
+ * @param pool The pool.
+ * @param out_bytes Receives the estimate.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_target_pool_get_estimated_bytes(
+    CNA_RenderTargetPoolHandle pool,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Releases a render-target pool and every target it owns.
+ *
+ * @param pool The pool.
+ * @return `CNA_RESULT_INVALID_STATE` while a borrowed target view is outstanding,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or another documented result.
+ */
+CNA_C_API CNA_Result cna_render_target_pool_destroy(CNA_RenderTargetPoolHandle pool);
+
+/* ---------------------------------------------------------------------------------------------
+ * Shader-effect factories
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief Owned handle for one engine-layer named shader-effect cache. */
+typedef CNA_Handle CNA_ShaderEffectFactoryHandle;
+
+/**
+ * @brief Creates a shader-effect factory for one device.
+ *
+ * @param graphics_device The device every cached effect is compiled on.
+ * @param out_factory Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shader_effect_factory_create(
+    CNA_Handle graphics_device,
+    CNA_ShaderEffectFactoryHandle* out_factory);
+
+/**
+ * @brief Gets a named cached shader effect, compiling it on the first request.
+ *
+ * The returned ordinary `CNA_EffectHandle` is a borrowed view accepted by every effect route.
+ * Release it with @ref cna_effect_destroy. Disposing a factory-owned effect is refused, and the
+ * factory refuses clear or destruction until the effect view and every child view taken from it
+ * have been released.
+ *
+ * @param factory The factory.
+ * @param name Non-empty stable cache key as UTF-8.
+ * @param vertex_source Vertex shader source as UTF-8.
+ * @param fragment_source Fragment shader source as UTF-8.
+ * @param out_effect Receives the borrowed effect view; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shader_effect_factory_acquire(
+    CNA_ShaderEffectFactoryHandle factory,
+    CNA_StringView name,
+    CNA_StringView vertex_source,
+    CNA_StringView fragment_source,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Reports whether a name is present in the cache.
+ *
+ * @param factory The factory.
+ * @param name The key to look for as UTF-8.
+ * @param out_contains Receives the result.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shader_effect_factory_contains(
+    CNA_ShaderEffectFactoryHandle factory,
+    CNA_StringView name,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Gets how many distinct shaders the factory has compiled since construction.
+ *
+ * Clearing the cache does not reset this count.
+ *
+ * @param factory The factory.
+ * @param out_compile_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shader_effect_factory_get_compile_count(
+    CNA_ShaderEffectFactoryHandle factory,
+    uint64_t* out_compile_count);
+
+/**
+ * @brief Releases every cached effect.
+ *
+ * @param factory The factory.
+ * @return `CNA_RESULT_INVALID_STATE` while a borrowed effect view is outstanding,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or another documented result.
+ */
+CNA_C_API CNA_Result cna_shader_effect_factory_clear(CNA_ShaderEffectFactoryHandle factory);
+
+/**
+ * @brief Releases the factory and every effect it cached.
+ *
+ * @param factory The factory.
+ * @return `CNA_RESULT_INVALID_STATE` while a borrowed effect view is outstanding,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or another documented result.
+ */
+CNA_C_API CNA_Result cna_shader_effect_factory_destroy(CNA_ShaderEffectFactoryHandle factory);
+
+/* ---------------------------------------------------------------------------------------------
+ * Scoped render targets
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief Owned handle for one active render-target restoration scope. */
+typedef CNA_Handle CNA_ScopedRenderTargetHandle;
+
+/**
+ * @brief Records the current binding and binds a destination until the scope is ended.
+ *
+ * Scopes on one device may nest, but @ref cna_scoped_render_target_end must close them in reverse
+ * order. An out-of-order end returns `CNA_RESULT_INVALID_STATE` and changes neither scope nor
+ * binding.
+ *
+ * @param graphics_device The device to bind on.
+ * @param destination A two-dimensional render target, or `CNA_INVALID_HANDLE` for the backbuffer.
+ * @param out_scope Receives the owned active-scope handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_scoped_render_target_begin(
+    CNA_Handle graphics_device,
+    CNA_Handle destination,
+    CNA_ScopedRenderTargetHandle* out_scope);
+
+/**
+ * @brief Reports whether the scope recorded a previous native binding.
+ *
+ * @param scope The active scope.
+ * @param out_recorded Receives the state.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_scoped_render_target_get_has_recorded_previous(
+    CNA_ScopedRenderTargetHandle scope,
+    CNA_Bool* out_recorded);
+
+/**
+ * @brief Restores the scope's previous binding and releases the scope.
+ *
+ * @param scope The active scope; it must be the most recently opened scope on its device.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an out-of-order end,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or another documented result.
+ */
+CNA_C_API CNA_Result cna_scoped_render_target_end(CNA_ScopedRenderTargetHandle scope);
+
 #ifdef __cplusplus
 }
 #endif

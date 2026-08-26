@@ -1857,6 +1857,17 @@
   "cna_gesture_sample_init_from_values",
   "cna_gesture_sample_init_from_values_ext",
   "cna_get_abi_version",
+  "cna_gpu_timer_begin",
+  "cna_gpu_timer_copy_unsupported_reason",
+  "cna_gpu_timer_create",
+  "cna_gpu_timer_destroy",
+  "cna_gpu_timer_end",
+  "cna_gpu_timer_get_last_milliseconds",
+  "cna_gpu_timer_get_sample_count",
+  "cna_gpu_timer_is_open",
+  "cna_gpu_timer_is_result_available",
+  "cna_gpu_timer_is_supported",
+  "cna_gpu_timer_poll",
   "cna_graphics_adapter_copy_description",
   "cna_graphics_adapter_copy_device_name",
   "cna_graphics_adapter_copy_display_modes",
@@ -3084,10 +3095,19 @@
   "cna_render_target_cube_create",
   "cna_render_target_destroy",
   "cna_render_target_get_info",
+  "cna_render_target_pool_acquire",
+  "cna_render_target_pool_create",
+  "cna_render_target_pool_destroy",
+  "cna_render_target_pool_get_estimated_bytes",
+  "cna_render_target_pool_get_target_count",
+  "cna_render_target_pool_reset",
   "cna_render_target_subscribe_content_lost",
   "cna_render_target_unsubscribe_content_lost",
   "cna_render_target_usage_preserves_contents",
   "cna_sampler_state_init",
+  "cna_scoped_render_target_begin",
+  "cna_scoped_render_target_end",
+  "cna_scoped_render_target_get_has_recorded_previous",
   "cna_sensor_info_equals",
   "cna_sensor_info_init",
   "cna_sensor_unsubscribe_ext",
@@ -3100,6 +3120,12 @@
   "cna_sensors_get_name_size_at",
   "cna_shader_effect_create",
   "cna_shader_effect_declare_uniform_block_ext",
+  "cna_shader_effect_factory_acquire",
+  "cna_shader_effect_factory_clear",
+  "cna_shader_effect_factory_contains",
+  "cna_shader_effect_factory_create",
+  "cna_shader_effect_factory_destroy",
+  "cna_shader_effect_factory_get_compile_count",
   "cna_shader_effect_get_projection",
   "cna_shader_effect_get_view",
   "cna_shader_effect_get_world",
@@ -5468,6 +5494,10 @@
    4,
    4
   ],
+  "CNA_GpuTimerHandle": [
+   8,
+   8
+  ],
   "CNA_GraphicsBackendCategory": [
    4,
    4
@@ -5952,6 +5982,10 @@
    4,
    4
   ],
+  "CNA_RenderTargetPoolHandle": [
+   8,
+   8
+  ],
   "CNA_RenderTargetUsage": [
    4,
    4
@@ -5980,6 +6014,10 @@
    4,
    4
   ],
+  "CNA_ScopedRenderTargetHandle": [
+   8,
+   8
+  ],
   "CNA_SeekOrigin": [
    4,
    4
@@ -6007,6 +6045,10 @@
   "CNA_ShaderDialect": [
    4,
    4
+  ],
+  "CNA_ShaderEffectFactoryHandle": [
+   8,
+   8
   ],
   "CNA_ShaderStage": [
    4,

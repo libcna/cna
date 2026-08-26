@@ -3,6 +3,7 @@
 #include "CNA/C/engine_layer.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
+#include "CnaCApiRenderTargetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/GraphicsImageAccess.hpp"
@@ -16,11 +17,22 @@
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/DepthEncoding.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
+#include "CNA/Graphics/GpuTimer.hpp"
+#include "CNA/Graphics/RenderTargetPool.hpp"
+#include "CNA/Graphics/ScopedRenderTarget.hpp"
+#include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <limits>
 #include <type_traits>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 #endif
 
 namespace {
@@ -124,12 +136,17 @@ static_assert(
 using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::CreateBorrowedEffect;
+using CNA::C::Detail::CreateBorrowedRenderTarget2D;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::GetTrackedRenderTargetBindings;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
+using CNA::C::Detail::ResolveRenderTargetScopeReference;
+using CNA::C::Detail::SetTrackedRenderTargetBindings;
 using CNA::C::Detail::Texture2DResource;
 
 namespace Ext = CNA::Graphics;
@@ -157,6 +174,139 @@ struct StorageBufferResource final {
 struct ComputeShaderResource final {
     std::shared_ptr<Ext::ComputeShader> value;
     CNA_Handle parentGame;
+};
+
+struct GpuTimerResource final {
+    std::shared_ptr<Ext::GpuTimer> value;
+    CNA_Handle parentGame;
+};
+
+struct RenderTargetPoolResource final {
+    std::shared_ptr<Ext::RenderTargetPool> value;
+    CNA_Handle parentGame;
+    uint64_t activeBorrowCount = 0U;
+};
+
+struct ShaderEffectFactoryResource final {
+    std::shared_ptr<Ext::ShaderEffectFactory> value;
+    CNA_Handle parentGame;
+    uint64_t activeBorrowCount = 0U;
+};
+
+template<typename TOwner>
+class CountedBorrow final {
+public:
+    explicit CountedBorrow(std::shared_ptr<TOwner> owner)
+        : owner_(std::move(owner))
+    {
+        if (owner_->activeBorrowCount == std::numeric_limits<uint64_t>::max()) {
+            throw std::overflow_error("The engine-layer borrow count cannot be incremented.");
+        }
+        ++owner_->activeBorrowCount;
+    }
+
+    CountedBorrow(const CountedBorrow&) = delete;
+    CountedBorrow& operator=(const CountedBorrow&) = delete;
+
+    ~CountedBorrow()
+    {
+        if (owner_ != nullptr && owner_->activeBorrowCount != 0U) {
+            --owner_->activeBorrowCount;
+        }
+    }
+
+private:
+    std::shared_ptr<TOwner> owner_;
+};
+
+class ScopeTargetReference final {
+public:
+    ScopeTargetReference(std::shared_ptr<void> owner, uint64_t* const referenceCount)
+        : owner_(std::move(owner)), referenceCount_(referenceCount)
+    {
+        if (referenceCount_ == nullptr ||
+            *referenceCount_ == std::numeric_limits<uint64_t>::max()) {
+            throw std::overflow_error("The render-target scope reference count cannot be incremented.");
+        }
+        ++*referenceCount_;
+    }
+
+    ScopeTargetReference(const ScopeTargetReference&) = delete;
+    ScopeTargetReference& operator=(const ScopeTargetReference&) = delete;
+
+    ScopeTargetReference(ScopeTargetReference&& other) noexcept
+        : owner_(std::move(other.owner_)), referenceCount_(other.referenceCount_)
+    {
+        other.referenceCount_ = nullptr;
+    }
+
+    ScopeTargetReference& operator=(ScopeTargetReference&&) = delete;
+
+    ~ScopeTargetReference()
+    {
+        if (referenceCount_ != nullptr && *referenceCount_ != 0U) {
+            --*referenceCount_;
+        }
+    }
+
+private:
+    std::shared_ptr<void> owner_;
+    uint64_t* referenceCount_;
+};
+
+struct ScopedRenderTargetResource final {
+    CNA_Handle parentGame;
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice* device;
+    uint64_t stackToken;
+    std::vector<CNA_RenderTargetBinding> previousBindings;
+    std::vector<ScopeTargetReference> targetReferences;
+    std::unique_ptr<Ext::ScopedRenderTarget> value;
+};
+
+std::unordered_map<Microsoft::Xna::Framework::Graphics::GraphicsDevice*, std::vector<uint64_t>>
+    scopeStacks;
+uint64_t nextScopeToken = 1U;
+
+class ScopeStackReservation final {
+public:
+    ScopeStackReservation(
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice* const device,
+        const uint64_t token)
+        : device_(device), token_(token)
+    {
+        scopeStacks[device_].push_back(token_);
+    }
+
+    ScopeStackReservation(const ScopeStackReservation&) = delete;
+    ScopeStackReservation& operator=(const ScopeStackReservation&) = delete;
+
+    ~ScopeStackReservation()
+    {
+        if (!committed_) {
+            Pop();
+        }
+    }
+
+    void Commit() noexcept { committed_ = true; }
+
+private:
+    void Pop() noexcept
+    {
+        const auto found = scopeStacks.find(device_);
+        if (found == scopeStacks.end()) {
+            return;
+        }
+        if (!found->second.empty() && found->second.back() == token_) {
+            found->second.pop_back();
+        }
+        if (found->second.empty()) {
+            scopeStacks.erase(found);
+        }
+    }
+
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice* device_;
+    uint64_t token_;
+    bool committed_ = false;
 };
 
 [[nodiscard]] CNA_Result GetStorageBuffer(
@@ -187,6 +337,39 @@ struct ComputeShaderResource final {
         result,
         ErrorCategoryForResult(result),
         "The ComputeShader handle is invalid for this call.");
+}
+
+template<typename TResource>
+[[nodiscard]] CNA_Result GetEngineResource(
+    const CNA_Handle handle,
+    const ObjectKind kind,
+    const char* const name,
+    std::shared_ptr<TResource>* const outResource)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(handle, kind, outResource);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        std::string("The ") + name + " handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result RetainScopeTarget(
+    const CNA_Handle handle,
+    const CNA_Handle parentGame,
+    std::vector<ScopeTargetReference>* const outReferences)
+{
+    std::shared_ptr<void> owner;
+    uint64_t* referenceCount = nullptr;
+    if (const CNA_Result result = ResolveRenderTargetScopeReference(
+            handle, parentGame, &owner, &referenceCount);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    outReferences->emplace_back(std::move(owner), referenceCount);
+    return CNA_RESULT_SUCCESS;
 }
 
 // The element routes exist to reproduce StorageBufferT<T>, so they refuse a buffer that was never
@@ -492,6 +675,252 @@ CNA_Result cna_compute_shader_copy_compile_error(
 CNA_Result cna_compute_shader_destroy(const CNA_ComputeShaderHandle shader)
 {
     (void)shader;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_create(
+    const CNA_Handle graphicsDevice,
+    CNA_GpuTimerHandle* const outTimer)
+{
+    (void)graphicsDevice;
+    if (outTimer != nullptr) {
+        *outTimer = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_is_supported(
+    const CNA_GpuTimerHandle timer,
+    CNA_Bool* const outSupported)
+{
+    (void)timer;
+    (void)outSupported;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_copy_unsupported_reason(
+    const CNA_GpuTimerHandle timer,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    (void)timer;
+    (void)destination;
+    (void)capacity;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_begin(const CNA_GpuTimerHandle timer)
+{
+    (void)timer;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_end(const CNA_GpuTimerHandle timer)
+{
+    (void)timer;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_is_result_available(
+    const CNA_GpuTimerHandle timer,
+    CNA_Bool* const outAvailable)
+{
+    (void)timer;
+    (void)outAvailable;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_poll(
+    const CNA_GpuTimerHandle timer,
+    CNA_Bool* const outCollected)
+{
+    (void)timer;
+    (void)outCollected;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_get_last_milliseconds(
+    const CNA_GpuTimerHandle timer,
+    double* const outMilliseconds)
+{
+    (void)timer;
+    (void)outMilliseconds;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_get_sample_count(
+    const CNA_GpuTimerHandle timer,
+    int32_t* const outSampleCount)
+{
+    (void)timer;
+    (void)outSampleCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_is_open(
+    const CNA_GpuTimerHandle timer,
+    CNA_Bool* const outOpen)
+{
+    (void)timer;
+    (void)outOpen;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_timer_destroy(const CNA_GpuTimerHandle timer)
+{
+    (void)timer;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_target_pool_create(
+    const CNA_Handle graphicsDevice,
+    CNA_RenderTargetPoolHandle* const outPool)
+{
+    (void)graphicsDevice;
+    if (outPool != nullptr) {
+        *outPool = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_target_pool_acquire(
+    const CNA_RenderTargetPoolHandle pool,
+    const int32_t width,
+    const int32_t height,
+    const CNA_SurfaceFormat format,
+    const CNA_DepthFormat depthFormat,
+    const int32_t slot,
+    CNA_Handle* const outRenderTarget)
+{
+    (void)pool;
+    (void)width;
+    (void)height;
+    (void)format;
+    (void)depthFormat;
+    (void)slot;
+    if (outRenderTarget != nullptr) {
+        *outRenderTarget = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_target_pool_reset(const CNA_RenderTargetPoolHandle pool)
+{
+    (void)pool;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_target_pool_get_target_count(
+    const CNA_RenderTargetPoolHandle pool,
+    uint64_t* const outTargetCount)
+{
+    (void)pool;
+    (void)outTargetCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_target_pool_get_estimated_bytes(
+    const CNA_RenderTargetPoolHandle pool,
+    uint64_t* const outBytes)
+{
+    (void)pool;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_target_pool_destroy(const CNA_RenderTargetPoolHandle pool)
+{
+    (void)pool;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_shader_effect_factory_create(
+    const CNA_Handle graphicsDevice,
+    CNA_ShaderEffectFactoryHandle* const outFactory)
+{
+    (void)graphicsDevice;
+    if (outFactory != nullptr) {
+        *outFactory = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_shader_effect_factory_acquire(
+    const CNA_ShaderEffectFactoryHandle factory,
+    const CNA_StringView name,
+    const CNA_StringView vertexSource,
+    const CNA_StringView fragmentSource,
+    CNA_EffectHandle* const outEffect)
+{
+    (void)factory;
+    (void)name;
+    (void)vertexSource;
+    (void)fragmentSource;
+    if (outEffect != nullptr) {
+        *outEffect = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_shader_effect_factory_contains(
+    const CNA_ShaderEffectFactoryHandle factory,
+    const CNA_StringView name,
+    CNA_Bool* const outContains)
+{
+    (void)factory;
+    (void)name;
+    (void)outContains;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_shader_effect_factory_get_compile_count(
+    const CNA_ShaderEffectFactoryHandle factory,
+    uint64_t* const outCompileCount)
+{
+    (void)factory;
+    (void)outCompileCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_shader_effect_factory_clear(const CNA_ShaderEffectFactoryHandle factory)
+{
+    (void)factory;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_shader_effect_factory_destroy(const CNA_ShaderEffectFactoryHandle factory)
+{
+    (void)factory;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_scoped_render_target_begin(
+    const CNA_Handle graphicsDevice,
+    const CNA_Handle destination,
+    CNA_ScopedRenderTargetHandle* const outScope)
+{
+    (void)graphicsDevice;
+    (void)destination;
+    if (outScope != nullptr) {
+        *outScope = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_scoped_render_target_get_has_recorded_previous(
+    const CNA_ScopedRenderTargetHandle scope,
+    CNA_Bool* const outRecorded)
+{
+    (void)scope;
+    (void)outRecorded;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_scoped_render_target_end(const CNA_ScopedRenderTargetHandle scope)
+{
+    (void)scope;
     return ExtensionUnavailable();
 }
 
@@ -1074,6 +1503,817 @@ CNA_Result cna_compute_shader_destroy(const CNA_ComputeShaderHandle shaderHandle
                 "The owned compute-shader handle could not be released.");
         }
         RemoveOwnedGraphicsResourceFor(shader->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_GpuTimerHandle* const outTimer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTimer == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The GPU-timer output handle is null.");
+        }
+        *outTimer = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<GpuTimerResource>(GpuTimerResource{
+            std::make_shared<Ext::GpuTimer>(*graphicsDevice->value),
+            graphicsDevice->parentGame});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::GpuTimer, resource, outTimer);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned GPU-timer handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_is_supported(
+    const CNA_GpuTimerHandle timerHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The GPU-timer support output is null.");
+        }
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = timer->value->isSupported() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_copy_unsupported_reason(
+    const CNA_GpuTimerHandle timerHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyFormattedString(destination, capacity, outBytes, [&timer] {
+            return timer->value->getUnsupportedReason();
+        });
+    });
+}
+
+CNA_Result cna_gpu_timer_begin(const CNA_GpuTimerHandle timerHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        timer->value->begin();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_end(const CNA_GpuTimerHandle timerHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        timer->value->end();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_is_result_available(
+    const CNA_GpuTimerHandle timerHandle,
+    CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAvailable == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The GPU-timer availability output is null.");
+        }
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAvailable = timer->value->isResultAvailable() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_poll(
+    const CNA_GpuTimerHandle timerHandle,
+    CNA_Bool* const outCollected)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollected == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The GPU-timer poll output is null.");
+        }
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCollected = timer->value->poll() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_get_last_milliseconds(
+    const CNA_GpuTimerHandle timerHandle,
+    double* const outMilliseconds)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMilliseconds == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The GPU-timer millisecond output is null.");
+        }
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outMilliseconds = timer->value->getLastMilliseconds();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_get_sample_count(
+    const CNA_GpuTimerHandle timerHandle,
+    int32_t* const outSampleCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSampleCount == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The GPU-timer sample-count output is null.");
+        }
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSampleCount = static_cast<int32_t>(timer->value->getSampleCount());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_is_open(
+    const CNA_GpuTimerHandle timerHandle,
+    CNA_Bool* const outOpen)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outOpen == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The GPU-timer open-state output is null.");
+        }
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outOpen = timer->value->isOpen() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_timer_destroy(const CNA_GpuTimerHandle timerHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GpuTimerResource> timer;
+        if (const CNA_Result result = GetEngineResource(
+                timerHandle, ObjectKind::GpuTimer, "GpuTimer", &timer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(timerHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned GPU-timer handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(timer->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_target_pool_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_RenderTargetPoolHandle* const outPool)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPool == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The render-target-pool output handle is null.");
+        }
+        *outPool = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<RenderTargetPoolResource>(
+            RenderTargetPoolResource{
+                std::make_shared<Ext::RenderTargetPool>(*graphicsDevice->value),
+                graphicsDevice->parentGame});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::RenderTargetPool, resource, outPool);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned render-target-pool handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_target_pool_acquire(
+    const CNA_RenderTargetPoolHandle poolHandle,
+    const int32_t width,
+    const int32_t height,
+    const CNA_SurfaceFormat format,
+    const CNA_DepthFormat depthFormat,
+    const int32_t slot,
+    CNA_Handle* const outRenderTarget)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRenderTarget == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The pooled render-target output handle is null.");
+        }
+        *outRenderTarget = CNA_INVALID_HANDLE;
+        if (format > CNA_SURFACE_FORMAT_USHORT_EXT ||
+            depthFormat > CNA_DEPTH_FORMAT_DEPTH24_STENCIL8) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The pooled render-target format identity is invalid.");
+        }
+        std::shared_ptr<RenderTargetPoolResource> pool;
+        if (const CNA_Result result = GetEngineResource(
+                poolHandle, ObjectKind::RenderTargetPool, "RenderTargetPool", &pool);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const target = pool->value->acquire(
+            static_cast<int>(width),
+            static_cast<int>(height),
+            static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(format),
+            static_cast<Microsoft::Xna::Framework::Graphics::DepthFormat>(depthFormat),
+            static_cast<int>(slot));
+        if (target == nullptr) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The render-target pool returned a null target.");
+        }
+        const auto borrow = std::make_shared<CountedBorrow<RenderTargetPoolResource>>(pool);
+        const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(
+            borrow, target);
+        return CreateBorrowedRenderTarget2D(
+            view, pool->parentGame, borrow, outRenderTarget);
+    });
+}
+
+CNA_Result cna_render_target_pool_reset(const CNA_RenderTargetPoolHandle poolHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<RenderTargetPoolResource> pool;
+        if (const CNA_Result result = GetEngineResource(
+                poolHandle, ObjectKind::RenderTargetPool, "RenderTargetPool", &pool);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (pool->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "Every borrowed pooled render-target handle must be released before reset.");
+        }
+        pool->value->reset();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_target_pool_get_target_count(
+    const CNA_RenderTargetPoolHandle poolHandle,
+    uint64_t* const outTargetCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTargetCount == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The render-target-pool count output is null.");
+        }
+        std::shared_ptr<RenderTargetPoolResource> pool;
+        if (const CNA_Result result = GetEngineResource(
+                poolHandle, ObjectKind::RenderTargetPool, "RenderTargetPool", &pool);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTargetCount = static_cast<uint64_t>(pool->value->getTargetCount());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_target_pool_get_estimated_bytes(
+    const CNA_RenderTargetPoolHandle poolHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The render-target-pool byte-count output is null.");
+        }
+        std::shared_ptr<RenderTargetPoolResource> pool;
+        if (const CNA_Result result = GetEngineResource(
+                poolHandle, ObjectKind::RenderTargetPool, "RenderTargetPool", &pool);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<uint64_t>(pool->value->getEstimatedBytes());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_target_pool_destroy(const CNA_RenderTargetPoolHandle poolHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<RenderTargetPoolResource> pool;
+        if (const CNA_Result result = GetEngineResource(
+                poolHandle, ObjectKind::RenderTargetPool, "RenderTargetPool", &pool);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (pool->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "Every borrowed pooled render-target handle must be released before the pool.");
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(poolHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned render-target-pool handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(pool->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_factory_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_ShaderEffectFactoryHandle* const outFactory)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFactory == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The shader-effect-factory output handle is null.");
+        }
+        *outFactory = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<ShaderEffectFactoryResource>(
+            ShaderEffectFactoryResource{
+                std::make_shared<Ext::ShaderEffectFactory>(*graphicsDevice->value),
+                graphicsDevice->parentGame});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::ShaderEffectFactory, resource, outFactory);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned shader-effect-factory handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_factory_acquire(
+    const CNA_ShaderEffectFactoryHandle factoryHandle,
+    const CNA_StringView name,
+    const CNA_StringView vertexSource,
+    const CNA_StringView fragmentSource,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The cached shader-effect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::string nativeName;
+        std::string nativeVertexSource;
+        std::string nativeFragmentSource;
+        if (const CNA_Result result = CopyStringView(name, true, &nativeName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The shader-effect cache key is not valid UTF-8 text.");
+        }
+        if (const CNA_Result result = CopyStringView(
+                vertexSource, true, &nativeVertexSource);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The cached vertex source is not valid UTF-8 text.");
+        }
+        if (const CNA_Result result = CopyStringView(
+                fragmentSource, true, &nativeFragmentSource);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The cached fragment source is not valid UTF-8 text.");
+        }
+        std::shared_ptr<ShaderEffectFactoryResource> factory;
+        if (const CNA_Result result = GetEngineResource(
+                factoryHandle,
+                ObjectKind::ShaderEffectFactory,
+                "ShaderEffectFactory",
+                &factory);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const effect = factory->value->acquire(
+            nativeName, nativeVertexSource, nativeFragmentSource);
+        if (effect == nullptr) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The shader-effect factory returned a null effect.");
+        }
+        const auto borrow =
+            std::make_shared<CountedBorrow<ShaderEffectFactoryResource>>(factory);
+        const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> view(
+            borrow, effect);
+        return CreateBorrowedEffect(view, factory->parentGame, outEffect);
+    });
+}
+
+CNA_Result cna_shader_effect_factory_contains(
+    const CNA_ShaderEffectFactoryHandle factoryHandle,
+    const CNA_StringView name,
+    CNA_Bool* const outContains)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContains == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The shader-effect-factory contains output is null.");
+        }
+        std::string nativeName;
+        if (const CNA_Result result = CopyStringView(name, true, &nativeName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The shader-effect cache key is not valid UTF-8 text.");
+        }
+        std::shared_ptr<ShaderEffectFactoryResource> factory;
+        if (const CNA_Result result = GetEngineResource(
+                factoryHandle,
+                ObjectKind::ShaderEffectFactory,
+                "ShaderEffectFactory",
+                &factory);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outContains = factory->value->contains(nativeName) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_factory_get_compile_count(
+    const CNA_ShaderEffectFactoryHandle factoryHandle,
+    uint64_t* const outCompileCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCompileCount == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The shader-effect-factory compile-count output is null.");
+        }
+        std::shared_ptr<ShaderEffectFactoryResource> factory;
+        if (const CNA_Result result = GetEngineResource(
+                factoryHandle,
+                ObjectKind::ShaderEffectFactory,
+                "ShaderEffectFactory",
+                &factory);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCompileCount = static_cast<uint64_t>(factory->value->getCompileCount());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_factory_clear(
+    const CNA_ShaderEffectFactoryHandle factoryHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ShaderEffectFactoryResource> factory;
+        if (const CNA_Result result = GetEngineResource(
+                factoryHandle,
+                ObjectKind::ShaderEffectFactory,
+                "ShaderEffectFactory",
+                &factory);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (factory->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "Every borrowed cached effect handle must be released before clear.");
+        }
+        factory->value->clear();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_factory_destroy(
+    const CNA_ShaderEffectFactoryHandle factoryHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ShaderEffectFactoryResource> factory;
+        if (const CNA_Result result = GetEngineResource(
+                factoryHandle,
+                ObjectKind::ShaderEffectFactory,
+                "ShaderEffectFactory",
+                &factory);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (factory->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "Every borrowed cached effect handle must be released before the factory.");
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(factoryHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned shader-effect-factory handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(factory->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_scoped_render_target_begin(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Handle destinationHandle,
+    CNA_ScopedRenderTargetHandle* const outScope)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outScope == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The scoped-render-target output handle is null.");
+        }
+        *outScope = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        std::vector<CNA_RenderTargetBinding> previousBindings;
+        if (const CNA_Result result = GetTrackedRenderTargetBindings(
+                graphicsDevice->value, &previousBindings);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<ScopeTargetReference> targetReferences;
+        targetReferences.reserve(
+            previousBindings.size() + (destinationHandle == CNA_INVALID_HANDLE ? 0U : 1U));
+        for (const CNA_RenderTargetBinding& binding : previousBindings) {
+            if (const CNA_Result result = RetainScopeTarget(
+                    binding.render_target,
+                    graphicsDevice->parentGame,
+                    &targetReferences);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+
+        Microsoft::Xna::Framework::Graphics::RenderTarget2D* destination = nullptr;
+        if (destinationHandle != CNA_INVALID_HANDLE) {
+            std::shared_ptr<Texture2DResource> target;
+            if (const CNA_Result result = GetOwnedTexture2D(destinationHandle, &target);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            ObjectKind kind = ObjectKind::Unknown;
+            if (GetRuntimeHandles().GetKind(destinationHandle, &kind) != CNA_RESULT_SUCCESS ||
+                kind != ObjectKind::RenderTarget2D ||
+                target->parentGame != graphicsDevice->parentGame) {
+                return Fail(
+                    CNA_RESULT_INVALID_HANDLE,
+                    CNA_ERROR_CATEGORY_HANDLE,
+                    "The scoped destination is not a RenderTarget2D owned by this game.");
+            }
+            if (const CNA_Result result = RetainScopeTarget(
+                    destinationHandle,
+                    graphicsDevice->parentGame,
+                    &targetReferences);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            destination = static_cast<Microsoft::Xna::Framework::Graphics::RenderTarget2D*>(
+                target->value.get());
+        }
+
+        if (nextScopeToken == std::numeric_limits<uint64_t>::max()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The scoped-render-target token space is exhausted.");
+        }
+        const uint64_t token = nextScopeToken++;
+        ScopeStackReservation stackReservation(graphicsDevice->value, token);
+        auto native = std::make_unique<Ext::ScopedRenderTarget>(
+            *graphicsDevice->value, destination);
+        const auto resource = std::make_shared<ScopedRenderTargetResource>(
+            ScopedRenderTargetResource{
+                graphicsDevice->parentGame,
+                graphicsDevice->value,
+                token,
+                previousBindings,
+                std::move(targetReferences),
+                std::move(native)});
+        const CNA_Result createResult = GetRuntimeHandles().Create(
+            ObjectKind::ScopedRenderTarget, resource, outScope);
+        if (createResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                createResult,
+                ErrorCategoryForResult(createResult),
+                "The active scoped-render-target handle could not be created.");
+        }
+
+        std::vector<CNA_RenderTargetBinding> activeBindings;
+        if (destinationHandle != CNA_INVALID_HANDLE) {
+            activeBindings.push_back(CNA_RenderTargetBinding{
+                .struct_size = sizeof(CNA_RenderTargetBinding),
+                .struct_version = UINT32_C(1),
+                .render_target = destinationHandle,
+                .array_slice = 0,
+                .cube_map_face = CNA_CUBE_MAP_FACE_POSITIVE_X});
+        }
+        try {
+            SetTrackedRenderTargetBindings(
+                graphicsDevice->value, std::move(activeBindings));
+        } catch (...) {
+            (void)GetRuntimeHandles().Release(*outScope);
+            *outScope = CNA_INVALID_HANDLE;
+            resource->value.reset();
+            throw;
+        }
+        stackReservation.Commit();
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_scoped_render_target_get_has_recorded_previous(
+    const CNA_ScopedRenderTargetHandle scopeHandle,
+    CNA_Bool* const outRecorded)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRecorded == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The scoped-render-target recorded-state output is null.");
+        }
+        std::shared_ptr<ScopedRenderTargetResource> scope;
+        if (const CNA_Result result = GetEngineResource(
+                scopeHandle,
+                ObjectKind::ScopedRenderTarget,
+                "ScopedRenderTarget",
+                &scope);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outRecorded = scope->value->hasRecordedPrevious() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_scoped_render_target_end(
+    const CNA_ScopedRenderTargetHandle scopeHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ScopedRenderTargetResource> scope;
+        if (const CNA_Result result = GetEngineResource(
+                scopeHandle,
+                ObjectKind::ScopedRenderTarget,
+                "ScopedRenderTarget",
+                &scope);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto found = scopeStacks.find(scope->device);
+        if (found == scopeStacks.end() || found->second.empty() ||
+            found->second.back() != scope->stackToken) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "Render-target scopes must be ended in reverse order on each device.");
+        }
+
+        std::vector<CNA_RenderTargetBinding> restored =
+            scope->value->hasRecordedPrevious()
+            ? scope->previousBindings
+            : std::vector<CNA_RenderTargetBinding>{};
+        SetTrackedRenderTargetBindings(scope->device, std::move(restored));
+        scope->value.reset();
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(scopeHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The scoped-render-target handle could not be released.");
+        }
+        found->second.pop_back();
+        if (found->second.empty()) {
+            scopeStacks.erase(found);
+        }
+        RemoveOwnedGraphicsResourceFor(scope->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

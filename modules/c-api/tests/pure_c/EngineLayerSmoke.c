@@ -22,6 +22,28 @@ typedef struct EngineLayerState {
     int failed_stage;
 } EngineLayerState;
 
+static CNA_StringView string_view(const char* const text)
+{
+    const CNA_StringView result = {text, (uint64_t)strlen(text)};
+    return result;
+}
+
+static int current_render_target_is(
+    const CNA_Handle graphics_device,
+    const CNA_Handle expected)
+{
+    CNA_RenderTargetBinding binding;
+    uint64_t count = UINT64_C(7);
+    if (expected == CNA_INVALID_HANDLE) {
+        return cna_graphics_device_get_render_target_count(graphics_device, &count) ==
+                CNA_RESULT_SUCCESS &&
+            count == UINT64_C(0);
+    }
+    return cna_graphics_device_copy_render_targets(
+               graphics_device, &binding, UINT64_C(1), &count) == CNA_RESULT_SUCCESS &&
+        count == UINT64_C(1) && binding.render_target == expected;
+}
+
 /* --- identities and pure values, which work in either build ------------------------------- */
 
 static int validate_identities(void)
@@ -123,6 +145,8 @@ static int validate_unavailable(const CNA_Handle graphics_device)
     const CNA_StringView source_view = {source, sizeof(source) - 1U};
     uint64_t value = UINT64_C(7);
     CNA_Bool flag = UINT8_C(9);
+    double milliseconds = 17.0;
+    int32_t samples = INT32_C(19);
     char text[8];
     unsigned char bytes[4] = {1U, 2U, 3U, 4U};
 
@@ -181,7 +205,84 @@ static int validate_unavailable(const CNA_Handle graphics_device)
         cna_compute_shader_destroy(shader) != CNA_RESULT_NOT_SUPPORTED) {
         return 0;
     }
-    return flag == UINT8_C(9);
+    if (flag != UINT8_C(9)) {
+        return 0;
+    }
+    value = UINT64_C(7);
+
+    {
+        CNA_GpuTimerHandle timer = UINT64_C(0x5A5A5A5A);
+        if (cna_gpu_timer_create(graphics_device, &timer) != CNA_RESULT_NOT_SUPPORTED ||
+            timer != CNA_INVALID_HANDLE ||
+            cna_gpu_timer_is_supported(timer, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_copy_unsupported_reason(timer, text, sizeof(text), &value) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_begin(timer) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_end(timer) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_is_result_available(timer, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_poll(timer, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_get_last_milliseconds(timer, &milliseconds) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_get_sample_count(timer, &samples) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_is_open(timer, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_timer_destroy(timer) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
+    {
+        CNA_RenderTargetPoolHandle pool = UINT64_C(0x5A5A5A5A);
+        CNA_Handle target = UINT64_C(0x5A5A5A5A);
+        if (cna_render_target_pool_create(graphics_device, &pool) != CNA_RESULT_NOT_SUPPORTED ||
+            pool != CNA_INVALID_HANDLE ||
+            cna_render_target_pool_acquire(
+                pool,
+                INT32_C(2),
+                INT32_C(3),
+                CNA_SURFACE_FORMAT_COLOR,
+                CNA_DEPTH_FORMAT_NONE,
+                INT32_C(0),
+                &target) != CNA_RESULT_NOT_SUPPORTED ||
+            target != CNA_INVALID_HANDLE ||
+            cna_render_target_pool_reset(pool) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_target_pool_get_target_count(pool, &value) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_target_pool_get_estimated_bytes(pool, &value) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_target_pool_destroy(pool) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
+    {
+        CNA_ShaderEffectFactoryHandle factory = UINT64_C(0x5A5A5A5A);
+        CNA_EffectHandle effect = UINT64_C(0x5A5A5A5A);
+        if (cna_shader_effect_factory_create(graphics_device, &factory) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            factory != CNA_INVALID_HANDLE ||
+            cna_shader_effect_factory_acquire(
+                factory, source_view, source_view, source_view, &effect) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            effect != CNA_INVALID_HANDLE ||
+            cna_shader_effect_factory_contains(factory, source_view, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_shader_effect_factory_get_compile_count(factory, &value) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_shader_effect_factory_clear(factory) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_shader_effect_factory_destroy(factory) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
+    {
+        CNA_ScopedRenderTargetHandle scope = UINT64_C(0x5A5A5A5A);
+        if (cna_scoped_render_target_begin(
+                graphics_device, CNA_INVALID_HANDLE, &scope) != CNA_RESULT_NOT_SUPPORTED ||
+            scope != CNA_INVALID_HANDLE ||
+            cna_scoped_render_target_get_has_recorded_previous(scope, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_scoped_render_target_end(scope) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
+    return flag == UINT8_C(9) && value == UINT64_C(7) &&
+        milliseconds == 17.0 && samples == INT32_C(19);
 }
 
 /* --- the layer-present build ---------------------------------------------------------------- */
@@ -420,6 +521,232 @@ static int validate_compute_shader(const CNA_Handle graphics_device)
     return ok && cna_compute_shader_destroy(shader) != CNA_RESULT_SUCCESS;
 }
 
+static int validate_gpu_timer(const CNA_Handle graphics_device)
+{
+    CNA_GpuTimerHandle timer = CNA_INVALID_HANDLE;
+    CNA_Bool supported = UINT8_C(9);
+    CNA_Bool state = UINT8_C(9);
+    uint64_t bytes = UINT64_C(0);
+    char reason[512];
+    double milliseconds = -1.0;
+    int32_t samples = -1;
+
+    if (cna_gpu_timer_create(graphics_device, &timer) != CNA_RESULT_SUCCESS ||
+        timer == CNA_INVALID_HANDLE ||
+        cna_gpu_timer_is_supported(timer, &supported) != CNA_RESULT_SUCCESS ||
+        (supported != CNA_TRUE && supported != CNA_FALSE)) {
+        return 0;
+    }
+    if (cna_gpu_timer_copy_unsupported_reason(timer, 0, UINT64_C(0), &bytes) !=
+            (supported == CNA_TRUE ? CNA_RESULT_SUCCESS : CNA_RESULT_BUFFER_TOO_SMALL) ||
+        (supported == CNA_TRUE && bytes != UINT64_C(0)) ||
+        (supported == CNA_FALSE && bytes == UINT64_C(0)) || bytes > sizeof(reason)) {
+        return 0;
+    }
+    if (cna_gpu_timer_copy_unsupported_reason(timer, reason, sizeof(reason), &bytes) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_gpu_timer_is_open(timer, &state) != CNA_RESULT_SUCCESS || state != CNA_FALSE ||
+        cna_gpu_timer_begin(timer) != CNA_RESULT_SUCCESS ||
+        cna_gpu_timer_is_open(timer, &state) != CNA_RESULT_SUCCESS ||
+        state != supported || cna_gpu_timer_begin(timer) != CNA_RESULT_SUCCESS ||
+        cna_gpu_timer_end(timer) != CNA_RESULT_SUCCESS ||
+        cna_gpu_timer_is_open(timer, &state) != CNA_RESULT_SUCCESS || state != CNA_FALSE ||
+        cna_gpu_timer_is_result_available(timer, &state) != CNA_RESULT_SUCCESS ||
+        (state != CNA_TRUE && state != CNA_FALSE) ||
+        cna_gpu_timer_poll(timer, &state) != CNA_RESULT_SUCCESS ||
+        (state != CNA_TRUE && state != CNA_FALSE) ||
+        cna_gpu_timer_get_last_milliseconds(timer, &milliseconds) != CNA_RESULT_SUCCESS ||
+        milliseconds < 0.0 ||
+        cna_gpu_timer_get_sample_count(timer, &samples) != CNA_RESULT_SUCCESS || samples < 0 ||
+        cna_gpu_timer_is_supported(timer, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_gpu_timer_destroy(timer) != CNA_RESULT_SUCCESS ||
+        cna_gpu_timer_destroy(timer) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_render_target_pool_and_scopes(const CNA_Handle graphics_device)
+{
+    CNA_RenderTargetPoolHandle pool = CNA_INVALID_HANDLE;
+    CNA_Handle first = CNA_INVALID_HANDLE;
+    CNA_Handle duplicate = CNA_INVALID_HANDLE;
+    CNA_Handle second = CNA_INVALID_HANDLE;
+    CNA_ScopedRenderTargetHandle outer = CNA_INVALID_HANDLE;
+    CNA_ScopedRenderTargetHandle inner = CNA_INVALID_HANDLE;
+    CNA_RenderTargetInfo info = {0};
+    CNA_Bool outer_recorded = UINT8_C(9);
+    CNA_Bool inner_recorded = UINT8_C(9);
+    uint64_t value = UINT64_C(0);
+
+    info.struct_size = sizeof(CNA_RenderTargetInfo);
+    info.struct_version = UINT32_C(1);
+    if (cna_render_target_pool_create(graphics_device, &pool) != CNA_RESULT_SUCCESS ||
+        pool == CNA_INVALID_HANDLE ||
+        cna_render_target_pool_acquire(
+            pool,
+            INT32_C(2),
+            INT32_C(3),
+            CNA_SURFACE_FORMAT_COLOR,
+            CNA_DEPTH_FORMAT_NONE,
+            INT32_C(0),
+            &first) != CNA_RESULT_SUCCESS ||
+        first == CNA_INVALID_HANDLE ||
+        cna_render_target_pool_get_target_count(pool, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(1) ||
+        cna_render_target_pool_get_estimated_bytes(pool, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(24) ||
+        cna_render_target_get_info(first, &info) != CNA_RESULT_SUCCESS ||
+        info.kind != CNA_RENDER_TARGET_KIND_2D || info.width != UINT32_C(2) ||
+        info.height != UINT32_C(3)) {
+        return 0;
+    }
+    if (cna_render_target_pool_acquire(
+            pool,
+            INT32_C(2),
+            INT32_C(3),
+            CNA_SURFACE_FORMAT_COLOR,
+            CNA_DEPTH_FORMAT_NONE,
+            INT32_C(0),
+            &duplicate) != CNA_RESULT_SUCCESS ||
+        cna_render_target_pool_get_target_count(pool, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(1) ||
+        cna_render_target_pool_acquire(
+            pool,
+            INT32_C(2),
+            INT32_C(3),
+            CNA_SURFACE_FORMAT_COLOR,
+            CNA_DEPTH_FORMAT_NONE,
+            INT32_C(1),
+            &second) != CNA_RESULT_SUCCESS ||
+        cna_render_target_pool_get_target_count(pool, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(2) ||
+        cna_render_target_pool_reset(pool) != CNA_RESULT_INVALID_STATE ||
+        cna_render_target_pool_destroy(pool) != CNA_RESULT_INVALID_STATE ||
+        cna_graphics_resource_dispose(first) != CNA_RESULT_INVALID_STATE ||
+        cna_render_target_destroy(duplicate) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (cna_graphics_device_set_render_target2d(graphics_device, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_SUCCESS ||
+        cna_scoped_render_target_begin(graphics_device, first, &outer) != CNA_RESULT_SUCCESS ||
+        outer == CNA_INVALID_HANDLE ||
+        cna_scoped_render_target_get_has_recorded_previous(outer, &outer_recorded) !=
+            CNA_RESULT_SUCCESS ||
+        (outer_recorded != CNA_TRUE && outer_recorded != CNA_FALSE) ||
+        !current_render_target_is(graphics_device, first) ||
+        cna_scoped_render_target_begin(graphics_device, second, &inner) != CNA_RESULT_SUCCESS ||
+        inner == CNA_INVALID_HANDLE ||
+        cna_scoped_render_target_get_has_recorded_previous(inner, &inner_recorded) !=
+            CNA_RESULT_SUCCESS ||
+        (inner_recorded != CNA_TRUE && inner_recorded != CNA_FALSE) ||
+        !current_render_target_is(graphics_device, second)) {
+        return 0;
+    }
+    /* The failed out-of-order end must be transactional: both scopes and the inner binding stay
+       active, and the target hidden beneath the inner scope stays retained too. */
+    if (cna_scoped_render_target_end(outer) != CNA_RESULT_INVALID_STATE ||
+        !current_render_target_is(graphics_device, second) ||
+        cna_render_target_destroy(first) != CNA_RESULT_INVALID_STATE ||
+        cna_scoped_render_target_end(inner) != CNA_RESULT_SUCCESS ||
+        !current_render_target_is(
+            graphics_device,
+            inner_recorded == CNA_TRUE ? first : CNA_INVALID_HANDLE) ||
+        cna_scoped_render_target_end(outer) != CNA_RESULT_SUCCESS ||
+        !current_render_target_is(graphics_device, CNA_INVALID_HANDLE) ||
+        cna_scoped_render_target_end(outer) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_render_target_destroy(first) != CNA_RESULT_SUCCESS ||
+        cna_render_target_destroy(second) != CNA_RESULT_SUCCESS ||
+        cna_render_target_pool_reset(pool) != CNA_RESULT_SUCCESS ||
+        cna_render_target_pool_get_target_count(pool, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(0) ||
+        cna_render_target_pool_get_estimated_bytes(pool, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(0) ||
+        cna_render_target_pool_destroy(pool) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    first = UINT64_C(0x5A5A5A5A);
+    return cna_render_target_pool_acquire(
+               CNA_INVALID_HANDLE,
+               INT32_C(0),
+               INT32_C(1),
+               UINT32_MAX,
+               UINT32_MAX,
+               INT32_C(0),
+               &first) == CNA_RESULT_INVALID_ARGUMENT &&
+        first == CNA_INVALID_HANDLE;
+}
+
+static int validate_shader_effect_factory(const CNA_Handle graphics_device)
+{
+    static const char Key[] = "EngineLayerSmoke.cached";
+    static const char VertexSource[] = "void main() { }";
+    static const char FragmentSource[] = "void main() { }";
+    static const char IgnoredSource[] = "different source for an existing key";
+    CNA_ShaderEffectFactoryHandle factory = CNA_INVALID_HANDLE;
+    CNA_EffectHandle first = CNA_INVALID_HANDLE;
+    CNA_EffectHandle second = CNA_INVALID_HANDLE;
+    CNA_EffectParameterCollectionHandle parameters = CNA_INVALID_HANDLE;
+    CNA_Bool contains = UINT8_C(9);
+    uint64_t count = UINT64_C(0);
+
+    if (cna_shader_effect_factory_create(graphics_device, &factory) != CNA_RESULT_SUCCESS ||
+        factory == CNA_INVALID_HANDLE ||
+        cna_shader_effect_factory_contains(factory, string_view(Key), &contains) !=
+            CNA_RESULT_SUCCESS ||
+        contains != CNA_FALSE ||
+        cna_shader_effect_factory_acquire(
+            factory,
+            string_view(Key),
+            string_view(VertexSource),
+            string_view(FragmentSource),
+            &first) != CNA_RESULT_SUCCESS ||
+        first == CNA_INVALID_HANDLE ||
+        cna_shader_effect_factory_contains(factory, string_view(Key), &contains) !=
+            CNA_RESULT_SUCCESS ||
+        contains != CNA_TRUE ||
+        cna_shader_effect_factory_get_compile_count(factory, &count) != CNA_RESULT_SUCCESS ||
+        count != UINT64_C(1) ||
+        cna_shader_effect_factory_acquire(
+            factory,
+            string_view(Key),
+            string_view(IgnoredSource),
+            string_view(IgnoredSource),
+            &second) != CNA_RESULT_SUCCESS ||
+        second == CNA_INVALID_HANDLE ||
+        cna_shader_effect_factory_get_compile_count(factory, &count) != CNA_RESULT_SUCCESS ||
+        count != UINT64_C(1)) {
+        return 0;
+    }
+    if (cna_effect_dispose(first) != CNA_RESULT_INVALID_STATE ||
+        cna_graphics_resource_dispose(first) != CNA_RESULT_INVALID_STATE ||
+        cna_effect_get_parameters(first, &parameters) != CNA_RESULT_SUCCESS ||
+        cna_effect_destroy(first) != CNA_RESULT_SUCCESS ||
+        cna_effect_destroy(second) != CNA_RESULT_SUCCESS ||
+        cna_shader_effect_factory_clear(factory) != CNA_RESULT_INVALID_STATE ||
+        cna_shader_effect_factory_destroy(factory) != CNA_RESULT_INVALID_STATE ||
+        cna_effect_parameter_collection_destroy(parameters) != CNA_RESULT_SUCCESS ||
+        cna_shader_effect_factory_clear(factory) != CNA_RESULT_SUCCESS ||
+        cna_shader_effect_factory_contains(factory, string_view(Key), &contains) !=
+            CNA_RESULT_SUCCESS ||
+        contains != CNA_FALSE ||
+        cna_shader_effect_factory_get_compile_count(factory, &count) != CNA_RESULT_SUCCESS ||
+        count != UINT64_C(1) ||
+        cna_shader_effect_factory_destroy(factory) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    factory = UINT64_C(0x5A5A5A5A);
+    return cna_shader_effect_factory_create(CNA_INVALID_HANDLE, &factory) != CNA_RESULT_SUCCESS &&
+        factory == CNA_INVALID_HANDLE;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -461,6 +788,15 @@ static CNA_Result on_load(
             state->failed_stage = 3;
         } else if (!validate_compute_shader(graphics_device)) {
             state->failed_stage = 4;
+        }
+        if (state->failed_stage == 0 && !validate_gpu_timer(graphics_device)) {
+            state->failed_stage = 12;
+        } else if (state->failed_stage == 0 &&
+                   !validate_render_target_pool_and_scopes(graphics_device)) {
+            state->failed_stage = 13;
+        } else if (state->failed_stage == 0 &&
+                   !validate_shader_effect_factory(graphics_device)) {
+            state->failed_stage = 14;
         }
     } else if (!validate_unavailable(graphics_device)) {
         state->failed_stage = 5;

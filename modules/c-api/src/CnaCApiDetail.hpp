@@ -191,6 +191,12 @@ enum class ObjectKind : uint32_t {
     // space does not shift with a build option.
     StorageBuffer = 125,
     ComputeShader = 126,
+    // plans/plan_binding.md CBIND-084B: timer, pool, factory and active scope handles follow
+    // without reusing either resource kind above; every value stays fixed when CNA_CNAEXT is off.
+    GpuTimer = 127,
+    RenderTargetPool = 128,
+    ShaderEffectFactory = 129,
+    ScopedRenderTarget = 130,
     Test = UINT32_MAX
 };
 

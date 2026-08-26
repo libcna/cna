@@ -1313,6 +1313,10 @@ if(CNA_BUILD_TESTS)
         set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
         )
+    elseif(CNA_GRAPHICS_RENDERER MATCHES "^OPEN(GL|GLES)")
+        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
+        )
     else()
         set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
             ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"

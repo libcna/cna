@@ -25,9 +25,11 @@ what the generator can and cannot see before assuming the API grew.
 as a substrate the way `modules/platform` is excluded — the decision was to **bind it**. So Phase B9
 in `plans/plan_binding.md` is a real backlog of fourteen slices, `CBIND-080`–`CBIND-093`, sized from
 the inventory rather than estimated: 232 rows in the post-process chain, 209 in lights and shadows,
-177 in PBR materials, 157 in instancing/culling, 137 in IBL and probes, 121 in the engine
+177 in PBR materials, 157 in instancing/culling, 137 in IBL and probes, 140 in the engine
 foundations, 117 in the render pipeline, 116 in clustered lighting, 87 in HDR and tonemapping, 48
-on the `*EXT` surface of existing XNA types, and 50 in the four tail slices.
+on the `*EXT` surface of existing XNA types, and 50 in the four tail slices. The foundations grew
+by 19 when their compute routes proved they must own the barrier and image-access identities first
+drafted under the instancing slice.
 
 **The ABI shape question is already answered — do not re-decide it.** An optional layer could make
 the export list depend on a CMake option, which would make the release gate's *No unreviewed ABI
@@ -56,6 +58,15 @@ writes under `$HOME` through the media library and failed outright where `$HOME`
 an isolated `HOME`/`XDG_DATA_HOME` under the build tree and `SDL_AUDIODRIVER=dummy`, unconditionally
 rather than only under `SDL_RENDERER`. A reviewer of this branch had to hand-patch the environment
 before either test could measure anything, which is the definition of a test that is not evidence.
+
+**`CBIND-084A` and `CBIND-084B` are closed; `CBIND-084C` is next.** The engine-layer foundation now
+has 51 of its 140 rows left: pass machinery, post-process context and PBR material binding. The C
+ABI is at **6,485 implemented, 15 approved partial, 1,362 planned and 444 not applicable**, with
+**2,923 identical exports** in the `CNA_CNAEXT=OFF` HEADLESS tree and the `ON` OPENGLES3/EasyGL
+tree. B settled the lifetime rules later slices inherit: a pool/factory refuses invalidation while
+counted borrowed views exist, borrowed native objects cannot be disposed through C, effect child
+views prolong their owner's borrow, and render-target scopes are checked per-device LIFO begin/end
+pairs rather than unchecked emulations of RAII.
 
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 

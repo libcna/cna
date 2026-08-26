@@ -30,6 +30,7 @@ struct EffectResource final {
     CNA_Handle parentGame;
     std::shared_ptr<void> adapterState;
     uint64_t activeModelReferenceCount = 0U;
+    bool disposeAllowed = true;
 };
 
 struct OcclusionQueryResource final {
@@ -44,6 +45,10 @@ struct Texture2DResource final {
     uint64_t activeFontReferenceCount;
     uint64_t activeEffectReferenceCount;
     uint64_t activeModelReferenceCount;
+    std::shared_ptr<void> adapterLifetime;
+    uint64_t activeScopeReferenceCount = 0U;
+    bool disposeAllowed = true;
+    bool ownedResource = true;
 };
 
 struct SpriteFontResource final {
@@ -56,6 +61,7 @@ struct RenderTargetCubeResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::RenderTargetCube> value;
     CNA_Handle parentGame;
     uint64_t activeEffectReferenceCount;
+    uint64_t activeScopeReferenceCount = 0U;
 };
 
 struct Texture3DResource final {
@@ -111,6 +117,17 @@ struct TextureCubeResourceView final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
     CNA_Handle parentGame,
     CNA_Handle* outTexture);
+
+[[nodiscard]] CNA_Result CreateBorrowedRenderTarget2D(
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
+    CNA_Handle parentGame,
+    std::shared_ptr<void> adapterLifetime,
+    CNA_Handle* outTexture);
+
+[[nodiscard]] CNA_Result CreateBorrowedEffect(
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> effect,
+    CNA_Handle parentGame,
+    CNA_Handle* outEffect);
 
 [[nodiscard]] CNA_Result CreateOwnedTextureCube(
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> texture,

@@ -14630,6 +14630,100 @@
         "CPP-E3A0A02C3FEC",
         "CPP-F7170DBF5A99"
       ]
+    },
+    {
+      "id": "engine-gpu-timer",
+      "qualified_name_regex": "^CNA::Graphics::GpuTimer(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_gpu_timer_create`, `_is_supported`, `_copy_unsupported_reason`, `_begin`, `_end`, `_is_result_available`, `_poll`, `_get_last_milliseconds`, `_get_sample_count`, `_is_open` and `_destroy` over an owned `CNA_GpuTimerHandle`. Creation succeeds for an unsupported timer just as the canonical constructor does; support and its reason cross separately, and poll remains non-blocking.",
+      "tests": "`EngineLayerSmoke.c` in both builds, including the OPENGLES3/EasyGL success path under SDL's offscreen GL driver",
+      "status": "implemented",
+      "task": "CBIND-084B",
+      "approved_symbols": [
+        "CPP-14DD8EBF1DFF",
+        "CPP-2E0B8A130ECC",
+        "CPP-3A81336A9739",
+        "CPP-3DDB0F4A4FBC",
+        "CPP-55664855ED60",
+        "CPP-5B91DCAB1DBD",
+        "CPP-60CD0B7183BA",
+        "CPP-6A4ECB526798",
+        "CPP-AAAF10D91D65",
+        "CPP-D68D344D0AA9",
+        "CPP-D717EB1F24D4",
+        "CPP-E5A847A0C034"
+      ]
+    },
+    {
+      "id": "engine-render-target-pool",
+      "qualified_name_regex": "^CNA::Graphics::RenderTargetPool(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_render_target_pool_create`, `_acquire`, `_reset`, `_get_target_count`, `_get_estimated_bytes` and `_destroy` over an owned `CNA_RenderTargetPoolHandle`. Acquire returns an ordinary borrowed RenderTarget2D `CNA_Handle`, accepted by the existing texture/render-target routes and released with `cna_render_target_destroy`; the view never disposes the pool-owned native target. Each view increments the pool's active-borrow count, so reset and destruction refuse rather than invalidate a live C handle.",
+      "tests": "`EngineLayerSmoke.c` in both builds, including reuse by shape/slot, byte estimates, borrowed-dispose refusal, reset/destroy refusal and release under OPENGLES3/EasyGL",
+      "status": "implemented",
+      "task": "CBIND-084B",
+      "approved_symbols": [
+        "CPP-2816D071B57E",
+        "CPP-8BB5102FAA00",
+        "CPP-8D6E0C44B2EA",
+        "CPP-B9D7D6078663",
+        "CPP-BD14C26B5A5F",
+        "CPP-D4F06345BB4E",
+        "CPP-FF76A0170536"
+      ]
+    },
+    {
+      "id": "engine-scoped-render-target",
+      "qualified_name_regex": "^CNA::Graphics::ScopedRenderTarget(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_scoped_render_target_begin`, `_get_has_recorded_previous` and `_end` over an owned active `CNA_ScopedRenderTargetHandle`. Begin constructs the canonical RAII guard and retains both its destination and the C-visible binding it will restore. Per-device stack tokens make end a checked LIFO operation: an out-of-order end returns `CNA_RESULT_INVALID_STATE` without changing either scope or binding; a valid end destroys the guard, restores the tracked binding and releases the handle.",
+      "tests": "`EngineLayerSmoke.c` in both builds, including nested scopes, current-binding observations, target retention, a transactional out-of-order refusal and reverse-order restoration under OPENGLES3/EasyGL",
+      "status": "implemented",
+      "task": "CBIND-084B",
+      "approved_symbols": [
+        "CPP-05078D2E88AF",
+        "CPP-E7D0CB06F96C",
+        "CPP-F5273E2D7FE2",
+        "CPP-F65C6E23A1AF"
+      ]
+    },
+    {
+      "id": "engine-shader-effect-factory",
+      "qualified_name_regex": "^CNA::Graphics::ShaderEffectFactory(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_shader_effect_factory_create`, `_acquire`, `_contains`, `_get_compile_count`, `_clear` and `_destroy` over an owned `CNA_ShaderEffectFactoryHandle`. Acquire returns an ordinary borrowed `CNA_EffectHandle`, so every existing effect route and child-view route accepts it; dispose is refused because the factory owns the native effect, while `cna_effect_destroy` releases only the C view. The borrow shares the effect adapter's lifetime, so even a parameter/technique/pass view left after the top-level effect handle is released keeps clear and factory destruction in `CNA_RESULT_INVALID_STATE` rather than dangling.",
+      "tests": "`EngineLayerSmoke.c` in both builds, including cache reuse by name, persistent compile count, both dispose refusals and a child effect view that keeps clear/destroy refused under OPENGLES3/EasyGL",
+      "status": "implemented",
+      "task": "CBIND-084B",
+      "approved_symbols": [
+        "CPP-2FCC2699C31C",
+        "CPP-36B66AD0AC25",
+        "CPP-4233D27E705F",
+        "CPP-9C98CC8096DD",
+        "CPP-CBF124E16AFA",
+        "CPP-FB827308E0B0",
+        "CPP-FEB5A82E6B6A"
+      ]
     }
   ]
 }

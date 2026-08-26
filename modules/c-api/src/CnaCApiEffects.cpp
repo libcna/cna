@@ -860,7 +860,8 @@ template<typename TNative, typename TC, typename TConvert>
 [[nodiscard]] CNA_Result CreateEffectHandle(
     std::shared_ptr<Effect> value,
     const CNA_Handle parentGame,
-    CNA_EffectHandle* const outEffect)
+    CNA_EffectHandle* const outEffect,
+    const bool disposeAllowed = true)
 {
     auto state = std::make_shared<EffectState>();
     state->lifetime = std::make_shared<EffectLifetime>(parentGame);
@@ -876,8 +877,8 @@ template<typename TNative, typename TC, typename TConvert>
     state->techniques->owner = value.get();
     state->techniques->effectOwnership = state->lifetime;
 
-    const auto resource = std::make_shared<EffectResource>(
-        EffectResource{std::move(value), parentGame, state});
+    const auto resource = std::make_shared<EffectResource>(EffectResource{
+        std::move(value), parentGame, state, 0U, disposeAllowed});
     const CNA_Result result = GetRuntimeHandles().Create(
         ObjectKind::Effect, resource, outEffect);
     if (result == CNA_RESULT_SUCCESS) {
@@ -1222,6 +1223,19 @@ template<typename TSetter>
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result CreateBorrowedEffect(
+    std::shared_ptr<Effect> effect,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outEffect)
+{
+    return CreateEffectHandle(
+        std::move(effect), parentGame, outEffect, false);
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_effect_annotation_create(
     const CNA_EffectAnnotationCreateInfo* const createInfo,
@@ -3677,6 +3691,12 @@ CNA_Result cna_effect_dispose(const CNA_EffectHandle effectHandle)
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
                 "The Effect is retained by a ModelMeshPart.");
+        }
+        if (!effect->disposeAllowed) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The Effect is a borrowed factory-owned view and cannot be disposed.");
         }
         effect->value->Dispose();
         return CNA_RESULT_SUCCESS;

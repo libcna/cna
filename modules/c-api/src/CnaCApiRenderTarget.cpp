@@ -3,6 +3,7 @@
 #include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "CNA/C/render_target.h"
 #include "CnaCApiGraphicsDetail.hpp"
+#include "CnaCApiRenderTargetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -244,6 +245,102 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result GetTrackedRenderTargetBindings(
+    GraphicsDevice* const device,
+    std::vector<CNA_RenderTargetBinding>* const outBindings)
+{
+    if (device == nullptr || outBindings == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The tracked render-target binding request is invalid.");
+    }
+    const auto found = activeBindings.find(device);
+    *outBindings = found == activeBindings.end()
+        ? std::vector<CNA_RenderTargetBinding>{}
+        : found->second;
+    return CNA_RESULT_SUCCESS;
+}
+
+void SetTrackedRenderTargetBindings(
+    GraphicsDevice* const device,
+    std::vector<CNA_RenderTargetBinding> bindings)
+{
+    if (device == nullptr) {
+        return;
+    }
+    if (bindings.empty()) {
+        activeBindings.erase(device);
+    } else {
+        activeBindings[device] = std::move(bindings);
+    }
+}
+
+CNA_Result ResolveRenderTargetScopeReference(
+    const CNA_Handle handle,
+    const CNA_Handle parentGame,
+    std::shared_ptr<void>* const outOwner,
+    uint64_t** const outReferenceCount)
+{
+    if (outOwner == nullptr || outReferenceCount == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The render-target scope reference output is invalid.");
+    }
+    outOwner->reset();
+    *outReferenceCount = nullptr;
+
+    ObjectKind kind = ObjectKind::Unknown;
+    if (const CNA_Result result = GetRuntimeHandles().GetKind(handle, &kind);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "A render-target scope binding handle is invalid.");
+    }
+    if (kind == ObjectKind::RenderTarget2D) {
+        std::shared_ptr<Texture2DResource> target;
+        if (const CNA_Result result = GetRenderTarget2D(handle, &target);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (target->parentGame != parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE,
+                CNA_ERROR_CATEGORY_HANDLE,
+                "A render-target scope binding belongs to a different game.");
+        }
+        *outReferenceCount = &target->activeScopeReferenceCount;
+        *outOwner = std::move(target);
+        return CNA_RESULT_SUCCESS;
+    }
+    if (kind == ObjectKind::RenderTargetCube) {
+        std::shared_ptr<RenderTargetCubeResource> target;
+        if (const CNA_Result result = GetRenderTargetCube(handle, &target);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (target->parentGame != parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE,
+                CNA_ERROR_CATEGORY_HANDLE,
+                "A render-target scope binding belongs to a different game.");
+        }
+        *outReferenceCount = &target->activeScopeReferenceCount;
+        *outOwner = std::move(target);
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        CNA_RESULT_INVALID_HANDLE,
+        CNA_ERROR_CATEGORY_HANDLE,
+        "A render-target scope binding does not refer to a render target.");
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_render_target_usage_preserves_contents(
     const CNA_RenderTargetUsage usage,
@@ -721,11 +818,12 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (resource->activeEffectReferenceCount != 0U) {
+        if (resource->activeEffectReferenceCount != 0U ||
+            resource->activeScopeReferenceCount != 0U) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "The RenderTargetCube is retained by an EffectParameter.");
+                "The RenderTargetCube is retained by an EffectParameter or render-target scope.");
         }
         resource->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(renderTargetHandle);

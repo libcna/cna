@@ -543,6 +543,41 @@ CNA_Result CreateOwnedRenderTarget2D(
         std::move(texture), parentGame, ObjectKind::RenderTarget2D, outTexture);
 }
 
+CNA_Result CreateBorrowedRenderTarget2D(
+    std::shared_ptr<Texture2D> texture,
+    const CNA_Handle parentGame,
+    std::shared_ptr<void> adapterLifetime,
+    CNA_Handle* const outTexture)
+{
+    if (texture == nullptr || adapterLifetime == nullptr || outTexture == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The borrowed RenderTarget2D view is invalid.");
+    }
+    *outTexture = CNA_INVALID_HANDLE;
+    const auto resource = std::make_shared<Texture2DResource>(Texture2DResource{
+        std::move(texture),
+        parentGame,
+        0U,
+        0U,
+        0U,
+        0U,
+        std::move(adapterLifetime),
+        0U,
+        false,
+        false});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::RenderTarget2D, resource, outTexture);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The borrowed RenderTarget2D handle could not be created.");
+}
+
 CNA_Result GetOwnedTexture2D(
     const CNA_Handle handle,
     std::shared_ptr<Texture2DResource>* const outTexture)
@@ -1219,13 +1254,17 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
         if (texture->activeBatchReferenceCount != 0U ||
             texture->activeFontReferenceCount != 0U ||
             texture->activeEffectReferenceCount != 0U ||
-            texture->activeModelReferenceCount != 0U) {
+            texture->activeModelReferenceCount != 0U ||
+            texture->activeScopeReferenceCount != 0U) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "The Texture2D is retained by an active SpriteBatch, SpriteFont, effect or model.");
+                "The Texture2D is retained by an active SpriteBatch, SpriteFont, effect, model "
+                "or render-target scope.");
         }
-        texture->value->Dispose();
+        if (texture->disposeAllowed) {
+            texture->value->Dispose();
+        }
         const CNA_Result releaseResult = GetRuntimeHandles().Release(textureHandle);
         if (releaseResult != CNA_RESULT_SUCCESS) {
             return Fail(
@@ -1233,7 +1272,7 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
                 ErrorCategoryForResult(releaseResult),
                 "The owned Texture2D handle could not be released.");
         }
-        if (texture->parentGame != CNA_INVALID_HANDLE) {
+        if (texture->ownedResource && texture->parentGame != CNA_INVALID_HANDLE) {
             RemoveOwnedGraphicsResourceFor(texture->parentGame);
         }
         return CNA_RESULT_SUCCESS;
