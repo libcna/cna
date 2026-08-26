@@ -2692,6 +2692,16 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
     try
     {
         std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+
+        // CABI-32: aim before playing. Starting playback fixes the choice between 3D and pan, so
+        // an instance played first and aimed afterwards refuses -- XNA's own rule. Cue's pending-3D
+        // cache exists precisely so this order works before there is an active instance to forward
+        // to (see the test below it).
+        AudioListener listener; // default position: origin
+        AudioEmitter nearEmitter;
+        nearEmitter.setPositionProperty({1.0f, 0.0f, 0.0f});
+        cue->Apply3D(listener, nearEmitter);
+
         cue->Play();
 
         SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
@@ -2704,10 +2714,6 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
         MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
         ASSERT_NE(track, nullptr);
 
-        AudioListener listener; // default position: origin
-        AudioEmitter nearEmitter;
-        nearEmitter.setPositionProperty({1.0f, 0.0f, 0.0f});
-        cue->Apply3D(listener, nearEmitter);
         const float nearGain = MIX_GetTrackGain(track);
 
         AudioEmitter farEmitter;
@@ -2719,10 +2725,13 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
 
         cue->Stop(AudioStopOptions::Immediate);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // Deliberately not a bare catch(...) reporting "no audio device". It was, and that is how
+        // CABI-25 hid here: the is3D gate made Apply3D-after-Play throw, the catch-all swallowed it,
+        // and the test reported a missing audio device on a machine that has one. A skip that names
+        // the wrong cause is worse than a failure.
+        GTEST_SKIP() << "could not exercise real playback: " << error.what();
     }
 }
 
