@@ -27,7 +27,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | BLOCKED by a real crash |
 | CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE, implementation scoped |
 | CABI-9 | VideoPlayer frame identity/generation contract | fixcnats P4 | OPEN |
-| CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | OPEN |
+| CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
 | CABI-11 | Reproducible qualified artifacts + provenance manifest | fixcnats P6 | OPEN |
 | CABI-12 | Emscripten C-ABI ESM/Wasm artifact | fixcnats P7 | OPEN |
 
@@ -132,14 +132,42 @@ passes alone is the kind that gets re-diagnosed from scratch every time somebody
 
 ## Test environment
 
-All results on this branch are measured on **Xvfb `:101`** (`-screen 0 1920x1080x24 +extension GLX
-+render -noreset`), with `CNA_TEST_DISPLAY=:101` in the build cache. Verified equivalent to the
-real display: 83 C-API tests, 5 failing, identical set on both.
+All results on this branch are measured on **Xvfb `:101`**, started detached so it survives the
+session's build cleanups:
 
-One trap worth recording, because it cost a wrong conclusion here. Forcing `SDL_VIDEODRIVER=x11`
-on the ctest invocation raises the failure count from 5 to **45** — it overrides the per-test
-`SDL_VIDEODRIVER=dummy` that several cases set for themselves. Set `DISPLAY` and let each test
-choose its own driver.
+```bash
+setsid Xvfb :101 -screen 0 1920x1080x24 +extension GLX +render -noreset </dev/null &>/dev/null &
+```
+
+and run with **both** variables set:
+
+```bash
+DISPLAY=:101 SDL_VIDEODRIVER=x11 ctest -R "^CApi_"
+```
+
+`CNA_TEST_DISPLAY=:101` is in the build cache for the tests that take it from there.
+
+**`SDL_VIDEODRIVER=x11` is mandatory, not optional.** This host runs Wayland
+(`WAYLAND_DISPLAY=wayland-0`, `XDG_SESSION_TYPE=wayland`), and SDL prefers the wayland driver
+whenever it can. Setting `DISPLAY` alone does not redirect anything: SDL connects to the host
+compositor and the Xvfb sits idle, so the run silently measures the real GPU while appearing to
+use the virtual display. Nothing in the output says so.
+
+The cheap way to tell which path a run actually took is the EasyGL capability banner:
+
+| Path | Banner |
+| --- | --- |
+| Xvfb `:101` (llvmpipe) | `MSAA up to 4x` |
+| Host GPU | `MSAA up to 8x` |
+
+Baseline on Xvfb `:101`: **83 C-API tests, 5 failing** — the same five as on the real display, so
+the virtual display costs no coverage and there is no reason to use the real one.
+
+One failure mode to recognise, because it produced a wrong reading during this work: if the Xvfb
+process has died, `SDL_VIDEODRIVER=x11` has no server to reach and fails with
+`AcquireSubsystem(Video) failed: x11 not available`, taking the suite from 5 failures to 45.
+That is a dead Xvfb, **not** a reason to drop the variable — dropping it just returns to silently
+using the host compositor. Check `DISPLAY=:101 xdpyinfo` first.
 
 ## CABI-7b — Non-finite sprite values (BLOCKED by a real crash)
 
@@ -264,3 +292,52 @@ on three backends this branch has not built (`directx9` and `direct2d` need Wine
 needs its pinned external artifact). The design above is complete and the pieces it depends on all
 exist; what remains is execution plus that verification matrix, which wants its own branch rather
 than the tail of this one.
+
+## CABI-10 — Standalone GraphicsDevice (outcome A: implementable cleanly)
+
+`fixcnats.md` Phase 5 asks whether CNA can create an independently owned `GraphicsDevice` outside a
+`Game`, offers outcomes A/B/C, and forbids answering with a half-working constructor.
+`cna-cs/docs/native-behavior-blockers.md` records the consequence downstream: the corpus emits
+`not-run(CNA-ABI-has-one-game-owned-device)` for every cross-device test.
+
+**The answer is A, and most of it already exists.**
+
+`GraphicsDevice` already has XNA's own constructor —
+`GraphicsDevice(GraphicsAdapter&, GraphicsProfile, const PresentationParameters&)`
+(`GraphicsDevice.hpp:110`) — plus a headless default. Single standalone devices are already
+exercised by `GraphicsRendererSelectionTests` and `GraphicsDeviceSubsystemLifecycleTests`, and the
+platform video subsystem is reference-counted with tests proving the count balances across
+construction failure, renderer fallback and repeated lifetimes.
+
+What nothing covered was **two live at once**, which is precisely what a cross-device test needs.
+Measured by `cna_standalone_device_probe` (`modules/graphics/examples/`, registered as
+`StandaloneGraphicsDeviceProbe`):
+
+```
+first device constructed
+second device constructed -- two devices coexist
+first device disposed while second still live
+second device disposed
+```
+
+Deterministic across runs, on Xvfb `:101`, with both devices attaching a real OPENGLES3 renderer —
+not a headless stub. Destruction order is covered too: releasing the first while the second is live
+does not pull the shared video subsystem out from under it.
+
+### What remains: the C ABI binding
+
+The gap is not architectural, it is that the C ABI only ever exposes the game-owned device, borrowed
+for the duration of a callback (`cna_game_get_graphics_device`). To close the downstream blocker:
+
+1. `cna_graphics_device_create(adapter_index, profile, presentation_parameters*, out_device)` and
+   `cna_graphics_device_destroy(device)`, producing an **owned** device handle rather than a
+   borrowed one. **ABI class C, additive** — no existing route changes shape.
+2. The resource-creation routes currently resolve a `BorrowedGraphicsDevice`; they need to accept
+   either ownership kind. That is the bulk of the work and the part that must not be rushed, since
+   every texture/buffer/effect/render-target route resolves a device.
+3. Cross-device validation then becomes expressible: a resource created on device A and used on
+   device B must be refused, which is the XNA behaviour the corpus currently cannot test at all.
+
+Not implemented here: item 2 touches every resource route in the C API, and it is a wider change
+than the rest of this milestone. The feasibility question Phase 5 actually asked is answered, with
+a committed probe that keeps the answer honest.
