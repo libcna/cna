@@ -1334,6 +1334,449 @@ typedef struct CNA_ShadowCascadeStateEXT {
  */
 CNA_C_API CNA_Result cna_shadow_cascade_state_ext_init(CNA_ShadowCascadeStateEXT* out_state);
 
+/* ---------------------------------------------------------------------------------------------
+ * Shadow maps
+ *
+ * **Casting and sampling are two different questions, and a shadow map answers only the first.**
+ * Each map's `_is_supported` reports whether its caster shader exists and links -- the honest
+ * answer, since a renderer can advertise custom effects and still fail to compile this one. Whether
+ * the renderer can *sample* the result is @ref cna_graphics_device_supports_shadow_sampling_ext,
+ * and a frame needs both: a map that rasters on a renderer that cannot sample it produces a
+ * shadow texture nothing reads, which looks exactly like a scene with no occluders.
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Reports whether the renderer can sample a shadow map in a shader.
+ *
+ * Ask this **as well as** a shadow map's own `_is_supported`, not instead of it: one answers
+ * whether the shadow can be drawn, the other whether anything can read it.
+ *
+ * @param graphics_device The device to ask.
+ * @param out_supported Receives `CNA_TRUE` when shadow sampling is available.
+ * @return `CNA_RESULT_SUCCESS`, or a documented argument/handle failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_supports_shadow_sampling_ext(
+    CNA_Handle graphics_device,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Owned handle for one directional-light shadow map.
+ *
+ * Release it with @ref cna_shadow_map_destroy before destroying the game that owns its device.
+ * The effects and the texture it hands out are borrowed from it and stop being valid with it.
+ */
+typedef CNA_Handle CNA_ShadowMapHandle;
+
+/**
+ * @brief Creates a directional-light shadow map at a quality preset.
+ *
+ * Creation succeeds on a renderer that cannot cast shadows; ask @ref cna_shadow_map_is_supported.
+ *
+ * @param graphics_device The device to render on.
+ * @param quality One `CNA_SHADOW_QUALITY_*` identity, which selects the map's size and filter.
+ * @param out_shadow_map Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_create(
+    CNA_Handle graphics_device,
+    CNA_ShadowQuality quality,
+    CNA_ShadowMapHandle* out_shadow_map);
+
+/**
+ * @brief Reports whether this renderer can cast into the map.
+ *
+ * @param shadow_map The map.
+ * @param out_supported Receives `CNA_TRUE` when the caster shader exists and links.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_is_supported(
+    CNA_ShadowMapHandle shadow_map,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Opens the shadow pass, binding the map and computing the light's transform.
+ *
+ * @param shadow_map The map.
+ * @param light The directional light to cast from.
+ * @param scene_bounds The world-space bounds the shadow must cover.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_begin(
+    CNA_ShadowMapHandle shadow_map,
+    const CNA_DirectionalLightEXT* light,
+    const CNA_BoundingBox* scene_bounds);
+
+/**
+ * @brief Closes the shadow pass opened by @ref cna_shadow_map_begin.
+ *
+ * @param shadow_map The map.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_end(CNA_ShadowMapHandle shadow_map);
+
+/**
+ * @brief Returns the caster effect, borrowed from the map.
+ *
+ * @param shadow_map The map.
+ * @param out_effect Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_caster_effect(
+    CNA_ShadowMapHandle shadow_map,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Returns the skinned caster effect, borrowed from the map.
+ *
+ * @param shadow_map The map.
+ * @param out_effect Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_skinned_caster_effect(
+    CNA_ShadowMapHandle shadow_map,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Applies the caster effect for a rigid draw inside the pass.
+ *
+ * @param shadow_map The map.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_apply_caster(CNA_ShadowMapHandle shadow_map);
+
+/**
+ * @brief Applies the skinned caster effect with a bone palette.
+ *
+ * @param shadow_map The map.
+ * @param bone_transforms Array of bone transforms; null only when @p bone_count is zero.
+ * @param bone_count Number of transforms.
+ * @param weights_per_vertex How many bone weights each vertex carries.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_apply_skinned_caster(
+    CNA_ShadowMapHandle shadow_map,
+    const CNA_Matrix* bone_transforms,
+    uint64_t bone_count,
+    int32_t weights_per_vertex);
+
+/**
+ * @brief Returns the shadow texture, borrowed from the map.
+ *
+ * @param shadow_map The map.
+ * The handle is a borrow that keeps the map alive; release it with
+ * @ref cna_render_target_destroy, which does not dispose the map's own target. The map
+ * refuses to be destroyed while a borrow is outstanding.
+ *
+ * @param out_texture Receives the borrowed Texture2D, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_shadow_texture(
+    CNA_ShadowMapHandle shadow_map,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the transform from world space into the map, as of the last `begin`.
+ *
+ * @param shadow_map The map.
+ * @param out_matrix Receives the transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_light_view_projection(
+    CNA_ShadowMapHandle shadow_map,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Returns the map's edge length in texels.
+ *
+ * @param shadow_map The map.
+ * @param out_size Receives the size.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_size(CNA_ShadowMapHandle shadow_map, int32_t* out_size);
+
+/**
+ * @brief Returns the quality preset the map was created with.
+ *
+ * @param shadow_map The map.
+ * @param out_quality Receives the preset.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_quality(
+    CNA_ShadowMapHandle shadow_map,
+    CNA_ShadowQuality* out_quality);
+
+/**
+ * @brief Returns the depth bias applied when casting.
+ *
+ * @param shadow_map The map.
+ * @param out_bias Receives the bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_depth_bias(
+    CNA_ShadowMapHandle shadow_map,
+    float* out_bias);
+
+/**
+ * @brief Sets the depth bias applied when casting.
+ *
+ * @param shadow_map The map.
+ * @param bias The bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_set_depth_bias(CNA_ShadowMapHandle shadow_map, float bias);
+
+/**
+ * @brief Returns the filter radius in texels the map's quality selects.
+ *
+ * @param shadow_map The map.
+ * @param out_radius Receives the radius.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_get_filter_radius(
+    CNA_ShadowMapHandle shadow_map,
+    int32_t* out_radius);
+
+/**
+ * @brief Computes a directional light's view transform for a scene, without a map.
+ *
+ * A pure function of its arguments, so it needs no handle and works wherever the layer is present.
+ *
+ * @param light The directional light.
+ * @param scene_bounds The world-space bounds to cover.
+ * @param out_matrix Receives the view transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_compute_light_view(
+    const CNA_DirectionalLightEXT* light,
+    const CNA_BoundingBox* scene_bounds,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Computes the projection that fits a scene into a light's view.
+ *
+ * @param light_view The view transform, from @ref cna_shadow_map_compute_light_view.
+ * @param scene_bounds The world-space bounds to cover.
+ * @param out_matrix Receives the projection.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_compute_light_projection(
+    const CNA_Matrix* light_view,
+    const CNA_BoundingBox* scene_bounds,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Returns the map size a quality preset selects.
+ *
+ * @param quality One `CNA_SHADOW_QUALITY_*` identity.
+ * @param out_size Receives the edge length in texels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_size_for_quality(
+    CNA_ShadowQuality quality,
+    int32_t* out_size);
+
+/**
+ * @brief Returns the filter radius a quality preset selects.
+ *
+ * @param quality One `CNA_SHADOW_QUALITY_*` identity.
+ * @param out_radius Receives the radius in texels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_filter_radius_for_quality(
+    CNA_ShadowQuality quality,
+    int32_t* out_radius);
+
+/**
+ * @brief Releases the shadow map, its texture and its effects.
+ *
+ * @param shadow_map The map; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_shadow_map_destroy(CNA_ShadowMapHandle shadow_map);
+
+/**
+ * @brief Owned handle for one spot-light shadow map.
+ *
+ * Release it with @ref cna_spot_shadow_map_destroy before destroying the game that owns its device.
+ */
+typedef CNA_Handle CNA_SpotShadowMapHandle;
+
+/**
+ * @brief Creates a spot-light shadow map at a quality preset.
+ *
+ * @param graphics_device The device to render on.
+ * @param quality One `CNA_SHADOW_QUALITY_*` identity.
+ * @param out_shadow_map Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_create(
+    CNA_Handle graphics_device,
+    CNA_ShadowQuality quality,
+    CNA_SpotShadowMapHandle* out_shadow_map);
+
+/**
+ * @brief Reports whether this renderer can cast into the map.
+ *
+ * @param shadow_map The map.
+ * @param out_supported Receives `CNA_TRUE` when the caster shader exists and links.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_is_supported(
+    CNA_SpotShadowMapHandle shadow_map,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Opens the shadow pass for a spot light.
+ *
+ * @param shadow_map The map.
+ * @param light The spot light to cast from.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_begin(
+    CNA_SpotShadowMapHandle shadow_map,
+    const CNA_SpotLightEXT* light);
+
+/**
+ * @brief Closes the shadow pass opened by @ref cna_spot_shadow_map_begin.
+ *
+ * @param shadow_map The map.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_end(CNA_SpotShadowMapHandle shadow_map);
+
+/**
+ * @brief Returns the shadow texture, borrowed from the map.
+ *
+ * @param shadow_map The map.
+ * The handle is a borrow that keeps the map alive; release it with
+ * @ref cna_render_target_destroy, which does not dispose the map's own target. The map
+ * refuses to be destroyed while a borrow is outstanding.
+ *
+ * @param out_texture Receives the borrowed Texture2D, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_shadow_texture(
+    CNA_SpotShadowMapHandle shadow_map,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the caster effect, borrowed from the map.
+ *
+ * @param shadow_map The map.
+ * @param out_effect Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_caster_effect(
+    CNA_SpotShadowMapHandle shadow_map,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Returns the map's edge length in texels.
+ *
+ * @param shadow_map The map.
+ * @param out_size Receives the size.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_size(
+    CNA_SpotShadowMapHandle shadow_map,
+    int32_t* out_size);
+
+/**
+ * @brief Returns the quality preset the map was created with.
+ *
+ * @param shadow_map The map.
+ * @param out_quality Receives the preset.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_quality(
+    CNA_SpotShadowMapHandle shadow_map,
+    CNA_ShadowQuality* out_quality);
+
+/**
+ * @brief Returns the transform from world space into the map, as of the last `begin`.
+ *
+ * @param shadow_map The map.
+ * @param out_matrix Receives the transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_light_view_projection(
+    CNA_SpotShadowMapHandle shadow_map,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Returns the position of the light the map last cast from.
+ *
+ * @param shadow_map The map.
+ * @param out_position Receives the position.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_light_position(
+    CNA_SpotShadowMapHandle shadow_map,
+    CNA_Vector3* out_position);
+
+/**
+ * @brief Returns the range of the light the map last cast from.
+ *
+ * @param shadow_map The map.
+ * @param out_range Receives the range.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_light_range(
+    CNA_SpotShadowMapHandle shadow_map,
+    float* out_range);
+
+/**
+ * @brief Returns the depth bias applied when casting.
+ *
+ * @param shadow_map The map.
+ * @param out_bias Receives the bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_get_depth_bias(
+    CNA_SpotShadowMapHandle shadow_map,
+    float* out_bias);
+
+/**
+ * @brief Sets the depth bias applied when casting.
+ *
+ * @param shadow_map The map.
+ * @param bias The bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_set_depth_bias(
+    CNA_SpotShadowMapHandle shadow_map,
+    float bias);
+
+/**
+ * @brief Computes a spot light's view transform, without a map.
+ *
+ * @param light The spot light.
+ * @param out_matrix Receives the view transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_compute_light_view(
+    const CNA_SpotLightEXT* light,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Computes a spot light's projection from its cone and range.
+ *
+ * @param light The spot light.
+ * @param out_matrix Receives the projection.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_compute_light_projection(
+    const CNA_SpotLightEXT* light,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Releases the spot shadow map, its texture and its effect.
+ *
+ * @param shadow_map The map; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spot_shadow_map_destroy(CNA_SpotShadowMapHandle shadow_map);
+
 #ifdef __cplusplus
 }
 #endif

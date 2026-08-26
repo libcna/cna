@@ -202,6 +202,9 @@ enum class ObjectKind : uint32_t {
     // this ABI is the abstract contract's operations, not the class that implements them.
     FullscreenPass = 131,
     PostProcessPass = 132,
+    // plans/plan_binding.md CBIND-085B1: the two 2D shadow maps.
+    ShadowMap = 133,
+    SpotShadowMap = 134,
     Test = UINT32_MAX
 };
 

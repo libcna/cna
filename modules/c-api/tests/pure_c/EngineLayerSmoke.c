@@ -1132,6 +1132,244 @@ static int validate_material_binding(const CNA_Handle graphics_device)
         cna_effect_destroy(pbr) == CNA_RESULT_SUCCESS;
 }
 
+
+/* CBIND-085B1. Casting and sampling are different questions and the suite asks both, because a map
+ * that rasters on a renderer that cannot sample it produces a texture nothing reads -- which looks
+ * exactly like a scene with no occluders. */
+static int validate_shadow_maps(const CNA_Handle graphics_device)
+{
+    CNA_ShadowMapHandle map = CNA_INVALID_HANDLE;
+    CNA_SpotShadowMapHandle spot_map = CNA_INVALID_HANDLE;
+    CNA_DirectionalLightEXT light;
+    CNA_SpotLightEXT spot;
+    CNA_BoundingBox bounds;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Vector3 position;
+    CNA_Bool supported = UINT8_C(9);
+    CNA_Bool samples = UINT8_C(9);
+    CNA_ShadowQuality quality = UINT32_C(99);
+    int32_t size = -1;
+    int32_t radius = -1;
+    float bias = -1.0F;
+
+    if (cna_graphics_device_supports_shadow_sampling_ext(graphics_device, &samples) !=
+            CNA_RESULT_SUCCESS ||
+        (samples != CNA_TRUE && samples != CNA_FALSE)) {
+        return 0;
+    }
+    if (cna_graphics_device_supports_shadow_sampling_ext(graphics_device, 0) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_directional_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
+        cna_spot_light_ext_init(&spot) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    bounds.min.x = -10.0F; bounds.min.y = -10.0F; bounds.min.z = -10.0F;
+    bounds.max.x = 10.0F;  bounds.max.y = 10.0F;  bounds.max.z = 10.0F;
+
+    /* The static computations are pure functions, so they answer without a map at all -- and they
+       must refuse an uninitialized light rather than reading whatever is in the struct. */
+    if (cna_shadow_map_compute_light_view(&light, &bounds, &view) != CNA_RESULT_SUCCESS ||
+        cna_shadow_map_compute_light_projection(&view, &bounds, &projection) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        CNA_DirectionalLightEXT raw;
+        memset(&raw, 0, sizeof(raw));
+        if (cna_shadow_map_compute_light_view(&raw, &bounds, &view) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_shadow_map_compute_light_view(&light, 0, &view) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_shadow_map_compute_light_view(0, &bounds, &view) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+    /* A quality preset selects a size and a filter radius, and both are static answers. Higher
+       quality must not give a smaller map -- an ordering the presets exist to provide. */
+    {
+        int32_t low_size = 0;
+        int32_t high_size = 0;
+        if (cna_shadow_map_size_for_quality(CNA_SHADOW_QUALITY_LOW, &low_size) !=
+                CNA_RESULT_SUCCESS ||
+            cna_shadow_map_size_for_quality(CNA_SHADOW_QUALITY_HIGH, &high_size) !=
+                CNA_RESULT_SUCCESS ||
+            low_size > high_size) {
+            return 0;
+        }
+        if (cna_shadow_map_filter_radius_for_quality(CNA_SHADOW_QUALITY_HIGH, &radius) !=
+                CNA_RESULT_SUCCESS ||
+            radius < 0) {
+            return 0;
+        }
+        if (cna_shadow_map_size_for_quality(UINT32_C(9), &low_size) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+
+    if (cna_shadow_map_create(graphics_device, CNA_SHADOW_QUALITY_MEDIUM, &map) !=
+            CNA_RESULT_SUCCESS ||
+        map == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    /* A refused creation must use its OWN output: every create route clears the output handle
+       before it validates anything, so passing a live handle here would silently strand the map
+       that was just made. That is how this assertion was written the first time, and the map it
+       leaked is what made cna_game_destroy refuse. */
+    {
+        CNA_ShadowMapHandle refused = (CNA_ShadowMapHandle)UINT64_C(0x5A5A5A5A);
+        if (cna_shadow_map_create(graphics_device, UINT32_C(9), &refused) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            refused != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+    }
+    if (cna_shadow_map_is_supported(map, &supported) != CNA_RESULT_SUCCESS ||
+        (supported != CNA_TRUE && supported != CNA_FALSE)) {
+        return 0;
+    }
+    if (cna_shadow_map_get_quality(map, &quality) != CNA_RESULT_SUCCESS ||
+        quality != CNA_SHADOW_QUALITY_MEDIUM) {
+        return 0;
+    }
+    if (cna_shadow_map_get_size(map, &size) != CNA_RESULT_SUCCESS ||
+        cna_shadow_map_get_filter_radius(map, &radius) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* The instance's size must agree with the static answer for the same preset; two ways of
+       asking one question that could drift apart. */
+    {
+        int32_t expected = 0;
+        if (cna_shadow_map_size_for_quality(CNA_SHADOW_QUALITY_MEDIUM, &expected) !=
+                CNA_RESULT_SUCCESS ||
+            expected != size) {
+            return 0;
+        }
+    }
+    if (cna_shadow_map_set_depth_bias(map, 0.5F) != CNA_RESULT_SUCCESS ||
+        cna_shadow_map_get_depth_bias(map, &bias) != CNA_RESULT_SUCCESS || bias != 0.5F) {
+        return 0;
+    }
+    /* begin/end and the rigid caster must not fail on a renderer that cannot cast: the contract
+       is that an unsupported map degrades rather than refusing.
+
+       The skinned caster is different, and the difference is canonical: it validates its palette
+       BEFORE it checks whether the map is supported, so an empty palette is refused everywhere.
+       Getting this expectation wrong is what turned a test failure into a crash -- the refusal
+       throws with the pass still open, and a map destroyed in that state disposes a target the
+       device still has bound. Every exit from here on goes through the single cleanup below for
+       the same reason. */
+    {
+        CNA_Matrix palette[1];
+        int ok = cna_shadow_map_begin(map, &light, &bounds) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_shadow_map_apply_caster(map) == CNA_RESULT_SUCCESS;
+        if (cna_matrix_get_identity(&palette[0]) != CNA_RESULT_SUCCESS) {
+            ok = 0;
+        }
+        ok = ok &&
+            cna_shadow_map_apply_skinned_caster(map, palette, UINT64_C(1), INT32_C(4)) ==
+                CNA_RESULT_SUCCESS;
+        /* An empty palette, a null array with a non-zero count, and a weight count the canonical
+           API does not accept are all refusals -- and each leaves the pass open, so they are made
+           here where the pass is still live and `end` still follows. */
+        ok = ok &&
+            cna_shadow_map_apply_skinned_caster(map, palette, UINT64_C(0), INT32_C(4)) !=
+                CNA_RESULT_SUCCESS;
+        ok = ok &&
+            cna_shadow_map_apply_skinned_caster(map, 0, UINT64_C(2), INT32_C(4)) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok &&
+            cna_shadow_map_apply_skinned_caster(map, palette, UINT64_C(1), INT32_C(3)) !=
+                CNA_RESULT_SUCCESS;
+        ok = ok && cna_shadow_map_end(map) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_shadow_map_get_light_view_projection(map, &view) == CNA_RESULT_SUCCESS;
+        if (!ok) {
+            (void)cna_shadow_map_destroy(map);
+            return 0;
+        }
+    }
+    /* The effects and the texture are borrowed from the map; each is either a real handle or the
+       invalid one, and destroying the map is refused while a borrow is outstanding. */
+    {
+        CNA_EffectHandle caster = (CNA_EffectHandle)UINT64_C(0x5A5A5A5A);
+        CNA_Handle texture = (CNA_Handle)UINT64_C(0x5A5A5A5A);
+        CNA_EffectHandle skinned = (CNA_EffectHandle)UINT64_C(0x5A5A5A5A);
+        int ok = cna_shadow_map_get_caster_effect(map, &caster) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_shadow_map_get_shadow_texture(map, &texture) == CNA_RESULT_SUCCESS;
+        /* The skinned caster is a second effect with the same borrow rules; a map that reported
+           itself supported must hand out both, and each one has to be released. */
+        ok = ok && cna_shadow_map_get_skinned_caster_effect(map, &skinned) == CNA_RESULT_SUCCESS;
+        if (ok && supported == CNA_TRUE) {
+            ok = skinned != CNA_INVALID_HANDLE &&
+                cna_effect_destroy(skinned) == CNA_RESULT_SUCCESS;
+        }
+        if (ok && supported == CNA_TRUE) {
+            ok = caster != CNA_INVALID_HANDLE && texture != CNA_INVALID_HANDLE;
+            /* A borrow keeps the map alive, so destroying the map is refused while one is out. */
+            ok = ok && cna_shadow_map_destroy(map) != CNA_RESULT_SUCCESS;
+            ok = ok && cna_effect_destroy(caster) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_render_target_destroy(texture) == CNA_RESULT_SUCCESS;
+        }
+        if (!ok) {
+            (void)cna_shadow_map_destroy(map);
+            return 0;
+        }
+    }
+    if (cna_shadow_map_destroy(map) != CNA_RESULT_SUCCESS ||
+        cna_shadow_map_destroy(map) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (cna_spot_shadow_map_create(graphics_device, CNA_SHADOW_QUALITY_LOW, &spot_map) !=
+            CNA_RESULT_SUCCESS ||
+        spot_map == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_spot_shadow_map_is_supported(spot_map, &supported) != CNA_RESULT_SUCCESS ||
+        cna_spot_shadow_map_get_quality(spot_map, &quality) != CNA_RESULT_SUCCESS ||
+        quality != CNA_SHADOW_QUALITY_LOW ||
+        cna_spot_shadow_map_get_size(spot_map, &size) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_spot_shadow_map_begin(spot_map, &spot) != CNA_RESULT_SUCCESS ||
+        cna_spot_shadow_map_end(spot_map) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_spot_shadow_map_get_light_view_projection(spot_map, &view) != CNA_RESULT_SUCCESS ||
+        cna_spot_shadow_map_get_light_position(spot_map, &position) != CNA_RESULT_SUCCESS ||
+        cna_spot_shadow_map_get_light_range(spot_map, &bias) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_spot_shadow_map_set_depth_bias(spot_map, 0.25F) != CNA_RESULT_SUCCESS ||
+        cna_spot_shadow_map_get_depth_bias(spot_map, &bias) != CNA_RESULT_SUCCESS ||
+        bias != 0.25F) {
+        return 0;
+    }
+    if (cna_spot_shadow_map_compute_light_view(&spot, &view) != CNA_RESULT_SUCCESS ||
+        cna_spot_shadow_map_compute_light_projection(&spot, &projection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        CNA_EffectHandle caster = CNA_INVALID_HANDLE;
+        CNA_Handle texture = CNA_INVALID_HANDLE;
+        if (cna_spot_shadow_map_get_caster_effect(spot_map, &caster) != CNA_RESULT_SUCCESS ||
+            cna_spot_shadow_map_get_shadow_texture(spot_map, &texture) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (caster != CNA_INVALID_HANDLE && cna_effect_destroy(caster) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (texture != CNA_INVALID_HANDLE &&
+            cna_render_target_destroy(texture) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    return cna_spot_shadow_map_destroy(spot_map) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -1169,6 +1407,10 @@ static CNA_Result on_load(
         }
         if (!validate_material_binding(graphics_device)) {
             state->failed_stage = 10;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_shadow_maps(graphics_device)) {
+            state->failed_stage = 11;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {
@@ -1240,8 +1482,10 @@ int main(void)
     if (!validate_barrier_containment()) {
         return 2;
     }
+    /* 30+ is reserved for checks made outside the game callback, so it can never collide with
+       a `3 + stage` code from inside it. */
     if (!validate_light_values()) {
-        return 14;
+        return 30;
     }
     {
         int stage = 0;

@@ -8,6 +8,7 @@
 #include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PunctualLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShadowCascadeStateEXT.hpp"
@@ -23,6 +24,10 @@
 #include "CNA/Graphics/DepthEncoding.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/PointLightEXT.hpp"
+#include "CNA/Graphics/ShadowMap.hpp"
+#include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "CNA/Graphics/ShadowQuality.hpp"
+#include "CNA/Graphics/SpotShadowMap.hpp"
 #include "CNA/Graphics/SpotLightEXT.hpp"
 #include "CNA/Graphics/EffectPass.hpp"
 #include "CNA/Graphics/EngineLayerVersion.hpp"
@@ -37,7 +42,6 @@
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
-#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
@@ -816,6 +820,29 @@ CNA_Result cna_shadow_cascade_state_ext_init(CNA_ShadowCascadeStateEXT* const ou
     return StoreValue(outState, defaults);
 }
 
+CNA_Result cna_graphics_device_supports_shadow_sampling_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The shadow-sampling support output is null.");
+        }
+        std::shared_ptr<CNA::C::Detail::BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = CNA::C::Detail::GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported =
+            graphicsDevice->value->SupportsShadowSamplingEXT() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 #ifndef CNA_CNAEXT
 
 CNA_Result cna_storage_buffer_create(
@@ -1443,6 +1470,136 @@ CNA_Result cna_pbr_material_apply_state(
     (void)material; (void)graphicsDevice;
     return ExtensionUnavailable();
 }
+
+
+CNA_Result cna_shadow_map_create(
+    const CNA_Handle graphicsDevice, const CNA_ShadowQuality quality,
+    CNA_ShadowMapHandle* const outShadowMap)
+{
+    (void)graphicsDevice; (void)quality;
+    if (outShadowMap != nullptr) { *outShadowMap = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_shadow_map_is_supported(const CNA_ShadowMapHandle m, CNA_Bool* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_begin(
+    const CNA_ShadowMapHandle m, const CNA_DirectionalLightEXT* const l,
+    const CNA_BoundingBox* const b)
+{ (void)m; (void)l; (void)b; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_end(const CNA_ShadowMapHandle m)
+{ (void)m; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_caster_effect(const CNA_ShadowMapHandle m, CNA_EffectHandle* const o)
+{ (void)m; if (o != nullptr) { *o = CNA_INVALID_HANDLE; } return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_skinned_caster_effect(
+    const CNA_ShadowMapHandle m, CNA_EffectHandle* const o)
+{ (void)m; if (o != nullptr) { *o = CNA_INVALID_HANDLE; } return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_apply_caster(const CNA_ShadowMapHandle m)
+{ (void)m; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_apply_skinned_caster(
+    const CNA_ShadowMapHandle m, const CNA_Matrix* const b, const uint64_t c, const int32_t w)
+{ (void)m; (void)b; (void)c; (void)w; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_shadow_texture(const CNA_ShadowMapHandle m, CNA_Handle* const o)
+{ (void)m; if (o != nullptr) { *o = CNA_INVALID_HANDLE; } return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_light_view_projection(
+    const CNA_ShadowMapHandle m, CNA_Matrix* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_size(const CNA_ShadowMapHandle m, int32_t* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_quality(const CNA_ShadowMapHandle m, CNA_ShadowQuality* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_depth_bias(const CNA_ShadowMapHandle m, float* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_set_depth_bias(const CNA_ShadowMapHandle m, const float b)
+{ (void)m; (void)b; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_get_filter_radius(const CNA_ShadowMapHandle m, int32_t* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_compute_light_view(
+    const CNA_DirectionalLightEXT* const l, const CNA_BoundingBox* const b, CNA_Matrix* const o)
+{ (void)l; (void)b; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_compute_light_projection(
+    const CNA_Matrix* const v, const CNA_BoundingBox* const b, CNA_Matrix* const o)
+{ (void)v; (void)b; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_size_for_quality(const CNA_ShadowQuality q, int32_t* const o)
+{ (void)q; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_filter_radius_for_quality(const CNA_ShadowQuality q, int32_t* const o)
+{ (void)q; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_shadow_map_destroy(const CNA_ShadowMapHandle m)
+{ (void)m; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_create(
+    const CNA_Handle d, const CNA_ShadowQuality q, CNA_SpotShadowMapHandle* const o)
+{ (void)d; (void)q; if (o != nullptr) { *o = CNA_INVALID_HANDLE; } return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_is_supported(const CNA_SpotShadowMapHandle m, CNA_Bool* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_begin(const CNA_SpotShadowMapHandle m, const CNA_SpotLightEXT* const l)
+{ (void)m; (void)l; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_end(const CNA_SpotShadowMapHandle m)
+{ (void)m; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_shadow_texture(
+    const CNA_SpotShadowMapHandle m, CNA_Handle* const o)
+{ (void)m; if (o != nullptr) { *o = CNA_INVALID_HANDLE; } return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_caster_effect(
+    const CNA_SpotShadowMapHandle m, CNA_EffectHandle* const o)
+{ (void)m; if (o != nullptr) { *o = CNA_INVALID_HANDLE; } return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_size(const CNA_SpotShadowMapHandle m, int32_t* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_quality(
+    const CNA_SpotShadowMapHandle m, CNA_ShadowQuality* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_light_view_projection(
+    const CNA_SpotShadowMapHandle m, CNA_Matrix* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_light_position(
+    const CNA_SpotShadowMapHandle m, CNA_Vector3* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_light_range(const CNA_SpotShadowMapHandle m, float* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_get_depth_bias(const CNA_SpotShadowMapHandle m, float* const o)
+{ (void)m; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_set_depth_bias(const CNA_SpotShadowMapHandle m, const float b)
+{ (void)m; (void)b; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_compute_light_view(
+    const CNA_SpotLightEXT* const l, CNA_Matrix* const o)
+{ (void)l; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_compute_light_projection(
+    const CNA_SpotLightEXT* const l, CNA_Matrix* const o)
+{ (void)l; (void)o; return ExtensionUnavailable(); }
+
+CNA_Result cna_spot_shadow_map_destroy(const CNA_SpotShadowMapHandle m)
+{ (void)m; return ExtensionUnavailable(); }
 
 
 #else // CNA_CNAEXT
@@ -3586,6 +3743,765 @@ CNA_Result cna_pbr_material_apply_state(
             return result;
         }
         Ext::applyMaterialState(native, *graphicsDevice->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::BoundingBox;
+
+struct ShadowMapResource final {
+    std::shared_ptr<Ext::ShadowMap> value;
+    CNA_Handle parentGame;
+    uint64_t activeBorrowCount = 0U;
+};
+
+struct SpotShadowMapResource final {
+    std::shared_ptr<Ext::SpotShadowMap> value;
+    CNA_Handle parentGame;
+    uint64_t activeBorrowCount = 0U;
+};
+
+[[nodiscard]] CNA_Matrix ToCMatrix(const Microsoft::Xna::Framework::Matrix& value) noexcept
+{
+    CNA_Matrix result;
+    result.m11 = value.M11; result.m12 = value.M12; result.m13 = value.M13; result.m14 = value.M14;
+    result.m21 = value.M21; result.m22 = value.M22; result.m23 = value.M23; result.m24 = value.M24;
+    result.m31 = value.M31; result.m32 = value.M32; result.m33 = value.M33; result.m34 = value.M34;
+    result.m41 = value.M41; result.m42 = value.M42; result.m43 = value.M43; result.m44 = value.M44;
+    return result;
+}
+
+[[nodiscard]] CNA_Result ToNativeShadowQuality(
+    const CNA_ShadowQuality value, Ext::ShadowQuality* const out)
+{
+    if (value > CNA_SHADOW_QUALITY_ULTRA) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The shadow quality is not a defined CNA_SHADOW_QUALITY_* value.");
+    }
+    *out = static_cast<Ext::ShadowQuality>(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ToNativeDirectionalLight(
+    const CNA_DirectionalLightEXT* const value, Ext::DirectionalLightEXT* const out)
+{
+    if (value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+    }
+    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_DirectionalLightEXT)) ||
+        value->struct_version != UINT32_C(1)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The light was not initialized by cna_directional_light_ext_init.");
+    }
+    if (const CNA_Result result =
+            ValidateCanonicalBool(value->casts_shadows, "casts_shadows");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    out->Direction = {value->direction.x, value->direction.y, value->direction.z};
+    out->Color = {value->color.x, value->color.y, value->color.z};
+    out->Intensity = value->intensity;
+    out->CastsShadows = value->casts_shadows == CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ToNativeSpotLight(
+    const CNA_SpotLightEXT* const value, Ext::SpotLightEXT* const out)
+{
+    if (value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+    }
+    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_SpotLightEXT)) ||
+        value->struct_version != UINT32_C(1)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The light was not initialized by cna_spot_light_ext_init.");
+    }
+    if (const CNA_Result result =
+            ValidateCanonicalBool(value->casts_shadows, "casts_shadows");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    out->Position = {value->position.x, value->position.y, value->position.z};
+    out->Direction = {value->direction.x, value->direction.y, value->direction.z};
+    out->Color = {value->color.x, value->color.y, value->color.z};
+    out->Intensity = value->intensity;
+    out->Range = value->range;
+    out->InnerAngle = value->inner_angle;
+    out->OuterAngle = value->outer_angle;
+    out->CastsShadows = value->casts_shadows == CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ToNativeBounds(
+    const CNA_BoundingBox* const value, BoundingBox* const out)
+{
+    if (value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The scene bounds are null.");
+    }
+    out->Min = {value->min.x, value->min.y, value->min.z};
+    out->Max = {value->max.x, value->max.y, value->max.z};
+    return CNA_RESULT_SUCCESS;
+}
+
+// A caster effect and a shadow texture both belong to the map. Handing either out as a borrow
+// keeps the map alive behind it, which is what stops a caller destroying the map and then drawing
+// through an effect that no longer exists.
+template<typename TResource>
+[[nodiscard]] CNA_Result BorrowEffectFrom(
+    const std::shared_ptr<TResource>& owner,
+    Microsoft::Xna::Framework::Graphics::Effect* const effect,
+    CNA_EffectHandle* const outEffect)
+{
+    if (effect == nullptr) {
+        *outEffect = CNA_INVALID_HANDLE;
+        return CNA_RESULT_SUCCESS;
+    }
+    const auto borrow = std::make_shared<CountedBorrow<TResource>>(owner);
+    const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> view(borrow, effect);
+    return CreateBorrowedEffect(view, owner->parentGame, outEffect);
+}
+
+template<typename TResource>
+[[nodiscard]] CNA_Result BorrowShadowTextureFrom(
+    const std::shared_ptr<TResource>& owner,
+    Microsoft::Xna::Framework::Graphics::Texture2D* const texture,
+    CNA_Handle* const outTexture)
+{
+    if (texture == nullptr) {
+        *outTexture = CNA_INVALID_HANDLE;
+        return CNA_RESULT_SUCCESS;
+    }
+    const auto borrow = std::make_shared<CountedBorrow<TResource>>(owner);
+    const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(borrow, texture);
+    return CreateBorrowedRenderTarget2D(view, owner->parentGame, borrow, outTexture);
+}
+
+} // namespace
+
+CNA_Result cna_shadow_map_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ShadowQuality quality,
+    CNA_ShadowMapHandle* const outShadowMap)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outShadowMap == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The shadow-map output handle is null.");
+        }
+        *outShadowMap = CNA_INVALID_HANDLE;
+        Ext::ShadowQuality nativeQuality{};
+        if (const CNA_Result result = ToNativeShadowQuality(quality, &nativeQuality);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ShadowMap>(*graphicsDevice->value, nativeQuality);
+        const auto resource = std::make_shared<ShadowMapResource>(
+            ShadowMapResource{std::move(native), graphicsDevice->parentGame, 0U});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::ShadowMap, resource, outShadowMap);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned shadow-map handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result GetShadowMap(
+    const CNA_Handle handle, std::shared_ptr<ShadowMapResource>* const out)
+{
+    return GetEngineResource(handle, ObjectKind::ShadowMap, "ShadowMap", out);
+}
+
+[[nodiscard]] CNA_Result GetSpotShadowMap(
+    const CNA_Handle handle, std::shared_ptr<SpotShadowMapResource>* const out)
+{
+    return GetEngineResource(handle, ObjectKind::SpotShadowMap, "SpotShadowMap", out);
+}
+
+template<typename TResource, typename TCallable>
+[[nodiscard]] CNA_Result WithMap(
+    const CNA_Handle handle,
+    const ObjectKind kind,
+    const char* const name,
+    TCallable&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TResource> resource;
+        if (const CNA_Result result = GetEngineResource(handle, kind, name, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return std::forward<TCallable>(body)(resource);
+    });
+}
+
+} // namespace
+
+CNA_Result cna_shadow_map_is_supported(
+    const CNA_ShadowMapHandle shadowMap, CNA_Bool* const outSupported)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            if (outSupported == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The support output is null.");
+            }
+            *outSupported = map->value->isSupported() ? CNA_TRUE : CNA_FALSE;
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_shadow_map_begin(
+    const CNA_ShadowMapHandle shadowMap,
+    const CNA_DirectionalLightEXT* const light,
+    const CNA_BoundingBox* const sceneBounds)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            Ext::DirectionalLightEXT nativeLight;
+            if (const CNA_Result result = ToNativeDirectionalLight(light, &nativeLight);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            BoundingBox nativeBounds;
+            if (const CNA_Result result = ToNativeBounds(sceneBounds, &nativeBounds);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            map->value->begin(nativeLight, nativeBounds);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_shadow_map_end(const CNA_ShadowMapHandle shadowMap)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            map->value->end();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_shadow_map_get_caster_effect(
+    const CNA_ShadowMapHandle shadowMap, CNA_EffectHandle* const outEffect)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            if (outEffect == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The effect output handle is null.");
+            }
+            *outEffect = CNA_INVALID_HANDLE;
+            return BorrowEffectFrom(map, map->value->getCasterEffect(), outEffect);
+        });
+}
+
+CNA_Result cna_shadow_map_get_skinned_caster_effect(
+    const CNA_ShadowMapHandle shadowMap, CNA_EffectHandle* const outEffect)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            if (outEffect == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The effect output handle is null.");
+            }
+            *outEffect = CNA_INVALID_HANDLE;
+            return BorrowEffectFrom(map, map->value->getSkinnedCasterEffect(), outEffect);
+        });
+}
+
+CNA_Result cna_shadow_map_apply_caster(const CNA_ShadowMapHandle shadowMap)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            map->value->applyCaster();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_shadow_map_apply_skinned_caster(
+    const CNA_ShadowMapHandle shadowMap,
+    const CNA_Matrix* const boneTransforms,
+    const uint64_t boneCount,
+    const int32_t weightsPerVertex)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            if (boneTransforms == nullptr && boneCount != 0U) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bone-transform array is null.");
+            }
+            if (boneCount > static_cast<uint64_t>(SIZE_MAX / sizeof(CNA_Matrix))) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The bone count does not fit this platform's size type.");
+            }
+            std::vector<Microsoft::Xna::Framework::Matrix> bones;
+            bones.reserve(static_cast<std::size_t>(boneCount));
+            for (uint64_t bone = 0U; bone < boneCount; ++bone) {
+                bones.push_back(ToNativeMatrix(boneTransforms[bone]));
+            }
+            map->value->applySkinnedCaster(bones, static_cast<int>(weightsPerVertex));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_shadow_map_get_shadow_texture(
+    const CNA_ShadowMapHandle shadowMap, CNA_Handle* const outTexture)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            return BorrowShadowTextureFrom(map, map->value->getShadowTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_shadow_map_get_light_view_projection(
+    const CNA_ShadowMapHandle shadowMap, CNA_Matrix* const outMatrix)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outMatrix, ToCMatrix(map->value->getLightViewProjection()));
+        });
+}
+
+CNA_Result cna_shadow_map_get_size(const CNA_ShadowMapHandle shadowMap, int32_t* const outSize)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outSize, static_cast<int32_t>(map->value->getSize()));
+        });
+}
+
+CNA_Result cna_shadow_map_get_quality(
+    const CNA_ShadowMapHandle shadowMap, CNA_ShadowQuality* const outQuality)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outQuality, NativeOrdinal(map->value->getQuality()));
+        });
+}
+
+CNA_Result cna_shadow_map_get_depth_bias(
+    const CNA_ShadowMapHandle shadowMap, float* const outBias)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outBias, map->value->getDepthBias());
+        });
+}
+
+CNA_Result cna_shadow_map_set_depth_bias(const CNA_ShadowMapHandle shadowMap, const float bias)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            map->value->setDepthBias(bias);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_shadow_map_get_filter_radius(
+    const CNA_ShadowMapHandle shadowMap, int32_t* const outRadius)
+{
+    return WithMap<ShadowMapResource>(
+        shadowMap, ObjectKind::ShadowMap, "ShadowMap",
+        [&](const std::shared_ptr<ShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outRadius, static_cast<int32_t>(map->value->getFilterRadius()));
+        });
+}
+
+CNA_Result cna_shadow_map_compute_light_view(
+    const CNA_DirectionalLightEXT* const light,
+    const CNA_BoundingBox* const sceneBounds,
+    CNA_Matrix* const outMatrix)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::DirectionalLightEXT nativeLight;
+        if (const CNA_Result result = ToNativeDirectionalLight(light, &nativeLight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        BoundingBox nativeBounds;
+        if (const CNA_Result result = ToNativeBounds(sceneBounds, &nativeBounds);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outMatrix, ToCMatrix(Ext::ShadowMap::computeLightView(nativeLight, nativeBounds)));
+    });
+}
+
+CNA_Result cna_shadow_map_compute_light_projection(
+    const CNA_Matrix* const lightView,
+    const CNA_BoundingBox* const sceneBounds,
+    CNA_Matrix* const outMatrix)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (lightView == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The light view is null.");
+        }
+        BoundingBox nativeBounds;
+        if (const CNA_Result result = ToNativeBounds(sceneBounds, &nativeBounds);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outMatrix,
+            ToCMatrix(Ext::ShadowMap::computeLightProjection(
+                ToNativeMatrix(*lightView), nativeBounds)));
+    });
+}
+
+CNA_Result cna_shadow_map_size_for_quality(
+    const CNA_ShadowQuality quality, int32_t* const outSize)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::ShadowQuality nativeQuality{};
+        if (const CNA_Result result = ToNativeShadowQuality(quality, &nativeQuality);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outSize, static_cast<int32_t>(Ext::ShadowMap::sizeForQuality(nativeQuality)));
+    });
+}
+
+CNA_Result cna_shadow_map_filter_radius_for_quality(
+    const CNA_ShadowQuality quality, int32_t* const outRadius)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::ShadowQuality nativeQuality{};
+        if (const CNA_Result result = ToNativeShadowQuality(quality, &nativeQuality);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outRadius, static_cast<int32_t>(Ext::ShadowMap::filterRadiusForQuality(nativeQuality)));
+    });
+}
+
+CNA_Result cna_shadow_map_destroy(const CNA_ShadowMapHandle shadowMapHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ShadowMapResource> map;
+        if (const CNA_Result result = GetShadowMap(shadowMapHandle, &map);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The effects and the texture this map hands out are borrows that keep it alive.
+        // Destroying it underneath one would leave a handle naming an object that is gone,
+        // so the borrow is what has to be released first.
+        if (map->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The shadow map is still lending an effect or its shadow texture.");
+        }
+        // The effects and the texture this map hands out are borrows that keep it alive.
+        // Destroying it underneath one would leave a handle naming an object that is gone,
+        // so the borrow is what has to be released first.
+        if (map->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The spot shadow map is still lending an effect or its shadow texture.");
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(shadowMapHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned shadow-map handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(map->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_spot_shadow_map_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ShadowQuality quality,
+    CNA_SpotShadowMapHandle* const outShadowMap)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outShadowMap == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The spot-shadow-map output handle is null.");
+        }
+        *outShadowMap = CNA_INVALID_HANDLE;
+        Ext::ShadowQuality nativeQuality{};
+        if (const CNA_Result result = ToNativeShadowQuality(quality, &nativeQuality);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::SpotShadowMap>(*graphicsDevice->value, nativeQuality);
+        const auto resource = std::make_shared<SpotShadowMapResource>(
+            SpotShadowMapResource{std::move(native), graphicsDevice->parentGame, 0U});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::SpotShadowMap, resource, outShadowMap);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned spot-shadow-map handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_spot_shadow_map_is_supported(
+    const CNA_SpotShadowMapHandle shadowMap, CNA_Bool* const outSupported)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(
+                outSupported, static_cast<CNA_Bool>(
+                    map->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_spot_shadow_map_begin(
+    const CNA_SpotShadowMapHandle shadowMap, const CNA_SpotLightEXT* const light)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            Ext::SpotLightEXT nativeLight;
+            if (const CNA_Result result = ToNativeSpotLight(light, &nativeLight);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            map->value->begin(nativeLight);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_spot_shadow_map_end(const CNA_SpotShadowMapHandle shadowMap)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            map->value->end();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_shadow_texture(
+    const CNA_SpotShadowMapHandle shadowMap, CNA_Handle* const outTexture)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            return BorrowShadowTextureFrom(map, map->value->getShadowTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_caster_effect(
+    const CNA_SpotShadowMapHandle shadowMap, CNA_EffectHandle* const outEffect)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            if (outEffect == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The effect output handle is null.");
+            }
+            *outEffect = CNA_INVALID_HANDLE;
+            return BorrowEffectFrom(map, map->value->getCasterEffect(), outEffect);
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_size(
+    const CNA_SpotShadowMapHandle shadowMap, int32_t* const outSize)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outSize, static_cast<int32_t>(map->value->getSize()));
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_quality(
+    const CNA_SpotShadowMapHandle shadowMap, CNA_ShadowQuality* const outQuality)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outQuality, NativeOrdinal(map->value->getQuality()));
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_light_view_projection(
+    const CNA_SpotShadowMapHandle shadowMap, CNA_Matrix* const outMatrix)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outMatrix, ToCMatrix(map->value->getLightViewProjection()));
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_light_position(
+    const CNA_SpotShadowMapHandle shadowMap, CNA_Vector3* const outPosition)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            const auto position = map->value->getLightPosition();
+            return StoreValue(outPosition, Vec3(position.X, position.Y, position.Z));
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_light_range(
+    const CNA_SpotShadowMapHandle shadowMap, float* const outRange)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outRange, map->value->getLightRange());
+        });
+}
+
+CNA_Result cna_spot_shadow_map_get_depth_bias(
+    const CNA_SpotShadowMapHandle shadowMap, float* const outBias)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            return StoreValue(outBias, map->value->getDepthBias());
+        });
+}
+
+CNA_Result cna_spot_shadow_map_set_depth_bias(
+    const CNA_SpotShadowMapHandle shadowMap, const float bias)
+{
+    return WithMap<SpotShadowMapResource>(
+        shadowMap, ObjectKind::SpotShadowMap, "SpotShadowMap",
+        [&](const std::shared_ptr<SpotShadowMapResource>& map) -> CNA_Result {
+            map->value->setDepthBias(bias);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_spot_shadow_map_compute_light_view(
+    const CNA_SpotLightEXT* const light, CNA_Matrix* const outMatrix)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::SpotLightEXT nativeLight;
+        if (const CNA_Result result = ToNativeSpotLight(light, &nativeLight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outMatrix, ToCMatrix(Ext::SpotShadowMap::computeLightView(nativeLight)));
+    });
+}
+
+CNA_Result cna_spot_shadow_map_compute_light_projection(
+    const CNA_SpotLightEXT* const light, CNA_Matrix* const outMatrix)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::SpotLightEXT nativeLight;
+        if (const CNA_Result result = ToNativeSpotLight(light, &nativeLight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outMatrix, ToCMatrix(Ext::SpotShadowMap::computeLightProjection(nativeLight)));
+    });
+}
+
+CNA_Result cna_spot_shadow_map_destroy(const CNA_SpotShadowMapHandle shadowMapHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SpotShadowMapResource> map;
+        if (const CNA_Result result = GetSpotShadowMap(shadowMapHandle, &map);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(shadowMapHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned spot-shadow-map handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(map->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

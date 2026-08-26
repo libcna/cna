@@ -15217,6 +15217,90 @@
         "CPP-E49013926690",
         "CPP-E828EEB62B9E"
       ]
+    },
+    {
+      "id": "engine-shadow-map",
+      "qualified_name_regex": "^CNA::Graphics::ShadowMap(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_shadow_map_create`, `_is_supported`, `_begin`, `_end`, `_apply_caster`, `_apply_skinned_caster`, `_get_caster_effect`, `_get_skinned_caster_effect`, `_get_shadow_texture`, `_get_light_view_projection`, `_get_size`, `_get_quality`, `_get_depth_bias`, `_set_depth_bias`, `_get_filter_radius` and `_destroy` over an owned `CNA_ShadowMapHandle`, plus the four static computations as free routes taking values. The bone palette becomes an array and a count, and the caster effects and the shadow texture are **borrows** that keep the map alive: destroying it is refused while one is outstanding.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute; the EasyGL tree is where the supported arm runs",
+      "status": "implemented",
+      "task": "CBIND-085B1",
+      "approved_symbols": [
+        "CPP-1161A928106D",
+        "CPP-1A94D78616EF",
+        "CPP-1C923ECE38BC",
+        "CPP-1ECF1AEAA75D",
+        "CPP-28A77A51FD58",
+        "CPP-29CA4BE1A0E5",
+        "CPP-41ADE40E71F8",
+        "CPP-48E287B590AD",
+        "CPP-57EEFDB1AE17",
+        "CPP-5A635BED7F10",
+        "CPP-6345D4F4FBC1",
+        "CPP-67513B13D991",
+        "CPP-7823D5D74E86",
+        "CPP-78DDBC0FC693",
+        "CPP-7C2FC6ED78C6",
+        "CPP-7F988152FDBC",
+        "CPP-A4C32917BD37",
+        "CPP-B0BADD5AA0EE",
+        "CPP-C29A6149EF5F",
+        "CPP-DD790F076A24",
+        "CPP-E46FBB219551"
+      ]
+    },
+    {
+      "id": "engine-spot-shadow-map",
+      "qualified_name_regex": "^CNA::Graphics::SpotShadowMap(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_spot_shadow_map_*` on the same terms as the directional map: an owned handle, borrowed effect and texture with the same refusal on destroy, and the two static computations as free routes taking a `CNA_SpotLightEXT`.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute; the EasyGL tree is where the supported arm runs",
+      "status": "implemented",
+      "task": "CBIND-085B1",
+      "approved_symbols": [
+        "CPP-02A89A2B4C57",
+        "CPP-0DEC09DB336E",
+        "CPP-0DF33668041C",
+        "CPP-2111C680C62B",
+        "CPP-2DCEFEC4AAFE",
+        "CPP-2FE4256F9736",
+        "CPP-3478378B2C02",
+        "CPP-3644C2327A88",
+        "CPP-465B5D0AEF6D",
+        "CPP-4DAE25CF220D",
+        "CPP-53FE5BA8D654",
+        "CPP-5C552A8B855C",
+        "CPP-5E2954483449",
+        "CPP-9E854612DA3D",
+        "CPP-A3216406207C",
+        "CPP-A93A966E7308",
+        "CPP-ECCBD495E9C0"
+      ]
+    },
+    {
+      "id": "graphics-device-shadow-sampling-query",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::SupportsShadowSamplingEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_graphics_device_supports_shadow_sampling_ext`. Moved here from `CBIND-093` because this is the slice that needs it: a shadow map's own `_is_supported` answers whether the shadow can be **cast**, and this answers whether anything can **sample** it. A frame needs both, and a caller with only the first would ship a shadow texture nothing reads. The route asks `GraphicsDevice`, not the engine layer, so it works in every build.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute; the EasyGL tree is where the supported arm runs",
+      "status": "implemented",
+      "task": "CBIND-085B1",
+      "approved_symbols": [
+        "CPP-7BD9B1CAA0A8"
+      ]
     }
   ]
 }
