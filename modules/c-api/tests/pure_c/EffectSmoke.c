@@ -545,6 +545,15 @@ static int validate_shader_effect(const CNA_Handle device)
             cna_effect_pass_collection_destroy(passes) == CNA_RESULT_SUCCESS &&
             cna_effect_pass_destroy(pass) == CNA_RESULT_SUCCESS &&
             cna_texturecube_destroy(cube) == CNA_RESULT_SUCCESS);
+    /*
+     * The volume texture is released here for the same reason the cube is, and only once the pass
+     * is gone: until then the effect still retains it. Omitting this leaked one owned graphics
+     * resource, which cna_game_destroy then refused to shut down over -- a leak invisible to every
+     * assertion in this function and only visible at the very end of main().
+     */
+    if (volume_created == CNA_RESULT_SUCCESS) {
+        REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_SUCCESS);
+    }
     return 1;
 }
 

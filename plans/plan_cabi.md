@@ -1058,3 +1058,42 @@ Suite unchanged: **84 C-API tests, 80 passing** on Xvfb `:101`. `CApi_RuntimeGam
 during a full run and passes in isolation twice — the same transient display flakiness this
 environment already shows, not a regression; running ctest with `--timeout 90` keeps one hang from
 blocking the suite.
+
+## CABI-22 — The EffectSmoke leak was mine, from CABI-4
+
+`CApi_EffectSmoke`'s final `cna_game_destroy` returned `CNA_RESULT_INVALID_STATE`: one owned
+graphics resource was still counted. Traced by instrumenting the gate and then every
+add/remove with a running total, correlated against the test's own stage markers:
+
+```
+STAGE 1 …  0 → 4 → 0    balanced
+STAGE 2 …  0 → 2 → 0    balanced
+STAGE 3 …  0 → … → 1    leaks one          <-- validate_shader_effect
+STAGE 5 …  1 → 3        create_retained_descendant's own two
+```
+
+**The leak is in the Texture3D branch [[CABI-4]] added to `validate_shader_effect`.** It creates a
+`Texture3D`, sets it into effect slot 2, asserts the destroy is refused while the effect retains it
+— and never destroys it afterwards. One owned graphics resource, leaked, invisible to every
+assertion in that function and only visible at the very end of `main()`.
+
+Fixed by releasing it where the cube is released: after `cna_effect_pass_destroy`, once the effect
+no longer retains it.
+
+### Correcting the earlier attribution
+
+[[CABI-21]] recorded this as "not from this milestone", verified by rebuilding from
+`424a73950~1`. **That verification was wrong.** It checked out `modules/c-api/src/` and
+`include/` only — not `tests/` — so the leaking test edit stayed in place and the failure
+naturally reproduced. The right check reverts the file that changed.
+
+Two mis-attributions in a row on the same test, both from a flawed probe rather than the code:
+first an unsequenced `fprintf` argument list, then a partial revert. The pattern worth naming is
+that a *negative* result ("still fails without my change") needs its control checked as carefully
+as the experiment.
+
+Suite: **84 C-API tests, 81 passing** on Xvfb `:101`. Remaining: `CApi_Draw3DSmoke`,
+`CApi_BasicEffectSmoke`, `CApi_InstalledConsumer`.
+
+`CApi_RuntimeGameSmoke` hangs in the full run and passes in isolation — run ctest with
+`--timeout 90` so one hang cannot block the rest.
