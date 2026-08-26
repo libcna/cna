@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>CNA C ABI browser probe</title>
+<body style="font:14px/1.5 monospace;padding:1rem">
+<h1 style="font-size:1rem">CNA C ABI browser probe</h1>
+<pre id="out">running…</pre>
+<script type="module">
+// plans/plan_cabi.md CABI-37; fixcnats.md Phase 7: "If toolchain exists, build a real artifact and
+// create a tiny C-level browser probe before involving TypeScript."
+//
+// module_smoke.mjs proves the artifact loads and answers under node. It does not prove the same in
+// a browser, where the module is fetched over HTTP, compiled by the browser's own WebAssembly
+// pipeline and run under its memory model. This is the smallest page that does, and it stays at
+// the C level on purpose -- no TypeScript, no binding layer.
+//
+// Reports in the same shape as every other CNA browser page, so
+// scripts/run_pixijs_browser_tests.mjs runs it unchanged.
+const EXPECTED = 4;
+let passed = 0;
+const out = document.getElementById('out');
+const lines = [];
+const say = (t) => { lines.push(t); out.textContent = lines.join('\n'); console.log(t); };
+const check = (name, ok, detail) => {
+    if (ok) { passed += 1; say(`[ok] ${name}${detail ? ': ' + detail : ''}`); }
+    else { say(`[FAIL] ${name}${detail ? ': ' + detail : ''}`); }
+};
+
+try {
+    const createCnaCApi = (await import('./cna_c_api.mjs')).default;
+    const cna = await createCnaCApi();
+    check('the ES module factory instantiates in a browser', true);
+
+    // The route a consumer must call before trusting any other.
+    const encoded = cna._cna_get_abi_version();
+    const version = `${(encoded >>> 16) & 0xff}.${(encoded >>> 8) & 0xff}.${encoded & 0xff}`;
+    check('cna_get_abi_version answers', encoded !== 0, version);
+
+    // A route that writes through a pointer: proves the heap views and the C memory model agree,
+    // which is the part most likely to differ between node and a browser.
+    const sizeOut = cna._malloc(8);
+    let bytes = 0;
+    try {
+        cna.HEAPU32[sizeOut >> 2] = 0;
+        cna.HEAPU32[(sizeOut >> 2) + 1] = 0;
+        const result = cna._cna_platform_get_current_name_size_ext(sizeOut);
+        bytes = cna.HEAPU32[sizeOut >> 2];
+        check('a pointer out-parameter is written', result === 0 && bytes > 0,
+              `result=${result} bytes=${bytes}`);
+    } finally { cna._free(sizeOut); }
+
+    // UTF-8 exchange, which the artifact contract names explicitly. Two facts a consumer needs,
+    // both measured rather than assumed: this module is linked with WASM_BIGINT, so a uint64_t
+    // passed *by value* must arrive as a BigInt -- a plain number throws "Cannot convert 4 to a
+    // BigInt" -- and the copied bytes carry no terminator, so UTF8ToString needs the length.
+    const buffer = cna._malloc(bytes + 1);
+    const copyOut = cna._malloc(8);
+    try {
+        const copied = cna._cna_platform_copy_current_name_ext(buffer, BigInt(bytes + 1), copyOut);
+        const name = cna.UTF8ToString(buffer, bytes);
+        check('UTF-8 is exchanged through the heap', copied === 0 && name === 'Web',
+              `"${name}" (result=${copied})`);
+    } finally { cna._free(buffer); cna._free(copyOut); }
+} catch (error) {
+    say(`[FAIL] the probe threw: ${error && error.message ? error.message : error}`);
+}
+
+say(`=== ${passed}/${EXPECTED} PASS ===`);
+</script>
+</body>

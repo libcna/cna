@@ -698,9 +698,37 @@ The native build is unchanged: still `SHARED`, 84 C-API tests, 79 passing on Xvf
 
 ### Status
 
-`BUILT` and callable. Not yet `PLATFORM_QUALIFIED`: the smoke test runs under Node, and nothing
-here has driven the module from a browser with a canvas, which is what a renderer needs. The
-existing `cna_demo_2d`/`cna_house3d_demo` Emscripten demos are the precedent for that step.
+`BUILT`, callable, and since [[CABI-37]] **browser-qualified at the C level**.
+
+`fixcnats.md` Phase 7 asks, in as many words, for "a real artifact and a tiny C-level browser probe
+before involving TypeScript". Node is not that: in a browser the module is fetched over HTTP,
+compiled by the browser's own WebAssembly pipeline and run under its memory model, and none of that
+is exercised by `node`. External review was right that this was still owed.
+
+`modules/c-api/wasm/browser_probe.html` is the probe, run through the repository's existing
+`scripts/run_pixijs_browser_tests.mjs` rather than a second runner of its own:
+
+    --- browser_probe.html ---
+    [ok] the ES module factory instantiates in a browser
+    [ok] cna_get_abi_version answers: 0.9.0
+    [ok] a pointer out-parameter is written: result=0 bytes=3
+    [ok] UTF-8 is exchanged through the heap: "Web" (result=0)
+    === 4/4 PASS ===
+
+Two artifact-contract facts came out of writing it, both of which a binding needs and neither of
+which was written down anywhere:
+
+- **A `uint64_t` passed by value must arrive as a `BigInt`.** The module is linked with
+  `WASM_BIGINT`, so `cna_platform_copy_current_name_ext(ptr, 4, out)` throws
+  `Cannot convert 4 to a BigInt`; it has to be `BigInt(4)`. Every route with a by-value 64-bit
+  parameter is affected, and the failure is a JavaScript `TypeError` rather than a `CNA_Result`.
+- **Copied strings carry no terminator.** `UTF8ToString(ptr)` reads past the end; the length from
+  the matching `_size_ext` route must be passed as `UTF8ToString(ptr, bytes)`.
+
+Still open, and deliberately not claimed: nothing here drives a **canvas** or a game loop from the
+browser, which is what a renderer needs and what `cna_demo_2d`/`cna_house3d_demo` are the precedent
+for. `cna-ts` also does not yet track this artifact -- its ABI audit still reports
+`TRACKED_WASM_ARTIFACTS=0` -- and that is downstream work this run may not do.
 
 ## CABI-15 — ContentLost, raised only where loss is real (DONE)
 
