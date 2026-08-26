@@ -90,8 +90,13 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Whether this render target's contents were lost to a device reset.
          *
-         * True only from the moment a renderer reported a real reset until the content is
-         * written again. Renderers whose API cannot lose a device never set it.
+         * True from the moment a renderer reports a real device reset until this target is next
+         * **bound for rendering**, which is when the caller takes ownership of its contents again.
+         * Binding is the boundary rather than a subsequent draw or `SetData`, deliberately: a bound
+         * target with the default `RenderTargetUsage::DiscardContents` has already had its previous
+         * contents discarded, so there is nothing left to describe as lost, and a renderer-neutral
+         * "a pixel was actually written" signal does not exist below this API. Renderers whose API
+         * cannot lose a device never set it.
          */
         [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
 
@@ -102,7 +107,7 @@ namespace Microsoft::Xna::Framework::Graphics
             ContentLost.Raise(this, System::EventArgs::Empty);
         }
 
-        /** @brief Clears the lost flag once the content has been written again. */
+        /** @brief Clears the lost flag; called when this target is bound for rendering. */
         CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
 
         /**

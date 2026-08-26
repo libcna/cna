@@ -126,9 +126,11 @@ typedef struct CNA_RenderTargetInfo {
     int32_t multi_sample_count;
     /** @brief Content preservation policy. */
     CNA_RenderTargetUsage usage;
-    /** @brief True from the moment a renderer reported a real device reset until the
-     * contents are written again. False on the renderer families that cannot lose a
-     * device, which is most of them. */
+    /** @brief True from the moment a renderer reports a real device reset until this target is
+     * next bound for rendering, which is when the caller takes ownership of its contents again.
+     * Binding is the boundary rather than a later draw: a target bound with the default
+     * `CNA_RENDER_TARGET_USAGE_DISCARD_CONTENTS` has already had its previous contents discarded.
+     * False on the renderer families that cannot lose a device, which is most of them. */
     CNA_Bool is_content_lost;
     /** @brief Whether the active backend created real bindable render-target storage. */
     CNA_Bool renderer_available;

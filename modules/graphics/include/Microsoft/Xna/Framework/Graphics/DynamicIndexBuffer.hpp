@@ -31,10 +31,10 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /**
-         * @brief Whether this index buffer's contents were lost to a device reset.
+         * @brief Whether this buffer's contents were lost to a device reset.
          *
-         * True only from the moment a renderer reported a real reset until the content is
-         * written again. Renderers whose API cannot lose a device never set it.
+         * True from the moment a renderer reports a real device reset until the buffer is written
+         * again with `SetData`. Renderers whose API cannot lose a device never set it.
          */
         [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
 
@@ -45,7 +45,7 @@ namespace Microsoft::Xna::Framework::Graphics
             ContentLost.Raise(this, System::EventArgs::Empty);
         }
 
-        /** @brief Clears the lost flag once the content has been written again. */
+        /** @brief Clears the lost flag; called when the buffer is written with SetData. */
         CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
 
         /**

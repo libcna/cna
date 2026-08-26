@@ -29,7 +29,12 @@ namespace CNA::Internal::Graphics
         virtual void NotifyContentLostEXT() = 0;
 
         /**
-         * @brief Clears the lost flag because the content has been written again.
+         * @brief Clears the lost flag because the caller has taken the content back.
+         *
+         * For a buffer that means a `SetData`; for a render target it means being bound for
+         * rendering. The two differ because a render target has no renderer-neutral "a pixel was
+         * written" signal below this API, while a bound target with the default discard usage has
+         * already lost its previous contents by definition.
          *
          * The other half of the contract, and the half that was missing: a flag that is set and
          * never cleared reports "lost" forever, which is a different untruth from never raising it
