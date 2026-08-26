@@ -49,6 +49,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plans/plan_webgpu.md WEBGPU-123: the shared cross-renderer diagnostic scene built for WEBGPU,
+    # exactly as EASYGL's cna_diag_easygl and SOFTWARE's cna_diag_software. Deliberately NOT a CTest
+    # (mirrors those two): it writes a 64x64 RGBA8 dump for cna_diag_compare to diff against another
+    # backend's dump, which is a two-build comparison, not a single-run pass/fail.
+    cna_webgpu_test(cna_diag_webgpu ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+
     # Phase 57/63 vertical slice: DrawColoredPrimitives/DrawIndexedColoredPrimitives.
     cna_webgpu_test(cna_test_webgpu_colored3d webgpu_colored3d_test.cpp)
     cna_register_renderer_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d
@@ -837,6 +843,16 @@ if(EMSCRIPTEN AND CNA_BUILD_EXAMPLES AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
     # close the "all 9" WEBGPU-121 question with real in-browser evidence rather than by inference.
     cna_webgpu_effect_page(cna_webgpu_dualtexture3d_page webgpu_dualtexture3d_test.cpp)
     cna_webgpu_effect_page(cna_webgpu_alphatest3d_page   webgpu_alphatest3d_test.cpp)
+
+    # plans/plan_webgpu.md WEBGPU-123: the shared, renderer-agnostic cross-renderer diagnostic scene
+    # (one unlit vertex-colour triangle -> 64x64 RGBA8 dump), built for WEBGPU exactly as SOFTWARE
+    # and EASYGL build it, so the WebGPU output can be pixel-compared against another backend's dump
+    # with cna_diag_compare. Under Emscripten it writes into MEMFS; scripts/run-webgpu-parity-test.sh
+    # extracts the dump and runs the comparison.
+    cna_webgpu_effect_page(cna_diag_webgpu ${CNA_GRAPHICS_EXAMPLES_DIR}/cross_renderer_diagnostic_scene.cpp)
+    # The scene writes its dump into MEMFS; export FS so the driver page (run-webgpu-parity-test.sh)
+    # can read the bytes back out of the browser without modifying the renderer-agnostic scene.
+    target_link_options(cna_diag_webgpu PRIVATE "SHELL:-sEXPORTED_RUNTIME_METHODS=FS,callMain")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot

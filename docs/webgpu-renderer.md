@@ -108,6 +108,15 @@ artifact, not a skinning bug: per-render probing confirmed the WeightsPerVertex=
 correctly.) The one remaining web-specific refusal is the `--webgpu-2d-validation` scene's
 `MinimizeEXT()` (a native-only `GameWindow` operation, not a renderer limit).
 
+**Cross-backend pixel parity (`WEBGPU-123`).** `cna_diag_webgpu` builds the shared, renderer-agnostic
+`cross_renderer_diagnostic_scene` (one unlit vertex-colour triangle -> 64x64 RGBA8) for WEBGPU,
+native and Emscripten, exactly as `cna_diag_easygl`/`cna_diag_software` do.
+`scripts/run-webgpu-parity-test.sh` runs the Emscripten `cna_diag_webgpu` in headless Chrome,
+extracts its dump out of MEMFS, and diffs it against another backend's dump with `cna_diag_compare`.
+Against the native SOFTWARE CPU rasterizer's dump of the same scene the max per-channel difference is
+1 and the mean 0.139 across the whole frame (both have the identical 1682 non-black pixels) -- well
+inside the tool's default tolerance of 40.
+
 ## Automated native smoke test
 
 With `CNA_BUILD_TESTS=ON`, the WebGPU configuration registers `WebGPU_Native2D_Smoke` with CTest:
