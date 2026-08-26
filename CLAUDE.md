@@ -533,8 +533,12 @@ public identities; EasyGL remains an internal implementation shared by five GL p
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
 `WEBGPU`
-is experimental and has a functional native
-2D baseline, not yet the 3D/effect parity of the established GPU renderers.
+is experimental but well past a 2D baseline: on desktop (wgpu-native) it has 3D with every stock
+effect, real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA and `Texture3D`, and since
+2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port (2D + 3D, its pixels
+byte-identical to the native Vulkan renderer's). Still open: MRT, occlusion queries, GPU-native
+compressed textures and custom WGSL effects -- see `docs/webgpu-renderer.md` and
+`plans/plan_webgpu.md`.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
 `plans/plan_magnum.md` for its own capability boundary.
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**

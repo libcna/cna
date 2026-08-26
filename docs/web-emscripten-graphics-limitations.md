@@ -10,9 +10,10 @@ input, and device support under Emscripten are already covered elsewhere (`NEXTd
 activated the native `wgpu-native` renderer on 2026-07-12. A browser/Emscripten WebGPU path (the
 same `WEBGPU` identity, built through Emscripten's emdawnwebgpu port) reached a running 2D renderer
 on 2026-08-26: `cna_demo_2d` renders SpriteBatch frames in headless Chrome with audio and no WebGPU
-validation error (`plans/plan_webgpu.md` `WEBGPU-119`/`120`/`122` ✅). Its 3D/effect shaders are not
-yet exercised in a browser (`WEBGPU-121` 🟨). Nothing below should be read as a status report for
-either WebGPU path.
+validation error, and the 3D `BasicEffect` path plus every stock effect shader
+(`PbrEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/dual-texture/alpha-test) compile and render
+in-browser too (`plans/plan_webgpu.md` `WEBGPU-119`/`120`/`121`/`122` all ✅). Nothing below should be
+read as a status report for either WebGPU path.
 
 > **2026-07-15 update, scoped to the new `CANVAS` renderer (`plans/plan_canvas.md`), not EasyGL**: this
 > document's own "no `.sdl-prebuilt-emscripten` directory... no `cmake-build-*emscripten*` directory
@@ -146,7 +147,7 @@ device/adapter-model concern rather than a rendering-renderer one.
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Explicitly excluded on Emscripten — zero coverage |
 | WebGL context-loss handling (`EasyGLRenderer.cpp`) | Real, non-trivial code; never run against a real browser |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Anticipated only, not verified; current `SurfaceFormat`/anisotropy constraints happen to sidestep most of them today |
-| WebGPU | Native `wgpu-native` renderer is active and experimental; the browser/Emscripten WebGPU path (same `WEBGPU` identity, via the emdawnwebgpu port) runs the 2D renderer in headless Chrome as of 2026-08-26 (`WEBGPU-122` ✅). 3D/effect shaders not yet exercised in a browser (`WEBGPU-121`); run it with `scripts/run-webgpu-browser-test.sh` |
+| WebGPU | Native `wgpu-native` renderer is active and experimental; the browser/Emscripten WebGPU path (same `WEBGPU` identity, via the emdawnwebgpu port) runs the 2D AND 3D paths in headless Chrome as of 2026-08-26 -- 2D SpriteBatch, 3D `BasicEffect`, and every stock effect shader all render in-browser (`WEBGPU-121`/`122` ✅). Run it with `scripts/run-webgpu-browser-test.sh` |
 
 **Recommendation for whoever eventually does the first real Emscripten build**: start by getting
 `cna_house3d_demo` (the one target with a WebGL version pin already) running in an actual browser
