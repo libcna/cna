@@ -2,8 +2,10 @@
 
 ## Status
 
-The WebGPU renderer was activated by the project owner on **2026-07-12** and is currently an
-**experimental fifth CNA graphics renderer**. Select it with:
+The WebGPU renderer was activated by the project owner on **2026-07-12** and is an **experimental
+CNA graphics renderer** -- one of the project's 49+ public renderer identities, native (wgpu-native)
+on desktop and, since 2026-08-26, also in the browser through Emscripten's emdawnwebgpu port. Select
+it with:
 
 ```bash
 cmake -S . -B cmake-build-webgpu \
@@ -33,15 +35,16 @@ For the verified Linux x86_64 layout, an extracted package may be placed at
 clean offline sequence builds a self-contained demo directory:
 
 ```bash
-cmake -S . -B /tmp/cna-webgpu-128 \
+cmake -S . -B cmake-build-webgpu \
   -DCNA_GRAPHICS_RENDERER=WEBGPU \
   -DCNA_WEBGPU_ROOT="$PWD/vendor/wgpu-native" \
   -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF \
   -DCNA_BUILD_TESTS=OFF \
   -DCNA_BUILD_EXAMPLES=ON \
-  -DCMAKE_BUILD_TYPE=Debug
-cmake --build /tmp/cna-webgpu-128 --target cna_demo_2d -j1
-cd /tmp/cna-webgpu-128
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+cmake --build cmake-build-webgpu --target cna_demo_2d -j"$(nproc)"
+cd cmake-build-webgpu
 readelf -d ./cna_demo_2d | grep -E 'NEEDED.*wgpu|RUNPATH'
 ldd ./cna_demo_2d | grep libwgpu_native.so
 timeout 60s ./cna_demo_2d --smoke 120
@@ -55,8 +58,8 @@ original package location at runtime.
 ## Web / browser target (Emscripten) — in progress
 
 `WEBGPU` is one renderer identity with two backends, not two renderers. The browser build reuses all
-of `WebGPURenderer.cpp` and every WGSL shader; only three seams differ, each behind
-`#if defined(__EMSCRIPTEN__)`:
+of `WebGPURenderer.cpp` and every WGSL shader; five seams differ, each behind
+`#if defined(__EMSCRIPTEN__)` -- the three below, then the two after them:
 
 - **Surface.** `CreateSurface()` uses `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` targeting the
   CSS selector `"#canvas"` (SDL3's Emscripten default canvas), instead of a native window handle.
@@ -71,7 +74,7 @@ of `WebGPURenderer.cpp` and every WGSL shader; only three seams differ, each beh
   exposes, which is why the shared code compiles unchanged. (The older `-sUSE_WEBGPU=1` built-in was
   removed in Emscripten 4.0.10 and is not used.)
 
-Two further web-only seams the first browser run required:
+The remaining two seams (the fourth and fifth), which the first browser run required:
 
 - **Present.** `Present()` skips `wgpuSurfacePresent()` under Emscripten — emdawnwebgpu aborts on it
   ("use requestAnimationFrame instead"). The canvas is shown automatically when `Game::RunLoop()`
@@ -130,7 +133,7 @@ paths (native Vulkan and browser WebGPU) are exact, and both agree with the CPU 
 With `CNA_BUILD_TESTS=ON`, the WebGPU configuration registers `WebGPU_Native2D_Smoke` with CTest:
 
 ```bash
-ctest --test-dir /tmp/cna-webgpu-128 -R '^WebGPU_Native2D_Smoke$' --output-on-failure
+ctest --test-dir cmake-build-webgpu -R '^WebGPU_Native2D_Smoke$' --output-on-failure
 ```
 
 The test runs `cna_demo_2d --smoke 120` when the host exposes Wayland or X11. It passed in 2.30
@@ -534,36 +537,33 @@ The initial renderer is deliberately useful rather than an empty scaffold. It cu
 
 ## Important limitations
 
-This is **not yet equivalent to CNA's Vulkan, EasyGL or Bgfx 3D renderers**. The following remain
-open in `plans/plan_webgpu.md`:
+The desktop feature set now covers 3D (every stock effect), real instancing,
+`RenderTarget2D`/`RenderTargetCube`, MSAA, `Texture3D`, mip generation, the full render state
+(blend, rasterizer/cull, viewport, scissor, depth-stencil), `Texture2D`/`TextureCube`/backbuffer
+readback (`WEBGPU-51`), and -- since 2026-08-26 -- the browser path (`WEBGPU-119`–`122`). Those are
+described in their own sections above and are no longer "limitations". What is **genuinely still
+open** in `plans/plan_webgpu.md`:
 
-- `BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedEffect`,
-  `SkinnedPbrEffect`, `EnvironmentMapEffect` real dispatch and real instancing
-  (`DrawInstancedPrimitivesEx()`) are all now implemented, see above. `RenderTargetCube` (cube
-  render targets) is now implemented too, see below; `TextureCube`/`RenderTargetCube` mip
-  regeneration remains open;
-- single-target `RenderTarget2D` AND `RenderTargetCube` (colour + depth/stencil round trip, real
-  3D-draw dispatch, sampling back through `EnvironmentMapEffect`) are now implemented, see below;
-  real GPU-native compressed texture formats (`WEBGPU-111`) and multiple simultaneous render
-  targets (MRT) remain open. Compressed formats are a cross-renderer/XNA-layer gap, not a
-  WebGPU-specific one -- no CNA renderer does real block-compressed GPU upload today (`Texture2D`
-  always CPU-decompresses DXT source content to RGBA8 first, and the common `ImageData` struct has
-  no field for a compressed format at all); the real adapter on the development machine used to
-  investigate this DOES support `WGPUFeatureName_TextureCompressionBC`, so this is a genuine future
-  design task, not a hardware dead end. MSAA
-  (backbuffer and render target) is now implemented and verified end-to-end — global sample count,
-  clamped `ApplyMultiSampleCount()`, RT mirroring, and genuine multisample-resolved rendering all
-  work (`WebGPU_Msaa`, 6/6) — see `WEBGPU-58`. A `RenderTarget2D`'s own per-instance
-  `multiSampleCount` constructor parameter is still intentionally ignored (it always mirrors the
-  renderer's global sample count instead);
-- `Texture2D.GetData()` (arbitrary-texture readback — distinct from the now-implemented backbuffer
-  readback, `WEBGPU-51`);
-- full BlendState, RasterizerState cull mode, viewport, scissor and stencil-operation mapping
-  (`DepthStencilState`'s *depth* portion is implemented, see below). `FillMode::WireFrame` is a
-  different case and is **not** on this list: it is not "not yet implemented", it is **reported as
-  unsupported and refused** -- see below;
-- custom SpriteBatch effects and custom WGSL effects;
-- browser/Emscripten WebGPU; this first implementation is the native wgpu-native renderer.
+- **Multiple simultaneous render targets (MRT)** -- infrastructure not built (`WEBGPU-85`/`86`/`87`).
+  The capability now truthfully reports false and a `count > 1` bind throws a
+  `System::NotSupportedException` (`WEBGPU-134`), rather than claiming MRT and then refusing it.
+- **Occlusion queries** -- unimplemented (`WEBGPU-84`). `SupportsCapability(OcclusionQuery)` now
+  reports false (`WEBGPU-135`) instead of returning a query that silently never completes.
+- **Real GPU-native compressed texture formats** (`WEBGPU-111`) -- a cross-renderer/XNA-layer gap,
+  not WebGPU-specific: no CNA renderer does real block-compressed GPU upload today (`Texture2D`
+  CPU-decompresses DXT to RGBA8 first, and the common `ImageData` struct has no compressed-format
+  field). The dev machine's adapter does support `WGPUFeatureName_TextureCompressionBC`, so this is a
+  design task, not a hardware dead end.
+- **Per-`RenderTarget2D` `multiSampleCount`** -- a target's own constructor sample count is ignored;
+  it mirrors the renderer's global sample count instead. Backbuffer and render-target MSAA otherwise
+  work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
+- **Custom WGSL effects** (`ShaderEffect`, `WEBGPU-76`) and custom SpriteBatch effects -- the renderer
+  accepts the stock effects but does not compile user-provided WGSL source.
+- `TextureCube`/`RenderTargetCube` mip regeneration.
+
+`FillMode::WireFrame` is deliberately **not** on this list: it is not "unimplemented" but **reported
+unsupported and refused** (`WEBGPU-115`) -- the same shape as the MRT (`WEBGPU-134`) and occlusion
+(`WEBGPU-135`) capability answers above.
 
 `GetBackBufferData()` and a first real 3D draw path (`DrawColoredPrimitives`/
 `DrawIndexedColoredPrimitives`, with genuine depth testing) are implemented — see below. Interface
