@@ -4,16 +4,24 @@
 
 #include <stdio.h>
 #include <string.h>
+
+#include "CNA/C/texture.h"
 #include <threads.h>
 
 typedef struct VideoSmokeState {
     int validated;
+    int real_frame_exercised;
 } VideoSmokeState;
 
 typedef struct WrongThreadState {
     CNA_VideoPlayerHandle player;
     CNA_Result result;
 } WrongThreadState;
+
+#ifndef CNA_C_API_TEST_ASSET_DIR
+#error "CNA_C_API_TEST_ASSET_DIR must be defined by the build"
+#endif
+#define RealVideoPath CNA_C_API_TEST_ASSET_DIR "/media/video/chroma_420.mkv"
 
 static CNA_StringView view(const char* const value)
 {
@@ -306,6 +314,105 @@ static int validate_video_player(const CNA_Handle game, const CNA_Handle device,
         cna_video_player_stop(rejected) == CNA_RESULT_INVALID_HANDLE;
 }
 
+/* CABI-35: the frame-identity contract against a real decoded video, through the C ABI only.
+   The earlier coverage exercised the descriptor's refusals and a generation of zero before
+   playback, which does not demonstrate the thing the route exists for: that the value advances on
+   a real decode, survives a replay without restarting, and that the texture it lends out is
+   invalidated by the next call. External review was right that this was too weak.
+
+   A build without an FFmpeg decoder cannot do any of it. That is an environment answer, not a
+   defect, so this reports "not exercised" rather than failing -- and says so, instead of passing
+   quietly. */
+static void frame_init(CNA_VideoFrameEXT* const frame)
+{
+    memset(frame, 0, sizeof(*frame));
+    frame->struct_size = (uint32_t)sizeof(CNA_VideoFrameEXT);
+    frame->struct_version = CNA_VIDEO_FRAME_EXT_STRUCT_VERSION;
+}
+
+static int validate_real_frame_identity(
+    const CNA_Handle game, const CNA_Handle device, int* const out_exercised)
+{
+    CNA_VideoHandle video = CNA_INVALID_HANDLE;
+    CNA_VideoPlayerHandle player = CNA_INVALID_HANDLE;
+    CNA_VideoFrameEXT first;
+    CNA_VideoFrameEXT second;
+    CNA_VideoFrameEXT replayed;
+    CNA_Handle borrowed = CNA_INVALID_HANDLE;
+    uint64_t name_bytes = 0U;
+    int32_t width = 0;
+
+    *out_exercised = 0;
+
+    if (cna_video_create(device, view(RealVideoPath), &video) != CNA_RESULT_SUCCESS) {
+        return 1;
+    }
+    /* An undecodable file leaves the dimensions at zero rather than failing, so that is the
+       honest test for "this build has a decoder". */
+    if (cna_video_get_width(video, &width) != CNA_RESULT_SUCCESS || width <= 0) {
+        (void)cna_video_destroy(video);
+        return 1;
+    }
+    if (cna_video_player_create(game, &player) != CNA_RESULT_SUCCESS) {
+        (void)cna_video_destroy(video);
+        return 0;
+    }
+
+    frame_init(&first);
+    frame_init(&second);
+    frame_init(&replayed);
+
+    if (cna_video_player_play(player, video) != CNA_RESULT_SUCCESS ||
+        cna_video_player_get_frame_ext(player, &first) != CNA_RESULT_SUCCESS) {
+        goto failed;
+    }
+    /* A real decode: a frame exists, it lends a texture, and the generation has left zero. */
+    if (first.available != CNA_TRUE || first.texture == CNA_INVALID_HANDLE ||
+        first.generation == UINT64_C(0)) {
+        goto failed;
+    }
+    borrowed = first.texture;
+    if (cna_texture2d_get_type_name_byte_count(borrowed, &name_bytes) != CNA_RESULT_SUCCESS) {
+        goto failed;
+    }
+
+    /* The next call on the player replaces the frame, which invalidates the handle the previous
+       call handed out -- the borrow rule the header states. It must fail rather than touch freed
+       memory. */
+    if (cna_video_player_get_frame_ext(player, &second) != CNA_RESULT_SUCCESS ||
+        second.generation < first.generation) {
+        goto failed;
+    }
+    if (cna_texture2d_get_type_name_byte_count(borrowed, &name_bytes) !=
+        CNA_RESULT_INVALID_HANDLE) {
+        goto failed;
+    }
+
+    /* The contract this route exists for: stop, play the same video again, and the first frame of
+       the second playback must not reuse a generation from the first. Before CABI-31 both were 1. */
+    if (cna_video_player_stop(player) != CNA_RESULT_SUCCESS ||
+        cna_video_player_play(player, video) != CNA_RESULT_SUCCESS ||
+        cna_video_player_get_frame_ext(player, &replayed) != CNA_RESULT_SUCCESS) {
+        goto failed;
+    }
+    if (replayed.generation <= second.generation) {
+        goto failed;
+    }
+
+    if (cna_video_player_stop(player) != CNA_RESULT_SUCCESS ||
+        cna_video_player_destroy(player) != CNA_RESULT_SUCCESS ||
+        cna_video_destroy(video) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    *out_exercised = 1;
+    return 1;
+
+failed:
+    (void)cna_video_player_destroy(player);
+    (void)cna_video_destroy(video);
+    return 0;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -322,6 +429,9 @@ static CNA_Result on_update(
     }
     if (!validate_video_values(graphics_device, FixturePath, &video_available) ||
         !validate_video_player(game, graphics_device, FixturePath, video_available)) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    if (!validate_real_frame_identity(game, graphics_device, &state->real_frame_exercised)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;
@@ -362,6 +472,13 @@ int main(void)
         (void)remove(FixturePath);
         return 2;
     }
+
+    /* Say whether the real-decode half ran. A build with no FFmpeg decoder legitimately cannot
+       run it, but a silent skip is how coverage evaporates unnoticed, so it is printed either
+       way rather than inferred from the exit code. */
+    printf("real frame identity: %s\n",
+           smoke_state.real_frame_exercised ? "exercised against a decoded video"
+                                            : "NOT EXERCISED (no decoder in this build)");
 
     CNA_VideoPlayerHandle player = CNA_INVALID_HANDLE;
     if (cna_video_player_create(game, &player) != CNA_RESULT_SUCCESS) {

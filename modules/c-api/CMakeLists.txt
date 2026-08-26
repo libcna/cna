@@ -1556,6 +1556,11 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    # CABI-35: the frame-identity coverage needs a real decodable video, and this is the first C
+    # test to want an asset at all. The source tree's own fixture directory is compiled in rather
+    # than relying on the working directory, which ctest does not guarantee.
+    target_compile_definitions(cna_c_api_video_smoke PRIVATE
+        CNA_C_API_TEST_ASSET_DIR="${PROJECT_SOURCE_DIR}/tests/assets")
     add_test(NAME CApi_VideoSmoke COMMAND cna_c_api_video_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_VideoSmoke PROPERTIES
