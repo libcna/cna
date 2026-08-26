@@ -707,7 +707,6 @@ TEST(EasyGLCompiledEffectDrawTest, SharedTruncationContract)
     CNA::TestSupport::RunCompiledEffectTruncationContract(device);
 }
 
-#endif  // CNA_EASYGL_COMPILED_EFFECTS
 
 // SAMPLE-028: MojoShader ends every generated vertex shader with Direct3D 9's clip-space depth
 // conversion (`gl_Position.z = gl_Position.z * 2.0 - gl_Position.w`), because OpenGL's clip volume
@@ -805,3 +804,5 @@ TEST(EasyGLCompiledEffectDrawTest, IsDepthTestedOnTheSameScaleAsStockGeometry)
            "encoding depth on different scales";
     EXPECT_EQ(centre.getBProperty(), 0);
 }
+
+#endif  // CNA_EASYGL_COMPILED_EFFECTS

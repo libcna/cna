@@ -792,6 +792,12 @@ namespace CNA::Internal::Renderers::EasyGL
         // Declared first so it is destroyed last: all GL resources below release while the
         // platform context is still current and alive.
         std::unique_ptr<EasyGLPlatformContext> platformContext_;
+        // The viewport's own depth range. SetViewport() writes it unconditionally, so it cannot
+        // live behind CNA_EASYGL_COMPILED_EFFECTS -- a build without compiled effects, which is
+        // the default, would not compile. Compiled-effect draws narrow it and put it back
+        // (see SetCompiledEffectDepthRangeEXT).
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
 #if defined(CNA_EASYGL_COMPILED_EFFECTS)
         // plans/plan_fx.md FX-062: one MojoShader GL context per this renderer's whole lifetime, created
         // lazily on first CreateCompiledEffect() call (see GetMojoShaderContextEXT() in
@@ -806,10 +812,6 @@ namespace CNA::Internal::Renderers::EasyGL
         // compiled-effect draw (ordinary, indexed, instanced and SpriteBatch alike).
         ::easygl::VertexArray compiledEffectVao_;
         bool compiledEffectVaoCreated_ = false;
-        // The viewport's own depth range, remembered so a compiled-effect draw can narrow it and
-        // put it back (see SetCompiledEffectDepthRangeEXT).
-        float viewportMinDepth_ = 0.0f;
-        float viewportMaxDepth_ = 1.0f;
         /**
          * @brief One slot's row-order-corrected copy of a render target being sampled. CNAEXT.
          *
