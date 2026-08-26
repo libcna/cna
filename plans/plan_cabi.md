@@ -827,31 +827,39 @@ outcome `fixcnacs.md` Phase 4 explicitly permits.
 
 ## Downstream read-only verification (fixcnacs P9, fixcnats)
 
-Both orders ask for read-only downstream checks. What this environment can actually run:
+Three of the four bindings were verified. Two did not need anything installed — they only needed
+finding: **npm ships inside emsdk** (`~/emsdk/node/22.16.0_64bit/bin/npm`), and cna-java has a
+**gradle wrapper** with JDK 21 already present, so maven was never required.
 
-| Binding | Toolchain | Result |
+| Binding | Command | Result |
 | --- | --- | --- |
-| cna-rust | `cargo` present | `cargo check --offline --workspace` **passes** |
-| cna-cs | no `dotnet` | **not run** |
-| cna-java | no `mvn` | **not run** |
-| cna-ts | no `npm` | **not run** |
+| cna-ts | `npm run check` | **pass** |
+| cna-ts | `npm run test` | **252 / 252 pass** |
+| cna-ts | `npm run audit:cna-abi` (`CNA_SOURCE_PATH` = this tree) | **pass** |
+| cna-ts | `npm run verify:runtime`, `verify:package` | **pass** |
+| cna-ts | `npm run api:verify` | not run — needs `XNA_REFERENCE_PATH`, the same XNA reference this workspace lacks (see [[CABI-6]]) |
+| cna-java | `./gradlew --offline test` | **156 tests, 0 failures**, 48 skipped |
+| cna-rust | `cargo check --offline --workspace` | **pass** |
+| cna-rust | `cargo test --offline --workspace` | **37 tests, 0 failures** |
+| cna-cs | — | **not run**, `dotnet` is absent. `sudo apt-get install -y dotnet-sdk-8.0` |
 
-The finding that matters more than the compile:
+Nothing downstream was modified and no loader was weakened.
 
-- **`cna-rust` pins `CNA_ABI_VERSION = 0x0000_0700`** (`crates/cna-sys/src/lib.rs:14`) and
-  compares it for exact equality (`crates/cna/src/native/api.rs:601`). CNA is at **0.8.0**. That
-  binding therefore rejects the current library, and did so before this milestone began.
+### Version findings
+
+- **`cna-rust` pins `CNA_ABI_VERSION = 0x0000_0700`** (`crates/cna-sys/src/lib.rs:14`) and compares
+  it for exact equality (`crates/cna/src/native/api.rs:601`). CNA is at **0.8.0**, so that binding
+  rejects the current library — and did so before this milestone began. Its tests pass because they
+  do not load the native library.
 - **`cna-cs`'s reviewed policy names 0.6.0, 0.7.0 and 0.8.0**, so it admits the current generation.
+- **`cna-ts`'s ABI audit reports `TRACKED_WASM_ARTIFACTS=0`, `BROWSER_ARTIFACT_STATUS=MISSING`.**
+  It does not yet know about [[CABI-14]]'s module, which lives in this build tree rather than
+  anywhere cna-ts tracks. Publishing it to a location that audit reads is the obvious follow-up.
 
-This milestone did **not** change `CNA_ABI_VERSION`; every change is class C (additive) except
-[[CABI-7a]], which is class D — a value the ABI refused now succeeds, with the shape unchanged.
-So cna-cs's admission of 0.8.0 still holds structurally, but the reviewed entry for 0.8.0 now
-describes different behaviour for one route.
+This milestone did **not** change `CNA_ABI_VERSION`.
 
     CNA_NEW_ABI_REQUIRES_DOWNSTREAM_REVIEW=false (no version change)
-    CNA_0_8_0_SEMANTICS_CHANGED=true (cna_sprite_batch_begin* accepts an unnamed sort mode)
-
-Per both orders, no downstream loader was weakened and no binding was modified.
+    CNA_0_8_0_SEMANTICS_CHANGED=true (two class-D rows below)
 
 ## ABI classification, all changes in this milestone
 
