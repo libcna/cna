@@ -79,10 +79,10 @@ Two things the review did not have, found while fixing its list:
   the unfiltered run.
 - **Two tests were registered on `SDL_VIDEODRIVER=dummy`** and so failed at `cna_game_create` before
   reaching what they test -- on any machine, not just this one. `CApi_InstalledConsumer` passes now.
-  `CApi_Draw3DSmoke` gets past game creation under a real driver and fails in frame validation,
-  which is the first honest measurement of it: the earlier reading of "the draw returns success and
-  the centre pixel never changes, identically on llvmpipe and on the host GPU" was taken under the
-  dummy driver, where neither was in use.
+  `CApi_Draw3DSmoke` got past game creation under a real driver and failed in frame validation --
+  the first honest measurement of it, since the earlier reading of "identically on llvmpipe and on
+  the host GPU" was taken under the dummy driver where neither was in use. [[CABI-36]] then found
+  the cause: the test cleared colour but not depth, so it drew against an undefined depth buffer.
 
 ### Both work orders are complete
 
@@ -92,7 +92,7 @@ work this milestone *found*, not work it was asked to do.
 | Open, and whose | Why it is not mine |
 | --- | --- |
 | `next` does not build (`b718f950a`, SAMPLE-028) | The sample lane's commit; blocks any merge. |
-| `CApi_Draw3DSmoke` | The user-primitive draw returns success and renders nothing. 3D draw path. |
+| `CApi_Draw3DSmoke` | RESOLVED in CABI-36 -- the test read an uncleared depth buffer, not a draw-path defect. |
 | `CApi_InstalledConsumer` | `generate_static_archive.py` reads a Makefile-only `link.txt`. Packaging. |
 | Merging this branch | Textually clean, needs a compile probe -- after `next` builds again. |
 
@@ -1036,9 +1036,9 @@ three glTF, three ENet, and a handful that pass in isolation and fail only under
 `SoundBankTest` shares one `/tmp` directory between cases, and the set that fails changes between
 runs, which is the signature of the parallel-isolation flake this suite has had for a while.
 
-`CApi_Draw3DSmoke` is the one genuine red test, and it is better understood than before: under a
-real driver it now gets past `cna_game_create` and fails in frame validation, so the defect is in
-the draw path rather than in the harness. See [[CABI-33]].
+`CApi_Draw3DSmoke` was the one red test at that point, and [[CABI-36]] closed it: the failure was
+in the test, which cleared colour but not depth and so drew against an undefined depth buffer. The
+C API and ABI suite is **96 / 96**.
 
 ### The one work-order item still genuinely unsatisfied: non-finite sprite values
 
@@ -1435,7 +1435,7 @@ touched by `CBIND-035D6`, kept asserting the old zeros. Same shape as the Textur
 
 Fixed. **Not a code change** — the expectations now match XNA and CNA both.
 
-### `CApi_Draw3DSmoke` — a real draw producing no output
+### `CApi_Draw3DSmoke` — a real draw producing no output (RESOLVED, and it was the test)
 
 Characterised, not fixed. Instrumented down to the first guarded block of `validate_real_output`:
 
@@ -1448,9 +1448,22 @@ DRAW result=0 confirmed=0         the draw SUCCEEDS and the centre pixel is unch
 (`hasReadback=1`), 3D is supported (`supports3d=1`) — and the centre pixel still equals the clear
 colour, so `confirm_drawn` fails and every later block is skipped.
 
-**Not a software-rasteriser artefact**: identical on Xvfb `:101` (llvmpipe) and on the host GPU
-at `:0`. Either the user-primitive draw path renders nothing, or the test's geometry/state
-expectation is stale. It belongs to whoever owns the 3D draw path.
+**RESOLVED in [[CABI-36]], and it was the second of those two possibilities.** The test cleared
+`CNA_CLEAR_OPTION_TARGET` alone, leaving the depth buffer holding whatever the window system handed
+over -- undefined on the first frame. The triangle sits at `z = 0`, so against undefined depth the
+default LessEqual test can discard every fragment: the draw returns success and changes no pixel,
+which is indistinguishable from a broken draw path by exit code alone. Clearing depth alongside
+colour makes it deterministic and all four routes render.
+
+The reading above -- "identical on Xvfb `:101` (llvmpipe) and on the host GPU at `:0`" -- was itself
+wrong, and worth leaving here rather than deleting. It was measured while the test was registered on
+`SDL_VIDEODRIVER=dummy`, where neither renderer was in use; the two runs agreed because both were
+the dummy driver failing at `cna_game_create`. Two successive attributions to "whoever owns the 3D
+draw path" rested on it, and neither was correct.
+
+Both halves of the fix are in the test: the depth clear, and diagnostics. The pixel helpers now
+print what they saw, which is what made the cause findable at all -- a bare `return 0` reaching
+`main` as exit code 2 tells nobody anything.
 
 ### `CApi_InstalledConsumer` — the static archive cannot be built under Ninja
 
