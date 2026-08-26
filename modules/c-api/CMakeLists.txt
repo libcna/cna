@@ -163,7 +163,10 @@ if(EMSCRIPTEN)
     # page, so the page is what triggers it.
     # A plain path, not $<TARGET_FILE_DIR:>: a generator expression naming a target is not usable
     # in a custom command's OUTPUT here. The module lands in this module's own binary directory,
-    # which is the same place.
+    # which is the same place -- CMAKE_RUNTIME_OUTPUT_DIRECTORY is set only in examples/
+    # subdirectories and is directory-scoped, so nothing redirects it here. The test below still
+    # passes $<TARGET_FILE_DIR:cna_c_api_wasm> to the runner, so if those two ever diverge the
+    # runner fails with "missing built page" rather than testing nothing.
     set(CNA_C_API_BROWSER_PROBE "${CMAKE_CURRENT_BINARY_DIR}/browser_probe.html")
     add_custom_command(
         OUTPUT "${CNA_C_API_BROWSER_PROBE}"

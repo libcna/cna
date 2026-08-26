@@ -710,8 +710,15 @@ before involving TypeScript". Node is not that: in a browser the module is fetch
 compiled by the browser's own WebAssembly pipeline and run under its memory model, and none of that
 is exercised by `node`. External review was right that this was still owed.
 
-`modules/c-api/wasm/browser_probe.html` is the probe, run through the repository's existing
-`scripts/run_pixijs_browser_tests.mjs` rather than a second runner of its own:
+`modules/c-api/wasm/browser_probe.html` is the probe, and since [[CABI-39]] it runs as the ctest
+**`CApi_WasmBrowserProbe`** in `cmake-build-web`.
+
+**It reuses `scripts/run_pixijs_browser_tests.mjs` rather than adding a second runner**, which is
+worth knowing before going looking: the script's name is historical, and it now serves two
+subsystems. Sharing it means both agree on how a page is served, what counts as a pass (`[FAIL]`
+lines and a final `=== n/m PASS ===`) and what "Playwright is available" means -- the last of those
+through the script's own `--check-playwright` mode, which the CMake gate calls so a gate and a run
+cannot disagree. The script's header records both callers.
 
     --- browser_probe.html ---
     [ok] the ES module factory instantiates in a browser
@@ -729,6 +736,13 @@ which was written down anywhere:
   parameter is affected, and the failure is a JavaScript `TypeError` rather than a `CNA_Result`.
 - **Copied strings carry no terminator.** `UTF8ToString(ptr)` reads past the end; the length from
   the matching `_size_ext` route must be passed as `UTF8ToString(ptr, bytes)`.
+
+One coupling is unwritten in CMake and worth naming: the page is staged to
+`${CMAKE_CURRENT_BINARY_DIR}` while the test passes `$<TARGET_FILE_DIR:cna_c_api_wasm>` to the
+runner. Those are the same directory today, because `CMAKE_RUNTIME_OUTPUT_DIRECTORY` is only set in
+`examples/` subdirectories and is directory-scoped. If they ever diverge the runner fails loudly
+with `missing built page` rather than silently testing nothing, which is why this is a note and not
+a defect.
 
 Still open, and deliberately not claimed: nothing here drives a **canvas** or a game loop from the
 browser, which is what a renderer needs and what `cna_demo_2d`/`cna_house3d_demo` are the precedent
