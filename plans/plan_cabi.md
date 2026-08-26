@@ -986,6 +986,41 @@ Nothing downstream was modified and no loader was weakened.
   It does not yet know about [[CABI-14]]'s module, which lives in this build tree rather than
   anywhere cna-ts tracks. Publishing it to a location that audit reads is the obvious follow-up.
 
+### CNA.NET actually run, against both ABI labels
+
+External review recorded that CNA.NET had never been run. It has now, with `dotnet` 8.0.424 and
+`CNA_NATIVE_LIBRARY` pointed at this branch's own `libcna_c_api.so`.
+
+    CNA.Framework.Tests   560 passed
+    CNA.XnaCompat.Tests   199 passed
+    CNA.Integration.Tests 119 skipped -> the loader refuses ABI 0.9.0
+
+The refusal is verbatim, and it is the mechanism working rather than a regression:
+
+> The CNA library ... implements C ABI 0.9.0, but cna-cs-native-abi/1 for consumer ABI 0.6.0
+> rejects it: experimental ABI 0.9.0 is not in the audited compatibility matrix.
+
+That answers "will it refuse?" and not "would it have passed?", so the library was temporarily
+relabelled 0.8.0 -- a measurement, not a commit -- and the integration suite run again:
+
+    CNA.Integration.Tests 117 passed, 2 failed
+
+Of the two, one is real and one is not:
+
+- **`CompatSoundEffectInstance_MultipleListenersFailDeterministically`** asserts
+  `NotSupportedException` for a two-listener `Apply3D` (`CompatLayerIntegrationTests.cs:245`).
+  [[CABI-6]] made that succeed, on the XNA reference. This is the class-D consequence measured
+  downstream in a named test instead of predicted -- the concrete thing the re-review has to decide,
+  and the reason the managed fallback stays until it does.
+- **`Game_TimingProperties_RoundTripThroughNative`** passes on its own and failed only in the full
+  run, which was sharing the machine with the 8,238-test native suite. A timing assertion under
+  load, not a contract.
+
+So the honest state of the C# binding against this branch: **one behavioural disagreement, which is
+one this milestone intended and documented**, plus a policy row it needs before it can admit 0.9.0
+at all. Neither is work that may be done from here -- `cna-cs` is read-only evidence and a loader is
+never weakened to make a test pass.
+
 ### The version bump this milestone owed and did not pay
 
 An earlier revision of this section flagged `CNA_0_8_0_SEMANTICS_CHANGED=true`, listed two class-D
