@@ -47,6 +47,42 @@ The per-blocker report `fixcnacs.md` Phase 10 asks for is `docs/c-api/CABI_BLOCK
 | CABI-25 | XNA's `is3d`/`isPacketSubmitted` gate | follow-up | DONE |
 | CABI-26 | `CApi_RuntimeGameSmoke` does not hang | follow-up | CLOSED |
 | CABI-27 | The last three red tests, traced | follow-up | 1 fixed, 2 attributed |
+| CABI-28 | Render-target ContentLost was set and never cleared | external review | DONE |
+| CABI-29 | Wasm export list did not depend on the headers | external review | DONE |
+| CABI-30 | ABI 0.8.0 -> 0.9.0, history and baseline | external review | DONE |
+| CABI-31 | Video frame generation restarted, defeating its own contract | external review | DONE |
+| CABI-32 | Apply3D docs and tests still described the refused contract | external review | DONE |
+| CABI-33 | Static archive under Ninja; two tests registered on a driver they cannot pass under | follow-up | DONE |
+
+### What external review found, and what it means
+
+An independent review of `2177a043b` rejected the "Both work orders are complete" claim above. It
+was right to. Six findings, all reproduced here before anything was changed:
+
+| Finding | Verdict | What it actually was |
+| --- | --- | --- |
+| ABI baseline stale, version not bumped | **confirmed** | Both ABI gates were red on the milestone's own HEAD. |
+| Wasm module missing three exports | **confirmed** | The generator rule did not depend on the headers it reads. |
+| Video generation contract wrong | **confirmed, and worse than reported** | The code did the exact opposite of the comment above it. |
+| Apply3D docs/tests contradict the code | **confirmed, and the test was inert** | `REQUIRE_DEVICE()` skips it wherever no audio device exists. |
+| ContentLost only partial | **confirmed** | `ClearContentLostEXT()` had no callers at all for render targets. |
+| Handoff and downstream notes stale | **confirmed** | Three rows described a state that had already moved. |
+
+Two things the review did not have, found while fixing its list:
+
+- **[[CABI-25]] had broken eighteen audio tests and nobody had noticed.** The `is3D`/
+  `isPacketSubmitted` gate is a faithful transcription of XNA -- `Play()` submits the packet, so
+  `Apply3D()` after it throws unless the instance was already aimed -- but every spatial test in the
+  file opened with `inst.Play();` and aimed afterwards, which XNA does not allow. The gate's own
+  tests missed it because both of them aim the instance before playing it, so neither described the
+  virgin-instance transition. Fifteen showed up under a `Apply3D*` filter and three more only under
+  the unfiltered run.
+- **Two tests were registered on `SDL_VIDEODRIVER=dummy`** and so failed at `cna_game_create` before
+  reaching what they test -- on any machine, not just this one. `CApi_InstalledConsumer` passes now.
+  `CApi_Draw3DSmoke` gets past game creation under a real driver and fails in frame validation,
+  which is the first honest measurement of it: the earlier reading of "the draw returns success and
+  the centre pixel never changes, identically on llvmpipe and on the host GPU" was taken under the
+  dummy driver, where neither was in use.
 
 ### Both work orders are complete
 
@@ -938,18 +974,34 @@ Nothing downstream was modified and no loader was weakened.
 ### Version findings
 
 - **`cna-rust` pins `CNA_ABI_VERSION = 0x0000_0700`** (`crates/cna-sys/src/lib.rs:14`) and compares
-  it for exact equality (`crates/cna/src/native/api.rs:601`). CNA is at **0.8.0**, so that binding
-  rejects the current library — and did so before this milestone began. Its tests pass because they
-  do not load the native library.
-- **`cna-cs`'s reviewed policy names 0.6.0, 0.7.0 and 0.8.0**, so it admits the current generation.
+  it for exact equality (`crates/cna/src/native/api.rs:601`). It rejected 0.8.0 before this
+  milestone began and rejects 0.9.0 for the same reason. Its tests pass because they do not load the
+  native library.
+- **`cna-cs`'s reviewed policy names 0.6.0, 0.7.0 and 0.8.0.** It admitted 0.8.0 and **will refuse
+  0.9.0 until its policy is extended.** That is the bump working as designed rather than a
+  regression: the two class-D rows below are exactly what a consumer is supposed to re-review before
+  admitting a new generation. Recorded here as required downstream work; nothing downstream was
+  modified.
 - **`cna-ts`'s ABI audit reports `TRACKED_WASM_ARTIFACTS=0`, `BROWSER_ARTIFACT_STATUS=MISSING`.**
   It does not yet know about [[CABI-14]]'s module, which lives in this build tree rather than
   anywhere cna-ts tracks. Publishing it to a location that audit reads is the obvious follow-up.
 
-This milestone did **not** change `CNA_ABI_VERSION`.
+### The version bump this milestone owed and did not pay
 
-    CNA_NEW_ABI_REQUIRES_DOWNSTREAM_REVIEW=false (no version change)
-    CNA_0_8_0_SEMANTICS_CHANGED=true (two class-D rows below)
+An earlier revision of this section flagged `CNA_0_8_0_SEMANTICS_CHANGED=true`, listed two class-D
+rows, and then left `CNA_ABI_VERSION` at 0.8.0 with the note "no version change". Those two
+statements contradict each other: `docs/c-api/ABI_VERSIONING.md` requires a minor increment, release
+notes and a regenerated baseline for an incompatible change under the experimental `0.x` policy, and
+a class-D row **is** an incompatible change. The condition was correctly identified and then not
+acted on, which left every downstream consumer with a version number promising that nothing about
+the old contracts had moved while ContentLost had gone from "never raised" to raised.
+
+The same omission left `tools/c-api/abi_baseline.json` stale, so both ABI gates were red on the
+milestone's own HEAD. Corrected in [[CABI-30]]: 0.8.0 -> **0.9.0**, history written, baseline
+re-recorded.
+
+    CNA_NEW_ABI_REQUIRES_DOWNSTREAM_REVIEW=true (0.8.0 -> 0.9.0)
+    CNA_0_9_0_SEMANTICS_CHANGED=true (two class-D rows below)
 
 ## ABI classification, all changes in this milestone
 
@@ -964,8 +1016,15 @@ This milestone did **not** change `CNA_ABI_VERSION`.
 | CABI-15 ContentLost raised | **D** | an event that never fired now can, on three renderers |
 | CABI-9 `cna_video_player_get_frame_ext` | **C** | additive |
 
-`CNA_ABI_VERSION` is unchanged at 0.8.0. Two class-D rows are the ones a downstream review must
-look at.
+`CNA_ABI_VERSION` moved 0.8.0 -> **0.9.0** because of the two class-D rows; see the section above
+for why leaving it unchanged was wrong. Those two rows are what a downstream review must look at.
+
+Two later corrections belong in this table:
+
+| Change | Class | Note |
+| --- | --- | --- |
+| CABI-28 render-target ContentLost is now cleared on binding | **D** | the flag was set and never cleared, so it reported "lost" forever |
+| CABI-31 video frame generation never restarts | **D** | `Play`/`Stop` reset it, giving every playback's first frame the same value |
 
 ## CABI-6 resolved — the XNA reference settled it
 
