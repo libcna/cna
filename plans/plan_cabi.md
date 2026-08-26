@@ -986,6 +986,32 @@ Nothing downstream was modified and no loader was weakened.
   It does not yet know about [[CABI-14]]'s module, which lives in this build tree rather than
   anywhere cna-ts tracks. Publishing it to a location that audit reads is the obvious follow-up.
 
+### Verification after the review fixes
+
+All on Xvfb `:101` with `SDL_VIDEODRIVER=x11`, confirmed by the EasyGL banner reporting `MSAA up to
+4x` (llvmpipe) rather than `8x` (host GPU).
+
+    C API + ABI gates          95 / 96      only CApi_Draw3DSmoke red
+    changed areas              309 / 309    ContentLost, VideoPlayer, SoundEffectInstance,
+                                            Cue, SoundBank, DynamicSoundEffectInstance
+    wasm module                2874 / 2874 exports present, reports ABI 0.9.0
+    full native suite          8209 / 8238
+
+All eight C API documentation and ABI gates are green, including the two that were red on
+`2177a043b`.
+
+**The 29 remaining full-suite failures are not from this work**, and that was measured rather than
+assumed. The ten `VertexDeclarationLayoutTest` / `DeclarationGuardTest` cases were the ones worth
+suspecting, since [[CABI-28]] touched `VertexBuffer.cpp`: reverting every file in that commit and
+rebuilding leaves exactly the same ten failing. The rest divide into eight EasyGL golden/MSAA cases,
+three glTF, three ENet, and a handful that pass in isolation and fail only under `-j4` --
+`SoundBankTest` shares one `/tmp` directory between cases, and the set that fails changes between
+runs, which is the signature of the parallel-isolation flake this suite has had for a while.
+
+`CApi_Draw3DSmoke` is the one genuine red test, and it is better understood than before: under a
+real driver it now gets past `cna_game_create` and fails in frame validation, so the defect is in
+the draw path rather than in the harness. See [[CABI-33]].
+
 ### The one work-order item still genuinely unsatisfied: non-finite sprite values
 
 `fixcnacs.md` Phase 5 asks for XNA's behaviour on NaN and Infinity, and says to preserve only those
