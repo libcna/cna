@@ -7,9 +7,11 @@ input, and device support under Emscripten are already covered elsewhere (`NEXTd
 `noxna_devices.md`) and are out of scope here.
 
 **This document covers only the existing EasyGL-over-WebGL2 browser path.** The project owner
-activated the native `wgpu-native` renderer on 2026-07-12, but browser/Emscripten WebGPU remains a
-separate unimplemented workstream tracked in `plans/plan_webgpu.md`. Nothing below should be read as a
-status report for the native WebGPU renderer.
+activated the native `wgpu-native` renderer on 2026-07-12. A browser/Emscripten WebGPU path was
+started on 2026-08-26 (the same `WEBGPU` identity, built through Emscripten's emdawnwebgpu port —
+see `plans/plan_webgpu.md` `WEBGPU-119`/`120`, both 🟨); its renderer code and build wiring compile
+and link to wasm, but the in-browser present loop and smoke test are still pending, so it is not yet
+a usable browser renderer. Nothing below should be read as a status report for either WebGPU path.
 
 > **2026-07-15 update, scoped to the new `CANVAS` renderer (`plans/plan_canvas.md`), not EasyGL**: this
 > document's own "no `.sdl-prebuilt-emscripten` directory... no `cmake-build-*emscripten*` directory
@@ -143,7 +145,7 @@ device/adapter-model concern rather than a rendering-renderer one.
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Explicitly excluded on Emscripten — zero coverage |
 | WebGL context-loss handling (`EasyGLRenderer.cpp`) | Real, non-trivial code; never run against a real browser |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Anticipated only, not verified; current `SurfaceFormat`/anisotropy constraints happen to sidestep most of them today |
-| WebGPU | Native `wgpu-native` renderer is now active and experimental; browser/Emscripten WebGPU remains unimplemented and is tracked separately in `plans/plan_webgpu.md` |
+| WebGPU | Native `wgpu-native` renderer is active and experimental; a browser/Emscripten WebGPU path (same `WEBGPU` identity, via the emdawnwebgpu port) was started 2026-08-26 — code + build wiring compile and link to wasm, but the in-browser present loop and smoke test are still pending (`plans/plan_webgpu.md` `WEBGPU-119`–`122`) |
 
 **Recommendation for whoever eventually does the first real Emscripten build**: start by getting
 `cna_house3d_demo` (the one target with a WebGL version pin already) running in an actual browser

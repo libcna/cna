@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(webgpu_web_spike CXX)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../../cmake/ThirdPartyWebGPU.cmake)
+cna_configure_webgpu()
+add_executable(spike main.cpp)
+target_link_libraries(spike PRIVATE WebGPU::WebGPU)

@@ -18,6 +18,24 @@ function(cna_configure_webgpu)
         return()
     endif()
 
+    # Web / browser target (WEBGPU-119): the browser owns the WebGPU implementation, reached from
+    # WebAssembly through Emscripten's emdawnwebgpu port. There is no wgpu-native library to
+    # download, find or copy -- the port supplies the same unified webgpu.h that wgpu-native v29
+    # exposes natively, plus the JavaScript bindings that route wgpu* calls to navigator.gpu. The
+    # single --use-port flag carries both the include path (at compile time) and those bindings (at
+    # link time); the WebAssembly module needs no sibling runtime file, so CNA_WEBGPU_RUNTIME_LIBRARY
+    # stays unset and the renderer's runtime-copy step is skipped. Asyncify is already enabled
+    # project-wide for Emscripten links (see top-level CMakeLists.txt), which is what lets this
+    # renderer's synchronous adapter/device waits yield to the browser event loop.
+    if(EMSCRIPTEN)
+        add_library(WebGPU::WebGPU INTERFACE IMPORTED GLOBAL)
+        set_target_properties(WebGPU::WebGPU PROPERTIES
+            INTERFACE_COMPILE_OPTIONS "--use-port=emdawnwebgpu"
+            INTERFACE_LINK_OPTIONS "--use-port=emdawnwebgpu")
+        message(STATUS "CNA WebGPU: using Emscripten emdawnwebgpu port (browser navigator.gpu)")
+        return()
+    endif()
+
     set(_root "${CNA_WEBGPU_ROOT}")
 
     if(NOT _root)

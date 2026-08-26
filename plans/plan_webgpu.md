@@ -36,8 +36,18 @@
 >   (debug marker no-op doc, simulated context loss, `IsFullScreen`), `WEBGPU-115`/`116` (wireframe
 >   deviation doc, vertex-format-from-`VertexElementFormat` helper), `WEBGPU-118`
 >   (Vulkan-deviations doc) — all `⬜`, all small/standalone.
-> - **Emscripten/browser target (`WEBGPU-119`–`122`)** — a distinct, large future initiative (real
->   browser WASM build), not started; treat as its own separate workstream, not a "next task" pick.
+> - **Emscripten/browser target (`WEBGPU-119`–`122`)** — STARTED 2026-08-26. `WEBGPU-119`/`120` are
+>   now 🟨: the renderer builds for the browser as the *same* `WEBGPU` identity (not a new renderer),
+>   sharing all of `WebGPURenderer.cpp` and every WGSL shader. Three `#ifdef __EMSCRIPTEN__` seams
+>   carry the only real differences — a `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` surface
+>   (`"#canvas"`), `WGPUCallbackMode_AllowSpontaneous` + `emscripten_sleep` (Asyncify) instead of the
+>   native `wgpuInstanceProcessEvents` pump, and an `if(EMSCRIPTEN)` branch in `ThirdPartyWebGPU.cmake`
+>   that links Emscripten's **emdawnwebgpu** port (NOT the removed `-sUSE_WEBGPU=1`) with no
+>   wgpu-native download. Both the full renderer TU (`-fsyntax-only`) and a canvas-surface
+>   existence-gate spike (`spikes/webgpu-web-spike/`) compile and link to wasm against the real
+>   emdawnwebgpu header. Still ⬜: the in-browser present loop/canvas sizing, WGSL compile check
+>   (`WEBGPU-121`) and the headless-Chrome 2D smoke run (`WEBGPU-122`) — those are the acceptance
+>   gates, so this is not yet "done".
 > - **Cross-backend pixel-parity test (`WEBGPU-123`)** — same scene on EasyGL/Vulkan/Bgfx/WebGPU,
 >   not started.
 > - Everything else in the row table below not listed here is ✅ or an honestly-scoped 🟨 (read
@@ -515,8 +525,8 @@ mark it ✅ from source inspection alone.
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-117 | `docs/webgpu-backend.md`: architecture, deviations from Vulkan, WGSL shader map, UBO layout | 🟨 | Document exists but must be revised after `WEBGPU-124`–`WEBGPU-131` with only verified claims and exact test commands. |
 | WEBGPU-118 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
-| WEBGPU-119 | Emscripten target: configure CNA for `emcc` build with `-sUSE_WEBGPU=1`; WebGPU backend routes to browser `navigator.gpu` | ⬜ | True browser WASM target |
-| WEBGPU-120 | Emscripten: SDL3 Emscripten port + WebGPU surface via `emscripten_webgpu_get_device()` | ⬜ | |
+| WEBGPU-119 | Emscripten target: configure CNA for `emcc` build; WebGPU backend routes to browser `navigator.gpu` | 🟨 | 2026-08-26. `ThirdPartyWebGPU.cmake` `if(EMSCRIPTEN)` links Emscripten's **emdawnwebgpu** port (`--use-port=emdawnwebgpu`). **Deviation:** the task said `-sUSE_WEBGPU=1`; that built-in was removed in Emscripten 4.0.10 and replaced by the emdawnwebgpu port, whose `webgpu.h` matches wgpu-native v29's unified header. Configure + wasm link verified via `spikes/webgpu-web-spike/`. Remaining: browser present loop + smoke run (`WEBGPU-122`). |
+| WEBGPU-120 | Emscripten: SDL3 Emscripten port + WebGPU surface (canvas selector) | 🟨 | 2026-08-26. `WebGPURenderer::CreateSurface()` gains a `#elif defined(__EMSCRIPTEN__)` branch using `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` on `"#canvas"` (the SDL3 Emscripten default canvas). **Deviation:** the task named `emscripten_webgpu_get_device()`; instead the existing synchronous `wgpuInstanceRequestAdapter`/`wgpuAdapterRequestDevice` path is reused with an `emscripten_sleep`/Asyncify yield in `WaitForCompletion()`, keeping one device-acquisition code path for native and web. Compiles against the real port header; end-to-end canvas present in a browser still pending. |
 | WEBGPU-121 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | ⬜ | |
 | WEBGPU-122 | Emscripten: run 2D smoke test in headless Chrome via `--headless=new --enable-features=WebGPU` | ⬜ | CI-friendly |
 | WEBGPU-123 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |

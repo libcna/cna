@@ -1,0 +1,5 @@
+# Built spike artifacts (regenerable via the commands in README.md)
+build/
+*.o
+*.wasm
+*.js

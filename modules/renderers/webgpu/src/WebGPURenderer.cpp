@@ -8,6 +8,10 @@
 #include <windows.h>
 #endif
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+#endif
+
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -35,6 +39,16 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         constexpr std::uint64_t kMinimumBufferSize = 4;
         constexpr std::uint64_t kRequestTimeoutNanoseconds = 10'000'000'000ULL;
+
+        // The callback-completion mode this renderer requests for every async wgpu* operation.
+        // Native wgpu-native drives completion by pumping wgpuInstanceProcessEvents() from
+        // WaitForCompletion(); a browser has no such pump, so under Emscripten the callbacks fire
+        // spontaneously from the JavaScript event loop while WaitForCompletion() yields to it.
+#if defined(__EMSCRIPTEN__)
+        constexpr WGPUCallbackMode kCnaWebGpuCallbackMode = WGPUCallbackMode_AllowSpontaneous;
+#else
+        constexpr WGPUCallbackMode kCnaWebGpuCallbackMode = WGPUCallbackMode_AllowProcessEvents;
+#endif
 
         [[nodiscard]] WGPUStringView StringView(const char* text)
         {
@@ -889,9 +903,18 @@ namespace CNA::Internal::Renderers::WebGPU
                                   std::chrono::nanoseconds(kRequestTimeoutNanoseconds);
             while (!completed && std::chrono::steady_clock::now() < deadline)
             {
+#if defined(__EMSCRIPTEN__)
+                // Asyncify hands control back to the browser event loop so the pending WebGPU
+                // promise can settle; the following pump then drains any completed future into its
+                // callback. A plain sleep would never yield to JavaScript and would only ever time
+                // out here.
+                emscripten_sleep(1);
+                wgpuInstanceProcessEvents(instance);
+#else
                 wgpuInstanceProcessEvents(instance);
                 if (!completed)
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
+#endif
             }
             if (!completed)
             {
@@ -1082,7 +1105,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         BufferMapState mapState;
         WGPUBufferMapCallbackInfo callbackInfo{};
-        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.mode = kCnaWebGpuCallbackMode;
         callbackInfo.callback = OnBufferMap;
         callbackInfo.userdata1 = &mapState;
         wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
@@ -1293,7 +1316,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         BufferMapState mapState;
         WGPUBufferMapCallbackInfo callbackInfo{};
-        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.mode = kCnaWebGpuCallbackMode;
         callbackInfo.callback = OnBufferMap;
         callbackInfo.userdata1 = &mapState;
         wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
@@ -1584,7 +1607,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         BufferMapState mapState;
         WGPUBufferMapCallbackInfo callbackInfo{};
-        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.mode = kCnaWebGpuCallbackMode;
         callbackInfo.callback = OnBufferMap;
         callbackInfo.userdata1 = &mapState;
         wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
@@ -1758,7 +1781,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         BufferMapState mapState;
         WGPUBufferMapCallbackInfo callbackInfo{};
-        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.mode = kCnaWebGpuCallbackMode;
         callbackInfo.callback = OnBufferMap;
         callbackInfo.userdata1 = &mapState;
         wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
@@ -2039,7 +2062,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         BufferMapState mapState;
         WGPUBufferMapCallbackInfo callbackInfo{};
-        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.mode = kCnaWebGpuCallbackMode;
         callbackInfo.callback = OnBufferMap;
         callbackInfo.userdata1 = &mapState;
         wgpuBufferMapAsync(readbackBuffer, WGPUMapMode_Read, 0, bufferSize, callbackInfo);
@@ -2427,6 +2450,16 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: unsupported Linux native window: " +
                                      CNA::Platform::Describe(nativeHandle));
         }
+#elif defined(__EMSCRIPTEN__)
+        // The browser owns the drawing surface: a <canvas> element chosen by a CSS selector, not a
+        // native window handle. SDL3's Emscripten port renders into "#canvas" by default, so the
+        // WebGPU surface must target that same element for the two to agree on one canvas.
+        (void) nativeHandle;
+        WGPUEmscriptenSurfaceSourceCanvasHTMLSelector source{};
+        source.chain.sType = WGPUSType_EmscriptenSurfaceSourceCanvasHTMLSelector;
+        source.selector = StringView("#canvas");
+        descriptor.nextInChain = &source.chain;
+        surface_ = wgpuInstanceCreateSurface(instance_, &descriptor);
 #else
         (void) nativeHandle;
         throw std::runtime_error("CNA WebGPU: native surface creation is unsupported on this platform");
@@ -2442,7 +2475,7 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPURequestAdapterOptions adapterOptions{};
         adapterOptions.compatibleSurface = surface_;
         WGPURequestAdapterCallbackInfo adapterCallback{};
-        adapterCallback.mode = WGPUCallbackMode_AllowProcessEvents;
+        adapterCallback.mode = kCnaWebGpuCallbackMode;
         adapterCallback.callback = OnAdapterRequest;
         adapterCallback.userdata1 = &adapterState;
         wgpuInstanceRequestAdapter(instance_, &adapterOptions, adapterCallback);
@@ -2459,7 +2492,7 @@ namespace CNA::Internal::Renderers::WebGPU
         descriptor.uncapturedErrorCallbackInfo.userdata1 = &uncapturedErrorCount_;
         descriptor.deviceLostCallbackInfo.callback = OnDeviceLost;
         WGPURequestDeviceCallbackInfo callback{};
-        callback.mode = WGPUCallbackMode_AllowProcessEvents;
+        callback.mode = kCnaWebGpuCallbackMode;
         callback.callback = OnDeviceRequest;
         callback.userdata1 = &deviceState;
         wgpuAdapterRequestDevice(adapter_, &descriptor, callback);
@@ -6810,7 +6843,7 @@ struct VSOut {
         const std::uint64_t mapSize = readbackBufferCapacity_;
         BufferMapState mapState;
         WGPUBufferMapCallbackInfo callbackInfo{};
-        callbackInfo.mode = WGPUCallbackMode_AllowProcessEvents;
+        callbackInfo.mode = kCnaWebGpuCallbackMode;
         callbackInfo.callback = OnBufferMap;
         callbackInfo.userdata1 = &mapState;
         wgpuBufferMapAsync(readbackBuffer_, WGPUMapMode_Read, 0, mapSize, callbackInfo);
@@ -6926,7 +6959,7 @@ struct VSOut {
 
         ErrorScopeState state;
         WGPUPopErrorScopeCallbackInfo callback{};
-        callback.mode = WGPUCallbackMode_AllowProcessEvents;
+        callback.mode = kCnaWebGpuCallbackMode;
         callback.callback = OnPopErrorScope;
         callback.userdata1 = &state;
         wgpuDevicePopErrorScope(device_, callback);

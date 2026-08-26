@@ -52,6 +52,31 @@ SONAME, copies the runtime beside `cna_demo_2d`, and gives the executable a `$OR
 This enables the executable to use its sibling `libwgpu_native.so` rather than requiring the
 original package location at runtime.
 
+## Web / browser target (Emscripten) — in progress
+
+`WEBGPU` is one renderer identity with two backends, not two renderers. The browser build reuses all
+of `WebGPURenderer.cpp` and every WGSL shader; only three seams differ, each behind
+`#if defined(__EMSCRIPTEN__)`:
+
+- **Surface.** `CreateSurface()` uses `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` targeting the
+  CSS selector `"#canvas"` (SDL3's Emscripten default canvas), instead of a native window handle.
+- **Async completion.** WebGPU is promise-based in the browser. The renderer keeps its single
+  synchronous adapter/device/readback path and, under Emscripten, requests
+  `WGPUCallbackMode_AllowSpontaneous` and yields with `emscripten_sleep()` (Asyncify, enabled
+  project-wide) so the browser event loop can settle the promise — instead of the native
+  `wgpuInstanceProcessEvents()` pump.
+- **Toolchain.** `cmake/ThirdPartyWebGPU.cmake` has an `if(EMSCRIPTEN)` branch that links
+  Emscripten's **emdawnwebgpu** port (`--use-port=emdawnwebgpu`) with no wgpu-native download and no
+  runtime library to copy. The port's `webgpu/webgpu.h` is the same unified header wgpu-native v29
+  exposes, which is why the shared code compiles unchanged. (The older `-sUSE_WEBGPU=1` built-in was
+  removed in Emscripten 4.0.10 and is not used.)
+
+Select it under `emcmake` with `-DCNA_GRAPHICS_RENDERER=WEBGPU`. As of 2026-08-26 the renderer
+translation unit and a canvas-surface existence-gate spike (`spikes/webgpu-web-spike/`) compile and
+link to WebAssembly against the real emdawnwebgpu header. The in-browser present loop, WGSL
+compile check and a headless-Chrome 2D smoke run (`plans/plan_webgpu.md` `WEBGPU-121`/`122`) are not
+done yet, so this is not a usable browser renderer at this stage — it is a verified build path.
+
 ## Automated native smoke test
 
 With `CNA_BUILD_TESTS=ON`, the WebGPU configuration registers `WebGPU_Native2D_Smoke` with CTest:
