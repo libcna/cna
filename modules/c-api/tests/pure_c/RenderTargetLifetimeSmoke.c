@@ -137,6 +137,60 @@ static CNA_Result validate_bound_cube_destroy_refused(
     return CNA_RESULT_SUCCESS;
 }
 
+/* Counts ContentLost notifications for one render target. */
+static void on_content_lost(const CNA_Handle render_target, void* const context)
+{
+    (void)render_target;
+    *(int*)context += 1;
+}
+
+/*
+ * The ContentLost subscription (CABI-24). The event itself is only reachable on the three renderer
+ * families that can report a device reset -- DIRECTX9, DIRECT2D and SKIA -- so what is asserted
+ * here is the subscription contract: it registers, it refuses malformed arguments, it releases
+ * once, and on a renderer that cannot lose a device it stays silent rather than inventing a
+ * notification.
+ */
+static CNA_Result validate_content_lost_subscription(RenderTargetLifetimeState* const state)
+{
+    int notifications = 0;
+    CNA_RenderTargetEventRegistrationHandle registration = CNA_INVALID_HANDLE;
+    CNA_RenderTargetEventRegistrationHandle rejected = UINT64_MAX;
+
+    if (cna_render_target_subscribe_content_lost(
+            state->render_target_cube, on_content_lost, &notifications, &registration) !=
+            CNA_RESULT_SUCCESS ||
+        registration == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /* A null callback and a null output are refused, and neither writes a handle. */
+    if (cna_render_target_subscribe_content_lost(
+            state->render_target_cube, 0, &notifications, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_render_target_subscribe_content_lost(
+            state->render_target_cube, on_content_lost, &notifications, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /* A handle of the wrong family is not a render target. */
+    if (cna_render_target_subscribe_content_lost(
+            CNA_INVALID_HANDLE, on_content_lost, &notifications, &rejected) ==
+        CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /* Nothing has lost a device, so nothing was notified. */
+    if (notifications != 0) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /* The registration is owned: released once, and refused the second time. */
+    if (cna_render_target_unsubscribe_content_lost(registration) != CNA_RESULT_SUCCESS ||
+        cna_render_target_unsubscribe_content_lost(registration) != CNA_RESULT_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -171,6 +225,7 @@ static CNA_Result on_load(
     }
 
     if (validate_bound_destroy_refused(graphics_device, state) != CNA_RESULT_SUCCESS ||
+        validate_content_lost_subscription(state) != CNA_RESULT_SUCCESS ||
         validate_bound_cube_destroy_refused(graphics_device, state) != CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;
     }

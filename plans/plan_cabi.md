@@ -1139,3 +1139,67 @@ branch has no business editing it.
 
 Once that break is fixed on `next`, this branch merges textually clean and needs a compile probe
 plus a suite run before the merge is trusted — not a `git merge` alone.
+
+## CABI-24 — `cna_render_target_subscribe_content_lost` (DONE)
+
+[[CABI-15]] left this route missing while the buffers already had theirs. Added now that there is
+a real event behind it. **ABI class C, additive.**
+
+`cna_render_target_subscribe_content_lost` / `_unsubscribe_content_lost`, accepting both
+`RenderTarget2D` and `RenderTargetCube` handles. The registration holds its target **weakly**, so a
+registration that outlives its render target unsubscribes from nothing rather than from freed
+memory — the same failure [[CABI-20]] just fixed one layer down.
+
+The header says plainly what the event does and does not promise: only `DIRECTX9`, `DIRECT2D` and
+`SKIA` can report a device reset, the rest never raise it, and a caller-initiated
+`cna_graphics_device_reset*` does not raise it either. Also corrected the now-stale
+`CNA_RenderTargetInfo::is_content_lost` doc, which still read *"Always false in current CNA"*.
+
+Covered by `CApi_RenderTargetLifetimeSmoke`: registration, the two argument refusals, a
+wrong-family handle, silence on a renderer that cannot lose a device, and release-once ownership.
+
+## CABI-25 — XNA's `is3d` / `isPacketSubmitted` state machine (DONE)
+
+The second XNA divergence [[CABI-6]] turned up. XNA
+(`SoundEffectInstance.cs:130-138`, `:376-383`) gates 3D and pan against each other:
+
+```csharp
+// Apply3D                                  // Pan setter
+if (!isPacketSubmitted) { is3d = true; }    if (!isPacketSubmitted) { is3d = false; }
+if (!is3d) throw InvalidApply3DCall;        if (is3d)  throw InvalidPanCall;
+```
+
+**The choice is free until playback begins and fixed afterwards.** Before the first `Play`, an
+instance switches between 3D and pan as often as it likes; once playing, the other call throws
+`InvalidOperationException`. `Stop` clears the flag, so a stopped instance can be re-aimed.
+
+CNA had no equivalent: `Apply3D` set `is3D_` unconditionally, and the `Pan` setter silently
+returned when `is3D_` — following FNA's `if (is3D) return;`, which CP-20 recorded as deliberate.
+The XNA reference supersedes that reading, the same way it did for CABI-6.
+
+Implemented with `packetSubmitted_`, set on `Play` and cleared on `Stop`.
+
+**ABI classification: D.** Two call sequences that used to succeed now throw:
+
+- `Play()` then `Apply3D()` — XNA's `InvalidApply3DCall`. **This is the one to warn a porter
+  about**: aiming a sound after starting it is a natural thing to write and a well-known XNA
+  gotcha. `Apply3D` must come first; updating the position *during* playback still works, because
+  the flag is already set.
+- `Apply3D()` then `Play()` then `Pan` — XNA's `InvalidPanCall`.
+
+`CApi_Audio3DSmoke` was written in the first of those orders and is reordered, now also asserting
+that pan is refused mid-playback and allowed again after `Stop`.
+`SetPanAfterApply3DDoesNotClearIs3DLatch` becomes two tests covering both halves of the rule.
+
+## CABI-26 — `CApi_RuntimeGameSmoke` does not hang
+
+Recorded here because I reported it twice as a hang and it is not one. It takes **13-15 seconds**
+(`GraphicsDeviceManagerSmoke` beside it takes ~16), and I was polling the suite every 15-20
+seconds, so it looked stuck. In every completed run it passes.
+
+What is real is **suite flakiness on this display**. Two back-to-back full runs gave 3 failures and
+then 12 — the extra nine a scattered mix of GL-using tests (`GraphicsExtSmoke`, `VertexBufferSmoke`,
+`GraphicsResourceSmoke`, `LifecycleSmoke`, `MediaSmoke`, `AudioSoundEffectSmoke`,
+`GraphicsDeviceManagerSmoke`, `DevicesSmoke`, `TextureVolumeSmoke`) rather than anything
+attributable. A single run's number is not trustworthy here; the 3-failure result is the one that
+reproduces.

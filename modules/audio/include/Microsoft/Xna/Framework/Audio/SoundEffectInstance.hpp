@@ -106,6 +106,15 @@ namespace Microsoft::Xna::Framework::Audio
         // approximation is what should keep governing the actual output until Apply3D runs
         // again. Never reset back to false once set (matches FNA: is3D is only ever set to true).
         bool  is3D_         = false;
+        /**
+         * @brief Whether playback has begun, which is what locks the 3D-versus-pan choice.
+         *
+         * plans/plan_cabi.md CABI-25. XNA calls this `isPacketSubmitted`: before the packet is
+         * submitted (before the first Play) the instance switches freely between Apply3D and Pan,
+         * and afterwards whichever was chosen is fixed -- the other one throws
+         * InvalidOperationException. Stop clears it, so a stopped instance can be re-aimed.
+         */
+        bool  packetSubmitted_ = false;
 
         // AUDIO-001: Apply3D's derived attenuation/pan/Doppler must survive later Play()/Volume/
         // Pitch calls, and a call made before this instance has ever had a track (no track yet to

@@ -893,12 +893,12 @@ TEST_F(SoundEffectInstanceTest, Apply3DExtremeVelocityClampsToDocumentedRange)
     EXPECT_GE(ratio, 0.5f);
 }
 
-// CP-20: matches FNA's `is3D` latch (SoundEffectInstance.cs) -- once Apply3D has run, it (not
-// setPanProperty) should keep governing the real track output. SDL3_mixer has no stereo-pan
-// getter to directly observe the output matrix (same limitation as CP-3/T-4B's Apply3D
-// coverage), so this verifies the is3D_ state machine that setPanProperty() actually branches
-// on, via SoundEffectInstanceTestAccess.
-TEST_F(SoundEffectInstanceTest, SetPanAfterApply3DDoesNotClearIs3DLatch)
+// CABI-25: the 3D-versus-pan choice is free until playback begins and fixed afterwards, which is
+// XNA's own rule (SoundEffectInstance.cs:130-138 and :376-383, decompiled reference). This
+// replaces CP-20's earlier reading, which followed FNA's `if (is3D) return;` and kept the latch
+// set for the instance's whole life. SDL3_mixer has no stereo-pan getter, so the state machine is
+// observed through SoundEffectInstanceTestAccess rather than the output matrix.
+TEST_F(SoundEffectInstanceTest, SetPanBeforePlaybackTakesTheInstanceOutOf3D)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
@@ -910,12 +910,38 @@ TEST_F(SoundEffectInstanceTest, SetPanAfterApply3DDoesNotClearIs3DLatch)
     inst.Apply3D(listener, emitter);
     EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
 
-    // Setting Pan afterward must still update the property (matches FNA) but must not clear the
-    // latch -- Apply3D's own pan approximation should keep governing the real output until
-    // Apply3D runs again, not this call.
+    // Nothing has played yet, so Pan is free to take the instance back out of 3D -- and does.
     inst.setPanProperty(0.9f);
     EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.9f);
+    EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(inst));
+
+    // And back again, still before playback.
+    inst.Apply3D(listener, emitter);
     EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+}
+
+// The other half of the same rule: once playing, the choice is fixed and the other call refuses.
+TEST_F(SoundEffectInstanceTest, PlaybackFixesTheChoiceBetween3DAndPan)
+{
+    REQUIRE_DEVICE();
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+
+    SoundEffectInstance spatial = instance();
+    spatial.Apply3D(listener, emitter);
+    spatial.Play();
+    EXPECT_THROW(spatial.setPanProperty(0.5f), System::InvalidOperationException);
+    // Stopping releases the choice, so the instance can be aimed again.
+    spatial.Stop();
+    EXPECT_NO_THROW(spatial.setPanProperty(0.5f));
+
+    SoundEffectInstance panned = instance();
+    panned.setPanProperty(0.5f);
+    panned.Play();
+    EXPECT_THROW(panned.Apply3D(listener, emitter), System::InvalidOperationException);
+    panned.Stop();
+    EXPECT_NO_THROW(panned.Apply3D(listener, emitter));
 }
 
 // ===================== AUDIO-001: persistent spatial state =====================

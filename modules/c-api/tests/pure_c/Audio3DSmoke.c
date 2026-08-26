@@ -116,8 +116,22 @@ static int validate_positioning(const CNA_Handle game, const CNA_Handle instance
     emitter.velocity.x = -60.0F;
     listener.forward.z = -1.0F;
     listener.up.y = 1.0F;
-    if (cna_sound_effect_instance_play(instance) != CNA_RESULT_SUCCESS ||
+    /*
+     * CABI-25: Apply3D before Play, which is the order XNA requires. Its UnsafeApply3D only sets
+     * the instance's 3D flag while no packet has been submitted, and refuses outright once one
+     * has -- so an instance aimed after it starts playing throws InvalidApply3DCall. Aiming first
+     * and updating during playback (below) is the sequence that works.
+     */
+    if (cna_sound_effect_instance_apply_3d(instance, &listener, &emitter) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_instance_play(instance) != CNA_RESULT_SUCCESS ||
         cna_sound_effect_instance_apply_3d(instance, &listener, &emitter) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Pan is refused while this instance is playing in 3D; the property is unchanged by that. */
+    if (cna_sound_effect_instance_set_pan(instance, 0.5F) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_sound_effect_instance_stop(instance, CNA_TRUE) != CNA_RESULT_SUCCESS) {
         return 0;
     }
 

@@ -496,6 +496,11 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
 
+        // CABI-25: XNA submits the packet on the first Play and never again until Stop; from
+        // that moment the 3D-versus-pan choice is fixed. Set before the early returns below, so a
+        // Play on an already-playing or paused instance still counts as submitted.
+        packetSubmitted_ = true;
+
         // Already playing: no-op, matching FNA exactly (a naive re-Play would otherwise restart
         // the track from the beginning instead of leaving ongoing playback untouched).
         if (getStateProperty() == SoundState::Playing)
@@ -612,6 +617,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::Stop(bool immediate)
     {
+        // CABI-25: XNA clears isPacketSubmitted on Stop, which is what lets a stopped instance be
+        // aimed again -- in 3D or in pan -- before it next plays.
+        packetSubmitted_ = false;
 #ifdef SOUND_ENABLED
         auto* track = AsTrack(GetLiveTrackHandle());
         if (track)
@@ -1003,7 +1011,18 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
 
-        is3D_ = true; // CP-20: latches setPanProperty() out of writing the real track output
+        // CABI-25: XNA's own gate (SoundEffectInstance.cs:376-383). Before the packet is
+        // submitted the instance may still be aimed in 3D; once it is playing, an instance that
+        // was put in pan mode refuses Apply3D rather than silently switching.
+        if (!packetSubmitted_)
+        {
+            is3D_ = true; // CP-20: latches setPanProperty() out of writing the real track output
+        }
+        if (!is3D_)
+        {
+            throw System::InvalidOperationException(
+                "Apply3D cannot be called on a playing instance that is not using 3D audio.");
+        }
 
         // The mixer does not support full 3D spatial audio (HRTF, orientation/cone). Pan and
         // distance attenuation are simplified linear approximations; Doppler pitch shift
@@ -1183,13 +1202,18 @@ namespace Microsoft::Xna::Framework::Audio
         }
         Pan_ = pan;
 
-        // CP-20: once Apply3D has run at least once, its own pan approximation is what should
-        // keep governing the real track output -- matches FNA's `if (is3D) return;` in Pan's
-        // setter (SoundEffectInstance.cs). The property itself still always reports what was
-        // last set, above.
+        // CABI-25: XNA's mirror of the Apply3D gate (SoundEffectInstance.cs:130-138). Before the
+        // packet is submitted, setting Pan takes the instance back out of 3D; once it is playing,
+        // a 3D instance refuses Pan rather than silently ignoring it, which is what FNA -- and CNA
+        // until now -- did.
+        if (!packetSubmitted_)
+        {
+            is3D_ = false;
+        }
         if (is3D_)
         {
-            return;
+            throw System::InvalidOperationException(
+                "Pan cannot be set on a playing instance that is using 3D audio.");
         }
 
         // AUDIO-001: routed through the same shared composition routine Play()/Apply3D()/the

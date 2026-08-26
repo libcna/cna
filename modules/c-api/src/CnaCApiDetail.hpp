@@ -181,6 +181,8 @@ enum class ObjectKind : uint32_t {
     // plans/plan_cabi.md CABI-13. Distinct from GraphicsDevice, which is the game's own
     // device borrowed for a callback: this one the caller created and must destroy.
     OwnedGraphicsDevice = 123,
+    /// plans/plan_cabi.md CABI-24: one render-target ContentLost subscription.
+    RenderTargetEventRegistration = 124,
     Test = UINT32_MAX
 };
 
