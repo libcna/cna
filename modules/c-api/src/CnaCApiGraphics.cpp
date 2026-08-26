@@ -122,7 +122,13 @@ struct ResolvedSpriteCommand final {
             *outMode = SpriteSortMode::FrontToBack;
             return true;
         default:
-            return false;
+            // XNA's Begin stores an unnamed sort enum rather than validating it, and its flush
+            // path reaches every comparison by equality, so the value sorts like Deferred and is
+            // still readable back. Refusing it here made a C caller unable to reproduce that,
+            // which downstream measured as a behavioural divergence rather than a safety check.
+            // SpriteSortMode fixes its underlying type for exactly this cast.
+            *outMode = static_cast<SpriteSortMode>(static_cast<int32_t>(mode));
+            return true;
     }
 }
 

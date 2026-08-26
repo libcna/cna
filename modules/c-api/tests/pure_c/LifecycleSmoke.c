@@ -210,7 +210,21 @@ static CNA_Result on_load(
     CNA_SpriteBatchBeginInfo sort_probe = {
         sizeof(CNA_SpriteBatchBeginInfo), UINT32_C(1), UINT32_MAX, 0U
     };
-    if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_INVALID_ARGUMENT) {
+    /*
+     * An unnamed sort enum is accepted, not refused. XNA's Begin stores whatever it is handed and
+     * its flush path only ever compares for equality against the named members, so the batch runs
+     * as Deferred with no sort applied. This assertion used to require CNA_RESULT_INVALID_ARGUMENT,
+     * which encoded a C-boundary check CNA had and XNA does not -- the batch has to begin and end
+     * normally, or a caller cannot reproduce XNA's behaviour through this ABI at all.
+     */
+    if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /* A second unnamed value, to keep this from passing on one accidentally-handled constant. */
+    sort_probe.sort_mode = UINT32_C(99);
+    if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;
     }
     for (size_t index = 0U; index < sizeof(sort_modes) / sizeof(sort_modes[0]); ++index) {
