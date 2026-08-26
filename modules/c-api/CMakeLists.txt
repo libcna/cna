@@ -154,6 +154,33 @@ if(EMSCRIPTEN)
         "SHELL:-sEXPORTED_FUNCTIONS=@${CNA_C_API_WASM_EXPORTS}"
     )
 
+    # CABI-37: the browser probe is a hand-written page, not one Emscripten emits, so nothing put
+    # it beside the module it imports. It was being copied by hand, which is exactly the kind of
+    # step that works once and is gone at the next clean build -- external review caught it. The
+    # copy is now part of building the module.
+    add_custom_command(TARGET cna_c_api_wasm POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/wasm/browser_probe.html"
+                "$<TARGET_FILE_DIR:cna_c_api_wasm>/browser_probe.html"
+        COMMENT "Staging the C ABI browser probe beside the wasm module"
+        VERBATIM)
+
+    # CABI-39: NODE_JS_EXECUTABLE was read here and set nowhere, so this guard was always false and
+    # neither wasm test was ever registered -- they were only ever run by hand. Emscripten already
+    # knows where node is; fall back to whatever is on PATH so a non-emsdk toolchain still works.
+    if(NOT NODE_JS_EXECUTABLE)
+        if(DEFINED NODE_JS_EXECUTABLE_FOR_EMSCRIPTEN)
+            set(NODE_JS_EXECUTABLE "${NODE_JS_EXECUTABLE_FOR_EMSCRIPTEN}")
+        elseif(DEFINED ENV{EMSDK_NODE})
+            set(NODE_JS_EXECUTABLE "$ENV{EMSDK_NODE}")
+        else()
+            find_program(NODE_JS_EXECUTABLE NAMES node nodejs)
+        endif()
+    endif()
+    if(NOT NODE_JS_EXECUTABLE AND CNA_BUILD_TESTS)
+        message(STATUS "cna_c_api: no node found, so the wasm module and browser tests are skipped")
+    endif()
+
     # The structural checks -- an ESM factory, one wrapper per generated name -- only prove the
     # link was configured. This instantiates the module and calls into it, which is the first
     # thing a consumer actually depends on.
@@ -163,6 +190,46 @@ if(EMSCRIPTEN)
                     "${CMAKE_CURRENT_SOURCE_DIR}/wasm/module_smoke.mjs"
                     "$<TARGET_FILE_DIR:cna_c_api_wasm>/cna_c_api.mjs"
                     "${CNA_C_API_WASM_EXPORTS}")
+
+        # And the same artifact in a real browser, which is what fixcnats.md Phase 7 actually asks
+        # for: node compiles the module itself, a browser fetches it over HTTP and runs it through
+        # its own WebAssembly pipeline. Registered only where Playwright resolves, since a browser
+        # is an environment fact rather than a build one -- and reported as a skipped test rather
+        # than silently absent, so a machine that cannot run it says so.
+        # Playwright is usually a global install, which a bare `require` from an arbitrary working
+        # directory will not find, so the global module root is resolved once here and handed to
+        # both the availability check and the test itself.
+        execute_process(
+            COMMAND "${NODE_JS_EXECUTABLE}" -e "console.log(require('node:child_process').execSync('npm root -g').toString().trim())"
+            OUTPUT_VARIABLE _cna_node_global_modules
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET)
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E env "NODE_PATH=${_cna_node_global_modules}"
+                    "${NODE_JS_EXECUTABLE}" -e "require(require('node:path').join(process.env.NODE_PATH,'playwright'))"
+            RESULT_VARIABLE _cna_playwright_missing
+            OUTPUT_QUIET ERROR_QUIET)
+        find_program(CNA_BROWSER_FOR_WASM_PROBE
+            NAMES google-chrome google-chrome-stable chromium chromium-browser)
+        if(_cna_playwright_missing EQUAL 0)
+            set(_cna_probe_env "NODE_PATH=${_cna_node_global_modules}")
+            if(CNA_BROWSER_FOR_WASM_PROBE)
+                list(APPEND _cna_probe_env "PLAYWRIGHT_CHROMIUM=${CNA_BROWSER_FOR_WASM_PROBE}")
+            endif()
+            add_test(NAME CApi_WasmBrowserProbe
+                COMMAND ${CMAKE_COMMAND} -E env ${_cna_probe_env}
+                        "${NODE_JS_EXECUTABLE}"
+                        "${PROJECT_SOURCE_DIR}/scripts/run_pixijs_browser_tests.mjs"
+                        "$<TARGET_FILE_DIR:cna_c_api_wasm>"
+                        "browser_probe.html")
+            set_tests_properties(CApi_WasmBrowserProbe PROPERTIES TIMEOUT 300)
+        else()
+            add_test(NAME CApi_WasmBrowserProbe
+                COMMAND ${CMAKE_COMMAND} -E echo
+                        "SKIPPED: Playwright is not resolvable from this node, so the browser probe cannot run here.")
+            set_tests_properties(CApi_WasmBrowserProbe PROPERTIES
+                PASS_REGULAR_EXPRESSION "SKIPPED")
+        endif()
     endif()
 endif()
 
