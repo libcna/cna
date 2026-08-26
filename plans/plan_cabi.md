@@ -1040,7 +1040,7 @@ runs, which is the signature of the parallel-isolation flake this suite has had 
 in the test, which cleared colour but not depth and so drew against an undefined depth buffer. The
 C API and ABI suite is **96 / 96**.
 
-### The one work-order item still genuinely unsatisfied: non-finite sprite values
+### Non-finite sprite values -- the last work-order item, now satisfied
 
 `fixcnacs.md` Phase 5 asks for XNA's behaviour on NaN and Infinity, and says to preserve only those
 CNA-specific checks that are **not** observably inconsistent with XNA. CNA's finiteness refusal is
@@ -1065,8 +1065,24 @@ taken unilaterally, with the evidence above. [[CABI-7b]] already closed the one 
 a live defect rather than a policy: `DrawString` never validated `layerDepth` at all, so a NaN there
 reached exactly the undefined behaviour described above.
 
-    SPRITEBATCH_NAN_STATUS      = DELIBERATE_DEVIATION_PENDING_OWNER_DECISION
-    SPRITEBATCH_INFINITY_STATUS = DELIBERATE_DEVIATION_PENDING_OWNER_DECISION
+The owner chose to match XNA, and [[CABI-38]] did. The sort was made a total order first --
+`CompareOrdered`, the order .NET's `float.CompareTo` defines -- because that, not the validation,
+was what the refusals were really standing in for. All 13 `ValidateFinite` calls and the four
+C-boundary guards on XNA-shaped routes are gone; `cna_sprite_batch_draw_mesh_ext` keeps its own,
+having no XNA counterpart.
+
+Two things worth keeping from doing it:
+
+- **`DrawString` had to stop building an integer `Rectangle`.** It rounded each glyph destination to
+  an `intcs`, which cannot carry NaN. It now calls the float `pushSprite` overload `Draw` already
+  used, still rounding finite components -- `CApi_LifecycleSmoke`'s pixel readback is the check that
+  no glyph moved.
+- **`float::max()` as a scale is no longer refused.** It is finite, but a 16-pixel source multiplies
+  it to infinity, so it is carried through. An existing test asserted the refusal; XNA's answer is
+  the new one.
+
+    SPRITEBATCH_NAN_STATUS      = MATCHES_XNA
+    SPRITEBATCH_INFINITY_STATUS = MATCHES_XNA
 
 ### CNA.NET actually run, against both ABI labels
 
@@ -1137,9 +1153,10 @@ re-recorded.
 | CABI-28 render-target ContentLost is cleared again | **D** | the flag was set and never cleared, so it reported "lost" forever |
 | CABI-31 video frame generation never restarts | **D** | `Play`/`Stop` reset it, giving every playback's first frame the same value |
 | CABI-32 the `apply_3d` routes document the gate | none | the refusal already existed; the headers did not say so |
+| CABI-38 non-finite sprite values accepted | **D** | values this ABI refused now succeed |
 | CABI-29/CABI-30/CABI-33/CABI-34 | none | build, baseline, registration and test coverage |
 
-`CNA_ABI_VERSION` moved 0.8.0 -> **0.9.0**. **Six** rows are class D, not the two an earlier
+`CNA_ABI_VERSION` moved 0.8.0 -> **0.9.0**. **Seven** rows are class D, not the two an earlier
 revision of this table listed: it was written before CABI-25 through CABI-31 landed and was never
 extended, and CABI-6 was missing from it even then. External review caught the omission in the
 public history; it was the same omission here.
