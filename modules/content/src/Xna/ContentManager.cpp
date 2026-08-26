@@ -5295,6 +5295,12 @@ namespace Microsoft::Xna::Framework::Content
             std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
+
+        // plans/plan_cnb.md CNBF-080: the .cnb loader table is process-wide rather than per-manager
+        // (a .cnb dispatches on the file's own asset type identifier, not on a reader this
+        // instance holds), so registration is idempotent and every constructor may safely repeat
+        // it.
+        CNA::Content::CnbLoaderRegistry::RegisterBuiltIns();
     }
 
 } // namespace Microsoft::Xna::Framework::Content

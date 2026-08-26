@@ -15,6 +15,8 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
@@ -281,6 +283,58 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
+         * @brief Factory signature for a game-registered `.cnb` loader
+         *        (see RegisterCnbLoaderEXT()).
+         *
+         * Receives the already-validated `.cnb` container and the owning ContentManager (for
+         * resolving the file's external references through the normal cache), and returns a
+         * constructed T.
+         */
+        template <typename T>
+        CNAEXT using CnbLoaderFn =
+            std::function<T(const CNA::Content::Cnb::CnbDocument& document, ContentManager& cm)>;
+
+        /**
+         * @brief CNAEXT: registers a loader for a game-defined `.cnb` asset type
+         *        (plans/plan_cnb.md `CNBF-082`).
+         *
+         * CNB's extension model is deliberately much smaller than XNB's: a `.cnb` header carries
+         * one `u32` asset type identifier, and this call says which C++ type that identifier
+         * decodes to. Mint the identifier once with
+         * `CNA::Content::Cnb::CnbAssetTypeIdFromName("MyGame.Level")` and use the same value in
+         * the tool that writes the file.
+         *
+         * Registration is process-wide (it outlives this ContentManager) and shared with every
+         * other ContentManager, matching `ContentTypeReaderManager`'s behaviour for `.xnb`.
+         *
+         * @tparam T            The asset type @p factory produces; must be exactly the `T` later
+         *                      passed to `Load<T>()`.
+         * @param assetTypeId   The identifier written into the `.cnb` header. Must not be 0.
+         * @param debugTypeName Human-readable type name, used in diagnostics and to detect an
+         *                      identifier collision between two custom type names.
+         * @param factory       Decodes the container into a T. Must not be empty.
+         * @throws std::invalid_argument if @p assetTypeId, @p debugTypeName or @p factory is
+         *         invalid.
+         * @throws std::logic_error if @p assetTypeId is already registered under a different name.
+         */
+        template <typename T>
+        CNAEXT static void RegisterCnbLoaderEXT(std::uint32_t assetTypeId,
+                                                 const std::string& debugTypeName,
+                                                 CnbLoaderFn<T> factory)
+        {
+            if (!factory)
+            {
+                throw std::invalid_argument(
+                    "ContentManager::RegisterCnbLoaderEXT<T>(): factory must not be empty.");
+            }
+            CNA::Content::CnbLoaderRegistry::Register(
+                assetTypeId, debugTypeName,
+                [factory](const CNA::Content::Cnb::CnbDocument& document, ContentManager& cm,
+                          const std::string&) -> std::any
+                { return std::any(factory(document, cm)); });
+        }
+
+        /**
          * @brief Loads an asset of type T from the content root.
          *
          * Results are cached — subsequent calls with the same asset name return the
@@ -328,6 +382,38 @@ namespace Microsoft::Xna::Framework::Content
                 T result = LoadXnbAsset<T>(xnbCandidate, assetName);
                 loadedAssets_[cacheKey] = result;
                 return result;
+            }
+
+            // .cnb ranks immediately below .xnb and above everything CNA can compile FROM
+            // (plans/plan_cnb.md CNBF-081, decision D8): a `.cnb` is CNA's own compiled artifact, so
+            // it must win over the loose `.cnj`/native sources it was produced from, while still
+            // yielding to a genuine externally-produced `.xnb`. Like the `.xnb` tier above it,
+            // this sits ahead of the per-T reader lookup, because a `.cnb` is self-describing --
+            // the file's own asset type identifier selects the loader through the process-wide
+            // CNA::Content::CnbLoaderRegistry, with no reader registered on this ContentManager
+            // at all.
+            const std::string cnbCandidate =
+                ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
+            if (std::filesystem::exists(cnbCandidate))
+            {
+                T result = LoadCnbAsset<T>(cnbCandidate, assetName);
+                loadedAssets_[cacheKey] = result;
+                return result;
+            }
+
+            // A caller that passes a full "Foo.cnb" name is handled too, which the .xnb tier does
+            // not do for ".xnb" -- the check costs a string comparison, not a stat call, because
+            // it only runs when the name actually ends that way.
+            if (assetName.size() > 4 &&
+                assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
+            {
+                const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
+                if (std::filesystem::exists(literalCnb))
+                {
+                    T result = LoadCnbAsset<T>(literalCnb, assetName);
+                    loadedAssets_[cacheKey] = result;
+                    return result;
+                }
             }
 
             auto readerIt = typeReaders_.find(std::type_index(typeid(T)));
@@ -403,6 +489,58 @@ namespace Microsoft::Xna::Framework::Content
                     envelope.type + "'.");
             }
         };
+
+        /**
+         * @brief Loads @p assetName from the compiled `.cnb` file at @p cnbPath
+         *        (plans/plan_cnb.md `CNBF-081`).
+         *
+         * The container is parsed and fully validated first (`CnbDocument::Parse` enforces every
+         * structural invariant in `plans/plan_cnb.md` §4), then the loader registered for the file's
+         * own asset type identifier produces the object.
+         *
+         * @tparam T       Requested asset type; must match exactly what the registered loader
+         *                 produces.
+         * @param cnbPath   Full filesystem path to the `.cnb` file.
+         * @param assetName Logical asset name, passed to the loader for diagnostics.
+         * @return The decoded asset.
+         * @throws ContentLoadException if the file is malformed, holds an asset type this build
+         *         has no loader for, or holds a different type than @p T.
+         */
+        template <typename T>
+        [[nodiscard]] T LoadCnbAsset(const std::string& cnbPath, const std::string& assetName)
+        {
+            const CNA::Content::Cnb::CnbDocument document =
+                CNA::Content::Cnb::CnbDocument::ParseFile(cnbPath);
+
+            const auto* loader = CNA::Content::CnbLoaderRegistry::Find(document.AssetTypeId());
+            if (loader == nullptr)
+            {
+                throw ContentLoadException(
+                    "'" + cnbPath + "' holds a " +
+                    CNA::Content::Cnb::AssetTypeIdToString(document.AssetTypeId()) +
+                    " asset, which this build of CNA has no .cnb loader for" +
+                    (document.Metadata().present && !document.Metadata().assetTypeName.empty()
+                         ? " (the file names it '" + document.Metadata().assetTypeName + "')."
+                         : "."));
+            }
+
+            std::any produced = (*loader)(document, *this, assetName);
+            try
+            {
+                return std::any_cast<T>(std::move(produced));
+            }
+            catch (const std::bad_any_cast&)
+            {
+                // The registry is keyed by the file's own asset type, so this means the caller
+                // asked for a different C++ type than that asset produces. Saying so beats
+                // letting std::bad_any_cast -- an unrelated, undocumented exception type --
+                // escape the content subsystem.
+                throw ContentLoadException(
+                    "'" + cnbPath + "' holds a " +
+                    CNA::Content::Cnb::AssetTypeIdToString(document.AssetTypeId()) +
+                    " asset, which is not the type requested for '" + assetName + "'.");
+            }
+        }
 
         /**
          * @brief Loads @p assetName as a real `.xnb` binary asset from @p xnbPath
