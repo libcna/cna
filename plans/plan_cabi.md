@@ -30,7 +30,8 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
 | CABI-13 | Owned GraphicsDevice bound into the C ABI | fixcnats P5 | DONE |
 | CABI-11 | Reproducible artifacts + provenance manifest | fixcnats P6 | DONE (measured reproducible) |
-| CABI-12 | Emscripten C-ABI artifact | fixcnats P7 | COMPILES; link needs a shape change |
+| CABI-12 | Emscripten C-ABI artifact | fixcnats P7 | superseded by CABI-14 |
+| CABI-14 | Wasm ESM artifact | fixcnats P7 | DONE (built and executed) |
 
 ## CABI-1 — Baseline (DONE)
 
@@ -589,3 +590,50 @@ no regression.
 `cna_graphics_device_create` takes an adapter index and a profile but no way to ask which adapters
 suit an owned device; the existing `cna_graphics_adapter_*` queries are global and answer that
 adequately for now.
+
+## CABI-14 — The wasm ESM artifact (DONE)
+
+[[CABI-12]] got the C ABI compiling for wasm32 and stopped at the link, on a structural problem:
+`cna_c_api` is `SHARED`, which under Emscripten means a PIC *side module*, and the vendored SDL3
+is non-PIC. This is the shape change that fixes it, and the artifact now exists and runs.
+
+### Changes
+
+- **`cna_c_api` is `STATIC` under Emscripten**, `SHARED` everywhere else. A side module is not what
+  a wasm consumer wants anyway.
+- **`cna_c_api_wasm`** links it into `cna_c_api.mjs` + `cna_c_api.wasm` with `--no-entry`,
+  `-sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCnaCApi`, growable memory and the heap views
+  and helpers a binding needs.
+- **The export list is generated, not written.** `tools/c-api/generate_wasm_exports.py` reads the
+  public headers with the same parser `check_declared_exports.py` uses. This is not tidiness: the
+  ELF build declares its surface with a *pattern* (`cna_*` public, everything else local), and
+  wasm-ld has no counterpart — a name missing from `-sEXPORTED_FUNCTIONS` is simply absent from
+  the module, with no build-time diagnostic. Generating it means a route reaches the wasm module
+  for the same reason it reaches the shared library: because it was declared.
+- `install(TARGETS)`/`install(EXPORT)` are skipped under Emscripten. A static library makes
+  `install(EXPORT)` demand every link dependency join the export set, and a wasm build ships a
+  module, not a `find_package` package.
+- `wasm/module_entry.c` gives the link a root and declares nothing of its own — a route added
+  there would be invisible to a generator that reads headers, and the version query a consumer
+  needs first is already public as `cna_get_abi_version()`.
+
+### Verified
+
+| Check | Result |
+| --- | --- |
+| Artifact | `cna_c_api.mjs` 645 KB, `cna_c_api.wasm` 31.7 MB |
+| ES module factory | `export default createCnaCApi;` |
+| Export coverage | **2871 of 2871** generated names present as `_cna_*` wrappers |
+| Module instantiates and answers | `cna_get_abi_version() -> 0.8.0` |
+| A call with an out-parameter reaches C | `cna_platform_get_current_name_size_ext() -> result=0 bytes=3` |
+
+`CApi_WasmModuleSmoke` runs the last two under emsdk's Node, so the module cannot regress to
+"links but does not instantiate".
+
+The native build is unchanged: still `SHARED`, 84 C-API tests, 79 passing on Xvfb `:101`.
+
+### Status
+
+`BUILT` and callable. Not yet `PLATFORM_QUALIFIED`: the smoke test runs under Node, and nothing
+here has driven the module from a browser with a canvas, which is what a renderer needs. The
+existing `cna_demo_2d`/`cna_house3d_demo` Emscripten demos are the precedent for that step.

@@ -10,7 +10,17 @@ function(cna_c_api_enable_strict_warnings target)
     endif()
 endfunction()
 
-add_library(cna_c_api SHARED
+# plans/plan_cabi.md CABI-14: SHARED under Emscripten means a PIC *side module*, which is neither
+# what a wasm consumer wants nor linkable here -- the vendored SDL3 is built non-PIC, so wasm-ld
+# refuses its relocations outright. A wasm consumer wants an ESM factory plus a .wasm, which is a
+# static library linked into a module target (cna_c_api_wasm, below).
+if(EMSCRIPTEN)
+    set(CNA_C_API_LIBRARY_KIND STATIC)
+else()
+    set(CNA_C_API_LIBRARY_KIND SHARED)
+endif()
+
+add_library(cna_c_api ${CNA_C_API_LIBRARY_KIND}
     src/CnaCApi.cpp
     src/CnaCApiAudio.cpp
     src/CnaCApiXact.cpp
@@ -95,6 +105,58 @@ if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     )
 endif()
 
+# ---- Wasm module (plans/plan_cabi.md CABI-14) --------------------------------------------
+# The consumable artifact for a browser: an ES module factory plus a .wasm, exporting the same
+# routes the ELF build publishes through its version script. The export list is generated from the
+# headers rather than maintained beside them -- a name missing from -sEXPORTED_FUNCTIONS is simply
+# absent from the module, with no build-time diagnostic, so the list must not be hand-written.
+if(EMSCRIPTEN)
+    set(CNA_C_API_WASM_EXPORTS "${CMAKE_CURRENT_BINARY_DIR}/cna_c_api_wasm_exports.json")
+    add_custom_command(
+        OUTPUT "${CNA_C_API_WASM_EXPORTS}"
+        COMMAND ${CMAKE_COMMAND} -E env python3
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_wasm_exports.py"
+                --headers "${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C"
+                --output "${CNA_C_API_WASM_EXPORTS}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_wasm_exports.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/check_declared_exports.py"
+        COMMENT "Generating the wasm export list from the public C headers"
+        VERBATIM
+    )
+    add_custom_target(cna_c_api_wasm_exports DEPENDS "${CNA_C_API_WASM_EXPORTS}")
+
+    # --no-entry: this is a library, not a program. MODULARIZE/EXPORT_ES6 give cna-ts a factory it
+    # can import rather than a script that installs a global.
+    add_executable(cna_c_api_wasm wasm/module_entry.c)
+    add_dependencies(cna_c_api_wasm cna_c_api_wasm_exports)
+    target_link_libraries(cna_c_api_wasm PRIVATE cna_c_api)
+    set_target_properties(cna_c_api_wasm PROPERTIES
+        OUTPUT_NAME "cna_c_api"
+        SUFFIX ".mjs"
+    )
+    target_link_options(cna_c_api_wasm PRIVATE
+        "--no-entry"
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sEXPORT_NAME=createCnaCApi"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sSTACK_SIZE=1048576"
+        "-sFORCE_FILESYSTEM=1"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAP8','HEAP16','HEAPU16','HEAP32','HEAPU32','HEAPF32','HEAPF64','getValue','setValue']"
+        "SHELL:-sEXPORTED_FUNCTIONS=@${CNA_C_API_WASM_EXPORTS}"
+    )
+
+    # The structural checks -- an ESM factory, one wrapper per generated name -- only prove the
+    # link was configured. This instantiates the module and calls into it, which is the first
+    # thing a consumer actually depends on.
+    if(CNA_BUILD_TESTS AND NODE_JS_EXECUTABLE)
+        add_test(NAME CApi_WasmModuleSmoke
+            COMMAND "${NODE_JS_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/wasm/module_smoke.mjs"
+                    "$<TARGET_FILE_DIR:cna_c_api_wasm>/cna_c_api.mjs")
+    endif()
+endif()
+
 target_compile_definitions(cna_c_api PRIVATE CNA_C_API_BUILD)
 # CBIND-052A: the adapter library gets the same strict warnings every one of its tests already
 # had. It did not before, which is how three renderers reached CNA::GraphicsRendererType with no
@@ -173,13 +235,15 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
         COMPONENT CNACApi)
 endif()
 
-install(TARGETS cna_c_api
-    EXPORT CNACTargets
-    COMPONENT CNACApi
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+if(NOT EMSCRIPTEN)
+    install(TARGETS cna_c_api
+        EXPORT CNACTargets
+        COMPONENT CNACApi
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 install(DIRECTORY include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     COMPONENT CNACApi
@@ -221,12 +285,18 @@ if(WIN32 AND NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install
         FILES_MATCHING PATTERN "SDL3*.dll"
     )
 endif()
-install(EXPORT CNACTargets
-    FILE CNACTargets.cmake
-    NAMESPACE CNA::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
-    COMPONENT CNACApi
-)
+# CABI-14: a wasm build ships an ESM factory plus a .wasm, not an installable CMake
+# package, and cna_c_api is STATIC there -- which makes install(EXPORT) demand every
+# link dependency join the export set. Skip the package on that target rather than
+# widening the export set for consumers that will never call find_package.
+if(NOT EMSCRIPTEN)
+    install(EXPORT CNACTargets
+        FILE CNACTargets.cmake
+        NAMESPACE CNA::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
+        COMPONENT CNACApi
+    )
+endif()
 
 # CBIND-041: the targets file alone is not a package. Without a CNAConfig.cmake beside it,
 # find_package(CNA CONFIG) finds nothing and every documented consumption instruction would have
