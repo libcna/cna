@@ -29,6 +29,18 @@ TEST(QuaternionTest, IdentityHasUnitLength)
 
 // --- Construction ---
 
+// C# zeroes a struct's fields for its parameterless constructor, so an undeclared XNA
+// Quaternion field starts at all zeros; Vector3 and Matrix already match that here.
+// SAMPLE-035's SampleArcBallCamera holds exactly such a field.
+TEST(QuaternionTest, DefaultConstructorZeroesEveryComponent)
+{
+    Quaternion q;
+    EXPECT_FLOAT_EQ(q.X, 0.0f);
+    EXPECT_FLOAT_EQ(q.Y, 0.0f);
+    EXPECT_FLOAT_EQ(q.Z, 0.0f);
+    EXPECT_FLOAT_EQ(q.W, 0.0f);
+}
+
 TEST(QuaternionTest, FourComponentConstructor)
 {
     Quaternion q(1.0f, 2.0f, 3.0f, 4.0f);

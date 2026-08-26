@@ -945,6 +945,28 @@ namespace Microsoft::Xna::Framework
         friend Matrix operator*(Matrix matrix, float scaleFactor);
 
         /**
+         * @brief Multiplies this matrix by another in place.
+         *
+         * C# derives `m *= other` from its `operator*` automatically; C++ does not, so the
+         * compound form has to be declared for XNA game code to transcribe as written. It is
+         * CNAEXT for that reason -- the operation is XNA's, the spelling is C++'s.
+         *
+         * @param matrix The right-hand matrix.
+         * @return Reference to this matrix after multiplication.
+         */
+        CNAEXT Matrix& operator*=(const Matrix& matrix);
+
+        /**
+         * @brief Multiplies all elements of this matrix by a scalar in place.
+         *
+         * The scalar counterpart of the matrix `*=`; see its note for why this is CNAEXT.
+         *
+         * @param scaleFactor Scalar multiplier.
+         * @return Reference to this matrix after scaling.
+         */
+        CNAEXT Matrix& operator*=(float scaleFactor);
+
+        /**
          * @brief Subtracts one matrix from another component-wise.
          *
          * @param matrix1 Left-hand matrix.

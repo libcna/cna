@@ -423,6 +423,32 @@ and a shader on that scale has to be authored around it.
 
 Found on `NormalMappingSample_4_0` (`plans/plan_fx.md` FX-121).
 
+### 10.4 Vertex colour output clamping on the GL ES profiles
+
+Direct3D 9 clamps a vertex shader's colour output registers (`oD0`, `oD1`) to [0,1] **before**
+the rasterizer interpolates them. A shader that computes a lighting sum can and often does
+exceed 1 at a vertex, and D3D9 therefore interpolates from the clamped value, not the raw one.
+
+MojoShader's desktop GLSL path inherits that behavior without asking: it writes `gl_FrontColor`,
+which GL clamps by default. The GLSL ES profiles have no `gl_FrontColor` and fall through to a
+plain varying, which nothing clamps — so the raw value is interpolated and saturated per
+fragment instead. The two are not the same picture:
+
+```text
+vertex colours 1.24 and 0.40, interpolated across a triangle
+
+  D3D9   clamp first:  1.00 ......... 0.40    a slope the whole way
+  GL ES  clamp last:   1.00 == 1.00 . 0.40    flat, then a steeper slope
+```
+
+On a low-poly mesh that flat region is large and obvious. CNA restores the clamp
+(`cmake/patches/mojoshader-6333f74-vertex-color-clamp.patch`) at the end of the generated
+`main()`, for the ES profiles only; the desktop profiles are left alone because GL already does
+it there.
+
+Found on `PerPixelLightingSample_4_0` (`plans/plan_fx.md` FX-122). The tell was that red and
+green matched the original exactly and only blue differed, and only where blue would exceed 1.
+
 ## 11. Error guide
 
 | Symptom | Exception | Cause |

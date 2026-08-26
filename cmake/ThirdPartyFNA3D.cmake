@@ -45,7 +45,8 @@ function(cna_configure_mojoshader)
 
     set(_cna_fna3d_mojoshader_patch
         "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-effect-parser-robustness.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-fragment-precision.patch")
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-fragment-precision.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/mojoshader-6333f74-vertex-color-clamp.patch")
     set(_cna_fna3d_mojoshader_patch_script
         "${CMAKE_CURRENT_LIST_DIR}/patches/apply-fna3d-mojoshader-patch.cmake")
 

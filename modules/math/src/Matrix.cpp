@@ -1235,6 +1235,19 @@ namespace Microsoft::Xna::Framework
     bool operator!=(Matrix matrix1, Matrix matrix2) { return !matrix1.Equals(matrix2); }
     Matrix operator*(Matrix matrix1, Matrix matrix2) { return Matrix::Multiply(matrix1, matrix2); }
     Matrix operator*(Matrix matrix, float scaleFactor) { return Matrix::Multiply(matrix, scaleFactor); }
+
+    Matrix& Matrix::operator*=(const Matrix& matrix)
+    {
+        *this = Matrix::Multiply(*this, matrix);
+        return *this;
+    }
+
+    Matrix& Matrix::operator*=(float scaleFactor)
+    {
+        *this = Matrix::Multiply(*this, scaleFactor);
+        return *this;
+    }
+
     Matrix operator-(Matrix matrix1, Matrix matrix2) { return Matrix::Subtract(matrix1, matrix2); }
     Matrix operator-(Matrix matrix) { return Matrix::Negate(matrix); }
 
