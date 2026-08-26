@@ -231,7 +231,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         // CABI-15: see VertexBuffer::UploadValidatedData -- one clear on the write path.
         if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this)) {
-            static_cast<DynamicIndexBuffer*>(losable)->ClearContentLostEXT();
+            losable->ClearContentLostEXT();
         }
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("IndexBuffer");

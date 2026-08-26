@@ -3951,6 +3951,19 @@ namespace Microsoft::Xna::Framework::Graphics
             renderer_->SetRenderTargets(
                 descriptors.data(), static_cast<int>(descriptors.size()));
 
+        // CABI-28: bound for writing, so the content is no longer lost. Deliberately after the
+        // renderer call above rather than beside the per-binding validation: a binding that throws
+        // (unsupported target, mismatched dimensions, duplicate subresource) must leave the flag
+        // exactly as it found it, and every path -- 2D, cube face, MRT -- funnels through here.
+        for (IRenderTarget* const target : publicTargets)
+        {
+            if (auto* const losable =
+                    dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(target))
+            {
+                losable->ClearContentLostEXT();
+            }
+        }
+
         currentRenderTargets_ = renderTargets;
         renderTargetBound_ = true;
         IRenderTarget* first = publicTargets[0];

@@ -67,7 +67,6 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the render target usage mode. */
         [[nodiscard]] RenderTargetUsage getRenderTargetUsageProperty() const override;
 
-        /** @brief Returns false; content is never lost in CNA. */
         /**
          * @brief Whether this render target's contents were lost to a device reset.
          *
@@ -76,6 +75,7 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
 
+        /** @brief Marks the content lost and raises ContentLost. */
         CNAEXT void NotifyContentLostEXT() override
         {
             contentLost_ = true;
@@ -83,9 +83,14 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /** @brief Clears the lost flag once the content has been written again. */
-        CNAEXT void ClearContentLostEXT() noexcept { contentLost_ = false; }
+        CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
 
-        /** @brief Raised when the render target content is lost (never raised in CNA). */
+        /**
+         * @brief Raised when this render target's content is lost to a device reset.
+         *
+         * Raised for real on the renderers whose API can lose a device (DirectX9,
+         * Direct2D, Skia). Families that cannot lose one never raise it.
+         */
         System::EventHandler<System::EventArgs> ContentLost;
 
         /** @brief Returns the renderer cube render target handle (CNA extension). */

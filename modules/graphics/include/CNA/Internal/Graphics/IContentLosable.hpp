@@ -27,5 +27,15 @@ namespace CNA::Internal::Graphics
          * untruth with a louder one.
          */
         virtual void NotifyContentLostEXT() = 0;
+
+        /**
+         * @brief Clears the lost flag because the content has been written again.
+         *
+         * The other half of the contract, and the half that was missing: a flag that is set and
+         * never cleared reports "lost" forever, which is a different untruth from never raising it
+         * at all. Every implementer had this method already; declaring it here is what lets the
+         * write paths call it without knowing the concrete type.
+         */
+        virtual void ClearContentLostEXT() noexcept = 0;
     };
 }
