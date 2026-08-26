@@ -2,15 +2,23 @@
 //
 // plans/plan_cabi.md CABI-14: load the built module and call into it.
 //
-// The structural checks (an ESM factory, 2871 wrappers matching the generated list) only prove the
-// link was configured correctly. This proves the module instantiates and that a call reaches
-// compiled C and comes back with the right answer, which is the first thing cna-ts needs to trust.
+// Two things are checked here. That the module instantiates and a call reaches compiled C and comes
+// back with the right answer -- the first thing cna-ts needs to trust. And, since CABI-29, that the
+// module exports every route the current headers declare.
+//
+// The second check exists because its absence was a real defect: the export list is generated from
+// the headers, but the build rule that generated it did not depend on them, so declaring a route
+// left the built module silently short of it. -sEXPORTED_FUNCTIONS produces no diagnostic for a
+// name that is merely absent, so nothing failed -- the routes were simply not there. The build-rule
+// dependency is the fix; this is the gate that says so if it ever regresses.
 
 import { argv, exit } from 'node:process';
+import { readFileSync } from 'node:fs';
 
 const modulePath = argv[2];
+const exportsPath = argv[3];
 if (!modulePath) {
-    console.error('usage: module_smoke.mjs <path to cna_c_api.mjs>');
+    console.error('usage: module_smoke.mjs <path to cna_c_api.mjs> [path to exports json]');
     exit(2);
 }
 
@@ -45,6 +53,23 @@ try {
     }
 } finally {
     cna._free(out);
+}
+
+// Completeness: every generated name must actually be on the module.
+if (exportsPath) {
+    const declared = JSON.parse(readFileSync(exportsPath, 'utf8'));
+    const names = Array.isArray(declared) ? declared : declared.exports;
+    const missing = names.filter((name) => typeof cna[name] !== 'function');
+    console.log(`export completeness: ${names.length - missing.length}/${names.length} present`);
+    if (missing.length > 0) {
+        console.error(
+            `the module is missing ${missing.length} declared export(s); the generated list and ` +
+            'the linked module disagree. First few: ' + missing.slice(0, 10).join(', '));
+        exit(1);
+    }
+} else {
+    console.error('no exports json given, so export completeness was NOT checked');
+    exit(2);
 }
 
 console.log('wasm module smoke: OK');

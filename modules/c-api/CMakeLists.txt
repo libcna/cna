@@ -112,6 +112,13 @@ endif()
 # absent from the module, with no build-time diagnostic, so the list must not be hand-written.
 if(EMSCRIPTEN)
     set(CNA_C_API_WASM_EXPORTS "${CMAKE_CURRENT_BINARY_DIR}/cna_c_api_wasm_exports.json")
+    # CABI-29: the generator reads the headers, so the headers are inputs. Depending only on the
+    # two scripts made the list stale the moment a route was declared without a script edit: an
+    # incremental build happily relinked against the previous list and the new routes were simply
+    # absent from the module, which is exactly the silent failure the comment above warns about.
+    # CONFIGURE_DEPENDS so a brand-new header is picked up too, not just an edit to an existing one.
+    file(GLOB CNA_C_API_PUBLIC_HEADERS CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/*.h")
     add_custom_command(
         OUTPUT "${CNA_C_API_WASM_EXPORTS}"
         COMMAND ${CMAKE_COMMAND} -E env python3
@@ -120,6 +127,7 @@ if(EMSCRIPTEN)
                 --output "${CNA_C_API_WASM_EXPORTS}"
         DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_wasm_exports.py"
                 "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/check_declared_exports.py"
+                ${CNA_C_API_PUBLIC_HEADERS}
         COMMENT "Generating the wasm export list from the public C headers"
         VERBATIM
     )
@@ -153,7 +161,8 @@ if(EMSCRIPTEN)
         add_test(NAME CApi_WasmModuleSmoke
             COMMAND "${NODE_JS_EXECUTABLE}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/wasm/module_smoke.mjs"
-                    "$<TARGET_FILE_DIR:cna_c_api_wasm>/cna_c_api.mjs")
+                    "$<TARGET_FILE_DIR:cna_c_api_wasm>/cna_c_api.mjs"
+                    "${CNA_C_API_WASM_EXPORTS}")
     endif()
 endif()
 
@@ -501,8 +510,12 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_draw3d_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_draw3d_smoke)
     add_test(NAME CApi_Draw3DSmoke COMMAND cna_c_api_draw3d_smoke)
+    # This draws and reads pixels back, so it needs a driver that can give it a GL context. Under
+    # the dummy driver it had been failing at cna_game_create -- returning 1, "no window" -- which
+    # is a failure it can never get past on any machine, and which masks whatever the draw path
+    # actually does. Same convention as CApi_OwnedGraphicsDeviceSmoke below.
     set_tests_properties(CApi_Draw3DSmoke PROPERTIES
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
     )
 
     add_executable(cna_c_api_graphics_ext_smoke
@@ -1754,6 +1767,8 @@ if(CNA_BUILD_TESTS)
                 -DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
                 -DCNA_SANITIZE=${CNA_SANITIZE}
                 -DCNA_EXPECT_STATIC=$<BOOL:${CNA_C_API_BUILD_STATIC}>
+                -DCNA_CONSUMER_VIDEODRIVER=x11
+                -DCNA_CONSUMER_DISPLAY=${CNA_TEST_DISPLAY}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
         # It installs, configures, compiles and runs; it is by far the slowest test here, and the
         # steady-state cost is small because cmake --install rewrites nothing that has not changed.
