@@ -5577,6 +5577,47 @@ if (!ProfileIsEs2ApiGeneration())
         // by ApplyRasterizerState via RasterizerState.ScissorTestEnable.
     }
 
+#if defined(CNA_EASYGL_COMPILED_EFFECTS)
+    void EasyGLRenderer::SetCompiledEffectDepthRangeEXT(bool begin)
+    {
+        if (metagl::IsContextLost()) return;
+        if (begin)
+        {
+            const float midpoint =
+                0.5f * (viewportMinDepth_ + viewportMaxDepth_);
+            device.set_depth_range(midpoint, viewportMaxDepth_);
+        }
+        else
+        {
+            device.set_depth_range(viewportMinDepth_, viewportMaxDepth_);
+        }
+    }
+
+    namespace
+    {
+        // Scope guard so every early return and every throw out of a compiled-effect draw still
+        // restores the viewport's own depth range.
+        class CompiledEffectDepthRangeScope
+        {
+        public:
+            explicit CompiledEffectDepthRangeScope(EasyGLRenderer& renderer)
+                : renderer_(renderer)
+            {
+                renderer_.SetCompiledEffectDepthRangeEXT(true);
+            }
+            ~CompiledEffectDepthRangeScope()
+            {
+                renderer_.SetCompiledEffectDepthRangeEXT(false);
+            }
+            CompiledEffectDepthRangeScope(const CompiledEffectDepthRangeScope&) = delete;
+            CompiledEffectDepthRangeScope& operator=(const CompiledEffectDepthRangeScope&) = delete;
+
+        private:
+            EasyGLRenderer& renderer_;
+        };
+    }
+#endif
+
     void EasyGLRenderer::SetBlendFactor(float r, float g, float b, float a)
     {
         if (metagl::IsContextLost()) return;
@@ -5602,6 +5643,8 @@ if (!ProfileIsEs2ApiGeneration())
         }
         device.set_viewport(x, fbH - y - h, w, h);
         device.set_depth_range(minDepth, maxDepth);
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
     }
 
     void EasyGLRenderer::ApplySamplerState(int slot, int filter,
@@ -9905,6 +9948,7 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
+            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
             const int compiledVertexCount = VertexCountForPrimitives(primitive, primitiveCount);
@@ -9999,6 +10043,7 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
+            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
             compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);
@@ -10179,6 +10224,7 @@ else
             RequireCompiledEffectDeclarations(compiledStreams);
             ::easygl::VertexArray& compiledVao = EnsureCompiledEffectVaoEXT();
             compiledVao.bind();
+            const CompiledEffectDepthRangeScope compiledDepthRange(*this);
             BindCompiledEffectForDrawEXT(compiledStreams.data(), compiledStreams.size(),
                                          *params.compiledEffectRuntime);
             compiledIb.ibo.bind(::easygl::BufferTarget::ElementArray);

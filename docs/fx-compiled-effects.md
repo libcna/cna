@@ -330,6 +330,36 @@ instead of passing quietly. `RunCompiledEffectContract`'s own doc comment carrie
 list of the drawing sections a backend must run; this table is a description of what they mean, not
 a second copy of the list.
 
+### 10.1 Depth convention on EasyGL
+
+MojoShader ends every vertex shader it generates with Direct3D 9's clip-space depth
+conversion:
+
+```glsl
+gl_Position.z = gl_Position.z * 2.0 - gl_Position.w;
+```
+
+because OpenGL's clip volume is `z ∈ [-w, w]` where Direct3D's is `[0, w]`. **EasyGL's own
+stock shaders do not do this** -- they emit the XNA projection's Direct3D-style z unchanged,
+so all ordinary geometry occupies the upper half of the depth range.
+
+Left alone, the two encodings disagree: geometry from a compiled effect is depth-tested
+against everything else on a different scale, and wins where it should lose. EasyGL
+therefore narrows the GL depth range to `[(min+max)/2, max]` for the duration of a
+compiled-effect draw, which makes the two produce identical window-space depth:
+
+```text
+stock     d = min + (max-min)/2 + z·(max-min)/2
+compiled  d = min' + z·(max'-min')    with min' = (min+max)/2, max' = max
+```
+
+Found on `ColorReplacementSample_4_0`, where the car body -- a compiled effect -- swallowed
+the headlight lens and thin window edges that ordinary `BasicEffect` parts draw in front of
+it. `EasyGLCompiledEffectDrawTest.IsDepthTestedOnTheSameScaleAsStockGeometry` pins it.
+
+This is EasyGL-specific: `FNA3D` runs MojoShader's own OpenGL device end to end, and
+`SDL_GPU` and `VULKAN` have their own conventions.
+
 ## 11. Error guide
 
 | Symptom | Exception | Cause |
