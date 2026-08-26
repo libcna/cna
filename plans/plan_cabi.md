@@ -25,7 +25,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED |
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
 | CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | BLOCKED by a real crash |
-| CABI-8 | Resource-loss model: investigate, design or document | fixcnats P3 | OPEN |
+| CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE, implementation scoped |
 | CABI-9 | VideoPlayer frame identity/generation contract | fixcnats P4 | OPEN |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | OPEN |
 | CABI-11 | Reproducible qualified artifacts + provenance manifest | fixcnats P6 | OPEN |
@@ -187,3 +187,80 @@ Note the C++ layer is not the culprit by itself: `SpriteBatch::Begin`/`Draw` hol
 without dereferencing anything by them. The crash is downstream of the draw calls and outlives
 `End` and the resource destroys, which points at the renderer's vertex submission rather than at
 the front end.
+
+## CABI-8 — Resource loss (DESIGN COMPLETE)
+
+`fixcnats.md` Phase 3 asks whether CNA has a real loss model, and says explicitly that
+"DESIGN COMPLETE / IMPLEMENTATION BLOCKED" is an acceptable answer. Neither extreme is true here.
+
+### What exists
+
+- **A real device-level loss model.** `RendererDeviceEvent{Lost,Resetting,Reset}`
+  (`IGraphicsRenderer.hpp:2891`) is forwarded by `GraphicsDevice`'s `deviceEventCallback`
+  (`GraphicsDevice.cpp:3205-3222`) to the public `DeviceLost` / `DeviceResetting` / `DeviceReset`
+  events, and sets `deviceStatus_`. This is not a stub: the enum documents `D3DERR_DEVICELOST` and
+  "pool-default-equivalent resources" as its origin.
+- **Three renderer families actually raise it**: `directx9`, `direct2d`, `skia`. The other 44 never
+  call the callback, because their APIs cannot lose a device.
+- **A real per-resource recreate registry**, in exactly one renderer:
+  `OpenGL1ResourceRegistry` / `IOpenGL1Recoverable` (`OpenGL1ContextRecovery.hpp`) with
+  `NotifyContextLost()` / `NotifyContextRestored()` and `ReleaseGLHandleOnly()` /
+  `RecreateGLResource()`. Desktop GL has no real context loss, so it is driven by
+  `DebugSimulateContextLoss()`.
+- **Device-side resource tracking**: `GraphicsDevice::resources_`
+  (`std::vector<GraphicsResource*>`), already maintained, already counted by
+  `GetTrackedResourceCount()`.
+- **C ABI subscription surface**, already shipped for `cna_vertex_buffer_subscribe_content_lost`
+  and `cna_index_buffer_subscribe_content_lost`. Render targets expose `is_content_lost` in
+  `CNA_RenderTargetInfo` but have no subscribe route.
+
+### What does not exist
+
+`ContentLost` is never raised, on any type, and `getIsContentLostProperty()` is a hardcoded inline
+`return false` on all four types.
+
+### The fact that reframes this row
+
+CNA is not diverging from its behavioural reference. **FNA does exactly the same thing**, and says
+so in as many words (`FNA/src/Graphics/RenderTarget2D.cs:39-45, 78-85`):
+
+```csharp
+public bool IsContentLost { get { return false; } }
+...
+#pragma warning disable 0067
+// We never lose data, but lol XNA4 compliance -flibit
+public event EventHandler<EventArgs> ContentLost;
+```
+
+So the current state is a faithful port, including FNA's deliberate decision. This row is the same
+shape as [[CABI-6]]: the work order measures CNA against XNA, `CLAUDE.md` measures it against FNA,
+and CNA matches FNA.
+
+**Where CNA differs from FNA, and can do better:** FNA has one backend (FNA3D) that cannot lose a
+device. CNA has three that genuinely can. On those three, `ContentLost` could be raised honestly —
+which is more correct than either FNA or the present state.
+
+### Design
+
+Raise `ContentLost` **only where a renderer actually reported loss**, never on a schedule:
+
+1. Give `DynamicVertexBuffer`, `DynamicIndexBuffer`, `RenderTarget2D` and `RenderTargetCube` real
+   `contentLost_` state, replacing the inline `return false`. Cleared when the resource is next
+   filled (`SetData`), which is XNA's own rule.
+2. On the renderer-driven `Reset` transition only, walk `GraphicsDevice::resources_`, mark the
+   eligible types, and raise each one's `ContentLost`. A caller-initiated
+   `GraphicsDevice::Reset(PresentationParameters)` on a renderer that never loses data must **not**
+   fire it: inventing an event for 44 renderers that do not lose content would replace one untruth
+   with a louder one.
+3. Add `cna_render_target_subscribe_content_lost` / `_unsubscribe_content_lost` mirroring the
+   buffer routes. **ABI class C, additive** — the buffer routes need no change.
+4. Test on `directx9`/`direct2d`/`skia`, where the event is reachable. Elsewhere the honest
+   assertion is that it never fires.
+
+### Why it is not implemented on this branch
+
+It changes XNA-layer behaviour across all 47 renderer families and needs per-renderer verification
+on three backends this branch has not built (`directx9` and `direct2d` need Wine/DXVK; `skia`
+needs its pinned external artifact). The design above is complete and the pieces it depends on all
+exist; what remains is execution plus that verification matrix, which wants its own branch rather
+than the tail of this one.
