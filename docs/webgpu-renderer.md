@@ -87,9 +87,12 @@ Select it under `emcmake` with `-DCNA_GRAPHICS_RENDERER=WEBGPU`. As of 2026-08-2
 in a real browser**: `cna_demo_2d` renders 120 SpriteBatch frames in headless Chrome (over the real
 AMD Vulkan WebGPU path — SwiftShader exposes no WebGPU adapter here) with audio, no WebGPU
 validation error, a mid-run canvas resize, and clean teardown. Reproduce with
-`scripts/run-webgpu-browser-test.sh` (`plans/plan_webgpu.md` `WEBGPU-122`). Still open: the 3D/effect
-WGSL shaders have not been exercised in a browser (`WEBGPU-121`), and the `--webgpu-2d-validation`
-scene's `MinimizeEXT()` refuses on web (a native-only `GameWindow` operation, not a renderer limit).
+`scripts/run-webgpu-browser-test.sh`; `CNA_WEBGPU_DEMO=cna_house3d_demo` drives the 3D `BasicEffect`
+path (perspective, depth test, texturing) through the same harness, also green in-browser
+(`plans/plan_webgpu.md` `WEBGPU-122`/`121`). Still open: the non-`BasicEffect` effect shaders
+(`PbrEffect`/`SkinnedEffect`/`EnvironmentMapEffect`/dual-texture/alpha-test) have no browser demo
+yet, and the `--webgpu-2d-validation` scene's `MinimizeEXT()` refuses on web (a native-only
+`GameWindow` operation, not a renderer limit).
 
 ## Automated native smoke test
 

@@ -121,13 +121,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRA
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
         OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU"
         OR CNA_GRAPHICS_RENDERER STREQUAL "FNA3D"))
     # ---- 3D house demo --------------------------------------------------------
     # The 3D house demo exercises the shared BasicEffect 3D path. The target is enabled
     # only with renderers that support every graphics operation used by the scene: a GL-family
     # public renderer
     # (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see
-    # plans/plan_glbackends.md), VULKAN, or FNA3D.
+    # plans/plan_glbackends.md), VULKAN, WEBGPU (its 3D BasicEffect path is verified both natively
+    # and, via this demo, in the browser -- plan_webgpu.md WEBGPU-121), or FNA3D.
     add_executable(cna_house3d_demo house3d_demo.cpp)
 
     if(EMSCRIPTEN)

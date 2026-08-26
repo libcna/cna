@@ -21,7 +21,9 @@ set -euo pipefail
 
 BUILD_DIR="${1:-cmake-build-wasm-webgpu}"
 FRAMES="${2:-120}"
-NAME="cna_demo_2d"
+# The demo target to drive. cna_demo_2d exercises the SpriteBatch path; cna_house3d_demo exercises
+# the 3D BasicEffect path (WEBGPU-121). Both accept `--smoke N` and tear the renderer down on exit.
+NAME="${CNA_WEBGPU_DEMO:-cna_demo_2d}"
 CHROME="${CNA_WEBGPU_CHROME:-google-chrome}"
 PORT="${CNA_WEBGPU_TEST_PORT:-8732}"
 DEFAULT_FLAGS="--enable-unsafe-webgpu --enable-features=Vulkan,WebGPU --use-angle=vulkan"

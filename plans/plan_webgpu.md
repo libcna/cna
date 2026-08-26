@@ -52,9 +52,12 @@
 >   `PlatformRendererSurfaceState` now accepts the `Web` (canvas) surface, which exposes no native
 >   window pointer. `cna_demo_2d` runs 120 SpriteBatch frames in headless Chrome (real AMD Vulkan
 >   WebGPU) with audio, no WebGPU validation error, clean teardown, and a mid-run canvas resize —
->   verified by `scripts/run-webgpu-browser-test.sh`. Still open: `WEBGPU-121` (the 3D/effect WGSL
->   shaders have not been exercised in-browser), and the `--webgpu-2d-validation` scene's frame-45
->   `MinimizeEXT()` refuses on web (a native-only GameWindow op, not a renderer concern).
+>   verified by `scripts/run-webgpu-browser-test.sh` (`CNA_WEBGPU_DEMO=cna_house3d_demo` drives the 3D
+>   `BasicEffect` path through the same harness -- perspective, depth test and texturing all render
+>   in-browser with no shader/validation error). Still open under `WEBGPU-121`: the non-`BasicEffect`
+>   effect shaders (`PbrEffect`/`SkinnedEffect`/`EnvironmentMapEffect`/dual-texture/alpha-test) have
+>   no browser demo yet; and the `--webgpu-2d-validation` scene's frame-45 `MinimizeEXT()` refuses on
+>   web (a native-only GameWindow op, not a renderer concern).
 > - **Cross-backend pixel-parity test (`WEBGPU-123`)** — same scene on EasyGL/Vulkan/Bgfx/WebGPU,
 >   not started.
 > - Everything else in the row table below not listed here is ✅ or an honestly-scoped 🟨 (read
@@ -534,6 +537,6 @@ mark it ✅ from source inspection alone.
 | WEBGPU-118 | `docs/webgpu-vs-vulkan-deviations.md`: push constants → UBO, no wireframe, async→sync strategy | ⬜ | |
 | WEBGPU-119 | Emscripten target: configure CNA for `emcc` build; WebGPU backend routes to browser `navigator.gpu` | ✅ | 2026-08-26. `ThirdPartyWebGPU.cmake` `if(EMSCRIPTEN)` links Emscripten's **emdawnwebgpu** port (`--use-port=emdawnwebgpu`). **Deviation:** the task said `-sUSE_WEBGPU=1`; that built-in was removed in Emscripten 4.0.10 and replaced by the emdawnwebgpu port, whose `webgpu.h` matches wgpu-native v29's unified header. Verified end-to-end: `cna_demo_2d` links and runs in headless Chrome, reaching `navigator.gpu` through the port (see `WEBGPU-122`). |
 | WEBGPU-120 | Emscripten: SDL3 Emscripten port + WebGPU surface (canvas selector) | ✅ | 2026-08-26. `CreateSurface()` `#elif defined(__EMSCRIPTEN__)` uses `WGPUEmscriptenSurfaceSourceCanvasHTMLSelector` on `"#canvas"` (SDL3's default canvas). **Deviations:** the task named `emscripten_webgpu_get_device()`; instead the existing `wgpuInstanceRequestAdapter`/`wgpuAdapterRequestDevice` path is reused with an `emscripten_sleep`/Asyncify yield, one code path for native and web. Web-only follow-ons found by the browser run and fixed here: device-lost callback needs a valid `mode` (emdawnwebgpu rejects 0); no `wgpuSurfacePresent` (browser presents on rAF); depth/MSAA resync to the acquired canvas-sized texture on resize; and `PlatformRendererSurfaceState` relaxed to accept the pointerless `Web` surface. |
-| WEBGPU-121 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | 🟨 | 2026-08-26. The 2D sprite WGSL pair compiles and renders in-browser (no `createShaderModule` error over 120 frames). The 3D/effect shader pairs have not yet been exercised in a browser -- needs a 3D demo page. |
+| WEBGPU-121 | Emscripten: verify all 9 WGSL shader pairs compile in browser via `createShaderModule` | 🟨 | 2026-08-26. The 2D sprite pair AND the 3D `BasicEffect` path (perspective geometry, depth test, texturing, vertex colour) compile and render in-browser with no `createShaderModule`/validation error, verified by `cna_house3d_demo` -- WEBGPU added to that demo's renderer allowlist for exactly this. Still not browser-exercised: the remaining effect shaders (`PbrEffect`/`SkinnedEffect`/`EnvironmentMapEffect`/dual-texture/alpha-test), which need their own demo pages. |
 | WEBGPU-122 | Emscripten: run 2D smoke test in headless Chrome | ✅ | 2026-08-26. `scripts/run-webgpu-browser-test.sh` serves the build and drives `cna_demo_2d --smoke 120` through headless Chrome (`--enable-features=Vulkan,WebGPU --use-angle=vulkan --enable-unsafe-webgpu`; SwiftShader has no WebGPU adapter here, the real AMD Vulkan path does). PASS = 120 SpriteBatch frames, audio, no WebGPU validation error, clean teardown; a canvas resize mid-run is covered by the opt-in `CNA_WEBGPU_VALIDATION_SCENE=1` variant. |
 | WEBGPU-123 | Cross-backend pixel comparison: same scene rendered on EasyGL/Vulkan/Bgfx/WebGPU — assert pixel-level parity | ⬜ | |
