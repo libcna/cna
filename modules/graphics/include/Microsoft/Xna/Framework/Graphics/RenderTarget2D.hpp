@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IRenderTarget.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -14,7 +15,8 @@ namespace CNA::Internal::Renderers { class IRenderTargetRenderer; }
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief A 2D texture that can be used as a render target. Mirrors XNA 4.0 RenderTarget2D. */
-    class RenderTarget2D : public Texture2D, public IRenderTarget
+    class RenderTarget2D : public Texture2D, public IRenderTarget,
+            public CNA::Internal::Graphics::IContentLosable
     {
     public:
         using Texture2D::Dispose;
@@ -86,7 +88,22 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] int getMultiSampleCountProperty() const override;
 
         /** @brief Returns false; content is never lost in CNA. */
-        [[nodiscard]] bool getIsContentLostProperty() const { return false; }
+        /**
+         * @brief Whether this render target's contents were lost to a device reset.
+         *
+         * True only from the moment a renderer reported a real reset until the content is
+         * written again. Renderers whose API cannot lose a device never set it.
+         */
+        [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
+
+        CNAEXT void NotifyContentLostEXT() override
+        {
+            contentLost_ = true;
+            ContentLost.Raise(this, System::EventArgs::Empty);
+        }
+
+        /** @brief Clears the lost flag once the content has been written again. */
+        CNAEXT void ClearContentLostEXT() noexcept { contentLost_ = false; }
 
         /** @brief Raised when the render target content is lost (never raised in CNA). */
         System::EventHandler<System::EventArgs> ContentLost;
@@ -106,5 +123,9 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Non-owning pointer into Texture2D::renderer_ (which holds the shared_ptr).
         CNA::Internal::Renderers::IRenderTargetRenderer* rtRenderer_ = nullptr;
+
+    private:
+        /** @brief Set by a real renderer-reported device reset; cleared by the next write. */
+        bool contentLost_ = false;
     };
 }

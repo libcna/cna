@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "CNA/Internal/DefaultWindowTitle.hpp"
@@ -675,6 +676,21 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!ResourceDestroyed.Empty())
             ResourceDestroyed.Raise(this, ResourceDestroyedEventArgs(name, tag));
+    }
+
+    void GraphicsDevice::NotifyContentLostResourcesEXT()
+    {
+        // A copy, because a subscriber is free to dispose the resource it is told about and that
+        // would rewrite resources_ underneath this loop.
+        const std::vector<GraphicsResource*> snapshot = resources_;
+        for (GraphicsResource* const resource : snapshot)
+        {
+            if (auto* const losable =
+                    dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(resource))
+            {
+                losable->NotifyContentLostEXT();
+            }
+        }
     }
 
     void GraphicsDevice::AddResourceReference(GraphicsResource* resource)
@@ -3216,6 +3232,11 @@ namespace Microsoft::Xna::Framework::Graphics
                     break;
                 case CNA::Internal::Renderers::RendererDeviceEvent::Reset:
                     deviceStatus_ = GraphicsDeviceStatus::Normal;
+                    // CABI-15: a renderer really did lose and recreate its resources, so the
+                    // default-pool ones lost their contents. This is the only place ContentLost is
+                    // raised: a caller-initiated Reset on a renderer that never loses anything must
+                    // not fire it, or the event becomes noise on 44 of the 47 families.
+                    NotifyContentLostResourcesEXT();
                     DeviceReset.Raise(this, System::EventArgs::Empty);
                     break;
             }

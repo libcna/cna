@@ -38,6 +38,16 @@ if(CNA_BUILD_EXAMPLES)
             TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
     endif()
 
+    # ---- Content-lost probe (plans/plan_cabi.md CABI-15) ----------------------
+    add_executable(cna_content_lost_probe content_lost_probe.cpp)
+    target_link_libraries(cna_content_lost_probe PRIVATE CNA)
+    cna_link_sharp_runtime(cna_content_lost_probe PRIVATE)
+    if(CNA_BUILD_TESTS)
+        add_test(NAME ContentLostProbe COMMAND cna_content_lost_probe)
+        set_tests_properties(ContentLostProbe PROPERTIES
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    endif()
+
     # ---- 2D sprite demo (works with all renderers) ----------------------------
     add_executable(cna_demo_2d
         demo_2d/src/Main.cpp

@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+namespace CNA::Internal::Graphics
+{
+    /**
+     * @brief Implemented by the resource types whose contents a device reset can destroy.
+     *
+     * plans/plan_cabi.md CABI-15. XNA raises ContentLost on the default-pool resources -- dynamic
+     * vertex/index buffers and render targets -- when a device is reset out from under them. CNA
+     * has that event for real on the renderers whose API can lose a device (DirectX9, Direct2D,
+     * Skia); the other families never report one and so never raise this.
+     *
+     * The device walks its own resource list and asks each entry whether it is losable, rather
+     * than testing four concrete types at the call site.
+     */
+    class IContentLosable
+    {
+    public:
+        virtual ~IContentLosable() = default;
+
+        /**
+         * @brief Marks the content lost and raises the type's own ContentLost event.
+         *
+         * Called only when a renderer actually reported a device reset. Raising it on a schedule,
+         * or on a caller-initiated reset that no renderer lost anything across, would replace one
+         * untruth with a louder one.
+         */
+        virtual void NotifyContentLostEXT() = 0;
+    };
+}

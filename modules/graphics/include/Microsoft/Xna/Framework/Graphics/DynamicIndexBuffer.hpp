@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include <cstdint>
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -10,7 +11,8 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief An index buffer whose content is expected to change frequently. */
-    class DynamicIndexBuffer : public IndexBuffer
+    class DynamicIndexBuffer : public IndexBuffer,
+            public CNA::Internal::Graphics::IContentLosable
     {
     public:
         /**
@@ -29,7 +31,22 @@ namespace Microsoft::Xna::Framework::Graphics
         }
 
         /** @brief Returns false; content is never lost in CNA. */
-        [[nodiscard]] bool getIsContentLostProperty() const { return false; }
+        /**
+         * @brief Whether this index buffer's contents were lost to a device reset.
+         *
+         * True only from the moment a renderer reported a real reset until the content is
+         * written again. Renderers whose API cannot lose a device never set it.
+         */
+        [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
+
+        CNAEXT void NotifyContentLostEXT() override
+        {
+            contentLost_ = true;
+            ContentLost.Raise(this, System::EventArgs::Empty);
+        }
+
+        /** @brief Clears the lost flag once the content has been written again. */
+        CNAEXT void ClearContentLostEXT() noexcept { contentLost_ = false; }
 
         /** @brief Raised when the index buffer content is lost (never raised in CNA). */
         System::EventHandler<System::EventArgs> ContentLost;
@@ -75,5 +92,9 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             IndexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
         }
+
+    private:
+        /** @brief Set by a real renderer-reported device reset; cleared by the next write. */
+        bool contentLost_ = false;
     };
 }

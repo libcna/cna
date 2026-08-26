@@ -25,7 +25,8 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-6 | Apply3D multi-listener adjudication | fixcnacs P4 | BLOCKED |
 | CABI-7a | SpriteBatch unnamed sort mode | fixcnacs P5 | DONE |
 | CABI-7b | SpriteBatch non-finite values | fixcnacs P5 | BLOCKED by a real crash |
-| CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE, implementation scoped |
+| CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE |
+| CABI-15 | ContentLost raised where loss is real | fixcnats P3 | DONE |
 | CABI-9 | VideoPlayer frame identity/generation | fixcnats P4 | DESIGN COMPLETE |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
 | CABI-13 | Owned GraphicsDevice bound into the C ABI | fixcnats P5 | DONE |
@@ -637,3 +638,55 @@ The native build is unchanged: still `SHARED`, 84 C-API tests, 79 passing on Xvf
 `BUILT` and callable. Not yet `PLATFORM_QUALIFIED`: the smoke test runs under Node, and nothing
 here has driven the module from a browser with a canvas, which is what a renderer needs. The
 existing `cna_demo_2d`/`cna_house3d_demo` Emscripten demos are the precedent for that step.
+
+## CABI-15 — ContentLost, raised only where loss is real (DONE)
+
+[[CABI-8]] established that CNA has a genuine device-loss model on three renderer families and
+that `ContentLost` was never raised on any of them, with `getIsContentLostProperty()` a hardcoded
+inline `return false` on all four affected types. This implements the design recorded there.
+
+### What changed
+
+- `CNA::Internal::Graphics::IContentLosable` — the four types whose contents a reset destroys
+  (`DynamicVertexBuffer`, `DynamicIndexBuffer`, `RenderTarget2D`, `RenderTargetCube`) implement it,
+  so `GraphicsDevice` asks its own resource list rather than testing four concrete types.
+- Each now carries real `contentLost_` state behind the XNA getter, plus
+  `NotifyContentLostEXT()` and `ClearContentLostEXT()`.
+- `GraphicsDevice::NotifyContentLostResourcesEXT()` walks `resources_` and notifies every losable
+  entry. It iterates a **copy**, because a subscriber is free to dispose the resource it was just
+  told about, which would rewrite `resources_` underneath the loop.
+- The flag clears where content is written again — `VertexBuffer::UploadValidatedData` and
+  `IndexBuffer::SetDataInternal`. One site each rather than the 13 `SetData` overloads, which is
+  what keeps the two from drifting apart.
+
+### The restraint that matters
+
+`NotifyContentLostResourcesEXT()` is called from **exactly one place**: the
+`RendererDeviceEvent::Reset` arm of the renderer callback. Not from
+`GraphicsDevice::Reset(PresentationParameters)`, which any caller can invoke on any renderer.
+
+Firing on a caller-initiated reset would raise ContentLost on 44 of 47 families that never lose
+anything, replacing FNA's honest `return false` with a louder untruth. The event means what it
+says: a renderer reported that it lost and recreated its resources.
+
+### Verified
+
+The three families that can report a reset — `directx9`, `direct2d`, `skia` — are not built here,
+so `cna_content_lost_probe` (`ContentLostProbe`) drives the same entry point the renderer callback
+drives and checks the contract around it:
+
+```
+content-lost probe: events raised, flags set, writes cleared them
+```
+
+false before any reset; exactly one event on each of the three resource types; `IsContentLost` true
+afterwards; a `SetData` clears it again.
+
+Suite: 86 tests, 81 passing on Xvfb `:101` — the same five pre-existing failures, no regression.
+Nothing changes on OPENGLES3, which is the point: it never reports a loss, so it never raises one.
+
+### Not done
+
+The C ABI still has no `cna_render_target_subscribe_content_lost`; the buffers have their
+subscribe routes and render targets expose only `is_content_lost` in `CNA_RenderTargetInfo`.
+Adding it is additive (**ABI class C**) and now has a real event behind it.

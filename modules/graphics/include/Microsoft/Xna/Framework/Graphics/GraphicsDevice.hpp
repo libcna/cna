@@ -962,6 +962,14 @@ namespace Microsoft::Xna::Framework::Graphics
          * Called by GraphicsResource constructors when a device is attached.
          * @param resource The newly created resource.
          */
+        /**
+         * @brief Raises ContentLost on every tracked resource whose contents a reset destroys.
+         *
+         * Called only from the renderer-reported device-reset transition. See
+         * plans/plan_cabi.md CABI-15 for why it is not called from GraphicsDevice::Reset.
+         */
+        CNAEXT void NotifyContentLostResourcesEXT();
+
         CNAEXT void OnResourceCreated(System::Object* resource);
 
         /**
