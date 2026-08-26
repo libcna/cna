@@ -986,6 +986,34 @@ Nothing downstream was modified and no loader was weakened.
   It does not yet know about [[CABI-14]]'s module, which lives in this build tree rather than
   anywhere cna-ts tracks. Publishing it to a location that audit reads is the obvious follow-up.
 
+### The one work-order item still genuinely unsatisfied: non-finite sprite values
+
+`fixcnacs.md` Phase 5 asks for XNA's behaviour on NaN and Infinity, and says to preserve only those
+CNA-specific checks that are **not** observably inconsistent with XNA. CNA's finiteness refusal is
+observably inconsistent: the decompiled `Microsoft.Xna.Framework.Graphics.SpriteBatch` contains no
+`IsNaN`, no `IsInfinity` and no validation of any kind -- it propagates the bits into the vertex
+path. So the standing CNA position does not satisfy the phase, and calling this milestone complete
+while it stands was wrong.
+
+It is not, however, a loosening that can simply be applied, and that is the part worth recording:
+
+- 17 `ValidateFinite` call sites in `SpriteBatch.cpp`, and 5 tests asserting the refusal.
+- **`layerDepth` cannot simply propagate.** Both sort paths are `std::stable_sort` with a bare
+  `<` / `>` comparator on `layerDepth`. NaN is unordered with everything, so `a < b` and `b < a` are
+  both false and the strict weak ordering `std::stable_sort` requires is violated -- undefined
+  behaviour, not a wrong order. C#'s sort does not carry that requirement, which is why XNA can
+  propagate a NaN depth safely and CNA cannot without first making the comparators NaN-safe (a
+  total order that gives NaN a defined position).
+
+So matching XNA here is a real design decision across the whole framework -- 17 sites, their tests,
+and the sort contract underneath them -- not a C-binding change. It is left to the owner rather than
+taken unilaterally, with the evidence above. [[CABI-7b]] already closed the one part of it that was
+a live defect rather than a policy: `DrawString` never validated `layerDepth` at all, so a NaN there
+reached exactly the undefined behaviour described above.
+
+    SPRITEBATCH_NAN_STATUS      = DELIBERATE_DEVIATION_PENDING_OWNER_DECISION
+    SPRITEBATCH_INFINITY_STATUS = DELIBERATE_DEVIATION_PENDING_OWNER_DECISION
+
 ### CNA.NET actually run, against both ABI labels
 
 External review recorded that CNA.NET had never been run. It has now, with `dotnet` 8.0.424 and
