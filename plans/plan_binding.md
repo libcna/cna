@@ -143,6 +143,8 @@ task. Do not start a later broad API phase merely because an earlier skeleton co
 | B5 | Content and expanded input/audio | B4 ownership and renderer matrix green |
 | B6 | Full public CNA API coverage | B5 foundation and the coverage inventory are green |
 | B7 | Hardening, packaging and experimental release | B3–B6 selected scope is complete |
+| B8 | Reconciling with the platform separation | `next` merged into `feature/binding` |
+| B9 | The CNAEXT engine layer and the post-merge tail | Owner put the layer in scope, 2026-08-26 |
 
 ## Planning baseline
 
@@ -375,7 +377,7 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 | CBIND-037A | 72 | Complete the CNA core module | ✅ | `core_ext.h` and `CnaCApiCoreExt.cpp` map every `core` row: one `cna_logger_*` route per canonical static so C never depends on a defaulted argument, the process-wide minimum level, the compile-time platform and desktop operating system, both backend classifications for any of the 46 public renderer identities plus their compiled-in forms, and the compiled-in renderer identity and name. Names use the project's count/copy pair rather than the canonical static-storage `std::string_view`, so no pointer into CNA storage crosses the ABI. `CNA::CNAException` gained a central boundary conversion to `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` observable in C instead of collapsing into a generic internal failure. The canonical `EXPERIMENT` log level keeps its ordinal 100 rather than being renumbered into a dense range, and 6 is refused. `CNAEXT` is `not-applicable`: a documentation-only marker macro with no callable behavior. Strict-C `CoreExtSmoke.c` plus C/C++ ABI assertions and two new `cna_c_api_boundary_detail_test` return codes run green in all three trees (51/51) and under ASan+UBSan with leak detection on. The `core` module has no planned row left. |
 | CBIND-037B | 599 | Complete the input module | ✅ | `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration) are mapped. Decomposed into CBIND-037B1–B7 below; **closed by CBIND-037B7b**, after which the `input` module records 834 implemented, 0 partial, 0 planned and 27 not applicable. |
 | CBIND-037C | 325 | Complete the media module | ✅ | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. Decomposed into CBIND-037C1–C7 below; **closed by CBIND-037C7**, after which the `media` module records 276 implemented, 0 partial, 0 planned and 52 not applicable. |
-| CBIND-037D | 289 | Complete the devices and devices-ext modules | 🟨 | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). Decomposed into CBIND-037D1–D4 below; the parent becomes complete only when all four rows and every `devices`/`devices-ext` inventory row are closed. |
+| CBIND-037D | 289 | Complete the devices and devices-ext modules | ✅ | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). Decomposed into CBIND-037D1–D4 below; the parent becomes complete only when all four rows and every `devices`/`devices-ext` inventory row are closed. **Closed 2026-08-26 by `CBIND-079`, which found the row stale rather than open.** Both closure conditions had been met and neither had been re-read: `CBIND-037D1`, `D2a`, `D2b`, `D3` and `D4` are all ✅, and `devices` and `devices-ext` have no planned inventory row between them. The row is the reason to re-read a parent's own closure rule when its last child closes, rather than only when the next one opens. |
 | CBIND-037E1 | 93 | Establish the component model and the service container | ✅ | `runtime_components.h` and `CnaCApiGameComponents.cpp` map `IGameComponent`, `IUpdateable`, `IDrawable`, `GameComponent`, `DrawableGameComponent`, the component collection with its event argument, and `GameServiceContainer`. This is the slice where the ABI's direction reverses: **a component is behavior the caller supplies**, and since C cannot implement a C++ interface, a component is a callback set this ABI wraps in a derived object. That derivation is also why the canonical **protected** content hooks are mapped here while a sensor's protected members were not — the deciding question is whether this ABI has a derived class to hang them on. The service container is the one canonical type C cannot fully have: it is keyed by C++ type identity, so lookup and removal are exposed over a named-identity subset (recorded `partial`) and **registration has no C form at all** (recorded `not-applicable`). Canonical behaviors reported rather than corrected: the comparison is inverted, a second disposal is a no-op, adding the same component twice is allowed, and a missing component answers -1. One deliberate addition with no canonical counterpart: releasing a component removes it from the collection first, because a handle-based ABI must not leave the runtime holding a released pointer. Strict-C `RuntimeComponentsSmoke.c`; green in all four trees (63/63) and under ASan+UBSan with leak detection on. |
 | CBIND-037E2 | 57 | Complete the game object and the frame | ✅ | The rest of `Game`'s own state and frame control, its four events, `GameTime`'s constructors, `LaunchParameters`, `FrameworkDispatcher`, `TitleContainer` and `TitleLocation`. The slice's real decision is the five canonical frame hooks: they arrive as a **second** table, `CNA_GameFrameHooks`, rather than as new members on the published `CNA_GameCallbacks`. Appending would have been ABI-safe — the structure is size-prefixed exactly so it can grow — but it leaves every positional initializer a consumer has already written incomplete, which a strict build rejects; that was tried first and reverted, and the finding belongs in `ABI_VERSIONING.md`'s eventual growth section. One rule extended: `cna_game_tick` is **refused from inside a lifecycle callback**, joining running and destroying the game, because a frame step called from within a frame re-enters the loop it is part of. Canonical behaviors preserved: launch parameters split on a **colon**, drop what they cannot parse and keep the first occurrence of a name; the title path is process-wide; and a missing title file's plain runtime error is reported as I/O rather than as an internal failure. One deliberate narrowing: title content is read **whole**, because this ABI has no stream handle for it. Two rows are deliberately left: the content-manager property to `CBIND-037E2b` and the window accessors to `CBIND-037E3`. Strict-C `RuntimeGameSmoke.c`; green in all four trees (64/64) and under ASan+UBSan with leak detection on. |
 | CBIND-037E2b | 3 | Map the game's content manager | ✅ | The contract the slice was waiting on is settled and written into `GAME_COMPONENTS.md`: a game owns its content manager as a **value member**, so `cna_game_get_content_manager_ext` answers a **borrowed** handle — the same one every time, refused by `cna_content_manager_destroy`, released with the game, and accepted by every other content-manager route. `cna_game_set_content_manager_ext` **copies**, because the canonical setter copy-assigns: the caller keeps its own manager and later changes to it never reach the game. Covered in `RuntimeGameSmoke.c`; green in all four trees (65/65) and under ASan+UBSan with leak detection on. The runtime module is now **11 rows** from closed: `CNA::Runtime` and `CNA::RuntimeOptions` remain, which `CBIND-037E5` takes. |
@@ -621,6 +623,74 @@ and that is recorded here rather than papered over.
 
 
 
+## Phase B9 — the CNAEXT engine layer, and the tail the merges left behind
+
+The matrix reopened for the fifth time, and this time it reopened by **1,451 rows** — more than a
+fifth of the surface it had just closed. `CBIND-078` merged `origin/next` and bound the four public
+symbols it saw; what it did not see is that the same stretch of merges had brought in the whole
+**CNAEXT engine layer** (`modules/graphics-ext`, 95 headers, all of it `MOD-1`–`MOD-1924` from
+`plans/plan_modern.md`) plus its `*EXT` surface on the XNA types in `modules/graphics`.
+
+Two facts about that layer decide how this phase is built, and both are worth stating before the
+table rather than discovering per slice:
+
+- **It is opt-in and OFF by default.** Every one of its 95 public headers is wrapped in
+  `#ifdef CNA_CNAEXT`, and `CNA_CNAEXT` is `OFF` at `CMakeLists.txt:81`. In the build configurations
+  this campaign has always used, none of these declarations exist at all. The coverage generator
+  reads header *text* and does not evaluate the preprocessor, which is why the layer entered the
+  inventory silently and in full.
+- **The owner put it in scope on 2026-08-26.** Asked whether to exclude the layer the way
+  `CBIND-047` excluded `modules/platform`, the decision was to **bind it**. This phase is that
+  decision's backlog, and the exclusion option is not open unless the owner reopens it.
+
+### The ABI shape, settled by precedent rather than by a new decision
+
+An optional layer raises a question the phase must answer before its first slice: what happens to
+the C routes when `CNA_CNAEXT` is `OFF`? The project has already answered it once. `CNA_DEVICES` is
+the same shape, and `modules/c-api/src/CnaCApiDevices.cpp` resolves it by **always declaring and
+always exporting every route**, and compiling an `#else` arm whose bodies return
+`CNA_RESULT_NOT_SUPPORTED` with `"This CNA build does not contain the extended device layer."`
+
+Every slice below follows that precedent, for a reason the release gate makes concrete: criterion
+*No unreviewed ABI break* records 2,872 exported symbols and requires that a change to any of them
+arrive as a reviewable diff. An export list that varies with a CMake option would make that
+criterion unenforceable — the same library version would export two different ABIs and the baseline
+could not describe either. So: **routes exist unconditionally, refuse honestly when the layer is
+absent, and the refusal is tested in a tree with `CNA_CNAEXT=OFF` exactly as the acceptance path is
+tested in one with `CNA_CNAEXT=ON`.** A slice that cannot be built both ways is not finished.
+
+The `ON` tree for this phase is `cmake-build-cnaext/` (`-DCNA_CNAEXT=ON -DCNA_BUILD_C_API=ON`); the
+`OFF` tree is the ordinary `cmake-build-debug/`. Both are required before a slice is committed.
+
+### What this phase must not repeat
+
+`CBIND-035` carried 1,414 of these rows while the plan recorded it ✅, `RELEASE_GATE.md` read
+**Not ready**, and `## Current status` read **ready** — three documents disagreeing about the same
+measurable fact for a week. `CBIND-079` corrected the record that produced it, and gated the invariant so the same
+combination fails instead of persisting.
+
+| # | Task | Rows | Status | Acceptance criteria |
+|---|---|---:|---|---|
+| CBIND-079 | Reopen the matrix, name the real owner of every planned row, and gate the invariant | 1,451 | ✅ | **Done 2026-08-26.** `owner_task()` attributed every unmapped symbol to `CBIND-035`/`036`/`037`/`044` by module, which was true when those tasks were live and became a lie the moment they closed: the matrix asserted that four completed tasks owned 1,451 unfinished symbols. `CNAEXT_SLICE_OWNERS` in `tools/c-api/generate_coverage_inventory.py` now partitions all 1,451 onto the fourteen slices below, keyed by module and header stem, and `COVERAGE.md` is regenerated. No planned row names a completed task. `## Current status` and `NEXT.md` are corrected to the measured numbers, and `CBIND-037D`'s stale 🟨 is closed — its four children are ✅ and `devices`/`devices-ext` have no planned row. `CBIND-037`'s 🟨 is **left standing and is correct**: its own closure rule requires every `CBIND-037` inventory row closed, and 23 media/runtime rows are still open under `CBIND-082`/`CBIND-083`.
+
+The same commit gates the invariant it restores, because a correction nobody re-reads is what produced the defect in the first place. `--check` now fails when a `planned` row names a task this plan records as `✅`, or names a task that has no row here at all — the same `--check` that `CApiCoverageMatrix` and `.github/workflows/c-api-coverage-gate.yml` already run. It is deliberately **not** *fail on any planned row*: Phase B9 opens 1,451 of them on purpose, and a gate that forbade them would simply be switched off. Verified by measurement, not by inspection: with the slice table disabled the check reports `CBIND-034`/`035`/`036`/`044` owning 5/1,414/1/4 planned rows — the exact defect, reproduced. `CBIND-037` is correctly **not** flagged, because 🟨 is not a claim of completion. |
+| CBIND-080 | Bind the post-merge graphics tail | 15 | ⬜ | Ordinary XNA graphics symbols the merges added and no slice picked up: the three explicit-state `SpriteBatch::Begin` overloads that take a `RasterizerState`, `Effect`'s copy constructor, `TextureCube`'s copy constructor and copy assignment, `VertexBuffer::SetData`'s template overload, and the two-row constructor/assignment pairs on `DynamicIndexBuffer`, `DynamicVertexBuffer`, `RenderTarget2D` and `RenderTargetCube`. Nothing here needs the engine layer, so this slice lands in the `OFF` tree alone. Copy semantics on a GPU-backed handle is the one design question: decide whether the C ABI offers a copy at all before writing a route for it, and record the answer either way. |
+| CBIND-081 | Bind the math tail | 7 | ⬜ | `Vector2`'s six compound-assignment operators (`+=`, `-=`, `*=` by vector and by scalar, `/=` by vector and by scalar) and `Color`'s default constructor. The value types are already POD in the ABI, so these are the cheapest rows in the phase — and the ones most likely to be quietly skipped as "obvious", which is how they got here. |
+| CBIND-082 | Bind the media identity tail | 23 | ⬜ | `Equals`, `GetHashCode` and `ToString` on `Album`, `Artist`, `Genre`, `Picture`, `PictureAlbum`, `Playlist` and `Song`, plus `MediaSource::ToString` and two `VideoPlayer` rows. `CBIND-037C` closed the media module's behaviour and left its `System::Object` overrides unbound; the campaign's settled shape for these is a value comparison plus a UTF-8 copy-out, not a bound `System::Object`. Closing this and `CBIND-083` is what finally lets `CBIND-037`'s parent row go ✅. |
+| CBIND-083 | Bind the runtime, input and content tail | 5 | ⬜ | `DrawableGameComponent`'s `getDrawOrderProperty`/`getVisibleProperty` overrides, two `TouchPanel` rows and `ContentManager::ResolveExistingAssetPath`. The `ResolveExistingAssetPath` row wants the campaign's existing path/UTF-8 copy-out contract, not a new one. |
+| CBIND-084 | Bind the engine-layer foundations, resources and diagnostics | 121 | ⬜ | The layer's substrate, and the slice every other CNAEXT slice depends on: `EngineLayerVersion`, `EngineException`, `RequireCapability`, `ShaderDiagnostics`, `ShaderEffectFactory`, the `EffectPass`/`PostProcessPass`/`FullscreenPass`/`BlitPass` bases, `RenderTargetPool`, `ScopedRenderTarget`, `PostProcessContext`, `DepthEncoding`, `StorageBuffer`, `ComputeShader`, `GpuTimer` and `MaterialBinding`. This slice establishes the phase's handle kinds, its `CNA_RESULT_NOT_SUPPORTED` refusal arm and its `EngineException` firewall arm, so it lands first and the rest of the phase inherits them. `StorageBufferT<T>` is a template and needs the campaign's settled answer for templates — a closed set of instantiations or a recorded limitation, never a bound template. |
+| CBIND-085 | Bind the lights and the shadow subsystem | 209 | ⬜ | `ShadowMap`, `CascadedShadowMap`, `CubeShadowMap`, `SpotShadowMap`, `ContactShadowPass`, `DepthNormalPrepass`, `ClusteredShadowPolicyEXT` and the `DirectionalLightEXT`/`PointLightEXT`/`SpotLightEXT` value types, plus the `graphics`-module surface they serve: `IShadowReceiverEXT`, `PunctualLightEXT` and `ShadowCascadeStateEXT`. The largest single slice, and the one where `SupportsShadowSamplingEXT()` matters: a route must ask the device query as well as the capability, or it will report success while drawing nothing. |
+| CBIND-086 | Bind clustered forward lighting | 116 | ⬜ | `ClusteredForwardEffect`, `ClusteredLightGrid`, `ClusteredLightSetEXT`, `ClusteredLightAssignment`, `ClusteredLightBuffer`, `ClusteredLightCompute`, `ClusteredLightEXT` and `ClusteredLightType`. The light set is a collection, so it takes the campaign's count/copy shape rather than a bound container; `ClusteredLightCompute` needs `SupportsComputeShadersEXT()` on top of the capability. |
+| CBIND-087 | Bind PBR materials and transparency | 177 | ⬜ | `PbrMaterial`, `PbrMaterialExtensions`, `ThinFilmIridescence`, `GltfMaterialBridge`, `TransparencyMode`, `TransparentDrawList` and `WeightedBlendedTransparency`, plus `PbrEffect` and `SkinnedPbrEffect` from `modules/graphics`. Materials carry texture references, so the borrowed-lifetime rules the campaign already settled for effects apply unchanged — a material never owns the `Texture2D` a caller hands it. |
+| CBIND-088 | Bind the render pipeline and its settings | 117 | ⬜ | `RenderPipeline` and `RenderPipelineSettings`. Two headers and 117 rows: `RenderPipelineSettings` alone is 79, almost all of it POD fields, which makes this the phase's clearest candidate for a fixed-layout struct plus an ABI-layout test rather than 79 accessor pairs. Decide that shape here and the rest of the phase gets shorter. |
+| CBIND-089 | Bind the post-process chain and its passes | 232 | ⬜ | `PostProcessChain` and the seventeen passes it drives: bloom, SSAO, SSR, depth of field, motion blur, FXAA, chromatic aberration, film grain, lens flare, light shafts, height fog, volumetric fog, aerial perspective, spatial upscale, decals and the ASCII pass. The largest row count in the phase, but the most repetitive: the pass base from `CBIND-084` should make each pass a settings POD plus create/apply/destroy. If it does not, stop and fix `CBIND-084` rather than writing seventeen bespoke shapes. |
+| CBIND-090 | Bind HDR output, tonemapping and colour grading | 87 | ⬜ | `HdrDisplayOutput`, `TonemapPass`, `TonemappingMode`, `ColorGradePass`, `CubeLut`, `LutInterpolation`, `AutoExposureEXT` and `DisplayColorSpace`. `CubeLut` reads caller-supplied bytes, so it is a byte-facing surface and inherits the release gate's requirement for an independent oracle and a fuzz target — not just a smoke test. |
+| CBIND-091 | Bind image-based lighting, probes, sky and area-light shading | 137 | ⬜ | `LightProbeEXT`, `LightProbeVolumeEXT`, `LightProbeBaker`, `EnvironmentProcessor`, `Skybox`, `AtmosphericSky`, `AreaLightBrdfTable`, `AreaLightShading`, and `AreaLightEXT`/`ImageBasedLightEXT` from `modules/graphics`. `SupportsImageBasedLightingEXT()` gates the whole slice; the baker is long-running and needs the campaign's settled answer for operations that are not instantaneous. |
+| CBIND-092 | Bind instancing, LOD, culling, particles and debug drawing | 157 | ⬜ | `InstancedRendererEXT`, `LodGroupEXT`, `FrustumCullerEXT`, `GpuInstanceCuller`, `ParticleSystem`, `DebugDraw`, `DebugGizmos`, and `IndirectDrawArguments`, `GraphicsMemoryBarrier` and `GraphicsImageAccess` from `modules/graphics`. `GraphicsMemoryBarrier` is a flags enum whose `All` member is a fold of the others: bind the members at their canonical values and let C callers or it, rather than inventing a combined constant that drifts. |
+| CBIND-093 | Bind the engine-layer surface on existing XNA and core types | 48 | ⬜ | The `*EXT` methods the layer grafted onto types the C ABI already binds — `BasicEffect`, `SkinnedEffect`, `ShaderEffect` and `GraphicsDevice` — plus `CNA::SetAssemblyTitleEXT`/`GetAssemblyTitleEXT` and `AssemblyTitleAttributeEXT` in `modules/core`. These extend handles that already exist, so no new handle kind should appear here; the four `GraphicsDevice` capability queries (`ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`, `SupportsComputeShadersEXT`) are the rows the rest of the phase calls, so they land early even though this slice closes late. |
+| CBIND-094 | Make `CApi_MediaSmoke` and `CApi_GamersSmoke` hermetic | — | ✅ | **Done 2026-08-26.** Both tests read the ambient environment rather than one the registration controls: `CApi_MediaSmoke` writes under `$HOME` through the media library and fails outright where `$HOME` is not writable, and `CApi_GamersSmoke` opens an audio device and blocks where PulseAudio is unreachable. Both now get an isolated `XDG_DATA_HOME`/`HOME` under the build tree and `SDL_AUDIODRIVER=dummy`, unconditionally rather than only under `SDL_RENDERER`. A test whose result depends on the machine it runs on is not evidence, and these two were the reason a review of this branch had to hand-patch its environment before it could measure anything. |
+| CBIND-095 | Close the reopened matrix | — | ⬜ | Closes when `CBIND-080`–`CBIND-093` are ✅ and the inventory has no planned row. `RELEASE_GATE.md` reads **ready** again, `LIMITATIONS.md` covers every new partial with an owner-approved disposition, the ABI baseline is regenerated, and the export count in the docs matches. Do not close this row on the strength of a green `--check` alone: `--check` proves the matrix matches the headers, and the four previous closures each proved that is not the same thing as finished. |
+
 ## Mandatory test layers
 
 Every implemented public C entry point must receive all applicable coverage in the same task:
@@ -667,8 +737,11 @@ This is an **experimental C ABI foundation**, not ABI 1.0 or a future language-s
 
 ## Completion criteria for full public CNA API coverage
 
-The C API is not complete until `CBIND-044` is ✅ and the machine-checked coverage matrix proves
+The C API is not complete until `CBIND-095` is ✅ and the machine-checked coverage matrix proves
 that every public CNA API symbol has a documented C-native mapping and the required C-only tests.
+(`CBIND-044` closed this criterion on 2026-08-16 for the surface that existed then; the merges since
+reopened it, and `CBIND-095` is the row that owns closing it again. A criterion that a finished task
+satisfied once is not a criterion that stays satisfied.)
 The full surface must preserve the behavior of the canonical C++ implementation (and FNA/XNA where
 applicable), including constants, overload-specific behavior, errors, lifetime and renderer
 capability limits. A raw C++ type, exception, container, callback/delegate, stream, task or Sharp
@@ -676,11 +749,19 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-19, after `CBIND-064`):** 421 headers / 6,708 symbols —
-**6,312 implemented, 12 approved partial, 0 planned, 384 not applicable.** ABI `0.2.0`, 2,852
+**Snapshot (2026-08-26, after `CBIND-079`):** 513 headers / 8,306 symbols —
+**6,397 implemented, 15 approved partial, 1,451 planned, 443 not applicable.** ABI `0.9.0`, 2,872
 exported symbols.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
-The release gate reads **ready**.
+The release gate reads **not ready**, on the one criterion the planned rows fail:
+*No public C++ symbol is unaccounted for*.
+
+**The matrix is open, and Phase B9 is the backlog that closes it.** The previous snapshot in this
+section — *0 planned, ABI 0.2.0, the gate reads ready* — was written on 2026-08-19 and was accurate
+then. It stayed in the file while four more merges and an ABI bump moved every number in it, so for
+a week this plan and `docs/c-api/RELEASE_GATE.md` asserted opposite things about the same
+measurable fact. Nothing had regressed; the record had. Re-measure this block before trusting it,
+and if `generate_coverage_inventory.py --check` disagrees with it, the check is right.
 
 ### What is closed
 
@@ -696,12 +777,21 @@ The release gate reads **ready**.
 
 ### What remains
 
-**Nothing, as of `CBIND-064` on 2026-08-19** — with the caveats below, which matter more than the
-word "nothing". `CBIND-053`–`CBIND-064` answered a review of the C ABI from the C#/.NET binding and
-two defect reports from the C template, added eleven routes, wrote three standing refusals into the
-headers, and moved the ABI to `0.2.0`. The matrix is closed and `RELEASE_GATE.md` reads **ready**.
+**Phase B9 — 1,451 rows in fourteen slices, `CBIND-080`–`CBIND-093`.** The fifth reopening, and the
+largest: the merges that ran through `CBIND-078` brought in the whole CNAEXT engine layer
+(`modules/graphics-ext`, 95 headers, every one of them `#ifdef CNA_CNAEXT`) plus its `*EXT` surface
+on the XNA types, and a tail of 50 ordinary XNA symbols no slice had picked up. The owner put the
+layer **in scope** on 2026-08-26 rather than excluding it the way `CBIND-047` excluded
+`modules/platform`, so it is a backlog and not a scope cut.
 
-**Expect the matrix to keep reopening, and do not read a closed one as a finished one.** Four merges
+The paragraph this replaced said *"Nothing, as of `CBIND-064` on 2026-08-19"*, and it was true when
+it was written: `CBIND-053`–`CBIND-064` answered a review from the C#/.NET binding and two defect
+reports from the C template, added eleven routes, wrote three standing refusals into the headers,
+and moved the ABI to `0.2.0`. It is kept here in the past tense because the sentence itself is the
+lesson — see the paragraph immediately below, which predicted exactly this and was still not enough
+to stop the record going stale. The gate `CBIND-079` added is the part that does not rely on anybody re-reading.
+
+**Expect the matrix to keep reopening, and do not read a closed one as a finished one.** Five merges
 have now each reopened it, and the pattern is stable: this plan's queue empties, the branch merges,
 and the tracked surface grows. The standing work is not "close the matrix" but "reconcile after
 each merge" — start every context by running `python3 tools/c-api/generate_coverage_inventory.py

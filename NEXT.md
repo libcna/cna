@@ -1,5 +1,62 @@
 # NEXT.md
 
+## C ABI — the matrix reopened by 1,451 rows, and Phase B9 owns them (`CBIND-079`, 2026-08-26)
+
+`plans/plan_binding.md` said the C ABI campaign was finished. `docs/c-api/RELEASE_GATE.md`, on the
+same HEAD, said **Not ready**. The gate was right, and the interesting part is which document was
+wrong and why.
+
+**What is actually unmapped: 1,451 public symbols, and 1,410 of them are one thing.** The merges
+that ran through `CBIND-078` brought in the **CNAEXT engine layer** — `modules/graphics-ext`, 95
+public headers from the `plans/plan_modern.md` campaign — together with its `*EXT` surface on the
+XNA types in `modules/graphics`. The remaining 41 are ordinary XNA symbols no slice picked up:
+`Vector2`'s compound-assignment operators, the three explicit-state `SpriteBatch::Begin` overloads,
+`ShaderEffect`'s array uniforms, `ContentManager::ResolveExistingAssetPath`, and the
+`Equals`/`GetHashCode`/`ToString` overrides on seven media identities.
+
+**Every one of those 95 headers is wrapped in `#ifdef CNA_CNAEXT`, and `CNA_CNAEXT` is OFF by
+default** (`CMakeLists.txt:81`). In the trees this campaign builds, none of those declarations
+exist. `tools/c-api/generate_coverage_inventory.py` reads header *text* and does not evaluate the
+preprocessor, which is how an entire opt-in subsystem entered the inventory in one step without
+anybody adding a line to it. That is worth remembering the next time the tracked surface jumps: ask
+what the generator can and cannot see before assuming the API grew.
+
+**The owner put the layer in scope on 2026-08-26.** Offered the `CBIND-047` precedent — exclude it
+as a substrate the way `modules/platform` is excluded — the decision was to **bind it**. So Phase B9
+in `plans/plan_binding.md` is a real backlog of fourteen slices, `CBIND-080`–`CBIND-093`, sized from
+the inventory rather than estimated: 232 rows in the post-process chain, 209 in lights and shadows,
+177 in PBR materials, 157 in instancing/culling, 137 in IBL and probes, 121 in the engine
+foundations, 117 in the render pipeline, 116 in clustered lighting, 87 in HDR and tonemapping, 48
+on the `*EXT` surface of existing XNA types, and 50 in the four tail slices.
+
+**The ABI shape question is already answered — do not re-decide it.** An optional layer could make
+the export list depend on a CMake option, which would make the release gate's *No unreviewed ABI
+break* criterion (2,872 recorded exports) unenforceable. `CNA_DEVICES` hit this first and
+`modules/c-api/src/CnaCApiDevices.cpp` settled it: **always declare and export every route**, and
+compile an `#else` arm returning `CNA_RESULT_NOT_SUPPORTED` when the layer is absent. Every B9 slice
+follows that, and is built and tested **both** ways — `cmake-build-cnaext/` with `CNA_CNAEXT=ON`,
+`cmake-build-debug/` with it off.
+
+**Three record defects came with it, all now closed.** The plan's `## Current status` block still
+read *0 planned, ABI 0.2.0, gate ready* — accurate on 2026-08-19, stale for a week while four merges
+and an ABI bump moved every number in it. `CBIND-037D` still read 🟨 although its four children were
+✅ and `devices`/`devices-ext` had no planned row — a parent nobody re-read when its last child
+closed. And 1,414 planned rows named `CBIND-035`, a task recorded ✅: the matrix asserted that
+finished tasks owned unfinished work, which is precisely how the gap stayed invisible.
+`CBIND-037`'s 🟨, by contrast, is **correct** and stays — 23 of its own inventory rows are still open.
+
+**The gate in the same commit is the part that does not depend on anyone re-reading anything.** `--check` now fails
+when a `planned` row names a task the plan records as `✅`. Deliberately not "fail on any planned
+row": B9 has 1,451 of them by design. What it forbids is unfinished work parked on a finished task's
+name — and it runs in `CApiCoverageMatrix` and the CI workflow that already existed.
+
+**`CBIND-094`: two C API tests were reading the machine, not the contract.** `CApi_MediaSmoke`
+writes under `$HOME` through the media library and failed outright where `$HOME` was read-only;
+`CApi_GamersSmoke` opened an audio device and blocked where PulseAudio was unreachable. Both now get
+an isolated `HOME`/`XDG_DATA_HOME` under the build tree and `SDL_AUDIODRIVER=dummy`, unconditionally
+rather than only under `SDL_RENDERER`. A reviewer of this branch had to hand-patch the environment
+before either test could measure anything, which is the definition of a test that is not evidence.
+
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 
 The sample audit removed the sample-side model, cubemap, font and background workarounds and fed
@@ -2016,7 +2073,9 @@ task.
 > **State at this handoff.** Forty-six slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **[SUPERSEDED 2026-08-26 — see the
+> top of this file. The sentence that follows was true on 2026-08-19 and is false now: the matrix
+> reopened by 1,451 rows and `graphics-ext` is the bulk of them.]** **Nothing remains in the campaign at all**: every
 > module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-042` are done,
 > as are `CBIND-045` and `CBIND-046` from the owner's two decisions and `CBIND-044A`–`D`. With the
 > owner's approval of the twelve remaining limitations on 2026-08-16, **every task in the plan is
