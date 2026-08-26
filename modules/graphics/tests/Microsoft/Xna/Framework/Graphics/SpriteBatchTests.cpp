@@ -1350,13 +1350,15 @@ TEST(SpriteBatchNumericInputTest, DrawStringStillRefusesUnrepresentableFiniteDes
 // This is the reason CNA could not simply accept non-finite values before. Both depth sorts used a
 // bare `<` on layerDepth, and NaN compares false against everything: `a < b` and `b < a` are both
 // false, which violates the strict weak ordering std::stable_sort requires. That is undefined
-// behaviour -- libstdc++ can walk off the end of the range -- not merely a surprising order. XNA
-// has no such hazard because it sorts through IComparable<float>, which defines a total order with
-// NaN below everything.
+// behaviour -- libstdc++ can walk off the end of the range -- not merely a surprising order.
 //
-// CompareOrdered gives CNA the same total order, so this exercises what used to be UB: enough
-// sprites to take stable_sort's real (non-insertion) path, with NaN depths scattered among finite
-// ones, in both sort modes.
+// The order asserted below is FNA's, whose depth comparers are p2->depth.CompareTo(p1->depth)
+// (SpriteBatch.cs:1602) and so put NaN below everything. XNA's own comparers differ: a bare > / <
+// pair returning 0 when neither holds, which makes a NaN depth compare equal to every other depth.
+// Copying that shape would keep the undefined behaviour, since equivalence would not be transitive,
+// so CNA follows the behavioural reference here and this test pins that choice: enough sprites to
+// take stable_sort's real (non-insertion) path, with NaN depths scattered among finite ones, in
+// both sort modes.
 TEST(SpriteBatchNumericInputTest, NonFiniteLayerDepthsSortWithoutCorruptingTheQueue)
 {
     using Microsoft::Xna::Framework::Graphics::BlendState;

@@ -27,14 +27,17 @@ namespace Microsoft::Xna::Framework::Graphics
     namespace
     {
         /**
-         * Total order over float, matching .NET's `float.CompareTo`: NaN sorts below everything,
+         * Total order over float, matching FNA's own depth comparers, which are
+         * `p2->depth.CompareTo(p1->depth)` (`SpriteBatch.cs:1602`): NaN sorts below everything,
          * including negative infinity, and NaN compares equal to NaN.
          *
-         * XNA needs no such helper because it sorts through `IComparable<float>`, which already
-         * defines that order -- which is exactly why XNA can carry a NaN layer depth into its sort
-         * and CNA could not. A bare `<` on NaN makes both `a < b` and `b < a` false, violating the
-         * strict weak ordering `std::stable_sort` requires: undefined behaviour, not a surprising
-         * order. This is the ordering CNA needed before it could accept non-finite values at all.
+         * FNA is the behavioural reference, and here it and XNA genuinely differ. XNA's comparers
+         * are a bare `>` / `<` pair returning 0 when neither holds, so a NaN depth compares
+         * **equal to every other depth**. That is not merely a different order: equivalence stops
+         * being transitive (NaN ~ 1 and NaN ~ 2 while 1 !~ 2), which is exactly what
+         * `std::stable_sort` forbids. Copying XNA's shape here would leave the undefined behaviour
+         * in place, so FNA's total order is both the reference answer and the only safe one --
+         * and it is what let CNA start accepting non-finite depths at all.
          */
         [[nodiscard]] int CompareOrdered(float a, float b) noexcept
         {

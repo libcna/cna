@@ -1007,8 +1007,8 @@ Nothing downstream was modified and no loader was weakened.
   native library.
 - **`cna-cs`'s reviewed policy names 0.6.0, 0.7.0 and 0.8.0.** It admitted 0.8.0 and **will refuse
   0.9.0 until its policy is extended.** That is the bump working as designed rather than a
-  regression: the two class-D rows below are exactly what a consumer is supposed to re-review before
-  admitting a new generation. Recorded here as required downstream work; nothing downstream was
+  regression: the seven class-D rows below are exactly what a consumer is supposed to re-review
+  before admitting a new generation. Recorded here as required downstream work; nothing downstream was
   modified.
 - **`cna-ts`'s ABI audit reports `TRACKED_WASM_ARTIFACTS=0`, `BROWSER_ARTIFACT_STATUS=MISSING`.**
   It does not yet know about [[CABI-14]]'s module, which lives in this build tree rather than
@@ -1076,8 +1076,16 @@ a live defect rather than a policy: `DrawString` never validated `layerDepth` at
 reached exactly the undefined behaviour described above.
 
 The owner chose to match XNA, and [[CABI-38]] did. The sort was made a total order first --
-`CompareOrdered`, the order .NET's `float.CompareTo` defines -- because that, not the validation,
-was what the refusals were really standing in for. All 13 `ValidateFinite` calls and the four
+`CompareOrdered`, the order FNA's own depth comparers define (`SpriteBatch.cs:1602`, which is
+`depth.CompareTo`) -- because that, not the validation, was what the refusals were really standing
+in for.
+
+**FNA and XNA differ here, and CNA follows FNA.** XNA's comparers are a bare `>` / `<` pair that
+returns 0 when neither holds, so a NaN depth compares equal to every other depth. That is not a
+usable model in C++: equivalence stops being transitive, which is precisely what
+`std::stable_sort` forbids, so copying XNA's shape would have left the undefined behaviour in
+place. FNA's total order is both the reference answer under this project's rules and the only safe
+one. External review caught this being credited to XNA in the source comment and the test. All 13 `ValidateFinite` calls and the four
 C-boundary guards on XNA-shaped routes are gone; `cna_sprite_batch_draw_mesh_ext` keeps its own,
 having no XNA counterpart.
 
@@ -1144,7 +1152,7 @@ milestone's own HEAD. Corrected in [[CABI-30]]: 0.8.0 -> **0.9.0**, history writ
 re-recorded.
 
     CNA_NEW_ABI_REQUIRES_DOWNSTREAM_REVIEW=true (0.8.0 -> 0.9.0)
-    CNA_0_9_0_SEMANTICS_CHANGED=true (two class-D rows below)
+    CNA_0_9_0_SEMANTICS_CHANGED=true (seven class-D rows below)
 
 ## ABI classification, all changes in this milestone
 
@@ -1171,7 +1179,7 @@ revision of this table listed: it was written before CABI-25 through CABI-31 lan
 extended, and CABI-6 was missing from it even then. External review caught the omission in the
 public history; it was the same omission here.
 
-Of the six, **CABI-25 is the one a consumer is most likely to hit**, and it is the only one that
+Of the seven, **CABI-25 is the one a consumer is most likely to hit**, and it is the only one that
 turns a succeeding call into a failing one. The rest either accept something previously refused or
 change a value's meaning.
 

@@ -62,16 +62,26 @@ Two halves with different answers.
 **Non-finite sprite values**
 
 - **BEFORE** — CNA refused values XNA carries into the vertex path.
-- **ROOT CAUSE** — CNA **deliberately** refuses them. `SpriteBatch` validates finiteness in 16
-  places, throws `ArgumentOutOfRangeException`, documents it with `@throws`, and has tests
-  asserting it. A standing, documented departure from XNA predating this milestone.
-- **CNA CHANGE** — the hole in that decision: `DrawString` never validated `layerDepth`, which is
-  what `flushBatch`'s depth comparators order by, and a NaN there breaks the strict weak ordering
-  `std::stable_sort` requires — undefined behaviour, not a wrong sort. Now validated and
-  documented.
-- **ABI CLASSIFICATION** — none at the C boundary; the C guard already refused it.
-- **STATUS** — `PARTIALLY_RESOLVED`. The crash path is closed. The divergence from XNA remains and
-  is CNA's deliberate position, not an oversight.
+- **ROOT CAUSE** — CNA **deliberately** refused them, in 13 places plus four more at the C
+  boundary. A standing, documented departure predating this milestone: XNA's `SpriteBatch` contains
+  no `IsNaN`, no `IsInfinity` and no finiteness check at all.
+- **CNA CHANGE** — the refusals are gone and the values reach the vertex path. What made that
+  possible was fixing the sort first: both depth comparators used a bare `<`, and NaN compares
+  false in both directions, so the strict weak ordering `std::stable_sort` requires was violated —
+  undefined behaviour, not a wrong order. `CompareOrdered` is now a total order matching **FNA's**
+  own comparers (`SpriteBatch.cs:1602`, `depth.CompareTo`), which puts NaN below everything.
+  `DrawString` also stopped building an integer `Rectangle`, since one cannot carry a NaN.
+- **FNA and XNA differ here, and CNA follows FNA.** XNA's comparers are a bare `>` / `<` pair
+  returning 0 when neither holds, so a NaN depth compares equal to every other depth. In C++ that
+  is unusable: equivalence stops being transitive, which is exactly what `std::stable_sort` forbids,
+  so copying XNA's shape would have kept the undefined behaviour.
+- **ABI CLASSIFICATION** — **D**. The C boundary's own finiteness guards on the four XNA-shaped
+  sprite routes are gone, so values this ABI refused now succeed.
+  `cna_sprite_batch_draw_mesh_ext` keeps its guard, having no XNA counterpart and so its own
+  contract.
+- **STATUS** — `RESOLVED`. **Downstream must re-review**: values this ABI refused now succeed. The
+  Int32 destination range check is unchanged and still refuses a finite value too large to be a
+  representable destination.
 
 ## `DynamicVertexBuffer` / `DynamicIndexBuffer` / render-target `ContentLost`
 
@@ -138,9 +148,10 @@ Two halves with different answers.
 
 ## Summary
 
-    BLOCKERS_RESOLVED  = 6   (storage disposing, sort mode, video frame identity, cross-device,
-                              Apply3D multi-listener, ContentLost where loss is real)
-    BLOCKERS_PARTIAL   = 1   (non-finite sprite values — a standing, deliberate departure)
+    BLOCKERS_RESOLVED  = 7   (storage disposing, sort mode, video frame identity, cross-device,
+                              Apply3D multi-listener, ContentLost where loss is real,
+                              non-finite sprite values)
+    BLOCKERS_PARTIAL   = 0
     BLOCKERS_REMAINING = 0
 
     CNA_ABI_VERSION 0.8.0 -> 0.9.0
