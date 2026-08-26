@@ -48,6 +48,17 @@
 > Everything above about `.cnj` itself is unchanged; `.xnb` support was added *alongside* it, not
 > instead of it.
 >
+> **2026-08-27 update — `.cnb` is now a tier above `.cnj`:** CNA gained a compiled binary content
+> format, `.cnb`, and `ContentManager`'s resolution order gained a corresponding tier. "The core
+> rule" below is otherwise unchanged, but it now reads **`.xnb`, then `.cnb`, then the literal
+> caller-given path, then `.cnj`, then native extensions**. The reasoning is the same shape as the
+> two tiers already there: a `.cnb` is CNA's own *compiled* artifact, so it must win over the loose
+> `.cnj` and native sources it was compiled **from**, while still yielding to a genuine,
+> externally-produced `.xnb`. Nothing about `.cnj` changed: it remains the editable, diffable,
+> hand-writable format, it remains loadable on its own with no `.cnb` anywhere, and it is the input
+> the `.cnb` compiler reads. See `docs/cnb-format.md` for the format and `plans/plan_cnb.md`
+> (`CNBF-081`/`CNBF-083`) for the tier and the test that pins the full order.
+>
 > **2026-07-17 update — Phase 10, `AnimationClipTypeReader`:** the "Per-type `.cnj` conventions"
 > table's `AnimationClip` row, previously a design sketch only, is now implemented
 > (`plans/plan_cnj.md` `CNB-40`–`CNB-42`) — a standalone `.cnj` `AnimationClip` document, independent of
@@ -148,15 +159,22 @@ actually requires" below for how large that cost really is in practice.
 ## The core rule
 
 For any asset CNA is asked to load by logical name (e.g. `"Textures/player"`), resolve it as
-follows — **`.xnb` is checked first (2026-07-16), then the literal caller-given path, then `.cnj`,
-with native extensions as the final fallback**:
+follows — **`.xnb` is checked first (2026-07-16), then `.cnb` (2026-08-27), then the literal
+caller-given path, then `.cnj`, with native extensions as the final fallback**:
 
 ```text
 1. If "<name>.xnb" exists, load it through CNA's own (MVP-scoped) binary .xnb
    reader. A recognized-but-not-yet-implemented reader name, or malformed/
    unsupported content, is a hard ContentLoadException -- it does NOT fall
-   through to steps 2-4 below. See xnb.md/plans/plan_xnb.md for what is actually
+   through to the steps below. See xnb.md/plans/plan_xnb.md for what is actually
    implemented at any given time.
+
+1b. Otherwise, if "<name>.cnb" exists, load it through CNA's own compiled
+   binary format. Like .xnb, this happens BEFORE any per-type reader lookup --
+   a .cnb declares its own asset type and dispatches through the process-wide
+   CNA::Content::CnbLoaderRegistry -- and, like .xnb, a present-but-malformed
+   .cnb is a hard ContentLoadException rather than a fall-through. See
+   docs/cnb-format.md and plans/plan_cnb.md.
 
 2. Otherwise, if the literal asset name/path as given by the caller (with
    whatever extension it already has, if any) exists, load it directly with
@@ -201,8 +219,9 @@ Two separate reasons drive this ordering, one per tier:
   file-exists check per load when no `.cnj` is present — negligible, and now serviced by the
   content-manifest cache (see `xnb.md`'s "Content manifest" section) rather than a raw stat call.
 
-Restated: **`.xnb`, when present, always wins outright; failing that, `.cnj`, when present, has
-final say over how an asset name resolves; failing that, the file extension picks the reader.**
+Restated: **`.xnb`, when present, always wins outright; failing that, a compiled `.cnb`; failing
+that, `.cnj`, when present, has final say over how an asset name resolves; failing that, the file
+extension picks the reader.**
 This still mirrors how `ContentManager.Load<T>()` resolves a logical asset name to a file today
 (`ResolveAssetPath` already tries a list of candidate paths in order) — it just means `.xnb` and
 `.cnj` are the first two candidates tried for every registered type, not appended after that type's

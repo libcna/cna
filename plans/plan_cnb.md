@@ -363,8 +363,16 @@ lines and shares six file-scope helpers with the 1800-line runtime-glTF reader
    reuses the existing `ModelResources`, `BuildVertexBufferFromRawBytes`, `WidenedIndicesEXT`,
    `AppendPositionsForMeshBoundsEXT` and `ApplyPunctualLightsEXT` helpers instead of copying them.
 
-Option 1 is recorded as future work (`CNBF-090`), to be done as its own isolated task with its own
-regression run — not smuggled into this one.
+**What actually landed, versus what D9 planned.** Option 3 was taken, with one deliberate,
+contained piece of option 1: the ~200-line block that builds a part's `Effect` and applies its
+complete material state was extracted out of `ModelTypeReader::Read` into a file-scope
+`BuildPartEffectEXT`, which both the `.cnj` reader and the `.cnb` loader now call. The alternative
+was a third copy of the PBR/DualTexture/unlit/lighting wiring in the same file, which would have
+drifted. The extraction is mechanical (the two paths differ only in how they arrive at eight
+resolved texture asset names), it is confined to one file, and it was verified against the existing
+model suites — including `GltfToCnjToolTest`'s own offline-versus-runtime L6 material comparison
+and skinning-data sweep, which are precisely the tests a mistake here would break. The rest of
+option 1 — a shared `.cnj`/`.cnb` *mesh builder* — remains future work as `CNBF-100`.
 
 **Model v1 schema scope** (everything the compiler can express *and* the reader can honour):
 bone hierarchy, per-part geometry (vertex bytes + declared stride/count, index bytes + declared
@@ -485,7 +493,7 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 | CNBF-031 | zero-length chunks accepted; zero-chunk file accepted | ✅ | |
 | CNBF-032 | `XREF` path-safety rejections (absolute, `..`, backslash, empty) | ✅ | |
 | CNBF-033 | deterministic byte-identical writing | ✅ | |
-| CNBF-034 | container fuzz — deterministic LCG mutation, never crashes | ⬜ | |
+| CNBF-034 | container fuzz — deterministic LCG mutation, never crashes | ✅ | 17 000 mutated inputs across Curve/AnimationClip/Model plus pure noise |
 
 ### Phase B — `Curve`
 
@@ -538,15 +546,15 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
-| CNBF-090 | `docs/cnb-format.md` — authoritative spec incl. annotated hex | ⬜ | |
+| CNBF-090 | `docs/cnb-format.md` — authoritative spec incl. annotated hex | ✅ | pinned by `CnbSpecConformanceTests.cpp`, verified to fail on a doc-only edit |
 | CNBF-091 | file-count / byte-size / open-count measurement, CNJ vs CNB | ✅ | §8 |
-| CNBF-092 | final architectural review pass | ⬜ | §9 |
+| CNBF-092 | final architectural review pass | 🚧 | §9 |
 
 ### Out of scope for v1 (recorded, not started)
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
-| CNBF-100 | Extract a shared `.cnj`/`.cnb` model builder out of `ContentManager.cpp` | ⛔ | see D9 |
+| CNBF-100 | Extract a shared `.cnj`/`.cnb` mesh builder out of `ContentManager.cpp` | ⛔ | see D9; the *effect/material* half of it did land, as `BuildPartEffectEXT` |
 | CNBF-101 | `Texture2D`/`TextureCube`/`Texture3D` schemas incl. multi-representation | ⛔ | id reserved, see D10 |
 | CNBF-102 | `SpriteFont` schema | ⛔ | id reserved |
 | CNBF-103 | `SoundEffect` / `Song` / `Video` schemas incl. external streaming payloads | ⛔ | id reserved |
