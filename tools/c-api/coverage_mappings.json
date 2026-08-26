@@ -14424,6 +14424,212 @@
         "CPP-F1056D5D6B71",
         "CPP-F79ACE9EA67C"
       ]
+    },
+    {
+      "id": "engine-layer-version",
+      "qualified_name_regex": "^(?:CNA_CNAEXT_ENGINE_VERSION|CNA::Graphics::getEngineLayerVersion|CNA::Graphics::getEngineLayerVersionString)$",
+      "kinds": [
+        "macro",
+        "function",
+        "method"
+      ],
+      "mapping": "`CNA_ENGINE_LAYER_VERSION`, `cna_engine_layer_get_version` and `cna_engine_layer_copy_version_string`. The macro and the routes answer the two different questions the canonical pair answers -- what the header said and what the linked library says -- and the C form keeps that split: the macro is a compile-time constant in every build, `cna_engine_layer_get_version` reports 0 where the layer is absent, and the string route refuses there rather than inventing a sentence.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-76D6F62F07AE",
+        "CPP-7C19BA5E8D86",
+        "CPP-9B400B552DD0"
+      ]
+    },
+    {
+      "id": "engine-layer-depth-encoding",
+      "qualified_name_regex": "^CNA::Graphics::DepthEncoding(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_DepthEncoding` and the `CNA_DEPTH_ENCODING_*` constants at the canonical ordinals, proved by a static assertion against the enumeration itself.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-15E8EB41E098",
+        "CPP-7824BDBFBFD7",
+        "CPP-A73382A35654",
+        "CPP-D141D2251A48"
+      ]
+    },
+    {
+      "id": "graphics-image-access-identity",
+      "qualified_name_regex": "^CNA::GraphicsImageAccess(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_GraphicsImageAccess` and the `CNA_GRAPHICS_IMAGE_ACCESS_*` constants at the canonical ordinals. The header is not behind `CNA_CNAEXT`, so the identity and its static assertion exist in every build even though its only consumer, `cna_compute_shader_bind_image`, needs the layer.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-5F2D6BC05C36",
+        "CPP-6B9C73BEACC4",
+        "CPP-909A6B701F8C",
+        "CPP-D5F82FCA204D"
+      ]
+    },
+    {
+      "id": "graphics-memory-barrier-identity",
+      "qualified_name_regex": "^CNA::GraphicsMemoryBarrier(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_GraphicsMemoryBarrier` and the `CNA_GRAPHICS_MEMORY_BARRIER_*` bits at the canonical values, including `_ALL` as the same fold of the same members, proved by a static assertion.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-0A2A34613C65",
+        "CPP-0D9C978E9769",
+        "CPP-2244E87C4993",
+        "CPP-47A8305135B1",
+        "CPP-514E4736059E",
+        "CPP-540B670C7B97",
+        "CPP-8B54F8747338",
+        "CPP-8EE0B7A9DA24",
+        "CPP-907910BEDFFA",
+        "CPP-EBA436E20E4A",
+        "CPP-F11B1C94552E",
+        "CPP-F2A98EBCE5E1"
+      ]
+    },
+    {
+      "id": "graphics-memory-barrier-operations",
+      "qualified_name_regex": "^CNA::(?:operator\\||operator&|HasBarrier)$",
+      "kinds": [
+        "operator",
+        "function"
+      ],
+      "mapping": "C's own `|` and `&` on the fixed-width identity, which is what the canonical `constexpr` operators do to the underlying value; `HasBarrier` additionally becomes `cna_graphics_memory_barrier_has`, because a containment test is the one of the three a caller can get wrong by writing `&` and comparing against zero.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-2D4D3C927E83",
+        "CPP-43A0432F220E",
+        "CPP-9F8F29E965C3"
+      ],
+      "header_regex": "^modules/graphics/include/CNA/GraphicsMemoryBarrier\\.hpp$"
+    },
+    {
+      "id": "engine-exception",
+      "qualified_name_regex": "^CNA::Graphics::EngineException(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "a boundary conversion rather than a type, following the audio and gamer-services exceptions: the firewall arm in `CnaCApiDetail.hpp` answers `CNA_RESULT_NOT_SUPPORTED` with `CNA_ERROR_CATEGORY_NOT_SUPPORTED` and passes the message through. The three property accessors need no routes of their own because `notSupported` composes exactly those three parts -- subsystem, requirement, renderer -- into that message, so what a C caller can act on is what crosses.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-65679F525FB1",
+        "CPP-ABEED0A3D56F",
+        "CPP-B22F8A66C9A2",
+        "CPP-B903ADB1511C",
+        "CPP-C55DC3FE1E4B",
+        "CPP-D7873AF9C2CF"
+      ]
+    },
+    {
+      "id": "engine-storage-buffer",
+      "qualified_name_regex": "^CNA::Graphics::StorageBuffer(?:::(?:StorageBuffer|~StorageBuffer|setBytes|getBytes|getByteSize))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_storage_buffer_create`, `_set_bytes`, `_get_bytes`, `_get_byte_size` and `_destroy` over an owned `CNA_StorageBufferHandle`. The canonical constructor throws where the renderer has no compute support; that reaches C as `CNA_RESULT_NOT_SUPPORTED` with the output handle left invalid, which is the arm a renderer without compute actually takes.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-4425AF867CAF",
+        "CPP-6297F157EDD6",
+        "CPP-6CD80E95D7EB",
+        "CPP-830A08E9C520",
+        "CPP-8BBC5284442F",
+        "CPP-9F86C3FDD19D"
+      ]
+    },
+    {
+      "id": "engine-storage-buffer-renderer-handle",
+      "qualified_name_regex": "^CNA::Graphics::StorageBuffer::getRendererEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: it returns `CNA::Internal::Renderers::IStorageBufferRenderer*`, a renderer-private C++ interface with virtual dispatch and no C form. Handing a C caller that pointer would put an internal contract into the ABI, which this campaign refuses everywhere else for the same reason.",
+      "tests": "Doxygen declaration inventory; the operation is reachable only through the C++ interface it returns",
+      "status": "not-applicable",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-7ECB4C4B2437"
+      ]
+    },
+    {
+      "id": "engine-storage-buffer-typed",
+      "qualified_name_regex": "^CNA::Graphics::StorageBufferT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "flattened onto the same handle: C has no templates, so the element type becomes an element **size** the buffer carries. `cna_storage_buffer_create_typed` records count and size, `_set_elements`/`_get_elements` are `setData`/`getData`, and `_get_element_count`/`_get_element_byte_size` report the shape. That is what lets the C form enforce the template's own refusals -- more elements than the buffer holds, and a whole-range read -- rather than degrading to untyped bytes; `getBuffer` is the identity, since both spellings name one buffer.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-1551393B74CA",
+        "CPP-2631ED0F1489",
+        "CPP-616D6B4FF4D3",
+        "CPP-722621979016",
+        "CPP-7788C85A4F6E",
+        "CPP-B095C7BFADF1",
+        "CPP-FF5489A3FA4E"
+      ]
+    },
+    {
+      "id": "engine-compute-shader",
+      "qualified_name_regex": "^CNA::Graphics::ComputeShader(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_compute_shader_create`, `_set_uniform_int`/`_set_uniform_float` for the two `setUniform` overloads, `_bind_storage_buffer`, `_bind_texture`, `_is_image_binding_supported`, `_bind_image`, `_dispatch`, `_barrier`, `_is_valid`, `_copy_compile_error` and `_destroy` over an owned `CNA_ComputeShaderHandle`. `dispatch`'s defaulted Y and Z become explicit arguments, and the two identity arguments are validated against their defined values rather than cast through.",
+      "tests": "`EngineLayerSmoke.c` in both builds, plus the OPENGLES3/EasyGL run that exercises the compute path",
+      "status": "implemented",
+      "task": "CBIND-084A",
+      "approved_symbols": [
+        "CPP-2FF844499A00",
+        "CPP-62810F161685",
+        "CPP-6BAE8D608DDC",
+        "CPP-6F3FC4E611A8",
+        "CPP-7E8D22517D14",
+        "CPP-A1202EF0ACCE",
+        "CPP-A36799B67722",
+        "CPP-B3BA5F7E38E6",
+        "CPP-B8BE1896F001",
+        "CPP-C18CC5474702",
+        "CPP-D791925158E4",
+        "CPP-E3A0A02C3FEC",
+        "CPP-F7170DBF5A99"
+      ]
     }
   ]
 }

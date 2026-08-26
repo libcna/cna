@@ -17,6 +17,9 @@
 // out-of-line constructors, so both stay compile-time dependencies and add no link edge to any
 // translation unit that never throws one.
 #include "CNA/CNAException.hpp"
+#ifdef CNA_CNAEXT
+#include "CNA/Graphics/EngineException.hpp"
+#endif
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
@@ -183,6 +186,11 @@ enum class ObjectKind : uint32_t {
     OwnedGraphicsDevice = 123,
     /// plans/plan_cabi.md CABI-24: one render-target ContentLost subscription.
     RenderTargetEventRegistration = 124,
+    // plans/plan_binding.md CBIND-084A: the engine layer's first two owned resources. Both exist
+    // only when CNA_CNAEXT is on; the kinds are declared unconditionally so the registry's kind
+    // space does not shift with a build option.
+    StorageBuffer = 125,
+    ComputeShader = 126,
     Test = UINT32_MAX
 };
 
@@ -303,6 +311,17 @@ template<typename TCallable>
         //
         // It derives from std::runtime_error, so this arm must precede that one.
         return Fail(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, exception.what());
+#ifdef CNA_CNAEXT
+    } catch (const CNA::Graphics::EngineException& exception) {
+        // plans/plan_binding.md CBIND-084A. The engine layer throws this when a renderer cannot do
+        // what a subsystem asked, and its message already names all three parts -- which subsystem,
+        // what it needed, which renderer refused -- because EngineException::notSupported composes
+        // them. So the three property accessors need no routes of their own: what a C caller can
+        // act on crosses in the message, and the result says the refusal was a capability boundary
+        // rather than a defect. It derives from System::Exception, so this arm must precede the
+        // arms below that catch its bases.
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
+#endif
     } catch (const CNA::CNAException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const System::ArgumentException& exception) {

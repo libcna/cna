@@ -1263,6 +1263,18 @@
   "cna_compass_stop",
   "cna_compass_subscribe_calibrate",
   "cna_compass_subscribe_current_value_changed",
+  "cna_compute_shader_barrier",
+  "cna_compute_shader_bind_image",
+  "cna_compute_shader_bind_storage_buffer",
+  "cna_compute_shader_bind_texture",
+  "cna_compute_shader_copy_compile_error",
+  "cna_compute_shader_create",
+  "cna_compute_shader_destroy",
+  "cna_compute_shader_dispatch",
+  "cna_compute_shader_is_image_binding_supported",
+  "cna_compute_shader_is_valid",
+  "cna_compute_shader_set_uniform_float",
+  "cna_compute_shader_set_uniform_int",
   "cna_content_manager_copy_asset_path",
   "cna_content_manager_copy_manifest_native_extension",
   "cna_content_manager_copy_manifest_relative_path",
@@ -1569,6 +1581,8 @@
   "cna_effect_technique_get_index_ext",
   "cna_effect_technique_get_name_byte_count",
   "cna_effect_technique_get_passes",
+  "cna_engine_layer_copy_version_string",
+  "cna_engine_layer_get_version",
   "cna_environment_map_effect_create",
   "cna_environment_map_effect_get_alpha",
   "cna_environment_map_effect_get_amount",
@@ -1989,6 +2003,7 @@
   "cna_graphics_device_unbind_texture",
   "cna_graphics_device_unsubscribe",
   "cna_graphics_ext_is_available",
+  "cna_graphics_memory_barrier_has",
   "cna_graphics_renderer_copy_available_ext",
   "cna_graphics_renderer_copy_current_name",
   "cna_graphics_renderer_fallback_copy_message_ext",
@@ -3305,6 +3320,16 @@
   "cna_sprite_font_set_default_character",
   "cna_sprite_font_set_line_spacing",
   "cna_sprite_font_set_spacing",
+  "cna_storage_buffer_create",
+  "cna_storage_buffer_create_typed",
+  "cna_storage_buffer_destroy",
+  "cna_storage_buffer_get_byte_size",
+  "cna_storage_buffer_get_bytes",
+  "cna_storage_buffer_get_element_byte_size",
+  "cna_storage_buffer_get_element_count",
+  "cna_storage_buffer_get_elements",
+  "cna_storage_buffer_set_bytes",
+  "cna_storage_buffer_set_elements",
   "cna_storage_container_copy_directory_name",
   "cna_storage_container_copy_display_name",
   "cna_storage_container_copy_file_name",
@@ -3972,6 +3997,9 @@
   "CNA_DEPTH_EFFECT_MODE_GRAYSCALE_4_BIT": 2,
   "CNA_DEPTH_EFFECT_MODE_PALETTE_16": 6,
   "CNA_DEPTH_EFFECT_MODE_PALETTE_256": 5,
+  "CNA_DEPTH_ENCODING_AUTOMATIC": 0,
+  "CNA_DEPTH_ENCODING_HALF_FLOAT": 2,
+  "CNA_DEPTH_ENCODING_PACKED": 1,
   "CNA_DEPTH_FORMAT_DEPTH16": 1,
   "CNA_DEPTH_FORMAT_DEPTH24": 2,
   "CNA_DEPTH_FORMAT_DEPTH24_STENCIL8": 3,
@@ -4018,6 +4046,7 @@
   "CNA_EFFECT_VALUE_VECTOR2": 6,
   "CNA_EFFECT_VALUE_VECTOR3": 7,
   "CNA_EFFECT_VALUE_VECTOR4": 8,
+  "CNA_ENGINE_LAYER_VERSION": 2,
   "CNA_ERROR_CATEGORY_ARGUMENT": 1,
   "CNA_ERROR_CATEGORY_CALLBACK": 9,
   "CNA_ERROR_CATEGORY_ENCODING": 11,
@@ -4267,6 +4296,11 @@
   "CNA_GRAPHICS_DEVICE_STATUS_LOST": 1,
   "CNA_GRAPHICS_DEVICE_STATUS_NORMAL": 0,
   "CNA_GRAPHICS_DEVICE_STATUS_NOT_RESET": 2,
+  "CNA_GRAPHICS_IMAGE_ACCESS_READ_ONLY": 0,
+  "CNA_GRAPHICS_IMAGE_ACCESS_READ_WRITE": 2,
+  "CNA_GRAPHICS_IMAGE_ACCESS_WRITE_ONLY": 1,
+  "CNA_GRAPHICS_MEMORY_BARRIER_ALL": 511,
+  "CNA_GRAPHICS_MEMORY_BARRIER_NONE": 0,
   "CNA_GRAPHICS_PROFILE_HI_DEF": 1,
   "CNA_GRAPHICS_PROFILE_REACH": 0,
   "CNA_GRAPHICS_RENDERER_BGFX": 7,
@@ -5182,6 +5216,10 @@
    8,
    8
   ],
+  "CNA_ComputeShaderHandle": [
+   8,
+   8
+  ],
   "CNA_ContainmentType": [
    4,
    4
@@ -5227,6 +5265,10 @@
    4
   ],
   "CNA_DepthEffectMode": [
+   4,
+   4
+  ],
+  "CNA_DepthEncoding": [
    4,
    4
   ],
@@ -5459,6 +5501,14 @@
    8
   ],
   "CNA_GraphicsDeviceStatus": [
+   4,
+   4
+  ],
+  "CNA_GraphicsImageAccess": [
+   4,
+   4
+  ],
+  "CNA_GraphicsMemoryBarrier": [
    4,
    4
   ],
@@ -6001,6 +6051,10 @@
   "CNA_StencilOperation": [
    4,
    4
+  ],
+  "CNA_StorageBufferHandle": [
+   8,
+   8
   ],
   "CNA_StorageContainerHandle": [
    8,

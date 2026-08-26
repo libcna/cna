@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,397 | A C route exists and is tested. |
+| Fully mapped | 6,455 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 443 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 444 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -110,6 +110,10 @@ A small number of canonical operations are unsafe or meaningless when reached th
 
 The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D).
 
+### Renderer-private C++ interfaces returned by a public accessor — 1 symbols
+
+A few engine-layer resources expose the renderer object behind them through an `*EXT` accessor -- `StorageBuffer::getRendererEXT` is the example, returning `CNA::Internal::Renderers::IStorageBufferRenderer*`. That type is an abstract C++ interface with virtual dispatch whose shape is a contract between CNA and its renderers, not between CNA and an application. Handing a C caller that pointer would put a renderer-private vtable into the ABI, and every operation reachable through it is already reachable through the resource's own routes. This is the same argument the inventory's `Internal`/`Detail` path exclusion makes, applied to a return type rather than a declaration site.
+
 ## Limitations that are not about symbols
 
 An inventory cannot record these, because they are properties of the package and the
@@ -118,7 +122,7 @@ promise rather than of any declaration.
 | Subject | What it means | Status |
 |---|---|---|
 | **FFmpeg stays a system dependency** | The package installs the SDL3, SDL3_image and SDL3_mixer libraries this project builds, beside `libcna_c_api.so`, whose RPATH is `$ORIGIN` -- so an installed CNA links and runs with no environment variable. FFmpeg is different: libavcodec, libavformat, libavutil and libswresample come from the distribution. Copying a distribution's binaries into this package would take on their redistribution terms, freeze their soname against future security updates and drag in the transitive libraries they were linked against, so they remain a system dependency a deployment installs the ordinary way. | by design (CONSUMING.md) |
-| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,872 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
+| **The static archive keeps 83 C++ statics visible** | A static CNA exists and exports exactly the same 2,897 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly. | by design (CONSUMING.md) |
 | **One active CNA runtime per process** | A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design. | by design (HANDLES.md) |
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |

@@ -1,0 +1,522 @@
+// SPDX-License-Identifier: MS-PL
+
+/*
+ * plans/plan_binding.md CBIND-084A. This suite runs in both builds and asserts different things in
+ * each, because the ABI's promise is that both builds export the same routes and answer honestly:
+ * with CNA_CNAEXT on, every route does its work; with it off, every route that needs a native
+ * engine-layer object returns CNA_RESULT_NOT_SUPPORTED and touches nothing. A test that only ran
+ * in one configuration would prove half the contract.
+ */
+
+#include <CNA/C/cna.h>
+
+#include <stdint.h>
+#include <string.h>
+
+typedef struct EngineLayerState {
+    CNA_Bool available;
+    CNA_Bool had_compute;
+    int validated;
+    /* Which validator refused, so a failing exit code names the family rather than only the
+     * callback. Set to the first one that fails; zero when everything passed. */
+    int failed_stage;
+} EngineLayerState;
+
+/* --- identities and pure values, which work in either build ------------------------------- */
+
+static int validate_identities(void)
+{
+    return CNA_DEPTH_ENCODING_AUTOMATIC == UINT32_C(0) &&
+        CNA_DEPTH_ENCODING_PACKED == UINT32_C(1) &&
+        CNA_DEPTH_ENCODING_HALF_FLOAT == UINT32_C(2) &&
+        CNA_GRAPHICS_IMAGE_ACCESS_READ_ONLY == UINT32_C(0) &&
+        CNA_GRAPHICS_IMAGE_ACCESS_WRITE_ONLY == UINT32_C(1) &&
+        CNA_GRAPHICS_IMAGE_ACCESS_READ_WRITE == UINT32_C(2) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_NONE == UINT32_C(0) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_VERTEX_ATTRIB_ARRAY == (UINT32_C(1) << 0) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_ELEMENT_ARRAY == (UINT32_C(1) << 1) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_UNIFORM == (UINT32_C(1) << 2) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_TEXTURE_FETCH == (UINT32_C(1) << 3) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_SHADER_IMAGE_ACCESS == (UINT32_C(1) << 4) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_SHADER_STORAGE == (UINT32_C(1) << 5) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_BUFFER_UPDATE == (UINT32_C(1) << 6) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_FRAMEBUFFER == (UINT32_C(1) << 7) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_INDIRECT_COMMAND == (UINT32_C(1) << 8) &&
+        CNA_GRAPHICS_MEMORY_BARRIER_ALL == UINT32_C(0x1FF);
+}
+
+/* The canonical HasBarrier is a containment test, not an intersection test: a mask containing only
+ * one of two requested bits must answer false. That is the arm a `&`-and-compare-nonzero
+ * implementation would get wrong, so it is the arm worth asserting. */
+static int validate_barrier_containment(void)
+{
+    CNA_Bool contains = UINT8_C(9);
+    const CNA_GraphicsMemoryBarrier pair = CNA_GRAPHICS_MEMORY_BARRIER_UNIFORM |
+        CNA_GRAPHICS_MEMORY_BARRIER_TEXTURE_FETCH;
+
+    if (cna_graphics_memory_barrier_has(
+            CNA_GRAPHICS_MEMORY_BARRIER_ALL, pair, &contains) != CNA_RESULT_SUCCESS ||
+        contains != CNA_TRUE) {
+        return 0;
+    }
+    if (cna_graphics_memory_barrier_has(
+            CNA_GRAPHICS_MEMORY_BARRIER_UNIFORM, pair, &contains) != CNA_RESULT_SUCCESS ||
+        contains != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_graphics_memory_barrier_has(
+            CNA_GRAPHICS_MEMORY_BARRIER_NONE,
+            CNA_GRAPHICS_MEMORY_BARRIER_NONE,
+            &contains) != CNA_RESULT_SUCCESS ||
+        contains != CNA_TRUE) {
+        return 0;
+    }
+    return cna_graphics_memory_barrier_has(
+               CNA_GRAPHICS_MEMORY_BARRIER_ALL, pair, 0) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
+/* The header's macro says what this translation unit compiled against; the route says what the
+ * library it linked to reports. Equal in a build with the layer, and 0 from the library without
+ * one -- which is the mismatch the pair exists to expose. */
+static int validate_version(const CNA_Bool available)
+{
+    int32_t version = INT32_C(-1);
+    char text[64];
+    uint64_t bytes = UINT64_C(0);
+
+    if (cna_engine_layer_get_version(&version) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_engine_layer_get_version(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (available == CNA_TRUE) {
+        if (version != CNA_ENGINE_LAYER_VERSION) {
+            return 0;
+        }
+        if (cna_engine_layer_copy_version_string(0, UINT64_C(0), &bytes) !=
+                CNA_RESULT_BUFFER_TOO_SMALL ||
+            bytes == UINT64_C(0) || bytes > sizeof(text)) {
+            return 0;
+        }
+        memset(text, 0, sizeof(text));
+        if (cna_engine_layer_copy_version_string(text, sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        return bytes > UINT64_C(0) && text[0] != '\0';
+    }
+    if (version != INT32_C(0)) {
+        return 0;
+    }
+    return cna_engine_layer_copy_version_string(text, sizeof(text), &bytes) ==
+        CNA_RESULT_NOT_SUPPORTED;
+}
+
+/* --- the layer-absent build: every object route refuses and writes nothing ----------------- */
+
+static int validate_unavailable(const CNA_Handle graphics_device)
+{
+    CNA_StorageBufferHandle buffer = (CNA_StorageBufferHandle)UINT64_C(0x5A5A5A5A);
+    CNA_ComputeShaderHandle shader = (CNA_ComputeShaderHandle)UINT64_C(0x5A5A5A5A);
+    static const char source[] = "#version 310 es\nvoid main() {}\n";
+    const CNA_StringView source_view = {source, sizeof(source) - 1U};
+    uint64_t value = UINT64_C(7);
+    CNA_Bool flag = UINT8_C(9);
+    char text[8];
+    unsigned char bytes[4] = {1U, 2U, 3U, 4U};
+
+    if (cna_storage_buffer_create(graphics_device, UINT64_C(16), &buffer) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        buffer != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_storage_buffer_create_typed(graphics_device, UINT64_C(4), UINT64_C(4), &buffer) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        buffer != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_storage_buffer_set_bytes(buffer, bytes, sizeof(bytes)) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_storage_buffer_get_bytes(buffer, bytes, sizeof(bytes)) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_storage_buffer_get_byte_size(buffer, &value) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_storage_buffer_set_elements(buffer, bytes, UINT64_C(1), UINT64_C(4)) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_storage_buffer_get_elements(buffer, bytes, UINT64_C(1), UINT64_C(4)) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_storage_buffer_get_element_count(buffer, &value) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_storage_buffer_get_element_byte_size(buffer, &value) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_storage_buffer_destroy(buffer) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    /* A refusal must leave the caller's outputs alone; a route that "helpfully" zeroed them would
+     * be indistinguishable from one that succeeded and reported zero. */
+    if (value != UINT64_C(7) || bytes[0] != 1U || bytes[3] != 4U) {
+        return 0;
+    }
+
+    if (cna_compute_shader_create(graphics_device, source_view, &shader) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        shader != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_compute_shader_set_uniform_int(shader, source_view, INT32_C(1)) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_set_uniform_float(shader, source_view, 1.0F) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_bind_storage_buffer(shader, INT32_C(0), buffer) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_bind_texture(shader, INT32_C(0), source_view, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_is_image_binding_supported(shader, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_bind_image(
+            shader, INT32_C(0), CNA_INVALID_HANDLE, CNA_GRAPHICS_IMAGE_ACCESS_READ_WRITE) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_dispatch(shader, INT32_C(1), INT32_C(1), INT32_C(1)) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_barrier(shader, CNA_GRAPHICS_MEMORY_BARRIER_ALL) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_is_valid(shader, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_copy_compile_error(shader, text, sizeof(text), &value) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        cna_compute_shader_destroy(shader) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    return flag == UINT8_C(9);
+}
+
+/* --- the layer-present build ---------------------------------------------------------------- */
+
+/* StorageBuffer's constructor throws System::NotSupportedException where the renderer has no
+ * compute support, and the firewall turns that into CNA_RESULT_NOT_SUPPORTED. That is a real
+ * contract with a real arm, so it is asserted rather than skipped: on a renderer without compute
+ * the refusal itself is what this suite proves, and it must leave the output handle invalid. */
+static int validate_compute_absent(const CNA_Handle graphics_device)
+{
+    CNA_StorageBufferHandle buffer = (CNA_StorageBufferHandle)UINT64_C(0x5A5A5A5A);
+    CNA_ComputeShaderHandle shader = (CNA_ComputeShaderHandle)UINT64_C(0x5A5A5A5A);
+    static const char source[] = "#version 310 es\nvoid main() {}\n";
+    const CNA_StringView source_view = {source, sizeof(source) - 1U};
+
+    if (cna_storage_buffer_create(graphics_device, UINT64_C(16), &buffer) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        buffer != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_storage_buffer_create_typed(graphics_device, UINT64_C(4), UINT64_C(4), &buffer) !=
+            CNA_RESULT_NOT_SUPPORTED ||
+        buffer != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    /* The compute shader itself is more forgiving than the buffer: it records a failure rather
+     * than throwing, so accept either a refusal or a shader that reports itself invalid. */
+    if (cna_compute_shader_create(graphics_device, source_view, &shader) ==
+        CNA_RESULT_SUCCESS) {
+        CNA_Bool valid = UINT8_C(9);
+        const int reports_invalid =
+            cna_compute_shader_is_valid(shader, &valid) == CNA_RESULT_SUCCESS &&
+            valid == CNA_FALSE;
+        return cna_compute_shader_destroy(shader) == CNA_RESULT_SUCCESS && reports_invalid;
+    }
+    return shader == CNA_INVALID_HANDLE;
+}
+
+static int validate_storage_buffer(const CNA_Handle graphics_device)
+{
+    CNA_StorageBufferHandle buffer = CNA_INVALID_HANDLE;
+    uint64_t value = UINT64_C(0);
+    unsigned char written[8] = {1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U};
+    unsigned char read_back[8];
+
+    if (cna_storage_buffer_create(graphics_device, sizeof(written), &buffer) !=
+            CNA_RESULT_SUCCESS ||
+        buffer == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_storage_buffer_get_byte_size(buffer, &value) != CNA_RESULT_SUCCESS ||
+        value != (uint64_t)sizeof(written)) {
+        return 0;
+    }
+    /* Created by byte size, so it has no element shape and the element routes must say so rather
+     * than invent one. */
+    if (cna_storage_buffer_get_element_count(buffer, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(0)) {
+        return 0;
+    }
+    if (cna_storage_buffer_get_element_byte_size(buffer, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(0)) {
+        return 0;
+    }
+    if (cna_storage_buffer_set_elements(buffer, written, UINT64_C(1), UINT64_C(4)) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_storage_buffer_set_bytes(buffer, written, sizeof(written)) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    memset(read_back, 0, sizeof(read_back));
+    if (cna_storage_buffer_get_bytes(buffer, read_back, sizeof(read_back)) != CNA_RESULT_SUCCESS ||
+        memcmp(read_back, written, sizeof(written)) != 0) {
+        return 0;
+    }
+    if (cna_storage_buffer_set_bytes(buffer, written, (uint64_t)sizeof(written) + UINT64_C(1)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_storage_buffer_get_bytes(buffer, read_back, (uint64_t)sizeof(read_back) + UINT64_C(1)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_storage_buffer_set_bytes(buffer, 0, UINT64_C(4)) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_storage_buffer_destroy(buffer) != CNA_RESULT_SUCCESS ||
+        cna_storage_buffer_destroy(buffer) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return 1;
+}
+
+/* The C form of StorageBufferT<T>: the element type becomes an element size the buffer carries,
+ * which is what lets it enforce the template's own "more elements than the buffer holds" refusal. */
+static int validate_typed_storage_buffer(const CNA_Handle graphics_device)
+{
+    CNA_StorageBufferHandle buffer = CNA_INVALID_HANDLE;
+    uint64_t value = UINT64_C(0);
+    int32_t written[4] = {11, 22, 33, 44};
+    int32_t read_back[4];
+
+    if (cna_storage_buffer_create_typed(
+            graphics_device, UINT64_C(4), sizeof(int32_t), &buffer) != CNA_RESULT_SUCCESS ||
+        buffer == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_storage_buffer_get_element_count(buffer, &value) != CNA_RESULT_SUCCESS ||
+        value != UINT64_C(4)) {
+        return 0;
+    }
+    if (cna_storage_buffer_get_element_byte_size(buffer, &value) != CNA_RESULT_SUCCESS ||
+        value != (uint64_t)sizeof(int32_t)) {
+        return 0;
+    }
+    if (cna_storage_buffer_get_byte_size(buffer, &value) != CNA_RESULT_SUCCESS ||
+        value != (uint64_t)sizeof(written)) {
+        return 0;
+    }
+    if (cna_storage_buffer_set_elements(
+            buffer, written, UINT64_C(4), sizeof(int32_t)) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    memset(read_back, 0, sizeof(read_back));
+    if (cna_storage_buffer_get_elements(
+            buffer, read_back, UINT64_C(4), sizeof(int32_t)) != CNA_RESULT_SUCCESS ||
+        memcmp(read_back, written, sizeof(written)) != 0) {
+        return 0;
+    }
+    /* setData accepts a shorter vector; getData always returns the whole range. */
+    if (cna_storage_buffer_set_elements(
+            buffer, written, UINT64_C(2), sizeof(int32_t)) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_storage_buffer_get_elements(
+            buffer, read_back, UINT64_C(2), sizeof(int32_t)) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* The template's own refusal, and the one a byte API cannot express. */
+    if (cna_storage_buffer_set_elements(
+            buffer, written, UINT64_C(5), sizeof(int32_t)) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* A disagreeing element size is an argument error, never a silent reinterpretation. */
+    if (cna_storage_buffer_set_elements(
+            buffer, written, UINT64_C(2), sizeof(int16_t)) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_storage_buffer_destroy(buffer) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* A refused creation must not produce a handle: these two would otherwise leave an owned
+     * resource behind, and cna_game_destroy refuses while one is outstanding -- which is exactly
+     * how the leak this test first had was found. */
+    buffer = (CNA_StorageBufferHandle)UINT64_C(0x5A5A5A5A);
+    if (cna_storage_buffer_create_typed(graphics_device, UINT64_C(4), UINT64_C(0), &buffer) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        buffer != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    buffer = (CNA_StorageBufferHandle)UINT64_C(0x5A5A5A5A);
+    if (cna_storage_buffer_create_typed(
+            graphics_device, UINT64_MAX, UINT64_C(4), &buffer) != CNA_RESULT_INVALID_ARGUMENT ||
+        buffer != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    return 1;
+}
+
+/* Creation succeeds for source that does not compile: the shader records the failure and reports
+ * it, because a renderer without compute is a documented boundary rather than a defect. */
+static int validate_compute_shader(const CNA_Handle graphics_device)
+{
+    CNA_ComputeShaderHandle shader = CNA_INVALID_HANDLE;
+    CNA_StorageBufferHandle buffer = CNA_INVALID_HANDLE;
+    static const char source[] =
+        "#version 310 es\nlayout(local_size_x = 1) in;\nvoid main() {}\n";
+    static const char name[] = "uValue";
+    const CNA_StringView source_view = {source, sizeof(source) - 1U};
+    const CNA_StringView name_view = {name, sizeof(name) - 1U};
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t bytes = UINT64_C(0);
+    char text[512];
+    int valid = 0;
+    int ok = 0;
+
+    if (cna_compute_shader_create(graphics_device, source_view, &shader) != CNA_RESULT_SUCCESS ||
+        shader == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_compute_shader_is_valid(shader, &flag) != CNA_RESULT_SUCCESS ||
+        (flag != CNA_TRUE && flag != CNA_FALSE)) {
+        return 0;
+    }
+    valid = flag == CNA_TRUE;
+
+    /* Whether it compiled or not, the error text must be readable and must agree with is_valid. */
+    if (cna_compute_shader_copy_compile_error(shader, 0, UINT64_C(0), &bytes) !=
+            (valid ? CNA_RESULT_SUCCESS : CNA_RESULT_BUFFER_TOO_SMALL) ||
+        (valid && bytes != UINT64_C(0)) || (!valid && bytes == UINT64_C(0))) {
+        return 0;
+    }
+    if (bytes <= sizeof(text) &&
+        cna_compute_shader_copy_compile_error(shader, text, sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (cna_compute_shader_is_image_binding_supported(shader, &flag) != CNA_RESULT_SUCCESS ||
+        (flag != CNA_TRUE && flag != CNA_FALSE)) {
+        return 0;
+    }
+    if (cna_compute_shader_set_uniform_int(shader, name_view, INT32_C(3)) != CNA_RESULT_SUCCESS ||
+        cna_compute_shader_set_uniform_float(shader, name_view, 0.5F) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_storage_buffer_create(graphics_device, UINT64_C(16), &buffer) != CNA_RESULT_SUCCESS ||
+        cna_compute_shader_bind_storage_buffer(shader, INT32_C(0), buffer) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_compute_shader_barrier(shader, CNA_GRAPHICS_MEMORY_BARRIER_SHADER_STORAGE) !=
+            CNA_RESULT_SUCCESS ||
+        cna_compute_shader_dispatch(shader, INT32_C(1), INT32_C(1), INT32_C(1)) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Undefined identity values are refused rather than cast through. */
+    if (cna_compute_shader_barrier(shader, UINT32_C(0x400)) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_compute_shader_bind_image(
+            shader, INT32_C(0), CNA_INVALID_HANDLE, UINT32_C(3)) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    ok = cna_compute_shader_bind_storage_buffer(shader, INT32_C(0), CNA_INVALID_HANDLE) !=
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_storage_buffer_destroy(buffer) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_compute_shader_destroy(shader) == CNA_RESULT_SUCCESS;
+    /* A second destroy must refuse rather than release a second time. */
+    return ok && cna_compute_shader_destroy(shader) != CNA_RESULT_SUCCESS;
+}
+
+static CNA_Result on_load(
+    CNA_Handle game,
+    const CNA_GameTime* game_time,
+    void* context,
+    CNA_CallbackError* out_error)
+{
+    (void)out_error;
+    EngineLayerState* const state = (EngineLayerState*)context;
+    CNA_Handle graphics_device = CNA_INVALID_HANDLE;
+    int ok = 0;
+
+    if (game_time != 0 ||
+        cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
+        cna_graphics_ext_is_available(&state->available) != CNA_RESULT_SUCCESS) {
+        state->failed_stage = 8;
+        return CNA_RESULT_INVALID_STATE;
+    }
+    if (!validate_version(state->available)) {
+        state->failed_stage = 1;
+        return CNA_RESULT_INVALID_STATE;
+    }
+
+    if (state->available == CNA_TRUE) {
+        CNA_Bool compute = CNA_FALSE;
+        if (cna_graphics_device_supports_capability(
+                graphics_device, CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS, &compute) !=
+            CNA_RESULT_SUCCESS) {
+            state->failed_stage = 6;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        state->had_compute = compute;
+        if (compute != CNA_TRUE) {
+            if (!validate_compute_absent(graphics_device)) {
+                state->failed_stage = 7;
+            }
+        } else if (!validate_storage_buffer(graphics_device)) {
+            state->failed_stage = 2;
+        } else if (!validate_typed_storage_buffer(graphics_device)) {
+            state->failed_stage = 3;
+        } else if (!validate_compute_shader(graphics_device)) {
+            state->failed_stage = 4;
+        }
+    } else if (!validate_unavailable(graphics_device)) {
+        state->failed_stage = 5;
+    }
+    ok = state->failed_stage == 0;
+    if (!ok) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    state->validated = 1;
+    return CNA_RESULT_SUCCESS;
+}
+
+static int validate_in_game(int* const out_stage)
+{
+    EngineLayerState state = {CNA_FALSE, CNA_FALSE, 0, 0};
+    CNA_GameCallbacks callbacks = {
+        sizeof(CNA_GameCallbacks), UINT32_C(1), on_load, 0, 0, 0, 0, &state};
+    static const char title[] = "C API engine layer";
+    const CNA_GameCreateInfo create_info = {
+        sizeof(CNA_GameCreateInfo),
+        UINT32_C(1),
+        CNA_TRUE,
+        {0U, 0U, 0U, 0U, 0U, 0U, 0U},
+        INT64_C(166667),
+        {title, sizeof(title) - 1U},
+        &callbacks};
+    CNA_Handle game = CNA_INVALID_HANDLE;
+    int ran = 0;
+
+    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
+        *out_stage = 9;
+        return 0;
+    }
+    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS) {
+        state.failed_stage = state.failed_stage != 0 ? state.failed_stage : 10;
+    }
+    ran = state.failed_stage == 0 && state.validated == 1;
+    *out_stage = state.failed_stage != 0 ? state.failed_stage : (ran ? 0 : 11);
+    return cna_game_destroy(game) == CNA_RESULT_SUCCESS && ran;
+}
+
+int main(void)
+{
+    /* One code per validator, so a failure names the family it came from. */
+    if (!validate_identities()) {
+        return 1;
+    }
+    if (!validate_barrier_containment()) {
+        return 2;
+    }
+    {
+        int stage = 0;
+        if (!validate_in_game(&stage)) {
+            /* 3 = the game itself did not run; 4..8 = the validator that refused. */
+            return stage == 0 ? 3 : 3 + stage;
+        }
+    }
+    return 0;
+}

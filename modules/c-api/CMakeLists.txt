@@ -34,6 +34,7 @@ add_library(cna_c_api ${CNA_C_API_LIBRARY_KIND}
     src/CnaCApiEffects.cpp
     src/CnaCApiGraphics.cpp
     src/CnaCApiGraphicsDevice.cpp
+    src/CnaCApiEngineLayer.cpp
     src/CnaCApiGraphicsExt.cpp
     src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
@@ -1294,6 +1295,30 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_engine_layer_smoke
+        tests/pure_c/EngineLayerSmoke.c
+    )
+    set_target_properties(cna_c_api_engine_layer_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_engine_layer_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_engine_layer_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_engine_layer_smoke)
+    add_test(NAME CApi_EngineLayerSmoke COMMAND cna_c_api_engine_layer_smoke)
+    # plans/plan_binding.md CBIND-084A. The suite creates a game, so it takes the same isolated
+    # environment CBIND-094 gave the other game-creating smokes rather than reading the machine.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
+        )
+    else()
+        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
+        )
+    endif()
+
     add_executable(cna_c_api_media_smoke
         tests/pure_c/MediaSmoke.c
     )
@@ -1807,6 +1832,13 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
+        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
+        # is what supplies it, and it also keeps this target catching the same exceptions the
+        # library does: a boundary test that saw a narrower firewall than production would be
+        # testing a different boundary.
+        cna_graphics_ext
         cna_platform
         Threads::Threads
         sharp_runtime_core_base
@@ -1838,6 +1870,13 @@ if(CNA_BUILD_TESTS)
     # throws whose constructors are not header-only, so proving their conversion needs those modules on the
     # link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
+        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
+        # is what supplies it, and it also keeps this target catching the same exceptions the
+        # library does: a boundary test that saw a narrower firewall than production would be
+        # testing a different boundary.
+        cna_graphics_ext
         sharp_runtime_core_base
         cna_core
         cna_platform
@@ -1874,6 +1913,13 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_utf8_oracle_test PRIVATE
+        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
+        # is what supplies it, and it also keeps this target catching the same exceptions the
+        # library does: a boundary test that saw a narrower firewall than production would be
+        # testing a different boundary.
+        cna_graphics_ext
         sharp_runtime_core_base
         cna_core
         cna_platform
