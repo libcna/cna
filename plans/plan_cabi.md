@@ -188,9 +188,13 @@ P4 -0
 ```
 
 Every C API call **succeeds** — all four draws, `End`, the font/atlas/batch destroys — and the
-process then segfaults later. Deterministic, 3 runs of 3. That is the worst available failure
-mode: the ABI reports success and the process dies after the caller has been told everything
-worked.
+process then segfaults later. That is the worst available failure mode: the ABI reports success and
+the process dies after the caller has been told everything worked.
+
+Re-verified on two independent GL stacks after the display mix-up described under *Test
+environment* was found: **Xvfb `:101` / llvmpipe, 3 runs of 3**, and the **host GPU on `:0`,
+2 runs of 2**. It is a CNA defect, not a driver quirk — and two non-finite draws (a NaN rotation
+and an infinite position) are enough to produce it.
 
 So the `isfinite` guards are not merely a divergence from XNA; they are holding back a real crash
 in CNA's own sprite path. Both work orders' own rules point the same way here —
