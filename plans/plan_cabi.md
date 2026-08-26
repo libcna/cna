@@ -1097,3 +1097,45 @@ Suite: **84 C-API tests, 81 passing** on Xvfb `:101`. Remaining: `CApi_Draw3DSmo
 
 `CApi_RuntimeGameSmoke` hangs in the full run and passes in isolation — run ctest with
 `--timeout 90` so one hang cannot block the rest.
+
+## CABI-23 — Merge readiness, and a build break already sitting on `next`
+
+`next` advanced by exactly one commit since this branch forked at `6319f30c5`:
+`b718f950a fix(SAMPLE-028): depth-test compiled effects on EasyGL's own scale`. It touches
+`EasyGLRenderer.hpp` and `EasyGLRenderer.cpp` — the two files [[CABI-20]] refactored, which is the
+collision this branch was planned around from the start.
+
+### The textual merge is clean; the tree is not
+
+`git merge --no-commit origin/next` auto-merges both files with **zero conflicts**. Then it does
+not compile:
+
+```
+EasyGLRenderer.cpp:5646:9: error: 'viewportMinDepth_' was not declared in this scope
+EasyGLRenderer.cpp:5647:9: error: 'viewportMaxDepth_' was not declared in this scope
+```
+
+This is the whole reason a stale-fork lane gets compile-probed rather than trusted: a clean history
+is not a compatible tree.
+
+### But it is not the merge's fault
+
+`b718f950a` declares both members inside `#if defined(CNA_EASYGL_COMPILED_EFFECTS)`
+(`EasyGLRenderer.hpp:809-812`) and writes to them **unguarded** in
+`EasyGLRenderer::SetViewport` (`EasyGLRenderer.cpp:5646-5647`).
+
+`CNA_EASYGL_COMPILED_EFFECTS` defaults to **OFF** (`CNA_EASYGL_COMPILED_EFFECTS:BOOL=OFF`), so that
+configuration cannot compile.
+
+Proven without any merge in the picture: with this branch's own files replaced by
+`git checkout origin/next -- modules/renderers/easygl/`, the identical two errors appear.
+**`next` does not build in its default configuration.** Restoring this branch's files builds clean.
+
+The fix is small and belongs to whoever owns SAMPLE-028: move the two declarations outside the
+`#if`, or guard the two writes with it. Not done here — it is the sample lane's commit, and this
+branch has no business editing it.
+
+### Merge verdict
+
+Once that break is fixed on `next`, this branch merges textually clean and needs a compile probe
+plus a suite run before the merge is trusted — not a `git merge` alone.
