@@ -214,6 +214,10 @@ if(CNA_BUILD_TESTS)
     # reasons as the harness-spawning tests above.
     if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Content/GltfToCnjToolTests\\.cpp$")
+        # plans/plan_cnb.md CNBF-064: CnbCompilerToolTests.cpp spawns cna_tool_cnj_to_cnb with the
+        # same POSIX-only posix_spawn/sys-wait APIs, so it is excluded on exactly the same
+        # platforms and for exactly the same reasons.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbCompilerToolTests\\.cpp$")
     endif()
 
     # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
@@ -498,6 +502,17 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_tool_gltf_to_cnj)
         target_compile_definitions(CnaTests PRIVATE
             CNA_GLTF_TO_CNJ_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnj>"
+        )
+    endif()
+
+    if(TARGET cna_tool_cnj_to_cnb)
+        # plans/plan_cnb.md CNBF-063/CNBF-064: CnbCompilerToolTests.cpp spawns the real .cnj -> .cnb
+        # compiler as a subprocess, for the same reason GltfToCnjToolTests.cpp spawns its own
+        # tool -- proving cross-process determinism means two genuinely separate processes, not
+        # two calls inside one.
+        add_dependencies(CnaTests cna_tool_cnj_to_cnb)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_CNJ_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_cnj_to_cnb>"
         )
     endif()
 

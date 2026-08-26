@@ -507,11 +507,11 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 
 | ID | Task | Status | Notes |
 |---|---|---|---|
-| CNBF-060 | `CnjToCnb` library entry point (JSON in, bytes out) | ⬜ | reuses `CNA::Internal::Json` + `CnjEnvelope` |
-| CNBF-061 | `Curve` compilation | ⬜ | |
-| CNBF-062 | `AnimationClip` compilation, both `tracks` and `clipFile` forms | ⬜ | absorbs the `.clip.bin` sidecar |
-| CNBF-063 | `cna_tool_cnj_to_cnb` CLI + cmake wiring | ⬜ | mirrors `cmake/ToolGltfToCnj.cmake` |
-| CNBF-064 | compiler tests incl. cross-process determinism | ⬜ | |
+| CNBF-060 | `CnjToCnb` library entry point (JSON in, bytes out) | ✅ | reuses `CNA::Internal::Json` + `CnjEnvelope` |
+| CNBF-061 | `Curve` compilation | ✅ | |
+| CNBF-062 | `AnimationClip` compilation, both `tracks` and `clipFile` forms | ✅ | absorbs the `.clip.bin` sidecar |
+| CNBF-063 | `cna_tool_cnj_to_cnb` CLI + cmake wiring | ✅ | `cmake/ToolCnjToCnb.cmake`, mirroring `cmake/ToolGltfToCnj.cmake` |
+| CNBF-064 | compiler tests incl. cross-process determinism | ✅ | |
 
 ### Phase E — `Model`
 
