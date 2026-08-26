@@ -271,6 +271,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_SetDataOptions COMMAND cna_test_webgpu_setdataoptions
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-63: every SpriteBatch sort mode's ordering (Immediate/Deferred/Texture/FrontToBack/
+    # BackToFront) reaches the WebGPU submission path -- two overlapping solid sprites, which colour
+    # ends up on top, with each depth-sorted mode set opposite to submission order.
+    cna_webgpu_test(cna_test_webgpu_spritebatch_sortmode webgpu_spritebatch_sortmode_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_SortMode COMMAND cna_test_webgpu_spritebatch_sortmode
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-114: WebGPURenderTargetCubeRenderer / CreateRenderTargetCube() -- this renderer's first
     # real render-into-a-cube-face support (previously IGraphicsRenderer's own nullptr-returning
     # default). Direct face-to-face switching (no intervening backbuffer bind), a real BasicEffect
