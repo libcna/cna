@@ -910,6 +910,56 @@ namespace
 // which flattened every fractional sprite onto whole pixels.
 // -----------------------------------------------------------------------
 
+// DrawString was left on the quantising path when Draw() was corrected. Measured against a
+// live XNA 4.0 build (samples campaign SAMPLE-031): drawing the BloomPostprocess overlay at
+// (64.5, 64.5) makes XNA filter each glyph ACROSS the half pixel -- the row through its 'A'
+// reads 121, 162, 174, 174, 162, 121 against 255, 255, 255, 255 for a whole-pixel glyph --
+// which a renderer can only reproduce if the fractional destination reaches it.
+TEST(SpriteBatchSubPixelDestinationTest, DrawStringKeepsItsFractionalPosition)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    const SpriteFont font = makeSingleGlyphFontWithRenderer(texRenderer);
+
+    batch.Begin();
+    batch.DrawString(font, std::string("A"), Vector2(10.5f, 20.25f), Color::White);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    // The glyph's kerning.X is 1 and its cropping.X is 0, so it sits one pixel right of the
+    // draw position -- and keeps the fraction.
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationX, 11.5f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationY, 20.25f);
+}
+
+TEST(SpriteBatchSubPixelDestinationTest, DrawStringKeepsAFractionalScale)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+
+    DummyTextureRenderer texRendererRaw(16, 16);
+    auto texRenderer = std::shared_ptr<CNA::Internal::Renderers::ITextureRenderer>(
+        &texRendererRaw, [](auto*) {});
+    const SpriteFont font = makeSingleGlyphFontWithRenderer(texRenderer);
+
+    batch.Begin();
+    batch.DrawString(font, std::string("A"), Vector2::Zero, Color::White,
+                     0.0f, Vector2::Zero, 1.5f, SpriteEffects::None, 0.0f);
+    batch.End();
+
+    ASSERT_EQ(rec->drawCalls.size(), 1u);
+    // The glyph is 8x12, so a 1.5 scale is 12x18 -- and 1.5 * 1 for the kerned offset.
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationWidth, 12.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationHeight, 18.0f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[0].destinationX, 1.5f);
+}
+
 TEST(SpriteBatchSubPixelDestinationTest, VectorPositionDrawKeepsItsFractionalPosition)
 {
     auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
@@ -1309,13 +1359,21 @@ TEST(SpriteBatchNumericInputTest, EveryDrawStringFamilyRejectsInvalidNumericInpu
     ASSERT_EQ(rec->drawCalls.size(), 6u);
     EXPECT_EQ(rec->drawCalls[0].destinationRectangle, Rectangle(10, -4, 1, 1));
     EXPECT_EQ(rec->drawCalls[1].destinationRectangle, Rectangle(0, 0, 0, 0));
-    EXPECT_EQ(rec->drawCalls[2].destinationRectangle, Rectangle(0, 0, -2, 1));
+    // A glyph's destination is no longer quantised inside SpriteBatch (SAMPLE-031), so the
+    // two fractional scales here reach the renderer unrounded and the recorder's
+    // compatibility rectangle truncates them. The float values are the real contract, so
+    // they are asserted alongside.
+    EXPECT_FLOAT_EQ(rec->drawCalls[2].destinationWidth, -1.5f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[2].destinationHeight, 0.5f);
+    EXPECT_EQ(rec->drawCalls[2].destinationRectangle, Rectangle(0, 0, -1, 0));
     EXPECT_EQ(rec->drawCalls[2].effects, SpriteEffects::FlipHorizontally);
     EXPECT_FLOAT_EQ(rec->drawCalls[2].layerDepth, 0.25f);
     EXPECT_EQ(rec->drawCalls[3].destinationRectangle, Rectangle(20, 30, 1, 1));
     EXPECT_EQ(rec->drawCalls[4].destinationRectangle, Rectangle(0, 0, 1, 1));
     EXPECT_FLOAT_EQ(rec->drawCalls[4].layerDepth, 0.5f);
-    EXPECT_EQ(rec->drawCalls[5].destinationRectangle, Rectangle(0, 0, 1, -2));
+    EXPECT_FLOAT_EQ(rec->drawCalls[5].destinationWidth, 1.25f);
+    EXPECT_FLOAT_EQ(rec->drawCalls[5].destinationHeight, -1.5f);
+    EXPECT_EQ(rec->drawCalls[5].destinationRectangle, Rectangle(0, 0, 1, -1));
     EXPECT_EQ(rec->drawCalls[5].effects, SpriteEffects::FlipVertically);
     EXPECT_FLOAT_EQ(rec->drawCalls[5].layerDepth, 0.75f);
 }
