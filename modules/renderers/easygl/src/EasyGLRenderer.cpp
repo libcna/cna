@@ -7526,9 +7526,21 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 // interpolates the resulting scalar -- NOT a per-fragment recompute from an interpolated normal
 // (Task 1112: the two are not equivalent once vertices carry different normals).
 "    float viewAngle=dot(eyeVector,worldNormal);\n"
-"    vFresnel=(uFresnelEnabled>0.5)\n"
+// The clamp is XNA's, not a safety net. EnvironmentMapEffect.fx carries this scalar to the
+// pixel shader in `float4 Specular : COLOR1` (Structures.fxh's VSOutputTxEnvMap), and Direct3D 9
+// saturates a vertex shader's COLOR output registers to [0,1] BEFORE interpolating them. The
+// value itself is not bounded -- ComputeFresnelFactor multiplies by EnvironmentMapAmount, whose
+// XNA range reaches well past 1 -- and it is then used as the weight of
+// `lerp(color.rgb, envmap.rgb, ...)`. Without the clamp that lerp EXTRAPOLATES past the
+// environment map's own colour and the rim over-brightens: on RimLighting_4_0 at
+// EnvironmentMapAmount 5 that turned XNA's orange rim yellow-white and cost 4.5 % of the frame
+// (SAMPLE-037). Clamp here, at the vertex, so the interpolation starts from the same values
+// D3D9's register file would hold -- clamping per fragment instead would interpolate the
+// unclamped value first and give a different gradient (plans/plan_fx.md FX-122 is the same
+// distinction for translated effects).
+"    vFresnel=clamp((uFresnelEnabled>0.5)\n"
 "        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
-"        : uEnvMapAmount;\n"
+"        : uEnvMapAmount, 0.0, 1.0);\n"
 // REMED-GFX-010: FNA EffectHelpers.SetFogVector / Common.fxh ComputeFogFactor. Fog is a true
 // VIEW-SPACE Z term: fogFactor = saturate(dot(pos, uFogVector)), where uFogVector bakes the third
 // column of World*View (CPU-side, GpuDrawParams.fogVector). EasyGL's vFogFactor is the inverse
