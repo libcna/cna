@@ -534,9 +534,9 @@ public identities; EasyGL remains an internal implementation shared by five GL p
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
 `WEBGPU`
 is experimental but well past a 2D baseline: on desktop (wgpu-native) it has 3D with every stock
-effect, real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA and `Texture3D`, and since
-2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port (2D + 3D, its pixels
-byte-identical to the native Vulkan renderer's). Still open: MRT, occlusion queries, GPU-native
+effect, real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, `Texture3D` and GPU occlusion
+queries, and since 2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port
+(2D + 3D, its pixels byte-identical to the native Vulkan renderer's). Still open: MRT, GPU-native
 compressed textures and custom WGSL effects -- see `docs/webgpu-renderer.md` and
 `plans/plan_webgpu.md`.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
