@@ -256,6 +256,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Texture3D COMMAND cna_test_webgpu_texture3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-47: a disposed VertexBuffer/IndexBuffer must throw System::ObjectDisposedException from
+    # SetData on the WebGPU device (the guard is the XNA GraphicsResource layer's; this proves the
+    # WebGPU path leaves it intact and that a live upload on the same device still works).
+    cna_webgpu_test(cna_test_webgpu_disposed_guard webgpu_disposed_guard_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DisposedGuard COMMAND cna_test_webgpu_disposed_guard
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-114: WebGPURenderTargetCubeRenderer / CreateRenderTargetCube() -- this renderer's first
     # real render-into-a-cube-face support (previously IGraphicsRenderer's own nullptr-returning
     # default). Direct face-to-face switching (no intervening backbuffer bind), a real BasicEffect
