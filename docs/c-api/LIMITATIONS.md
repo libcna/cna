@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,531 | A C route exists and is tested. |
+| Fully mapped | 6,536 | A C route exists and is tested. |
 | **Partially mapped** | 15 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 448 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 458 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -50,7 +50,7 @@ All of them are **recorded by CBIND-069 on 2026-08-19**.
 Every unmapped symbol falls under one of these. The generator fails if one does not, which
 is what stops this list from acquiring a silent "other" category.
 
-### The inward direction of a two-way contract — 5 symbols
+### The inward direction of a two-way contract — 13 symbols
 
 Some CNA surfaces come in pairs: one class a game calls, and a separate one the implementing module calls back with facts about the build. `GraphicsRendererSelection` and `GraphicsRendererSelectionAccessEXT` are the example, and the canonical header keeps them apart so the two directions are not confusable. The C ABI binds the outward half only: telling the selection which renderers are compiled in is a fact about the build, not a choice a caller may make.
 
@@ -94,7 +94,7 @@ Not a design choice: the canonical declaration has no definition anywhere in CNA
 
 Where CNA owns the only instance and its lifetime, the constructor and destructor are not operations a caller can perform, so they are not routes.
 
-### C++ language mechanics with no runtime behavior — 23 symbols
+### C++ language mechanics with no runtime behavior — 25 symbols
 
 Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface.
 

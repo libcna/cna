@@ -134,7 +134,8 @@
         "cross-module signalling",
         "no second name to move from",
         "`std::function` alias",
-        "an alias naming the platform's"
+        "an alias naming the platform's",
+        "a second name for the same resource"
       ],
       "note": "Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface."
     },

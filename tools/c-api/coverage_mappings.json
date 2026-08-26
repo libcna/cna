@@ -14892,6 +14892,88 @@
         "CPP-B9B8CD9E9730",
         "CPP-EEE21C48B72E"
       ]
+    },
+    {
+      "id": "content-lost-inward-notifications",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:DynamicIndexBuffer|DynamicVertexBuffer|RenderTarget2D|RenderTargetCube)::(?:NotifyContentLostEXT|ClearContentLostEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is the **inward** direction of the content-lost contract. Both methods are `CNA::Internal::Graphics::IContentLosable`, and their only caller is `GraphicsDevice` telling a resource that its content went away. What a C application does with that fact -- read `is_content_lost` on the resource's info structure, or subscribe with `cna_render_target_subscribe_content_lost`, `cna_vertex_buffer_subscribe_content_lost` and `cna_index_buffer_subscribe_content_lost` -- is bound. Letting a caller *raise* the loss would let an application lie to the framework about the device.",
+      "tests": "Doxygen declaration inventory; the outward direction is covered by `RenderTargetLifetimeSmoke.c`, `VertexBufferSmoke.c` and `IndexBufferSmoke.c`, which subscribe and read `is_content_lost`",
+      "status": "not-applicable",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-5D16AF86A4FB",
+        "CPP-684F40502072",
+        "CPP-83385E0DF1B7",
+        "CPP-A359210F274E",
+        "CPP-C81B18F69B6D",
+        "CPP-C91ED2DCEDC9",
+        "CPP-DD601C38FE45",
+        "CPP-F49E29E72F0F"
+      ]
+    },
+    {
+      "id": "effect-copy-constructor-clone",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Effect::Effect$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_effect_clone`, which is what the protected copy constructor exists for: `Clone()` calls it, and the C route produces an owned clone of the same concrete native type. C cannot call a protected constructor directly, and the canonical API does not intend anyone to.",
+      "tests": "`EffectSmoke.c`, plus the stock-effect suites that clone each concrete type",
+      "status": "implemented",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-4FC5B092D7C0"
+      ]
+    },
+    {
+      "id": "sprite-batch-begin-explicit-state",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Begin$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_sprite_batch_begin` for the sort-mode-only shape and `cna_sprite_batch_begin_with_effect` for every explicit-state shape. The route `CBIND-044A` added already takes all four state objects, the effect and the transform as nullable arguments, and the canonical overloads differ from one another only in which trailing arguments they carry -- so the three overloads the merge added need no new route: a null argument means exactly what the shorter overload means. Verified by reading the declaration rather than assumed.",
+      "tests": "`GraphicsSurfaceSmoke.c`, which drives `cna_sprite_batch_begin_with_effect` with explicit state",
+      "status": "implemented",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-53DF8299BFBD",
+        "CPP-64D952D77844",
+        "CPP-D80647AB123B"
+      ]
+    },
+    {
+      "id": "texture-cube-value-copy",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::TextureCube::(?:TextureCube|operator=)$",
+      "kinds": [
+        "constructor",
+        "operator"
+      ],
+      "mapping": "No C mapping: the canonical copy is a value wrapper that shares one underlying texture resource, and in this ABI the handle already **is** that shared reference -- passing it around is the copy. Minting a second name for the same resource would create a second owner the registry must reconcile at destroy, which is a lifetime hazard rather than a feature; the shared-resource semantics a caller wants are what one handle already provides.",
+      "tests": "Doxygen declaration inventory; sharing is covered wherever a cube handle is passed to more than one operation",
+      "status": "not-applicable",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-06F1EB9C1F4F",
+        "CPP-B58568C470FA"
+      ]
+    },
+    {
+      "id": "vertex-buffer-set-data-template",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexBuffer::SetData$",
+      "kinds": [
+        "method"
+      ],
+      "signature_regex": ".*template.*|.*TVertex.*",
+      "mapping": "`cna_vertex_buffer_set_data`, which is the same operation with the element type selected by a versioned descriptor instead of a template parameter: `transfer->vertex_type` names the built-in vertex structure, `data` is the typed array and `capacity` is its element count. That is the flattening this campaign settled for `IPackedVectorT` -- a closed set of element types the ABI names, rather than a template C cannot instantiate.",
+      "tests": "`VertexBufferSmoke.c` and `Draw3DSmoke.c` typed set-data coverage",
+      "status": "implemented",
+      "task": "CBIND-080",
+      "approved_symbols": [
+        "CPP-FFE25DBCD3E6"
+      ]
     }
   ]
 }
