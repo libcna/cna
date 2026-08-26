@@ -169,6 +169,8 @@ CNA_Result GetOwnedTexture(
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -407,7 +409,7 @@ template<typename TResource>
             ErrorCategoryForResult(result),
             "The owned Texture3D handle could not be created.");
     }
-    AddOwnedGraphicsResource();
+    AddOwnedGraphicsResourceFor(parentGame);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -426,7 +428,7 @@ template<typename TResource>
             ErrorCategoryForResult(result),
             "The owned TextureCube handle could not be created.");
     }
-    AddOwnedGraphicsResource();
+    AddOwnedGraphicsResourceFor(parentGame);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -547,7 +549,7 @@ CNA_Result cna_texture3d_destroy(const CNA_Handle textureHandle)
                 ErrorCategoryForResult(result),
                 "The owned Texture3D handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(texture->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -825,7 +827,7 @@ CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
                 ErrorCategoryForResult(result),
                 "The owned TextureCube handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(texture->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

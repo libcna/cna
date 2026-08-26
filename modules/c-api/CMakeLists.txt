@@ -452,6 +452,21 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_owned_graphics_device_smoke
+        tests/pure_c/OwnedGraphicsDeviceSmoke.c
+    )
+    set_target_properties(cna_c_api_owned_graphics_device_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_owned_graphics_device_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_owned_graphics_device_smoke)
+    add_test(NAME CApi_OwnedGraphicsDeviceSmoke
+        COMMAND cna_c_api_owned_graphics_device_smoke)
+    set_tests_properties(CApi_OwnedGraphicsDeviceSmoke PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     add_executable(cna_c_api_render_target_lifetime_smoke
         tests/pure_c/RenderTargetLifetimeSmoke.c
     )

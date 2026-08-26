@@ -24,6 +24,8 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
@@ -128,7 +130,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
             ErrorCategoryForResult(result),
             "The owned RenderTargetCube handle could not be created.");
     }
-    AddOwnedGraphicsResource();
+    AddOwnedGraphicsResourceFor(parentGame);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -583,7 +585,7 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
                 ErrorCategoryForResult(releaseResult),
                 "The owned RenderTargetCube handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(resource->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

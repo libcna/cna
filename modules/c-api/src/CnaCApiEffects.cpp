@@ -56,6 +56,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -116,11 +118,15 @@ using Microsoft::Xna::Framework::Graphics::TextureCube;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
+/// CABI-13: the owner is captured at construction because the count has to be undone against the
+/// same owner it was taken against -- an effect on a caller-created device never counted, and must
+/// not decrement a game's tally when it goes away.
 class EffectOwnership final {
 public:
-    EffectOwnership()
+    explicit EffectOwnership(const CNA_Handle owner)
+        : owner_(owner)
     {
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(owner_);
     }
 
     EffectOwnership(const EffectOwnership&) = delete;
@@ -128,8 +134,11 @@ public:
 
     ~EffectOwnership()
     {
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(owner_);
     }
+
+private:
+    CNA_Handle owner_;
 };
 
 class CApiEffect final : public Effect {
@@ -272,6 +281,13 @@ struct DirectionalLightResource final {
 };
 
 struct EffectLifetime final {
+    /// EffectOwnership is deliberately non-copyable, so the owner is threaded through a
+    /// constructor rather than an aggregate initialiser.
+    explicit EffectLifetime(const CNA_Handle owner)
+        : ownership(owner)
+    {
+    }
+
     EffectOwnership ownership;
     std::unordered_map<int, RetainedTextureSlot> shaderTextures;
     RetainedTextureSlot basicTexture;
@@ -847,7 +863,7 @@ template<typename TNative, typename TC, typename TConvert>
     CNA_EffectHandle* const outEffect)
 {
     auto state = std::make_shared<EffectState>();
-    state->lifetime = std::make_shared<EffectLifetime>();
+    state->lifetime = std::make_shared<EffectLifetime>(parentGame);
 
     state->parameters = std::make_shared<ParameterCollectionState>();
     state->parameters->value = std::shared_ptr<EffectParameterCollection>(

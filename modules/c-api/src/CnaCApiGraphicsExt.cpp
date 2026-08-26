@@ -29,6 +29,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::Fail;
 
 // Every caller is in the #ifndef CNA_CNAEXT half below, so a build that has the extension layer
@@ -342,7 +344,7 @@ CNA_Result cna_ascii_post_process_effect_create(
                 ErrorCategoryForResult(result),
                 "The owned ASCII post-process effect handle could not be created.");
         }
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -512,7 +514,7 @@ CNA_Result cna_ascii_post_process_effect_destroy(
                 ErrorCategoryForResult(releaseResult),
                 "The owned ASCII post-process effect handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(effect->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -20,6 +20,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -458,10 +460,45 @@ CNA_Result GetBorrowedGraphicsDevice(
     if (result == CNA_RESULT_SUCCESS) {
         return CNA_RESULT_SUCCESS;
     }
+    // CABI-13: a caller-created device answers here too, so every resource route accepts one
+    // without knowing it exists. Resolving it to the same BorrowedGraphicsDevice view is what
+    // keeps that true -- the alternative was teaching ~60 routes about a second ownership kind.
+    std::shared_ptr<OwnedGraphicsDevice> owned;
+    if (GetRuntimeHandles().Get(handle, ObjectKind::OwnedGraphicsDevice, &owned) ==
+        CNA_RESULT_SUCCESS) {
+        *outGraphicsDevice = owned->view;
+        return CNA_RESULT_SUCCESS;
+    }
     return Fail(
         result,
         ErrorCategoryForResult(result),
-        "The callback-scoped graphics-device handle is invalid for this call.");
+        "The graphics-device handle is invalid for this call.");
+}
+
+bool IsGameOwnedResource(const CNA_Handle owner) noexcept
+{
+    if (owner == CNA_INVALID_HANDLE) {
+        return false;
+    }
+    ObjectKind kind = ObjectKind::Unknown;
+    return GetRuntimeHandles().GetKind(owner, &kind) == CNA_RESULT_SUCCESS &&
+        kind == ObjectKind::Game;
+}
+
+void AddOwnedGraphicsResourceFor(const CNA_Handle owner) noexcept
+{
+    // Only a game's resources gate cna_game_destroy. A standalone device owns its own and is
+    // destroyed on its own terms, so counting them here would block an unrelated game's shutdown.
+    if (IsGameOwnedResource(owner)) {
+        AddOwnedGraphicsResource();
+    }
+}
+
+void RemoveOwnedGraphicsResourceFor(const CNA_Handle owner) noexcept
+{
+    if (IsGameOwnedResource(owner)) {
+        RemoveOwnedGraphicsResource();
+    }
 }
 
 CNA_Result BorrowGameGraphicsDevice(

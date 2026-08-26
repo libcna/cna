@@ -178,6 +178,9 @@ enum class ObjectKind : uint32_t {
     AvatarRenderer = 120,
     ModelAnimationsEXT = 121,
     ContentTypeReaderRegistration = 122,
+    // plans/plan_cabi.md CABI-13. Distinct from GraphicsDevice, which is the game's own
+    // device borrowed for a callback: this one the caller created and must destroy.
+    OwnedGraphicsDevice = 123,
     Test = UINT32_MAX
 };
 

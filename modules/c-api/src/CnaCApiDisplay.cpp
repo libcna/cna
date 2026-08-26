@@ -28,12 +28,14 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ValidateCanonicalBool;
 using Microsoft::Xna::Framework::DisplayOrientation;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
 using Microsoft::Xna::Framework::Graphics::DisplayModeCollection;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::PresentationParameters;
 using Microsoft::Xna::Framework::Graphics::PresentInterval;
@@ -786,6 +788,81 @@ CNA_Result cna_graphics_device_reset(const CNA_Handle graphicsDeviceHandle)
             return result;
         }
         graphicsDevice->value->Reset();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_create(
+    const uint32_t adapterIndex,
+    const uint32_t graphicsProfile,
+    const CNA_PresentationParameters* const parameters,
+    CNA_Handle* const outGraphicsDevice)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outGraphicsDevice == nullptr) {
+            return InvalidArgument("The GraphicsDevice output handle is null.");
+        }
+        *outGraphicsDevice = CNA_INVALID_HANDLE;
+        if (!IsPresentationParameters(parameters)) {
+            return InvalidArgument("The PresentationParameters source structure is invalid.");
+        }
+        if (graphicsProfile != CNA_GRAPHICS_PROFILE_REACH &&
+            graphicsProfile != CNA_GRAPHICS_PROFILE_HI_DEF) {
+            return InvalidArgument("The graphics profile is not a public CNA profile identity.");
+        }
+        const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+        if (adapterIndex >= adapters.size()) {
+            return InvalidArgument("The graphics adapter index is out of range.");
+        }
+
+        PresentationParameters nativeParameters;
+        ApplyPresentationParameters(*parameters, &nativeParameters);
+
+        auto owned = std::make_shared<CNA::C::Detail::OwnedGraphicsDevice>();
+        // Construction is what acquires the platform video subsystem and the renderer, so it is
+        // also what can fail. Letting it throw into the barrier keeps the failure a documented
+        // result rather than a half-registered handle.
+        owned->value = std::make_unique<GraphicsDevice>(
+            *adapters[adapterIndex],
+            static_cast<GraphicsProfile>(graphicsProfile),
+            nativeParameters);
+
+        const CNA_Result result = GetRuntimeHandles().Create(
+            CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, owned, outGraphicsDevice);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned GraphicsDevice handle could not be created.");
+        }
+        // The owner token is the device's own handle, so resources created on it are as
+        // distinguishable from another device's as two games' resources are from each other.
+        owned->view = std::make_shared<BorrowedGraphicsDevice>(
+            BorrowedGraphicsDevice{owned->value.get(), *outGraphicsDevice});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_destroy(const CNA_Handle graphicsDeviceHandle)
+{
+    return CallWithExceptionBarrier([&]() {
+        std::shared_ptr<CNA::C::Detail::OwnedGraphicsDevice> owned;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            graphicsDeviceHandle, CNA::C::Detail::ObjectKind::OwnedGraphicsDevice, &owned);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                getResult,
+                ErrorCategoryForResult(getResult),
+                "The handle does not refer to a caller-created GraphicsDevice.");
+        }
+        owned->value->Dispose();
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(graphicsDeviceHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned GraphicsDevice handle could not be released.");
+        }
         return CNA_RESULT_SUCCESS;
     });
 }

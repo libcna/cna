@@ -42,6 +42,8 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
@@ -508,7 +510,7 @@ CNA_Result CreateOwnedTexture2DWithKind(
             "The owned Texture2D handle could not be created.");
     }
     if (parentGame != CNA_INVALID_HANDLE) {
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(parentGame);
     }
     return CNA_RESULT_SUCCESS;
 }
@@ -1232,7 +1234,7 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
                 "The owned Texture2D handle could not be released.");
         }
         if (texture->parentGame != CNA_INVALID_HANDLE) {
-            RemoveOwnedGraphicsResource();
+            RemoveOwnedGraphicsResourceFor(texture->parentGame);
         }
         return CNA_RESULT_SUCCESS;
     });
@@ -1275,7 +1277,7 @@ CNA_Result cna_sprite_batch_create(
                 ErrorCategoryForResult(result),
                 "The owned SpriteBatch handle could not be created.");
         }
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1748,7 +1750,7 @@ CNA_Result cna_sprite_batch_destroy(const CNA_Handle spriteBatchHandle)
                 ErrorCategoryForResult(releaseResult),
                 "The owned SpriteBatch handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(spriteBatch->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

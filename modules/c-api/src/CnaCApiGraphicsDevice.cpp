@@ -75,6 +75,8 @@ static_assert(
     NativeGraphics::TextureCollection::MaxTextures == CNA_TEXTURE_COLLECTION_MAX_TEXTURES);
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
@@ -2304,7 +2306,7 @@ CNA_Result cna_occlusion_query_create(
                 ErrorCategoryForResult(result),
                 "The owned occlusion-query handle could not be created.");
         }
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2366,7 +2368,7 @@ CNA_Result cna_occlusion_query_destroy(const CNA_OcclusionQueryHandle occlusionQ
                 ErrorCategoryForResult(releaseResult),
                 "The owned occlusion-query handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(query->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

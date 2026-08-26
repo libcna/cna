@@ -36,6 +36,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -304,7 +306,7 @@ MeshResource::~MeshResource()
         part->value = std::move(part->detachedValue);
     }
     if (countedAsGraphicsResource) {
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(parentGame);
     }
 }
 
@@ -1575,7 +1577,7 @@ void AddMeshEffect(
     mesh->value = named
         ? std::make_shared<ModelMesh>(device->value, name, std::move(nativeParts))
         : std::make_shared<ModelMesh>(device->value, std::move(nativeParts));
-    AddOwnedGraphicsResource();
+    AddOwnedGraphicsResourceFor(mesh->parentGame);
     mesh->countedAsGraphicsResource = true;
     return CreateMeshHandle(std::move(mesh), outMesh);
 }

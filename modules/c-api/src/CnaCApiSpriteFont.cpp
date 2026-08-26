@@ -21,6 +21,8 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
@@ -172,7 +174,7 @@ CNA_Result cna_sprite_font_create(
                 "The SpriteFont texture reference count overflowed.");
         }
         ++texture->activeFontReferenceCount;
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(texture->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -399,7 +401,7 @@ CNA_Result cna_sprite_font_destroy(const CNA_Handle spriteFontHandle)
         if (spriteFont->texture->activeFontReferenceCount != 0U) {
             --spriteFont->texture->activeFontReferenceCount;
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(spriteFont->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

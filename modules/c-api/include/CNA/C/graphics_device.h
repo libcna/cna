@@ -767,6 +767,49 @@ CNA_C_API CNA_Result cna_graphics_device_present(CNA_Handle graphics_device);
  *
  * A successful reset raises the device's resetting and reset events in that order.
  */
+/**
+ * @brief Creates a GraphicsDevice this caller owns, outside any Game.
+ *
+ * Every other route in this ABI hands out the Game's own device, borrowed for the duration of a
+ * callback. This one creates an independent device with XNA's own constructor arguments, and the
+ * caller destroys it with @ref cna_graphics_device_destroy. Several may exist at once, and one may
+ * be destroyed while another is still live.
+ *
+ * The returned handle is accepted everywhere a borrowed device handle is, so resources are created
+ * on it exactly as they are on a Game's device. Resources remember which device made them: mixing
+ * one device's resource into another device's call is refused, whether the devices are two
+ * caller-created ones or a caller-created one and a Game's.
+ *
+ * Unlike a Game's resources, resources on a caller-created device do not gate
+ * `cna_game_destroy` -- they belong to this device, not to a game, and are released with it.
+ *
+ * @param adapter_index Adapter to use, indexed as `cna_graphics_adapter_get_count` reports.
+ * @param graphics_profile `CNA_GRAPHICS_PROFILE_REACH` or `CNA_GRAPHICS_PROFILE_HI_DEF`.
+ * @param parameters Caller-provided versioned presentation parameters.
+ * @param out_graphics_device Receives an owned device handle on success, `CNA_INVALID_HANDLE`
+ *        otherwise.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output, a malformed
+ *         parameter structure, an unknown profile or an out-of-range adapter, or a documented
+ *         native failure when the platform cannot supply a device.
+ */
+CNA_C_API CNA_Result cna_graphics_device_create(
+    uint32_t adapter_index,
+    uint32_t graphics_profile,
+    const CNA_PresentationParameters* parameters,
+    CNA_Handle* out_graphics_device);
+
+/**
+ * @brief Disposes and releases a caller-created GraphicsDevice.
+ *
+ * Only a handle from @ref cna_graphics_device_create is accepted; a Game's borrowed device is not
+ * the caller's to destroy and is refused.
+ *
+ * @param graphics_device Owned graphics-device handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle is not a
+ *         caller-created device, or a documented thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_destroy(CNA_Handle graphics_device);
+
 CNA_C_API CNA_Result cna_graphics_device_reset(CNA_Handle graphics_device);
 
 /**

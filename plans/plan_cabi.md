@@ -28,6 +28,7 @@ Downstream repositories are read-only evidence. They are not modified by this mi
 | CABI-8 | Resource-loss model | fixcnats P3 | DESIGN COMPLETE, implementation scoped |
 | CABI-9 | VideoPlayer frame identity/generation | fixcnats P4 | DESIGN COMPLETE |
 | CABI-10 | Standalone GraphicsDevice feasibility | fixcnats P5 | ANSWERED: outcome A |
+| CABI-13 | Owned GraphicsDevice bound into the C ABI | fixcnats P5 | DONE |
 | CABI-11 | Reproducible artifacts + provenance manifest | fixcnats P6 | DONE (measured reproducible) |
 | CABI-12 | Emscripten C-ABI artifact | fixcnats P7 | COMPILES; link needs a shape change |
 
@@ -531,3 +532,60 @@ Emscripten demos (`cna_demo_2d`, `cna_house3d_demo`). It is a target-shape chang
 list, which wants its own branch rather than the tail of this one.
 
 **Status: `BUILT` is not yet claimable.** Compiles, does not link, no artifact, no browser probe.
+
+## CABI-13 — Owned GraphicsDevice in the C ABI (DONE)
+
+[[CABI-10]] proved two independently owned devices coexist in C++. This binds that to the ABI, so
+`cna-cs`'s `not-run(CNA-ABI-has-one-game-owned-device)` corpus rows become expressible.
+
+### Surface
+
+`cna_graphics_device_create(adapter_index, profile, parameters, out_device)` and
+`cna_graphics_device_destroy(device)`. **ABI class C, additive** — no existing route changes shape
+or meaning.
+
+### The design decision that matters
+
+Rather than teaching ~60 resource routes about a second ownership kind,
+`GetBorrowedGraphicsDevice` resolves **both** kinds to the same `BorrowedGraphicsDevice` view. An
+owned device therefore reaches every route by the path a Game's device already uses, and no route
+knows it exists.
+
+That works because `BorrowedGraphicsDevice::parentGame` is now an **owner token**, not a game
+handle: the game handle for a Game's device, the device's own handle for a caller-created one.
+Resources copy it and compare it, so:
+
+- a resource from device A is refused by device B — the cross-device validation this feature exists
+  for, obtained without touching a single comparison site;
+- two caller-created devices are as distinguishable as two games are. Had standalone resources
+  simply carried `CNA_INVALID_HANDLE`, as standalone textures already do, both devices would have
+  compared equal and every cross-device test would have silently passed.
+
+The one thing the token change did force: `cna_game_destroy` gates on a global count of owned
+graphics resources, and a caller-created device's resources must not gate it — they belong to the
+device, not to a game. The 25 accounting sites now call
+`AddOwnedGraphicsResourceFor(owner)`/`RemoveOwnedGraphicsResourceFor(owner)`, which count only when
+the owner is a live Game handle. Each site's owner expression was resolved from its enclosing
+function rather than pattern-matched; a first heuristic pass got the destroy paths wrong (it read a
+creating function's `graphicsDevice->parentGame` into a destroy that only has the resource in
+scope), which is why they were done by inspection.
+
+`EffectOwnership` is RAII and now captures its owner at construction, so the decrement is taken
+against the same owner as the increment.
+
+### Verified
+
+`CApi_OwnedGraphicsDeviceSmoke`: argument refusals before anything is acquired, two devices with
+distinct handles, ordinary device queries answering on an owned device, resources created on it,
+**the cross-device draw refusal**, destroying one device while the other stays live, and double
+destroy. The test reports whether the refusal arm actually ran, so it cannot go quiet the way
+`GraphicsSurfaceSmoke`'s did (see [[CABI-2]]).
+
+Suite: 84 C-API tests, 79 passing on Xvfb `:101` — the same five pre-existing failures as before,
+no regression.
+
+### Not done
+
+`cna_graphics_device_create` takes an adapter index and a profile but no way to ask which adapters
+suit an owned device; the existing `cna_graphics_adapter_*` queries are global and answer that
+adequately for now.
