@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -586,4 +587,365 @@ TEST(CnbProducerTest, AnUnsupportedTypeIsRefusedWithTheListOfWhatIsSupported)
         EXPECT_NE(message.find("TextureCube"), std::string::npos)
             << "TextureCube is supported now and must appear in that list: " << message;
     }
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-117 -- the RIFF/WAVE parser against files written to break it
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    /// Assembles an arbitrary RIFF/WAVE chunk list, including shapes MakeWav() cannot express: a
+    /// wrong declared RIFF length, an odd-sized chunk, a truncated `smpl` loop table, an
+    /// EXTENSIBLE `fmt `. Every hostile case below is one edit away from a file this builder also
+    /// produces valid, so "the parser refused it" is never confusable with "the fixture was
+    /// never valid".
+    struct WavBuilder
+    {
+        std::vector<std::uint8_t> body;   // everything after "RIFF" + size + "WAVE"
+
+        static void PutU16(std::vector<std::uint8_t>& out, std::uint16_t v)
+        {
+            out.push_back(static_cast<std::uint8_t>(v & 0xFFu));
+            out.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu));
+        }
+        static void PutU32(std::vector<std::uint8_t>& out, std::uint32_t v)
+        {
+            out.push_back(static_cast<std::uint8_t>(v & 0xFFu));
+            out.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFFu));
+            out.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFFu));
+            out.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFFu));
+        }
+
+        /// Appends one chunk. `pad` writes RIFF's alignment byte after an odd-length payload;
+        /// passing false is how the "missing pad byte" case is built.
+        WavBuilder& Chunk(const char* id, const std::vector<std::uint8_t>& payload,
+                          bool pad = true)
+        {
+            for (int i = 0; i < 4; ++i) { body.push_back(static_cast<std::uint8_t>(id[i])); }
+            PutU32(body, static_cast<std::uint32_t>(payload.size()));
+            body.insert(body.end(), payload.begin(), payload.end());
+            if (pad && (payload.size() & 1u) != 0u) { body.push_back(0u); }
+            return *this;
+        }
+
+        WavBuilder& Fmt(std::uint16_t formatTag, std::uint16_t channels, std::uint32_t sampleRate,
+                        std::uint16_t bitsPerSample,
+                        std::optional<std::uint16_t> blockAlignOverride = std::nullopt,
+                        std::optional<std::uint32_t> byteRateOverride = std::nullopt)
+        {
+            const auto blockAlign = static_cast<std::uint16_t>(
+                blockAlignOverride.value_or(static_cast<std::uint16_t>(channels * (bitsPerSample / 8u))));
+            const std::uint32_t byteRate = byteRateOverride.value_or(
+                sampleRate * static_cast<std::uint32_t>(channels * (bitsPerSample / 8u)));
+            std::vector<std::uint8_t> fmt;
+            PutU16(fmt, formatTag);
+            PutU16(fmt, channels);
+            PutU32(fmt, sampleRate);
+            PutU32(fmt, byteRate);
+            PutU16(fmt, blockAlign);
+            PutU16(fmt, bitsPerSample);
+            return Chunk("fmt ", fmt);
+        }
+
+        /// An EXTENSIBLE `fmt ` chunk. `guid` is the whole 16-byte SubFormat, so a test can supply
+        /// one outside the KSDATAFORMAT_SUBTYPE_* family.
+        WavBuilder& FmtExtensible(std::uint16_t channels, std::uint32_t sampleRate,
+                                  std::uint16_t bitsPerSample, std::uint16_t validBits,
+                                  const std::array<std::uint8_t, 16>& guid,
+                                  std::uint16_t cbSize = 22u)
+        {
+            const auto blockAlign = static_cast<std::uint16_t>(channels * (bitsPerSample / 8u));
+            std::vector<std::uint8_t> fmt;
+            PutU16(fmt, 0xFFFEu);
+            PutU16(fmt, channels);
+            PutU32(fmt, sampleRate);
+            PutU32(fmt, sampleRate * blockAlign);
+            PutU16(fmt, blockAlign);
+            PutU16(fmt, bitsPerSample);
+            PutU16(fmt, cbSize);
+            PutU16(fmt, validBits);
+            PutU32(fmt, 0u);   // channel mask
+            fmt.insert(fmt.end(), guid.begin(), guid.end());
+            return Chunk("fmt ", fmt);
+        }
+
+        WavBuilder& Data(const std::vector<std::uint8_t>& pcm) { return Chunk("data", pcm); }
+
+        /// A `smpl` chunk of `totalBytes`, declaring `loops` loops. `totalBytes` below 60 is how
+        /// the truncated-loop-table cases are built; exactly 36 is the case that used to read its
+        /// "loop entry" out of whatever chunk followed.
+        WavBuilder& Smpl(std::size_t totalBytes, std::uint32_t loops, std::uint32_t loopStart = 0u,
+                         std::uint32_t loopEnd = 0u)
+        {
+            std::vector<std::uint8_t> smpl(totalBytes, 0u);
+            const auto put = [&](std::size_t at, std::uint32_t v)
+            {
+                if (at + 4u > smpl.size()) { return; }
+                smpl[at] = static_cast<std::uint8_t>(v & 0xFFu);
+                smpl[at + 1u] = static_cast<std::uint8_t>((v >> 8) & 0xFFu);
+                smpl[at + 2u] = static_cast<std::uint8_t>((v >> 16) & 0xFFu);
+                smpl[at + 3u] = static_cast<std::uint8_t>((v >> 24) & 0xFFu);
+            };
+            put(28u, loops);
+            put(44u, loopStart);
+            put(48u, loopEnd);
+            return Chunk("smpl", smpl);
+        }
+
+        /// `riffSizeOverride` replaces the computed RIFF length, which is how the declared-length
+        /// cases are built.
+        [[nodiscard]] std::vector<std::uint8_t> Build(
+            std::optional<std::uint32_t> riffSizeOverride = std::nullopt) const
+        {
+            std::vector<std::uint8_t> out;
+            for (const char c : std::string("RIFF")) { out.push_back(static_cast<std::uint8_t>(c)); }
+            PutU32(out, riffSizeOverride.value_or(static_cast<std::uint32_t>(4u + body.size())));
+            for (const char c : std::string("WAVE")) { out.push_back(static_cast<std::uint8_t>(c)); }
+            out.insert(out.end(), body.begin(), body.end());
+            return out;
+        }
+    };
+
+    /// The PCM member of the KSDATAFORMAT_SUBTYPE_* family: {00000001-0000-0010-8000-00AA00389B71}.
+    constexpr std::array<std::uint8_t, 16> kPcmSubtypeGuid = {
+        0x01u, 0x00u, 0x00u, 0x00u, 0x00u, 0x00u, 0x10u, 0x00u,
+        0x80u, 0x00u, 0x00u, 0xAAu, 0x00u, 0x38u, 0x9Bu, 0x71u};
+
+    void ExpectWavRefused(const std::vector<std::uint8_t>& bytes, const char* fragment,
+                          const char* what)
+    {
+        try
+        {
+            (void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(bytes, "hostile.wav");
+            ADD_FAILURE() << what << ": expected a refusal mentioning '" << fragment << "'";
+        }
+        catch (const ContentLoadException& e)
+        {
+            EXPECT_NE(std::string(e.what()).find(fragment), std::string::npos)
+                << what << ": " << e.what();
+        }
+    }
+}
+
+TEST(CnbProducerTest, ThirtySixByteSmplFollowedByAnotherChunkDoesNotInventALoop)
+{
+    // The defect this pins: the loop-entry read was bounded by the FILE, not by the smpl chunk, so
+    // a 36-byte smpl declaring a loop took its 24-byte "entry" out of the next chunk's header and
+    // first sixteen bytes. With 'data' following, the loop region came from the ASCII "data", the
+    // payload length and the samples themselves -- a loop invented from unrelated bytes.
+    const std::vector<std::uint8_t> pcm = Pcm16(1000u, 1u);
+    const std::vector<std::uint8_t> bytes =
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(36u, 1u).Data(pcm).Build();
+    ExpectWavRefused(bytes, "loop table", "36-byte smpl declaring a loop");
+
+    // The same chunk declaring NO loops is well-formed and must still compile: the refusal is
+    // about a loop that is not there, not about a short smpl.
+    const std::vector<std::uint8_t> noLoops =
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(36u, 0u).Data(pcm).Build();
+    const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(noLoops, "noloops.wav");
+    EXPECT_EQ(sound.loopStart, 0u);
+    EXPECT_EQ(sound.loopLength, 0u);
+    EXPECT_EQ(sound.frameCount, 1000u);
+}
+
+TEST(CnbProducerTest, ATruncatedSmplLoopEntryIsRefusedRatherThanReadPast)
+{
+    const std::vector<std::uint8_t> pcm = Pcm16(1000u, 1u);
+    for (const std::size_t smplBytes : {37u, 40u, 52u, 59u})
+    {
+        const std::vector<std::uint8_t> bytes =
+            WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(smplBytes, 1u).Data(pcm).Build();
+        ExpectWavRefused(bytes, "loop table",
+                         ("smpl of " + std::to_string(smplBytes) + " bytes").c_str());
+    }
+
+    // Exactly 60 bytes is one complete entry and must be accepted, so the bound is not merely
+    // "refuse anything unusual".
+    const std::vector<std::uint8_t> whole =
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(60u, 1u, 100u, 400u).Data(pcm).Build();
+    const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(whole, "loop.wav");
+    EXPECT_EQ(sound.loopStart, 100u);
+    EXPECT_EQ(sound.loopLength, 300u);
+}
+
+TEST(CnbProducerTest, OddSizedChunksAreWalkedThroughTheirRiffPadByte)
+{
+    const std::vector<std::uint8_t> pcm = Pcm16(64u, 1u);
+
+    // A padded odd-length chunk ahead of 'fmt ' must not shift the walk: if the pad byte were
+    // ignored, every subsequent chunk header would be read one byte early.
+    const std::vector<std::uint8_t> padded = WavBuilder{}
+                                                 .Chunk("junk", std::vector<std::uint8_t>(5u, 0xABu))
+                                                 .Fmt(1u, 1u, 32000u, 16u)
+                                                 .Data(pcm)
+                                                 .Build();
+    const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(padded, "padded.wav");
+    EXPECT_EQ(sound.sampleRate, 32000u);
+    EXPECT_EQ(sound.frameCount, 64u);
+
+    // The same file with the pad byte omitted: the RIFF form and its chunk list now disagree, and
+    // the parser says so instead of resynchronising onto a byte offset that is not a chunk header.
+    const std::vector<std::uint8_t> unpadded =
+        WavBuilder{}
+            .Chunk("junk", std::vector<std::uint8_t>(5u, 0xABu), /*pad=*/false)
+            .Fmt(1u, 1u, 32000u, 16u)
+            .Data(pcm)
+            .Build();
+    EXPECT_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(unpadded, "unpadded.wav"),
+                 ContentLoadException);
+
+    // A trailing odd-length chunk at the very end of the form needs no pad byte.
+    const std::vector<std::uint8_t> trailing =
+        WavBuilder{}
+            .Fmt(1u, 1u, 32000u, 16u)
+            .Data(pcm)
+            .Chunk("junk", std::vector<std::uint8_t>(3u, 0u), /*pad=*/false)
+            .Build();
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(trailing, "trailing.wav"));
+}
+
+TEST(CnbProducerTest, AMalformedRiffDeclaredLengthIsRefused)
+{
+    const std::vector<std::uint8_t> pcm = Pcm16(64u, 1u);
+    const WavBuilder builder = WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Data(pcm);
+    const std::vector<std::uint8_t> good = builder.Build();
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(good, "good.wav"));
+
+    // Longer than the file: a truncated download, and the value that bounds the chunk walk.
+    ExpectWavRefused(builder.Build(static_cast<std::uint32_t>(good.size())), "past the end",
+                     "RIFF length past the end of the file");
+    ExpectWavRefused(builder.Build(0xFFFFFFFFu), "past the end", "RIFF length 0xFFFFFFFF");
+
+    // Too short even for its own form identifier.
+    ExpectWavRefused(builder.Build(0u), "too short", "RIFF length 0");
+    ExpectWavRefused(builder.Build(3u), "too short", "RIFF length 3");
+
+    // Shorter than the chunks it contains: the walk stops at the declared end, so 'data' is
+    // reported as running past the form rather than being read anyway.
+    ExpectWavRefused(builder.Build(static_cast<std::uint32_t>(good.size() - 8u - 20u)),
+                     "runs past the end of the RIFF form", "RIFF length cutting 'data' short");
+}
+
+TEST(CnbProducerTest, FmtFieldsThatDisagreeWithEachOtherAreRefused)
+{
+    const std::vector<std::uint8_t> pcm = Pcm16(64u, 2u);
+
+    // blockAlign says 2 bytes per frame; two channels of 16-bit samples is 4. The importer splits
+    // the data chunk by the derived value, so believing the declared one would produce twice the
+    // frames at half the width -- audible, and silent.
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 2u, 44100u, 16u, /*blockAlign=*/2u).Data(pcm).Build(),
+        "block alignment", "blockAlign disagreeing with channels x bits");
+
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 2u, 44100u, 16u, std::nullopt, /*byteRate=*/1234u).Data(pcm).Build(),
+        "byte rate", "byteRate disagreeing with rate x blockAlign");
+
+    // Both consistent: still accepted, so the checks are not simply refusing everything.
+    const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
+        WavBuilder{}.Fmt(1u, 2u, 44100u, 16u).Data(pcm).Build(), "consistent.wav");
+    EXPECT_EQ(sound.channels, 2u);
+    EXPECT_EQ(sound.frameCount, 64u);
+}
+
+TEST(CnbProducerTest, ExtensibleFormatIsAcceptedOnlyForARealKsDataFormatSubtype)
+{
+    const std::vector<std::uint8_t> pcm = Pcm16(64u, 1u);
+
+    // The genuine PCM subtype decodes exactly as a plain PCM file would.
+    const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
+        WavBuilder{}.FmtExtensible(1u, 44100u, 16u, 16u, kPcmSubtypeGuid).Data(pcm).Build(),
+        "extensible.wav");
+    EXPECT_EQ(sound.sampleRate, 44100u);
+    EXPECT_EQ(sound.channels, 1u);
+    ASSERT_EQ(sound.samples.size(), pcm.size());
+    EXPECT_TRUE(std::equal(sound.samples.begin(), sound.samples.end(), pcm.begin()));
+
+    // An unrelated GUID whose first two bytes happen to be 0x0001. Reading only those two bytes
+    // called this PCM; the rest of the GUID says it is not, and CNA does not guess.
+    std::array<std::uint8_t, 16> impostor = kPcmSubtypeGuid;
+    impostor[8] = 0x12u;
+    impostor[15] = 0x34u;
+    ExpectWavRefused(
+        WavBuilder{}.FmtExtensible(1u, 44100u, 16u, 16u, impostor).Data(pcm).Build(),
+        "KSDATAFORMAT_SUBTYPE_", "an unrelated SubFormat GUID beginning 01 00");
+
+    // A truncated extension, an undersized cbSize, and a container wider than its valid bits.
+    ExpectWavRefused(
+        WavBuilder{}.FmtExtensible(1u, 44100u, 16u, 16u, kPcmSubtypeGuid, /*cbSize=*/0u)
+            .Data(pcm).Build(),
+        "extension size", "cbSize 0");
+    ExpectWavRefused(
+        WavBuilder{}.FmtExtensible(1u, 44100u, 16u, /*validBits=*/12u, kPcmSubtypeGuid)
+            .Data(pcm).Build(),
+        "valid bits", "12 valid bits in a 16-bit container");
+
+    // A 16-byte EXTENSIBLE fmt has no GUID at all: it used to fall through with the tag left at
+    // 0xFFFE and be refused for the wrong reason.
+    std::vector<std::uint8_t> shortExtensible =
+        WavBuilder{}.Fmt(0xFFFEu, 1u, 44100u, 16u).Data(pcm).Build();
+    ExpectWavRefused(shortExtensible, "the extension needs 40", "a 16-byte EXTENSIBLE fmt");
+}
+
+TEST(CnbProducerTest, RiffIntegersAreDecodedFromTheirBytesRatherThanTheHostLayout)
+{
+    // Values chosen so every byte of every multi-byte field differs: 0x0000AC44 (44100 Hz) has
+    // three distinct bytes, and 44100 x 4 = 176400 = 0x0002B110 has four. A host-endian memcpy
+    // decodes these correctly only on a little-endian machine; asserting the exact values here is
+    // what the byte-assembled reads have to keep true on any host.
+    const std::vector<std::uint8_t> pcm = Pcm16(300u, 2u);
+    const std::vector<std::uint8_t> bytes = WavBuilder{}.Fmt(1u, 2u, 44100u, 16u).Data(pcm).Build();
+
+    // The fields really are stored little-endian in the fixture, so the assertions below are about
+    // the DECODER rather than about the builder.
+    const std::size_t fmtPayload = 12u + 8u;
+    EXPECT_EQ(bytes[fmtPayload + 4u], 0x44u);
+    EXPECT_EQ(bytes[fmtPayload + 5u], 0xACu);
+    EXPECT_EQ(bytes[fmtPayload + 6u], 0x00u);
+
+    const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(bytes, "endian.wav");
+    EXPECT_EQ(sound.sampleRate, 44100u);
+    EXPECT_EQ(sound.channels, 2u);
+    EXPECT_EQ(sound.frameCount, 300u);
+}
+
+TEST(CnbProducerTest, ValidPcmFixturesStillCompileAcrossEveryAcceptedShape)
+{
+    // The positive contract, restated after the hardening: every shape the importer accepts must
+    // still round-trip its samples, its rate and its channel count exactly.
+    struct Shape { std::uint16_t channels; std::uint32_t rate; std::uint16_t bits; };
+    for (const Shape& shape : {Shape{1u, 8000u, 8u}, Shape{1u, 44100u, 16u},
+                               Shape{2u, 22050u, 16u}, Shape{2u, 384000u, 8u}})
+    {
+        const std::size_t frames = 128u;
+        const std::vector<std::uint8_t> payload =
+            shape.bits == 16u ? Pcm16(frames, shape.channels)
+                              : std::vector<std::uint8_t>(frames * shape.channels, 200u);
+        const std::vector<std::uint8_t> bytes =
+            WavBuilder{}.Fmt(1u, shape.channels, shape.rate, shape.bits).Data(payload).Build();
+
+        const auto sound = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(bytes, "valid.wav");
+        EXPECT_EQ(sound.sampleRate, shape.rate);
+        EXPECT_EQ(sound.channels, shape.channels);
+        EXPECT_EQ(sound.frameCount, frames);
+        EXPECT_EQ(sound.samples.size(), frames * shape.channels * 2u);
+        EXPECT_EQ(sound.format, CNA::Content::Cnb::CnbAudioFormat::Pcm16);
+        // And it encodes to a .cnb that loads back, so "the parser accepted it" is not the end of
+        // the claim.
+        EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeSoundEffectToCnb(sound, "valid"));
+    }
+}
+
+TEST(CnbProducerTest, DuplicateFmtOrDataChunksAreRefused)
+{
+    // Two of either means the file describes two different sounds and the importer would silently
+    // pick one of them.
+    const std::vector<std::uint8_t> pcm = Pcm16(64u, 1u);
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Fmt(1u, 2u, 22050u, 16u).Data(pcm).Build(),
+        "more than one 'fmt '", "two fmt chunks");
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Data(pcm).Data(pcm).Build(),
+        "more than one 'data'", "two data chunks");
 }

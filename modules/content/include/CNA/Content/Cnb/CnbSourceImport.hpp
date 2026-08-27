@@ -109,9 +109,20 @@ namespace CNA::Content::Cnb
      * Accepted: 16-bit PCM (stored as-is) and 8-bit unsigned PCM (widened exactly). Refused, by
      * name: 24-bit, 32-bit, IEEE float, ADPCM and any other tag — each of those would be a lossy
      * or lossy-adjacent conversion, which is an authoring decision rather than a compiler's.
+     * `WAVE_FORMAT_EXTENSIBLE` is unwrapped only for a genuine `KSDATAFORMAT_SUBTYPE_*` GUID,
+     * all sixteen bytes of it, so an unrelated GUID that merely begins with `01 00` is refused
+     * rather than read as PCM.
      *
      * A `smpl` chunk's first loop entry becomes the sound's loop region, using the same rules the
-     * runtime applies, so a looping WAV compiles to a looping `.cnb`.
+     * runtime applies, so a looping WAV compiles to a looping `.cnb`. Every read of that entry is
+     * bounded by the `smpl` chunk's own payload: a chunk declaring a loop it has no room for is
+     * refused rather than completed from whatever follows it (plans/plan_cnb.md `CNBF-117`).
+     *
+     * Integers are decoded from their bytes rather than by copying into a host integer, so the
+     * result does not depend on the machine's byte order; the RIFF form's declared length bounds
+     * the chunk walk and must agree with the file; `fmt `'s redundant `blockAlign` and `byteRate`
+     * must agree with the channel count, sample width and rate they duplicate; and an odd-length
+     * chunk must carry its RIFF pad byte when anything follows it.
      *
      * @param wavBytes The complete file contents.
      * @param origin   Text naming the source in diagnostics, e.g. its path.

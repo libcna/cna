@@ -29,19 +29,34 @@ namespace CNA::Content::Cnb
                                               std::istreambuf_iterator<char>());
         }
 
+        // RIFF integers are little-endian by definition, so they are assembled from individual
+        // bytes rather than memcpy'd into a host integer (plans/plan_cnb.md CNBF-117). A memcpy
+        // decodes correctly only on a little-endian host: on a big-endian one every field --
+        // channel count, sample rate, every chunk length -- came out byte-swapped, so a perfectly
+        // ordinary WAV would have been refused or, worse, accepted with a nonsense sample rate.
+        // CnbByteReader assembles its integers this way for exactly the same reason.
         std::uint16_t ReadU16(std::span<const std::uint8_t> bytes, std::size_t offset)
         {
-            std::uint16_t value = 0;
-            std::memcpy(&value, bytes.data() + offset, sizeof(value));
-            return value;
+            return static_cast<std::uint16_t>(static_cast<std::uint16_t>(bytes[offset]) |
+                                              static_cast<std::uint16_t>(bytes[offset + 1u] << 8));
         }
 
         std::uint32_t ReadU32(std::span<const std::uint8_t> bytes, std::size_t offset)
         {
-            std::uint32_t value = 0;
-            std::memcpy(&value, bytes.data() + offset, sizeof(value));
-            return value;
+            return static_cast<std::uint32_t>(bytes[offset]) |
+                   (static_cast<std::uint32_t>(bytes[offset + 1u]) << 8) |
+                   (static_cast<std::uint32_t>(bytes[offset + 2u]) << 16) |
+                   (static_cast<std::uint32_t>(bytes[offset + 3u]) << 24);
         }
+
+        /// The twelve bytes every KSDATAFORMAT_SUBTYPE_* GUID shares, after its leading
+        /// format-tag word: `{0000xxxx-0000-0010-8000-00AA00389B71}` in the little-endian layout
+        /// the file stores. Checking them is what stops an unrelated GUID whose first two bytes
+        /// happen to be 0x0001 from being read as PCM.
+        constexpr std::uint8_t kKsDataFormatSubtypeSuffix[12] = {
+            0x00u, 0x00u, 0x00u, 0x00u, 0x10u, 0x00u,
+            0x80u, 0x00u, 0x00u, 0xAAu, 0x00u, 0x38u};
+        constexpr std::uint8_t kKsDataFormatSubtypeTail[2] = {0x9Bu, 0x71u};
 
         [[noreturn]] void FailWav(const std::string& origin, const std::string& what)
         {
@@ -164,59 +179,138 @@ namespace CNA::Content::Cnb
             FailWav(origin, "is not a RIFF/WAVE file.");
         }
 
+        // The RIFF header's own length field bounds the chunk list, and it is checked rather than
+        // ignored (plans/plan_cnb.md CNBF-117). A declared length longer than the file is a
+        // truncated download; a shorter one means the chunks after it are not part of this RIFF
+        // form and must not be walked into.
+        const std::uint32_t riffSize = ReadU32(wavBytes, 4u);
+        if (riffSize < 4u)
+        {
+            FailWav(origin, "declares a RIFF length of " + std::to_string(riffSize) +
+                                " bytes, too short even for its own 'WAVE' form identifier.");
+        }
+        if (static_cast<std::uint64_t>(riffSize) + 8u > wavBytes.size())
+        {
+            FailWav(origin, "declares a RIFF length of " + std::to_string(riffSize) +
+                                " bytes, which runs past the end of the " +
+                                std::to_string(wavBytes.size()) + "-byte file by " +
+                                std::to_string(static_cast<std::uint64_t>(riffSize) + 8u -
+                                               wavBytes.size()) +
+                                " byte(s).");
+        }
+        const std::size_t riffEnd = 8u + static_cast<std::size_t>(riffSize);
+
         bool haveFmt = false;
         std::uint16_t formatTag = 0u;
         std::uint16_t channels = 0u;
         std::uint32_t sampleRate = 0u;
+        std::uint32_t byteRate = 0u;
+        std::uint16_t blockAlign = 0u;
         std::uint16_t bitsPerSample = 0u;
         std::span<const std::uint8_t> data;
         bool haveData = false;
         std::uint32_t loopStart = 0u;
         std::uint32_t loopLength = 0u;
 
-        // One pass over the chunk list. Chunks are word-aligned and a chunk that claims to extend
-        // past the file is a truncated file, not something to read anyway.
+        // One pass over the chunk list, bounded by the RIFF form rather than by the file. Chunks
+        // are word-aligned and a chunk that claims to extend past the form is malformed, not
+        // something to read anyway.
         std::size_t pos = 12u;
-        while (pos + 8u <= wavBytes.size())
+        while (pos + 8u <= riffEnd)
         {
             const std::uint8_t* id = wavBytes.data() + pos;
+            const std::string idText(reinterpret_cast<const char*>(id), 4);
             const std::uint32_t chunkSize = ReadU32(wavBytes, pos + 4u);
             const std::size_t start = pos + 8u;
-            if (static_cast<std::uint64_t>(start) + chunkSize > wavBytes.size())
+            if (static_cast<std::uint64_t>(start) + chunkSize > riffEnd)
             {
-                FailWav(origin, "has a '" + std::string(reinterpret_cast<const char*>(id), 4) +
-                                    "' chunk claiming " + std::to_string(chunkSize) +
-                                    " bytes, which runs past the end of the file.");
+                FailWav(origin, "has a '" + idText + "' chunk claiming " +
+                                    std::to_string(chunkSize) +
+                                    " bytes, which runs past the end of the RIFF form.");
             }
+            const std::size_t chunkEnd = start + chunkSize;
 
-            if (std::memcmp(id, "fmt ", 4) == 0)
+            if (idText == "fmt ")
             {
+                if (haveFmt) { FailWav(origin, "has more than one 'fmt ' chunk."); }
                 if (chunkSize < 16u) { FailWav(origin, "has a 'fmt ' chunk shorter than 16 bytes."); }
                 formatTag = ReadU16(wavBytes, start);
                 channels = ReadU16(wavBytes, start + 2u);
                 sampleRate = ReadU32(wavBytes, start + 4u);
+                byteRate = ReadU32(wavBytes, start + 8u);
+                blockAlign = ReadU16(wavBytes, start + 12u);
                 bitsPerSample = ReadU16(wavBytes, start + 14u);
-                // WAVE_FORMAT_EXTENSIBLE carries the real tag in its GUID's first two bytes.
-                if (formatTag == 0xFFFEu && chunkSize >= 40u)
+                if (formatTag == 0xFFFEu)
                 {
+                    // WAVE_FORMAT_EXTENSIBLE carries the real tag in the first two bytes of its
+                    // SubFormat GUID -- but ONLY for the KSDATAFORMAT_SUBTYPE_* family. Reading
+                    // those two bytes without checking the rest of the GUID means any unrelated
+                    // format whose GUID happens to start 01 00 is decoded as PCM, which is a wrong
+                    // answer rather than a refusal. The remaining fourteen bytes are fixed, so
+                    // checking them costs nothing and closes that entirely.
+                    if (chunkSize < 40u)
+                    {
+                        FailWav(origin, "is WAVE_FORMAT_EXTENSIBLE but its 'fmt ' chunk is " +
+                                            std::to_string(chunkSize) +
+                                            " bytes; the extension needs 40.");
+                    }
+                    const std::uint16_t cbSize = ReadU16(wavBytes, start + 16u);
+                    if (cbSize < 22u)
+                    {
+                        FailWav(origin, "is WAVE_FORMAT_EXTENSIBLE but declares an extension size "
+                                        "of " + std::to_string(cbSize) + " bytes; 22 is required.");
+                    }
+                    const std::uint16_t validBits = ReadU16(wavBytes, start + 18u);
+                    if (validBits != 0u && validBits != bitsPerSample)
+                    {
+                        FailWav(origin, "declares " + std::to_string(validBits) +
+                                            " valid bits inside a " +
+                                            std::to_string(bitsPerSample) +
+                                            "-bit container; CNB stores whole samples only.");
+                    }
+                    if (std::memcmp(wavBytes.data() + start + 26u, kKsDataFormatSubtypeSuffix,
+                                    sizeof(kKsDataFormatSubtypeSuffix)) != 0 ||
+                        std::memcmp(wavBytes.data() + start + 38u, kKsDataFormatSubtypeTail,
+                                    sizeof(kKsDataFormatSubtypeTail)) != 0)
+                    {
+                        FailWav(origin, "is WAVE_FORMAT_EXTENSIBLE with a SubFormat GUID outside "
+                                        "the KSDATAFORMAT_SUBTYPE_* family, so its leading bytes "
+                                        "are not a wave format tag and this compiler will not "
+                                        "guess what the samples are.");
+                    }
                     formatTag = ReadU16(wavBytes, start + 24u);
                 }
                 haveFmt = true;
             }
-            else if (std::memcmp(id, "data", 4) == 0)
+            else if (idText == "data")
             {
+                if (haveData) { FailWav(origin, "has more than one 'data' chunk."); }
                 data = wavBytes.subspan(start, chunkSize);
                 haveData = true;
             }
-            else if (std::memcmp(id, "smpl", 4) == 0)
+            else if (idText == "smpl")
             {
                 // Same rules the runtime applies: 36-byte header, then 24-byte loop entries, and
                 // only the first entry's Start/End matter.
+                //
+                // Every read is bounded by the smpl chunk's OWN payload, not by the file
+                // (CNBF-117). A 36-byte smpl declaring a loop, followed by any other chunk, used
+                // to satisfy `start + 36 + 24 <= fileSize` and take that "loop entry" out of the
+                // next chunk's header and contents -- a loop region invented from unrelated bytes,
+                // which is exactly the kind of plausible wrong answer a refusal exists to prevent.
                 if (chunkSize >= 36u)
                 {
                     const std::uint32_t loops = ReadU32(wavBytes, start + 28u);
-                    if (loops != 0u && start + 36u + 24u <= wavBytes.size())
+                    if (loops != 0u)
                     {
+                        if (start + 36u + 24u > chunkEnd)
+                        {
+                            FailWav(origin, "has a 'smpl' chunk declaring " +
+                                                std::to_string(loops) +
+                                                " loop(s) but only " +
+                                                std::to_string(chunkSize - 36u) +
+                                                " byte(s) of loop table; one entry needs 24.");
+                        }
                         const std::uint32_t first = ReadU32(wavBytes, start + 36u + 8u);
                         const std::uint32_t last = ReadU32(wavBytes, start + 36u + 12u);
                         if (last > first)
@@ -227,7 +321,27 @@ namespace CNA::Content::Cnb
                     }
                 }
             }
-            pos = start + chunkSize + (chunkSize & 1u);
+
+            // RIFF pads an odd-length chunk to an even boundary. The pad byte has to be there when
+            // anything follows; its value is not constrained here, because real encoders differ
+            // and refusing on it would reject files every other tool plays.
+            std::size_t next = chunkEnd;
+            if ((chunkSize & 1u) != 0u)
+            {
+                if (chunkEnd < riffEnd) { next = chunkEnd + 1u; }
+                else if (chunkEnd > riffEnd)
+                {
+                    FailWav(origin, "has an odd-length '" + idText +
+                                        "' chunk with no room for its RIFF pad byte.");
+                }
+            }
+            pos = next;
+        }
+        if (pos != riffEnd)
+        {
+            FailWav(origin, "has " + std::to_string(riffEnd - pos) +
+                                " byte(s) after its last chunk, too few to be another chunk "
+                                "header; the RIFF form and its chunk list disagree.");
         }
 
         if (!haveFmt) { FailWav(origin, "has no 'fmt ' chunk."); }
@@ -255,13 +369,35 @@ namespace CNA::Content::Cnb
                                 "Pcm16 exactly.");
         }
 
+        // blockAlign and byteRate are redundant with the three fields above -- which is exactly
+        // why they are worth checking (CNBF-117). A file whose blockAlign disagrees with
+        // channels x bitsPerSample/8 is describing two different frame layouts, and the one this
+        // importer would use to split the data chunk is not necessarily the one the encoder used.
+        const std::uint32_t expectedBlockAlign =
+            static_cast<std::uint32_t>(bitsPerSample / 8u) * channels;
+        if (blockAlign != expectedBlockAlign)
+        {
+            FailWav(origin, "declares a block alignment of " + std::to_string(blockAlign) +
+                                " bytes, but " + std::to_string(channels) + " channel(s) of " +
+                                std::to_string(bitsPerSample) + "-bit samples is " +
+                                std::to_string(expectedBlockAlign) + ".");
+        }
+        const std::uint64_t expectedByteRate =
+            static_cast<std::uint64_t>(sampleRate) * expectedBlockAlign;
+        if (static_cast<std::uint64_t>(byteRate) != expectedByteRate)
+        {
+            FailWav(origin, "declares a byte rate of " + std::to_string(byteRate) +
+                                ", but " + std::to_string(sampleRate) + " Hz x " +
+                                std::to_string(expectedBlockAlign) + " bytes per frame is " +
+                                std::to_string(expectedByteRate) + ".");
+        }
+
         CnbSoundEffectData sound;
         sound.format = CnbAudioFormat::Pcm16;
         sound.sampleRate = sampleRate;
         sound.channels = channels;
 
-        const std::uint32_t sourceFrameBytes =
-            static_cast<std::uint32_t>(bitsPerSample / 8u) * channels;
+        const std::uint32_t sourceFrameBytes = expectedBlockAlign;
         if (data.size() % sourceFrameBytes != 0u)
         {
             FailWav(origin, "has a 'data' chunk of " + std::to_string(data.size()) +
