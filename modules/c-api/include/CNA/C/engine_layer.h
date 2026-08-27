@@ -4061,6 +4061,478 @@ CNA_C_API CNA_Result cna_clustered_light_buffer_copy_light_lookup_glsl(
  */
 CNA_C_API CNA_Result cna_clustered_light_buffer_destroy(CNA_ClusteredLightBufferHandle buffer);
 
+/* ---------------------------------------------------------------------------------------------
+ * The clustered forward effect and the compute assignment
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief The most lights one fragment walks before the shader stops accumulating. */
+#define CNA_CLUSTERED_FORWARD_MAX_LIGHTS_PER_FRAGMENT_EXT INT32_C(128)
+
+/**
+ * @brief Owned handle for one clustered forward effect.
+ *
+ * Release it with @ref cna_clustered_forward_effect_destroy. Its shader effect is a borrow that
+ * keeps it alive, and destroying it is refused while one is outstanding.
+ */
+typedef CNA_Handle CNA_ClusteredForwardEffectHandle;
+
+/**
+ * @brief Creates a clustered forward effect.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask
+ * @ref cna_clustered_forward_effect_is_supported.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_effect Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_create(
+    CNA_Handle graphics_device,
+    CNA_ClusteredForwardEffectHandle* out_effect);
+
+/**
+ * @brief Reports whether the effect's shader exists and links.
+ *
+ * @param effect The effect.
+ * @param out_supported Receives `CNA_TRUE` when the effect can shade.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_is_supported(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Prepares the effect to shade with an uploaded light buffer.
+ *
+ * @param effect The effect.
+ * @param world The world transform.
+ * @param view The camera's view matrix.
+ * @param projection The camera's projection matrix.
+ * @param camera_position The camera's world-space position.
+ * @param lights An uploaded clustered light buffer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the buffer holds nothing — there is
+ * no cluster table for the shader to walk — or when the material transmits and no opaque frame has
+ * been given to refract against, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ *
+ * The transmission case is a refusal rather than an approximation on purpose: a transmissive
+ * material drawn without a frame to refract is not slightly wrong, it is an opaque object where a
+ * glass one was asked for. See @ref cna_clustered_forward_effect_set_opaque_frame.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_begin(
+    CNA_ClusteredForwardEffectHandle effect,
+    const CNA_Matrix* world,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    const CNA_Vector3* camera_position,
+    CNA_ClusteredLightBufferHandle lights);
+
+/**
+ * @brief Returns the underlying shader effect, borrowed from this effect.
+ *
+ * @param effect The effect.
+ * @param out_shader Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_effect(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_EffectHandle* out_shader);
+
+/**
+ * @brief Reports whether an area light is bound.
+ *
+ * @param effect The effect.
+ * @param out_has Receives `CNA_TRUE` when one is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_has_area_light(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_Bool* out_has);
+
+/**
+ * @brief Unbinds any area light.
+ *
+ * @param effect The effect.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_clear_area_light(
+    CNA_ClusteredForwardEffectHandle effect);
+
+/**
+ * @brief Reports whether a light probe is bound.
+ *
+ * @param effect The effect.
+ * @param out_has Receives `CNA_TRUE` when one is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_has_light_probe(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_Bool* out_has);
+
+/**
+ * @brief Unbinds any light probe.
+ *
+ * @param effect The effect.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_clear_light_probe(
+    CNA_ClusteredForwardEffectHandle effect);
+
+/**
+ * @brief Returns the material's base colour.
+ *
+ * @param effect The effect.
+ * @param out_color Receives the colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_base_color(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_Vector3* out_color);
+
+/**
+ * @brief Sets the material's base colour, clamping each channel to zero-to-one.
+ *
+ * @param effect The effect.
+ * @param color The colour; each channel is **clamped** rather than refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_base_color(
+    CNA_ClusteredForwardEffectHandle effect,
+    const CNA_Vector3* color);
+
+/**
+ * @brief Returns how metallic the material is.
+ *
+ * @param effect The effect.
+ * @param out_metallic Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_metallic(
+    CNA_ClusteredForwardEffectHandle effect,
+    float* out_metallic);
+
+/**
+ * @brief Sets how metallic the material is, clamped to zero-to-one.
+ *
+ * @param effect The effect.
+ * @param metallic The value; **clamped** rather than refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_metallic(
+    CNA_ClusteredForwardEffectHandle effect,
+    float metallic);
+
+/**
+ * @brief Returns the material's roughness.
+ *
+ * @param effect The effect.
+ * @param out_roughness Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_roughness(
+    CNA_ClusteredForwardEffectHandle effect,
+    float* out_roughness);
+
+/**
+ * @brief Sets the material's roughness, clamped to **0.04**-to-one.
+ *
+ * The floor is not zero and is not a typo: a perfectly smooth surface collapses the specular lobe
+ * to a point the shader cannot integrate, so the canonical setter refuses to go below it by
+ * clamping. This route preserves that exactly.
+ *
+ * @param effect The effect.
+ * @param roughness The value; **clamped** rather than refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_roughness(
+    CNA_ClusteredForwardEffectHandle effect,
+    float roughness);
+
+/**
+ * @brief Returns the material's index of refraction.
+ *
+ * @param effect The effect.
+ * @param out_ior Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_ior(
+    CNA_ClusteredForwardEffectHandle effect,
+    float* out_ior);
+
+/**
+ * @brief Sets the material's index of refraction.
+ *
+ * @param effect The effect.
+ * @param ior The value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_ior(
+    CNA_ClusteredForwardEffectHandle effect,
+    float ior);
+
+/**
+ * @brief Returns the ambient term.
+ *
+ * @param effect The effect.
+ * @param out_ambient Receives the term.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_ambient(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_Vector3* out_ambient);
+
+/**
+ * @brief Sets the ambient term, flooring each channel at zero.
+ *
+ * @param effect The effect.
+ * @param ambient The term; each channel is **floored at zero** rather than refused, because a
+ * negative ambient would subtract light that was never added.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_ambient(
+    CNA_ClusteredForwardEffectHandle effect,
+    const CNA_Vector3* ambient);
+
+/**
+ * @brief Returns the opaque frame the effect refracts against.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive: the effect
+ * borrows the frame rather than owning it, exactly as @ref cna_effect_get_shadow_map_ext does.
+ *
+ * @param effect The effect.
+ * @param out_frame Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_opaque_frame(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_Handle* out_frame);
+
+/**
+ * @brief Gives the effect a copy of the opaque frame to refract against.
+ *
+ * @param effect The effect.
+ * @param frame The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_opaque_frame(
+    CNA_ClusteredForwardEffectHandle effect,
+    CNA_Handle frame);
+
+/**
+ * @brief Computes the volume attenuation of a transmissive material.
+ *
+ * A pure function of its arguments, so it needs no effect.
+ *
+ * @param attenuation_color The colour light takes on as it travels.
+ * @param attenuation_distance The distance over which that colour is reached.
+ * @param thickness How far light travels through the volume.
+ * @param out_attenuation Receives the attenuation.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_volume_attenuation(
+    const CNA_Vector3* attenuation_color,
+    float attenuation_distance,
+    float thickness,
+    CNA_Vector3* out_attenuation);
+
+/**
+ * @brief Computes one light's contribution to a surface point.
+ *
+ * The canonical overload defaults its last eight arguments; C has no defaults, so all of them are
+ * explicit here. Pass zero for the effects you are not using and the documented neutral values for
+ * the rest — `1.3` for the iridescence IOR, `400` for its thickness and `0.5` for the subsurface
+ * wrap, which are the canonical defaults.
+ *
+ * @param light The light.
+ * @param surface The surface point.
+ * @param normal The surface normal.
+ * @param camera_position The camera's world-space position.
+ * @param base_color The material's base colour.
+ * @param metallic How metallic the material is.
+ * @param roughness The material's roughness.
+ * @param clearcoat Clearcoat strength.
+ * @param clearcoat_roughness Clearcoat roughness.
+ * @param sheen_color Sheen colour.
+ * @param sheen_roughness Sheen roughness.
+ * @param iridescence Iridescence strength.
+ * @param iridescence_ior Iridescence index of refraction.
+ * @param iridescence_thickness Iridescence film thickness in nanometres.
+ * @param subsurface_color Subsurface colour.
+ * @param subsurface_wrap How far light wraps around the terminator.
+ * @param out_contribution Receives the contribution.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument or an
+ * uninitialized light, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_contribution(
+    const CNA_ClusteredLightEXT* light,
+    const CNA_Vector3* surface,
+    const CNA_Vector3* normal,
+    const CNA_Vector3* camera_position,
+    const CNA_Vector3* base_color,
+    float metallic,
+    float roughness,
+    float clearcoat,
+    float clearcoat_roughness,
+    const CNA_Vector3* sheen_color,
+    float sheen_roughness,
+    float iridescence,
+    float iridescence_ior,
+    float iridescence_thickness,
+    const CNA_Vector3* subsurface_color,
+    float subsurface_wrap,
+    CNA_Vector3* out_contribution);
+
+/**
+ * @brief Releases the clustered forward effect.
+ *
+ * @param effect The effect; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_destroy(
+    CNA_ClusteredForwardEffectHandle effect);
+
+/** @brief The per-cluster capacity a compute assignment uses unless told otherwise. */
+#define CNA_CLUSTERED_COMPUTE_DEFAULT_STRIDE_EXT INT32_C(64)
+
+/**
+ * @brief Owned handle for one GPU cluster-assignment program.
+ *
+ * **It degrades rather than refuses.** On a renderer without compute shaders the object still
+ * works: @ref cna_clustered_light_compute_assign falls back to the CPU sort and produces the same
+ * assignment, and @ref cna_clustered_light_compute_used_compute reports which path ran.
+ */
+typedef CNA_Handle CNA_ClusteredLightComputeHandle;
+
+/**
+ * @brief Creates a GPU cluster-assignment program.
+ *
+ * @param graphics_device The device to compile on.
+ * @param stride The per-cluster light capacity; must be positive.
+ * @param out_compute Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive stride,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_create(
+    CNA_Handle graphics_device,
+    int32_t stride,
+    CNA_ClusteredLightComputeHandle* out_compute);
+
+/**
+ * @brief Reports whether the GPU path is available.
+ *
+ * A `CNA_FALSE` here is not a failure: assignment still works, on the CPU.
+ *
+ * @param compute The program.
+ * @param out_supported Receives `CNA_TRUE` when the compute program compiled.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_is_supported(
+    CNA_ClusteredLightComputeHandle compute,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Copies why the GPU path is unavailable, as UTF-8 bytes without a terminator.
+ *
+ * Empty when the program compiled.
+ *
+ * @param compute The program.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_copy_unsupported_reason(
+    CNA_ClusteredLightComputeHandle compute,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the per-cluster light capacity.
+ *
+ * @param compute The program.
+ * @param out_stride Receives the capacity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_get_stride(
+    CNA_ClusteredLightComputeHandle compute,
+    int32_t* out_stride);
+
+/**
+ * @brief Sorts lights into clusters, on the GPU where it can and the CPU where it cannot.
+ *
+ * @param compute The program.
+ * @param grid The grid to sort into.
+ * @param view The camera's view matrix.
+ * @param bounds Array of light bounding spheres, in light-index order.
+ * @param bounds_count How many spheres.
+ * @param out_assignment The assignment to fill.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for more lights than the assignment
+ * accepts, `CNA_RESULT_INVALID_STATE` when the grid has no projection, `CNA_RESULT_NOT_SUPPORTED`
+ * without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_assign(
+    CNA_ClusteredLightComputeHandle compute,
+    CNA_ClusteredLightGridHandle grid,
+    const CNA_Matrix* view,
+    const CNA_BoundingSphere* bounds,
+    uint64_t bounds_count,
+    CNA_ClusteredLightAssignmentHandle out_assignment);
+
+/**
+ * @brief Reports whether the last assignment ran on the GPU.
+ *
+ * @param compute The program.
+ * @param out_used Receives `CNA_TRUE` when the GPU path ran.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_used_compute(
+    CNA_ClusteredLightComputeHandle compute,
+    CNA_Bool* out_used);
+
+/**
+ * @brief Reports whether the last assignment overflowed a cluster's capacity.
+ *
+ * A cluster holding more lights than the stride drops the excess, so this is the flag that says a
+ * larger stride is needed rather than that anything failed.
+ *
+ * @param compute The program.
+ * @param out_overflowed Receives `CNA_TRUE` when at least one cluster overflowed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_has_overflowed(
+    CNA_ClusteredLightComputeHandle compute,
+    CNA_Bool* out_overflowed);
+
+/**
+ * @brief Releases the compute program.
+ *
+ * @param compute The program; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_compute_destroy(
+    CNA_ClusteredLightComputeHandle compute);
+
+/**
+ * @brief Scores a light set and selects which lights may cast shadows this frame.
+ *
+ * Completes the shadow-budget family `CBIND-085C1` bound: the policy could be configured and read
+ * but not run, because scoring needs a light set.
+ *
+ * @param policy The policy.
+ * @param lights The light set to score.
+ * @param view The camera's view matrix.
+ * @param projection The camera's projection matrix.
+ * @param camera_position The camera's world-space position.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_select(
+    CNA_ClusteredShadowPolicyHandle policy,
+    CNA_ClusteredLightSetHandle lights,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    const CNA_Vector3* camera_position);
+
 #ifdef __cplusplus
 }
 #endif

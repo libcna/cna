@@ -15427,15 +15427,15 @@
     },
     {
       "id": "clustered-shadow-policy",
-      "qualified_name_regex": "^CNA::Graphics::ClusteredShadowPolicyEXT(?:::(?!select$)[A-Za-z0-9_~]+)?$",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredShadowPolicyEXT(?:::[A-Za-z0-9_~]+)?$",
       "kinds": [
         "class",
         "constant",
         "constructor",
         "method"
       ],
-      "mapping": "`cna_clustered_shadow_policy_*` over an owned handle, with `kDefaultBudget` and `kDefaultHysteresis` as constants. The policy is a pure CPU object needing no device, but it is still parented to a game so its lifetime is accounted for like every other owned resource. `getSelected` returns a vector, so it takes the count/copy form. `getScore` keeps its canonical refusal for an index the last selection did not score, rather than answering zero -- which a caller would read as \"scored, and worthless\".",
-      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "mapping": "`cna_clustered_shadow_policy_*` over an owned handle, with `kDefaultBudget` and `kDefaultHysteresis` as constants. The policy is a pure CPU object needing no device, but it is still parented to a game so its lifetime is accounted for like every other owned resource. `getSelected` returns a vector, so it takes the count/copy form. `getScore` keeps its canonical refusal for an index the last selection did not score, rather than answering zero -- which a caller would read as \"scored, and worthless\".\n\n`select` was the one member this slice could declare but not run, because scoring needs a `ClusteredLightSetEXT` that did not exist in C yet. `CBIND-086C` binds it as `cna_clustered_shadow_policy_select` and removes the deferral, so the family is now callable end to end rather than configurable and inert.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute; `select` in `EngineLayerSmoke.c` stage 19, which scores a one-light set and refuses a null view and an invalid set handle",
       "status": "implemented",
       "task": "CBIND-085C1",
       "approved_symbols": [
@@ -15451,6 +15451,7 @@
         "CPP-97B92CA2EB39",
         "CPP-A7648A307806",
         "CPP-AA1830DE1CE5",
+        "CPP-B2A03771DE4F",
         "CPP-C2F9EAD9FAC0",
         "CPP-ECB458AB8A43"
       ]
@@ -15693,6 +15694,77 @@
         "CPP-F48EF8C683EB",
         "CPP-F70530DFB419"
       ]
+    },
+    {
+      "id": "clustered-forward-effect",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredForwardEffect(?:::(?!setMaterialExtensions$|getMaterialExtensions$|setAreaLight$|setLightProbe$|setLightProbeVolume$)[A-Za-z0-9_~]+)?$",
+      "signature_regex": "^(?!.*(?:PbrMaterialExtensions|=delete)).*$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_clustered_forward_effect_*` over an owned handle, with `kMaxLightsPerFragment` as `CNA_CLUSTERED_FORWARD_MAX_LIGHTS_PER_FRAGMENT_EXT` and a `static_assert` tying them together. The shader effect is a **counted borrow** -- unlike the light buffer, the effect really does hand out a pointer to something it owns, so destruction is refused while one is outstanding. The opaque frame is the opposite case and is deliberately *not* counted: the effect borrows the texture rather than owning it, so `getOpaqueFrame` returns a fresh name for the same texture on the precedent `cna_effect_get_shadow_map_ext` set.\n\nEvery throw and every clamp in the canonical body was classified before a route was written. The two throws are **contracts** and are refused: `begin` against a buffer that holds nothing has no cluster table for the shader to walk, and a transmissive material with no opaque frame is an opaque object where a glass one was asked for -- the canonical code says 'refused rather than approximated' and the C form keeps that. The four setters are **corrections** and stay clamped, because a material parameter outside its range has a nearest meaningful value: base colour and metallic clamp to zero-to-one, ambient is floored at zero because a negative ambient would subtract light that was never added, and roughness clamps to **0.04**, not zero, because a perfectly smooth surface collapses the specular lobe to a point the shader cannot integrate. That floor is asserted at 0.04 rather than 0, which is the only way a clamp that stops clamping is visible.\n\n`volumeAttenuation` and the fifteen-scalar `contribution` are pure functions and become free routes with no handle. `contribution` defaults its last eight arguments; C has no defaults, so all sixteen are explicit and the header names the canonical neutral values.\n\nFive members are deferred with named owners rather than bound here, because each takes a type another slice owns and the effect cannot ask for what C cannot yet describe: `setMaterialExtensions`/`getMaterialExtensions` to `CBIND-087`, and `setAreaLight`/`setLightProbe`/`setLightProbeVolume` to `CBIND-091`. Their `clear*`/`has*` partners are bound here, since neither names the foreign type.",
+      "tests": "`EngineLayerSmoke.c` stage 19, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-086C",
+      "approved_symbols": [
+        "CPP-023E0E739087",
+        "CPP-0BE6286A106C",
+        "CPP-0CF74BA5C45E",
+        "CPP-0CFE52FC6458",
+        "CPP-10A7C4E33269",
+        "CPP-1C5DD8A83051",
+        "CPP-1CBFCFA9BE8A",
+        "CPP-2C4DB80780C4",
+        "CPP-3709FDAB6F3F",
+        "CPP-384F0720BDEF",
+        "CPP-3A64B16ECA9E",
+        "CPP-45329ED0068A",
+        "CPP-5EDB57634BFA",
+        "CPP-7FEFAD155A6B",
+        "CPP-869D100C9E95",
+        "CPP-B19CC3AB1A8A",
+        "CPP-C1DF9597285F",
+        "CPP-C94F3B06E820",
+        "CPP-CF7C649571DC",
+        "CPP-D8111E92C532",
+        "CPP-D97FE107AA3D",
+        "CPP-DFF31248E289",
+        "CPP-ED0D9D9DC2D9",
+        "CPP-F9548331088A",
+        "CPP-FD4051699A98"
+      ]
+    },
+    {
+      "id": "clustered-light-compute",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredLightCompute(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_clustered_light_compute_*` over an owned handle, with `kDefaultStride` as `CNA_CLUSTERED_COMPUTE_DEFAULT_STRIDE_EXT` and a `static_assert` tying them together.\n\n**It degrades rather than refuses, and reading the body rather than the class name is what established that.** `assign` falls back to the CPU `ClusteredLightAssignment::assign` when no compute program compiled, so on a renderer without compute shaders the object still produces a correct assignment -- `usedCompute` reports which path ran, and a `false` there is not a failure. The fallback happens *before* the canonical validations, so the two paths would otherwise answer the same refusal with two different messages; the C form checks the grid's projection up front so one message is given either way. A non-positive stride is a **contract** and is refused, because the stride sizes the light-index list. `hasOverflowed` reports a cluster that held more lights than the stride, which asks for a larger stride rather than reporting a failure.\n\n`getUnsupportedReason` takes the count/copy form and is empty exactly when the program compiled; the test asserts that equivalence as one condition rather than two.",
+      "tests": "`EngineLayerSmoke.c` stage 18, which sorts the same lights through the CPU route and this one and compares offsets and indices element by element, so the GPU and fallback paths are held to one answer. Measured on all three arms: with the layer off, on EasyGL where the compute path runs (proved by asserting `used_compute` is false and watching the exit code move to stage 18) and on HEADLESS with the layer on where it falls back.",
+      "status": "implemented",
+      "task": "CBIND-086C",
+      "approved_symbols": [
+        "CPP-09E35D2CF195",
+        "CPP-22DB8D8888A5",
+        "CPP-259A4D60BB95",
+        "CPP-4224A10A66AD",
+        "CPP-52D0BEB7A9D5",
+        "CPP-5F1ED69D3C1C",
+        "CPP-680C47A84E23",
+        "CPP-9F8690A2D41D",
+        "CPP-A182AD963356",
+        "CPP-F40EE30A7258"
+      ],
+      "signature_regex": "^(?!.*=delete).*$"
     }
   ]
 }

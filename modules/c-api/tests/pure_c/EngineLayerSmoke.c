@@ -2415,6 +2415,317 @@ static int validate_cluster_grid_and_buffer(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-086C. The compute path exists on exactly one renderer here (EasyGL advertises compute
+   shaders; HEADLESS does not), and ClusteredLightCompute::assign falls back to the CPU sort rather
+   than refusing when it is absent. So the arm-independent thing worth asserting is not "the GPU
+   ran" but "both paths produce the same assignment" -- and `used_compute` is then read back
+   against `is_supported` to say which one this build actually exercised. */
+static int validate_clustered_compute(const CNA_Handle graphics_device)
+{
+    CNA_ClusteredLightGridHandle grid = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightAssignmentHandle on_cpu = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightAssignmentHandle under_test = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightComputeHandle compute = CNA_INVALID_HANDLE;
+    CNA_Matrix projection;
+    CNA_Matrix view;
+    CNA_BoundingSphere spheres[3];
+    int32_t cpu_offsets[512];
+    int32_t test_offsets[512];
+    int32_t cpu_indices[1024];
+    int32_t test_indices[1024];
+    uint64_t cpu_count = UINT64_C(0);
+    uint64_t test_count = UINT64_C(0);
+    uint64_t reason_bytes = UINT64_C(1);
+    CNA_Bool supported = UINT8_C(9);
+    CNA_Bool used = UINT8_C(9);
+    CNA_Bool overflowed = UINT8_C(9);
+    int32_t stride = -1;
+    int32_t cpu_total = -1;
+    int32_t test_total = -2;
+    uint64_t index = UINT64_C(0);
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    for (index = UINT64_C(0); index < UINT64_C(3); ++index) {
+        spheres[index].center.x = (float)index * 2.0F - 2.0F;
+        spheres[index].center.y = 0.0F;
+        spheres[index].center.z = -6.0F;
+        spheres[index].radius = 3.0F;
+    }
+
+    /* A non-positive per-cluster capacity is REFUSED, not corrected: the stride is what the
+       light-index list is sized from, so a silently different one would size the wrong list. */
+    if (cna_clustered_light_compute_create(graphics_device, INT32_C(0), &compute) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        compute != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_clustered_light_compute_create(graphics_device, INT32_C(-4), &compute) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        compute != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_clustered_light_compute_create(
+            graphics_device, CNA_CLUSTERED_COMPUTE_DEFAULT_STRIDE_EXT, &compute) !=
+            CNA_RESULT_SUCCESS ||
+        compute == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    ok = cna_clustered_light_compute_get_stride(compute, &stride) == CNA_RESULT_SUCCESS &&
+        stride == CNA_CLUSTERED_COMPUTE_DEFAULT_STRIDE_EXT;
+    ok = ok && cna_clustered_light_compute_is_supported(compute, &supported) ==
+        CNA_RESULT_SUCCESS && (supported == CNA_TRUE || supported == CNA_FALSE);
+    /* The reason is empty exactly when the program compiled, and non-empty exactly when it did
+       not. That equivalence is the whole contract of the pair, so it is asserted as one. */
+    ok = ok && cna_clustered_light_compute_copy_unsupported_reason(compute, 0, UINT64_C(0),
+                                                                   &reason_bytes) ==
+        (supported == CNA_TRUE ? CNA_RESULT_SUCCESS : CNA_RESULT_BUFFER_TOO_SMALL);
+    ok = ok && ((supported == CNA_TRUE) == (reason_bytes == UINT64_C(0)));
+
+    if (!ok || cna_clustered_light_grid_create(graphics_device, INT32_C(4), INT32_C(4),
+                                               INT32_C(8), &grid) != CNA_RESULT_SUCCESS) {
+        (void)cna_clustered_light_compute_destroy(compute);
+        return 0;
+    }
+    if (cna_clustered_light_assignment_create(graphics_device, &on_cpu) != CNA_RESULT_SUCCESS ||
+        cna_clustered_light_assignment_create(graphics_device, &under_test) !=
+            CNA_RESULT_SUCCESS) {
+        (void)cna_clustered_light_assignment_destroy(on_cpu);
+        (void)cna_clustered_light_grid_destroy(grid);
+        (void)cna_clustered_light_compute_destroy(compute);
+        return 0;
+    }
+
+    /* Without a projection the grid has no clusters to sort into, so this refuses on either path
+       rather than sorting into nothing. It is checked BEFORE the fallback is reached, so the two
+       paths give one message instead of two differently-worded ones. */
+    ok = ok && cna_clustered_light_compute_assign(compute, grid, &view, spheres, UINT64_C(3),
+                                                  under_test) == CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_clustered_light_grid_set_projection(grid, &projection, 1.0F, 100.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_compute_assign(compute, grid, 0, spheres, UINT64_C(3),
+                                                  under_test) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_compute_assign(compute, grid, &view, 0, UINT64_C(3),
+                                                  under_test) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_compute_assign(
+            compute, grid, &view, spheres,
+            (uint64_t)CNA_CLUSTERED_ASSIGNMENT_MAX_LIGHTS_EXT + UINT64_C(1), under_test) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The oracle: sort the same three lights both ways and compare the results element by
+       element. On EasyGL the second sort runs on the GPU, on HEADLESS it falls back to the same
+       CPU code the first one used -- either way disagreement here is a real defect. */
+    ok = ok && cna_clustered_light_assignment_assign(on_cpu, grid, &view, spheres, UINT64_C(3)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_compute_assign(compute, grid, &view, spheres, UINT64_C(3),
+                                                  under_test) == CNA_RESULT_SUCCESS;
+    /* Which path just ran is exactly whether the program compiled. This is the assertion that
+       fails if the compute arm silently stops executing on the one renderer that has it. */
+    ok = ok && cna_clustered_light_compute_used_compute(compute, &used) == CNA_RESULT_SUCCESS &&
+        used == supported;
+    ok = ok && cna_clustered_light_compute_has_overflowed(compute, &overflowed) ==
+        CNA_RESULT_SUCCESS && overflowed == CNA_FALSE;
+
+    ok = ok && cna_clustered_light_assignment_get_total_reference_count(on_cpu, &cpu_total) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_assignment_get_total_reference_count(under_test, &test_total) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cpu_total == test_total && cpu_total > 0;
+    ok = ok && cna_clustered_light_assignment_copy_offsets(
+            on_cpu, cpu_offsets, (uint64_t)(sizeof cpu_offsets / sizeof cpu_offsets[0]),
+            &cpu_count) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_assignment_copy_offsets(
+            under_test, test_offsets, (uint64_t)(sizeof test_offsets / sizeof test_offsets[0]),
+            &test_count) == CNA_RESULT_SUCCESS;
+    ok = ok && cpu_count == test_count && cpu_count > UINT64_C(0);
+    for (index = UINT64_C(0); ok && index < cpu_count; ++index) {
+        ok = cpu_offsets[index] == test_offsets[index];
+    }
+    ok = ok && cna_clustered_light_assignment_copy_indices(
+            on_cpu, cpu_indices, (uint64_t)(sizeof cpu_indices / sizeof cpu_indices[0]),
+            &cpu_count) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_assignment_copy_indices(
+            under_test, test_indices, (uint64_t)(sizeof test_indices / sizeof test_indices[0]),
+            &test_count) == CNA_RESULT_SUCCESS;
+    ok = ok && cpu_count == test_count;
+    for (index = UINT64_C(0); ok && index < cpu_count; ++index) {
+        ok = cpu_indices[index] == test_indices[index];
+    }
+
+    ok = ok && cna_clustered_light_compute_destroy(compute) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_compute_destroy(compute) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_assignment_destroy(under_test) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_assignment_destroy(on_cpu) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_grid_destroy(grid) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
+/* CBIND-086C. The forward effect's material setters correct rather than refuse, so each one is
+   given a value outside its range and read straight back: a clamp that stops clamping is not
+   visible any other way. */
+static int validate_clustered_forward(const CNA_Handle graphics_device)
+{
+    CNA_ClusteredForwardEffectHandle effect = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightBufferHandle buffer = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightSetHandle lights = CNA_INVALID_HANDLE;
+    CNA_ClusteredShadowPolicyHandle policy = CNA_INVALID_HANDLE;
+    CNA_EffectHandle shader = CNA_INVALID_HANDLE;
+    CNA_Handle frame = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightEXT light;
+    CNA_Matrix world;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Vector3 camera;
+    CNA_Vector3 vector;
+    CNA_Vector3 read_back;
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool supported = UINT8_C(9);
+    float scalar = -1.0F;
+    int32_t light_index = -1;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&world) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS ||
+        cna_clustered_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    camera.x = 0.0F;
+    camera.y = 0.0F;
+    camera.z = 5.0F;
+
+    if (cna_clustered_forward_effect_create(graphics_device, &effect) != CNA_RESULT_SUCCESS ||
+        effect == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    ok = cna_clustered_forward_effect_is_supported(effect, &supported) == CNA_RESULT_SUCCESS &&
+        (supported == CNA_TRUE || supported == CNA_FALSE);
+
+    /* Base colour clamps per channel to zero-to-one. */
+    vector.x = 2.0F;
+    vector.y = -1.0F;
+    vector.z = 0.5F;
+    ok = ok && cna_clustered_forward_effect_set_base_color(effect, &vector) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_base_color(effect, &read_back) ==
+        CNA_RESULT_SUCCESS && read_back.x == 1.0F && read_back.y == 0.0F && read_back.z == 0.5F;
+    ok = ok && cna_clustered_forward_effect_set_base_color(effect, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Metallic clamps to zero-to-one at both ends. */
+    ok = ok && cna_clustered_forward_effect_set_metallic(effect, 5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_metallic(effect, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_clustered_forward_effect_set_metallic(effect, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_metallic(effect, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* Roughness has a FLOOR OF 0.04, not zero: a perfectly smooth surface collapses the specular
+       lobe to a point the shader cannot integrate. Asserting 0.04 rather than 0 is the point. */
+    ok = ok && cna_clustered_forward_effect_set_roughness(effect, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_roughness(effect, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar > 0.039F && scalar < 0.041F;
+    ok = ok && cna_clustered_forward_effect_set_roughness(effect, 9.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_roughness(effect, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 1.0F;
+
+    ok = ok && cna_clustered_forward_effect_set_ior(effect, 1.5F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_ior(effect, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.5F;
+
+    /* Ambient is floored at zero per channel but has no ceiling: a negative ambient would
+       subtract light that was never added, while a bright one is legitimate. */
+    vector.x = -1.0F;
+    vector.y = 3.0F;
+    vector.z = 0.0F;
+    ok = ok && cna_clustered_forward_effect_set_ambient(effect, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_ambient(effect, &read_back) ==
+        CNA_RESULT_SUCCESS && read_back.x == 0.0F && read_back.y == 3.0F && read_back.z == 0.0F;
+
+    /* Nothing bound, and the clears are no-ops rather than errors. */
+    ok = ok && cna_clustered_forward_effect_has_area_light(effect, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_clustered_forward_effect_clear_area_light(effect) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_has_light_probe(effect, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_clustered_forward_effect_clear_light_probe(effect) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_get_opaque_frame(effect, &frame) ==
+        CNA_RESULT_SUCCESS && frame == CNA_INVALID_HANDLE;
+    ok = ok && cna_clustered_forward_effect_set_opaque_frame(effect, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_SUCCESS;
+
+    /* Pure functions of their arguments: no effect needed, and a null vector is refused. */
+    vector.x = 1.0F;
+    vector.y = 0.5F;
+    vector.z = 0.25F;
+    ok = ok && cna_clustered_forward_effect_volume_attenuation(&vector, 1.0F, 0.0F, &read_back) ==
+        CNA_RESULT_SUCCESS && read_back.x == 1.0F && read_back.y == 1.0F && read_back.z == 1.0F;
+    ok = ok && cna_clustered_forward_effect_volume_attenuation(&vector, 1.0F, 1.0F, &read_back) ==
+        CNA_RESULT_SUCCESS && read_back.y < 1.0F && read_back.z < 1.0F;
+    ok = ok && cna_clustered_forward_effect_volume_attenuation(0, 1.0F, 1.0F, &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_forward_effect_contribution(
+            &light, &vector, &vector, &camera, &vector, 0.0F, 0.5F, 0.0F, 0.0F, &vector, 0.3F,
+            0.0F, 1.3F, 400.0F, &vector, 0.5F, &read_back) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_forward_effect_contribution(
+            0, &vector, &vector, &camera, &vector, 0.0F, 0.5F, 0.0F, 0.0F, &vector, 0.3F, 0.0F,
+            1.3F, 400.0F, &vector, 0.5F, &read_back) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_forward_effect_contribution(
+            &light, 0, &vector, &camera, &vector, 0.0F, 0.5F, 0.0F, 0.0F, &vector, 0.3F, 0.0F,
+            1.3F, 400.0F, &vector, 0.5F, &read_back) == CNA_RESULT_INVALID_ARGUMENT;
+
+    if (!ok || cna_clustered_light_buffer_create(graphics_device, &buffer) !=
+            CNA_RESULT_SUCCESS) {
+        (void)cna_clustered_forward_effect_destroy(effect);
+        return 0;
+    }
+    /* An empty buffer has no cluster table for the shader to walk, so beginning is refused rather
+       than shading against whatever the textures last held. */
+    ok = ok && cna_clustered_forward_effect_begin(effect, &world, &view, &projection, &camera,
+                                                  buffer) == CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_clustered_forward_effect_begin(effect, 0, &view, &projection, &camera,
+                                                  buffer) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_forward_effect_begin(effect, &world, &view, &projection, 0,
+                                                  buffer) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_buffer_destroy(buffer) == CNA_RESULT_SUCCESS;
+
+    /* The shader effect is a counted borrow, so destroying the lender while it is out is refused
+       rather than leaving the borrower pointing at freed memory. */
+    ok = ok && cna_clustered_forward_effect_get_effect(effect, &shader) == CNA_RESULT_SUCCESS;
+    if (ok && shader != CNA_INVALID_HANDLE) {
+        ok = cna_clustered_forward_effect_destroy(effect) == CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_effect_destroy(shader) == CNA_RESULT_SUCCESS;
+    }
+    ok = ok && cna_clustered_forward_effect_destroy(effect) == CNA_RESULT_SUCCESS;
+
+    /* CBIND-085C1 left select() unbound because scoring needs a light set; it closes here. */
+    if (!ok) {
+        return 0;
+    }
+    if (cna_clustered_shadow_policy_create(graphics_device, INT32_C(2), &policy) !=
+            CNA_RESULT_SUCCESS ||
+        cna_clustered_light_set_create(graphics_device, &lights) != CNA_RESULT_SUCCESS) {
+        (void)cna_clustered_shadow_policy_destroy(policy);
+        return 0;
+    }
+    light.casts_shadows = CNA_TRUE;
+    light.position.z = -4.0F;
+    ok = cna_clustered_light_set_add(lights, &light, &light_index) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_shadow_policy_select(policy, lights, &view, &projection, &camera) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_shadow_policy_select(policy, lights, 0, &projection, &camera) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_shadow_policy_select(policy, CNA_INVALID_HANDLE, &view, &projection,
+                                                  &camera) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_set_destroy(lights) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_shadow_policy_destroy(policy) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -2480,6 +2791,14 @@ static CNA_Result on_load(
         }
         if (!validate_cluster_grid_and_buffer(graphics_device)) {
             state->failed_stage = 17;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_clustered_compute(graphics_device)) {
+            state->failed_stage = 18;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_clustered_forward(graphics_device)) {
+            state->failed_stage = 19;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

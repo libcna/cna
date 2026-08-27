@@ -25,6 +25,8 @@
 #include "CNA/Graphics/ClusteredLightAssignment.hpp"
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
+#include "CNA/Graphics/ClusteredForwardEffect.hpp"
+#include "CNA/Graphics/ClusteredLightCompute.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
 #include "CNA/Graphics/ClusteredLightType.hpp"
@@ -2635,6 +2637,200 @@ CNA_Result cna_clustered_light_buffer_copy_light_lookup_glsl(char* p0, uint64_t 
 CNA_Result cna_clustered_light_buffer_destroy(CNA_ClusteredLightBufferHandle p0)
 {
     (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_create(CNA_Handle p0, CNA_ClusteredForwardEffectHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_is_supported(CNA_ClusteredForwardEffectHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_begin(CNA_ClusteredForwardEffectHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2, const CNA_Matrix* p3, const CNA_Vector3* p4, CNA_ClusteredLightBufferHandle p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_effect(CNA_ClusteredForwardEffectHandle p0, CNA_EffectHandle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_has_area_light(CNA_ClusteredForwardEffectHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_clear_area_light(CNA_ClusteredForwardEffectHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_has_light_probe(CNA_ClusteredForwardEffectHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_clear_light_probe(CNA_ClusteredForwardEffectHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_base_color(CNA_ClusteredForwardEffectHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_base_color(CNA_ClusteredForwardEffectHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_metallic(CNA_ClusteredForwardEffectHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_metallic(CNA_ClusteredForwardEffectHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_roughness(CNA_ClusteredForwardEffectHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_roughness(CNA_ClusteredForwardEffectHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_ior(CNA_ClusteredForwardEffectHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_ior(CNA_ClusteredForwardEffectHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_ambient(CNA_ClusteredForwardEffectHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_ambient(CNA_ClusteredForwardEffectHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_opaque_frame(CNA_ClusteredForwardEffectHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_opaque_frame(CNA_ClusteredForwardEffectHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_volume_attenuation(const CNA_Vector3* p0, float p1, float p2, CNA_Vector3* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_contribution(const CNA_ClusteredLightEXT* p0, const CNA_Vector3* p1, const CNA_Vector3* p2, const CNA_Vector3* p3, const CNA_Vector3* p4, float p5, float p6, float p7, float p8, const CNA_Vector3* p9, float p10, float p11, float p12, float p13, const CNA_Vector3* p14, float p15, CNA_Vector3* p16)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5; (void)p6; (void)p7; (void)p8; (void)p9; (void)p10; (void)p11; (void)p12; (void)p13; (void)p14; (void)p15; (void)p16;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_destroy(CNA_ClusteredForwardEffectHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_create(CNA_Handle p0, int32_t p1, CNA_ClusteredLightComputeHandle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_is_supported(CNA_ClusteredLightComputeHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_copy_unsupported_reason(CNA_ClusteredLightComputeHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_get_stride(CNA_ClusteredLightComputeHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_assign(CNA_ClusteredLightComputeHandle p0, CNA_ClusteredLightGridHandle p1, const CNA_Matrix* p2, const CNA_BoundingSphere* p3, uint64_t p4, CNA_ClusteredLightAssignmentHandle p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_used_compute(CNA_ClusteredLightComputeHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_has_overflowed(CNA_ClusteredLightComputeHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_compute_destroy(CNA_ClusteredLightComputeHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_select(CNA_ClusteredShadowPolicyHandle p0, CNA_ClusteredLightSetHandle p1, const CNA_Matrix* p2, const CNA_Matrix* p3, const CNA_Vector3* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
     return ExtensionUnavailable();
 }
 
@@ -8687,6 +8883,661 @@ CNA_Result cna_clustered_light_buffer_destroy(const CNA_ClusteredLightBufferHand
         RemoveOwnedGraphicsResourceFor(buffer->parentGame);
         return CNA_RESULT_SUCCESS;
     });
+}
+
+namespace {
+
+struct ClusteredForwardEffectResource final {
+    std::shared_ptr<Ext::ClusteredForwardEffect> value;
+    CNA_Handle parentGame;
+    uint64_t activeBorrowCount = 0U;
+};
+
+struct ClusteredLightComputeResource final {
+    std::shared_ptr<Ext::ClusteredLightCompute> value;
+    CNA_Handle parentGame;
+};
+
+static_assert(
+    Ext::ClusteredForwardEffect::kMaxLightsPerFragment ==
+        CNA_CLUSTERED_FORWARD_MAX_LIGHTS_PER_FRAGMENT_EXT &&
+    Ext::ClusteredLightCompute::kDefaultStride == CNA_CLUSTERED_COMPUTE_DEFAULT_STRIDE_EXT);
+
+[[nodiscard]] CNA_Result RequireVector3Argument(
+    const CNA_Vector3* const value, const char* const what)
+{
+    if (value == nullptr) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, what);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] Microsoft::Xna::Framework::Vector3 ToNativeVector3(const CNA_Vector3& v) noexcept
+{
+    return {v.x, v.y, v.z};
+}
+
+[[nodiscard]] CNA_Result ToNativeSphereArray(
+    const CNA_BoundingSphere* const bounds,
+    const uint64_t boundsCount,
+    std::vector<BoundingSphere>* const out)
+{
+    if (bounds == nullptr && boundsCount != 0U) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The bounds array is null.");
+    }
+    if (boundsCount > static_cast<uint64_t>(CNA_CLUSTERED_ASSIGNMENT_MAX_LIGHTS_EXT)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "More lights than the assignment accepts.");
+    }
+    out->reserve(static_cast<std::size_t>(boundsCount));
+    for (uint64_t sphere = 0U; sphere < boundsCount; ++sphere) {
+        out->emplace_back(
+            ToNativeVector3(bounds[sphere].center), bounds[sphere].radius);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_clustered_forward_effect_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_ClusteredForwardEffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The clustered-forward-effect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ClusteredForwardEffect>(*graphicsDevice->value);
+        const auto resource = std::make_shared<ClusteredForwardEffectResource>(
+            ClusteredForwardEffectResource{std::move(native), graphicsDevice->parentGame, 0U});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::ClusteredForwardEffect, resource, outEffect);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned clustered-forward-effect handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#define CNA_WITH_FORWARD(handle, body)                                                             \
+    WithMap<ClusteredForwardEffectResource>(                                                       \
+        (handle), ObjectKind::ClusteredForwardEffect, "ClusteredForwardEffect", body)
+#define CNA_WITH_COMPUTE(handle, body)                                                             \
+    WithMap<ClusteredLightComputeResource>(                                                        \
+        (handle), ObjectKind::ClusteredLightCompute, "ClusteredLightCompute", body)
+
+CNA_Result cna_clustered_forward_effect_is_supported(
+    const CNA_ClusteredForwardEffectHandle effect, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            return StoreValue(
+                outSupported,
+                static_cast<CNA_Bool>(e->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_begin(
+    const CNA_ClusteredForwardEffectHandle effect,
+    const CNA_Matrix* const world,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const CNA_Vector3* const cameraPosition,
+    const CNA_ClusteredLightBufferHandle lights)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(world, "The world is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireMatrixArgument(projection, "The projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireVector3Argument(cameraPosition, "The camera position is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::shared_ptr<ClusteredLightBufferResource> buffer;
+            if (const CNA_Result result = GetEngineResource(
+                    lights, ObjectKind::ClusteredLightBuffer, "ClusteredLightBuffer", &buffer);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Both canonical refusals are answered here so each keeps its own message: an empty
+            // buffer has no cluster table to walk, and a transmissive material with no opaque
+            // frame is an opaque object where a glass one was asked for.
+            if (!buffer->value->isUploaded()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "The light buffer holds nothing, so there is no cluster table for the shader "
+                    "to walk.");
+            }
+            e->value->begin(
+                ToNativeMatrix(*world), ToNativeMatrix(*view), ToNativeMatrix(*projection),
+                ToNativeVector3(*cameraPosition), *buffer->value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_get_effect(
+    const CNA_ClusteredForwardEffectHandle effect, CNA_EffectHandle* const outShader)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            if (outShader == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The shader output handle is null.");
+            }
+            *outShader = CNA_INVALID_HANDLE;
+            return BorrowEffectFrom(e, e->value->getEffect(), outShader);
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_has_area_light(
+    const CNA_ClusteredForwardEffectHandle effect, CNA_Bool* const outHas)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            return StoreValue(
+                outHas, static_cast<CNA_Bool>(e->value->hasAreaLight() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_clear_area_light(
+    const CNA_ClusteredForwardEffectHandle effect)
+{
+    return CNA_WITH_FORWARD(effect, [](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            e->value->clearAreaLight();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_has_light_probe(
+    const CNA_ClusteredForwardEffectHandle effect, CNA_Bool* const outHas)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            return StoreValue(
+                outHas, static_cast<CNA_Bool>(e->value->hasLightProbe() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_clear_light_probe(
+    const CNA_ClusteredForwardEffectHandle effect)
+{
+    return CNA_WITH_FORWARD(effect, [](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            e->value->clearLightProbe();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_get_base_color(
+    const CNA_ClusteredForwardEffectHandle effect, CNA_Vector3* const outColor)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            const auto c = e->value->getBaseColor();
+            return StoreValue(outColor, Vec3(c.X, c.Y, c.Z));
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_set_base_color(
+    const CNA_ClusteredForwardEffectHandle effect, const CNA_Vector3* const color)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireVector3Argument(color, "The colour is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Clamped per channel by the canonical setter; preserved rather than refused.
+            e->value->setBaseColor(ToNativeVector3(*color));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_get_metallic(
+    const CNA_ClusteredForwardEffectHandle effect, float* const outMetallic)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result { return StoreValue(outMetallic, e->value->getMetallic()); });
+}
+
+CNA_Result cna_clustered_forward_effect_set_metallic(
+    const CNA_ClusteredForwardEffectHandle effect, const float metallic)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            e->value->setMetallic(metallic);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_get_roughness(
+    const CNA_ClusteredForwardEffectHandle effect, float* const outRoughness)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result { return StoreValue(outRoughness, e->value->getRoughness()); });
+}
+
+CNA_Result cna_clustered_forward_effect_set_roughness(
+    const CNA_ClusteredForwardEffectHandle effect, const float roughness)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            // Clamped to 0.04 at the low end, not 0: a perfectly smooth surface collapses the
+            // specular lobe to a point the shader cannot integrate.
+            e->value->setRoughness(roughness);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_get_ior(
+    const CNA_ClusteredForwardEffectHandle effect, float* const outIor)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result { return StoreValue(outIor, e->value->getIor()); });
+}
+
+CNA_Result cna_clustered_forward_effect_set_ior(
+    const CNA_ClusteredForwardEffectHandle effect, const float ior)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            e->value->setIor(ior);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_get_ambient(
+    const CNA_ClusteredForwardEffectHandle effect, CNA_Vector3* const outAmbient)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            const auto a = e->value->getAmbient();
+            return StoreValue(outAmbient, Vec3(a.X, a.Y, a.Z));
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_set_ambient(
+    const CNA_ClusteredForwardEffectHandle effect, const CNA_Vector3* const ambient)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireVector3Argument(ambient, "The ambient is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Floored at zero per channel: a negative ambient would subtract light never added.
+            e->value->setAmbient(ToNativeVector3(*ambient));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_get_opaque_frame(
+    const CNA_ClusteredForwardEffectHandle effect, CNA_Handle* const outFrame)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            if (outFrame == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The frame output handle is null.");
+            }
+            *outFrame = CNA_INVALID_HANDLE;
+            auto* const frame = e->value->getOpaqueFrame();
+            if (frame == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            // Not a counted borrow, for the reason cna_effect_get_shadow_map_ext gives: the effect
+            // borrows the frame rather than owning it, so counting would protect nothing.
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(e, frame);
+            return CreateBorrowedRenderTarget2D(view, e->parentGame, e, outFrame);
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_set_opaque_frame(
+    const CNA_ClusteredForwardEffectHandle effect, const CNA_Handle frame)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(frame, "opaque frame", &texture, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            e->value->setOpaqueFrame(texture);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_volume_attenuation(
+    const CNA_Vector3* const attenuationColor,
+    const float attenuationDistance,
+    const float thickness,
+    CNA_Vector3* const outAttenuation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result =
+                RequireVector3Argument(attenuationColor, "The attenuation colour is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto value = Ext::ClusteredForwardEffect::volumeAttenuation(
+            ToNativeVector3(*attenuationColor), attenuationDistance, thickness);
+        return StoreValue(outAttenuation, Vec3(value.X, value.Y, value.Z));
+    });
+}
+
+CNA_Result cna_clustered_forward_effect_contribution(
+    const CNA_ClusteredLightEXT* const light,
+    const CNA_Vector3* const surface,
+    const CNA_Vector3* const normal,
+    const CNA_Vector3* const cameraPosition,
+    const CNA_Vector3* const baseColor,
+    const float metallic,
+    const float roughness,
+    const float clearcoat,
+    const float clearcoatRoughness,
+    const CNA_Vector3* const sheenColor,
+    const float sheenRoughness,
+    const float iridescence,
+    const float iridescenceIor,
+    const float iridescenceThickness,
+    const CNA_Vector3* const subsurfaceColor,
+    const float subsurfaceWrap,
+    CNA_Vector3* const outContribution)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::ClusteredLightEXT nativeLight;
+        if (const CNA_Result result = ToNativeClusteredLight(light, &nativeLight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Vector3* const required[] = {
+            surface, normal, cameraPosition, baseColor, sheenColor, subsurfaceColor};
+        for (const CNA_Vector3* const argument : required) {
+            if (const CNA_Result result =
+                    RequireVector3Argument(argument, "A contribution vector is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        const auto value = Ext::ClusteredForwardEffect::contribution(
+            nativeLight, ToNativeVector3(*surface), ToNativeVector3(*normal),
+            ToNativeVector3(*cameraPosition), ToNativeVector3(*baseColor), metallic, roughness,
+            clearcoat, clearcoatRoughness, ToNativeVector3(*sheenColor), sheenRoughness,
+            iridescence, iridescenceIor, iridescenceThickness, ToNativeVector3(*subsurfaceColor),
+            subsurfaceWrap);
+        return StoreValue(outContribution, Vec3(value.X, value.Y, value.Z));
+    });
+}
+
+CNA_Result cna_clustered_forward_effect_destroy(
+    const CNA_ClusteredForwardEffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ClusteredForwardEffectResource> effect;
+        if (const CNA_Result result = GetEngineResource(
+                effectHandle, ObjectKind::ClusteredForwardEffect, "ClusteredForwardEffect",
+                &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (effect->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The clustered forward effect is still lending its shader effect.");
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(effectHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned clustered-forward-effect handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(effect->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clustered_light_compute_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t stride,
+    CNA_ClusteredLightComputeHandle* const outCompute)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCompute == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The compute output handle is null.");
+        }
+        *outCompute = CNA_INVALID_HANDLE;
+        if (stride <= 0) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The per-cluster capacity must be positive.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ClusteredLightCompute>(
+            *graphicsDevice->value, static_cast<int>(stride));
+        const auto resource = std::make_shared<ClusteredLightComputeResource>(
+            ClusteredLightComputeResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::ClusteredLightCompute, resource, outCompute);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned compute handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clustered_light_compute_is_supported(
+    const CNA_ClusteredLightComputeHandle compute, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_COMPUTE(compute, [&](const std::shared_ptr<ClusteredLightComputeResource>& c)
+        -> CNA_Result {
+            return StoreValue(
+                outSupported,
+                static_cast<CNA_Bool>(c->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_light_compute_copy_unsupported_reason(
+    const CNA_ClusteredLightComputeHandle compute,
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    std::shared_ptr<ClusteredLightComputeResource> resource;
+    if (const CNA_Result result = GetEngineResource(
+            compute, ObjectKind::ClusteredLightCompute, "ClusteredLightCompute", &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(destination, capacity, outBytes, [&resource] {
+        return resource->value->getUnsupportedReason();
+    });
+}
+
+CNA_Result cna_clustered_light_compute_get_stride(
+    const CNA_ClusteredLightComputeHandle compute, int32_t* const outStride)
+{
+    return CNA_WITH_COMPUTE(compute, [&](const std::shared_ptr<ClusteredLightComputeResource>& c)
+        -> CNA_Result { return StoreValue(outStride, static_cast<int32_t>(c->value->getStride())); });
+}
+
+CNA_Result cna_clustered_light_compute_assign(
+    const CNA_ClusteredLightComputeHandle compute,
+    const CNA_ClusteredLightGridHandle gridHandle,
+    const CNA_Matrix* const view,
+    const CNA_BoundingSphere* const bounds,
+    const uint64_t boundsCount,
+    const CNA_ClusteredLightAssignmentHandle outAssignment)
+{
+    return CNA_WITH_COMPUTE(compute, [&](const std::shared_ptr<ClusteredLightComputeResource>& c)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<BoundingSphere> nativeBounds;
+            if (const CNA_Result result =
+                    ToNativeSphereArray(bounds, boundsCount, &nativeBounds);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::shared_ptr<ClusteredLightGridResource> grid;
+            if (const CNA_Result result = GetEngineResource(
+                    gridHandle, ObjectKind::ClusteredLightGrid, "ClusteredLightGrid", &grid);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::shared_ptr<ClusteredLightAssignmentResource> assignment;
+            if (const CNA_Result result = GetEngineResource(
+                    outAssignment, ObjectKind::ClusteredLightAssignment,
+                    "ClusteredLightAssignment", &assignment);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // The projection check is made here rather than left to the canonical code, because
+            // the CPU fallback path reaches ClusteredLightAssignment::assign, which throws its own
+            // differently-worded version of the same refusal.
+            if (!grid->value->hasProjection()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "The grid has no projection, so it has no clusters to sort into yet.");
+            }
+            c->value->assign(
+                *grid->value, ToNativeMatrix(*view), nativeBounds, *assignment->value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_compute_used_compute(
+    const CNA_ClusteredLightComputeHandle compute, CNA_Bool* const outUsed)
+{
+    return CNA_WITH_COMPUTE(compute, [&](const std::shared_ptr<ClusteredLightComputeResource>& c)
+        -> CNA_Result {
+            return StoreValue(
+                outUsed, static_cast<CNA_Bool>(c->value->usedCompute() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_light_compute_has_overflowed(
+    const CNA_ClusteredLightComputeHandle compute, CNA_Bool* const outOverflowed)
+{
+    return CNA_WITH_COMPUTE(compute, [&](const std::shared_ptr<ClusteredLightComputeResource>& c)
+        -> CNA_Result {
+            return StoreValue(
+                outOverflowed,
+                static_cast<CNA_Bool>(c->value->hasOverflowed() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_light_compute_destroy(
+    const CNA_ClusteredLightComputeHandle computeHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ClusteredLightComputeResource> compute;
+        if (const CNA_Result result = GetEngineResource(
+                computeHandle, ObjectKind::ClusteredLightCompute, "ClusteredLightCompute",
+                &compute);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(computeHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned compute handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(compute->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clustered_shadow_policy_select(
+    const CNA_ClusteredShadowPolicyHandle policy,
+    const CNA_ClusteredLightSetHandle lights,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const CNA_Vector3* const cameraPosition)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireMatrixArgument(projection, "The projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireVector3Argument(cameraPosition, "The camera position is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::shared_ptr<ClusteredLightSetResource> set;
+            if (const CNA_Result result = GetEngineResource(
+                    lights, ObjectKind::ClusteredLightSet, "ClusteredLightSetEXT", &set);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->value->select(
+                *set->value, ToNativeMatrix(*view), ToNativeMatrix(*projection),
+                ToNativeVector3(*cameraPosition));
+            return CNA_RESULT_SUCCESS;
+        });
 }
 
 #endif // CNA_CNAEXT

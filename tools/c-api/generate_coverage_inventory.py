@@ -674,9 +674,14 @@ CNAEXT_SLICE_OWNERS: dict[str, str] = {
 # type, while the rest of the struct is bound by CBIND-084C.
 SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     "CNA::Graphics::PostProcessContext::settings": "CBIND-088",
-    # CBIND-085C1: select() takes a ClusteredLightSetEXT, so it waits for the slice that binds
-    # that type rather than for the one that binds the policy around it.
-    "CNA::Graphics::ClusteredShadowPolicyEXT::select": "CBIND-086",
+    # CBIND-086C: the forward effect's material and light-probe setters each take a type another
+    # slice owns, so they wait for that slice rather than for the one that binds the effect. The
+    # effect itself is bound; only the argument is missing.
+    "CNA::Graphics::ClusteredForwardEffect::setMaterialExtensions": "CBIND-087",
+    "CNA::Graphics::ClusteredForwardEffect::getMaterialExtensions": "CBIND-087",
+    "CNA::Graphics::ClusteredForwardEffect::setAreaLight": "CBIND-091",
+    "CNA::Graphics::ClusteredForwardEffect::setLightProbe": "CBIND-091",
+    "CNA::Graphics::ClusteredForwardEffect::setLightProbeVolume": "CBIND-091",
 }
 
 

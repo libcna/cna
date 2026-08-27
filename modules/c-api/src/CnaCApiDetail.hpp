@@ -220,6 +220,9 @@ enum class ObjectKind : uint32_t {
     ClusteredLightGrid = 140,
     ClusteredLightAssignment = 141,
     ClusteredLightBuffer = 142,
+    // plans/plan_binding.md CBIND-086C.
+    ClusteredForwardEffect = 143,
+    ClusteredLightCompute = 144,
     Test = UINT32_MAX
 };
 
