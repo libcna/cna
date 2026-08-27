@@ -14727,19 +14727,20 @@
     },
     {
       "id": "engine-post-process-context",
-      "qualified_name_regex": "^CNA::Graphics::PostProcessContext(?:::(?!settings$)[A-Za-z0-9_]+)?$",
+      "qualified_name_regex": "^CNA::Graphics::PostProcessContext(?:::[A-Za-z0-9_]+)?$",
       "kinds": [
         "struct",
         "field"
       ],
-      "mapping": "`CNA_PostProcessContext` plus `cna_post_process_context_init`, a fixed-layout struct whose texture and target pointers become handles resolved and **retained for the duration of one apply**, so a pass cannot read a texture the caller released between filling the struct and applying it. `struct_size`/`struct_version` make an uninitialized context a refusal rather than a misreading.",
-      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through",
+      "mapping": "`CNA_PostProcessContext` plus `cna_post_process_context_init`, a fixed-layout struct whose texture and target pointers become handles resolved and **retained for the duration of one apply**, so a pass cannot read a texture the caller released between filling the struct and applying it. `struct_size`/`struct_version` make an uninitialized context a refusal rather than a misreading.\n\n**`settings` was the field this structure could not carry, and `CBIND-100` is why it now can.** `CBIND-084C` deferred it because binding it against a subset of the settings would have applied engine defaults for every omitted field; `CBIND-088B` could not add it either, because appending to this structure would have been refused by its own validator. With the prefix rule in place the field is appended as version 2 and bound as a **borrowed pointer**, matching the canonical `const RenderPipelineSettings*` exactly rather than copying a large value into every context. A version-1 caller's structure stops before it, passes `CNA_POST_PROCESS_CONTEXT_SIZE_V1`, and is accepted; CNA never reads past what `struct_size` declares.",
+      "tests": "`EngineLayerSmoke.c` in both builds; the pass and material arms run wherever the layer is present and are proved to execute rather than fall through; `EngineLayerSmoke.c` stage 30, which applies a chain with a version-1 structure, with a larger-than-current one, and with settings attached, and refuses anything below the mandatory prefix",
       "status": "implemented",
       "task": "CBIND-084C",
       "approved_symbols": [
         "CPP-0A895A43D66D",
         "CPP-0F77E23DA409",
         "CPP-181B8FD63E74",
+        "CPP-194E66DE0653",
         "CPP-1E0240F5B177",
         "CPP-2F226BBDCB64",
         "CPP-2F686B5D63FF",

@@ -687,11 +687,6 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     "Microsoft::Xna::Framework::Graphics::PbrEffect::getImageBasedLightEXT": "CBIND-091",
     "Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect::setImageBasedLightEXT": "CBIND-091",
     "Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect::getImageBasedLightEXT": "CBIND-091",
-    # CBIND-088B: binding PostProcessContext::settings means appending a field to a published
-    # struct, and that struct is one of thirteen whose validator tests struct_size for EXACT
-    # equality rather than the documented prefix rule -- so growing it would refuse every existing
-    # caller. CBIND-100 fixes the validators first.
-    "CNA::Graphics::PostProcessContext::settings": "CBIND-100",
     # CBIND-088B: the pipeline's skybox pair takes a Skybox, and its pass timings a
     # PostProcessChain::PassTiming; both types belong to later slices.
     "CNA::Graphics::RenderPipeline::setSkybox": "CBIND-091",

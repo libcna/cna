@@ -5325,6 +5325,8 @@
   "CNA_PLAYER_INDEX_ONE": 0,
   "CNA_PLAYER_INDEX_THREE": 2,
   "CNA_PLAYER_INDEX_TWO": 1,
+  "CNA_POST_PROCESS_CONTEXT_SIZE_V1": 328,
+  "CNA_POST_PROCESS_CONTEXT_VERSION_2": 2,
   "CNA_POWER_STATE_CHARGED": 5,
   "CNA_POWER_STATE_CHARGING": 4,
   "CNA_POWER_STATE_ERROR": 0,
@@ -10972,7 +10974,7 @@
      4
     ]
    },
-   "size": 328
+   "size": 336
   },
   "CNA_PresentationParameters": {
    "align": 4,

@@ -572,14 +572,27 @@ struct ResolvedPostProcessContext final {
     std::shared_ptr<Texture2DResource> normalsRetention;
     std::shared_ptr<Texture2DResource> velocityRetention;
     std::shared_ptr<Texture2DResource> destinationRetention;
+
+    // CBIND-100. The canonical context holds a borrowed pointer to settings; the C structure
+    // carries a pointer to a C value, so the converted native settings live here and the
+    // canonical pointer aims at them.
+    Ext::RenderPipelineSettings settings;
 };
+
+// CBIND-100. Defined with the rest of the settings binding further down; declared here because
+// the post-process context resolver needs it and sits earlier in the file.
+[[nodiscard]] CNA_Result ToNativeRenderPipelineSettings(
+    const CNA_RenderPipelineSettingsEXT& value, Ext::RenderPipelineSettings* out);
 
 [[nodiscard]] CNA_Result ResolvePostProcessContext(
     const CNA_PostProcessContext& context,
     ResolvedPostProcessContext* const out)
 {
-    if (context.struct_size != static_cast<uint32_t>(sizeof(CNA_PostProcessContext)) ||
-        context.struct_version != UINT32_C(1)) {
+    // CBIND-100. The mandatory prefix is version 1's layout, not the current sizeof: a caller
+    // compiled before `settings` existed passes the smaller size and must still work. Anything
+    // below the prefix is refused, because CNA would otherwise read fields never allocated.
+    if (context.struct_size < CNA_POST_PROCESS_CONTEXT_SIZE_V1 ||
+        context.struct_version == UINT32_C(0)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
             CNA_ERROR_CATEGORY_ARGUMENT,
@@ -631,9 +644,23 @@ struct ResolvedPostProcessContext final {
     out->value.inverseView = ToNativeMatrix(context.inverse_view);
     out->value.previousViewProjection = ToNativeMatrix(context.previous_view_projection);
     out->value.hasPreviousFrame = context.has_previous_frame == CNA_TRUE;
-    // CBIND-088 owns RenderPipelineSettings; until its C form is the whole canonical type, a
-    // pass applied from C gets no settings and uses its own defaults, which is what null means.
+    // CBIND-100. Read `settings` only when struct_size says the caller allocated it. A version-1
+    // caller's structure stops before this field, so touching it would read past their memory --
+    // which is exactly what the prefix rule exists to prevent, and why the check is a size
+    // comparison rather than a version comparison: a caller may set any version it likes, but
+    // struct_size is the one number that describes what it actually allocated.
     out->value.settings = nullptr;
+    if (context.struct_size >= static_cast<uint32_t>(sizeof(CNA_PostProcessContext)) &&
+        context.settings != nullptr) {
+        if (const CNA_Result result =
+                ToNativeRenderPipelineSettings(*context.settings, &out->settings);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Borrowed for the duration of the call, exactly as the canonical pointer is: the copy
+        // lives in the resolved context, which outlives the call it was resolved for.
+        out->value.settings = &out->settings;
+    }
     return CNA_RESULT_SUCCESS;
 }
 
@@ -689,7 +716,9 @@ CNA_Result cna_post_process_context_init(CNA_PostProcessContext* const outContex
         CNA_PostProcessContext defaults;
         std::memset(&defaults, 0, sizeof(defaults));
         defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_PostProcessContext));
-        defaults.struct_version = UINT32_C(1);
+        // CBIND-100. Version 2 is the layout that has `settings`; a caller that initializes
+        // through this route gets the current structure and says so.
+        defaults.struct_version = CNA_POST_PROCESS_CONTEXT_VERSION_2;
         defaults.source = CNA_INVALID_HANDLE;
         defaults.source_depth = CNA_INVALID_HANDLE;
         defaults.source_normals = CNA_INVALID_HANDLE;
@@ -6001,7 +6030,7 @@ constexpr int kPbrSlotCount = Ext::kPbrTextureSlotCount;
 [[nodiscard]] CNA_Result ToNativePbrMaterial(
     const CNA_PbrMaterialEXT& value, Ext::PbrMaterial* const out)
 {
-    if (value.struct_size != static_cast<uint32_t>(sizeof(CNA_PbrMaterialEXT)) ||
+    if (value.struct_size < static_cast<uint32_t>(sizeof(CNA_PbrMaterialEXT)) ||
         value.struct_version != UINT32_C(1)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -6740,7 +6769,7 @@ struct SpotShadowMapResource final {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
     }
-    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_DirectionalLightEXT)) ||
+    if (value->struct_size < static_cast<uint32_t>(sizeof(CNA_DirectionalLightEXT)) ||
         value->struct_version != UINT32_C(1)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -6766,7 +6795,7 @@ struct SpotShadowMapResource final {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
     }
-    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_SpotLightEXT)) ||
+    if (value->struct_size < static_cast<uint32_t>(sizeof(CNA_SpotLightEXT)) ||
         value->struct_version != UINT32_C(1)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -7483,7 +7512,7 @@ struct CubeShadowMapResource final {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
     }
-    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_PointLightEXT)) ||
+    if (value->struct_size < static_cast<uint32_t>(sizeof(CNA_PointLightEXT)) ||
         value->struct_version != UINT32_C(1)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -8209,7 +8238,7 @@ template<typename TCallable>
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The cascade state is null.");
     }
-    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_ShadowCascadeStateEXT)) ||
+    if (value->struct_size < static_cast<uint32_t>(sizeof(CNA_ShadowCascadeStateEXT)) ||
         value->struct_version != UINT32_C(1)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -8260,7 +8289,7 @@ void FromNativeCascadeState(
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
     }
-    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_PunctualLightEXT)) ||
+    if (value->struct_size < static_cast<uint32_t>(sizeof(CNA_PunctualLightEXT)) ||
         value->struct_version != UINT32_C(1)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -9428,7 +9457,7 @@ static_assert(
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
     }
-    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_ClusteredLightEXT)) ||
+    if (value->struct_size < static_cast<uint32_t>(sizeof(CNA_ClusteredLightEXT)) ||
         value->struct_version != UINT32_C(1)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -12964,7 +12993,7 @@ namespace {
 [[nodiscard]] CNA_Result ToNativeRenderPipelineSettings(
     const CNA_RenderPipelineSettingsEXT& value, Ext::RenderPipelineSettings* const out)
 {
-    if (value.struct_size != sizeof(CNA_RenderPipelineSettingsEXT) ||
+    if (value.struct_size < sizeof(CNA_RenderPipelineSettingsEXT) ||
         value.struct_version == UINT32_C(0)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,

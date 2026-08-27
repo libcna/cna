@@ -163,7 +163,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
 
     for (uint64_t index = 0U; index < bindingCount; ++index) {
         const CNA_RenderTargetBinding& binding = bindings[index];
-        if (binding.struct_size != sizeof(CNA_RenderTargetBinding) ||
+        if (binding.struct_size < sizeof(CNA_RenderTargetBinding) ||
             binding.struct_version != StructureVersion) {
             return InvalidArgument("A render-target binding has an invalid structure version.");
         }

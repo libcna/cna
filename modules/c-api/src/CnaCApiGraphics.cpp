@@ -1570,7 +1570,7 @@ CNA_Result cna_sprite_batch_submit_many(
             // CABI-38: the structure's own shape is still checked; its floating-point values are
             // not. A non-finite rotation, origin or layer depth is XNA-valid and travels into the
             // vertex path, so refusing it here was a divergence rather than a safety check.
-            if (command.struct_size != sizeof(CNA_SpriteCommand) ||
+            if (command.struct_size < sizeof(CNA_SpriteCommand) ||
                 command.struct_version != StructureVersion ||
                 (command.effects & ~ValidEffects) != 0U) {
                 return Fail(
@@ -1675,7 +1675,7 @@ CNA_Result cna_sprite_batch_submit_scaled_many(
         for (uint64_t index = 0U; index < commandCount; ++index) {
             const CNA_SpriteScaledCommand& command = commands[index];
             // CABI-38: shape yes, floating-point values no. See the note in the unscaled route.
-            if (command.struct_size != sizeof(CNA_SpriteScaledCommand) ||
+            if (command.struct_size < sizeof(CNA_SpriteScaledCommand) ||
                 command.struct_version != StructureVersion ||
                 (command.effects & ~ValidEffects) != 0U) {
                 return Fail(

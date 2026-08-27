@@ -3,6 +3,8 @@
 #ifndef CNA_C_ENGINE_LAYER_H
 #define CNA_C_ENGINE_LAYER_H
 
+#include <stddef.h>
+
 #include "CNA/C/effects.h"
 #include "CNA/C/graphics.h"
 #include "CNA/C/graphics_ext.h"
@@ -887,6 +889,13 @@ CNA_C_API CNA_Result cna_fullscreen_pass_destroy(CNA_FullscreenPassHandle pass);
  * `CBIND-088` binds the settings type in full, a pass applied from C sees no settings and uses
  * its own defaults, which is exactly what the canonical struct means by a null `settings`.
  */
+/**
+ * @brief Forward declaration so a post-process context can point at settings declared below.
+ *
+ * The full definition is further down this header; a context only ever holds a pointer.
+ */
+struct CNA_RenderPipelineSettingsEXT;
+
 typedef struct CNA_PostProcessContext {
     /** @brief Size of this structure in bytes. */
     uint32_t struct_size;
@@ -924,7 +933,35 @@ typedef struct CNA_PostProcessContext {
     CNA_Matrix inverse_view;
     /** @brief The previous frame's view-projection matrix, for reprojection. */
     CNA_Matrix previous_view_projection;
+
+    /**
+     * @brief The settings a pass reads, or null when it has none. Appended in version 2.
+     *
+     * `CBIND-084C` deferred this field, `CBIND-088B` could not add it, and `CBIND-100` made the
+     * structure growable so it could. **It is a borrowed pointer, not a copy**, matching the
+     * canonical `const RenderPipelineSettings*` exactly: the caller owns the settings and must
+     * keep them alive for the call.
+     *
+     * A caller compiled against version 1 does not have this field, sets `struct_size` to the
+     * smaller size, and is accepted -- see @ref CNA_POST_PROCESS_CONTEXT_SIZE_V1. Reaching it
+     * requires `struct_size` to cover it; CNA never reads past what `struct_size` declares.
+     */
+    const struct CNA_RenderPipelineSettingsEXT* settings;
 } CNA_PostProcessContext;
+
+/**
+ * @brief The size of @ref CNA_PostProcessContext as version 1 defined it.
+ *
+ * The mandatory prefix. A caller compiled before `settings` existed passes this as `struct_size`
+ * and every route still works; anything smaller is refused, because CNA would otherwise read
+ * fields the caller never allocated. This constant is what makes the structure growable rather
+ * than frozen, and it is why the size check is `<` rather than `!=`.
+ */
+#define CNA_POST_PROCESS_CONTEXT_SIZE_V1 \
+    ((uint32_t)(offsetof(CNA_PostProcessContext, settings)))
+
+/** @brief The structure version that added @ref CNA_PostProcessContext::settings. */
+#define CNA_POST_PROCESS_CONTEXT_VERSION_2 UINT32_C(2)
 
 /**
  * @brief Fills a post-process context with the canonical defaults.

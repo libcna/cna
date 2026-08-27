@@ -5007,6 +5007,88 @@ static int validate_remaining_passes(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-100. The ABI documents that a versioned structure may grow and that CNA "accepts only the
+   fields contained in struct_size". Thirteen validators tested struct_size for EXACT equality, so
+   the first structure to grow would have refused every caller compiled against the previous
+   header. Nothing was broken, because nothing had grown yet -- which is precisely why no test
+   caught it: every suite passed the exact current size, the one value both the correct and the
+   broken rule accept.
+
+   This stage passes sizes the old rule would have rejected. It is the test that has to exist
+   before growth is safe, not after. */
+static int validate_struct_growth(const CNA_Handle graphics_device)
+{
+    CNA_PostProcessContext context;
+    CNA_RenderPipelineSettingsEXT settings;
+    CNA_PostProcessChainHandle chain = CNA_INVALID_HANDLE;
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    int ok = 1;
+
+    if (cna_post_process_context_init(&context) != CNA_RESULT_SUCCESS ||
+        cna_render_pipeline_settings_ext_init(&settings) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        const CNA_Texture2DCreateInfo info = {
+            sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 16U, 16U, CNA_FALSE, {0U, 0U, 0U},
+            CNA_SURFACE_FORMAT_COLOR};
+        if (cna_texture2d_create(graphics_device, &info, &texture) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    if (cna_post_process_chain_create(graphics_device, &chain) != CNA_RESULT_SUCCESS) {
+        (void)cna_texture2d_destroy(texture);
+        return 0;
+    }
+    context.source = texture;
+    context.width = INT32_C(16);
+    context.height = INT32_C(16);
+
+    /* The current size is accepted, which the old rule also did. */
+    ok = cna_post_process_chain_apply(chain, &context) == CNA_RESULT_SUCCESS;
+
+    /* **A version-1 caller.** Its structure stopped before `settings`, so it passes the smaller
+       size. The old rule refused this; the prefix rule must accept it, and must not read the
+       field the caller never allocated. This is the assertion that makes the structure growable
+       rather than merely documented as growable. */
+    context.struct_size = CNA_POST_PROCESS_CONTEXT_SIZE_V1;
+    context.struct_version = UINT32_C(1);
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_SUCCESS;
+
+    /* A caller from the future: a larger structure whose extra fields CNA does not know. Its
+       known prefix validates, so it is accepted and the unknown tail ignored. */
+    context.struct_size = (uint32_t)(sizeof(CNA_PostProcessContext) + 64U);
+    context.struct_version = UINT32_C(99);
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_SUCCESS;
+
+    /* Below the mandatory prefix is still refused -- the rule loosened in one direction only. */
+    context.struct_size = CNA_POST_PROCESS_CONTEXT_SIZE_V1 - UINT32_C(1);
+    context.struct_version = UINT32_C(1);
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_INVALID_ARGUMENT;
+    context.struct_size = UINT32_C(0);
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* CBIND-084C's deferred field, bound at last: the settings a pass reads. Borrowed, not
+       copied into the structure -- the caller owns them for the duration of the call. */
+    ok = ok && cna_post_process_context_init(&context) == CNA_RESULT_SUCCESS;
+    context.source = texture;
+    context.width = INT32_C(16);
+    context.height = INT32_C(16);
+    context.settings = &settings;
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_SUCCESS;
+    /* Settings that fail validation are refused rather than silently ignored, so a caller learns
+       its settings never reached the pass. */
+    settings.tonemapping_mode = UINT32_C(99);
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_INVALID_ARGUMENT;
+    settings.tonemapping_mode = CNA_TONEMAPPING_MODE_NONE;
+    context.settings = 0;
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_SUCCESS;
+
+    ok = ok && cna_post_process_chain_destroy(chain) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -5120,6 +5202,10 @@ static CNA_Result on_load(
         }
         if (!validate_remaining_passes(graphics_device)) {
             state->failed_stage = 29;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_struct_growth(graphics_device)) {
+            state->failed_stage = 30;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {
