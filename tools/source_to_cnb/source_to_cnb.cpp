@@ -28,17 +28,18 @@
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSourceImport.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CnaToolAtomicWrite.hpp"
 #include "CnaToolNumericArgs.hpp"
 
 namespace
 {
+    // plans/plan_cnb.md CNBF-122: all-or-nothing. This used to open the destination with the
+    // implicit `trunc`, so a failure anywhere after that point -- a full disk, a throwing
+    // encoder, a killed process -- left a truncated file where a finished asset used to be, newer
+    // than its inputs and therefore invisible to an incremental build.
     void WriteFile(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
     {
-        std::ofstream out(path, std::ios::binary);
-        if (!out) { throw std::runtime_error("cannot write '" + path.string() + "'"); }
-        out.write(reinterpret_cast<const char*>(bytes.data()),
-                  static_cast<std::streamsize>(bytes.size()));
-        if (!out) { throw std::runtime_error("failed while writing '" + path.string() + "'"); }
+        CNA::Tools::WriteFileAtomically(path, bytes);
     }
 
     std::string LowerExtension(const std::filesystem::path& path)

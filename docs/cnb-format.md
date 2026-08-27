@@ -341,6 +341,13 @@ match for them would make the metadata chunk load-bearing for every asset in exi
 any file whose type-name string was ever tidied, in exchange for nothing: CNA controls those
 identifiers and does not reuse them.
 
+**A game cannot register a built-in identifier at all.** `CnbLoaderRegistry::Register` is the
+game-extension route and takes a custom identifier only; CNA's own loaders go through a *private*
+`RegisterBuiltIn`, reachable by `ContentManager` alone. The boundary is a compile-time one on
+purpose: while it was a defaulted argument, game code could claim CNA's ownership for a built-in
+identifier under its canonical name before any `ContentManager` existed, and because the first
+equivalent registration is retained, CNA's genuine loader would then never have been installed.
+
 Runtime type identity (`std::type_index`) is deliberately not used: its value is not stable across
 processes, let alone builds, so it is not a serialisation ABI.
 
@@ -727,6 +734,24 @@ regardless, because chunks do not overlap. The sum is accumulated with `CheckedA
 of contents is read and compared to the ceiling **before any chunk's bytes are allocated or handed
 to a decompressor**. The default is deliberately larger than `maxFileSize`, so compression can
 genuinely expand a file rather than be cancelled out by this bound.
+
+### 12.0 The writer applies the same limits
+
+`CnbWriter` holds a `CnbReadLimits` of its own — `DefaultCnbReadLimits()` unless `SetLimits()` says
+otherwise — and `Build()` enforces **all seven** of the entries above: the chunk count against
+`maxChunkCount`, each chunk's stored and logical size against `maxChunkSize`, the sum of every
+chunk's logical size against `maxTotalUncompressedSize`, each chunk's alignment against
+`maxChunkAlignment`, and the finished image against `maxFileSize` — and, less obviously,
+`maxStringBytes` and `maxArrayElementCount`. Those last two look schema-only and are not: the
+container reads `CMET`'s two names, `XREF`'s row count and every `XREF` name through the same
+bounded `CnbByteReader`, so a writer ignoring them emits a `CMET` its own `Parse()` refuses.
+
+Without this a **writer could produce a file its own reader refuses**, and compression is what makes
+that reachable rather than theoretical: a highly compressible document serializes to very little and
+expands to a great deal, so it can sit far inside `maxFileSize` while its aggregate logical size is
+over `maxTotalUncompressedSize`. Build time is where that has to be found. Together with the
+external-reference name rule and the container-chunk rule (§13), this is what makes the guarantee
+whole: **whatever `Build()` accepts under a limit set, `Parse()` loads under the same one.**
 
 ### 12.1 What the limits do and do not guarantee
 

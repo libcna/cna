@@ -2,7 +2,9 @@
 
 #include "CNA/Internal/CnjCanonicalRead.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -307,6 +309,52 @@ namespace CNA::Internal
                 RequireCnjSingle(&kerning.arrayValue[2], glyphWhat + " kerning right"));
 
             font.glyphs.push_back(std::move(out));
+        }
+
+        // plans/plan_cnb.md CNBF-122: the two rules SpriteFont's own lookup depends on, applied
+        // here so the runtime .cnj reader and the .cnj -> .cnb compiler decide identically.
+        // EncodeSpriteFontToCnb()/ValidateFont() have always refused both, and nothing on the
+        // runtime side did -- so a document the compiler rejected could still be loaded, which is
+        // exactly the equivalence CNBF-118 set out to establish and did not finish.
+        //
+        // Strictly ascending, which also rules out duplicates: SpriteFont binary-searches the
+        // character map, so an unsorted or duplicated one does not fail loudly. It returns the
+        // wrong glyph, or none.
+        for (std::size_t i = 1; i < font.glyphs.size(); ++i)
+        {
+            if (!(font.glyphs[i - 1u].character < font.glyphs[i].character))
+            {
+                const bool duplicate =
+                    font.glyphs[i - 1u].character == font.glyphs[i].character;
+                Fail(what, std::string("glyph ") + std::to_string(i) + " has character U+" +
+                               std::to_string(
+                                   static_cast<std::uint32_t>(font.glyphs[i].character)) +
+                               (duplicate ? ", a duplicate of glyph " : ", which does not follow "
+                                                                        "the character of glyph ") +
+                               std::to_string(i - 1u) +
+                               ". A SpriteFont's characters must be strictly ascending, because "
+                               "SpriteFont looks a character up by binary search and an unsorted "
+                               "or duplicated map silently returns the wrong glyph.");
+            }
+        }
+        // A defaultCharacter with no glyph is a fallback that cannot be taken: the first
+        // unmapped character then has nothing to substitute. SpriteFont's constructor refuses it
+        // too, but as a System::ArgumentException from a different layer -- and the compiler,
+        // which never constructs one, would otherwise not refuse it at all.
+        if (font.defaultCharacter.has_value())
+        {
+            const bool present =
+                std::any_of(font.glyphs.begin(), font.glyphs.end(),
+                            [&](const CnjSpriteFontGlyph& glyph)
+                            { return glyph.character == *font.defaultCharacter; });
+            if (!present)
+            {
+                Fail(what, "'defaultCharacter' is U+" +
+                               std::to_string(
+                                   static_cast<std::uint32_t>(*font.defaultCharacter)) +
+                               ", which is not one of the font's characters, so the substitution "
+                               "it names could never be made.");
+            }
         }
         return font;
     }

@@ -19,11 +19,21 @@ namespace CNA::Content
 {
     namespace
     {
+        /// Who a registration belongs to. A file-local detail: the CNA/game boundary is a
+        /// compile-time one (plans/plan_cnb.md `CNBF-122`), so this never appears in the public
+        /// header and no caller can name it -- which is exactly what stops a game asking for
+        /// `CnaBuiltIn`.
+        enum class Ownership
+        {
+            GameExtension,
+            CnaBuiltIn,
+        };
+
         struct Registration
         {
             std::string canonicalTypeName;
             CnbLoaderRegistry::LoaderFn loader;
-            CnbLoaderOwnership ownership = CnbLoaderOwnership::GameExtension;
+            Ownership ownership = Ownership::GameExtension;
         };
 
         // One function-local static for the table and one for its lock, both with the guaranteed
@@ -44,90 +54,103 @@ namespace CNA::Content
         }
     }
 
-    void CnbLoaderRegistry::Register(std::uint32_t assetTypeId,
-                                     const std::string& canonicalTypeName, LoaderFn loader,
-                                     CnbLoaderOwnership ownership)
+    namespace
     {
-        if (assetTypeId == Cnb::CnbAssetTypeId::Invalid)
+        /// The one implementation both registration routes share. `ownership` is decided by WHICH
+        /// entry point was called, never by the caller (plans/plan_cnb.md `CNBF-122`).
+        void RegisterWithOwnership(std::uint32_t assetTypeId, const std::string& canonicalTypeName,
+                                   CnbLoaderRegistry::LoaderFn loader, Ownership ownership)
         {
-            throw std::invalid_argument(
-                "CnbLoaderRegistry::Register(): asset type 0 is not a valid asset type.");
-        }
-        if (canonicalTypeName.empty())
-        {
-            throw std::invalid_argument(
-                "CnbLoaderRegistry::Register(): canonicalTypeName must not be empty.");
-        }
-        if (!loader)
-        {
-            throw std::invalid_argument("CnbLoaderRegistry::Register(): loader must not be empty.");
-        }
-        // plans/plan_cnb.md CNBF-119: the identifier RANGE and the registration's ownership have to
-        // agree before anything else is considered. CNA assigns and freezes 0x00000001-0x3FFFFFFF
-        // and reserves 0x40000000-0x7FFFFFFF for itself; a game mints one at 0x80000000 or above
-        // with CnbAssetTypeIdFromName(). Without this check a game registering a built-in
-        // identifier under its canonical name was ACCEPTED, and whether its factory or CNA's ended
-        // up in the table depended on which call ran first -- silently either way, because the
-        // repeat-registration rule below retains the first.
-        if (ownership == CnbLoaderOwnership::GameExtension && !Cnb::IsCustomAssetTypeId(assetTypeId))
-        {
-            throw std::invalid_argument(
-                "CnbLoaderRegistry::Register(): asset type " +
-                Cnb::AssetTypeIdToString(assetTypeId) +
-                " is not a game-defined identifier. A game extension -- whether through "
-                "ContentManager::RegisterCnbLoaderEXT<T>() or this function directly -- registers "
-                "custom types only; CNA's built-in identifiers (0x00000001-0x3FFFFFFF) and its "
-                "reserved range (0x40000000-0x7FFFFFFF) belong to CNA. Mint one with "
-                "CnbAssetTypeIdFromName(\"YourGame.YourType\").");
-        }
-        if (ownership == CnbLoaderOwnership::CnaBuiltIn && Cnb::IsCustomAssetTypeId(assetTypeId))
-        {
-            throw std::invalid_argument(
-                "CnbLoaderRegistry::Register(): asset type " +
-                Cnb::AssetTypeIdToString(assetTypeId) +
-                " is in the game-defined custom range, so it cannot be registered as a CNA "
-                "built-in.");
-        }
-        // A custom identifier IS the hash of its canonical name, and the load path compares that
-        // name against the one the file carries. Registering a name the identifier does not hash
-        // to would therefore make every file of that type unloadable -- with a confusing
-        // "names X but is registered for Y" error at load time, far from the mistake. Caught here
-        // instead, at the registration that is wrong.
-        if (Cnb::IsCustomAssetTypeId(assetTypeId) &&
-            Cnb::CnbAssetTypeIdFromName(canonicalTypeName) != assetTypeId)
-        {
-            throw std::invalid_argument(
-                "CnbLoaderRegistry::Register(): custom asset type id " +
-                Cnb::AssetTypeIdToString(assetTypeId) + " is not the identifier '" +
-                canonicalTypeName +
-                "' hashes to. A custom identifier must be minted with "
-                "CnbAssetTypeIdFromName(canonicalTypeName).");
-        }
-
-        const std::unique_lock lock(TableMutex());
-        auto& table = Table();
-        const auto existing = table.find(assetTypeId);
-        if (existing != table.end())
-        {
-            if (existing->second.canonicalTypeName == canonicalTypeName &&
-                existing->second.ownership == ownership)
+            const std::string who = ownership == Ownership::CnaBuiltIn
+                                        ? "CnbLoaderRegistry::RegisterBuiltIn()"
+                                        : "CnbLoaderRegistry::Register()";
+            if (assetTypeId == Cnb::CnbAssetTypeId::Invalid)
             {
-                // Same type registering itself again -- tolerated, exactly as
-                // ContentTypeReaderManager::AddTypeCreator tolerates a repeat registration. The
-                // FIRST registration's loader is retained, which is only safe because the name and
-                // the ownership both match: it is the same type, registered by the same side of
-                // the CNA/game boundary (CNBF-119).
-                return;
+                throw std::invalid_argument(who + ": asset type 0 is not a valid asset type.");
             }
-            throw std::logic_error(
-                "CnbLoaderRegistry::Register(): asset type id " +
-                Cnb::AssetTypeIdToString(assetTypeId) + " is already registered for '" +
-                existing->second.canonicalTypeName + "'; refusing to re-register it for '" +
-                canonicalTypeName +
-                "'. Two custom type names whose FNV-1a hashes collide must not share a loader.");
-        }
+            if (canonicalTypeName.empty())
+            {
+                throw std::invalid_argument(who + ": canonicalTypeName must not be empty.");
+            }
+            if (!loader) { throw std::invalid_argument(who + ": loader must not be empty."); }
+            // plans/plan_cnb.md CNBF-119/CNBF-122: the identifier RANGE and the entry point have to
+            // agree before anything else is considered. CNA assigns and freezes
+            // 0x00000001-0x3FFFFFFF and reserves 0x40000000-0x7FFFFFFF for itself; a game mints one
+            // at 0x80000000 or above with CnbAssetTypeIdFromName(). The two routes partition the
+            // space between them, so neither can be told to behave as the other -- CNBF-119 made
+            // that a defaulted ARGUMENT, which a game could simply pass.
+            if (ownership == Ownership::GameExtension && !Cnb::IsCustomAssetTypeId(assetTypeId))
+            {
+                throw std::invalid_argument(
+                    who + ": asset type " + Cnb::AssetTypeIdToString(assetTypeId) +
+                    " is not a game-defined identifier. A game extension -- whether through "
+                    "ContentManager::RegisterCnbLoaderEXT<T>() or this function directly -- "
+                    "registers custom types only; CNA's built-in identifiers "
+                    "(0x00000001-0x3FFFFFFF) and its reserved range (0x40000000-0x7FFFFFFF) belong "
+                    "to CNA. Mint one with CnbAssetTypeIdFromName(\"YourGame.YourType\").");
+            }
+            if (ownership == Ownership::CnaBuiltIn && Cnb::IsCustomAssetTypeId(assetTypeId))
+            {
+                throw std::invalid_argument(
+                    who + ": asset type " + Cnb::AssetTypeIdToString(assetTypeId) +
+                    " is in the game-defined custom range, so it cannot be registered as a CNA "
+                    "built-in.");
+            }
+            // A custom identifier IS the hash of its canonical name, and the load path compares
+            // that name against the one the file carries. Registering a name the identifier does
+            // not hash to would therefore make every file of that type unloadable -- with a
+            // confusing "names X but is registered for Y" error at load time, far from the mistake.
+            // Caught here instead, at the registration that is wrong.
+            if (Cnb::IsCustomAssetTypeId(assetTypeId) &&
+                Cnb::CnbAssetTypeIdFromName(canonicalTypeName) != assetTypeId)
+            {
+                throw std::invalid_argument(
+                    who + ": custom asset type id " + Cnb::AssetTypeIdToString(assetTypeId) +
+                    " is not the identifier '" + canonicalTypeName +
+                    "' hashes to. A custom identifier must be minted with "
+                    "CnbAssetTypeIdFromName(canonicalTypeName).");
+            }
 
-        table.emplace(assetTypeId, Registration{canonicalTypeName, std::move(loader), ownership});
+            const std::unique_lock lock(TableMutex());
+            auto& table = Table();
+            const auto existing = table.find(assetTypeId);
+            if (existing != table.end())
+            {
+                if (existing->second.canonicalTypeName == canonicalTypeName &&
+                    existing->second.ownership == ownership)
+                {
+                    // Same type registering itself again -- tolerated, exactly as
+                    // ContentTypeReaderManager::AddTypeCreator tolerates a repeat registration. The
+                    // FIRST registration's loader is retained, which is only safe because the name
+                    // and the ownership both match: it is the same type, registered through the
+                    // same side of the CNA/game boundary (CNBF-119).
+                    return;
+                }
+                throw std::logic_error(
+                    who + ": asset type id " + Cnb::AssetTypeIdToString(assetTypeId) +
+                    " is already registered for '" + existing->second.canonicalTypeName +
+                    "'; refusing to re-register it for '" + canonicalTypeName +
+                    "'. Two custom type names whose FNV-1a hashes collide must not share a loader, "
+                    "and a game extension never shares one with a CNA built-in.");
+            }
+
+            table.emplace(assetTypeId,
+                          Registration{canonicalTypeName, std::move(loader), ownership});
+        }
+    }
+
+    void CnbLoaderRegistry::Register(std::uint32_t assetTypeId,
+                                     const std::string& canonicalTypeName, LoaderFn loader)
+    {
+        RegisterWithOwnership(assetTypeId, canonicalTypeName, std::move(loader),
+                              Ownership::GameExtension);
+    }
+
+    void CnbLoaderRegistry::RegisterBuiltIn(std::uint32_t assetTypeId,
+                                            const std::string& canonicalTypeName, LoaderFn loader)
+    {
+        RegisterWithOwnership(assetTypeId, canonicalTypeName, std::move(loader),
+                              Ownership::CnaBuiltIn);
     }
 
     bool CnbLoaderRegistry::Remove(std::uint32_t assetTypeId)
@@ -227,19 +250,17 @@ namespace CNA::Content
         // so they register from ContentManager::RegisterBuiltinLoaders() where those helpers live.
         // This function is therefore NOT "every built-in", and its documentation says so
         // (plans/plan_cnb.md CNBF-119).
-        Register(Cnb::CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve",
-                 [](const Cnb::CnbDocument& document,
-                    Microsoft::Xna::Framework::Content::ContentManager&,
-                    const std::string&) -> std::any
-                 { return std::any(Cnb::DecodeCurveFromCnb(document)); },
-                 CnbLoaderOwnership::CnaBuiltIn);
+        RegisterBuiltIn(Cnb::CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve",
+                        [](const Cnb::CnbDocument& document,
+                           Microsoft::Xna::Framework::Content::ContentManager&,
+                           const std::string&) -> std::any
+                        { return std::any(Cnb::DecodeCurveFromCnb(document)); });
 
-        Register(Cnb::CnbAssetTypeId::AnimationClip,
-                 "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
-                 [](const Cnb::CnbDocument& document,
-                    Microsoft::Xna::Framework::Content::ContentManager&,
-                    const std::string&) -> std::any
-                 { return std::any(Cnb::DecodeAnimationClipFromCnb(document)); },
-                 CnbLoaderOwnership::CnaBuiltIn);
+        RegisterBuiltIn(Cnb::CnbAssetTypeId::AnimationClip,
+                        "Microsoft.Xna.Framework.Graphics.AnimationClipEXT",
+                        [](const Cnb::CnbDocument& document,
+                           Microsoft::Xna::Framework::Content::ContentManager&,
+                           const std::string&) -> std::any
+                        { return std::any(Cnb::DecodeAnimationClipFromCnb(document)); });
     }
 }

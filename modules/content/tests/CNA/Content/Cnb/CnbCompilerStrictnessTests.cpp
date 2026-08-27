@@ -34,6 +34,7 @@
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 
 using CNA::Content::Cnb::CnbDocument;
@@ -833,6 +834,77 @@ TEST(CnbCompilerStrictnessTest, TheCompilerAndTheRuntimeAgreeOnEveryMalformedDoc
 
         EXPECT_TRUE(compilerRefused) << c.tag << ": the compiler accepted it";
         EXPECT_TRUE(runtimeRefused) << c.tag << ": the runtime accepted it";
+    }
+}
+
+TEST(CnbCompilerStrictnessTest, ASpriteFontsCharacterMapIsValidatedIdenticallyByBothRoutes)
+{
+    // plans/plan_cnb.md CNBF-122. EncodeSpriteFontToCnb()'s ValidateFont() has always required a
+    // strictly ascending character map and a defaultCharacter drawn from it -- SpriteFont
+    // binary-searches the map, so an unsorted or duplicated one silently returns the wrong glyph,
+    // and a defaultCharacter with no glyph is a substitution that can never be made. The shared
+    // canonical reader enforced neither, so the RUNTIME .cnj route accepted documents the compiler
+    // rejected: the "one reading of a .cnj document" CNBF-118 established was one reading with two
+    // different verdicts.
+    //
+    // Both halves are asserted here, on the same documents. The runtime half needs no
+    // GraphicsDevice: the description is read before the atlas is loaded, so a refusal happens
+    // first. `CnjSpriteFontTests` carries the runtime positive control, which does need one.
+    const std::string head =
+        R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","lineSpacing":8,)";
+    const std::string glyphA =
+        R"({"char":65,"source":[0,0,1,1],"crop":[0,0,1,1],"kerning":[0,1,0]})";
+    const std::string glyphB =
+        R"({"char":66,"source":[0,0,1,1],"crop":[0,0,1,1],"kerning":[0,1,0]})";
+
+    struct Case
+    {
+        const char* tag;
+        std::string document;
+        const char* fragment;
+    };
+    const Case refused[] = {
+        {"sf_unsorted", head + R"("glyphs":[)" + glyphB + "," + glyphA + "]}",
+         "strictly ascending"},
+        {"sf_duplicate", head + R"("glyphs":[)" + glyphA + "," + glyphA + "]}",
+         "duplicate of glyph"},
+        {"sf_defcharabsent",
+         head + R"("defaultCharacter":"?","glyphs":[)" + glyphA + "]}",
+         "not one of the font's characters"},
+    };
+
+    for (const Case& c : refused)
+    {
+        ExpectCompileRefused(c.tag, c.document, c.fragment);
+
+        // The same document through ContentManager's own .cnj route, which must refuse it too.
+        ScratchDir dir(std::string("rt_") + c.tag);
+        WriteBytes(dir.path() / "atlas.png", TinyPng());
+        WriteText(dir.path() / "a.cnj", c.document);
+        Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, dir.path().string());
+        bool runtimeRefused = false;
+        try
+        {
+            (void)cm.Load<Microsoft::Xna::Framework::Graphics::SpriteFont>("a.cnj");
+        }
+        catch (const ContentLoadException& e)
+        {
+            runtimeRefused = true;
+            EXPECT_NE(std::string(e.what()).find(c.fragment), std::string::npos)
+                << c.tag << ": the runtime refused it for a different reason: " << e.what();
+        }
+        EXPECT_TRUE(runtimeRefused) << c.tag << ": the runtime accepted what the compiler refused";
+    }
+
+    // The positive control on the compiler side: correctly ordered characters, with a
+    // defaultCharacter that is one of them, still compile. Without this the three refusals above
+    // would be satisfied by a rule that rejected every font.
+    {
+        ScratchDir dir("sf_ordered");
+        WriteBytes(dir.path() / "atlas.png", TinyPng());
+        WriteText(dir.path() / "a.cnj",
+                  head + R"("defaultCharacter":"A","glyphs":[)" + glyphA + "," + glyphB + "]}");
+        EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "a.cnj").string()));
     }
 }
 

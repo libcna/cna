@@ -384,6 +384,10 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/input/tests
             # PLAT-94: implementation test only; Sdl3AudioDevice remains out of public headers.
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
+            # plans/plan_cnb.md CNBF-122: the content tools' shared header-only helpers
+            # (CnaToolAtomicWrite.hpp), so the atomic-write contract can be asserted directly
+            # rather than only through what a subprocess happens to leave on disk.
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/common
     )
 
     # plans/plan_fx.md FX-060: the shared compiled-effect conformance suite is header-only test support

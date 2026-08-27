@@ -3,6 +3,7 @@
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <string>
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
@@ -75,6 +76,15 @@ namespace CNA::Internal::Graphics
             return ((width + 3u) / 4u) * ((height + 3u) / 4u) * blockSize;
         }
 
+        /// Refuses a header whose decoded size cannot even be counted (plans/plan_cnb.md
+        /// `CNBF-122`). Unreachable while the dimension ceiling stands; present so that raising
+        /// that ceiling produces a refusal rather than a wrapped total that passes the budget.
+        [[noreturn]] void Overflow(const std::string& where)
+        {
+            throw System::FormatException(
+                where + "cube map header describes a decoded size too large to count");
+        }
+
         /// Number of mip levels a square face of @p width texels can physically have: each level
         /// halves and the chain ends at 1x1, so a 256-texel face has exactly nine.
         std::uint32_t PhysicalMipChainLength(std::uint32_t width)
@@ -86,7 +96,8 @@ namespace CNA::Internal::Graphics
     }
 
     DecodedDdsCube DecodeDdsCube(const std::uint8_t* data, std::size_t size,
-                                  const std::string& diagnosticPrefix)
+                                  const std::string& diagnosticPrefix,
+                                  std::uint64_t maxDecodedBytes)
     {
         const std::string where = diagnosticPrefix + ": ";
 
@@ -194,6 +205,44 @@ namespace CNA::Internal::Graphics
             throw System::FormatException(
                 where + "declares " + std::to_string(levels) + " mip levels, but a " +
                 std::to_string(width) + "-texel face has at most " + std::to_string(maxLevels));
+        }
+
+        // plans/plan_cnb.md CNBF-122: the aggregate DECODED size, computed from the validated
+        // header alone before a single output vector is allocated and before any block is
+        // decompressed. The dimension ceiling bounds ONE level of ONE face; six faces times a
+        // whole mip chain is 8 times that at the same dimension, which at 16384 texels is about
+        // 8.6 GiB of retained memory -- an OOM kill rather than an exception on most machines.
+        //
+        // Every term is bounded above by the ceilings checked above -- width <= 16384 so
+        // width*width*4*6 < 2^33, and levels <= 15 -- so the sum provably fits a std::uint64_t
+        // today. Each step is nevertheless CHECKED rather than argued, because the invariant that
+        // makes it safe lives fifty lines up in a constant someone may raise, and unsigned wrap is
+        // well defined: it would hand this budget a SMALL number from two huge ones and let the
+        // very allocation it exists to refuse through.
+        std::uint64_t decodedBytes = 0u;
+        {
+            std::uint64_t levelExtent = width;
+            for (std::uint32_t level = 0; level < levels; ++level)
+            {
+                const std::uint64_t texels = levelExtent * levelExtent;
+                if (levelExtent != 0u && texels / levelExtent != levelExtent) { Overflow(where); }
+                if (texels > std::numeric_limits<std::uint64_t>::max() / 24u) { Overflow(where); }
+                const std::uint64_t levelBytes = texels * 24u; // 4 bytes RGBA x 6 faces
+                if (decodedBytes > std::numeric_limits<std::uint64_t>::max() - levelBytes)
+                {
+                    Overflow(where);
+                }
+                decodedBytes += levelBytes;
+                levelExtent = std::max<std::uint64_t>(1u, levelExtent / 2u);
+            }
+        }
+        if (decodedBytes > maxDecodedBytes)
+        {
+            throw System::FormatException(
+                where + "cube map decodes to " + std::to_string(decodedBytes) +
+                " bytes of RGBA across six faces and " + std::to_string(levels) +
+                " mip level(s), above the " + std::to_string(maxDecodedBytes) +
+                "-byte decoded-output budget. Refused before allocating anything.");
         }
 
         DecodedDdsCube decoded;

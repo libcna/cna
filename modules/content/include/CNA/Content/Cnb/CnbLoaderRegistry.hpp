@@ -14,32 +14,6 @@ namespace Microsoft::Xna::Framework::Content { class ContentManager; }
 namespace CNA::Content
 {
     /**
-     * @brief Who a `.cnb` loader registration belongs to (plans/plan_cnb.md `CNBF-119`).
-     *
-     * The registry is one process-wide table shared by CNA's own built-in loaders and by any a
-     * game adds, and the two are not interchangeable: CNA assigns and freezes the built-in
-     * identifiers, and installs their loaders from every `ContentManager` constructor. Without
-     * this distinction a game registering a built-in identifier under its canonical name was
-     * accepted, and which factory ended up in the table depended on which call ran first --
-     * silently, either way.
-     */
-    enum class CnbLoaderOwnership
-    {
-        /**
-         * @brief A game-defined type, which must use a custom identifier
-         *        (`CnbAssetTypeId::CustomRangeFirst` or above). The default.
-         */
-        GameExtension,
-
-        /**
-         * @brief One of CNA's own built-in asset types. Not available to a game: CNA's built-in
-         *        identifiers are outside the custom range, and this value is refused for one
-         *        inside it.
-         */
-        CnaBuiltIn,
-    };
-
-    /**
      * @brief The process-wide table mapping a `.cnb` file's numeric asset type to the code that
      *        turns that file into a runtime object (plans/plan_cnb.md `CNBF-080`).
      *
@@ -79,46 +53,45 @@ namespace CNA::Content
             const std::string& assetName)>;
 
         /**
-         * @brief Registers a loader for one asset type identifier.
+         * @brief Registers a **game extension's** loader for one custom asset type identifier.
          *
-         * Registering the same identifier twice with the same @p canonicalTypeName **and** the
-         * same @p ownership is accepted and has no effect, so two static-initialisation paths
-         * registering the same built-in is not an error. Registering the same identifier under a
-         * *different* name is refused: for a custom identifier that is exactly the hash-collision
-         * case `CnbAssetTypeIdFromName()`'s 31-bit space makes possible, and silently letting the
-         * second registration win would mean loading one game type's file with another's loader.
+         * This is the only registration route a caller outside CNA has, and it accepts a custom
+         * identifier only -- `CnbAssetTypeId::CustomRangeFirst` or above, which is what
+         * `CnbAssetTypeIdFromName()` mints. CNA's built-in identifiers (`0x00000001`-`0x3FFFFFFF`)
+         * and its reserved range (`0x40000000`-`0x7FFFFFFF`) belong to CNA, and there is
+         * deliberately **no parameter** by which a caller can claim one: the built-in route is the
+         * private RegisterBuiltIn(), reachable only by `ContentManager`
+         * (plans/plan_cnb.md `CNBF-122`).
          *
-         * The @p ownership half of that rule is what stops a repeat registration being tolerated
-         * across the boundary between CNA and a game (plans/plan_cnb.md `CNBF-119`): the first
-         * caller's factory is retained, so an extension registering a built-in identifier under
-         * its canonical name would have won or lost depending purely on which ran first.
+         * That the boundary is a *compile-time* one matters. While it was an ownership argument on
+         * this function, a game could pass the built-in value, register its own factory under a
+         * built-in identifier's canonical name before any `ContentManager` existed, and -- because
+         * the first equivalent registration is retained -- keep CNA's genuine loader from ever
+         * being installed.
          *
-         * @param assetTypeId       The identifier appearing in a `.cnb` header.
-         * @param canonicalTypeName The type's canonical name. For a **custom** identifier this is
-         *                          not merely a diagnostic label: it is compared against the name
-         *                          the file itself carries before dispatch (see
-         *                          ResolveForDocument()), so it must be exactly the string passed
-         *                          to `CnbAssetTypeIdFromName()`. Must not be empty.
+         * Registering the same identifier twice with the same @p canonicalTypeName is accepted and
+         * has no effect, so two initialisation paths registering the same game type is not an
+         * error. Registering the same identifier under a *different* name is refused: that is
+         * exactly the hash-collision case `CnbAssetTypeIdFromName()`'s 31-bit space makes possible,
+         * and silently letting the second registration win would mean loading one game type's file
+         * with another's loader.
+         *
+         * @param assetTypeId       The identifier appearing in a `.cnb` header. Must be a custom
+         *                          identifier.
+         * @param canonicalTypeName The type's canonical name. This is not merely a diagnostic
+         *                          label: it is compared against the name the file itself carries
+         *                          before dispatch (see ResolveForDocument()), so it must be
+         *                          exactly the string passed to `CnbAssetTypeIdFromName()`. Must
+         *                          not be empty.
          * @param loader            The loader. Must not be empty.
-         * @param ownership         Who the registration belongs to. The default,
-         *                          CnbLoaderOwnership::GameExtension, accepts a **custom**
-         *                          identifier only -- CNA's built-in identifiers and its reserved
-         *                          range belong to CNA, whose own registrations pass
-         *                          CnbLoaderOwnership::CnaBuiltIn and are in turn refused a custom
-         *                          identifier. A repeat registration is tolerated only when the
-         *                          name **and** the ownership both match, so an extension cannot
-         *                          quietly inherit a built-in's slot or be inherited by one
-         *                          (plans/plan_cnb.md `CNBF-119`).
          * @throws std::invalid_argument if @p canonicalTypeName or @p loader is empty, if
-         *         @p assetTypeId is CnbAssetTypeId::Invalid, if @p assetTypeId is outside the
-         *         range @p ownership may claim, or if @p assetTypeId is a custom identifier that
-         *         @p canonicalTypeName does not actually hash to.
-         * @throws std::logic_error if @p assetTypeId is already registered under a different name
-         *         or a different ownership.
+         *         @p assetTypeId is CnbAssetTypeId::Invalid, if @p assetTypeId is not a custom
+         *         identifier, or if @p canonicalTypeName does not hash to @p assetTypeId.
+         * @throws std::logic_error if @p assetTypeId is already registered under a different name,
+         *         or is already held by one of CNA's own built-in loaders.
          */
         static void Register(std::uint32_t assetTypeId, const std::string& canonicalTypeName,
-                             LoaderFn loader,
-                             CnbLoaderOwnership ownership = CnbLoaderOwnership::GameExtension);
+                             LoaderFn loader);
 
         /**
          * @brief Withdraws the loader registered for @p assetTypeId.
@@ -203,5 +176,38 @@ namespace CNA::Content
          * so games never need to call it.
          */
         static void RegisterBuiltIns();
+
+    private:
+        /**
+         * @brief Registers one of **CNA's own** built-in loaders. Not reachable by a game
+         *        (plans/plan_cnb.md `CNBF-122`).
+         *
+         * The counterpart of Register(), and the reason that one needs no ownership argument. It
+         * accepts a built-in or reserved identifier and refuses a custom one, so the two routes
+         * partition the identifier space between them and neither can be told to behave as the
+         * other. Access is the boundary: this is private, and `ContentManager` -- which installs
+         * the eight device-bound built-ins -- is the only type outside this class that can reach
+         * it. A game therefore cannot register a built-in identifier at all, rather than being
+         * refused at run time for passing the wrong enumerator.
+         *
+         * A repeat registration under the same name is tolerated, because every `ContentManager`
+         * constructor repeats it; a game-owned registration for the same identifier is not, in
+         * either order.
+         *
+         * @param assetTypeId       One of CNA's own identifiers; must not be a custom one.
+         * @param canonicalTypeName The type's canonical .NET name. Must not be empty.
+         * @param loader            The loader. Must not be empty.
+         * @throws std::invalid_argument if @p assetTypeId is CnbAssetTypeId::Invalid, is a custom
+         *         identifier, or if @p canonicalTypeName or @p loader is empty.
+         * @throws std::logic_error if @p assetTypeId is already registered under a different name
+         *         or by a game extension.
+         */
+        static void RegisterBuiltIn(std::uint32_t assetTypeId,
+                                    const std::string& canonicalTypeName, LoaderFn loader);
+
+        // The compile-time half of the CNA/game boundary (plans/plan_cnb.md `CNBF-122`).
+        // ContentManager registers the eight built-in loaders that need a GraphicsDevice or the
+        // manager itself, so it -- and nothing else -- reaches RegisterBuiltIn().
+        friend class Microsoft::Xna::Framework::Content::ContentManager;
     };
 }

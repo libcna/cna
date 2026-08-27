@@ -131,6 +131,40 @@ namespace CNA::Content::Cnb
         void SetCompression(CnbCompression codec, int level = 3);
 
         /**
+         * @brief Bounds the file this writer will produce, so it cannot exceed what a reader with
+         *        @p limits will open (plans/plan_cnb.md `CNBF-122`).
+         *
+         * Build() applies these the way `CnbDocument::Parse()` applies its own: the number of
+         * chunks against `maxChunkCount`, each chunk's stored and logical size against
+         * `maxChunkSize`, the sum of every chunk's **logical** size against
+         * `maxTotalUncompressedSize`, and the finished image against `maxFileSize`. Together with
+         * the chunk-alignment ceiling AddChunk() already enforces, that is every applicable limit
+         * a default reader applies to a well-formed file.
+         *
+         * It matters because compression breaks the intuition that a file a writer built is a file
+         * a reader can open. A highly compressible document -- a megabyte of zeros in each of a
+         * few hundred chunks -- serializes to very little and expands to a great deal, so before
+         * this it could Build() successfully and then be refused by a default
+         * `CnbDocument::Parse()` for exceeding the aggregate expansion budget `CNBF-114` added.
+         * The producer is the right place to find that out.
+         *
+         * Defaults to DefaultCnbReadLimits(), so a writer that says nothing produces files the
+         * default reader accepts. Tests inject small limits to exercise the boundaries without
+         * allocating anything large.
+         *
+         * @param limits The reader limits this writer must stay inside.
+         */
+        void SetLimits(const CnbReadLimits& limits);
+
+        /**
+         * @brief The limits Build() will enforce; DefaultCnbReadLimits() unless SetLimits() says
+         *        otherwise.
+         *
+         * @return The current writer limits.
+         */
+        [[nodiscard]] const CnbReadLimits& Limits() const noexcept;
+
+        /**
          * @brief Assembles the finished `.cnb` image.
          *
          * Every file this returns is loadable by CnbDocument::Parse(): the external-reference
@@ -138,11 +172,16 @@ namespace CNA::Content::Cnb
          * call that supplied them, so the writer has no path to a file its own reader refuses
          * (plans/plan_cnb.md `CNBF-115`).
          *
+         * That guarantee is bounded by SetLimits() as well as by the format: a document whose
+         * chunks are individually legal but whose aggregate logical size, chunk count or finished
+         * length exceeds the configured reader limits is refused here rather than at load time
+         * (plans/plan_cnb.md `CNBF-122`).
+         *
          * @return The complete file bytes.
          * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the result would
-         *         exceed what the format can express, if an external reference is not a valid
-         *         relative logical name, or if the asset type is custom and no matching canonical
-         *         type name was set (see SetMetadata()).
+         *         exceed what the format can express or what Limits() allows, if an external
+         *         reference is not a valid relative logical name, or if the asset type is custom
+         *         and no matching canonical type name was set (see SetMetadata()).
          */
         [[nodiscard]] std::vector<std::uint8_t> Build() const;
 
@@ -168,6 +207,10 @@ namespace CNA::Content::Cnb
         /// CnbCompression::None unless SetCompression() says otherwise.
         CnbCompression compression_ = CnbCompression::None;
         int compressionLevel_ = 3;
+
+        /// The reader limits Build() must stay inside. A copy rather than a reference, because a
+        /// caller's own CnbReadLimits need not outlive the writer.
+        CnbReadLimits limits_ = DefaultCnbReadLimits();
 
         [[nodiscard]] std::vector<PendingChunk> AssembleChunkList() const;
 

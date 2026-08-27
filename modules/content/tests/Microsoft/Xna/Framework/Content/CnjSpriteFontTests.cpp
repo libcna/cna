@@ -15,7 +15,6 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
-#include "System/ArgumentException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -75,6 +74,10 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
     atlas.SetData(pixels.data(), static_cast<int>(pixels.size()));
     atlas.SaveAsPng((root.path() / "atlas.png").string());
 
+    // The glyphs are in ascending character order -- U+003F '?' then U+0041 'A'. This fixture
+    // used to list 'A' first, which SpriteFont's binary search cannot look up correctly and which
+    // EncodeSpriteFontToCnb() has always refused; the shared canonical reader now refuses it too,
+    // so the two routes agree (plans/plan_cnb.md CNBF-122).
     WriteFile(root.path() / "arial.cnj", R"({
         "cnjVersion": 1,
         "type": "SpriteFont",
@@ -83,8 +86,8 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
         "spacing": 1.5,
         "defaultCharacter": "?",
         "glyphs": [
-            { "char": 65, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] },
-            { "char": 63, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] }
+            { "char": 63, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] },
+            { "char": 65, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] }
         ]
     })");
 
@@ -98,13 +101,18 @@ TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
     ASSERT_TRUE(font.getDefaultCharacterProperty().has_value());
     EXPECT_EQ(*font.getDefaultCharacterProperty(), u'?');
     ASSERT_EQ(font.getCharactersProperty().size(), 2u);
-    EXPECT_EQ(font.getCharactersProperty()[0], u'A');
-    EXPECT_EQ(font.getCharactersProperty()[1], u'?');
+    EXPECT_EQ(font.getCharactersProperty()[0], u'?');
+    EXPECT_EQ(font.getCharactersProperty()[1], u'A');
 }
 
-// REMED-GFX-002: a defaultCharacter absent from the glyph list must now be rejected at
-// construction time (System::ArgumentException surfaces as a load failure), not silently
+// REMED-GFX-002: a defaultCharacter absent from the glyph list must be rejected, not silently
 // accepted and left to invoke UB the first time MeasureString/DrawString needed the fallback.
+//
+// plans/plan_cnb.md CNBF-122 moved the refusal earlier and made it shared. It used to come from
+// SpriteFont's constructor as a System::ArgumentException, which the `.cnj` -> `.cnb` compiler --
+// which constructs no SpriteFont -- never reached; the document is now refused by the canonical
+// reader BOTH routes call, as a ContentLoadException. `CnbCompilerStrictnessTests` asserts the
+// compiler's half of exactly this document.
 TEST_F(CnjSpriteFontTest, DefaultCharacterAbsentFromGlyphsThrows)
 {
     ScratchContentRoot root;
@@ -129,7 +137,50 @@ TEST_F(CnjSpriteFontTest, DefaultCharacterAbsentFromGlyphsThrows)
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
-    EXPECT_THROW(cm.Load<SpriteFont>("badDefault"), System::ArgumentException);
+    EXPECT_THROW(cm.Load<SpriteFont>("badDefault"), ContentLoadException);
+}
+
+// plans/plan_cnb.md CNBF-122: the other half of the runtime side of the equivalence. An unsorted
+// or duplicated character map is what SpriteFont's binary search cannot survive, and the runtime
+// accepted both while EncodeSpriteFontToCnb() refused them -- so a font that compiled nowhere
+// still loaded here.
+TEST_F(CnjSpriteFontTest, UnsortedOrDuplicatedGlyphCharactersThrow)
+{
+    ScratchContentRoot root;
+
+    Texture2D atlas(gd, 16, 24);
+    std::vector<Color> pixels(16 * 24, Color(255, 255, 255, 255));
+    atlas.SetData(pixels.data(), static_cast<int>(pixels.size()));
+    atlas.SaveAsPng((root.path() / "atlas.png").string());
+
+    const std::string prologue = R"({
+        "cnjVersion": 1,
+        "type": "SpriteFont",
+        "texture": "atlas.png",
+        "lineSpacing": 24,
+        "spacing": 1.5,
+        "glyphs": [)";
+    const std::string epilogue = "]}";
+    const std::string glyphA =
+        R"({ "char": 65, "source": [0,0,16,24], "crop": [0,0,16,24], "kerning": [1,14,1] })";
+    const std::string glyphB =
+        R"({ "char": 66, "source": [0,0,16,24], "crop": [0,0,16,24], "kerning": [1,14,1] })";
+
+    WriteFile(root.path() / "unsorted.cnj", prologue + glyphB + "," + glyphA + epilogue);
+    WriteFile(root.path() / "duplicate.cnj", prologue + glyphA + "," + glyphA + epilogue);
+    WriteFile(root.path() / "ordered.cnj", prologue + glyphA + "," + glyphB + epilogue);
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(cm.Load<SpriteFont>("unsorted"), ContentLoadException);
+    EXPECT_THROW(cm.Load<SpriteFont>("duplicate"), ContentLoadException);
+
+    // The positive control, so the rule is a boundary rather than a blanket refusal.
+    SpriteFont ordered = cm.Load<SpriteFont>("ordered");
+    ASSERT_EQ(ordered.getCharactersProperty().size(), 2u);
+    EXPECT_EQ(ordered.getCharactersProperty()[0], u'A');
+    EXPECT_EQ(ordered.getCharactersProperty()[1], u'B');
 }
 
 TEST_F(CnjSpriteFontTest, MismatchedTypeThrowsContentLoadException)

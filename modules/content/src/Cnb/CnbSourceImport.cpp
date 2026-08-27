@@ -260,6 +260,21 @@ namespace CNA::Content::Cnb
                         FailWav(origin, "is WAVE_FORMAT_EXTENSIBLE but declares an extension size "
                                         "of " + std::to_string(cbSize) + " bytes; 22 is required.");
                     }
+                    // plans/plan_cnb.md CNBF-122: cbSize is the extension's DECLARED length, and
+                    // the 18 bytes of WAVEFORMATEX in front of it plus that length must fit inside
+                    // the chunk that carries them. `chunkSize >= 40` above only proves the 22 bytes
+                    // this decoder READS are present; a cbSize of 4000 in a 40-byte 'fmt ' is a
+                    // header describing a chunk that is not there, and accepting it means trusting
+                    // the rest of the same header.
+                    if (18u + static_cast<std::uint64_t>(cbSize) > chunkSize)
+                    {
+                        FailWav(origin, "is WAVE_FORMAT_EXTENSIBLE declaring an extension of " +
+                                            std::to_string(cbSize) + " bytes, which with the "
+                                            "18-byte WAVEFORMATEX in front of it needs " +
+                                            std::to_string(18u + static_cast<std::uint64_t>(cbSize)) +
+                                            " bytes; its 'fmt ' chunk holds " +
+                                            std::to_string(chunkSize) + ".");
+                    }
                     const std::uint16_t validBits = ReadU16(wavBytes, start + 18u);
                     if (validBits != 0u && validBits != bitsPerSample)
                     {
@@ -298,18 +313,34 @@ namespace CNA::Content::Cnb
                 // to satisfy `start + 36 + 24 <= fileSize` and take that "loop entry" out of the
                 // next chunk's header and contents -- a loop region invented from unrelated bytes,
                 // which is exactly the kind of plausible wrong answer a refusal exists to prevent.
+                // CNBF-122 widened that from "the first entry fits" to "the declared table fits".
                 if (chunkSize >= 36u)
                 {
                     const std::uint32_t loops = ReadU32(wavBytes, start + 28u);
                     if (loops != 0u)
                     {
-                        if (start + 36u + 24u > chunkEnd)
+                        // plans/plan_cnb.md CNBF-122: the WHOLE declared loop table must fit, not
+                        // just the first entry this importer consumes. A count of 1000 in a
+                        // 60-byte 'smpl' is a header that disagrees with its own chunk, and the
+                        // first entry's Start/End are read out of that same header -- so believing
+                        // one number while refusing to check the other is how a plausible wrong
+                        // loop region gets accepted. Computed in std::uint64_t because
+                        // `loops * 24` wraps for a count above 178 956 970.
+                        //
+                        // This subsumes the old "is there room for the FIRST entry?" bound, which
+                        // is now unreachable: `loops >= 1` makes `36 + tableBytes >= 60`, so a
+                        // chunk that satisfies this one always holds at least one whole entry.
+                        // Left as dead code it would read like a case someone still thought about.
+                        const std::uint64_t tableBytes = static_cast<std::uint64_t>(loops) * 24u;
+                        if (36u + tableBytes > chunkSize)
                         {
                             FailWav(origin, "has a 'smpl' chunk declaring " +
                                                 std::to_string(loops) +
-                                                " loop(s) but only " +
+                                                " loop(s), which need " +
+                                                std::to_string(tableBytes) +
+                                                " bytes of loop table, but only " +
                                                 std::to_string(chunkSize - 36u) +
-                                                " byte(s) of loop table; one entry needs 24.");
+                                                " byte(s) follow its 36-byte header.");
                         }
                         const std::uint32_t first = ReadU32(wavBytes, start + 36u + 8u);
                         const std::uint32_t last = ReadU32(wavBytes, start + 36u + 12u);

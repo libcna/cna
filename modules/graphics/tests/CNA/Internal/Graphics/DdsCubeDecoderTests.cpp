@@ -94,18 +94,39 @@ TEST(DdsCubeDecoderTest, TheLargestRepresentableDimensionIsStillAccepted)
 {
     // The ceiling must not be lower than it claims. A 16384-texel face is refused only for being
     // truncated -- the header itself is legal -- which proves the dimension check let it through.
+    //
+    // The budget has to be lifted for this one (plans/plan_cnb.md CNBF-122): six 16384-texel faces
+    // decode to 6 GiB even at a single mip level, which the DEFAULT budget refuses before the
+    // payload is looked at. Isolating the dimension check is exactly what an injected budget is
+    // for -- and the two layers are asserted in order, one test each, rather than one standing in
+    // for the other.
     std::vector<std::uint8_t> dds = ValidCube();
     PatchU32(dds, kOffWidth, 16384u);
     PatchU32(dds, kOffHeight, 16384u);
     try
     {
-        (void)Decode(dds);
+        (void)DecodeDdsCube(dds.data(), dds.size(), "DdsCubeDecoderTest",
+                            /*maxDecodedBytes=*/16ull * 1024ull * 1024ull * 1024ull);
         FAIL() << "a 16384-texel cube with an 8-texel payload cannot decode";
     }
     catch (const System::FormatException& e)
     {
         EXPECT_NE(std::string(e.what()).find("truncated"), std::string::npos)
             << "expected the TRUNCATION refusal, not a dimension refusal: " << e.what();
+    }
+
+    // At the default budget the same header is refused earlier, and for the aggregate rather than
+    // for the dimension -- which is the layering CNBF-122 added, stated where someone changing
+    // either ceiling will see it.
+    try
+    {
+        (void)Decode(dds);
+        FAIL() << "the default budget accepted a 6 GiB decode";
+    }
+    catch (const System::FormatException& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("decoded-output budget"), std::string::npos)
+            << "expected the BUDGET refusal at the default: " << e.what();
     }
 }
 
@@ -243,4 +264,73 @@ TEST(DdsCubeDecoderTest, ANullOrShortBufferIsRefusedWithoutDereferencingIt)
     const std::vector<std::uint8_t> tiny(16u, 0u);
     EXPECT_THROW((void)DecodeDdsCube(tiny.data(), tiny.size(), "tiny"),
                  System::NotSupportedException);
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-122 -- the aggregate DECODED size is budgeted, not just each level's
+// --------------------------------------------------------------------------------------------
+
+TEST(DdsCubeDecoderTest, TheAggregateDecodedSizeIsBudgetedBeforeAnythingIsAllocated)
+{
+    // The gap CNBF-116's dimension ceiling left. It bounds ONE level of ONE face; a cube map is six
+    // faces each holding a whole mip chain, so the retained RGBA is up to eight times a single
+    // level -- about 8.6 GiB at the 16384-texel maximum, every allocation of it individually
+    // representable. The budget is therefore about the AGGREGATE and has to be computed from the
+    // header before any output vector exists.
+    //
+    // Exercised with an injected small budget rather than a real large image: the arithmetic under
+    // test is the same either way, and a genuine 8 GiB fixture is not a test.
+    const std::vector<std::uint8_t> dds = ValidCube(8, 4);
+
+    // 8x8 with four levels: 6 * 4 * (64 + 16 + 4 + 1) = 2040 bytes decoded.
+    constexpr std::uint64_t kExact = 6ull * 4ull * (64ull + 16ull + 4ull + 1ull);
+
+    EXPECT_NO_THROW((void)DecodeDdsCube(dds.data(), dds.size(), "exact", kExact))
+        << "a cube map exactly at the budget must decode";
+    EXPECT_THROW((void)DecodeDdsCube(dds.data(), dds.size(), "one byte over", kExact - 1u),
+                 System::FormatException);
+
+    // One mip LEVEL fewer is the other axis the budget has to see: the same face dimension, a
+    // smaller total. A budget that admits the three-level cube must refuse the four-level one.
+    const std::vector<std::uint8_t> threeLevels = ValidCube(8, 3);
+    constexpr std::uint64_t kThreeLevels = 6ull * 4ull * (64ull + 16ull + 4ull);
+    EXPECT_NO_THROW((void)DecodeDdsCube(threeLevels.data(), threeLevels.size(), "three levels",
+                                        kThreeLevels));
+    EXPECT_THROW((void)DecodeDdsCube(dds.data(), dds.size(), "one level over", kThreeLevels),
+                 System::FormatException);
+
+    // A budget of zero refuses everything, so the check cannot be short-circuited by an empty cube.
+    EXPECT_THROW((void)DecodeDdsCube(dds.data(), dds.size(), "zero budget", 0u),
+                 System::FormatException);
+}
+
+TEST(DdsCubeDecoderTest, TheDefaultBudgetAdmitsEveryCubeAGpuWouldAcceptAndRefusesTheLargest)
+{
+    // The default is a number with a reason, so the reason is asserted rather than described. A
+    // fully mipped 8192-texel cube is the largest complete cube that fits; the 16384 one -- which
+    // the dimension ceiling still permits -- is four times that and is refused.
+    const auto fullyMippedCubeBytes = [](std::uint64_t extent)
+    {
+        std::uint64_t total = 0u;
+        while (true)
+        {
+            total += extent * extent * 4u * 6u;
+            if (extent == 1u) { break; }
+            extent /= 2u;
+        }
+        return total;
+    };
+
+    EXPECT_LE(fullyMippedCubeBytes(8192u),
+              CNA::Internal::Graphics::DefaultDdsCubeDecodedByteBudget)
+        << "the default budget must admit a fully mipped 8192-texel cube map";
+    EXPECT_GT(fullyMippedCubeBytes(16384u),
+              CNA::Internal::Graphics::DefaultDdsCubeDecodedByteBudget)
+        << "the default budget must refuse the ~8.6 GiB cube the dimension ceiling still permits";
+    // Each step up in dimension is four times the previous chain plus its own extra 1x1 level,
+    // which for six faces of RGBA is 24 bytes. Asserted so a future change to the ceiling has to
+    // face the arithmetic rather than guess at it.
+    EXPECT_EQ(fullyMippedCubeBytes(4096u) * 4u + 24u, fullyMippedCubeBytes(8192u))
+        << "the arithmetic this bound rests on is wrong";
+    EXPECT_EQ(fullyMippedCubeBytes(8192u), 2147483640ull);
 }

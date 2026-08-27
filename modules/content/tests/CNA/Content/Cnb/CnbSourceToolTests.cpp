@@ -9,11 +9,13 @@
 // contract: what it accepts, what it refuses, what it writes, and what it leaves on disk when it
 // fails.
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -23,6 +25,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "CnaToolAtomicWrite.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
@@ -449,4 +452,193 @@ TEST(CnbSourceToolTest, StructurallyWrongInvocationsFailWithoutWritingAnything)
     // --help succeeds and writes nothing.
     EXPECT_EQ(RunTool({"--help"}, output), 0);
     EXPECT_NE(output.find("Usage:"), std::string::npos);
+}
+
+
+// --------------------------------------------------------------------------------------------
+// CNBF-122 -- the output file is produced all-or-nothing
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    /// Every entry of `dir`, sorted, so a test can assert on what a run LEFT rather than only on
+    /// what it produced. A temporary the tool failed to clean up shows here and nowhere else.
+    std::vector<std::string> EntryNames(const std::filesystem::path& dir)
+    {
+        std::vector<std::string> names;
+        for (const auto& entry : std::filesystem::directory_iterator(dir))
+        {
+            names.push_back(entry.path().filename().string());
+        }
+        std::sort(names.begin(), names.end());
+        return names;
+    }
+}
+
+TEST(CnbSourceToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTemporary)
+{
+    // plans/plan_cnb.md CNBF-122. The tool opened its destination with the implicit `trunc`, so
+    // the previous build's output was destroyed at the moment the file was opened rather than at
+    // the moment the new one was complete. It now writes a sibling temporary and renames it, so
+    // the visible result is the complete new file or the untouched old one.
+    //
+    // Most of the failures below happen before the write, so they held under the old writer too:
+    // they are the contract, not the discriminator. The last case IS the discriminator -- see the
+    // end of this test. The failure a test cannot induce at all (a full disk, a process killed
+    // mid-write) is what the rename itself covers, and the direct WriteFileAtomically tests below
+    // exercise the guard that cleans up after it.
+    ScratchDir dir("preserve");
+    WriteBytes(dir.path() / "hero.png", MakePng());
+    const std::filesystem::path out = dir.path() / "out.cnb";
+
+    // A real, previously-built output at the destination.
+    ASSERT_EQ(RunTool({(dir.path() / "hero.png").string(), out.string(), "--quiet"}), 0);
+    const std::vector<std::uint8_t> previous = ReadBytes(out);
+    ASSERT_FALSE(previous.empty());
+    ASSERT_NO_THROW((void)CnbDocument::Parse(previous, "out.cnb"));
+
+    WriteBytes(dir.path() / "broken.png", std::vector<std::uint8_t>(64u, 0x7Fu));
+
+    struct Case { const char* what; std::vector<std::string> args; };
+    const std::vector<Case> cases = {
+        {"a source file that will not decode",
+         {(dir.path() / "broken.png").string(), out.string()}},
+        {"a missing input", {(dir.path() / "absent.png").string(), out.string()}},
+        {"an option that does not apply",
+         {(dir.path() / "hero.png").string(), out.string(), "--fps", "30"}},
+        {"a malformed numeric option",
+         {(dir.path() / "hero.png").string(), out.string(), "--as", "song", "--stream",
+          "Songs/x.ogg", "--duration-ms", "12abc"}},
+    };
+    for (const Case& c : cases)
+    {
+        std::string output;
+        EXPECT_EQ(RunTool(c.args, output), 1) << c.what << " succeeded: " << output;
+        EXPECT_EQ(ReadBytes(out), previous)
+            << c.what << ": the failing run changed the existing output";
+        EXPECT_EQ(EntryNames(dir.path()),
+                  (std::vector<std::string>{"broken.png", "hero.png", "out.cnb"}))
+            << c.what << ": the failing run left something behind";
+    }
+
+    // The discriminating case: a run that CANNOT produce its output, with a perfectly valid input
+    // and a destination that already exists. The output directory is read-only while the existing
+    // file inside it stays writable, which on POSIX is exactly the state in which an in-place
+    // `trunc` open succeeds and a sibling temporary cannot be created. The old writer rewrote the
+    // file here and exited 0; the new one refuses, says why, and leaves the previous build alone.
+    //
+    // This is also the one thing the change gives up, stated where it is asserted: writing into a
+    // directory that is not itself writable no longer works. That is inherent to replacing by
+    // rename, and is the trade this task accepts.
+    if (::geteuid() != 0)
+    {
+        ScratchDir locked("preserve_ro");
+        WriteBytes(locked.path() / "hero.png", MakePng());
+        const std::filesystem::path target = locked.path() / "sub" / "out.cnb";
+        std::filesystem::create_directories(target.parent_path());
+        ASSERT_EQ(RunTool({(locked.path() / "hero.png").string(), target.string(), "--quiet"}), 0);
+        const std::vector<std::uint8_t> before = ReadBytes(target);
+        ASSERT_FALSE(before.empty());
+
+        std::filesystem::permissions(target.parent_path(),
+                                     std::filesystem::perms::owner_read |
+                                         std::filesystem::perms::owner_exec,
+                                     std::filesystem::perm_options::replace);
+        std::string output;
+        const int code = RunTool({(locked.path() / "hero.png").string(), target.string(),
+                                  "--quiet", "--name", "different"},
+                                 output);
+        std::filesystem::permissions(target.parent_path(), std::filesystem::perms::owner_all,
+                                     std::filesystem::perm_options::replace);
+
+        EXPECT_EQ(code, 1) << "a run that cannot write its output reported success: " << output;
+        EXPECT_EQ(ReadBytes(target), before)
+            << "the run rewrote an output it should not have been able to replace";
+        EXPECT_EQ(EntryNames(target.parent_path()), (std::vector<std::string>{"out.cnb"}))
+            << "the failed run left a temporary behind";
+    }
+}
+
+TEST(CnbSourceToolTest, ASuccessfulRunReplacesAnExistingOutputWholly)
+{
+    // The other side of the rename: replacing must leave none of the previous file, which for a
+    // longer predecessor is exactly what an in-place write would not guarantee.
+    ScratchDir dir("replace");
+    WriteBytes(dir.path() / "beep.wav", MakeWav());
+    const std::filesystem::path out = dir.path() / "sound.cnb";
+
+    // A sentinel longer than the .cnb that will replace it, so a partial overwrite would leave a
+    // visible tail.
+    WriteBytes(out, std::vector<std::uint8_t>(200000u, 0xEEu));
+
+    ASSERT_EQ(RunTool({(dir.path() / "beep.wav").string(), out.string(), "--quiet"}), 0);
+    const std::vector<std::uint8_t> produced = ReadBytes(out);
+    EXPECT_LT(produced.size(), 200000u) << "the sentinel's tail survived the replacement";
+    const CnbDocument document = CnbDocument::Parse(produced, "sound.cnb");
+    EXPECT_EQ(document.AssetTypeId(), CnbAssetTypeId::SoundEffect);
+    EXPECT_EQ(EntryNames(dir.path()), (std::vector<std::string>{"beep.wav", "sound.cnb"}))
+        << "a successful run left a temporary behind";
+
+    // And running it again over its own output is byte-identical, so replacement is idempotent
+    // rather than merely successful.
+    ASSERT_EQ(RunTool({(dir.path() / "beep.wav").string(), out.string(), "--quiet"}), 0);
+    EXPECT_EQ(ReadBytes(out), produced);
+}
+
+TEST(CnbSourceToolTest, WriteFileAtomicallyPreservesTheDestinationWhenItCannotFinish)
+{
+    // The failure arm the subprocess tests cannot reach, exercised directly on the helper both
+    // tools now use. A read-only directory is the closest reproducible stand-in for "the write
+    // cannot complete": the temporary cannot be created, so nothing is written and nothing is
+    // removed -- and the destination, which the old in-place write would have truncated the
+    // instant it opened it, is untouched.
+    if (::geteuid() == 0)
+    {
+        GTEST_SKIP() << "running as root, which ignores the directory permissions this test needs";
+    }
+
+    ScratchDir dir("atomic");
+    const std::filesystem::path locked = dir.path() / "locked";
+    std::filesystem::create_directories(locked);
+    const std::filesystem::path destination = locked / "asset.cnb";
+    const std::vector<std::uint8_t> previous(4096u, 0xA5u);
+    WriteBytes(destination, previous);
+
+    std::filesystem::permissions(locked, std::filesystem::perms::owner_read |
+                                             std::filesystem::perms::owner_exec,
+                                 std::filesystem::perm_options::replace);
+
+    EXPECT_THROW(CNA::Tools::WriteFileAtomically(destination, std::vector<std::uint8_t>(16u, 1u)),
+                 std::runtime_error);
+
+    std::filesystem::permissions(locked, std::filesystem::perms::owner_all,
+                                 std::filesystem::perm_options::replace);
+    EXPECT_EQ(ReadBytes(destination), previous)
+        << "a failed write changed the destination it could not replace";
+    EXPECT_EQ(EntryNames(locked), (std::vector<std::string>{"asset.cnb"}))
+        << "a failed write left a temporary behind";
+
+    // A destination whose directory does not exist fails the same way, and creates nothing.
+    const std::filesystem::path absent = dir.path() / "nope" / "asset.cnb";
+    EXPECT_THROW(CNA::Tools::WriteFileAtomically(absent, std::vector<std::uint8_t>(16u, 1u)),
+                 std::runtime_error);
+    EXPECT_FALSE(std::filesystem::exists(dir.path() / "nope"));
+}
+
+TEST(CnbSourceToolTest, WriteFileAtomicallyReplacesWhatIsThereAndWritesAnEmptyFile)
+{
+    ScratchDir dir("atomic_ok");
+    const std::filesystem::path destination = dir.path() / "asset.bin";
+    WriteBytes(destination, std::vector<std::uint8_t>(1024u, 0x11u));
+
+    const std::vector<std::uint8_t> shorter{1u, 2u, 3u};
+    ASSERT_NO_THROW(CNA::Tools::WriteFileAtomically(destination, shorter));
+    EXPECT_EQ(ReadBytes(destination), shorter);
+    EXPECT_EQ(EntryNames(dir.path()), (std::vector<std::string>{"asset.bin"}));
+
+    // An empty payload is a legitimate file, not a no-op, and must not trip the write path.
+    ASSERT_NO_THROW(CNA::Tools::WriteFileAtomically(destination, {}));
+    EXPECT_TRUE(std::filesystem::exists(destination));
+    EXPECT_EQ(std::filesystem::file_size(destination), 0u);
+    EXPECT_EQ(EntryNames(dir.path()), (std::vector<std::string>{"asset.bin"}));
 }

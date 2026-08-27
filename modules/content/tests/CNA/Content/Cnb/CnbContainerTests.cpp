@@ -1146,12 +1146,17 @@ TEST(CnbContainerTest, WriterRefusesToAddAContainerDefinedChunkAsASchemaChunk)
     }
 }
 
-TEST(CnbContainerTest, EveryFileBuildAcceptsIsStructurallyLoadable)
+TEST(CnbContainerTest, EveryShapeOfWriterCallsAnEncoderMakesProducesALoadableFile)
 {
-    // The invariant the two tests above exist to protect, stated directly: whatever combination of
-    // writer calls succeeds, the bytes it produced parse. Exercised over the shapes a schema
-    // encoder actually produces -- with and without metadata, with and without references, with a
-    // mandatory chunk, with an empty chunk, with a non-default alignment.
+    // The invariant the two tests above exist to protect, over the SHAPES a schema encoder
+    // actually produces: with and without metadata, with and without references, with a mandatory
+    // chunk, with an empty chunk, with a non-default alignment. Whatever combination of writer
+    // calls succeeds, the bytes it produced parse.
+    //
+    // This is deliberately no longer named as if it proved Build() -> Parse() symmetry in general
+    // (plans/plan_cnb.md CNBF-122): it varies the document's shape and not its SIZE, so it says
+    // nothing about the reader's count and size limits. Those are the next test's subject, and
+    // until CNBF-122 the writer did not enforce them at all.
     struct Shape
     {
         const char* what;
@@ -1184,5 +1189,261 @@ TEST(CnbContainerTest, EveryFileBuildAcceptsIsStructurallyLoadable)
         EXPECT_EQ(document.FindAll(CNA::Content::Cnb::CnbContainerChunk::Metadata).size(),
                   shape.metadata ? 1u : 0u)
             << shape.what;
+    }
+}
+
+
+// --------------------------------------------------------------------------------------------
+// CNBF-122 -- the writer enforces the reader's own limits, so Build() -> Parse() holds by SIZE too
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    /// Bytes a `.cnb` costs before any chunk contents: the 64-byte header plus a 48-byte
+    /// table-of-contents entry per chunk. Spelled out from the format constants so a layout change
+    /// breaks this arithmetic rather than silently shifting the boundaries under it.
+    [[nodiscard]] std::uint64_t ContainerOverhead(std::uint32_t chunkCount)
+    {
+        return Format::HeaderSize + static_cast<std::uint64_t>(chunkCount) * Format::TocEntrySize;
+    }
+
+    /// Small limits, so every boundary below is reached with a few hundred bytes rather than by
+    /// allocating anything of the default limits' size.
+    [[nodiscard]] CnbReadLimits TinyLimits()
+    {
+        CnbReadLimits limits;
+        limits.maxFileSize = 512u;
+        limits.maxChunkCount = 4u;
+        limits.maxChunkSize = 128u;
+        limits.maxTotalUncompressedSize = 192u;
+        return limits;
+    }
+
+    /// One writer holding `count` chunks of `each` bytes, at the default 4-byte alignment.
+    [[nodiscard]] CnbWriter WriterWith(const CnbReadLimits& limits, std::size_t count,
+                                       std::size_t each)
+    {
+        CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+        writer.SetLimits(limits);
+        for (std::size_t i = 0; i < count; ++i)
+        {
+            writer.AddChunk(kAlpha, std::vector<std::uint8_t>(each, 0x5Au), CnbChunkFlags::None,
+                            4u);
+        }
+        return writer;
+    }
+}
+
+TEST(CnbContainerTest, TheWriterDefaultsToTheReadersOwnLimits)
+{
+    // The property that makes SetLimits() an override rather than a requirement: say nothing, and
+    // the writer is already bounded by exactly what DefaultCnbReadLimits() allows.
+    const CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+    const CNA::Content::Cnb::CnbReadLimits& defaults = CNA::Content::Cnb::DefaultCnbReadLimits();
+    EXPECT_EQ(writer.Limits().maxFileSize, defaults.maxFileSize);
+    EXPECT_EQ(writer.Limits().maxChunkCount, defaults.maxChunkCount);
+    EXPECT_EQ(writer.Limits().maxChunkSize, defaults.maxChunkSize);
+    EXPECT_EQ(writer.Limits().maxTotalUncompressedSize, defaults.maxTotalUncompressedSize);
+    EXPECT_EQ(writer.Limits().maxChunkAlignment, defaults.maxChunkAlignment);
+}
+
+TEST(CnbContainerTest, TheWriterRefusesADocumentWhoseChunksUnpackAboveTheAggregateBudget)
+{
+    // The asymmetry CNBF-122 closes, and the reason it is not hypothetical: with compression on, a
+    // document's SERIALIZED size says nothing about the aggregate logical size CNBF-114 taught the
+    // reader to bound. Build() checked neither, so a highly compressible document could be built
+    // and then refused by a default Parse().
+    const CnbReadLimits limits = TinyLimits(); // aggregate 192
+
+    // Exactly at the limit: three 64-byte chunks unpack to 192. Accepted, and loadable.
+    CnbWriter exact = WriterWith(limits, 3u, 64u);
+    std::vector<std::uint8_t> bytes;
+    ASSERT_NO_THROW(bytes = exact.Build());
+    EXPECT_NO_THROW((void)CnbDocument::Parse(bytes, "aggregate-exact.cnb", limits));
+
+    // One byte over: a fourth chunk of one byte. Every chunk is still individually legal, and the
+    // file is still tiny -- the aggregate is the only thing that moved.
+    CnbWriter over = WriterWith(limits, 3u, 64u);
+    over.AddChunk(kBeta, Bytes({0}), CnbChunkFlags::None, 4u);
+    EXPECT_THROW((void)over.Build(), ContentLoadException);
+
+    // And the refusal is the AGGREGATE's, not the per-chunk ceiling's: each chunk here is well
+    // under maxChunkSize, and raising only the aggregate makes the same document build.
+    CnbReadLimits raised = limits;
+    raised.maxTotalUncompressedSize = 193u;
+    CnbWriter allowed = WriterWith(raised, 3u, 64u);
+    allowed.AddChunk(kBeta, Bytes({0}), CnbChunkFlags::None, 4u);
+    ASSERT_NO_THROW(bytes = allowed.Build());
+    EXPECT_NO_THROW((void)CnbDocument::Parse(bytes, "aggregate-raised.cnb", raised));
+}
+
+TEST(CnbContainerTest, TheWriterRefusesAFileLargerThanTheReaderWouldOpen)
+{
+    // The one limit that cannot be known before the layout exists, so it is checked last -- but
+    // still before the output buffer is allocated.
+    CnbReadLimits limits = TinyLimits();
+    // One chunk: 64-byte header + one 48-byte TOC entry + the payload.
+    const std::uint64_t overhead = ContainerOverhead(1u);
+    limits.maxFileSize = overhead + 100u;
+    limits.maxChunkSize = 4096u;
+    limits.maxTotalUncompressedSize = 4096u;
+
+    CnbWriter exact = WriterWith(limits, 1u, 100u);
+    std::vector<std::uint8_t> bytes;
+    ASSERT_NO_THROW(bytes = exact.Build());
+    EXPECT_EQ(bytes.size(), limits.maxFileSize) << "the arithmetic this test rests on is wrong";
+    EXPECT_NO_THROW((void)CnbDocument::Parse(bytes, "size-exact.cnb", limits));
+
+    // One byte over the ceiling, with everything else unchanged.
+    CnbWriter over = WriterWith(limits, 1u, 101u);
+    EXPECT_THROW((void)over.Build(), ContentLoadException);
+}
+
+TEST(CnbContainerTest, TheWriterRefusesTooManyChunksAndTooLargeAChunk)
+{
+    // The remaining two limits a reader applies to a well-formed file. Without these the "every
+    // applicable default limit" claim below would be false, which is why they are here rather than
+    // left to the reader.
+    CnbReadLimits limits = TinyLimits();
+    limits.maxChunkCount = 3u;
+    limits.maxTotalUncompressedSize = 4096u;
+
+    ASSERT_NO_THROW((void)WriterWith(limits, 3u, 8u).Build());
+    EXPECT_THROW((void)WriterWith(limits, 4u, 8u).Build(), ContentLoadException);
+
+    // maxChunkSize is 128 in TinyLimits(): one chunk at the ceiling builds, one byte over does not.
+    CnbReadLimits perChunk = TinyLimits();
+    perChunk.maxTotalUncompressedSize = 4096u;
+    perChunk.maxFileSize = 4096u;
+    ASSERT_NO_THROW((void)WriterWith(perChunk, 1u, perChunk.maxChunkSize).Build());
+    EXPECT_THROW((void)WriterWith(perChunk, 1u, perChunk.maxChunkSize + 1u).Build(),
+                 ContentLoadException);
+
+    // A metadata chunk counts toward the chunk COUNT like any other -- the container-level chunks
+    // are not exempt from the reader's arithmetic, so they must not be exempt from the writer's.
+    CnbWriter withMetadata = WriterWith(limits, 3u, 8u);
+    withMetadata.SetMetadata("Microsoft.Xna.Framework.Curve", "counted");
+    EXPECT_THROW((void)withMetadata.Build(), ContentLoadException);
+}
+
+TEST(CnbContainerTest, EveryDefaultReaderLimitIsAlsoAWriterLimit)
+{
+    // The universal claim, made only now that it is true: for a limit set L, whatever Build()
+    // accepts, Parse(..., L) loads. Asserted by walking each limit to its exact boundary and one
+    // step past it, under injected small limits so nothing large is allocated.
+    //
+    // All SEVEN of CnbReadLimits' entries are in scope, which was not obvious: maxStringBytes and
+    // maxArrayElementCount look like schema-layer limits, and are, but the CONTAINER reads CMET's
+    // two names, XREF's count and every XREF name through the same bounded CnbByteReader -- so a
+    // writer ignoring them emits a CMET its own Parse() refuses. They are covered by the second
+    // half of this test.
+    const CnbReadLimits limits = TinyLimits();
+
+    struct Case
+    {
+        const char* what;
+        std::size_t chunks;
+        std::size_t each;
+        bool buildable;
+    };
+    // aggregate 192, per chunk 128, at most 4 chunks, at most 512 bytes of file.
+    for (const Case& c : {Case{"aggregate exactly", 3u, 64u, true},
+                          Case{"aggregate one over", 3u, 65u, false},
+                          Case{"per-chunk exactly", 1u, 128u, true},
+                          Case{"per-chunk one over", 1u, 129u, false},
+                          Case{"count exactly", 4u, 32u, true},
+                          Case{"count one over", 5u, 32u, false}})
+    {
+        CnbWriter writer = WriterWith(limits, c.chunks, c.each);
+        if (c.buildable)
+        {
+            std::vector<std::uint8_t> bytes;
+            ASSERT_NO_THROW(bytes = writer.Build()) << c.what;
+            EXPECT_NO_THROW((void)CnbDocument::Parse(bytes, "limits.cnb", limits))
+                << c.what << ": Build() accepted a file Parse() refuses";
+        }
+        else
+        {
+            EXPECT_THROW((void)writer.Build(), ContentLoadException) << c.what;
+        }
+    }
+
+    // The file-size ceiling separately, because it is the one that depends on the layout: 512
+    // bytes of file is 64 + 4*48 = 256 of overhead plus 256 of payload.
+    CnbReadLimits sizeOnly = limits;
+    sizeOnly.maxTotalUncompressedSize = 4096u;
+    sizeOnly.maxChunkSize = 4096u;
+    const std::uint64_t payload = sizeOnly.maxFileSize - ContainerOverhead(4u);
+    std::vector<std::uint8_t> bytes;
+    ASSERT_NO_THROW(bytes = WriterWith(sizeOnly, 4u, static_cast<std::size_t>(payload / 4u))
+                                .Build());
+    EXPECT_EQ(bytes.size(), sizeOnly.maxFileSize);
+    EXPECT_NO_THROW((void)CnbDocument::Parse(bytes, "limits-size.cnb", sizeOnly));
+    EXPECT_THROW((void)WriterWith(sizeOnly, 4u, static_cast<std::size_t>(payload / 4u) + 1u).Build(),
+                 ContentLoadException);
+
+    // maxStringBytes, on the container's own strings: CMET's two names and every XREF name.
+    CnbReadLimits strings;
+    strings.maxStringBytes = 16u;
+    for (int over = 0; over <= 1; ++over)
+    {
+        const std::string name(static_cast<std::size_t>(strings.maxStringBytes) +
+                                   static_cast<std::size_t>(over),
+                               'x');
+        const char* what = over == 0 ? "exactly at maxStringBytes" : "one byte over";
+
+        CnbWriter metadata(CnbAssetTypeId::Curve, 1u);
+        metadata.SetLimits(strings);
+        metadata.SetMetadata(name, "n");
+        CnbWriter contentName(CnbAssetTypeId::Curve, 1u);
+        contentName.SetLimits(strings);
+        contentName.SetMetadata("n", name);
+        CnbWriter reference(CnbAssetTypeId::Curve, 1u);
+        reference.SetLimits(strings);
+        CnbExternalReference ref;
+        ref.logicalName = name; // a bare 'x'-run is a valid relative logical name
+        reference.SetExternalReferences({ref});
+
+        for (CnbWriter* writer : {&metadata, &contentName, &reference})
+        {
+            writer->AddChunk(kAlpha, Bytes({1}), CnbChunkFlags::None, 4u);
+            if (over == 0)
+            {
+                std::vector<std::uint8_t> built;
+                ASSERT_NO_THROW(built = writer->Build()) << what;
+                EXPECT_NO_THROW((void)CnbDocument::Parse(built, "strings.cnb", strings))
+                    << what << ": Build() accepted a file Parse() refuses";
+            }
+            else
+            {
+                EXPECT_THROW((void)writer->Build(), ContentLoadException) << what;
+            }
+        }
+    }
+
+    // maxArrayElementCount, on the XREF row count. Two references at a ceiling of two build; the
+    // same document at a ceiling of one does not.
+    for (const std::uint32_t ceiling : {2u, 1u})
+    {
+        CnbReadLimits arrays;
+        arrays.maxArrayElementCount = ceiling;
+        CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+        writer.SetLimits(arrays);
+        CnbExternalReference a;
+        a.logicalName = "art/a";
+        CnbExternalReference b;
+        b.logicalName = "art/b";
+        writer.SetExternalReferences({a, b});
+        writer.AddChunk(kAlpha, Bytes({1}), CnbChunkFlags::None, 4u);
+        if (ceiling == 2u)
+        {
+            std::vector<std::uint8_t> built;
+            ASSERT_NO_THROW(built = writer.Build());
+            EXPECT_NO_THROW((void)CnbDocument::Parse(built, "refs.cnb", arrays));
+        }
+        else
+        {
+            EXPECT_THROW((void)writer.Build(), ContentLoadException);
+        }
     }
 }

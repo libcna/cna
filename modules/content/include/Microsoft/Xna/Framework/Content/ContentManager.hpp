@@ -323,6 +323,10 @@ namespace Microsoft::Xna::Framework::Content
          * silently ignored, because "accepted and had no effect" is the shape of this mistake that
          * is hardest to find.
          *
+         * There is also no way *around* this call: `CnbLoaderRegistry::Register()` applies the
+         * same rule, and CNA's own built-in route is private to `CnbLoaderRegistry` and reachable
+         * only by `ContentManager` (plans/plan_cnb.md `CNBF-122`).
+         *
          * @param assetTypeId       The identifier written into the `.cnb` header. Must be a custom
          *                          identifier, `CnbAssetTypeId::CustomRangeFirst` or above.
          * @param canonicalTypeName The type's canonical name; must hash to @p assetTypeId.
@@ -342,15 +346,14 @@ namespace Microsoft::Xna::Framework::Content
                 throw std::invalid_argument(
                     "ContentManager::RegisterCnbLoaderEXT<T>(): factory must not be empty.");
             }
-            // The custom-range rule itself is enforced once, by CnbLoaderRegistry::Register()'s
-            // default CnbLoaderOwnership::GameExtension -- there is deliberately no second copy of
-            // it here (plans/plan_cnb.md `CNBF-119`).
+            // The custom-range rule itself is enforced once, by CnbLoaderRegistry::Register(),
+            // which is the game-extension route and accepts nothing else -- there is deliberately
+            // no second copy of it here (plans/plan_cnb.md `CNBF-119`, `CNBF-122`).
             CNA::Content::CnbLoaderRegistry::Register(
                 assetTypeId, canonicalTypeName,
                 [factory](const CNA::Content::Cnb::CnbDocument& document, ContentManager& cm,
                           const std::string&) -> std::any
-                { return std::any(factory(document, cm)); },
-                CNA::Content::CnbLoaderOwnership::GameExtension);
+                { return std::any(factory(document, cm)); });
         }
 
         /**

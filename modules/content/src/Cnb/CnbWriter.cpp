@@ -68,11 +68,11 @@ namespace CNA::Content::Cnb
         {
             throw ContentLoadException("CnbWriter: unknown chunk flag bits requested.");
         }
-        if (!IsPowerOfTwo(alignment) || alignment > DefaultCnbReadLimits().maxChunkAlignment)
+        if (!IsPowerOfTwo(alignment) || alignment > limits_.maxChunkAlignment)
         {
             throw ContentLoadException(
                 "CnbWriter: chunk alignment must be a power of two no greater than " +
-                std::to_string(DefaultCnbReadLimits().maxChunkAlignment) + ".");
+                std::to_string(limits_.maxChunkAlignment) + ".");
         }
         // plans/plan_cnb.md CNBF-115: CMET and XREF belong to the container, and the writer emits
         // each of them at most once, from SetMetadata()/SetExternalReferences(). Letting a schema
@@ -98,8 +98,26 @@ namespace CNA::Content::Cnb
         std::vector<PendingChunk> all;
         all.reserve(chunks_.size() + 2u);
 
+        // plans/plan_cnb.md CNBF-122: maxStringBytes and maxArrayElementCount are NOT schema-only
+        // limits -- the container reads CMET's two names, XREF's count and every XREF name through
+        // the same bounded CnbByteReader. A writer that ignores them here produces a CMET its own
+        // Parse() refuses, which is the asymmetry this whole rule exists to remove.
+        const auto requireStringFits = [this](const std::string& value, const char* what)
+        {
+            if (value.size() > limits_.maxStringBytes)
+            {
+                throw ContentLoadException(
+                    "CnbWriter: the " + std::string(what) + " is " +
+                    std::to_string(value.size()) + " bytes, above the configured string limit of " +
+                    std::to_string(limits_.maxStringBytes) +
+                    "; a reader with these limits would refuse the file.");
+            }
+        };
+
         if (hasMetadata_)
         {
+            requireStringFits(assetTypeName_, "canonical type name");
+            requireStringFits(contentName_, "content name");
             CnbByteWriter w;
             w.WriteU32(0u); // flags, reserved
             w.WriteString(assetTypeName_);
@@ -114,6 +132,15 @@ namespace CNA::Content::Cnb
             {
                 throw ContentLoadException("CnbWriter: too many external references to encode.");
             }
+            if (externalReferences_.size() > limits_.maxArrayElementCount)
+            {
+                throw ContentLoadException(
+                    "CnbWriter: the document declares " +
+                    std::to_string(externalReferences_.size()) +
+                    " external references, above the configured array limit of " +
+                    std::to_string(limits_.maxArrayElementCount) +
+                    "; a reader with these limits would refuse the file.");
+            }
             CnbByteWriter w;
             w.WriteU32(static_cast<std::uint32_t>(externalReferences_.size()));
             for (const CnbExternalReference& ref : externalReferences_)
@@ -126,6 +153,7 @@ namespace CNA::Content::Cnb
                 // plans/plan_cnb.md CNBF-115: the SAME rule the reader applies, from the same
                 // function. Before this the reader refused names the writer would happily emit, so
                 // an encoder could produce a file its own decoder rejected.
+                requireStringFits(ref.logicalName, "external reference name");
                 if (const std::string problem = CnbLogicalNameProblem(ref.logicalName);
                     !problem.empty())
                 {
@@ -160,6 +188,10 @@ namespace CNA::Content::Cnb
         compressionLevel_ = level;
     }
 
+    void CnbWriter::SetLimits(const CnbReadLimits& limits) { limits_ = limits; }
+
+    const CnbReadLimits& CnbWriter::Limits() const noexcept { return limits_; }
+
     std::vector<std::uint8_t> CnbWriter::Build() const
     {
         // plans/plan_cnb.md CNBF-H002: a custom asset type is identified by a 31-bit hash, so the load
@@ -190,6 +222,59 @@ namespace CNA::Content::Cnb
             throw ContentLoadException("CnbWriter: too many chunks to encode.");
         }
         const auto chunkCount = static_cast<std::uint32_t>(all.size());
+        // plans/plan_cnb.md CNBF-122: from here on the writer applies the SAME limits the reader
+        // does, in the same order, so a file Build() returns is a file Parse() opens. The chunk
+        // count and the aggregate LOGICAL size are both checked before anything is compressed or
+        // laid out, because both are known from the pending list alone and neither depends on the
+        // codec.
+        if (chunkCount > limits_.maxChunkCount)
+        {
+            throw ContentLoadException(
+                "CnbWriter: the document holds " + std::to_string(chunkCount) +
+                " chunks, above the configured limit of " +
+                std::to_string(limits_.maxChunkCount) +
+                "; a reader with these limits would refuse the file.");
+        }
+        std::uint64_t totalUncompressed = 0u;
+        for (std::size_t i = 0; i < all.size(); ++i)
+        {
+            if (all[i].data.size() > limits_.maxChunkSize)
+            {
+                throw ContentLoadException(
+                    "CnbWriter: chunk " + std::to_string(i) + " (" +
+                    ChunkIdToString(all[i].type) + ") holds " +
+                    std::to_string(all[i].data.size()) +
+                    " bytes, above the configured per-chunk limit of " +
+                    std::to_string(limits_.maxChunkSize) + ".");
+            }
+            if (!IsPowerOfTwo(all[i].alignment) || all[i].alignment > limits_.maxChunkAlignment)
+            {
+                // Re-checked here as well as in AddChunk(), because SetLimits() may have been
+                // called after the chunk was added and only Build() sees the final pairing.
+                throw ContentLoadException(
+                    "CnbWriter: chunk " + std::to_string(i) + " (" +
+                    ChunkIdToString(all[i].type) + ") declares an alignment of " +
+                    std::to_string(all[i].alignment) +
+                    "; it must be a power of two no greater than " +
+                    std::to_string(limits_.maxChunkAlignment) + ".");
+            }
+            // Overflow-safe, and against the same aggregate ceiling CNBF-114 gave the reader: the
+            // per-chunk limit above caps ONE chunk and maxChunkCount caps how many there are, so
+            // their product is what a compressible document could otherwise ask a reader to
+            // allocate. A writer able to produce that file is a writer able to produce an
+            // unloadable one.
+            totalUncompressed = CheckedAdd(totalUncompressed, all[i].data.size(),
+                                           "CnbWriter total unpacked chunk size");
+            if (totalUncompressed > limits_.maxTotalUncompressedSize)
+            {
+                throw ContentLoadException(
+                    "CnbWriter: the document's chunks unpack to at least " +
+                    std::to_string(totalUncompressed) +
+                    " bytes in total, above the configured aggregate limit of " +
+                    std::to_string(limits_.maxTotalUncompressedSize) +
+                    " bytes; a reader with these limits would refuse the file.");
+            }
+        }
 
         // CNBF-105: compress before laying the file out, because a chunk's OFFSET depends on the
         // size it ends up occupying. A chunk is emitted compressed only when that actually made it
@@ -239,6 +324,30 @@ namespace CNA::Content::Cnb
         if (fileSize > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()))
         {
             throw ContentLoadException("CnbWriter: the resulting .cnb file would be too large.");
+        }
+        // The two limits that cannot be applied any earlier (CNBF-122): a chunk's STORED size is
+        // only known once the codec has run, and the file's length only once the layout exists.
+        // Both are still checked before the output buffer is allocated, so an over-budget document
+        // costs nothing to refuse.
+        for (std::size_t i = 0; i < all.size(); ++i)
+        {
+            if (stored[i].size() > limits_.maxChunkSize)
+            {
+                throw ContentLoadException(
+                    "CnbWriter: chunk " + std::to_string(i) + " (" +
+                    ChunkIdToString(all[i].type) + ") stores " +
+                    std::to_string(stored[i].size()) +
+                    " bytes, above the configured per-chunk limit of " +
+                    std::to_string(limits_.maxChunkSize) + ".");
+            }
+        }
+        if (fileSize > limits_.maxFileSize)
+        {
+            throw ContentLoadException(
+                "CnbWriter: the resulting .cnb file would be " + std::to_string(fileSize) +
+                " bytes, above the configured .cnb size limit of " +
+                std::to_string(limits_.maxFileSize) +
+                " bytes; a reader with these limits would refuse it.");
         }
 
         std::vector<std::uint8_t> out(static_cast<std::size_t>(fileSize), 0u);

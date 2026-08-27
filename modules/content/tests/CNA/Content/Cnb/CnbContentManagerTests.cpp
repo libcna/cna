@@ -17,6 +17,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
@@ -578,16 +579,102 @@ TEST_F(CnbContentManagerTest, ABuiltInLoaderCannotBeSilentlyReplacedOrInheritedB
     EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve),
               "Microsoft.Xna.Framework.Curve");
 
-    // CNA cannot mint a custom identifier either -- the rule reads in both directions.
+    // CNA cannot mint a custom identifier either -- the rule reads in both directions. There is
+    // no public way to attempt it any more (CNBF-122), so this is asserted through the built-in
+    // route CNA itself uses: RegisterBuiltIns() installs only non-custom identifiers, and a
+    // custom one registered through Register() is a game's and stays a game's.
     const std::uint32_t custom = CNA::Content::Cnb::CnbAssetTypeIdFromName("MyGame.NotCnas");
-    EXPECT_THROW(CnbLoaderRegistry::Register(custom, "MyGame.NotCnas", loader,
-                                             CNA::Content::CnbLoaderOwnership::CnaBuiltIn),
-                 std::invalid_argument);
+    CnbLoaderRegistry::Remove(custom);
+    EXPECT_NO_THROW(CnbLoaderRegistry::Register(custom, "MyGame.NotCnas", loader));
+    EXPECT_TRUE(CnbLoaderRegistry::Remove(custom));
 
     // Repeating CNA's own built-in registration is still tolerated: every ContentManager
     // constructor does it.
     EXPECT_NO_THROW(CnbLoaderRegistry::RegisterBuiltIns());
     EXPECT_NO_THROW(CnbLoaderRegistry::RegisterBuiltIns());
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-122 -- the built-in registration route is not caller-selectable
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    /// Detects whether `CnbLoaderRegistry::RegisterBuiltIn(u32, string, LoaderFn)` is callable
+    /// from here. Access checking is part of template argument substitution, so a private member
+    /// is a substitution failure rather than a hard error -- which makes the boundary something a
+    /// test can assert instead of merely describe.
+    template <typename T, typename = void>
+    struct BuiltInRouteIsReachable : std::false_type
+    {
+    };
+
+    template <typename T>
+    struct BuiltInRouteIsReachable<
+        T, std::void_t<decltype(T::RegisterBuiltIn(std::declval<std::uint32_t>(),
+                                                    std::declval<const std::string&>(),
+                                                    std::declval<typename T::LoaderFn>()))>>
+        : std::true_type
+    {
+    };
+
+    static_assert(!BuiltInRouteIsReachable<CnbLoaderRegistry>::value,
+                  "CnbLoaderRegistry's built-in registration route must not be reachable from "
+                  "outside CNA (plans/plan_cnb.md CNBF-122). Making it public would let game code "
+                  "claim a built-in identifier before any ContentManager exists.");
+
+    // The same detector, shown to have teeth: a class whose equivalent member IS public makes it
+    // report true, so the assertion above is not vacuously satisfied by a typo in the signature.
+    struct ForgeableRegistryShape
+    {
+        using LoaderFn = CnbLoaderRegistry::LoaderFn;
+        static void RegisterBuiltIn(std::uint32_t, const std::string&, LoaderFn) {}
+    };
+    static_assert(BuiltInRouteIsReachable<ForgeableRegistryShape>::value,
+                  "the detector above cannot distinguish a private member from a missing one");
+}
+
+TEST_F(CnbContentManagerTest, AGameCannotForgeABuiltInRegistrationBeforeCnaInstallsIt)
+{
+    // The defect CNBF-122 closes. CnbLoaderOwnership::CnaBuiltIn was a public enumerator and
+    // Register() took it as a defaulted argument, so game code could register its own factory
+    // under a built-in identifier's canonical name, claiming CNA's ownership, BEFORE the first
+    // ContentManager was constructed. The repeat-registration rule retains the first equivalent
+    // registration, so CNA's genuine loader would then never have been installed -- silently.
+    //
+    // The enumerator is gone and the built-in route is private, so the forgery no longer compiles
+    // (asserted above). What remains reachable is the direct-registry call, and it must refuse
+    // every identifier CNA owns -- with an EMPTY table, which is the moment the hijack aimed at.
+    const auto hostile = [](const CnbDocument&, ContentManager&, const std::string&) -> std::any
+    { return std::any(Marker{"hijacked"}); };
+
+    CnbLoaderRegistry::Clear();
+    ASSERT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+    for (const std::uint32_t owned :
+         {CnbAssetTypeId::Curve, CnbAssetTypeId::AnimationClip, CnbAssetTypeId::Model,
+          CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube, CnbAssetTypeId::Texture3D,
+          CnbAssetTypeId::SpriteFont, CnbAssetTypeId::SoundEffect, CnbAssetTypeId::Song,
+          CnbAssetTypeId::Video, CnbAssetTypeId::Effect, CnbAssetTypeId::ReservedRangeFirst,
+          0x7FFFFFFFu})
+    {
+        EXPECT_THROW(CnbLoaderRegistry::Register(owned, "Microsoft.Xna.Framework.Curve", hostile),
+                     std::invalid_argument)
+            << "an empty table accepted a game registration for "
+            << CNA::Content::Cnb::AssetTypeIdToString(owned);
+        EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(owned))
+            << CNA::Content::Cnb::AssetTypeIdToString(owned) << " was registered anyway";
+    }
+
+    // And the genuine loader still installs afterwards and is the one that decodes -- the property
+    // the hijack was aiming to take away. Asserted by decoding a real Curve through the resolved
+    // loader rather than by asking whether something is registered.
+    CnbLoaderRegistry::RegisterBuiltIns();
+    ScratchContentRoot root;
+    WriteBytes(root.path() / "wobble.cnb", EncodeCurveToCnb(MakeSampleCurve(), "wobble"));
+    ContentManager cm(nullptr, root.path().string());
+    const Curve loaded = cm.Load<Curve>("wobble");
+    EXPECT_EQ(loaded.getKeysProperty().getCountProperty(), 2);
+    EXPECT_EQ(loaded.getPreLoopProperty(), CurveLoopType::Cycle);
 }
 
 TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManagerInstallsTheRest)

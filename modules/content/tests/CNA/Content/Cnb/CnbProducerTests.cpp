@@ -888,6 +888,69 @@ TEST(CnbProducerTest, ExtensibleFormatIsAcceptedOnlyForARealKsDataFormatSubtype)
     ExpectWavRefused(shortExtensible, "the extension needs 40", "a 16-byte EXTENSIBLE fmt");
 }
 
+TEST(CnbProducerTest, AnExtensibleFmtMustDeclareAnExtensionThatFitsInsideItsChunk)
+{
+    // plans/plan_cnb.md CNBF-122. `chunkSize >= 40` proves the 22 extension bytes this importer
+    // READS are present; it says nothing about the length the header itself declares. A cbSize of
+    // 4000 in a 40-byte 'fmt ' describes 4018 bytes of WAVEFORMATEXTENSIBLE that are not there,
+    // and every other field in that same header was then believed.
+    const std::vector<std::uint8_t> pcm = Pcm16(64u, 1u);
+
+    // Exactly at the boundary: 18 bytes of WAVEFORMATEX plus a 22-byte extension is the 40-byte
+    // chunk the builder produces, so this is the largest cbSize that fits and must be accepted.
+    const auto exact = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
+        WavBuilder{}.FmtExtensible(1u, 44100u, 16u, 16u, kPcmSubtypeGuid, /*cbSize=*/22u)
+            .Data(pcm).Build(),
+        "exact.wav");
+    EXPECT_EQ(exact.sampleRate, 44100u);
+    EXPECT_EQ(exact.frameCount, 64u);
+
+    // One byte over, and then a value that is nowhere near the chunk.
+    for (const std::uint16_t cbSize : {std::uint16_t{23u}, std::uint16_t{64u},
+                                       std::uint16_t{4000u}, std::uint16_t{0xFFFFu}})
+    {
+        ExpectWavRefused(
+            WavBuilder{}.FmtExtensible(1u, 44100u, 16u, 16u, kPcmSubtypeGuid, cbSize)
+                .Data(pcm).Build(),
+            "its 'fmt ' chunk holds",
+            ("EXTENSIBLE cbSize " + std::to_string(cbSize) + " in a 40-byte fmt").c_str());
+    }
+}
+
+TEST(CnbProducerTest, ADeclaredSmplLoopTableMustFitTheSmplChunk)
+{
+    // plans/plan_cnb.md CNBF-122. Only the FIRST loop entry is consumed, so only the first was
+    // required to fit -- but the loop count is read out of the same header whose first entry is
+    // then believed, and a count the chunk cannot hold means the two disagree. Checking one number
+    // and not the other is how a plausible wrong loop region survives.
+    const std::vector<std::uint8_t> pcm = Pcm16(1000u, 1u);
+
+    // Exact fit: 36-byte header plus two 24-byte entries is 84 bytes, and the first entry decodes.
+    const auto exact = CNA::Content::Cnb::DecodeWavAsCnbSoundEffect(
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(84u, 2u, 100u, 400u).Data(pcm).Build(),
+        "twoloops.wav");
+    EXPECT_EQ(exact.loopStart, 100u);
+    EXPECT_EQ(exact.loopLength, 300u);
+
+    // One entry short of what it declares -- the first entry still fits, so the OLD check passed.
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(83u, 2u, 100u, 400u).Data(pcm).Build(),
+        "bytes of loop table", "two declared loops in 83 bytes");
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(60u, 2u, 100u, 400u).Data(pcm).Build(),
+        "bytes of loop table", "two declared loops in a 60-byte smpl");
+
+    // A count whose 24-byte product WRAPS a 32-bit accumulator: 178 956 971 * 24 is 2^32 + 8, so
+    // 36 + that reads as 44 in 32-bit arithmetic and would have fitted a 60-byte chunk. Computed
+    // in std::uint64_t it is 4 GiB of loop table and is refused.
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(60u, 178956971u, 100u, 400u).Data(pcm).Build(),
+        "bytes of loop table", "a loop count whose table size wraps 32 bits");
+    ExpectWavRefused(
+        WavBuilder{}.Fmt(1u, 1u, 44100u, 16u).Smpl(60u, 0xFFFFFFFFu, 100u, 400u).Data(pcm).Build(),
+        "bytes of loop table", "a loop count of 0xFFFFFFFF");
+}
+
 TEST(CnbProducerTest, RiffIntegersAreDecodedFromTheirBytesRatherThanTheHostLayout)
 {
     // Values chosen so every byte of every multi-byte field differs: 0x0000AC44 (44100 Hz) has

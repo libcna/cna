@@ -206,6 +206,14 @@ namespace CNA::Internal
      * repository is -- that is the same character either way. The member may be absent or `null`
      * to say the font has no substitute character; present and any other type is refused.
      *
+     * **The two semantic rules `SpriteFont` itself depends on are enforced here**, so the runtime
+     * `.cnj` reader and the `.cnj` -> `.cnb` compiler reach the same verdict on the same document
+     * (plans/plan_cnb.md `CNBF-122`). `SpriteFont` looks a character up by **binary search**, so an
+     * unsorted or duplicated character map does not fail loudly -- it silently returns the wrong
+     * glyph, or none; and a `defaultCharacter` absent from the map is a fallback that cannot be
+     * taken. `EncodeSpriteFontToCnb()` has always refused both, so before this a document the
+     * compiler rejected could still be loaded at run time.
+     *
      * @param root The document's root object.
      * @param what Text naming the document.
      * @return The description.
@@ -214,8 +222,9 @@ namespace CNA::Internal
      *         `char`, a four-element `source`, a four-element `crop` or a three-element `kerning`,
      *         if any number is not finite, is not integral where an integer is required, or is
      *         outside its destination's range, if a character value is not a Unicode scalar in the
-     *         Basic Multilingual Plane, or if `defaultCharacter` is present as anything other than
-     *         `null` or a non-empty string.
+     *         Basic Multilingual Plane, if `defaultCharacter` is present as anything other than
+     *         `null` or a non-empty string, if the glyphs' characters are not strictly ascending
+     *         (which also rules out duplicates), or if `defaultCharacter` is not one of them.
      */
     [[nodiscard]] CnjSpriteFontDescription ReadCnjSpriteFontDescription(const JsonValue& root,
                                                                          const std::string& what);

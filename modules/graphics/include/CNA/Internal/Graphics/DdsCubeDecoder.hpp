@@ -40,6 +40,27 @@ namespace CNA::Internal::Graphics
     };
 
     /**
+     * @brief Default ceiling on the **total** RGBA8 bytes a decoded cube map may occupy
+     *        (plans/plan_cnb.md `CNBF-122`).
+     *
+     * The dimension ceiling alone does not bound this. A cube map is six faces and a face is a
+     * whole mip chain, so at the 16384-texel maximum the decoded result is
+     * `6 * 4 * sum(16384^2 / 4^k)` = about **8.6 GiB** of retained `std::vector` -- from a DDS file
+     * of roughly 1.4 GiB, or from a truncated one that gets that far before the read bound catches
+     * it. Every one of those allocations is individually representable, which is exactly why the
+     * per-level ceiling cannot see the problem.
+     *
+     * 2 GiB is the largest complete cube this admits: a fully mipped 8192-texel cube needs
+     * 2 147 483 640 bytes, eight short of this value, and every 4096-texel cube is a quarter of
+     * that. So nothing a GPU CNA targets would accept as a cube map is refused, and the 16384 case
+     * -- which no consumer of this decoder could upload anyway -- is.
+     *
+     * A caller that genuinely wants more passes its own budget; a caller that wants less (a test,
+     * or a build machine with a known memory ceiling) does the same.
+     */
+    inline constexpr std::uint64_t DefaultDdsCubeDecodedByteBudget = 2ull * 1024ull * 1024ull * 1024ull;
+
+    /**
      * @brief Decodes a DXT1/DXT3/DXT5 cube-map DDS image into RGBA8, entirely on the CPU
      *        (plans/plan_cnb.md `CNBF-113`).
      *
@@ -60,19 +81,30 @@ namespace CNA::Internal::Graphics
      * because six faces are read whether or not they were declared. Each of those is a refusal,
      * not a repair: a clamped header would produce a plausible wrong image.
      *
+     * **The decoded output is budgeted as well as the input** (plans/plan_cnb.md `CNBF-122`). The
+     * aggregate RGBA8 length of all six faces and every mip level is computed in `std::uint64_t`
+     * from the validated header alone -- before a single output vector is allocated and before any
+     * block is decompressed -- and refused if it exceeds @p maxDecodedBytes. Without it a
+     * well-formed 16384-texel cube map header asks for roughly 8.6 GiB of retained memory, which
+     * on most machines is an OOM kill rather than an exception.
+     *
      * @param data             The complete DDS file bytes.
      * @param size             Length of @p data.
      * @param diagnosticPrefix Text placed at the front of every message, so a caller's
      *                         diagnostics name the caller. Pass the API the user actually called.
+     * @param maxDecodedBytes  Ceiling on the total decoded RGBA8 bytes; see
+     *                         DefaultDdsCubeDecodedByteBudget.
      * @return The decoded cube.
      * @throws System::NotSupportedException if the bytes are not a DDS image, the header is
      *         malformed, the pixel format is outside the supported scope, or `caps2` carries a bit
      *         outside the cube-map set.
      * @throws System::FormatException if the image is not a cube map, does not declare all six
      *         faces, its faces are not square, a dimension is zero or above what the decoded
-     *         result can represent, the mip count exceeds the face's physical chain, or the file
-     *         is truncated part-way through a face or mip level.
+     *         result can represent, the mip count exceeds the face's physical chain, the decoded
+     *         result would exceed @p maxDecodedBytes, or the file is truncated part-way through a
+     *         face or mip level.
      */
-    [[nodiscard]] DecodedDdsCube DecodeDdsCube(const std::uint8_t* data, std::size_t size,
-                                                const std::string& diagnosticPrefix);
+    [[nodiscard]] DecodedDdsCube DecodeDdsCube(
+        const std::uint8_t* data, std::size_t size, const std::string& diagnosticPrefix,
+        std::uint64_t maxDecodedBytes = DefaultDdsCubeDecodedByteBudget);
 }

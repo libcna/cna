@@ -233,3 +233,65 @@ TEST(CnbGltfDirectToolTest, KeepCnjReportsAFailedCopyInsteadOfSucceeding)
     // rather than pretending either way.
     EXPECT_TRUE(std::filesystem::exists(out.path() / "asset.cnb"));
 }
+
+// --------------------------------------------------------------------------------------------
+// CNBF-122 -- the output file is produced all-or-nothing
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbGltfDirectToolTest, AFailingRunPreservesAnExistingOutputAndLeavesNoPartialFile)
+{
+    // plans/plan_cnb.md CNBF-122. The tool wrote each .cnb by opening the destination with the
+    // implicit `trunc`, so the previous build's output was gone the moment the file was opened
+    // rather than when the new one was finished. It now writes a sibling temporary and renames it.
+    //
+    // Asserted on the destination's BYTES, not merely its existence: a truncated file exists too,
+    // and that is precisely the failure being ruled out. The directory listing is asserted as well,
+    // because a temporary that outlived a failed run is an unexplained file a build system would
+    // pick up.
+    if (!kToolsAvailable) { GTEST_SKIP() << "the content tools were not built"; }
+    const std::filesystem::path fixture = FindFixture("skin-four-weighted.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "fixture not found (run from the source root)"; }
+
+    ScratchDir out("preserve");
+    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                      out.path().string() + " asset --quiet"),
+              0);
+    const std::vector<std::uint8_t> previous = ReadFile(out.path() / "asset.cnb");
+    ASSERT_FALSE(previous.empty());
+
+    // Each of these fails at a different stage -- argument parsing, then the conversion itself --
+    // and none of them may touch what is already there.
+    const std::string failing[] = {
+        std::string(kDirectTool) + " " + fixture.string() + " " + out.path().string() +
+            " asset --quiet --unit-scale 0.01m",
+        std::string(kDirectTool) + " does-not-exist.gltf " + out.path().string() +
+            " asset --quiet",
+    };
+    for (const std::string& command : failing)
+    {
+        EXPECT_NE(RunTool(command), 0) << command << " succeeded";
+        EXPECT_EQ(ReadFile(out.path() / "asset.cnb"), previous)
+            << command << ": the failing run changed the existing output";
+
+        std::vector<std::string> left;
+        for (const auto& entry : std::filesystem::directory_iterator(out.path()))
+        {
+            left.push_back(entry.path().filename().string());
+        }
+        ASSERT_EQ(left.size(), 1u) << command << ": the failing run left something behind";
+        EXPECT_EQ(left[0], "asset.cnb");
+    }
+
+    // Re-running the successful command over its own output replaces it with identical bytes and
+    // leaves nothing beside it, so the rename is the whole mechanism rather than a partial one.
+    ASSERT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                      out.path().string() + " asset --quiet"),
+              0);
+    EXPECT_EQ(ReadFile(out.path() / "asset.cnb"), previous);
+    std::vector<std::string> after;
+    for (const auto& entry : std::filesystem::directory_iterator(out.path()))
+    {
+        after.push_back(entry.path().filename().string());
+    }
+    EXPECT_EQ(after.size(), 1u) << "a successful run left a temporary behind";
+}
