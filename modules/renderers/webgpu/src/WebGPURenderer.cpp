@@ -7428,8 +7428,9 @@ struct VSOut {
         depthTestEnabled_ = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
         depthCompareFunction_ = depthFunc;
-        // WEBGPU-83: stored for a future task -- see stencilEnable_'s own declaration comment for
-        // why baking these into every pipeline's WGPUStencilFaceState is deliberately deferred.
+        // WEBGPU-83 (complete): this full stencil parameter set is baked into every 3D pipeline's
+        // WGPUStencilFaceState (via FillWGPUStencilState / the pipeline cache key) and the reference
+        // is applied per draw; see CaptureStencilStateEXT and each GetOrCreatePipeline*3D.
         stencilEnable_ = stencilEnable;
         stencilFunc_ = stencilFunc;
         stencilPass_ = stencilPass;
@@ -8580,9 +8581,9 @@ struct VSOut {
         int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
     {
         // WEBGPU-53/54: mip-chain regeneration (mipMap=true) is not implemented on this renderer
-        // yet -- throwing here (matching this file's own ThrowUnsupported3DDraw() precedent for
-        // "genuinely unsupported, not a silent degrade" cases, and CHECKLIST.md's Draco-import
-        // convention of a clear error over quietly under-delivering) is deliberately preferred
+        // yet -- throwing here (a clear "genuinely unsupported, not a silent degrade" error, matching
+        // CHECKLIST.md's Draco-import convention of a clear error over quietly under-delivering) is
+        // deliberately preferred
         // over silently creating a single-level target while RenderTarget2D::RenderTarget2D()'s
         // own CalculateMipLevels() has already told the XNA layer to expect a full mip chain --
         // that mismatch would let Texture2D::SetData/GetData(level>0, ...) silently write into or
@@ -8799,13 +8800,6 @@ struct VSOut {
     int WebGPURenderer::PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const
     {
         return PrimitiveVertexCount(primitive, primitiveCount);
-    }
-
-    [[noreturn]] void WebGPURenderer::ThrowUnsupported3DDraw(const char* method)
-    {
-        throw std::runtime_error(std::string("CNA WebGPU: ") + method +
-                                 " is not implemented in the initial renderer. Clear/present, Texture2D, "
-                                 "SpriteBatch and buffer upload are implemented; see plans/plan_webgpu.md Phase 58+ for 3D parity.");
     }
 
     void WebGPURenderer::QueueColoredDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,

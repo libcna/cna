@@ -1109,10 +1109,10 @@ namespace CNA::Internal::Renderers::WebGPU
         void SetDepthTestEnabled(bool enabled) override { depthTestEnabled_ = enabled; }
         void SetBlendEnabled(bool enabled) override { blendEnabled_ = enabled; }
         void SetDepthWriteEnabled(bool enabled) override { depthWriteEnabled_ = enabled; }
-        // Depth portion was the original Phase 57/63 vertical slice; WEBGPU-83 extends this to
-        // also STORE the stencil parameters (dsParams_ below) for a future task to bake into each
-        // pipeline's WGPUStencilFaceState -- see dsParams_'s own comment for why that bake-in step
-        // is deliberately still deferred. Without the depth half of this override,
+        // Depth portion was the original Phase 57/63 vertical slice; WEBGPU-83 (complete) also stores
+        // the stencil parameters (dsParams_ below) AND bakes them into every 3D pipeline's
+        // WGPUStencilFaceState (via the pipeline cache key), applying the reference per draw. Without
+        // the depth half of this override,
         // GraphicsDevice.DepthStencilState (the real XNA API surface almost every game/effect
         // uses, as opposed to the older SetDepthTestEnabled()/SetDepthWriteEnabled() convenience
         // methods above) had zero effect on this renderer -- found and fixed while verifying
@@ -1788,7 +1788,6 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUPrimitiveTopology ToTopology(PrimitiveType primitive) const;
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
-        [[noreturn]] static void ThrowUnsupported3DDraw(const char* method);
 
         // WEBGPU-52: real, genuinely-linear-filtered mip generation for a plain Texture2D/
         // TextureCube, via a render pass per mip level that draws a full-screen triangle sampling
@@ -2019,14 +2018,11 @@ namespace CNA::Internal::Renderers::WebGPU
         float blendFactorB_ = 1.0f;
         float blendFactorA_ = 1.0f;
         int referenceStencil_ = 0;
-        // WEBGPU-83: stencil op storage only -- captured for a future task to bake into each
-        // pipeline's WGPUStencilFaceState. Deliberately NOT yet applied to any pipeline (stencil
-        // test stays Always/Keep everywhere, unchanged from prior behavior, so this is not a
-        // regression): VulkanRenderer::FillDepthStencilState()'s own comment documents a
-        // real, empirically-discovered front/back-winding quirk it had to work around on that
-        // renderer, and baking stencil ops into this renderer's 10 pipeline families without an
-        // equivalent WebGPU-side differential test risks the same silent-wrongness class this
-        // project explicitly avoids -- see plans/plan_webgpu.md's WEBGPU-83 row for the scope cut.
+        // WEBGPU-83 (complete): this stencil parameter set is both stored here AND baked into every
+        // 3D pipeline's WGPUStencilFaceState (FillWGPUStencilState, folded into the pipeline cache
+        // key since WebGPU keeps masks as pipeline state), with the reference applied per draw via
+        // wgpuRenderPassEncoderSetStencilReference. Two-sided front/back winding is pixel-verified
+        // (WebGPU_StencilTwoSided) -- see plans/plan_webgpu.md's WEBGPU-83 row.
         bool stencilEnable_ = false;
         int stencilFunc_ = 0;
         int stencilPass_ = 0;
