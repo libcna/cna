@@ -59,7 +59,7 @@ below) — both need their own explicit registration.
 | `VertexDeclarationReader`, `VertexBufferReader`, `IndexBufferReader` | ✅ Full | |
 | `ModelReader` | ✅ Full bone hierarchy, mesh/mesh-part, shared-resource (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution | Verified against a real, externally-produced multi-bone fixture. This is a **different, real binary path** from the older `.model.json`-based `ModelTypeReader` — see the scope note above |
 | The general `EffectReader` (compiled XNA Effect Framework bytecode) | ✅ on FNA3D; explicit renderer rejection elsewhere | Reads a bounded signed length and exact payload, constructs the same reflected `Effect` as the byte-array constructor, and preserves asset context in failures. The payload is XNA/FNA D3D9 Effect Framework bytecode, not MGFX or `.fx` source. |
-| `ReflectiveReader<T>` (any custom `.xnb` type compiled *without* an explicit `ContentTypeWriter`/reader pair, relying on XNA's content-pipeline reflection fallback) | ❌ Not supported, by design | See "Custom readers" below |
+| `ReflectiveReader<T>` (any custom `.xnb` type compiled *without* an explicit `ContentTypeWriter`/reader pair, relying on XNA's content-pipeline reflection fallback) | ✅ Supported since SAMPLE-044 via `ReflectiveTypeReaderBuilder<T>` — the game declares its field list once, CNA builds the reader | See "`ReflectiveReader<T>`" below |
 
 ### Generic collections
 
@@ -126,11 +126,34 @@ explicit-registration-only decision `.cnj`'s `RegisterCnjLoader<T>` already made
 format. A `.xnb` file whose content pipeline used an implicit `ReflectiveReader<T>` for some type
 cannot be loaded by CNA at all today.
 
-**What a game author does instead**: give the type an explicit `ContentTypeWriter`/reader pair at
-build time (a small, well-documented change to the content project — MonoGame/XNA both support
-this directly), then register the equivalent native C++ `ContentTypeReader<T>` in CNA under the
-exact same canonical reader name the rebuilt file will reference, using the "Custom readers"
-pattern above. This is a real, explicit, documented limitation — not a silent gap.
+**What a game author does instead** (updated 2026-08-27, SAMPLE-044): declare the type's fields
+once and let CNA build the reader. `ReflectiveTypeReaderBuilder<T>` is the middle ground between
+"no reflection" and "rebuild your content":
+
+```cpp
+ReflectiveTypeReaderBuilder<ParticleSystemSettings>("ParticlesSettings.ParticleSystemSettings")
+    .Field(&ParticleSystemSettings::MinNumParticles)
+    .Field(&ParticleSystemSettings::TextureFilename)
+    .EnumField(&ParticleSystemSettings::AccelerationMode, "ParticlesSettings.AccelerationMode")
+    .Register();
+```
+
+The list must be in the type's **declaration order**, because that is the order
+`IntermediateSerializer` wrote the fields in. Each member is dispatched by its C++ type:
+arithmetic types and the XNA math structs are read inline as XNA writes a value type, and anything
+else goes through `ContentReader::ReadObject`, which consumes the reference type's own reader
+index first. `Register()` derives the canonical reader name — the assembly qualifiers are stripped,
+so a game never has to reproduce that string — and registers an `EnumReader` for every
+`EnumField`, because **an `.xnb`'s type-reader table must resolve in full before any object is
+read**, including readers the reflective payload never dispatches to.
+
+This is still not reflection: the field list comes from the game, since C++ cannot introspect a
+type at run time. What it removes is the duplication of that list in a hand-written reader.
+
+The reflective payload's format, verified byte for byte against pipeline output on SAMPLE-044:
+value-type fields inline in declaration order, a reference-type field preceded by the 1-based index
+of its own type reader. Rebuilding the content with an explicit `ContentTypeWriter`/reader pair
+remains available and is still the right answer when you control the pipeline.
 
 ## Compression support
 
