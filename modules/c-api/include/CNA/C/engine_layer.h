@@ -6303,6 +6303,245 @@ CNA_C_API CNA_Result cna_render_pipeline_get_statistics(
 CNA_C_API CNA_Result cna_render_pipeline_release_device_resources_ext(
     CNA_RenderPipelineHandle pipeline);
 
+/* ---------------------------------------------------------------------------------------------
+ * The post-process chain
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief How long one pass took, without its name; read the name with the matching route. */
+typedef struct CNA_PassTimingEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief How many samples the average is over; zero when the pass has not been timed. */
+    int32_t sample_count;
+    /** @brief Padding; always zero. */
+    uint8_t reserved[4];
+    /** @brief Mean milliseconds the pass took on the GPU. */
+    double milliseconds;
+} CNA_PassTimingEXT;
+
+/** @brief Owned handle for one post-process chain. */
+typedef CNA_Handle CNA_PostProcessChainHandle;
+
+/**
+ * @brief Creates an empty post-process chain.
+ *
+ * @param graphics_device The device its intermediate targets come from.
+ * @param out_chain Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_create(
+    CNA_Handle graphics_device, CNA_PostProcessChainHandle* out_chain);
+
+/**
+ * @brief Releases the chain.
+ *
+ * Passes added with @ref cna_post_process_chain_add_owned_pass are released with it; passes added
+ * with @ref cna_post_process_chain_add_pass are not, because the chain never owned them.
+ *
+ * @param chain The chain; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_destroy(CNA_PostProcessChainHandle chain);
+
+/**
+ * @brief Appends a pass the caller keeps owning.
+ *
+ * **Borrowed:** the caller must keep the pass alive for as long as it is in the chain, and must
+ * release it afterwards.
+ *
+ * @param chain The chain.
+ * @param pass The pass to append.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid pass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_add_pass(
+    CNA_PostProcessChainHandle chain, CNA_PostProcessPassHandle pass);
+
+/**
+ * @brief Appends a pass and takes ownership of it.
+ *
+ * **The pass handle is consumed.** On success it is released from the runtime and must not be used
+ * again -- the chain owns the object now, and a second release would be a double free. This is the
+ * one route in the engine layer that invalidates a handle a caller still holds, which is why it is
+ * named `add_owned_pass` rather than being a flag on @ref cna_post_process_chain_add_pass.
+ *
+ * @param chain The chain.
+ * @param pass The pass to hand over; invalid on return whether or not the call succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid pass or one that is
+ * lending its effect, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_add_owned_pass(
+    CNA_PostProcessChainHandle chain, CNA_PostProcessPassHandle pass);
+
+/**
+ * @brief Removes every pass, releasing the ones the chain owns.
+ *
+ * @param chain The chain.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_clear(CNA_PostProcessChainHandle chain);
+
+/**
+ * @brief Returns how many passes the chain holds.
+ *
+ * @param chain The chain.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_get_pass_count(
+    CNA_PostProcessChainHandle chain, int32_t* out_count);
+
+/**
+ * @brief Runs every pass in order, ping-ponging between pooled targets.
+ *
+ * @param chain The chain.
+ * @param context The frame's inputs and destination.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed context, a
+ * context with no source, or a non-positive size -- the chain needs somewhere to read from and a
+ * size to allocate its intermediates against -- `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_apply(
+    CNA_PostProcessChainHandle chain, const CNA_PostProcessContext* context);
+
+/**
+ * @brief Releases the chain's pooled intermediate targets.
+ *
+ * @param chain The chain.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_reset_targets(CNA_PostProcessChainHandle chain);
+
+/**
+ * @brief Returns the chain's render-target pool, borrowed.
+ *
+ * A counted borrow: destroying the chain is refused while the pool handle is outstanding.
+ *
+ * @param chain The chain.
+ * @param out_pool Receives the borrowed pool.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_get_target_pool(
+    CNA_PostProcessChainHandle chain, CNA_RenderTargetPoolHandle* out_pool);
+
+/**
+ * @brief Reports whether GPU timing is on.
+ *
+ * @param chain The chain.
+ * @param out_enabled Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_is_gpu_timing_enabled(
+    CNA_PostProcessChainHandle chain, CNA_Bool* out_enabled);
+
+/**
+ * @brief Turns GPU timing on or off.
+ *
+ * A renderer without GPU timers accepts the request and reports `CNA_FALSE` afterwards rather than
+ * refusing, so ask @ref cna_post_process_chain_is_gpu_timing_enabled what it got.
+ *
+ * @param chain The chain.
+ * @param value `CNA_TRUE` to enable.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a byte that is neither
+ * `CNA_TRUE` nor `CNA_FALSE`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_set_gpu_timing_enabled(
+    CNA_PostProcessChainHandle chain, CNA_Bool value);
+
+/**
+ * @brief Returns how many pass timings the chain recorded.
+ *
+ * Zero when GPU timing is off or unavailable, which is not a failure.
+ *
+ * @param chain The chain.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_get_pass_timing_count(
+    CNA_PostProcessChainHandle chain, uint64_t* out_count);
+
+/**
+ * @brief Returns one recorded pass timing, without its name.
+ *
+ * The canonical timing carries a name, a duration and a sample count; a C structure cannot own the
+ * string, so the name is read separately by
+ * @ref cna_post_process_chain_copy_pass_timing_name. Splitting them keeps the structure a plain
+ * value with no lifetime of its own.
+ *
+ * @param chain The chain.
+ * @param index Which timing, from zero.
+ * @param out_timing Receives the timing; its versioning fields are filled here.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index the chain does not
+ * hold, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_get_pass_timing(
+    CNA_PostProcessChainHandle chain, uint64_t index, CNA_PassTimingEXT* out_timing);
+
+/**
+ * @brief Copies one recorded timing's pass name as UTF-8 bytes without a terminator.
+ *
+ * @param chain The chain.
+ * @param index Which timing, from zero.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` for
+ * an index the chain does not hold, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_post_process_chain_copy_pass_timing_name(
+    CNA_PostProcessChainHandle chain,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns how many pass timings the pipeline's own chain recorded.
+ *
+ * `CBIND-088B` deferred the pipeline's timings row here, because the timing type belongs to the
+ * chain rather than to the pipeline.
+ *
+ * @param pipeline The pipeline.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_pass_timing_count_ext(
+    CNA_RenderPipelineHandle pipeline, uint64_t* out_count);
+
+/**
+ * @brief Returns one of the pipeline's recorded pass timings, without its name.
+ *
+ * @param pipeline The pipeline.
+ * @param index Which timing, from zero.
+ * @param out_timing Receives the timing.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index the pipeline does not
+ * hold, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_pass_timing_ext(
+    CNA_RenderPipelineHandle pipeline, uint64_t index, CNA_PassTimingEXT* out_timing);
+
+/**
+ * @brief Copies one of the pipeline's recorded timings' pass names as UTF-8 bytes.
+ *
+ * @param pipeline The pipeline.
+ * @param index Which timing, from zero.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` for
+ * an index the pipeline does not hold, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_copy_pass_timing_name_ext(
+    CNA_RenderPipelineHandle pipeline,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

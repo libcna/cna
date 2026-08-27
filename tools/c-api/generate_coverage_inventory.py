@@ -696,7 +696,6 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     # PostProcessChain::PassTiming; both types belong to later slices.
     "CNA::Graphics::RenderPipeline::setSkybox": "CBIND-091",
     "CNA::Graphics::RenderPipeline::getSkybox": "CBIND-091",
-    "CNA::Graphics::RenderPipeline::getPassTimingsEXT": "CBIND-089",
 }
 
 

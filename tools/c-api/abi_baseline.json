@@ -3264,6 +3264,20 @@
   "cna_point_multiply",
   "cna_point_not_equals",
   "cna_point_subtract",
+  "cna_post_process_chain_add_owned_pass",
+  "cna_post_process_chain_add_pass",
+  "cna_post_process_chain_apply",
+  "cna_post_process_chain_clear",
+  "cna_post_process_chain_copy_pass_timing_name",
+  "cna_post_process_chain_create",
+  "cna_post_process_chain_destroy",
+  "cna_post_process_chain_get_pass_count",
+  "cna_post_process_chain_get_pass_timing",
+  "cna_post_process_chain_get_pass_timing_count",
+  "cna_post_process_chain_get_target_pool",
+  "cna_post_process_chain_is_gpu_timing_enabled",
+  "cna_post_process_chain_reset_targets",
+  "cna_post_process_chain_set_gpu_timing_enabled",
   "cna_post_process_context_init",
   "cna_post_process_effect_pass_create",
   "cna_post_process_effect_pass_create_owning",
@@ -3380,6 +3394,7 @@
   "cna_render_pipeline_add_user_pass",
   "cna_render_pipeline_begin",
   "cna_render_pipeline_clear_user_passes",
+  "cna_render_pipeline_copy_pass_timing_name_ext",
   "cna_render_pipeline_copy_transparency_fallback_reason_ext",
   "cna_render_pipeline_create",
   "cna_render_pipeline_destroy",
@@ -3388,6 +3403,8 @@
   "cna_render_pipeline_end",
   "cna_render_pipeline_get_gpu_memory_estimate_bytes",
   "cna_render_pipeline_get_last_frame_pass_count",
+  "cna_render_pipeline_get_pass_timing_count_ext",
+  "cna_render_pipeline_get_pass_timing_ext",
   "cna_render_pipeline_get_scene_target",
   "cna_render_pipeline_get_scene_target_format",
   "cna_render_pipeline_get_settings",
@@ -6397,6 +6414,10 @@
    8
   ],
   "CNA_PlaylistHandle": [
+   8,
+   8
+  ],
+  "CNA_PostProcessChainHandle": [
    8,
    8
   ],
@@ -10454,6 +10475,32 @@
     ]
    },
    "size": 8
+  },
+  "CNA_PassTimingEXT": {
+   "align": 8,
+   "fields": {
+    "milliseconds": [
+     16,
+     8
+    ],
+    "reserved": [
+     12,
+     4
+    ],
+    "sample_count": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 24
   },
   "CNA_PbrMaterial": {
    "align": 8,

@@ -549,6 +549,24 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-089A. The chain and the pipeline's timing surface are engine-layer objects. */
+    {
+        CNA_PostProcessChainHandle chain = CNA_INVALID_HANDLE;
+        CNA_PassTimingEXT timing;
+        uint64_t number = UINT64_C(0);
+        if (cna_post_process_chain_create(graphics_device, &chain) != CNA_RESULT_NOT_SUPPORTED ||
+            chain != CNA_INVALID_HANDLE ||
+            cna_post_process_chain_get_pass_timing_count(chain, &number) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_post_process_chain_get_pass_timing(chain, UINT64_C(0), &timing) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_post_process_chain_copy_pass_timing_name(
+                chain, UINT64_C(0), 0, UINT64_C(0), &number) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_pipeline_get_pass_timing_count_ext(CNA_INVALID_HANDLE, &number) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -4114,6 +4132,120 @@ static int validate_render_pipeline(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-089A. The chain is where every pass plugs in, and its two contracts are both argument
+   mistakes on apply(): a context with nothing to read from, and a non-positive size. The
+   interesting binding decision is add_owned_pass -- the canonical signature takes a unique_ptr,
+   which this ABI cannot express, so the chain resource keeps the pass alive itself and registers
+   it non-owningly. The observable lifetime is the same, and the test proves the caller's handle is
+   genuinely consumed rather than merely documented as consumed. */
+static int validate_post_process_chain(const CNA_Handle graphics_device)
+{
+    CNA_PostProcessChainHandle chain = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle borrowed_pass = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle owned_pass = CNA_INVALID_HANDLE;
+    CNA_RenderTargetPoolHandle pool = CNA_INVALID_HANDLE;
+    CNA_PostProcessContext context;
+    CNA_PassTimingEXT timing;
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t count = UINT64_C(0);
+    uint64_t bytes = UINT64_C(0);
+    int32_t passes = -1;
+    int ok = 1;
+
+    if (cna_post_process_context_init(&context) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_post_process_chain_create(graphics_device, &chain) != CNA_RESULT_SUCCESS ||
+        chain == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    ok = cna_post_process_chain_get_pass_count(chain, &passes) == CNA_RESULT_SUCCESS &&
+        passes == INT32_C(0);
+
+    /* Both canonical throws are argument mistakes and are answered before the chain sees them:
+       a context with no source has nothing to read from, and a non-positive size gives the chain
+       nothing to size its intermediates against. They are separate messages because a caller fixes
+       them differently. */
+    ok = ok && cna_post_process_chain_apply(chain, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    context.width = INT32_C(16);
+    context.height = INT32_C(16);
+    ok = ok && cna_post_process_chain_apply(chain, &context) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The pool is a counted borrow: destroying the chain is refused while it is out. */
+    ok = ok && cna_post_process_chain_get_target_pool(chain, &pool) == CNA_RESULT_SUCCESS &&
+        pool != CNA_INVALID_HANDLE;
+    ok = ok && cna_post_process_chain_destroy(chain) == CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_render_target_pool_destroy(pool) == CNA_RESULT_SUCCESS;
+
+    /* GPU timing is accepted everywhere and reports back what it got. */
+    ok = ok && cna_post_process_chain_set_gpu_timing_enabled(chain, UINT8_C(2)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_post_process_chain_set_gpu_timing_enabled(chain, CNA_TRUE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_chain_is_gpu_timing_enabled(chain, &flag) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_chain_set_gpu_timing_enabled(chain, CNA_FALSE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_chain_is_gpu_timing_enabled(chain, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+
+    /* No timings recorded yet, and an index into an empty list is refused rather than read. */
+    ok = ok && cna_post_process_chain_get_pass_timing_count(chain, &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(0);
+    ok = ok && cna_post_process_chain_get_pass_timing(chain, UINT64_C(0), &timing) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_post_process_chain_copy_pass_timing_name(
+            chain, UINT64_C(0), 0, UINT64_C(0), &bytes) == CNA_RESULT_INVALID_ARGUMENT &&
+        bytes == UINT64_C(0);
+
+    /* A borrowed pass stays the caller's: the chain records it and the handle keeps working. */
+    if (ok && cna_blit_pass_create(graphics_device, &borrowed_pass) == CNA_RESULT_SUCCESS) {
+        ok = cna_post_process_chain_add_pass(chain, borrowed_pass) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_post_process_chain_get_pass_count(chain, &passes) ==
+            CNA_RESULT_SUCCESS && passes == INT32_C(1);
+        /* Still the caller's, so it still answers and still needs releasing. */
+        ok = ok && cna_post_process_pass_copy_name(borrowed_pass, 0, UINT64_C(0), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL;
+        ok = ok && cna_post_process_chain_clear(chain) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_post_process_pass_destroy(borrowed_pass) == CNA_RESULT_SUCCESS;
+    }
+
+    /* An owned pass is CONSUMED: after handing it over the caller's handle is dead, and that is
+       asserted rather than documented -- a route that promised ownership transfer and left the
+       handle usable would invite a double free. */
+    if (ok && cna_blit_pass_create(graphics_device, &owned_pass) == CNA_RESULT_SUCCESS) {
+        ok = cna_post_process_chain_add_owned_pass(chain, owned_pass) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_post_process_chain_get_pass_count(chain, &passes) ==
+            CNA_RESULT_SUCCESS && passes == INT32_C(1);
+        ok = ok && cna_post_process_pass_copy_name(owned_pass, 0, UINT64_C(0), &bytes) ==
+            CNA_RESULT_INVALID_HANDLE;
+        ok = ok && cna_post_process_pass_destroy(owned_pass) != CNA_RESULT_SUCCESS;
+        /* Clearing releases what the chain owned; the chain survives and is reusable. */
+        ok = ok && cna_post_process_chain_clear(chain) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_post_process_chain_get_pass_count(chain, &passes) ==
+            CNA_RESULT_SUCCESS && passes == INT32_C(0);
+    }
+
+    ok = ok && cna_post_process_chain_reset_targets(chain) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_chain_destroy(chain) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_chain_destroy(chain) != CNA_RESULT_SUCCESS;
+
+    /* CBIND-088B deferred the pipeline's timings row here; it reads through the same shape. */
+    {
+        CNA_RenderPipelineHandle pipeline = CNA_INVALID_HANDLE;
+        if (ok && cna_render_pipeline_create(graphics_device, &pipeline) == CNA_RESULT_SUCCESS) {
+            ok = cna_render_pipeline_get_pass_timing_count_ext(pipeline, &count) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_render_pipeline_get_pass_timing_ext(pipeline, count, &timing) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_render_pipeline_copy_pass_timing_name_ext(
+                    pipeline, count, 0, UINT64_C(0), &bytes) == CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_render_pipeline_destroy(pipeline) == CNA_RESULT_SUCCESS;
+        }
+    }
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -4211,6 +4343,10 @@ static CNA_Result on_load(
         }
         if (!validate_render_pipeline(graphics_device)) {
             state->failed_stage = 25;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_post_process_chain(graphics_device)) {
+            state->failed_stage = 26;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

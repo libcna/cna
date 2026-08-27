@@ -16215,6 +16215,57 @@
         "CPP-F7045383D950",
         "CPP-FCFDB7867DCD"
       ]
+    },
+    {
+      "id": "post-process-chain",
+      "qualified_name_regex": "^CNA::Graphics::PostProcessChain(?:::(?:PassTiming(?:::[A-Za-z0-9_]+)?|[A-Za-z0-9_~]+))?$",
+      "kinds": [
+        "class",
+        "struct",
+        "field",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_post_process_chain_*` over an owned handle. The target pool is a **counted borrow**: destroying the chain is refused while the pool handle is outstanding.\n\n**`addOwnedPass` is the one route in the engine layer that consumes a handle a caller still holds, and the reason is worth stating.** The canonical signature takes a `std::unique_ptr`; this ABI holds its objects in `shared_ptr` and cannot release one, so a literal transfer is not expressible. Rather than fake it, the chain resource keeps the handed-over pass alive itself and registers it with the non-owning `addPass`. **The observable lifetime is identical** -- the pass lives exactly as long as the chain, `clear` releases it, and the caller's handle is released either way -- and it avoids the one thing a forced transfer risks, two owners of the same object. The route is named `add_owned_pass` rather than being a flag on `add_pass` precisely because the handle dies; a caller can see that in the name.\n\n`PassTiming` carries a name, a duration and a sample count. A C structure cannot own the string, so the timing splits into a plain `CNA_PassTimingEXT` value and a separate `copy_pass_timing_name` -- the structure then has no lifetime of its own. Both canonical throws on `apply` are argument mistakes and are answered before the chain sees them, with separate messages: a context with no source has nothing to read from, and a non-positive size gives the chain nothing to allocate its intermediates against.",
+      "tests": "`EngineLayerSmoke.c` stage 26, which proves the borrowed pass stays usable after the chain records it and the **owned** pass's handle is genuinely dead afterwards -- asserted rather than documented, because a route promising ownership transfer that left the handle usable would invite a double free. It also refuses an index into an empty timing list, and asserts the pool borrow blocks destruction. The layer-absent build asserts every route refuses. Proved to execute on both arms by asserting the consumed handle still answers, which moves the exit code to stage 26.",
+      "status": "implemented",
+      "task": "CBIND-089A",
+      "approved_symbols": [
+        "CPP-0BB5E281F7AB",
+        "CPP-0D73D501266A",
+        "CPP-1177691164B7",
+        "CPP-21D37355BCCC",
+        "CPP-244298767241",
+        "CPP-2701C49A5FA4",
+        "CPP-34613F4387FE",
+        "CPP-3986A071C270",
+        "CPP-3C193E4B3C22",
+        "CPP-51C6323CADF9",
+        "CPP-5BBAB7B4F561",
+        "CPP-646159BF0055",
+        "CPP-750DED24A434",
+        "CPP-7E2209D5023F",
+        "CPP-91AD8705454A",
+        "CPP-A21378F0EE9C",
+        "CPP-B780E0EE7BBA",
+        "CPP-D57758BAE888",
+        "CPP-F7CABD527BF2"
+      ]
+    },
+    {
+      "id": "render-pipeline-pass-timings",
+      "qualified_name_regex": "^CNA::Graphics::RenderPipeline::getPassTimingsEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_render_pipeline_get_pass_timing_count_ext`, `_get_pass_timing_ext` and `_copy_pass_timing_name_ext`. `CBIND-088B` deferred this row here because its return type is `PostProcessChain::PassTiming`, which this slice defines; one canonical getter returning a vector of records with strings becomes three routes for the reason the chain's own timings do.",
+      "tests": "`EngineLayerSmoke.c` stage 26, which reads the count and refuses an index past it",
+      "status": "implemented",
+      "task": "CBIND-089A",
+      "approved_symbols": [
+        "CPP-44F3A840B24C"
+      ]
     }
   ]
 }

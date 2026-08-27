@@ -27,6 +27,7 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
@@ -3610,6 +3611,111 @@ CNA_Result cna_render_pipeline_release_device_resources_ext(CNA_RenderPipelineHa
 }
 
 
+
+CNA_Result cna_post_process_chain_create(CNA_Handle p0, CNA_PostProcessChainHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_destroy(CNA_PostProcessChainHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_add_pass(CNA_PostProcessChainHandle p0, CNA_PostProcessPassHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_add_owned_pass(CNA_PostProcessChainHandle p0, CNA_PostProcessPassHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_clear(CNA_PostProcessChainHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_get_pass_count(CNA_PostProcessChainHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_apply(CNA_PostProcessChainHandle p0, const CNA_PostProcessContext* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_reset_targets(CNA_PostProcessChainHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_get_target_pool(CNA_PostProcessChainHandle p0, CNA_RenderTargetPoolHandle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_is_gpu_timing_enabled(CNA_PostProcessChainHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_set_gpu_timing_enabled(CNA_PostProcessChainHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_get_pass_timing_count(CNA_PostProcessChainHandle p0, uint64_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_get_pass_timing(CNA_PostProcessChainHandle p0, uint64_t p1, CNA_PassTimingEXT* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_post_process_chain_copy_pass_timing_name(CNA_PostProcessChainHandle p0, uint64_t p1, char* p2, uint64_t p3, uint64_t* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    if (p4 != nullptr) { *p4 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_pass_timing_count_ext(CNA_RenderPipelineHandle p0, uint64_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_pass_timing_ext(CNA_RenderPipelineHandle p0, uint64_t p1, CNA_PassTimingEXT* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_copy_pass_timing_name_ext(CNA_RenderPipelineHandle p0, uint64_t p1, char* p2, uint64_t p3, uint64_t* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    if (p4 != nullptr) { *p4 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
 
 #else // CNA_CNAEXT
 
@@ -12847,6 +12953,426 @@ CNA_Result cna_render_pipeline_release_device_resources_ext(
             }
             return CNA_RESULT_SUCCESS;
         });
+}
+
+namespace {
+
+struct PostProcessChainResource final {
+    std::shared_ptr<Ext::PostProcessChain> value;
+    CNA_Handle parentGame;
+    uint64_t activeBorrowCount = 0U;
+    // CBIND-089A. The canonical addOwnedPass takes a unique_ptr; this ABI holds its objects in
+    // shared_ptr and cannot release one. So the chain resource keeps the handed-over pass alive
+    // itself and registers it with the non-owning addPass. The observable lifetime is identical --
+    // the pass lives exactly as long as the chain, and the caller's handle is consumed either way
+    // -- and it avoids the one thing a forced transfer would risk, which is two owners.
+    std::vector<std::shared_ptr<Ext::PostProcessPass>> ownedPasses;
+};
+
+[[nodiscard]] CNA_Result GetChainTiming(
+    const std::shared_ptr<PostProcessChainResource>& chain,
+    const uint64_t index,
+    const Ext::PostProcessChain::PassTiming** const out)
+{
+    const auto& timings = chain->value->getPassTimings();
+    if (index >= static_cast<uint64_t>(timings.size())) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "There is no timing at that index.");
+    }
+    *out = &timings[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+void FillPassTiming(
+    const Ext::PostProcessChain::PassTiming& value, CNA_PassTimingEXT* const out)
+{
+    *out = CNA_PassTimingEXT{};
+    out->struct_size = static_cast<uint32_t>(sizeof(CNA_PassTimingEXT));
+    out->struct_version = UINT32_C(1);
+    out->sample_count = static_cast<int32_t>(value.SampleCount);
+    out->milliseconds = static_cast<double>(value.Milliseconds);
+}
+
+} // namespace
+
+#define CNA_WITH_CHAIN(handle, body)                                                               \
+    WithMap<PostProcessChainResource>(                                                             \
+        (handle), ObjectKind::PostProcessChain, "PostProcessChain", body)
+
+CNA_Result cna_post_process_chain_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessChainHandle* const outChain)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outChain == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The chain output handle is null.");
+        }
+        *outChain = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::PostProcessChain>(*graphicsDevice->value);
+        const auto resource = std::make_shared<PostProcessChainResource>(
+            PostProcessChainResource{std::move(native), graphicsDevice->parentGame, 0U, {}});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::PostProcessChain, resource, outChain);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned chain handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_post_process_chain_destroy(const CNA_PostProcessChainHandle chainHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PostProcessChainResource> chain;
+        if (const CNA_Result result = GetEngineResource(
+                chainHandle, ObjectKind::PostProcessChain, "PostProcessChain", &chain);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (chain->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The chain is still lending its target pool.");
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(chainHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned chain handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(chain->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_post_process_chain_add_pass(
+    const CNA_PostProcessChainHandle chain, const CNA_PostProcessPassHandle pass)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            std::shared_ptr<PostProcessPassResource> passResource;
+            if (const CNA_Result result = GetEngineResource(
+                    pass, ObjectKind::PostProcessPass, "PostProcessPass", &passResource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Borrowed: the caller keeps owning the pass and must outlive the chain's use of it.
+            c->value->addPass(passResource->value.get());
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_add_owned_pass(
+    const CNA_PostProcessChainHandle chain, const CNA_PostProcessPassHandle pass)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            std::shared_ptr<PostProcessPassResource> passResource;
+            if (const CNA_Result result = GetEngineResource(
+                    pass, ObjectKind::PostProcessPass, "PostProcessPass", &passResource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // A pass lending its effect cannot be handed over: the borrower would outlive the
+            // handle that guaranteed it, which is the one thing CountedBorrow exists to prevent.
+            if (passResource->activeBorrowCount != 0U) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "The pass is still lending its effect.");
+            }
+            // The chain resource takes ownership and registers the pass non-owningly, which
+            // gives the canonical lifetime without needing a transfer this ABI cannot express.
+            c->ownedPasses.push_back(passResource->value);
+            c->value->addPass(passResource->value.get());
+            const CNA_Result releaseResult = GetRuntimeHandles().Release(pass);
+            if (releaseResult != CNA_RESULT_SUCCESS) {
+                c->ownedPasses.pop_back();
+                c->value->clear();
+                for (const auto& owned : c->ownedPasses) {
+                    c->value->addPass(owned.get());
+                }
+                return Fail(
+                    releaseResult,
+                    ErrorCategoryForResult(releaseResult),
+                    "The pass handle could not be consumed.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_clear(const CNA_PostProcessChainHandle chain)
+{
+    return CNA_WITH_CHAIN(chain,
+        [](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            c->value->clear();
+            // Releasing what the chain owned, which is what the canonical clear() does too.
+            c->ownedPasses.clear();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_get_pass_count(
+    const CNA_PostProcessChainHandle chain, int32_t* const outCount)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(c->value->getPassCount()));
+        });
+}
+
+CNA_Result cna_post_process_chain_apply(
+    const CNA_PostProcessChainHandle chain, const CNA_PostProcessContext* const context)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            if (context == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The context is null.");
+            }
+            ResolvedPostProcessContext resolved;
+            if (const CNA_Result result = ResolvePostProcessContext(*context, &resolved);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Both canonical throws are argument mistakes and are answered before the call, so the
+            // chain never sees a context it would reject.
+            if (resolved.value.source == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The chain has nothing to read from: the context's source is null.");
+            }
+            if (resolved.value.width <= 0 || resolved.value.height <= 0) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The context size must be positive.");
+            }
+            c->value->apply(resolved.value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_reset_targets(const CNA_PostProcessChainHandle chain)
+{
+    return CNA_WITH_CHAIN(chain,
+        [](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            c->value->resetTargets();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_get_target_pool(
+    const CNA_PostProcessChainHandle chain, CNA_RenderTargetPoolHandle* const outPool)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            if (outPool == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The pool output handle is null.");
+            }
+            *outPool = CNA_INVALID_HANDLE;
+            const auto borrow = std::make_shared<CountedBorrow<PostProcessChainResource>>(c);
+            const std::shared_ptr<Ext::RenderTargetPool> view(borrow, &c->value->getTargetPool());
+            const auto resource = std::make_shared<RenderTargetPoolResource>(
+                RenderTargetPoolResource{view, c->parentGame, 0U});
+            const CNA_Result result =
+                GetRuntimeHandles().Create(ObjectKind::RenderTargetPool, resource, outPool);
+            if (result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result,
+                    ErrorCategoryForResult(result),
+                    "The borrowed pool handle could not be created.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_is_gpu_timing_enabled(
+    const CNA_PostProcessChainHandle chain, CNA_Bool* const outEnabled)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            return StoreValue(
+                outEnabled,
+                static_cast<CNA_Bool>(c->value->isGpuTimingEnabled() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_post_process_chain_set_gpu_timing_enabled(
+    const CNA_PostProcessChainHandle chain, const CNA_Bool value)
+{
+    if (value != CNA_TRUE && value != CNA_FALSE) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "value must be CNA_TRUE or CNA_FALSE.");
+    }
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            c->value->setGpuTimingEnabled(value == CNA_TRUE);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_get_pass_timing_count(
+    const CNA_PostProcessChainHandle chain, uint64_t* const outCount)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            return StoreValue(
+                outCount, static_cast<uint64_t>(c->value->getPassTimings().size()));
+        });
+}
+
+CNA_Result cna_post_process_chain_get_pass_timing(
+    const CNA_PostProcessChainHandle chain,
+    const uint64_t index,
+    CNA_PassTimingEXT* const outTiming)
+{
+    return CNA_WITH_CHAIN(chain,
+        [&](const std::shared_ptr<PostProcessChainResource>& c) -> CNA_Result {
+            if (outTiming == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The timing output is null.");
+            }
+            const Ext::PostProcessChain::PassTiming* timing = nullptr;
+            if (const CNA_Result result = GetChainTiming(c, index, &timing);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            FillPassTiming(*timing, outTiming);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_post_process_chain_copy_pass_timing_name(
+    const CNA_PostProcessChainHandle chain,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    std::shared_ptr<PostProcessChainResource> resource;
+    if (const CNA_Result result = GetEngineResource(
+            chain, ObjectKind::PostProcessChain, "PostProcessChain", &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    const Ext::PostProcessChain::PassTiming* timing = nullptr;
+    if (const CNA_Result result = GetChainTiming(resource, index, &timing);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(
+        destination, capacity, outBytes, [timing] { return timing->Name; });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result GetPipelineTiming(
+    const std::shared_ptr<RenderPipelineResource>& pipeline,
+    const uint64_t index,
+    const Ext::PostProcessChain::PassTiming** const out)
+{
+    const auto& timings = pipeline->value->getPassTimingsEXT();
+    if (index >= static_cast<uint64_t>(timings.size())) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "There is no timing at that index.");
+    }
+    *out = &timings[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_render_pipeline_get_pass_timing_count_ext(
+    const CNA_RenderPipelineHandle pipeline, uint64_t* const outCount)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(
+                outCount, static_cast<uint64_t>(p->value->getPassTimingsEXT().size()));
+        });
+}
+
+CNA_Result cna_render_pipeline_get_pass_timing_ext(
+    const CNA_RenderPipelineHandle pipeline,
+    const uint64_t index,
+    CNA_PassTimingEXT* const outTiming)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (outTiming == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The timing output is null.");
+            }
+            const Ext::PostProcessChain::PassTiming* timing = nullptr;
+            if (const CNA_Result result = GetPipelineTiming(p, index, &timing);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            FillPassTiming(*timing, outTiming);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_copy_pass_timing_name_ext(
+    const CNA_RenderPipelineHandle pipeline,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    std::shared_ptr<RenderPipelineResource> resource;
+    if (const CNA_Result result = GetEngineResource(
+            pipeline, ObjectKind::RenderPipeline, "RenderPipeline", &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    const Ext::PostProcessChain::PassTiming* timing = nullptr;
+    if (const CNA_Result result = GetPipelineTiming(resource, index, &timing);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(
+        destination, capacity, outBytes, [timing] { return timing->Name; });
 }
 
 #endif // CNA_CNAEXT
