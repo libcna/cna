@@ -990,20 +990,27 @@ different axes.
 | `.cnj` → `.cnb` compiler | ✅ done | `cna_tool_cnj_to_cnb` |
 | `Model` | ✅ schema 1 **frozen** | `CnbModelCodec` |
 | custom asset registry | ✅ done; C++ API still experimental | `CnbLoaderRegistry` |
-| `SpriteFont` | ❌ **id reserved, no schema** | — |
-| `Texture2D` | ❌ **id reserved, no schema** | — |
-| `Texture3D` | ❌ **id reserved, no schema** | — |
-| `TextureCube` | ❌ **id reserved, no schema** | — |
-| `SoundEffect` | ❌ **id reserved, no schema** | — |
-| `Song` | ❌ **id reserved, no schema** | — |
-| `Video` | ❌ **id reserved, no schema** | — |
+| `SpriteFont` | ✅ schema 1 (§17), atlas embedded | `CnbSpriteFontCodec` |
+| `Texture2D` | ✅ schema 1 (§16) | `CnbTextureCodec` |
+| `Texture3D` | ✅ schema 1 (§16) | `CnbTextureCodec` |
+| `TextureCube` | ✅ schema 1 (§16), golden vector | `CnbTextureCodec` |
+| `SoundEffect` | ✅ schema 1 (§18) | `CnbSoundEffectCodec` |
+| `Song` | ✅ schema 1 (§19), stream reference | `CnbMediaCodec` |
+| `Video` | ✅ schema 1 (§19), stream reference | `CnbMediaCodec` |
 | `Effect` | ❌ **id reserved, no schema** | — |
-| direct glTF → `.cnb` | ❌ **only via `.cnj`** | — |
+| direct glTF → `.cnb` | ✅ one command, one interpretation | `cna_tool_gltf_to_cnb` |
 | chunk compression | ❌ reserved; reader rejects codec ≠ 0 | by design |
 | mmap / zero-copy | ❌ future; the `alignment` field exists for it | by design |
 | `.cnapak` | ❌ a different format, a different project | by design |
 
 So **Phase 0–4 are complete and Phase 7 largely is; Phase 5, 6 and 8 are not started.**
+
+> **Updated 2026-08-27, later the same day.** Phases 5, 6 and 8 are now done: `Texture2D`,
+> `TextureCube`, `Texture3D`, `SpriteFont`, `SoundEffect`, `Song`, `Video` all have schema 1, and
+> `cna_tool_gltf_to_cnb` compiles glTF in one command. **Ten of eleven** reserved built-in
+> identifiers now have a schema; only `Effect` does not, and §15.5 records why it waits. The table
+> above is left as it was measured, with the state column brought up to date, because the gap
+> analysis is what justified the order the work was then done in.
 
 ### 15.2 The honest completeness number
 
@@ -1098,14 +1105,21 @@ is many. Conflating them would damage both.
 ### 15.6 The one-line answers
 
 - **3D glTF models:** yes, today, via `glTF → CNJ → CNB → Model`, with skeleton, animation, morphs, PBR and lights.
-- **Direct glTF → CNB:** no.
-- **`SpriteFont`:** no — reserved id only.
-- **`Texture2D`/`3D`/`Cube`:** no — reserved ids only; a `Model` can reference textures externally.
+- **Direct glTF → CNB:** yes — `cna_tool_gltf_to_cnb`, byte-identical to the two-step route.
+- **`SpriteFont`:** yes — §17, with its atlas embedded in the same file.
+- **`Texture2D`/`3D`/`Cube`:** yes — §16, one shared layout, `Rgba8` in schema 1.
 - **`Curve`, `AnimationClip`, `Model`:** yes. `Model` is the most capable CNB asset by a distance.
-- **`SoundEffect`, `Song`, `Video`:** no.
+- **`SoundEffect`, `Song`, `Video`:** yes — §18 and §19. A sound effect owns its samples; a song or video carries metadata and a stream reference.
 - **`Effect`:** not as a standalone `.cnb`, though `Model` schema 1 can select a stock effect and reference an external one.
 - **Custom game assets:** infrastructure yes (custom id + canonical name + registry); the C++ extension API is still deliberately unstable.
 
-**Summary.** CNB is a mature binary container with a strong `Model` implementation, but not yet a
-universal content pipeline. The next real jump in usefulness is not another container audit — it is
-`Texture2D`, `SpriteFont` and direct glTF→CNB.
+**Summary, as measured.** CNB was a mature binary container with a strong `Model` implementation
+but not yet a universal content pipeline, and the next real jump was named as `Texture2D`,
+`SpriteFont` and direct glTF→CNB.
+
+**Summary, after doing them.** All three landed, along with `TextureCube`, `Texture3D`,
+`SoundEffect`, `Song` and `Video`. Ten of eleven reserved built-in asset types now have a schema.
+What remains is `Effect` — which waits on the shader pipeline by design, not by neglect — plus the
+three items whose own task text says to measure before implementing (`CNBF-105` compression,
+`CNBF-108` mmap) or that belong to a different project (`CNBF-107` `.cnapak`), and two internal
+refactors, `CNBF-100` and `CNBF-106B`.
