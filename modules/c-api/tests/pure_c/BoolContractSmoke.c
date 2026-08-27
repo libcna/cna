@@ -756,6 +756,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_tonemap_pass_set_deband_enabled(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_tonemap_pass_set_deband_enabled\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_touch_capabilities_init_from_values_ext(UINT8_C(9), 0, 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -806,6 +813,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 106 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 107 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

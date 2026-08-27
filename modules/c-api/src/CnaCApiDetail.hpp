@@ -235,6 +235,10 @@ enum class ObjectKind : uint32_t {
     // plans/plan_binding.md CBIND-089D: neither derives from PostProcessPass.
     DecalPass = 150,
     SpatialUpscalePass = 151,
+    // plans/plan_binding.md CBIND-090: none of the three derives from PostProcessPass.
+    HdrDisplayOutput = 152,
+    AutoExposure = 153,
+    CubeLut = 154,
     Test = UINT32_MAX
 };
 

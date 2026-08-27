@@ -1936,6 +1936,18 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_utf8_oracle_test)
     add_test(NAME CApi_Utf8Oracle COMMAND cna_c_api_utf8_oracle_test)
 
+    # CBIND-090: the .cube parser against an independent oracle. Unlike the UTF-8 oracle this one
+    # goes through the public routes, because the subject is the parser as a caller reaches it --
+    # a few thousand entries rather than eighteen million decisions, so the route costs nothing.
+    add_executable(cna_c_api_cube_lut_oracle_test tests/cpp/CubeLutOracleTest.cpp)
+    target_include_directories(cna_c_api_cube_lut_oracle_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
+    )
+    target_link_libraries(cna_c_api_cube_lut_oracle_test PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cube_lut_oracle_test)
+    add_test(NAME CApi_CubeLutOracle COMMAND cna_c_api_cube_lut_oracle_test)
+
     # CBIND-041: the only test that leaves the source tree. It installs the CNACApi component into a
     # staging prefix, configures modules/c-api/examples/c as a standalone project that knows nothing
     # but CMAKE_PREFIX_PATH, builds it and runs it. Everything else in this suite proves the ABI
@@ -1968,6 +1980,8 @@ if(CNA_BUILD_TESTS)
     # the Clang command line that turns this source into a running fuzzer.
     add_library(cna_c_api_fuzz_targets OBJECT
         tests/fuzz/StringViewFuzz.cpp
+        # CBIND-090: the engine layer's only byte-facing surface, the .cube LUT parser.
+        tests/fuzz/CubeLutFuzz.cpp
     )
     target_include_directories(cna_c_api_fuzz_targets PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include

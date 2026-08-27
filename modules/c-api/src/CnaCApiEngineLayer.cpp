@@ -28,7 +28,15 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/DisplayColorSpace.hpp"
 #include "CNA/Graphics/AerialPerspectivePass.hpp"
+#include "CNA/Graphics/AutoExposureEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "CNA/Graphics/ColorGradePass.hpp"
+#include "CNA/Graphics/CubeLut.hpp"
+#include "CNA/Graphics/HdrDisplayOutput.hpp"
+#include "CNA/Graphics/LutInterpolation.hpp"
+#include "CNA/Graphics/TonemapPass.hpp"
 #include "CNA/Graphics/AsciiPass.hpp"
 #include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/ChromaticAberrationPass.hpp"
@@ -4575,6 +4583,390 @@ CNA_Result cna_decal_pass_destroy(CNA_DecalPassHandle p0)
 CNA_Result cna_spatial_upscale_pass_destroy(CNA_SpatialUpscalePassHandle p0)
 {
     (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_get_mode(CNA_PostProcessPassHandle p0, CNA_TonemappingMode* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_set_mode(CNA_PostProcessPassHandle p0, CNA_TonemappingMode p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_get_exposure(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_set_exposure(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_get_gamma(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_set_gamma(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_is_deband_enabled(CNA_PostProcessPassHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_set_deband_enabled(CNA_PostProcessPassHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_get_deband_strength(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_set_deband_strength(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_tonemap_pass_tonemap_channel(CNA_TonemappingMode p0, float p1, float p2, float p3, float* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_get_lut(CNA_PostProcessPassHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_set_lut(CNA_PostProcessPassHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_get_volume_lut(CNA_PostProcessPassHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_set_volume_lut(CNA_PostProcessPassHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_get_interpolation(CNA_PostProcessPassHandle p0, CNA_LutInterpolation* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_set_interpolation(CNA_PostProcessPassHandle p0, CNA_LutInterpolation p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_get_strength(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_set_strength(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_lut_size_for_strip(int32_t p0, int32_t p1, int32_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_color_grade_pass_create_identity_lut(CNA_Handle p0, int32_t p1, CNA_Handle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_create(CNA_Handle p0, CNA_HdrDisplayOutputHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_destroy(CNA_HdrDisplayOutputHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_is_supported(CNA_HdrDisplayOutputHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_get_color_space(CNA_HdrDisplayOutputHandle p0, CNA_DisplayColorSpace* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_set_color_space(CNA_HdrDisplayOutputHandle p0, CNA_DisplayColorSpace p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_get_paper_white_nits(CNA_HdrDisplayOutputHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_set_paper_white_nits(CNA_HdrDisplayOutputHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_get_peak_nits(CNA_HdrDisplayOutputHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_set_peak_nits(CNA_HdrDisplayOutputHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_draw(CNA_HdrDisplayOutputHandle p0, CNA_Handle p1, CNA_Handle p2, int32_t p3, int32_t p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_encode_pq(float p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_decode_pq(float p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_rec709_to_rec2020(const CNA_Vector3* p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_roll_off(float p0, float p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_hdr_display_output_encode(CNA_DisplayColorSpace p0, const CNA_Vector3* p1, float p2, float p3, CNA_Vector3* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_create(CNA_Handle p0, CNA_AutoExposureHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_destroy(CNA_AutoExposureHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_measure_average_luminance(CNA_AutoExposureHandle p0, CNA_Handle p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_update(CNA_AutoExposureHandle p0, CNA_Handle p1, float p2, float* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_apply_to(CNA_AutoExposureHandle p0, CNA_RenderPipelineSettingsEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_get_exposure(CNA_AutoExposureHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_set_exposure(CNA_AutoExposureHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_get_key_value(CNA_AutoExposureHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_set_key_value(CNA_AutoExposureHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_get_brightening_speed(CNA_AutoExposureHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_get_darkening_speed(CNA_AutoExposureHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_set_adaptation_speeds(CNA_AutoExposureHandle p0, float p1, float p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_auto_exposure_ext_set_exposure_range(CNA_AutoExposureHandle p0, float p1, float p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_parse(CNA_StringView p0, CNA_CubeLutHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_load_from_file(CNA_StringView p0, CNA_CubeLutHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_destroy(CNA_CubeLutHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_get_size(CNA_CubeLutHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_copy_title(CNA_CubeLutHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_get_domain_min(CNA_CubeLutHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_get_domain_max(CNA_CubeLutHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_is_unit_domain(CNA_CubeLutHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_get_entry(CNA_CubeLutHandle p0, int32_t p1, int32_t p2, int32_t p3, CNA_Vector3* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_create_strip_texture(CNA_CubeLutHandle p0, CNA_Handle p1, CNA_Handle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cube_lut_create_volume_texture(CNA_CubeLutHandle p0, CNA_Handle p1, CNA_Handle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
     return ExtensionUnavailable();
 }
 
@@ -13007,7 +13399,11 @@ namespace {
     out->setHDREnabled(value.hdr_enabled == CNA_TRUE);
     out->setExposure(value.exposure);
     out->setGamma(value.gamma);
-    if (value.tonemapping_mode > UINT32_C(3)) {
+    // CBIND-090 widened this from 3 to 4 when it added CNA_TONEMAPPING_MODE_UNCHARTED2. The
+    // bound and the macro have to move together: CBIND-088A left this at 3 precisely because the
+    // fifth identity had no C name yet, and widening it without one would have accepted an
+    // ordinal no caller could spell.
+    if (value.tonemapping_mode > CNA_TONEMAPPING_MODE_UNCHARTED2) {
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
                     "tonemapping_mode is not a defined identity.");
     }
@@ -15697,5 +16093,1010 @@ static_assert(
     CNA_LENS_FLARE_GHOST_COUNT_EXT == Ext::LensFlarePass::kGhostCount &&
     CNA_MOTION_BLUR_SAMPLE_COUNT_EXT == Ext::MotionBlurPass::kSampleCount);
 } // namespace
+
+namespace {
+
+// CBIND-090. CubeLut has no device constructor -- it is parsed from text and only later asked for
+// a texture -- so it does not fit CreateStandaloneEffect, which builds from a GraphicsDevice.
+struct CubeLutResource final {
+    std::shared_ptr<Ext::CubeLut> value;
+};
+
+[[nodiscard]] CNA_Result RequireDisplayColorSpace(const CNA_DisplayColorSpace space)
+{
+    if (space > CNA_DISPLAY_COLOR_SPACE_HDR10) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "space is not a defined CNA_DISPLAY_COLOR_SPACE_* value.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result RequireTonemappingMode(const CNA_TonemappingMode mode)
+{
+    if (mode > CNA_TONEMAPPING_MODE_UNCHARTED2) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "mode is not a defined CNA_TONEMAPPING_MODE_* value.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// The C identities must name the canonical ordinals and constants.
+static_assert(
+    static_cast<uint32_t>(Ext::TonemappingMode::Uncharted2) == CNA_TONEMAPPING_MODE_UNCHARTED2 &&
+    static_cast<uint32_t>(Ext::LutInterpolation::Trilinear) == CNA_LUT_INTERPOLATION_TRILINEAR &&
+    static_cast<uint32_t>(Ext::LutInterpolation::Tetrahedral) ==
+        CNA_LUT_INTERPOLATION_TETRAHEDRAL &&
+    static_cast<uint32_t>(CNA::DisplayColorSpace::Srgb) == CNA_DISPLAY_COLOR_SPACE_SRGB &&
+    static_cast<uint32_t>(CNA::DisplayColorSpace::Scrgb) == CNA_DISPLAY_COLOR_SPACE_SCRGB &&
+    static_cast<uint32_t>(CNA::DisplayColorSpace::Hdr10) == CNA_DISPLAY_COLOR_SPACE_HDR10);
+static_assert(
+    CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT == Ext::ColorGradePass::kMaxLutSize &&
+    CNA_CUBE_LUT_MIN_SIZE_EXT == Ext::CubeLut::kMinSize &&
+    CNA_CUBE_LUT_MAX_SIZE_EXT == Ext::CubeLut::kMaxSize &&
+    CNA_HDR_DISPLAY_DEFAULT_PAPER_WHITE_NITS_EXT ==
+        Ext::HdrDisplayOutput::kDefaultPaperWhiteNits &&
+    CNA_HDR_DISPLAY_DEFAULT_PEAK_NITS_EXT == Ext::HdrDisplayOutput::kDefaultPeakNits);
+
+} // namespace
+
+#define CNA_WITH_HDR(handle, body)                                                                 \
+    WithStandaloneEffect<Ext::HdrDisplayOutput>(                                                   \
+        (handle), ObjectKind::HdrDisplayOutput, "HdrDisplayOutput", body)
+#define CNA_WITH_AUTOEXP(handle, body)                                                             \
+    WithStandaloneEffect<Ext::AutoExposureEXT>(                                                    \
+        (handle), ObjectKind::AutoExposure, "AutoExposureEXT", body)
+
+/* ---- TonemapPass ------------------------------------------------------------------------- */
+
+CNA_Result cna_tonemap_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::TonemapPass>(graphicsDeviceHandle, outPass);
+}
+
+CNA_Result cna_tonemap_pass_get_mode(
+    const CNA_PostProcessPassHandle pass, CNA_TonemappingMode* const outMode)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result {
+            return StoreValue(outMode, static_cast<CNA_TonemappingMode>(p->getMode()));
+        });
+}
+
+CNA_Result cna_tonemap_pass_set_mode(
+    const CNA_PostProcessPassHandle pass, const CNA_TonemappingMode mode)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireTonemappingMode(mode);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->setMode(static_cast<Ext::TonemappingMode>(mode));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_tonemap_pass_get_exposure(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result { return StoreValue(outValue, p->getExposure()); });
+}
+
+CNA_Result cna_tonemap_pass_set_exposure(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result {
+            p->setExposure(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_tonemap_pass_get_gamma(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result { return StoreValue(outValue, p->getGamma()); });
+}
+
+CNA_Result cna_tonemap_pass_set_gamma(const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result {
+            p->setGamma(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_tonemap_pass_is_deband_enabled(
+    const CNA_PostProcessPassHandle pass, CNA_Bool* const outEnabled)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result {
+            return StoreValue(
+                outEnabled, static_cast<CNA_Bool>(p->isDebandEnabled() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_tonemap_pass_set_deband_enabled(
+    const CNA_PostProcessPassHandle pass, const CNA_Bool value)
+{
+    if (value != CNA_TRUE && value != CNA_FALSE) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "value must be CNA_TRUE or CNA_FALSE.");
+    }
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result {
+            p->setDebandEnabled(value == CNA_TRUE);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_tonemap_pass_get_deband_strength(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result { return StoreValue(outValue, p->getDebandStrength()); });
+}
+
+CNA_Result cna_tonemap_pass_set_deband_strength(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::TonemapPass>(pass, "TonemapPass", [&](Ext::TonemapPass* const p)
+        -> CNA_Result {
+            p->setDebandStrength(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_tonemap_pass_tonemap_channel(
+    const CNA_TonemappingMode mode,
+    const float value,
+    const float exposure,
+    const float gamma,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = RequireTonemappingMode(mode);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outValue,
+            Ext::TonemapPass::tonemapChannel(
+                static_cast<Ext::TonemappingMode>(mode), value, exposure, gamma));
+    });
+}
+
+/* ---- ColorGradePass ---------------------------------------------------------------------- */
+
+CNA_Result cna_color_grade_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::ColorGradePass>(graphicsDeviceHandle, outPass);
+}
+
+CNA_Result cna_color_grade_pass_get_lut(
+    const CNA_PostProcessPassHandle pass, CNA_Handle* const outLut)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass",
+        [&](Ext::ColorGradePass* const p,
+            const std::shared_ptr<PostProcessPassResource>& resource) -> CNA_Result {
+            if (outLut == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The LUT output handle is null.");
+            }
+            *outLut = CNA_INVALID_HANDLE;
+            auto* const lut = p->getLut();
+            if (lut == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(
+                resource, lut);
+            return CreateBorrowedRenderTarget2D(view, resource->parentGame, resource, outLut);
+        });
+}
+
+CNA_Result cna_color_grade_pass_set_lut(
+    const CNA_PostProcessPassHandle pass, const CNA_Handle lut)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass", [&](Ext::ColorGradePass* const p) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(lut, "lut", &texture, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // A null texture unbinds; a malformed strip is REFUSED. The canonical setter throws
+            // invalid_argument for a strip whose width is not the square of its height, because
+            // one read at the wrong slice count grades the frame into colours nothing in the
+            // table names -- a wrong picture rather than a visible failure.
+            try {
+                p->setLut(texture);
+            } catch (const std::invalid_argument&) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "A strip LUT must be N slices of N by N, so its width must be the square of "
+                    "its height.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_color_grade_pass_get_interpolation(
+    const CNA_PostProcessPassHandle pass, CNA_LutInterpolation* const outValue)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass", [&](Ext::ColorGradePass* const p) -> CNA_Result {
+            return StoreValue(
+                outValue, static_cast<CNA_LutInterpolation>(p->getInterpolation()));
+        });
+}
+
+CNA_Result cna_color_grade_pass_set_interpolation(
+    const CNA_PostProcessPassHandle pass, const CNA_LutInterpolation value)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass", [&](Ext::ColorGradePass* const p) -> CNA_Result {
+            if (value > CNA_LUT_INTERPOLATION_TETRAHEDRAL) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "value is not a defined CNA_LUT_INTERPOLATION_* value.");
+            }
+            p->setInterpolation(static_cast<Ext::LutInterpolation>(value));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_color_grade_pass_get_strength(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass",
+        [&](Ext::ColorGradePass* const p) -> CNA_Result {
+            return StoreValue(outValue, p->getStrength());
+        });
+}
+
+CNA_Result cna_color_grade_pass_set_strength(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass", [&](Ext::ColorGradePass* const p) -> CNA_Result {
+            p->setStrength(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_color_grade_pass_lut_size_for_strip(
+    const int32_t width, const int32_t height, int32_t* const outSize)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outSize,
+            static_cast<int32_t>(Ext::ColorGradePass::lutSizeForStrip(
+                static_cast<int>(width), static_cast<int>(height))));
+    });
+}
+
+CNA_Result cna_color_grade_pass_get_volume_lut(
+    const CNA_PostProcessPassHandle pass, CNA_Handle* const outLut)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass",
+        [&](Ext::ColorGradePass* const p,
+            const std::shared_ptr<PostProcessPassResource>& resource) -> CNA_Result {
+            if (outLut == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The LUT output handle is null.");
+            }
+            *outLut = CNA_INVALID_HANDLE;
+            auto* const lut = p->getVolumeLut();
+            if (lut == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            // No CreateBorrowedTexture3D exists, and Texture3DResource is declared in the
+            // shared graphics detail header, so the borrow is built here rather than by adding a
+            // helper for one caller. The aliasing constructor keeps the pass alive behind it.
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture3D> view(
+                resource, lut);
+            const auto lutResource = std::make_shared<CNA::C::Detail::Texture3DResource>(
+                CNA::C::Detail::Texture3DResource{view, resource->parentGame, 0U});
+            const CNA_Result created =
+                GetRuntimeHandles().Create(ObjectKind::Texture3D, lutResource, outLut);
+            if (created != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    created,
+                    ErrorCategoryForResult(created),
+                    "The borrowed volume-LUT handle could not be created.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_color_grade_pass_set_volume_lut(
+    const CNA_PostProcessPassHandle pass, const CNA_Handle lut)
+{
+    return WithEnginePass<Ext::ColorGradePass>(
+        pass, "ColorGradePass", [&](Ext::ColorGradePass* const p) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture3D* texture = nullptr;
+            std::shared_ptr<CNA::C::Detail::Texture3DResource> retention;
+            if (lut != CNA_INVALID_HANDLE) {
+                if (const CNA_Result result = CNA::C::Detail::GetOwnedTexture3D(lut, &retention);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                texture = retention->value.get();
+            }
+            // Null unbinds; a volume that is not a cube, or whose edge is outside the accepted
+            // range, is refused for the same reason the strip is.
+            try {
+                p->setVolumeLut(texture);
+            } catch (const std::invalid_argument&) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "A volume LUT must be a cube with an edge between two and the maximum LUT "
+                    "size.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_color_grade_pass_create_identity_lut(
+    const CNA_Handle graphicsDeviceHandle, const int32_t size, CNA_Handle* const outLut)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLut == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                "The LUT output handle is null.");
+        }
+        *outLut = CNA_INVALID_HANDLE;
+        if (size < INT32_C(2) || size > CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The slice count must be between two and the maximum LUT size.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = Ext::ColorGradePass::createIdentityLut(
+            *graphicsDevice->value, static_cast<int>(size));
+        return CNA::C::Detail::CreateOwnedTexture2D(
+            std::move(native), graphicsDevice->parentGame, outLut);
+    });
+}
+
+/* ---- HdrDisplayOutput -------------------------------------------------------------------- */
+
+CNA_Result cna_hdr_display_output_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_HdrDisplayOutputHandle* const outOutput)
+{
+    return CreateStandaloneEffect<Ext::HdrDisplayOutput>(
+        graphicsDeviceHandle, ObjectKind::HdrDisplayOutput, outOutput);
+}
+
+CNA_Result cna_hdr_display_output_destroy(const CNA_HdrDisplayOutputHandle output)
+{
+    return DestroyStandaloneEffect<Ext::HdrDisplayOutput>(
+        output, ObjectKind::HdrDisplayOutput, "HdrDisplayOutput");
+}
+
+CNA_Result cna_hdr_display_output_is_supported(
+    const CNA_HdrDisplayOutputHandle output, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        return StoreValue(
+            outSupported, static_cast<CNA_Bool>(o->isSupported() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_hdr_display_output_get_color_space(
+    const CNA_HdrDisplayOutputHandle output, CNA_DisplayColorSpace* const outSpace)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        return StoreValue(outSpace, static_cast<CNA_DisplayColorSpace>(o->getColorSpace()));
+    });
+}
+
+CNA_Result cna_hdr_display_output_set_color_space(
+    const CNA_HdrDisplayOutputHandle output, const CNA_DisplayColorSpace value)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        if (const CNA_Result result = RequireDisplayColorSpace(value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        o->setColorSpace(static_cast<CNA::DisplayColorSpace>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_hdr_display_output_get_paper_white_nits(
+    const CNA_HdrDisplayOutputHandle output, float* const outNits)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        return StoreValue(outNits, o->getPaperWhiteNits());
+    });
+}
+
+CNA_Result cna_hdr_display_output_set_paper_white_nits(
+    const CNA_HdrDisplayOutputHandle output, const float value)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        o->setPaperWhiteNits(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_hdr_display_output_get_peak_nits(
+    const CNA_HdrDisplayOutputHandle output, float* const outNits)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        return StoreValue(outNits, o->getPeakNits());
+    });
+}
+
+CNA_Result cna_hdr_display_output_set_peak_nits(
+    const CNA_HdrDisplayOutputHandle output, const float value)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        // Floored at the CURRENT paper-white rather than at a constant: the bound moves with the
+        // other setter, which is the only correction of this shape in the engine layer.
+        o->setPeakNits(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_hdr_display_output_draw(
+    const CNA_HdrDisplayOutputHandle output,
+    const CNA_Handle source,
+    const CNA_Handle destination,
+    const int32_t width,
+    const int32_t height)
+{
+    return CNA_WITH_HDR(output, [&](Ext::HdrDisplayOutput* const o) -> CNA_Result {
+        if (width <= 0 || height <= 0) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The size must be positive.");
+        }
+        Microsoft::Xna::Framework::Graphics::Texture2D* sourceTexture = nullptr;
+        std::shared_ptr<Texture2DResource> sourceRetention;
+        if (const CNA_Result result =
+                ResolveTexture2DArgument(source, "source", &sourceTexture, &sourceRetention);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (sourceTexture == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "There is no source to encode.");
+        }
+        Microsoft::Xna::Framework::Graphics::RenderTarget2D* target = nullptr;
+        std::shared_ptr<Texture2DResource> targetRetention;
+        if (const CNA_Result result =
+                ResolveRenderTarget2DArgument(destination, &target, &targetRetention);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        o->draw(sourceTexture, target, static_cast<int>(width), static_cast<int>(height));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_hdr_display_output_encode_pq(const float nits, float* const outEncoded)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(outEncoded, Ext::HdrDisplayOutput::encodePq(nits));
+    });
+}
+
+CNA_Result cna_hdr_display_output_decode_pq(const float encoded, float* const outNits)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(outNits, Ext::HdrDisplayOutput::decodePq(encoded));
+    });
+}
+
+CNA_Result cna_hdr_display_output_rec709_to_rec2020(
+    const CNA_Vector3* const color, CNA_Vector3* const outColor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(color, "The colour is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto v = Ext::HdrDisplayOutput::rec709ToRec2020(ToNativeVector3(*color));
+        return StoreValue(outColor, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_hdr_display_output_roll_off(
+    const float nits, const float peakNits, float* const outNits)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(outNits, Ext::HdrDisplayOutput::rollOff(nits, peakNits));
+    });
+}
+
+CNA_Result cna_hdr_display_output_encode(
+    const CNA_DisplayColorSpace space,
+    const CNA_Vector3* const sceneLinear,
+    const float paperWhiteNits,
+    const float peakNits,
+    CNA_Vector3* const outColor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = RequireDisplayColorSpace(space);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireVector3Argument(sceneLinear, "The colour is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto v = Ext::HdrDisplayOutput::encode(
+            static_cast<CNA::DisplayColorSpace>(space), ToNativeVector3(*sceneLinear),
+            paperWhiteNits, peakNits);
+        return StoreValue(outColor, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+/* ---- AutoExposureEXT --------------------------------------------------------------------- */
+
+CNA_Result cna_auto_exposure_ext_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_AutoExposureHandle* const outAutoExposure)
+{
+    return CreateStandaloneEffect<Ext::AutoExposureEXT>(
+        graphicsDeviceHandle, ObjectKind::AutoExposure, outAutoExposure);
+}
+
+CNA_Result cna_auto_exposure_ext_destroy(const CNA_AutoExposureHandle autoExposure)
+{
+    return DestroyStandaloneEffect<Ext::AutoExposureEXT>(
+        autoExposure, ObjectKind::AutoExposure, "AutoExposureEXT");
+}
+
+CNA_Result cna_auto_exposure_ext_measure_average_luminance(
+    const CNA_AutoExposureHandle autoExposure, const CNA_Handle scene, float* const outLuminance)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+        std::shared_ptr<Texture2DResource> retention;
+        if (const CNA_Result result =
+                ResolveTexture2DArgument(scene, "scene", &texture, &retention);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (texture == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "There is no scene to measure.");
+        }
+        return StoreValue(outLuminance, a->measureAverageLuminance(*texture));
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_update(
+    const CNA_AutoExposureHandle autoExposure,
+    const CNA_Handle scene,
+    const float deltaSeconds,
+    float* const outExposure)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+        std::shared_ptr<Texture2DResource> retention;
+        if (const CNA_Result result =
+                ResolveTexture2DArgument(scene, "scene", &texture, &retention);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (texture == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "There is no scene to adapt to.");
+        }
+        return StoreValue(outExposure, a->update(*texture, deltaSeconds));
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_apply_to(
+    const CNA_AutoExposureHandle autoExposure, CNA_RenderPipelineSettingsEXT* const settings)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        if (settings == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                "The settings are null.");
+        }
+        Ext::RenderPipelineSettings native;
+        if (const CNA_Result result = ToNativeRenderPipelineSettings(*settings, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        a->applyTo(native);
+        FromNativeRenderPipelineSettings(native, settings);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_get_exposure(
+    const CNA_AutoExposureHandle autoExposure, float* const outValue)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        return StoreValue(outValue, a->getExposure());
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_set_exposure(
+    const CNA_AutoExposureHandle autoExposure, const float value)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        // A contract, not a guard: the canonical setter throws rather than ignoring.
+        try {
+            a->setExposure(value);
+        } catch (const std::invalid_argument&) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The exposure must be positive.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_get_key_value(
+    const CNA_AutoExposureHandle autoExposure, float* const outValue)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        return StoreValue(outValue, a->getKeyValue());
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_set_key_value(
+    const CNA_AutoExposureHandle autoExposure, const float value)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        // A contract, not a guard: the canonical setter throws rather than ignoring.
+        try {
+            a->setKeyValue(value);
+        } catch (const std::invalid_argument&) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The key value must be positive.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_get_brightening_speed(
+    const CNA_AutoExposureHandle autoExposure, float* const outValue)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        return StoreValue(outValue, a->getBrighteningSpeed());
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_get_darkening_speed(
+    const CNA_AutoExposureHandle autoExposure, float* const outValue)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        return StoreValue(outValue, a->getDarkeningSpeed());
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_set_adaptation_speeds(
+    const CNA_AutoExposureHandle autoExposure,
+    const float brighteningPerSecond,
+    const float darkeningPerSecond)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        // Validated as a PAIR: if either speed is not positive the call is refused and neither
+        // is written, so one good value and one bad changes nothing.
+        try {
+            a->setAdaptationSpeeds(brighteningPerSecond, darkeningPerSecond);
+        } catch (const std::invalid_argument&) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "Both adaptation speeds must be positive.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_auto_exposure_ext_set_exposure_range(
+    const CNA_AutoExposureHandle autoExposure, const float minimum, const float maximum)
+{
+    return CNA_WITH_AUTOEXP(autoExposure, [&](Ext::AutoExposureEXT* const a) -> CNA_Result {
+        // A contract, not a guard: the canonical setter throws rather than ignoring.
+        try {
+            a->setExposureRange(minimum, maximum);
+        } catch (const std::invalid_argument&) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The minimum exposure must be positive and the maximum must not be below it.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+/* ---- CubeLut ----------------------------------------------------------------------------- */
+
+namespace {
+
+[[nodiscard]] CNA_Result GetCubeLut(
+    const CNA_CubeLutHandle handle, std::shared_ptr<CubeLutResource>* const out)
+{
+    return GetEngineResource(handle, ObjectKind::CubeLut, "CubeLut", out);
+}
+
+// CBIND-090. Every refusal the parser can produce is an argument mistake about the *text*, so
+// they arrive as CNA_RESULT_INVALID_ARGUMENT rather than as the firewall's generic internal
+// error. The distinction that matters to a caller is "your bytes are not a .cube file" versus
+// "this file could not be opened", and those stay apart.
+[[nodiscard]] CNA_Result ParseCubeLutText(
+    const std::string& text, CNA_CubeLutHandle* const outLut)
+{
+    std::shared_ptr<Ext::CubeLut> parsed;
+    try {
+        parsed = std::make_shared<Ext::CubeLut>(Ext::CubeLut::parse(text));
+    } catch (const CNA::CNAException&) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The text is not a well-formed .cube LUT.");
+    }
+    const auto resource = std::make_shared<CubeLutResource>(CubeLutResource{std::move(parsed)});
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::CubeLut, resource, outLut);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The owned LUT handle could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+#define CNA_WITH_LUT(handle, body)                                                                 \
+    WithMap<CubeLutResource>((handle), ObjectKind::CubeLut, "CubeLut", body)
+
+CNA_Result cna_cube_lut_parse(const CNA_StringView text, CNA_CubeLutHandle* const outLut)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLut == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The LUT output handle is null.");
+        }
+        *outLut = CNA_INVALID_HANDLE;
+        // Embedded NULs are rejected: the parser reads the whole text, so a NUL would silently
+        // truncate a table the caller believes it supplied.
+        if (const CNA_Result result = CNA::C::Detail::ValidateStringView(text, true);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::string owned(
+            text.data == nullptr ? "" : text.data, static_cast<std::size_t>(text.byte_length));
+        return ParseCubeLutText(owned, outLut);
+    });
+}
+
+CNA_Result cna_cube_lut_load_from_file(
+    const CNA_StringView path, CNA_CubeLutHandle* const outLut)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLut == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The LUT output handle is null.");
+        }
+        *outLut = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = CNA::C::Detail::ValidateStringView(path, true);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::string owned(
+            path.data == nullptr ? "" : path.data, static_cast<std::size_t>(path.byte_length));
+        std::shared_ptr<Ext::CubeLut> parsed;
+        try {
+            parsed = std::make_shared<Ext::CubeLut>(Ext::CubeLut::loadFromFile(owned));
+        } catch (const CNA::CNAException& failure) {
+            // "cannot open" is an IO failure the caller can act on; anything else is malformed
+            // content. The canonical code throws one type for both, so they are told apart by
+            // what the message says about the file rather than about the table.
+            const std::string what = failure.what();
+            if (what.find("cannot open") != std::string::npos) {
+                return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "The LUT file cannot be read.");
+            }
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The file is not a well-formed .cube LUT.");
+        }
+        const auto resource =
+            std::make_shared<CubeLutResource>(CubeLutResource{std::move(parsed)});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::CubeLut, resource, outLut);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned LUT handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cube_lut_destroy(const CNA_CubeLutHandle lutHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CubeLutResource> lut;
+        if (const CNA_Result result = GetCubeLut(lutHandle, &lut);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(lutHandle);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned LUT handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cube_lut_get_size(const CNA_CubeLutHandle lut, int32_t* const outSize)
+{
+    return CNA_WITH_LUT(lut, [&](const std::shared_ptr<CubeLutResource>& l) -> CNA_Result {
+        return StoreValue(outSize, static_cast<int32_t>(l->value->getSize()));
+    });
+}
+
+CNA_Result cna_cube_lut_copy_title(
+    const CNA_CubeLutHandle lut, char* const destination, const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    std::shared_ptr<CubeLutResource> resource;
+    if (const CNA_Result result = GetCubeLut(lut, &resource); result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(
+        destination, capacity, outBytes, [&resource] { return resource->value->getTitle(); });
+}
+
+CNA_Result cna_cube_lut_get_domain_min(const CNA_CubeLutHandle lut, CNA_Vector3* const outValue)
+{
+    return CNA_WITH_LUT(lut, [&](const std::shared_ptr<CubeLutResource>& l) -> CNA_Result {
+        const auto v = l->value->getDomainMin();
+        return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_cube_lut_get_domain_max(const CNA_CubeLutHandle lut, CNA_Vector3* const outValue)
+{
+    return CNA_WITH_LUT(lut, [&](const std::shared_ptr<CubeLutResource>& l) -> CNA_Result {
+        const auto v = l->value->getDomainMax();
+        return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_cube_lut_is_unit_domain(const CNA_CubeLutHandle lut, CNA_Bool* const outUnit)
+{
+    return CNA_WITH_LUT(lut, [&](const std::shared_ptr<CubeLutResource>& l) -> CNA_Result {
+        return StoreValue(
+            outUnit, static_cast<CNA_Bool>(l->value->isUnitDomain() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_cube_lut_get_entry(
+    const CNA_CubeLutHandle lut,
+    const int32_t red,
+    const int32_t green,
+    const int32_t blue,
+    CNA_Vector3* const outColor)
+{
+    return CNA_WITH_LUT(lut, [&](const std::shared_ptr<CubeLutResource>& l) -> CNA_Result {
+        const int size = l->value->getSize();
+        // Refused rather than clamped: a clamped index would silently return a different colour,
+        // which is worse than an error because the frame would look almost right.
+        if (red < 0 || red >= size || green < 0 || green >= size || blue < 0 || blue >= size) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The index is outside the table.");
+        }
+        const auto v = l->value->getEntry(
+            static_cast<int>(red), static_cast<int>(green), static_cast<int>(blue));
+        return StoreValue(outColor, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_cube_lut_create_strip_texture(
+    const CNA_CubeLutHandle lut, const CNA_Handle graphicsDeviceHandle,
+    CNA_Handle* const outTexture)
+{
+    return CNA_WITH_LUT(lut, [&](const std::shared_ptr<CubeLutResource>& l) -> CNA_Result {
+        if (outTexture == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                "The texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = l->value->createStripTexture(*graphicsDevice->value);
+        return CNA::C::Detail::CreateOwnedTexture2D(
+            std::move(native), graphicsDevice->parentGame, outTexture);
+    });
+}
+
+CNA_Result cna_cube_lut_create_volume_texture(
+    const CNA_CubeLutHandle lut, const CNA_Handle graphicsDeviceHandle,
+    CNA_Handle* const outTexture)
+{
+    return CNA_WITH_LUT(lut, [&](const std::shared_ptr<CubeLutResource>& l) -> CNA_Result {
+        if (outTexture == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                "The texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = l->value->createVolumeTexture(*graphicsDevice->value);
+        const auto resource = std::make_shared<CNA::C::Detail::Texture3DResource>(
+            CNA::C::Detail::Texture3DResource{std::move(native), graphicsDevice->parentGame, 0U});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::Texture3D, resource, outTexture);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned volume-texture handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
 
 #endif // CNA_CNAEXT

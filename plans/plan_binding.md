@@ -1004,7 +1004,21 @@ Three arms, all passing. 96/96 in both trees, all nine gates green. |
 **`CApiRouteTestCoverage` caught one route with no caller**, `cna_decal_pass_draw` — bound, documented and matrix-green, but nothing exercised it. Now covered, including the sequencing refusal when the projector has a camera but no prepass inputs. Third time in the phase that gate has found a route the slice believed it had tested.
 
 Three arms, all passing; proved to execute on both by asserting the shared destroy accepts a `DecalPass`. 96/96 in both trees, all nine gates green. |
-| CBIND-090 | Bind HDR output, tonemapping and colour grading | 87 | ⬜ | `HdrDisplayOutput`, `TonemapPass`, `TonemappingMode`, `ColorGradePass`, `CubeLut`, `LutInterpolation`, `AutoExposureEXT` and `DisplayColorSpace`. `CubeLut` reads caller-supplied bytes, so it is a byte-facing surface and inherits the release gate's requirement for an independent oracle and a fuzz target — not just a smoke test. |
+| CBIND-090 | Bind HDR output, tonemapping and colour grading | 87 | ✅ | **Done 2026-08-27.** 62 routes; exports 3,457 → 3,519, identical in both trees with zero symbols differing. 97/97 in both trees — the suite grew by one, the new oracle.
+
+**The inheritance survey ran first this time, and that is the whole difference from `CBIND-089D`.** One command before any code: `TonemapPass` and `ColorGradePass` derive from `PostProcessPass`; `HdrDisplayOutput`, `CubeLut` and `AutoExposureEXT` do not. In `CBIND-089D` the compiler found that after the wrong shape was already built. A survey is cheaper than a compiler error and much cheaper than a shipped mistake.
+
+**`CubeLut` is the layer's only byte-facing surface, and it is covered two ways as the release gate requires.** The oracle **emits where the parser scans** — opposite directions, no shared code — and the expected entry at any index is a closed form, so the comparison does not lean on the emitter's bookkeeping either. Every entry of every accepted size is compared, and one malformed case per refusal is enumerated. **Verified to catch a real disagreement rather than merely to run:** swapping red and blue in the parser's index arithmetic, the classic `.cube` ordering mistake, makes it exit 1 naming entry (1,0,0) at every size; restored, it exits 0. `tests/fuzz/CubeLutFuzz.cpp` covers what enumeration cannot, and judges the answer — an accepted table must report a size inside the documented bounds, read its corners, refuse one index past the edge and release.
+
+**Three corrections here are unlike anything earlier in the phase.** `setPeakNits` floors against **another field**: a peak below diffuse white would make white brighter than the display's brightest, so the bound is the current paper-white and it *moves*. Proved to matter by asserting a fixed floor instead, which moves the exit code to stage 31 on both arms — no constant expectation could have caught it. `AutoExposureEXT` validates two of its setters **as pairs**, so one good value and one bad writes neither. And `setExposure` both refuses *and* corrects: non-positive is refused, and an accepted value is then clamped into the current range.
+
+**`AutoExposureEXT` is compute-gated at construction**, the only object in the layer whose capability boundary is there rather than behind an `is_supported` query — its constructor builds a compute program and a storage buffer, so on HEADLESS there is no object to make and `create` answers `NOT_SUPPORTED`. Found by arm 3, not by reading.
+
+**`TonemappingMode::Uncharted2` is bound**, closing what `CBIND-088A` found: the enumerator existed canonically but had no C name, so a caller could not select it and the settings validator refused its ordinal. The macro and the validator's bound moved together, which is what `CBIND-088A` deliberately deferred rather than widening a bound past a value nobody could spell.
+
+**Three wrong classifications, all mine, all caught by running.** `ColorGradePass::setLut` and all four `AutoExposureEXT` setters were recorded as guarded assignments from a regex match on `if (…)`; every one of them **throws**. `setLut`'s `if` is an early return that *unbinds*, followed by a refusal for a strip whose width is not the square of its height. The amendment to the standing practice: **the classifier must distinguish `if (cond) throw` from `if (cond) field = value`** — they look identical to a pattern that stops at the condition, and they are opposite behaviours. The header, the routes and the test all said the wrong thing until the runs disagreed.
+
+`CApiRouteTestCoverage` then caught six routes with no caller — the volume-LUT pair, both texture builders and both domain-corner readers. Fourth time in the phase that gate has found a route a slice believed it had tested. |
 | CBIND-091 | Bind image-based lighting, probes, sky and area-light shading | 146 | ⬜ | `LightProbeEXT`, `LightProbeVolumeEXT`, `LightProbeBaker`, `EnvironmentProcessor`, `Skybox`, `AtmosphericSky`, `AreaLightBrdfTable`, `AreaLightShading`, and `AreaLightEXT`/`ImageBasedLightEXT` from `modules/graphics`. `SupportsImageBasedLightingEXT()` gates the whole slice; the baker is long-running and needs the campaign's settled answer for operations that are not instantaneous.
 
 **137 base rows plus nine moved here by three earlier slices, and all three are named because the cell was wrong once already.** `CBIND-086C` moved **3** — `ClusteredForwardEffect::setAreaLight`, `setLightProbe` and `setLightProbeVolume`. `CBIND-087C` moved **4** — `setImageBasedLightEXT`/`getImageBasedLightEXT` on *both* `PbrEffect` and `SkinnedPbrEffect`. `CBIND-088B` moved **2** — `RenderPipeline::setSkybox`/`getSkybox`. 137 + 3 + 4 + 2 = **146**.
@@ -1118,9 +1132,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-27, after `CBIND-100`):** 513 headers / 8,306 symbols —
-**7,414 implemented, 15 approved partial, 418 planned, 459 not applicable.** ABI `0.9.0`, 3,457
-exported symbols — the same 3,457 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-27, after `CBIND-090`):** 513 headers / 8,306 symbols —
+**7,501 implemented, 15 approved partial, 331 planned, 459 not applicable.** ABI `0.9.0`, 3,519
+exported symbols — the same 3,519 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 The release gate reads **not ready**, on the one criterion the planned rows fail:

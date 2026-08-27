@@ -8204,6 +8204,529 @@ CNA_C_API CNA_Result cna_spatial_upscale_pass_is_identity_scale(
 CNA_C_API CNA_Result cna_ascii_pass_get_effect(
     CNA_PostProcessPassHandle pass, CNA_AsciiPostProcessEffectHandle* out_effect);
 
+/* ---------------------------------------------------------------------------------------------
+ * HDR output, tonemapping and colour grading
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Uncharted 2 filmic tonemapping (Hable's curve), normalized against a white point.
+ *
+ * `CBIND-088A` found this enumerator declared in the canonical enum but absent from the C
+ * identity, so a C caller could not select it and `cna_render_pipeline_settings_ext_normalize`
+ * refused its ordinal. It is appended rather than inserted, because the preceding values are
+ * stored in settings and compared by ordinal elsewhere. Unlike `FILMIC`, this curve does not bake
+ * gamma into itself, so the pipeline's gamma step still applies to its output.
+ */
+#define CNA_TONEMAPPING_MODE_UNCHARTED2 UINT32_C(4)
+
+/** @brief Fixed-width identity for how a LUT is sampled between its slices. */
+typedef uint32_t CNA_LutInterpolation;
+/** @brief Sample the eight surrounding entries and blend them. */
+#define CNA_LUT_INTERPOLATION_TRILINEAR UINT32_C(0)
+/** @brief Sample the four entries of the enclosing tetrahedron; sharper on steep gradients. */
+#define CNA_LUT_INTERPOLATION_TETRAHEDRAL UINT32_C(1)
+
+/** @brief Fixed-width identity for the colour space a display expects. */
+typedef uint32_t CNA_DisplayColorSpace;
+/** @brief Ordinary sRGB output. */
+#define CNA_DISPLAY_COLOR_SPACE_SRGB UINT32_C(0)
+/** @brief Extended-range linear sRGB, as scRGB displays expect. */
+#define CNA_DISPLAY_COLOR_SPACE_SCRGB UINT32_C(1)
+/** @brief Rec.2020 primaries with the PQ transfer function. */
+#define CNA_DISPLAY_COLOR_SPACE_HDR10 UINT32_C(2)
+
+/** @brief The largest slice count a colour-grading LUT strip may describe. */
+#define CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT INT32_C(64)
+
+/** @brief The smallest cube LUT this layer accepts; below two nothing can be interpolated. */
+#define CNA_CUBE_LUT_MIN_SIZE_EXT INT32_C(2)
+
+/** @brief The largest cube LUT this layer accepts. */
+#define CNA_CUBE_LUT_MAX_SIZE_EXT INT32_C(64)
+
+/** @brief The luminance the pass treats as diffuse white unless told otherwise, in nits. */
+#define CNA_HDR_DISPLAY_DEFAULT_PAPER_WHITE_NITS_EXT 200.0F
+
+/** @brief The brightest luminance the pass will emit unless told otherwise, in nits. */
+#define CNA_HDR_DISPLAY_DEFAULT_PEAK_NITS_EXT 1000.0F
+
+/**
+ * @brief Creates a tonemapping pass.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_tonemap_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/** @brief Returns the pass's tonemapping mode. */
+CNA_C_API CNA_Result cna_tonemap_pass_get_mode(
+    CNA_PostProcessPassHandle pass, CNA_TonemappingMode* out_mode);
+
+/**
+ * @brief Sets the pass's tonemapping mode.
+ *
+ * @param pass The pass.
+ * @param mode The mode; an undefined identity is refused rather than cast through.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined mode or when the
+ * pass is not a TonemapPass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_tonemap_pass_set_mode(
+    CNA_PostProcessPassHandle pass, CNA_TonemappingMode mode);
+
+/** @brief Returns the pass's exposure. */
+CNA_C_API CNA_Result cna_tonemap_pass_get_exposure(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/** @brief Sets the pass's exposure; stored as given, the pass corrects nothing here. */
+CNA_C_API CNA_Result cna_tonemap_pass_set_exposure(
+    CNA_PostProcessPassHandle pass, float value);
+
+/** @brief Returns the pass's gamma. */
+CNA_C_API CNA_Result cna_tonemap_pass_get_gamma(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/** @brief Sets the pass's gamma; stored as given, the pass corrects nothing here. */
+CNA_C_API CNA_Result cna_tonemap_pass_set_gamma(
+    CNA_PostProcessPassHandle pass, float value);
+
+/** @brief Reports whether debanding is on. */
+CNA_C_API CNA_Result cna_tonemap_pass_is_deband_enabled(
+    CNA_PostProcessPassHandle pass, CNA_Bool* out_enabled);
+
+/** @brief Turns debanding on or off. */
+CNA_C_API CNA_Result cna_tonemap_pass_set_deband_enabled(
+    CNA_PostProcessPassHandle pass, CNA_Bool value);
+
+/** @brief Returns the deband strength. */
+CNA_C_API CNA_Result cna_tonemap_pass_get_deband_strength(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/** @brief Sets the deband strength. */
+CNA_C_API CNA_Result cna_tonemap_pass_set_deband_strength(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Tonemaps one channel, exactly as the pass's shader would.
+ *
+ * A pure function of its arguments, so it needs no pass -- and the only way from C to check what
+ * a mode does to a value without rendering a frame.
+ *
+ * @param mode The tonemapping mode.
+ * @param value The channel's scene-linear value.
+ * @param exposure The exposure multiplier.
+ * @param gamma The gamma to encode with.
+ * @param out_value Receives the tonemapped channel.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined mode,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_tonemap_pass_tonemap_channel(
+    CNA_TonemappingMode mode, float value, float exposure, float gamma, float* out_value);
+
+/**
+ * @brief Creates a colour-grading pass.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_color_grade_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/** @brief Returns the strip LUT, borrowed, or `CNA_INVALID_HANDLE`. */
+CNA_C_API CNA_Result cna_color_grade_pass_get_lut(
+    CNA_PostProcessPassHandle pass, CNA_Handle* out_lut);
+
+/**
+ * @brief Binds a strip LUT, or unbinds the current one.
+ *
+ * @param pass The pass.
+ * @param lut The LUT texture; borrowed. `CNA_INVALID_HANDLE` **unbinds**, which is what every
+ *        other `set*` in this ABI does with an invalid handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * ColorGradePass **or the texture is not a valid strip** -- a strip is N slices of N by N, so its
+ * width must be the square of its height, and one read at the wrong slice count would grade the
+ * frame into colours nothing in the table names, which is why it is refused rather than sampled --
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_color_grade_pass_set_lut(
+    CNA_PostProcessPassHandle pass, CNA_Handle lut);
+
+/** @brief Returns the volume LUT, borrowed, or `CNA_INVALID_HANDLE`. */
+CNA_C_API CNA_Result cna_color_grade_pass_get_volume_lut(
+    CNA_PostProcessPassHandle pass, CNA_Handle* out_lut);
+
+/**
+ * @brief Binds a volume LUT, or unbinds the current one.
+ *
+ * @param pass The pass.
+ * @param lut The LUT texture; borrowed. `CNA_INVALID_HANDLE` unbinds.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * ColorGradePass or the texture is not a cube with an edge between two and
+ * `CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_color_grade_pass_set_volume_lut(
+    CNA_PostProcessPassHandle pass, CNA_Handle lut);
+
+/** @brief Returns how the LUT is sampled between slices. */
+CNA_C_API CNA_Result cna_color_grade_pass_get_interpolation(
+    CNA_PostProcessPassHandle pass, CNA_LutInterpolation* out_value);
+
+/** @brief Sets how the LUT is sampled; an undefined identity is refused. */
+CNA_C_API CNA_Result cna_color_grade_pass_set_interpolation(
+    CNA_PostProcessPassHandle pass, CNA_LutInterpolation value);
+
+/** @brief Returns how strongly the grade is applied. */
+CNA_C_API CNA_Result cna_color_grade_pass_get_strength(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/** @brief Sets how strongly the grade is applied. */
+CNA_C_API CNA_Result cna_color_grade_pass_set_strength(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the slice count a strip of the given pixel size describes.
+ *
+ * A pure function of its arguments.
+ *
+ * @param width Strip width in pixels.
+ * @param height Strip height in pixels.
+ * @param out_size Receives the slice count, or zero when the size describes no valid strip.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_color_grade_pass_lut_size_for_strip(
+    int32_t width, int32_t height, int32_t* out_size);
+
+/**
+ * @brief Creates an identity strip LUT, which grades nothing.
+ *
+ * @param graphics_device The device to allocate on.
+ * @param size The slice count; must be between two and `CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT`.
+ * @param out_lut Receives an owned texture handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a size outside the range,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_color_grade_pass_create_identity_lut(
+    CNA_Handle graphics_device, int32_t size, CNA_Handle* out_lut);
+
+/** @brief Owned handle for one HDR display output. Not a post-process pass. */
+typedef CNA_Handle CNA_HdrDisplayOutputHandle;
+
+/**
+ * @brief Creates an HDR display output.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_output Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_hdr_display_output_create(
+    CNA_Handle graphics_device, CNA_HdrDisplayOutputHandle* out_output);
+
+/** @brief Releases the HDR display output. */
+CNA_C_API CNA_Result cna_hdr_display_output_destroy(CNA_HdrDisplayOutputHandle output);
+
+/** @brief Reports whether this renderer can drive an HDR display. */
+CNA_C_API CNA_Result cna_hdr_display_output_is_supported(
+    CNA_HdrDisplayOutputHandle output, CNA_Bool* out_supported);
+
+/** @brief Returns the colour space the output encodes for. */
+CNA_C_API CNA_Result cna_hdr_display_output_get_color_space(
+    CNA_HdrDisplayOutputHandle output, CNA_DisplayColorSpace* out_space);
+
+/** @brief Sets the colour space; an undefined identity is refused. */
+CNA_C_API CNA_Result cna_hdr_display_output_set_color_space(
+    CNA_HdrDisplayOutputHandle output, CNA_DisplayColorSpace value);
+
+/** @brief Returns the luminance treated as diffuse white, in nits. */
+CNA_C_API CNA_Result cna_hdr_display_output_get_paper_white_nits(
+    CNA_HdrDisplayOutputHandle output, float* out_nits);
+
+/** @brief Sets the luminance treated as diffuse white, in nits. */
+CNA_C_API CNA_Result cna_hdr_display_output_set_paper_white_nits(
+    CNA_HdrDisplayOutputHandle output, float value);
+
+/** @brief Returns the brightest luminance the output will emit, in nits. */
+CNA_C_API CNA_Result cna_hdr_display_output_get_peak_nits(
+    CNA_HdrDisplayOutputHandle output, float* out_nits);
+
+/**
+ * @brief Sets the brightest luminance the output will emit, in nits.
+ *
+ * **Floored at the current paper-white**, not at a constant: a peak below diffuse white would
+ * make white brighter than the brightest thing the display can show. The bound therefore moves
+ * with @ref cna_hdr_display_output_set_paper_white_nits, which is the only correction of this
+ * shape in the engine layer.
+ *
+ * @param output The output.
+ * @param value The peak luminance; **raised to the paper-white value** when below it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_hdr_display_output_set_peak_nits(
+    CNA_HdrDisplayOutputHandle output, float value);
+
+/**
+ * @brief Encodes a scene-linear frame for the display.
+ *
+ * @param output The output.
+ * @param source The scene-linear source; borrowed.
+ * @param destination The destination render target, or `CNA_INVALID_HANDLE` for the back buffer.
+ * @param width Destination width in pixels; must be positive.
+ * @param height Destination height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size or a null
+ * source, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_hdr_display_output_draw(
+    CNA_HdrDisplayOutputHandle output,
+    CNA_Handle source,
+    CNA_Handle destination,
+    int32_t width,
+    int32_t height);
+
+/** @brief Encodes a luminance in nits with the PQ transfer function. Pure. */
+CNA_C_API CNA_Result cna_hdr_display_output_encode_pq(float nits, float* out_encoded);
+
+/** @brief Decodes a PQ-encoded value back to nits. Pure, and the inverse of the above. */
+CNA_C_API CNA_Result cna_hdr_display_output_decode_pq(float encoded, float* out_nits);
+
+/** @brief Converts a Rec.709 colour to Rec.2020 primaries. Pure. */
+CNA_C_API CNA_Result cna_hdr_display_output_rec709_to_rec2020(
+    const CNA_Vector3* color, CNA_Vector3* out_color);
+
+/** @brief Rolls a luminance off towards a peak so highlights compress rather than clip. Pure. */
+CNA_C_API CNA_Result cna_hdr_display_output_roll_off(
+    float nits, float peak_nits, float* out_nits);
+
+/**
+ * @brief Encodes one scene-linear colour for a colour space. Pure.
+ *
+ * @param space The colour space.
+ * @param scene_linear The scene-linear colour.
+ * @param paper_white_nits The luminance of diffuse white.
+ * @param peak_nits The brightest luminance the display can show.
+ * @param out_color Receives the encoded colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined space or a null
+ * colour, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_hdr_display_output_encode(
+    CNA_DisplayColorSpace space,
+    const CNA_Vector3* scene_linear,
+    float paper_white_nits,
+    float peak_nits,
+    CNA_Vector3* out_color);
+
+/**
+ * @brief Owned handle for one automatic-exposure meter. Not a post-process pass.
+ *
+ * **It needs compute shaders**, and unlike everything else in this layer it says so at
+ * construction rather than through an `is_supported` query: the canonical constructor builds a
+ * compute program and a storage buffer, so where the renderer has neither there is no object to
+ * create. Ask `cna_graphics_device_supports_capability` with
+ * `CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS` before creating one.
+ */
+typedef CNA_Handle CNA_AutoExposureHandle;
+
+/**
+ * @brief Creates an automatic-exposure meter.
+ *
+ * @param graphics_device The device to read the scene on.
+ * @param out_auto_exposure Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`; `CNA_RESULT_NOT_SUPPORTED` without the engine layer **or on a
+ * renderer without compute shaders**, which is a capability boundary rather than a failure; or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_create(
+    CNA_Handle graphics_device, CNA_AutoExposureHandle* out_auto_exposure);
+
+/** @brief Releases the meter. */
+CNA_C_API CNA_Result cna_auto_exposure_ext_destroy(CNA_AutoExposureHandle auto_exposure);
+
+/**
+ * @brief Measures a scene's average luminance without adapting to it.
+ *
+ * @param auto_exposure The meter.
+ * @param scene The scene texture; borrowed.
+ * @param out_luminance Receives the average luminance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null scene,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_measure_average_luminance(
+    CNA_AutoExposureHandle auto_exposure, CNA_Handle scene, float* out_luminance);
+
+/**
+ * @brief Adapts the exposure towards a scene over a time step, and returns the new exposure.
+ *
+ * @param auto_exposure The meter.
+ * @param scene The scene texture; borrowed.
+ * @param delta_seconds How much time has passed.
+ * @param out_exposure Receives the exposure after adapting.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null scene,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_update(
+    CNA_AutoExposureHandle auto_exposure,
+    CNA_Handle scene,
+    float delta_seconds,
+    float* out_exposure);
+
+/**
+ * @brief Writes the meter's exposure into a settings structure.
+ *
+ * @param auto_exposure The meter.
+ * @param settings The settings to update in place.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_apply_to(
+    CNA_AutoExposureHandle auto_exposure, CNA_RenderPipelineSettingsEXT* settings);
+
+/** @brief Returns the exposure as it stands. */
+CNA_C_API CNA_Result cna_auto_exposure_ext_get_exposure(
+    CNA_AutoExposureHandle auto_exposure, float* out_value);
+
+/**
+ * @brief Sets the exposure.
+ *
+ * @param auto_exposure The meter.
+ * @param value The exposure; **must be positive**, and is then **clamped into the current
+ *        exposure range** -- so a value inside the contract can still come back different.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a value that is not positive,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_set_exposure(
+    CNA_AutoExposureHandle auto_exposure, float value);
+
+/** @brief Returns the key value the meter targets. */
+CNA_C_API CNA_Result cna_auto_exposure_ext_get_key_value(
+    CNA_AutoExposureHandle auto_exposure, float* out_value);
+
+/**
+ * @brief Sets the key value the meter targets.
+ *
+ * @param auto_exposure The meter.
+ * @param value The key value; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a value that is not positive,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_set_key_value(
+    CNA_AutoExposureHandle auto_exposure, float value);
+
+/** @brief Returns how fast the meter adapts to a brighter scene. */
+CNA_C_API CNA_Result cna_auto_exposure_ext_get_brightening_speed(
+    CNA_AutoExposureHandle auto_exposure, float* out_value);
+
+/** @brief Returns how fast the meter adapts to a darker scene. */
+CNA_C_API CNA_Result cna_auto_exposure_ext_get_darkening_speed(
+    CNA_AutoExposureHandle auto_exposure, float* out_value);
+
+/**
+ * @brief Sets both adaptation speeds.
+ *
+ * **The pair is validated as a pair**: if either speed is not positive the call is refused and
+ * neither is written, so one good value and one bad changes nothing.
+ *
+ * @param auto_exposure The meter.
+ * @param brightening_per_second How fast to adapt to a brighter scene; must be positive.
+ * @param darkening_per_second How fast to adapt to a darker scene; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when either speed is not positive,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_set_adaptation_speeds(
+    CNA_AutoExposureHandle auto_exposure,
+    float brightening_per_second,
+    float darkening_per_second);
+
+/**
+ * @brief Sets the range the exposure is kept within.
+ *
+ * Validated as a pair, exactly as the adaptation speeds are, and **the current exposure is
+ * re-clamped into the new range** -- so setting a range can change the exposure a caller just set.
+ *
+ * @param auto_exposure The meter.
+ * @param minimum The lowest exposure; must be positive.
+ * @param maximum The highest exposure; must not be below @p minimum.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the minimum is not positive or
+ * the maximum is below it, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_auto_exposure_ext_set_exposure_range(
+    CNA_AutoExposureHandle auto_exposure, float minimum, float maximum);
+
+/**
+ * @brief Owned handle for one parsed `.cube` colour LUT.
+ *
+ * **This is the byte-facing surface of the engine layer.** Everything else in Phase B9 takes
+ * numbers a caller chose; this takes text a caller did not necessarily write, so its refusals are
+ * covered by an independent oracle and a fuzz target rather than by a smoke test alone -- the
+ * release gate's rule for parser-like surfaces, set by `CBIND-040B`.
+ */
+typedef CNA_Handle CNA_CubeLutHandle;
+
+/**
+ * @brief Parses a `.cube` LUT from text.
+ *
+ * @param text The LUT text as UTF-8 bytes; need not be null-terminated.
+ * @param out_lut Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for text the parser refuses --
+ * a missing or unreadable size, a size outside `CNA_CUBE_LUT_MIN_SIZE_EXT`..
+ * `CNA_CUBE_LUT_MAX_SIZE_EXT`, a malformed domain line, an entry line with fewer than three
+ * numbers, or an entry count that disagrees with the declared size -- `CNA_RESULT_ENCODING` when
+ * the text is not valid UTF-8, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_lut_parse(CNA_StringView text, CNA_CubeLutHandle* out_lut);
+
+/**
+ * @brief Loads and parses a `.cube` LUT from a file.
+ *
+ * @param path The file path as UTF-8 bytes.
+ * @param out_lut Receives the owned handle; set invalid on failure.
+ * @return As @ref cna_cube_lut_parse, plus `CNA_RESULT_IO` when the file cannot be opened.
+ */
+CNA_C_API CNA_Result cna_cube_lut_load_from_file(
+    CNA_StringView path, CNA_CubeLutHandle* out_lut);
+
+/** @brief Releases the LUT. */
+CNA_C_API CNA_Result cna_cube_lut_destroy(CNA_CubeLutHandle lut);
+
+/** @brief Returns the table's slice count. */
+CNA_C_API CNA_Result cna_cube_lut_get_size(CNA_CubeLutHandle lut, int32_t* out_size);
+
+/** @brief Copies the table's title as UTF-8 bytes without a terminator. */
+CNA_C_API CNA_Result cna_cube_lut_copy_title(
+    CNA_CubeLutHandle lut, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/** @brief Returns the low corner of the table's input domain. */
+CNA_C_API CNA_Result cna_cube_lut_get_domain_min(CNA_CubeLutHandle lut, CNA_Vector3* out_value);
+
+/** @brief Returns the high corner of the table's input domain. */
+CNA_C_API CNA_Result cna_cube_lut_get_domain_max(CNA_CubeLutHandle lut, CNA_Vector3* out_value);
+
+/** @brief Reports whether the domain is the unit cube, which needs no rescaling. */
+CNA_C_API CNA_Result cna_cube_lut_is_unit_domain(CNA_CubeLutHandle lut, CNA_Bool* out_unit);
+
+/**
+ * @brief Returns one entry of the table.
+ *
+ * @param lut The LUT.
+ * @param red The red index, from zero.
+ * @param green The green index, from zero.
+ * @param blue The blue index, from zero.
+ * @param out_color Receives the entry.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the table --
+ * refused rather than clamped, because a clamped index would silently read a different colour --
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cube_lut_get_entry(
+    CNA_CubeLutHandle lut, int32_t red, int32_t green, int32_t blue, CNA_Vector3* out_color);
+
+/** @brief Builds a strip texture from the table; the caller owns the result. */
+CNA_C_API CNA_Result cna_cube_lut_create_strip_texture(
+    CNA_CubeLutHandle lut, CNA_Handle graphics_device, CNA_Handle* out_texture);
+
+/** @brief Builds a volume texture from the table; the caller owns the result. */
+CNA_C_API CNA_Result cna_cube_lut_create_volume_texture(
+    CNA_CubeLutHandle lut, CNA_Handle graphics_device, CNA_Handle* out_texture);
+
 #ifdef __cplusplus
 }
 #endif

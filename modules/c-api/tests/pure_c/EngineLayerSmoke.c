@@ -643,6 +643,38 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-090. HDR output, tonemapping, grading and the .cube parser. */
+    {
+        CNA_PostProcessPassHandle pass = CNA_INVALID_HANDLE;
+        CNA_HdrDisplayOutputHandle hdr = CNA_INVALID_HANDLE;
+        CNA_AutoExposureHandle meter = CNA_INVALID_HANDLE;
+        CNA_CubeLutHandle lut = CNA_INVALID_HANDLE;
+        CNA_StringView text;
+        CNA_Vector3 vector;
+        float scalar = -1.0F;
+        text.data = "LUT_3D_SIZE 2\n";
+        text.byte_length = (uint64_t)14;
+        vector.x = 1.0F; vector.y = 1.0F; vector.z = 1.0F;
+        if (cna_tonemap_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            pass != CNA_INVALID_HANDLE ||
+            cna_color_grade_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_tonemap_pass_tonemap_channel(CNA_TONEMAPPING_MODE_ACES, 1.0F, 1.0F, 2.2F,
+                                             &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_hdr_display_output_create(graphics_device, &hdr) != CNA_RESULT_NOT_SUPPORTED ||
+            hdr != CNA_INVALID_HANDLE ||
+            cna_hdr_display_output_encode_pq(203.0F, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_hdr_display_output_rec709_to_rec2020(&vector, &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_auto_exposure_ext_create(graphics_device, &meter) != CNA_RESULT_NOT_SUPPORTED ||
+            meter != CNA_INVALID_HANDLE ||
+            cna_cube_lut_parse(text, &lut) != CNA_RESULT_NOT_SUPPORTED ||
+            lut != CNA_INVALID_HANDLE ||
+            cna_cube_lut_load_from_file(text, &lut) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_color_grade_pass_lut_size_for_strip(INT32_C(64), INT32_C(8), &samples) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -5089,6 +5121,321 @@ static int validate_struct_growth(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-090. HDR output, tonemapping and grading. Three corrections here are unlike anything
+   earlier in the phase: setPeakNits floors against ANOTHER FIELD rather than a constant, so its
+   bound moves; AutoExposureEXT guards its two-argument setters as PAIRS, so one good value and
+   one bad writes neither; and ColorGradePass::setLut IGNORES a null rather than unbinding, which
+   is the opposite of every other set* in this ABI. Each is asserted for what it actually does. */
+static int validate_hdr_and_grading(const CNA_Handle graphics_device)
+{
+    CNA_PostProcessPassHandle tonemap = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle grade = CNA_INVALID_HANDLE;
+    CNA_HdrDisplayOutputHandle hdr = CNA_INVALID_HANDLE;
+    CNA_AutoExposureHandle meter = CNA_INVALID_HANDLE;
+    CNA_Handle identity_lut = CNA_INVALID_HANDLE;
+    CNA_Vector3 vector;
+    CNA_Vector3 read_back;
+    CNA_Bool flag = UINT8_C(9);
+    float scalar = -1.0F;
+    float other = -1.0F;
+    int32_t number = -1;
+    uint32_t identity = UINT32_C(99);
+    int ok = 1;
+
+    /* The meter needs compute shaders and says so at construction rather than through an
+       is_supported query -- the only object in the layer that does. So its create is allowed to
+       refuse, and the assertions that follow branch on whether it exists. Measured, not assumed:
+       an earlier draft required it and failed on HEADLESS, where compute is absent. */
+    {
+        CNA_Bool compute = CNA_FALSE;
+        const CNA_Result asked = cna_graphics_device_supports_capability(
+            graphics_device, CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS, &compute);
+        const CNA_Result made = cna_auto_exposure_ext_create(graphics_device, &meter);
+        if (asked != CNA_RESULT_SUCCESS ||
+            made != (compute == CNA_TRUE ? CNA_RESULT_SUCCESS : CNA_RESULT_NOT_SUPPORTED)) {
+            (void)cna_auto_exposure_ext_destroy(meter);
+            return 0;
+        }
+    }
+    if (cna_tonemap_pass_create(graphics_device, &tonemap) != CNA_RESULT_SUCCESS ||
+        cna_color_grade_pass_create(graphics_device, &grade) != CNA_RESULT_SUCCESS ||
+        cna_hdr_display_output_create(graphics_device, &hdr) != CNA_RESULT_SUCCESS) {
+        (void)cna_post_process_pass_destroy(tonemap);
+        (void)cna_post_process_pass_destroy(grade);
+        (void)cna_hdr_display_output_destroy(hdr);
+        (void)cna_auto_exposure_ext_destroy(meter);
+        return 0;
+    }
+
+    /* CBIND-088A found Uncharted2 declared canonically but absent from the C identity, so a C
+       caller could not select it and the settings validator refused its ordinal. Both halves are
+       asserted here: the pass accepts it, and the settings bag now normalizes it rather than
+       refusing. */
+    ok = cna_tonemap_pass_set_mode(tonemap, CNA_TONEMAPPING_MODE_UNCHARTED2) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_tonemap_pass_get_mode(tonemap, &identity) == CNA_RESULT_SUCCESS &&
+        identity == CNA_TONEMAPPING_MODE_UNCHARTED2;
+    ok = ok && cna_tonemap_pass_set_mode(tonemap, CNA_TONEMAPPING_MODE_UNCHARTED2 + UINT32_C(1)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    {
+        CNA_RenderPipelineSettingsEXT settings;
+        ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+        settings.tonemapping_mode = CNA_TONEMAPPING_MODE_UNCHARTED2;
+        ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+            settings.tonemapping_mode == CNA_TONEMAPPING_MODE_UNCHARTED2;
+    }
+    /* Every mode must actually do something different to a value, or the identity is decorative. */
+    {
+        float previous = -99.0F;
+        uint32_t mode = UINT32_C(0);
+        int distinct = 0;
+        for (mode = UINT32_C(0); mode <= CNA_TONEMAPPING_MODE_UNCHARTED2; ++mode) {
+            ok = ok && cna_tonemap_pass_tonemap_channel(mode, 4.0F, 1.0F, 2.2F, &scalar) ==
+                CNA_RESULT_SUCCESS;
+            if (scalar != previous) {
+                ++distinct;
+            }
+            previous = scalar;
+        }
+        /* Not every pair of adjacent modes has to differ at one sample point -- two curves can
+           cross. What must be true is that the five are not one function under five names, and
+           that the two extremes disagree. Measured rather than guessed: an earlier draft asserted
+           four distinct values here and failed, which is what a number picked by intuition does. */
+        ok = ok && distinct >= 2;
+        ok = ok && cna_tonemap_pass_tonemap_channel(UINT32_C(99), 1.0F, 1.0F, 2.2F, &scalar) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        /* None clamps; Aces rolls off. At a value well above one they cannot agree. */
+        ok = ok && cna_tonemap_pass_tonemap_channel(CNA_TONEMAPPING_MODE_NONE, 4.0F, 1.0F, 2.2F,
+                                                    &scalar) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_tonemap_pass_tonemap_channel(CNA_TONEMAPPING_MODE_ACES, 4.0F, 1.0F, 2.2F,
+                                                    &other) == CNA_RESULT_SUCCESS &&
+            other != scalar;
+    }
+    /* The pass corrects nothing: exposure and gamma survive out-of-range values. */
+    ok = ok && cna_tonemap_pass_set_exposure(tonemap, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_tonemap_pass_get_exposure(tonemap, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_tonemap_pass_set_gamma(tonemap, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_tonemap_pass_get_gamma(tonemap, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_tonemap_pass_set_deband_enabled(tonemap, CNA_TRUE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_tonemap_pass_is_deband_enabled(tonemap, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_tonemap_pass_set_deband_enabled(tonemap, UINT8_C(2)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_tonemap_pass_set_deband_strength(tonemap, 0.5F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_tonemap_pass_get_deband_strength(tonemap, &scalar) == CNA_RESULT_SUCCESS;
+
+    /* ---- ColorGradePass: a null LUT is IGNORED, not an unbind ---- */
+    ok = ok && cna_color_grade_pass_set_interpolation(
+            grade, CNA_LUT_INTERPOLATION_TETRAHEDRAL) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_color_grade_pass_get_interpolation(grade, &identity) == CNA_RESULT_SUCCESS &&
+        identity == CNA_LUT_INTERPOLATION_TETRAHEDRAL;
+    ok = ok && cna_color_grade_pass_set_interpolation(grade, UINT32_C(99)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_color_grade_pass_set_strength(grade, 0.25F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_color_grade_pass_get_strength(grade, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    ok = ok && cna_color_grade_pass_lut_size_for_strip(INT32_C(64), INT32_C(8), &number) ==
+        CNA_RESULT_SUCCESS && number == INT32_C(8);
+    ok = ok && cna_color_grade_pass_lut_size_for_strip(INT32_C(7), INT32_C(3), &number) ==
+        CNA_RESULT_SUCCESS && number == INT32_C(0);
+    /* Out-of-range slice counts are refused rather than corrected: the texture is sized from it. */
+    ok = ok && cna_color_grade_pass_create_identity_lut(graphics_device, INT32_C(1),
+                                                        &identity_lut) ==
+        CNA_RESULT_INVALID_ARGUMENT && identity_lut == CNA_INVALID_HANDLE;
+    ok = ok && cna_color_grade_pass_create_identity_lut(
+            graphics_device, CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT + INT32_C(1), &identity_lut) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    if (ok && cna_color_grade_pass_create_identity_lut(graphics_device, INT32_C(8),
+                                                       &identity_lut) == CNA_RESULT_SUCCESS) {
+        CNA_Handle read_lut = CNA_INVALID_HANDLE;
+        ok = cna_color_grade_pass_set_lut(grade, identity_lut) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_color_grade_pass_get_lut(grade, &read_lut) == CNA_RESULT_SUCCESS &&
+            read_lut != CNA_INVALID_HANDLE;
+        ok = ok && cna_render_target_destroy(read_lut) == CNA_RESULT_SUCCESS;
+        /* An invalid handle UNBINDS, like every other set* in this ABI. An earlier draft of this
+           stage asserted the opposite, on a classification taken from a regex match on `if (...)`
+           rather than from the setter's body -- the run corrected it. */
+        ok = ok && cna_color_grade_pass_set_lut(grade, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_color_grade_pass_get_lut(grade, &read_lut) == CNA_RESULT_SUCCESS &&
+            read_lut == CNA_INVALID_HANDLE;
+        /* A texture that is not a valid strip is REFUSED rather than sampled: a strip read at the
+           wrong slice count grades the frame into colours nothing in the table names, which looks
+           almost right and is therefore worse than an error. */
+        {
+            const CNA_Texture2DCreateInfo bad = {
+                sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 5U, 3U, CNA_FALSE, {0U, 0U, 0U},
+                CNA_SURFACE_FORMAT_COLOR};
+            CNA_Handle wrong = CNA_INVALID_HANDLE;
+            if (cna_texture2d_create(graphics_device, &bad, &wrong) == CNA_RESULT_SUCCESS) {
+                ok = ok && cna_color_grade_pass_set_lut(grade, wrong) ==
+                    CNA_RESULT_INVALID_ARGUMENT;
+                ok = ok && cna_texture2d_destroy(wrong) == CNA_RESULT_SUCCESS;
+            }
+        }
+        ok = ok && cna_texture2d_destroy(identity_lut) == CNA_RESULT_SUCCESS;
+    }
+
+    /* The volume LUT pair. Nothing is bound, so the getter answers with the invalid handle, and
+       unbinding an unbound volume is accepted -- the same shape as the strip. A 2D texture is not
+       a volume, so the setter refuses it by handle rather than sampling it as one. */
+    {
+        CNA_Handle volume = (CNA_Handle)UINT64_C(0x5A5A5A5A);
+        ok = ok && cna_color_grade_pass_get_volume_lut(grade, &volume) == CNA_RESULT_SUCCESS &&
+            volume == CNA_INVALID_HANDLE;
+        ok = ok && cna_color_grade_pass_set_volume_lut(grade, CNA_INVALID_HANDLE) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_color_grade_pass_set_volume_lut(tonemap, CNA_INVALID_HANDLE) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    /* The .cube parser's two texture builders. The oracle covers the parse itself; what belongs
+       here is that a parsed table can be handed to the device at all, and that both builders
+       refuse a device that is not one. */
+    {
+        CNA_CubeLutHandle lut = CNA_INVALID_HANDLE;
+        CNA_StringView text;
+        text.data =
+            "LUT_3D_SIZE 2\n"
+            "0.0 0.0 0.0\n1.0 0.0 0.0\n0.0 1.0 0.0\n1.0 1.0 0.0\n"
+            "0.0 0.0 1.0\n1.0 0.0 1.0\n0.0 1.0 1.0\n1.0 1.0 1.0\n";
+        text.byte_length = (uint64_t)118;
+        if (ok && cna_cube_lut_parse(text, &lut) == CNA_RESULT_SUCCESS) {
+            CNA_Handle strip = CNA_INVALID_HANDLE;
+            CNA_Handle volume = CNA_INVALID_HANDLE;
+            if (cna_cube_lut_create_strip_texture(lut, graphics_device, &strip) ==
+                    CNA_RESULT_SUCCESS) {
+                ok = ok && strip != CNA_INVALID_HANDLE;
+                ok = ok && cna_texture2d_destroy(strip) == CNA_RESULT_SUCCESS;
+            }
+            if (cna_cube_lut_create_volume_texture(lut, graphics_device, &volume) ==
+                    CNA_RESULT_SUCCESS) {
+                ok = ok && volume != CNA_INVALID_HANDLE;
+                ok = ok && cna_texture3d_destroy(volume) == CNA_RESULT_SUCCESS;
+            }
+            ok = ok && cna_cube_lut_create_strip_texture(lut, CNA_INVALID_HANDLE, &strip) !=
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_cube_lut_create_volume_texture(lut, CNA_INVALID_HANDLE, &volume) !=
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_cube_lut_destroy(lut) == CNA_RESULT_SUCCESS;
+        }
+    }
+
+    /* ---- HdrDisplayOutput: a floor that MOVES with another field ---- */
+    ok = ok && cna_hdr_display_output_is_supported(hdr, &flag) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_get_paper_white_nits(hdr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == CNA_HDR_DISPLAY_DEFAULT_PAPER_WHITE_NITS_EXT;
+    ok = ok && cna_hdr_display_output_get_peak_nits(hdr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == CNA_HDR_DISPLAY_DEFAULT_PEAK_NITS_EXT;
+    /* Below the current paper-white, the peak is raised to it -- not to a constant. Proving the
+       bound MOVES needs two paper-white values, which a fixed expectation could never show. */
+    ok = ok && cna_hdr_display_output_set_paper_white_nits(hdr, 100.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_set_peak_nits(hdr, 1.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_get_peak_nits(hdr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 100.0F;
+    ok = ok && cna_hdr_display_output_set_paper_white_nits(hdr, 400.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_set_peak_nits(hdr, 1.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_get_peak_nits(hdr, &other) == CNA_RESULT_SUCCESS &&
+        other == 400.0F && other != scalar;
+    ok = ok && cna_hdr_display_output_set_color_space(hdr, CNA_DISPLAY_COLOR_SPACE_HDR10) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_get_color_space(hdr, &identity) == CNA_RESULT_SUCCESS &&
+        identity == CNA_DISPLAY_COLOR_SPACE_HDR10;
+    ok = ok && cna_hdr_display_output_set_color_space(hdr, UINT32_C(99)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_hdr_display_output_draw(hdr, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
+                                           INT32_C(16), INT32_C(16)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* PQ round-trips, which is the one claim about it worth making without restating the curve. */
+    ok = ok && cna_hdr_display_output_encode_pq(203.0F, &scalar) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_decode_pq(scalar, &other) == CNA_RESULT_SUCCESS &&
+        other > 200.0F && other < 206.0F;
+    /* Roll-off compresses towards the peak: below it nothing changes much, above it the result
+       stays under the peak rather than clipping past it. */
+    ok = ok && cna_hdr_display_output_roll_off(10000.0F, 1000.0F, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar <= 1000.0F;
+    vector.x = 1.0F; vector.y = 1.0F; vector.z = 1.0F;
+    ok = ok && cna_hdr_display_output_rec709_to_rec2020(&vector, &read_back) ==
+        CNA_RESULT_SUCCESS;
+    /* White is white in any primaries: the conversion must not tint it. */
+    ok = ok && read_back.x > 0.99F && read_back.x < 1.01F &&
+        read_back.y > 0.99F && read_back.y < 1.01F && read_back.z > 0.99F &&
+        read_back.z < 1.01F;
+    ok = ok && cna_hdr_display_output_rec709_to_rec2020(0, &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_hdr_display_output_encode(CNA_DISPLAY_COLOR_SPACE_SRGB, &vector, 200.0F,
+                                             1000.0F, &read_back) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_hdr_display_output_encode(UINT32_C(99), &vector, 200.0F, 1000.0F,
+                                             &read_back) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* ---- AutoExposureEXT: pairs validated as pairs, and every setter REFUSES ---- */
+    if (meter != CNA_INVALID_HANDLE) {
+    /* All four setters throw rather than ignoring, which a regex over `if (...)` reported as a
+       guarded assignment. The run corrected it: an earlier draft of this stage asserted that a
+       non-positive value was silently kept, and the route returned a refusal instead. */
+    ok = ok && cna_auto_exposure_ext_set_exposure_range(meter, 0.5F, 8.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_auto_exposure_ext_set_exposure(meter, 2.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_auto_exposure_ext_get_exposure(meter, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 2.0F;
+    ok = ok && cna_auto_exposure_ext_set_exposure(meter, 0.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_auto_exposure_ext_set_exposure(meter, -1.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_auto_exposure_ext_get_exposure(meter, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 2.0F;
+    /* An accepted exposure is still CLAMPED into the range, so a value inside the contract can
+       come back different -- a refusal and a correction on the same setter. */
+    ok = ok && cna_auto_exposure_ext_set_exposure(meter, 99.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_auto_exposure_ext_get_exposure(meter, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 8.0F;
+    ok = ok && cna_auto_exposure_ext_set_key_value(meter, 0.25F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_auto_exposure_ext_get_key_value(meter, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    ok = ok && cna_auto_exposure_ext_set_key_value(meter, -1.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_auto_exposure_ext_get_key_value(meter, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    /* The pair: one good speed and one bad must write NEITHER. Asserting only the refusal would
+       pass even if the good half had been written. */
+    ok = ok && cna_auto_exposure_ext_set_adaptation_speeds(meter, 3.0F, 4.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_auto_exposure_ext_set_adaptation_speeds(meter, 9.0F, -1.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_auto_exposure_ext_get_brightening_speed(meter, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_auto_exposure_ext_get_darkening_speed(meter, &other) == CNA_RESULT_SUCCESS &&
+        other == 4.0F;
+    ok = ok && cna_auto_exposure_ext_set_exposure_range(meter, -1.0F, 8.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_auto_exposure_ext_set_exposure_range(meter, 8.0F, 1.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_auto_exposure_ext_measure_average_luminance(meter, CNA_INVALID_HANDLE,
+                                                               &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_auto_exposure_ext_update(meter, CNA_INVALID_HANDLE, 0.016F, &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    {
+        CNA_RenderPipelineSettingsEXT settings;
+        ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_auto_exposure_ext_apply_to(meter, &settings) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_auto_exposure_ext_apply_to(meter, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    }
+
+    /* Cross-type refusals, by argument rather than by handle. */
+    ok = ok && cna_tonemap_pass_get_exposure(grade, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_color_grade_pass_get_strength(tonemap, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+
+    if (meter != CNA_INVALID_HANDLE) {
+        ok = ok && cna_auto_exposure_ext_destroy(meter) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_auto_exposure_ext_destroy(meter) != CNA_RESULT_SUCCESS;
+    }
+    ok = ok && cna_hdr_display_output_destroy(hdr) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(grade) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(tonemap) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -5206,6 +5553,10 @@ static CNA_Result on_load(
         }
         if (!validate_struct_growth(graphics_device)) {
             state->failed_stage = 30;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_hdr_and_grading(graphics_device)) {
+            state->failed_stage = 31;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

@@ -1057,6 +1057,19 @@
   "cna_audio_get_capabilities",
   "cna_audio_listener_init",
   "cna_audio_unsubscribe_ext",
+  "cna_auto_exposure_ext_apply_to",
+  "cna_auto_exposure_ext_create",
+  "cna_auto_exposure_ext_destroy",
+  "cna_auto_exposure_ext_get_brightening_speed",
+  "cna_auto_exposure_ext_get_darkening_speed",
+  "cna_auto_exposure_ext_get_exposure",
+  "cna_auto_exposure_ext_get_key_value",
+  "cna_auto_exposure_ext_measure_average_luminance",
+  "cna_auto_exposure_ext_set_adaptation_speeds",
+  "cna_auto_exposure_ext_set_exposure",
+  "cna_auto_exposure_ext_set_exposure_range",
+  "cna_auto_exposure_ext_set_key_value",
+  "cna_auto_exposure_ext_update",
   "cna_available_network_session_collection_copy_session",
   "cna_available_network_session_collection_create_ext",
   "cna_available_network_session_collection_destroy",
@@ -1366,6 +1379,17 @@
   "cna_color_get_hash_code",
   "cna_color_get_packed_value",
   "cna_color_get_string_byte_count",
+  "cna_color_grade_pass_create",
+  "cna_color_grade_pass_create_identity_lut",
+  "cna_color_grade_pass_get_interpolation",
+  "cna_color_grade_pass_get_lut",
+  "cna_color_grade_pass_get_strength",
+  "cna_color_grade_pass_get_volume_lut",
+  "cna_color_grade_pass_lut_size_for_strip",
+  "cna_color_grade_pass_set_interpolation",
+  "cna_color_grade_pass_set_lut",
+  "cna_color_grade_pass_set_strength",
+  "cna_color_grade_pass_set_volume_lut",
   "cna_color_init_bytes_rgb",
   "cna_color_init_bytes_rgba",
   "cna_color_init_float_rgb",
@@ -1519,6 +1543,17 @@
   "cna_crt_effect_set_mask_type",
   "cna_crt_effect_set_scanline_intensity",
   "cna_crt_effect_set_vignette_intensity",
+  "cna_cube_lut_copy_title",
+  "cna_cube_lut_create_strip_texture",
+  "cna_cube_lut_create_volume_texture",
+  "cna_cube_lut_destroy",
+  "cna_cube_lut_get_domain_max",
+  "cna_cube_lut_get_domain_min",
+  "cna_cube_lut_get_entry",
+  "cna_cube_lut_get_size",
+  "cna_cube_lut_is_unit_domain",
+  "cna_cube_lut_load_from_file",
+  "cna_cube_lut_parse",
   "cna_cube_shadow_map_begin",
   "cna_cube_shadow_map_compute_face_projection",
   "cna_cube_shadow_map_compute_face_view",
@@ -2437,6 +2472,21 @@
   "cna_haptics_open",
   "cna_haptics_open_from_joystick",
   "cna_haptics_open_from_mouse",
+  "cna_hdr_display_output_create",
+  "cna_hdr_display_output_decode_pq",
+  "cna_hdr_display_output_destroy",
+  "cna_hdr_display_output_draw",
+  "cna_hdr_display_output_encode",
+  "cna_hdr_display_output_encode_pq",
+  "cna_hdr_display_output_get_color_space",
+  "cna_hdr_display_output_get_paper_white_nits",
+  "cna_hdr_display_output_get_peak_nits",
+  "cna_hdr_display_output_is_supported",
+  "cna_hdr_display_output_rec709_to_rec2020",
+  "cna_hdr_display_output_roll_off",
+  "cna_hdr_display_output_set_color_space",
+  "cna_hdr_display_output_set_paper_white_nits",
+  "cna_hdr_display_output_set_peak_nits",
   "cna_height_fog_pass_create",
   "cna_height_fog_pass_get_base_height",
   "cna_height_fog_pass_get_color",
@@ -3986,6 +4036,18 @@
   "cna_title_location_copy_path",
   "cna_title_location_get_path_size",
   "cna_title_location_set_path_ext",
+  "cna_tonemap_pass_create",
+  "cna_tonemap_pass_get_deband_strength",
+  "cna_tonemap_pass_get_exposure",
+  "cna_tonemap_pass_get_gamma",
+  "cna_tonemap_pass_get_mode",
+  "cna_tonemap_pass_is_deband_enabled",
+  "cna_tonemap_pass_set_deband_enabled",
+  "cna_tonemap_pass_set_deband_strength",
+  "cna_tonemap_pass_set_exposure",
+  "cna_tonemap_pass_set_gamma",
+  "cna_tonemap_pass_set_mode",
+  "cna_tonemap_pass_tonemap_channel",
   "cna_touch_capabilities_init",
   "cna_touch_capabilities_init_from_values_ext",
   "cna_touch_get_capabilities",
@@ -4520,6 +4582,7 @@
   "CNA_CLUSTER_GRID_DEFAULT_TILES_Y_EXT": 8,
   "CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT": 256,
   "CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT": 128,
+  "CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT": 64,
   "CNA_COLOR_WRITE_ALL": 15,
   "CNA_COLOR_WRITE_ALPHA": 8,
   "CNA_COLOR_WRITE_BLUE": 4,
@@ -4544,6 +4607,8 @@
   "CNA_CRT_MASK_TYPE_APERTURE_GRILLE": 1,
   "CNA_CRT_MASK_TYPE_NONE": 0,
   "CNA_CRT_MASK_TYPE_SHADOW_MASK": 2,
+  "CNA_CUBE_LUT_MAX_SIZE_EXT": 64,
+  "CNA_CUBE_LUT_MIN_SIZE_EXT": 2,
   "CNA_CUBE_MAP_FACE_NEGATIVE_X": 1,
   "CNA_CUBE_MAP_FACE_NEGATIVE_Y": 3,
   "CNA_CUBE_MAP_FACE_NEGATIVE_Z": 5,
@@ -4586,6 +4651,9 @@
   "CNA_DESKTOP_OS_MACOSX": 2,
   "CNA_DESKTOP_OS_OTHER": 3,
   "CNA_DESKTOP_OS_WINDOWS": 0,
+  "CNA_DISPLAY_COLOR_SPACE_HDR10": 2,
+  "CNA_DISPLAY_COLOR_SPACE_SCRGB": 1,
+  "CNA_DISPLAY_COLOR_SPACE_SRGB": 0,
   "CNA_DISPLAY_ORIENTATION_DEFAULT": 0,
   "CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT": 1,
   "CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT": 2,
@@ -4975,6 +5043,8 @@
   "CNA_HAPTIC_FEATURE_SQUARE": 4,
   "CNA_HAPTIC_FEATURE_STATUS": 262144,
   "CNA_HAPTIC_FEATURE_TRIANGLE": 8,
+  "CNA_HDR_DISPLAY_DEFAULT_PAPER_WHITE_NITS_EXT": 200,
+  "CNA_HDR_DISPLAY_DEFAULT_PEAK_NITS_EXT": 1000,
   "CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS": 0,
   "CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS": 1,
   "CNA_INVALID_HANDLE": 0,
@@ -5200,6 +5270,8 @@
   "CNA_LOG_LEVEL_INFO": 3,
   "CNA_LOG_LEVEL_TRACE": 5,
   "CNA_LOG_LEVEL_WARN": 2,
+  "CNA_LUT_INTERPOLATION_TETRAHEDRAL": 1,
+  "CNA_LUT_INTERPOLATION_TRILINEAR": 0,
   "CNA_MATH_E": 2,
   "CNA_MATH_LOG10_E": 0,
   "CNA_MATH_LOG2_E": 1,
@@ -5588,6 +5660,7 @@
   "CNA_TONEMAPPING_MODE_FILMIC": 2,
   "CNA_TONEMAPPING_MODE_NONE": 0,
   "CNA_TONEMAPPING_MODE_REINHARD": 1,
+  "CNA_TONEMAPPING_MODE_UNCHARTED2": 4,
   "CNA_TOUCH_LOCATION_INVALID": 0,
   "CNA_TOUCH_LOCATION_MOVED": 3,
   "CNA_TOUCH_LOCATION_PRESSED": 2,
@@ -5702,6 +5775,10 @@
   "CNA_AudioStopOptions": [
    4,
    4
+  ],
+  "CNA_AutoExposureHandle": [
+   8,
+   8
   ],
   "CNA_AvailableNetworkSessionCollectionHandle": [
    8,
@@ -5867,6 +5944,10 @@
    4,
    4
   ],
+  "CNA_CubeLutHandle": [
+   8,
+   8
+  ],
   "CNA_CubeMapFace": [
    4,
    4
@@ -5930,6 +6011,10 @@
   "CNA_DirectionalLightHandle": [
    8,
    8
+  ],
+  "CNA_DisplayColorSpace": [
+   4,
+   4
   ],
   "CNA_DisplayOrientation": [
    4,
@@ -6207,6 +6292,10 @@
    4,
    4
   ],
+  "CNA_HdrDisplayOutputHandle": [
+   8,
+   8
+  ],
   "CNA_IndexBufferEventRegistrationHandle": [
    8,
    8
@@ -6272,6 +6361,10 @@
    4
   ],
   "CNA_LogLevel": [
+   4,
+   4
+  ],
+  "CNA_LutInterpolation": [
    4,
    4
   ],
