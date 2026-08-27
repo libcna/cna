@@ -2,13 +2,12 @@
 
 ## Status summary (2026-08-27)
 
-**141 rows — ✅ 131 · 🟨 8 · ⬜ 2** (hand-counted from the row tables' status column; the count is
-reproducible with the awk in this file's git history). The **10 open rows** are the only WebGPU work
-not at ✅: `WEBGPU-1, 12, 28, 29, 39, 59, 70, 107, 108, 114`.
+**141 rows — ✅ 132 · 🟨 7 · ⬜ 2** (hand-counted from the row tables' status column). The **9 open
+rows** are the only WebGPU work not at ✅: `WEBGPU-12, 28, 29, 39, 59, 70, 107, 108, 114`. (`WEBGPU-1`
+was closed 2026-08-27 — the auto-download now SHA-256-verifies every pinned wgpu-native asset and fails
+closed on mismatch.)
 
 ### Current limitations (what is genuinely still open)
-- **`WEBGPU-1` 🟨** — the convenience auto-download of the pinned wgpu-native package has no checksum
-  verification. `CNA_WEBGPU_ROOT`/offline builds are the supported reproducible path.
 - **`WEBGPU-12` 🟨** — one fresh per-*draw* uniform `WGPUBuffer` (correct, GPU-validated), not the
   per-frame/ring-buffer design this row describes.
 - **`WEBGPU-28` ⬜** — no shared `webgpu_shaders.hpp` extraction and no startup WGSL pre-validation
@@ -182,12 +181,11 @@ EnvironmentMapEffect fog). See Phase 64.1.
 
 ## Active execution order — do this one task at a time
 
-**Current open tasks (2026-08-27)** — only these 10 rows are not ✅; do one at a time, each its own
-commit, never mark ✅ from source inspection:
+**Current open tasks (2026-08-27)** — only these 9 rows are not ✅; do one at a time, each its own
+commit, never mark ✅ from source inspection. (`WEBGPU-1` SHA-256 verification was completed
+2026-08-27.)
 
-1. **`WEBGPU-1`** — add SHA-256 verification to the wgpu-native auto-download (URL_HASH/EXPECTED_HASH,
-   verify before extract, fail closed on mismatch); keep `CNA_WEBGPU_ROOT`/offline intact.
-2. **`WEBGPU-39`** — decide the `DepthFormat` mapping (None/Depth16/Depth24/Depth24Stencil8): implement
+1. **`WEBGPU-39`** — decide the `DepthFormat` mapping (None/Depth16/Depth24/Depth24Stencil8): implement
    the exact supported attachment formats or document+test the always-`Depth24PlusStencil8` deviation.
 3. **`WEBGPU-70`** — either apply `vertexStart` on the instanced route (and test the reachable ordinary
    routes) or remove the unreachable parameter/requirement.
@@ -383,7 +381,7 @@ mark it ✅ from source inspection alone.
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
-| WEBGPU-1 | Add `CNA_GRAPHICS_RENDERER=WEBGPU` CMake option; locate headers + libs; define `CNA_RENDERER_WEBGPU` | 🟨 | Re-audited 2026-08-26 -- still 🟨, gap unchanged. Linux configure, backend archive creation and final executable linkage/runtime loading are all verified (`WEBGPU-124`/`WEBGPU-128`, and cross-repo via `WEBGPU-130`). Package integrity/checksums and non-Linux paths remain unverified. `vendor/wgpu-native` is not a portable vendored dependency. |
+| WEBGPU-1 | Add `CNA_GRAPHICS_RENDERER=WEBGPU` CMake option; locate headers + libs; define `CNA_RENDERER_WEBGPU`; verify package integrity | ✅ | **Done 2026-08-27: SHA-256 verification added.** `cmake/WebGPUChecksum.cmake` pins the SHA-256 of every supported wgpu-native v29.0.1.1 asset (linux x86_64/aarch64, macos x86_64/aarch64, windows x86_64/aarch64-msvc, windows x86_64-gnu — all computed from the official GitHub release assets). The auto-download path now (a) refuses to download an asset with no pinned hash, (b) passes `EXPECTED_HASH SHA256=…` to `file(DOWNLOAD)`, and (c) re-verifies with `cna_webgpu_verify_sha256()` **before** `file(ARCHIVE_EXTRACT)`, failing closed — removing the invalid archive **and** the extract stamp — on any mismatch (also covering a pre-placed/tampered archive). `CNA_WEBGPU_ROOT`/offline and `CNA_WEBGPU_AUTO_DOWNLOAD=OFF` are unaffected (that branch bypasses the download entirely). New local test `WebGPU_ChecksumVerification` (`cmake/tests/webgpu_checksum_test.cmake`, pure CMake, no GPU): the pinned table returns the known linux hash and "" for unknown asset/version, a matching archive verifies and is kept, and both a corrupt archive and an empty/unknown hash fail closed with the archive+stamp removed. End-to-end re-verified against the real downloaded archive (`-- CNA WebGPU: verified SHA-256 of …wgpu-linux-x86_64-release.zip`). Linux configure/link/runtime-load were already verified (`WEBGPU-124`/`128`/`130`); non-Linux packages now have pinned hashes but their extracted trees are still not built/run here. |
 | WEBGPU-2 | Create `modules/renderers/webgpu/include/CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp` — class skeleton, all IGraphicsBackend sub-interfaces declared | ✅ | Core backend, Texture2D, vertex/index buffers and SpriteBatch classes exist and are runtime-verified (`WEBGPU-124`–`WEBGPU-130`); Re-audited 2026-08-26: the render-target (`WEBGPU-53`), render-target-cube (`WEBGPU-114`), 3D-draw and stock-effect renderer classes have all since shipped and are CTest-verified on the real RADV GPU (`:0`). The last sub-interface that had not been declared/overridden -- the occlusion-query class -- shipped 2026-08-26 (`WEBGPU-84`: `CreateOcclusionQuery()` now returns a real `WebGPUOcclusionQueryRenderer`), so every `IGraphicsBackend` sub-interface this renderer needs now exists and is CTest-verified. Flipped to ✅. |
 | WEBGPU-3 | Create `modules/renderers/webgpu/src/WebGPURenderer.cpp` — initial functional baseline and explicit unsupported 3D paths | ✅ | Compiles against the pinned header (`WEBGPU-124`); the 2D baseline is verified end-to-end (`WEBGPU-125`–`WEBGPU-130`) and full 3D has since landed (Phases 57-66). Re-verified 2026-08-27: the temporary `ThrowUnsupported3DDraw()` helper that guarded the pre-3D paths is gone (removed once every 3D route shipped) -- it was dead code (defined + one comment reference, never called). |
 | WEBGPU-4 | SDL3 surface creation | ✅ | X11/Wayland branches runtime-verified on Linux desktop (`WEBGPU-125`, `WEBGPU-127`'s resize/minimize/restore coverage, `WEBGPU-130`'s independent second application). Win32/Metal are code paths only, not validation claims; Android is not a supported build route. |

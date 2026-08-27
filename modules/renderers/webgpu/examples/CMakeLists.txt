@@ -19,6 +19,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
     endif()
 
+    # WEBGPU-1: SHA-256 integrity verification for the auto-downloaded wgpu-native packages. A pure
+    # CMake test (no GPU/display): it drives cmake/WebGPUChecksum.cmake with a good archive, a corrupt
+    # archive (must fail closed and remove the archive + stamp) and an unknown/empty hash.
+    cna_register_renderer_test(NAME WebGPU_ChecksumVerification COMMAND ${CMAKE_COMMAND}
+        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
+        -DCHILD=${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_checksum_verify_once.cmake
+        -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_checksum_tmp
+        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_checksum_test.cmake
+        TIMEOUT 30 LABELS "WebGPU")
+
     # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
     # WebGPU_Native2D_Smoke (SKIP_REGULAR_EXPRESSION for a headless/no-display environment),
     # since ReadBackbuffer() needs a real GPU-backed surface exactly like the smoke test does.
