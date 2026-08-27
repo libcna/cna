@@ -1313,3 +1313,45 @@ vector still matches, and the determinism assertions (in-process and cross-proce
 | **Public C++ API** | `CnbReadLimits` gained a field; `CnbLoaderRegistry::Register` gained a defaulted parameter; `CnbLoaderRegistry::Register`/`RegisterCnbLoaderEXT` refuse identifier ranges they previously accepted. No signature a caller passes positionally changed. |
 | **Command-line tools** | `cna_tool_source_to_cnb` and `cna_tool_gltf_to_cnb` refuse arguments they previously misread. No accepted invocation produces different output. |
 
+### 17.2 Verification at the end of this pass
+
+Every number below is from a run, not from memory. Repo-root CWD, `DISPLAY=:131` with
+`SDL_VIDEODRIVER=x11` (the GPU-backed virtual display), `cmake-build-debug` unless stated.
+
+| what | result |
+|---|---|
+| CNB + DDS suites (`Cnb*`, `*Cnb*`, `DdsCubeDecoderTest.*`) | **366 / 366 pass** |
+| Content, CNJ, `ContentManager`, SpriteFont, Texture3D | **531 pass, 3 skipped** (absent optional glTF fixtures, and one renderer-gated `Texture3D` case) |
+| Real-executable subprocess suites (`CnbSourceToolTest`, `CnbCompilerToolTest`, `CnbGltfDirectToolTest`, `CnbInfoToolTest`) | **25 / 25 pass** |
+| Golden vectors (`CnbGoldenVectorTest`) | **11 / 11 pass**, and `CnbGoldenVectorTests.cpp` is **not in this pass's diff** — the committed byte arrays are unchanged and still match the writer |
+| Full `ctest -j8` | **8550 tests, 34 failures**, none in CNB or the content module's CNB paths — see below |
+| ASan + UBSan (`build-asan`, `-DCNA_SANITIZE=address,undefined`) | CNB/DDS: **366 pass, 0 sanitizer reports**. Content/CNJ/XNB: **528 pass, 3 skipped, 0 sanitizer reports** |
+| **No Zstandard** (`-DCNA_CNB_ZSTD=OFF`) | **356 pass, 10 skipped, 0 failures.** The ten skips are exactly the tests that ask `IsCnbCompressionSupported()` first. The two written to exercise the *codec-refusal* arm — `TheAggregateSumIsComputedWithoutOverflowing` and `ACompressedFileNeedsItsCodecEvenThoughCmetIsStoredUncompressed` — **ran and passed** rather than skipping, which is what makes the no-codec build genuinely covered rather than merely quiet |
+
+**The no-Zstandard build is reproducible in one command**, and is a `build-probe` configuration
+because it is a probe rather than a variant anyone develops in:
+
+```bash
+cmake -S . -B build-probe/cnbf-nozstd -G Ninja \
+      -DCMAKE_BUILD_TYPE=Debug -DCNA_CNB_ZSTD=OFF -DCNA_BUILD_EXAMPLES=OFF \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+      -DCNA_GRAPHICS_RENDERER=OPENGLES3 -DCNA_TEST_DISPLAY=:131
+cmake --build build-probe/cnbf-nozstd --target CnaTests -j"$(nproc)"
+DISPLAY=:131 SDL_VIDEODRIVER=x11 ./build-probe/cnbf-nozstd/CnaTests \
+      --gtest_filter='Cnb*:*Cnb*:DdsCubeDecoderTest.*'
+```
+
+**The 34 full-suite failures, and why none of them is this pass's.** They are audio timing flakes
+(5), glTF conformance and its two documented content-module failures (6), OpenGL-under-Xvfb
+renderer suites — `EasyGL_*`, `VertexDeclarationLayoutTest`, `DeclarationGuardTest`,
+`GraphicsDeviceSubsystemLifecycleTest` (22), and `CApiCoverageMatrix` (1). The composition matches
+§7a's recorded baseline for this branch.
+
+`CApiCoverageMatrix` is the one worth naming, because it is the only failure a change to a **public
+header** could plausibly cause. It does not: regenerating the inventory and diffing it against the
+committed `docs/c-api/COVERAGE.md` shows the snapshot is missing **twenty-two `CNA/Content/Cnb/`
+headers plus `ReflectiveTypeReader.hpp`** — every one of them added by `CNBF-001`–`CNBF-113` and
+`SAMPLE-044`, none by this pass. `CnjCanonicalRead.hpp` is under `CNA/Internal/` and is correctly
+excluded from the scan. The inventory belongs to the C-ABI campaign (`plans/plan_cabi.md`), was
+already stale before this pass, and is deliberately not regenerated here.
+
