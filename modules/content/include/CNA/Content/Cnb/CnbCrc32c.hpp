@@ -46,4 +46,28 @@ namespace CNA::Content::Cnb
      * @return The seed value (the CRC-32C of an empty byte range).
      */
     [[nodiscard]] constexpr std::uint32_t Crc32cSeed() noexcept { return 0u; }
+
+    /**
+     * @brief CNAEXT: whether this process is folding CRC-32C with a hardware instruction
+     *        (plans/plan_cnb.md `CNBF-108`).
+     *
+     * Detected once at runtime, not chosen at build time, so one binary runs on a machine with the
+     * instruction and one without. Exposed for tests and diagnostics: the *result* is identical
+     * either way, so nothing about correctness depends on this — but a benchmark that does not
+     * know which path it measured is a benchmark that will eventually mislead someone.
+     *
+     * @return True when the SSE4.2 (x86) or ARMv8 CRC32 path is in use.
+     */
+    [[nodiscard]] bool Crc32cUsesHardwareEXT() noexcept;
+
+    /**
+     * @brief CNAEXT: the portable table-driven CRC-32C, bypassing any hardware path.
+     *
+     * The definition of correct, kept reachable so a test can prove the hardware path agrees with
+     * it rather than merely agreeing with itself.
+     *
+     * @param data The bytes to checksum.
+     * @return The CRC-32C of @p data.
+     */
+    [[nodiscard]] std::uint32_t Crc32cPortableEXT(std::span<const std::uint8_t> data) noexcept;
 }

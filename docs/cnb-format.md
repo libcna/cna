@@ -832,7 +832,11 @@ Recorded so the boundary is a decision rather than an omission. Each is tracked 
   build produces one and this build cannot upload one.
 * Chunk compression (§8).
 * Direct glTF / PNG / WAV → `.cnb` importers. The only compiler is `.cnj` → `.cnb`.
-* Memory-mapped, zero-copy chunk access. The `alignment` field exists for it.
+* Memory-mapped, zero-copy chunk access. **Measured and rejected**, not pending: mmap would save
+  4.7 ms of a 32 MiB load while the CRC verification it cannot avoid cost 62.5 ms, so the effort
+  went into hardware CRC-32C instead and made the same load 6.4× faster. See
+  `docs/cnb-mmap-measurements.md`, including what would change the answer. The `alignment` field
+  keeps its meaning regardless.
 * A package format bundling many assets. That would be a different format.
 
 ---
