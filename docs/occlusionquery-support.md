@@ -82,8 +82,18 @@ boolean for the life of the process. The distinction is askable rather than folk
 `IOcclusionQueryRenderer::PixelCountIsPreciseEXT()`, which defaults to `true` so no other backend
 had to change.
 
-The asymmetry is real and driver-side, not a CNA choice — the **same Mesa 25.0.7** answers both
-ways depending on the context it was given:
+FNA is **worse** here rather than equivalent: `FNA3D_Driver_OpenGL.c` uses `GL_SAMPLES_PASSED`
+unconditionally and asserts `supports_ARB_occlusion_query`; on its ES3 path a missing extension
+only logs *"Occlusion queries unsupported, beware..."*, and off ES it is a fatal device-creation
+error. FNA therefore declares occlusion queries unsupported on ES rather than degrading them to a
+flag. CNA keeps them working as a flag and upgrades to a real count wherever the driver has the
+precise target.
+
+The asymmetry is real and driver-side, not a CNA choice. Listing what each profile exposes on the
+**same Mesa 25.0.7** settles it: the ES 3.2 profile offers `GL_EXT_occlusion_query_boolean` and
+nothing else, while the desktop profile offers `GL_ARB_occlusion_query` (a count),
+`GL_ARB_occlusion_query2` and the EXT boolean. No ES extension anywhere adds a precise count, and
+the WebGL registry has none either. Asking the driver for the enum answers the same way:
 
 | Context | `GL_SAMPLES_PASSED` accepted | Fragments reported for a fully covered viewport |
 |---|---|---|
