@@ -9,6 +9,7 @@
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
+#include "CNA/Content/Cnb/CnbWriter.hpp"
 
 namespace CNA::Content::Cnb
 {
@@ -201,6 +202,37 @@ namespace CNA::Content::Cnb
      *         DecodeTexture2DFromCnb().
      */
     [[nodiscard]] CnbTextureData DecodeTexture3DFromCnb(const CnbDocument& document);
+
+    /**
+     * @brief Appends a 2D texture's `TEXH`/`TEXR`/`TEXD` chunks to a document being written for a
+     *        *different* asset type (plans/plan_cnb.md `CNBF-102`).
+     *
+     * This is what lets `SpriteFont` embed its glyph atlas without a second copy of the texture
+     * layout: the atlas is stored with exactly the chunks, strides, alignment and validation a
+     * standalone `Texture2D` would use, in the font's own file. An atlas normally belongs to
+     * exactly one font, so embedding is the right default — unlike a model's textures, which are
+     * shared and therefore referenced through `XREF`.
+     *
+     * @param writer The document under construction.
+     * @param data   The atlas. `faceCount` and `depth` must both be 1.
+     * @param label  Owner name used in diagnostics, e.g. `"SpriteFont"`.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if @p data is inconsistent
+     *         or uses a format CNB schema 1 does not encode.
+     */
+    void AppendEmbeddedTexture2DChunks(CnbWriter& writer, const CnbTextureData& data,
+                                       const char* label);
+
+    /**
+     * @brief Reads back the `TEXH`/`TEXR`/`TEXD` chunks AppendEmbeddedTexture2DChunks() wrote.
+     *
+     * @param document The container to read from.
+     * @param label    Owner name used in diagnostics, e.g. `"SpriteFont"`.
+     * @return The embedded atlas.
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if a mandatory chunk is
+     *         missing, or the counts, dimensions and payload lengths disagree.
+     */
+    [[nodiscard]] CnbTextureData ReadEmbeddedTexture2DChunks(const CnbDocument& document,
+                                                             const char* label);
 
     /**
      * @brief Picks the representation a caller should upload, preferring the earliest supported one.

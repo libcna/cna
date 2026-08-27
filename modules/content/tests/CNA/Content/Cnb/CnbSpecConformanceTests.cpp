@@ -29,6 +29,7 @@
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
+#include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
@@ -134,6 +135,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     ExpectSpecContains(spec, "| 1 | `Texture2D` | **version 1**");
     ExpectSpecContains(spec, "| 2 | `Texture3D` | **version 1**");
     ExpectSpecContains(spec, "| 3 | `TextureCube` | **version 1**");
+    ExpectSpecContains(spec, "| 4 | `SpriteFont` | **version 1**");
     ExpectSpecContains(spec, "| 5 | `Model` | **version 1**");
     ExpectSpecContains(spec, "| 6 | `AnimationClip` | **version 1**");
     ExpectSpecContains(spec, "| 7 | `Curve` | **version 1**");
@@ -157,6 +159,11 @@ TEST(CnbSpecConformanceTest, TheDocumentedSchemaStridesMatchTheImplementation)
     EXPECT_EQ(CNA::Content::Cnb::CnbTextureCubeFaceCount, 6u);
     EXPECT_EQ(CNA::Content::Cnb::CnbMaxTextureMipLevels, 16u);
     EXPECT_EQ(CNA::Content::Cnb::CnbMaxTextureRepresentations, 8u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbSpriteFontHeaderStride, 24u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbSpriteFontRectangleStride, 16u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbSpriteFontKerningStride, 12u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbSpriteFontCharacterStride, 4u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbMaxSpriteFontGlyphs, 65536u);
     EXPECT_EQ(CNA::Content::Cnb::CnbNoIndex, 0xFFFFFFFFu);
     EXPECT_EQ(CNA::Content::Cnb::CnbTextureSlotCount, 7u);
     EXPECT_EQ(CNA::Content::Cnb::CnbMaxEffectKind, 5u);
@@ -169,6 +176,8 @@ TEST(CnbSpecConformanceTest, TheDocumentedSchemaStridesMatchTheImplementation)
     ExpectSpecContains(spec, "56 bytes each");
     ExpectSpecContains(spec, "`count` × 368 bytes");
     ExpectSpecContains(spec, "`representationCount` × 24-byte descriptors");
+    ExpectSpecContains(spec, "`glyphCount` × 16 bytes: source rectangles");
+    ExpectSpecContains(spec, "`glyphCount` × 12 bytes: bearings");
 }
 
 TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation)
@@ -184,6 +193,11 @@ TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Header), "ACLH");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Tracks), "ACLT");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Keys), "ACLK");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::Header), "FONT");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::GlyphBounds), "GLYP");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::Cropping), "CROP");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::Kerning), "KERN");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::Characters), "CHAR");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbTextureChunk::Header), "TEXH");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbTextureChunk::Representations), "TEXR");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbTextureChunk::Payload), "TEXD");

@@ -145,9 +145,10 @@ namespace CNA::Content::Cnb
             return CnbTextureLevelByteSize(format, w, h, d);
         }
 
-        std::vector<std::uint8_t> EncodeTexture(const TextureShape& shape,
-                                                const CnbTextureData& data,
-                                                const std::string& contentName)
+        /// The chunk-producing half of EncodeTexture(), factored out so a SpriteFont can embed a
+        /// texture with byte-identical layout instead of growing its own copy of it.
+        void AppendTextureChunks(const TextureShape& shape, const CnbTextureData& data,
+                                 CnbWriter& writer)
         {
             ValidateShape(shape, data);
 
@@ -226,8 +227,6 @@ namespace CNA::Content::Cnb
                 nextOrdinal += static_cast<std::uint32_t>(levelsPerRepresentation);
             }
 
-            CnbWriter writer(shape.assetTypeId, CnbTextureSchemaVersion);
-            writer.SetMetadata(shape.canonicalTypeName, contentName);
             writer.AddChunk(CnbTextureChunk::Header, header.Take(), CnbChunkFlags::Mandatory, 4u);
             writer.AddChunk(CnbTextureChunk::Representations, descriptors.Take(),
                             CnbChunkFlags::Mandatory, 4u);
@@ -236,16 +235,23 @@ namespace CNA::Content::Cnb
                 writer.AddChunk(CnbTextureChunk::Payload, std::move(payload),
                                 CnbChunkFlags::Mandatory, kPayloadAlignment);
             }
+        }
+
+        std::vector<std::uint8_t> EncodeTexture(const TextureShape& shape,
+                                                const CnbTextureData& data,
+                                                const std::string& contentName)
+        {
+            CnbWriter writer(shape.assetTypeId, CnbTextureSchemaVersion);
+            writer.SetMetadata(shape.canonicalTypeName, contentName);
+            AppendTextureChunks(shape, data, writer);
             return writer.Build();
         }
 
-        CnbTextureData DecodeTexture(const TextureShape& shape, const CnbDocument& document)
+        /// The chunk-consuming half of DecodeTexture(). An embedded atlas reaches this directly:
+        /// its owner has already checked the asset type, and the file's mandatory-chunk audit is
+        /// the owner's job because the owner knows its own chunks too.
+        CnbTextureData ReadTextureChunks(const TextureShape& shape, const CnbDocument& document)
         {
-            document.RequireAsset(shape.assetTypeId, CnbTextureSchemaVersion);
-            const CnbChunkId known[] = {CnbTextureChunk::Header, CnbTextureChunk::Representations,
-                                        CnbTextureChunk::Payload};
-            document.RequireMandatoryChunksUnderstood(known);
-
             CnbByteReader header = document.OpenChunk(document.RequireSingle(CnbTextureChunk::Header));
             CnbTextureData data;
             data.width = header.ReadU32();
@@ -380,6 +386,30 @@ namespace CNA::Content::Cnb
             }
             return data;
         }
+
+        CnbTextureData DecodeTexture(const TextureShape& shape, const CnbDocument& document)
+        {
+            document.RequireAsset(shape.assetTypeId, CnbTextureSchemaVersion);
+            const CnbChunkId known[] = {CnbTextureChunk::Header, CnbTextureChunk::Representations,
+                                        CnbTextureChunk::Payload};
+            document.RequireMandatoryChunksUnderstood(known);
+            return ReadTextureChunks(shape, document);
+        }
+    }
+
+    void AppendEmbeddedTexture2DChunks(CnbWriter& writer, const CnbTextureData& data,
+                                       const char* label)
+    {
+        TextureShape shape = kTexture2D;
+        shape.label = label;
+        AppendTextureChunks(shape, data, writer);
+    }
+
+    CnbTextureData ReadEmbeddedTexture2DChunks(const CnbDocument& document, const char* label)
+    {
+        TextureShape shape = kTexture2D;
+        shape.label = label;
+        return ReadTextureChunks(shape, document);
     }
 
     void CnbTextureLevelDimensions(const CnbTextureData& data, std::uint32_t level,

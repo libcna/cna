@@ -4,6 +4,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
@@ -5866,6 +5867,34 @@ namespace Microsoft::Xna::Framework::Content
             return texture;
         }
 
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb SpriteFont loader (plans/plan_cnb.md CNBF-102)
+        //
+        // The atlas is EMBEDDED rather than XREF'd, so this needs no second asset load: the font
+        // and its atlas arrive in one file, and the atlas is built with the same code path a
+        // standalone Texture2D .cnb uses.
+        // ---------------------------------------------------------------------------
+
+        Graphics::SpriteFont BuildSpriteFontFromCnbEXT(
+            const CNA::Content::Cnb::CnbSpriteFontData& data, ContentManager& cm,
+            const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data.atlas, assetName);
+            Graphics::Texture2D atlas(cm.getGraphicsDeviceInternal(),
+                                      static_cast<int>(data.atlas.width),
+                                      static_cast<int>(data.atlas.height),
+                                      data.atlas.mipCount > 1u, Graphics::SurfaceFormat::Color);
+            for (std::uint32_t mip = 0u; mip < data.atlas.mipCount; ++mip)
+            {
+                const std::vector<Color> colors = ColorsFromRgba8EXT(representation.levels[mip]);
+                atlas.SetData(static_cast<int>(mip), nullptr, colors.data(), 0,
+                              static_cast<int>(colors.size()));
+            }
+            return Graphics::SpriteFont(std::move(atlas), data.glyphBounds, data.cropping,
+                                        data.characters, data.lineSpacing, data.spacing,
+                                        data.kerning, data.defaultCharacter);
+        }
+
     } // anonymous namespace
 
     // ---------------------------------------------------------------------------
@@ -5932,6 +5961,16 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return std::any(BuildTexture3DFromCnbEXT(
                     CNA::Content::Cnb::DecodeTexture3DFromCnb(document), contentManager,
+                    assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::SpriteFont,
+            "Microsoft.Xna.Framework.Graphics.SpriteFont",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildSpriteFontFromCnbEXT(
+                    CNA::Content::Cnb::DecodeSpriteFontFromCnb(document), contentManager,
                     assetName));
             });
     }

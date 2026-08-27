@@ -305,7 +305,7 @@ Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this or
 | 1 | `Texture2D` | **version 1**, §16 |
 | 2 | `Texture3D` | **version 1**, §16 |
 | 3 | `TextureCube` | **version 1**, §16 |
-| 4 | `SpriteFont` | reserved, not implemented |
+| 4 | `SpriteFont` | **version 1**, §17 |
 | 5 | `Model` | **version 1**, §11 |
 | 6 | `AnimationClip` | **version 1**, §10 |
 | 7 | `Curve` | **version 1**, §9 |
@@ -790,8 +790,8 @@ chunk occupies no bytes and takes no part in the layout partition.
 Recorded so the boundary is a decision rather than an omission. Each is tracked in
 `plans/plan_cnb.md`.
 
-* `SpriteFont`, `SoundEffect`, `Song`, `Video` and `Effect` schemas. Their identifiers are
-  frozen; their layouts are not designed.
+* `SoundEffect`, `Song`, `Video` and `Effect` schemas. Their identifiers are frozen; their
+  layouts are not designed.
 * Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
   structure that carries them, and the reader accepts a file that uses them, but no writer in this
   build produces one and this build cannot upload one.
@@ -911,3 +911,56 @@ A `TEXD` payload's length must equal the level's exact size: `unitBytes × width
 for an uncompressed format, and `unitBytes × ceil(width/4) × ceil(height/4) × depth` for a
 block-compressed one. **The rounding is up, to whole blocks** — a 1×1 `Bc7` level is one 16-byte
 block, not a fraction of one, which is what makes the tail of a compressed mip chain correct.
+
+---
+
+## 17. `SpriteFont`, schema version 1
+
+A font is a glyph atlas plus four parallel per-glyph tables. **The atlas is embedded**, using the
+same `TEXH`/`TEXR`/`TEXD` chunks §16 defines, with the same strides, alignment and validation — not
+a second encoding of the same idea. An atlas normally belongs to exactly one font, which is the
+opposite of a model's textures, and that difference is why one is embedded and the other is `XREF`d.
+
+| chunk | count | flags | contents |
+|---|---|---|---|
+| `FONT` | exactly 1 | Mandatory | glyph count, spacing, default character |
+| `GLYP` | exactly 1 | Mandatory | `glyphCount` × 16 bytes: source rectangles |
+| `CROP` | exactly 1 | Mandatory | `glyphCount` × 16 bytes: cropping rectangles |
+| `KERN` | exactly 1 | Mandatory | `glyphCount` × 12 bytes: bearings |
+| `CHAR` | exactly 1 | Mandatory | `glyphCount` × 4 bytes: the character map |
+| `TEXH`/`TEXR`/`TEXD` | §16 | Mandatory | the embedded atlas, `faceCount` 1, `depth` 1 |
+
+### 17.1 `FONT`
+
+| offset | size | field | notes |
+|---|---|---|---|
+| 0 | 4 | `glyphCount` | 1…65536 |
+| 4 | 4 | `lineSpacing` | signed; vertical distance between lines, in pixels |
+| 8 | 4 | `spacing` | `f32`; extra horizontal spacing between characters |
+| 12 | 4 | `hasDefaultCharacter` | 0 or 1; any other value is rejected |
+| 16 | 4 | `defaultCharacter` | UTF-16 code unit; meaningless when the flag is 0 |
+| 20 | 4 | `flags` | reserved; must be zero |
+
+The presence flag is not decoration. "No default character" and "the default character is U+0000"
+are different fonts — one throws on a missing glyph, the other renders a NUL — and a bare code unit
+cannot distinguish them.
+
+### 17.2 The per-glyph tables
+
+`GLYP` and `CROP` hold four `i32` each: `x`, `y`, `width`, `height`. `KERN` holds three `f32`:
+left bearing, width, right bearing. `CHAR` holds one `u32` per glyph, each a UTF-16 code unit; a
+value above `0xFFFF` is rejected.
+
+All four tables have exactly `glyphCount` entries. They are parallel — entry *n* of each describes
+the same glyph — and a length disagreement is refused rather than truncated, because it would
+otherwise become an out-of-range read at render time rather than a load error.
+
+### 17.3 The character map must be strictly ascending
+
+`SpriteFont` looks a character up by **binary search**. An unsorted map therefore does not fail
+loudly: it silently returns the wrong glyph, or none. So the order is a format requirement, checked
+on write *and* on read — a file need not have come from this writer, and no length or checksum test
+can catch a reordering, since both orderings are the same number of well-formed bytes.
+
+Strictly ascending also forbids duplicates, which would make one of the two entries unreachable.
+A `defaultCharacter` that is not in the map is likewise refused.
