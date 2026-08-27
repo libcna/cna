@@ -173,6 +173,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_BasicEffect_Fog COMMAND cna_test_webgpu_basiceffect_fog
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-146: AlphaTestEffect fog on both alpha_test3d WGSL modules (uncolored stride-20 and
+    # vertex-colour stride-24). Fog applies to the pixel that survives the alpha-test discard.
+    cna_webgpu_test(cna_test_webgpu_alphatesteffect_fog webgpu_alphatesteffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_AlphaTestEffect_Fog COMMAND cna_test_webgpu_alphatesteffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.

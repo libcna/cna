@@ -4235,6 +4235,9 @@ struct Uniforms {
     diffuseColor: vec4f,
     alphaTest: vec4f,
     extra: vec4f,
+    fogPad: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -4247,11 +4250,15 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
+    @location(1) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    // WEBGPU-146: FNA fog keep factor (see colored3d.wgsl). fogColor/fogVector occupy floats
+    // [32..39] of the 160-byte primary UBO (FillAlphaTestUniforms), so fogPad skips [28..31].
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
@@ -4265,7 +4272,8 @@ struct VertexOutput {
     if (w < 0.0) {
         discard;
     }
-    return color;
+    // WEBGPU-146: ApplyFog on the surviving pixel (FNA applies fog after the alpha-test discard).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -4288,6 +4296,9 @@ struct Uniforms {
     diffuseColor: vec4f,
     alphaTest: vec4f,
     extra: vec4f,
+    fogPad: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -4302,6 +4313,7 @@ struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
     @location(1) tint: vec4f,
+    @location(2) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -4309,6 +4321,8 @@ struct VertexOutput {
     output.uv = input.uv;
     let vertexColorEnabled = u.extra.x;
     output.tint = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    // WEBGPU-146: FNA fog keep factor (see colored3d.wgsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
@@ -4322,7 +4336,8 @@ struct VertexOutput {
     if (w < 0.0) {
         discard;
     }
-    return color;
+    // WEBGPU-146: ApplyFog on the surviving pixel (FNA applies fog after the alpha-test discard).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
