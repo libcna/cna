@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <limits>
 #include <numeric>
 #include <span>
 #include <stdexcept>
@@ -18,6 +19,9 @@
 
 #include "CNA/Content/Cnb/CnbByteWriter.hpp"
 #include "CNA/Content/Cnb/CnbChunkCompression.hpp"
+#include "CNA/Content/Cnb/CnbCrc32c.hpp"
+#include "CNA/Content/Cnb/CnbFormat.hpp"
+#include "CNA/Content/Cnb/CnbReadLimits.hpp"
 #include "CNA/Content/Cnb/CnbCurveCodec.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
@@ -241,4 +245,234 @@ TEST(CnbChunkCompressionTest, AnUnimplementedCodecIsRefusedByName)
     const std::vector<std::uint8_t> payload = CompressiblePayload(256u);
     EXPECT_THROW((void)CNA::Content::Cnb::CompressCnbChunk(payload, CnbCompression::ReservedLz4),
                  ContentLoadException);
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-114 -- the aggregate expansion budget, and the empty-logical-chunk sentinel
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    // Header/table-of-contents field offsets, spelled out rather than derived, so a layout change
+    // has to break these tests explicitly instead of silently following along. Same values as
+    // CnbContainerTests.cpp's; repeated because these are separate translation units and a shared
+    // header for nine constants would be worse than the repetition.
+    constexpr std::size_t kOffChunkCount = 20;
+    constexpr std::size_t kOffFileSize = 24;
+    constexpr std::size_t kOffTocOffset = 32;
+    constexpr std::size_t kOffTocChecksum = 40;
+    constexpr std::size_t kOffHeaderChecksum = 44;
+
+    constexpr std::size_t kEntStored = 16;
+    constexpr std::size_t kEntUnpacked = 24;
+    constexpr std::size_t kEntChecksum = 32;
+    constexpr std::size_t kEntCompression = 36;
+
+    /// A mutable `.cnb` image plus the surgery these tests need. A chunk whose stored frame and
+    /// declared logical size disagree cannot be produced by CnbWriter -- which is the point: the
+    /// writer is not the threat model here, an arbitrary file on disk is.
+    struct RawCnb
+    {
+        std::vector<std::uint8_t> bytes;
+
+        void PatchU32(std::size_t offset, std::uint32_t value)
+        {
+            for (int i = 0; i < 4; ++i)
+            {
+                bytes[offset + static_cast<std::size_t>(i)] =
+                    static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu);
+            }
+        }
+        void PatchU64(std::size_t offset, std::uint64_t value)
+        {
+            for (int i = 0; i < 8; ++i)
+            {
+                bytes[offset + static_cast<std::size_t>(i)] =
+                    static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu);
+            }
+        }
+        [[nodiscard]] std::uint32_t ReadU32(std::size_t offset) const
+        {
+            std::uint32_t v = 0;
+            for (int i = 3; i >= 0; --i) { v = (v << 8) | bytes[offset + static_cast<std::size_t>(i)]; }
+            return v;
+        }
+        [[nodiscard]] std::uint64_t ReadU64(std::size_t offset) const
+        {
+            std::uint64_t v = 0;
+            for (int i = 7; i >= 0; --i) { v = (v << 8) | bytes[offset + static_cast<std::size_t>(i)]; }
+            return v;
+        }
+        [[nodiscard]] std::size_t EntryOffset(std::size_t index) const
+        {
+            return static_cast<std::size_t>(ReadU64(kOffTocOffset)) +
+                   index * CNA::Content::Cnb::Format::TocEntrySize;
+        }
+        void FixStructuralChecksums()
+        {
+            const auto tocOffset = static_cast<std::size_t>(ReadU64(kOffTocOffset));
+            const std::size_t tocSize = static_cast<std::size_t>(ReadU32(kOffChunkCount)) *
+                                         CNA::Content::Cnb::Format::TocEntrySize;
+            PatchU32(kOffTocChecksum,
+                     CNA::Content::Cnb::Crc32c(
+                         std::span<const std::uint8_t>(bytes).subspan(tocOffset, tocSize)));
+            PatchU32(kOffHeaderChecksum,
+                     CNA::Content::Cnb::Crc32c(std::span<const std::uint8_t>(bytes).first(
+                         CNA::Content::Cnb::Format::HeaderChecksumCoverage)));
+        }
+    };
+
+    /// Builds a file whose two payload chunks each hold `frame` verbatim, marked as codec `codec`
+    /// with a declared logical size of `logicalSize` -- the shape a hostile file has, and one the
+    /// writer would never produce.
+    RawCnb MakeHandBuiltCompressedFile(const std::vector<std::uint8_t>& frame,
+                                       CnbCompression codec, std::uint64_t logicalSize,
+                                       std::size_t payloadChunks)
+    {
+        CnbWriter writer(CNA::Content::Cnb::CnbAssetTypeId::Curve, 1u);
+        for (std::size_t i = 0; i < payloadChunks; ++i)
+        {
+            writer.AddChunk(MakeChunkId('P', 'A', 'Y', static_cast<char>('0' + i)), frame,
+                            CnbChunkFlags::None, 4u);
+        }
+        RawCnb raw{writer.Build()};
+        for (std::size_t i = 0; i < payloadChunks; ++i)
+        {
+            const std::size_t entry = raw.EntryOffset(i);
+            raw.PatchU32(entry + kEntCompression, static_cast<std::uint32_t>(codec));
+            raw.PatchU64(entry + kEntUnpacked, logicalSize);
+        }
+        raw.FixStructuralChecksums();
+        return raw;
+    }
+}
+
+TEST(CnbChunkCompressionTest, ManyIndividuallyLegalChunksCannotExceedTheAggregateBudget)
+{
+    if (!HasZstd()) { GTEST_SKIP() << "this build has no Zstandard codec"; }
+
+    // The zip-bomb the per-chunk ceiling does not catch: four frames of a few hundred bytes each,
+    // every one of them under maxChunkSize, together asking for four times that. Without an
+    // aggregate limit the reader would have allocated all of it.
+    const std::vector<std::uint8_t> payload = CompressiblePayload(256u * 1024u);
+    const std::vector<std::uint8_t> frame =
+        CNA::Content::Cnb::CompressCnbChunk(payload, CnbCompression::Zstd, 3);
+
+    CnbWriter writer(CNA::Content::Cnb::CnbAssetTypeId::Curve, 1u);
+    writer.SetCompression(CnbCompression::Zstd, 3);
+    for (int i = 0; i < 4; ++i)
+    {
+        writer.AddChunk(MakeChunkId('P', 'A', 'Y', static_cast<char>('0' + i)), payload,
+                        CnbChunkFlags::None, 4u);
+    }
+    const std::vector<std::uint8_t> file = writer.Build();
+
+    CNA::Content::Cnb::CnbReadLimits generous;                 // every chunk is individually legal
+    EXPECT_NO_THROW((void)CnbDocument::Parse(file, "budget.cnb", generous));
+
+    CNA::Content::Cnb::CnbReadLimits tight;
+    tight.maxTotalUncompressedSize = 3u * payload.size();      // room for three of the four
+    try
+    {
+        (void)CnbDocument::Parse(file, "budget.cnb", tight);
+        FAIL() << "the aggregate expansion budget must be enforced";
+    }
+    catch (const ContentLoadException& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("aggregate limit"), std::string::npos) << e.what();
+        EXPECT_NE(std::string(e.what()).find("before allocating"), std::string::npos) << e.what();
+    }
+}
+
+TEST(CnbChunkCompressionTest, TheAggregateBudgetAcceptsAFileThatExactlyReachesIt)
+{
+    if (!HasZstd()) { GTEST_SKIP() << "this build has no Zstandard codec"; }
+
+    // An off-by-one here would refuse legitimate content, which is the failure a limit is most
+    // likely to introduce and least likely to be noticed introducing.
+    const std::vector<std::uint8_t> payload = CompressiblePayload(64u * 1024u);
+    CnbWriter writer(CNA::Content::Cnb::CnbAssetTypeId::Curve, 1u);
+    writer.SetCompression(CnbCompression::Zstd, 3);
+    writer.AddChunk(MakeChunkId('P', 'A', 'Y', '0'), payload, CnbChunkFlags::None, 4u);
+    writer.AddChunk(MakeChunkId('P', 'A', 'Y', '1'), payload, CnbChunkFlags::None, 4u);
+    const std::vector<std::uint8_t> file = writer.Build();
+
+    const CnbDocument reference = CnbDocument::Parse(file, "exact.cnb");
+    std::uint64_t total = 0u;
+    for (std::size_t i = 0; i < reference.ChunkCount(); ++i)
+    {
+        total += reference.ChunkAt(i).uncompressedSize;
+    }
+
+    CNA::Content::Cnb::CnbReadLimits exact;
+    exact.maxTotalUncompressedSize = total;
+    EXPECT_NO_THROW((void)CnbDocument::Parse(file, "exact.cnb", exact));
+
+    CNA::Content::Cnb::CnbReadLimits oneShort;
+    oneShort.maxTotalUncompressedSize = total - 1u;
+    EXPECT_THROW((void)CnbDocument::Parse(file, "exact.cnb", oneShort), ContentLoadException);
+}
+
+TEST(CnbChunkCompressionTest, TheAggregateSumIsComputedWithoutOverflowing)
+{
+    // Two chunks each declaring an unpacked size of 2^64-1: the naive sum wraps to a small number
+    // that would pass any ceiling. Reached only with a caller-supplied per-chunk ceiling high
+    // enough to admit them, which is exactly why the arithmetic cannot rely on the default limits
+    // for its safety.
+    const std::vector<std::uint8_t> frame =
+        HasZstd() ? CNA::Content::Cnb::CompressCnbChunk(std::vector<std::uint8_t>(64u, 5u),
+                                                         CnbCompression::Zstd, 3)
+                  : std::vector<std::uint8_t>(64u, 5u);
+    const RawCnb raw = MakeHandBuiltCompressedFile(
+        frame, CnbCompression::Zstd, std::numeric_limits<std::uint64_t>::max(), 2u);
+
+    CNA::Content::Cnb::CnbReadLimits huge;
+    huge.maxChunkSize = std::numeric_limits<std::uint64_t>::max();
+    huge.maxTotalUncompressedSize = std::numeric_limits<std::uint64_t>::max();
+
+    // On a build without the codec the file is refused one check earlier, by codec name. Either
+    // way it is refused cleanly rather than wrapping an addition -- which is the property under
+    // test, and the reason this case is not skipped when Zstandard is absent.
+    try
+    {
+        (void)CnbDocument::Parse(raw.bytes, "overflow.cnb", huge);
+        FAIL() << "a wrapping aggregate sum must be refused";
+    }
+    catch (const ContentLoadException& e)
+    {
+        const std::string message = e.what();
+        if (HasZstd())
+        {
+            EXPECT_NE(message.find("overflow"), std::string::npos) << message;
+        }
+        else
+        {
+            EXPECT_NE(message.find("does not implement"), std::string::npos) << message;
+        }
+    }
+}
+
+TEST(CnbChunkCompressionTest, ACompressedChunkWhoseLogicalSizeIsZeroReadsBackEmpty)
+{
+    if (!HasZstd()) { GTEST_SKIP() << "this build has no Zstandard codec"; }
+
+    // A zstd frame of no input is a dozen non-zero bytes. Before CNBF-114 the "has this chunk been
+    // expanded?" test was `!expanded[i].empty()`, so this chunk answered no and ChunkData() handed
+    // back the frame itself -- a chunk the file declares as empty reading as 13 bytes of codec
+    // header. The writer never produces such a chunk (it stores empty data uncompressed), so the
+    // file is hand-built.
+    const std::vector<std::uint8_t> emptyFrame =
+        CNA::Content::Cnb::CompressCnbChunk(std::vector<std::uint8_t>{}, CnbCompression::Zstd, 3);
+    ASSERT_FALSE(emptyFrame.empty()) << "a zstd frame of no input still has a header";
+
+    const RawCnb raw = MakeHandBuiltCompressedFile(emptyFrame, CnbCompression::Zstd, 0u, 1u);
+    const CnbDocument document = CnbDocument::Parse(raw.bytes, "emptylogical.cnb");
+    const std::size_t chunk = document.RequireSingle(MakeChunkId('P', 'A', 'Y', '0'));
+
+    EXPECT_EQ(document.ChunkAt(chunk).compression, CnbCompression::Zstd);
+    EXPECT_EQ(document.ChunkAt(chunk).storedSize, emptyFrame.size());
+    EXPECT_EQ(document.ChunkAt(chunk).uncompressedSize, 0u);
+    EXPECT_TRUE(document.ChunkData(chunk).empty())
+        << "a compressed chunk with no logical bytes must read as no bytes, not as its frame";
+    EXPECT_EQ(document.OpenChunk(chunk).Size(), 0u);
 }

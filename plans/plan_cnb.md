@@ -1238,3 +1238,20 @@ that needs no GPU, no audio device and no display.
 
 `Effect` is the one built-in identifier with no schema, and it is waiting on the FX/shader
 architecture rather than on anyone's time.
+
+---
+
+## 17. Remediation pass (`CNBF-114`–`CNBF-121`)
+
+Recorded 2026-08-27. A second adversarial audit of the CNB tree, run after §16 closed the producer
+gap, found eight groups of defects. They are grouped by the invariant each one restores rather than
+by the file each one touches, because several of them are the *same* mistake made in two places —
+a reader and a writer disagreeing about what is legal, or a compiler and a runtime reader
+disagreeing about what a document means.
+
+**No serialized byte of a previously valid `.cnb` changes anywhere in this section.** Every golden
+vector still matches, and the determinism assertions (in-process and cross-process) still hold.
+
+| ID | Group | Root cause | Fix | Status |
+|---|---|---|---|---|
+| CNBF-114 | **Container decompression safety.** | Two defects, both introduced by `CNBF-105`'s compression support. (1) Nothing bounded a file's **aggregate** expansion: `maxChunkSize` caps one chunk and `maxChunkCount` caps how many, so their product — 24 PiB at the defaults — was what a few kilobytes of individually legal compressed frames could ask a reader to allocate. (2) `ChunkData()` decided "has this chunk been expanded?" with `!expanded_[i].empty()`, so a compressed chunk whose **logical** size is zero answered *no* and the accessor handed back its stored compressed frame — a chunk the file declares as empty reading as a dozen bytes of codec header. | (1) A new configurable `CnbReadLimits::maxTotalUncompressedSize` (default 1024 MiB, deliberately larger than `maxFileSize` so compression can genuinely expand a file), accumulated with `CheckedAdd` while the table of contents is read and checked **before any chunk's bytes are allocated or handed to a decompressor**. Every chunk counts toward the sum, compressed or not, so there is one invariant rather than one per codec. (2) The expansion state is tracked explicitly — `std::optional` per chunk — instead of being inferred from an empty vector. | ✅ |

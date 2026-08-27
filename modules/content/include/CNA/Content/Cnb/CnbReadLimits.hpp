@@ -27,6 +27,23 @@ namespace CNA::Content::Cnb
         /** @brief Largest single chunk this reader will accept, in bytes. */
         std::uint64_t maxChunkSize = 384ull * 1024ull * 1024ull;
 
+        /**
+         * @brief Largest total of every chunk's **logical** (post-decompression) size, in bytes.
+         *
+         * The per-chunk ceilings alone do not bound a file's total expansion
+         * (plans/plan_cnb.md `CNBF-114`). `maxChunkSize` caps one chunk and `maxChunkCount` caps how
+         * many there are, so their product -- 24 PiB at the defaults -- is what a reader without
+         * this limit would be willing to allocate for a file of a few kilobytes of individually
+         * legal compressed frames. Every chunk counts toward the total, compressed or not, so the
+         * invariant reads the same way whatever a file's codec is; for a wholly uncompressed file
+         * the sum is bounded by @ref maxFileSize anyway, because chunks do not overlap.
+         *
+         * The default is deliberately **larger** than @ref maxFileSize, so compression can
+         * genuinely expand a file rather than being cancelled out by this bound, and far smaller
+         * than `maxChunkCount * maxChunkSize`, which is the unbounded case it closes.
+         */
+        std::uint64_t maxTotalUncompressedSize = 1024ull * 1024ull * 1024ull;
+
         /** @brief Largest single serialized string this reader will allocate, in bytes. */
         std::uint32_t maxStringBytes = 1024u * 1024u;
 

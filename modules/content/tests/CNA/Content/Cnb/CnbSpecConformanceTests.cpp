@@ -252,6 +252,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedLimitsMatchTheImplementation)
     EXPECT_EQ(limits.maxFileSize, 512ull * 1024ull * 1024ull);
     EXPECT_EQ(limits.maxChunkCount, 65536u);
     EXPECT_EQ(limits.maxChunkSize, 384ull * 1024ull * 1024ull);
+    EXPECT_EQ(limits.maxTotalUncompressedSize, 1024ull * 1024ull * 1024ull);
     EXPECT_EQ(limits.maxStringBytes, 1024u * 1024u);
     EXPECT_EQ(limits.maxArrayElementCount, 16u * 1024u * 1024u);
     EXPECT_EQ(limits.maxChunkAlignment, 4096u);
@@ -259,6 +260,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedLimitsMatchTheImplementation)
     ExpectSpecContains(spec, "| `maxFileSize` | 512 MiB |");
     ExpectSpecContains(spec, "| `maxChunkCount` | 65536 |");
     ExpectSpecContains(spec, "| `maxChunkSize` | 384 MiB |");
+    ExpectSpecContains(spec, "| `maxTotalUncompressedSize` | 1024 MiB |");
     ExpectSpecContains(spec, "| `maxStringBytes` | 1 MiB |");
     ExpectSpecContains(spec, "| `maxArrayElementCount` | 16777216 |");
     ExpectSpecContains(spec, "| `maxChunkAlignment` | 4096 |");

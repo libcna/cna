@@ -685,6 +685,7 @@ would make lifetime the caller's problem for no benefit. The process-wide defaul
 | `maxFileSize` | 512 MiB |
 | `maxChunkCount` | 65536 |
 | `maxChunkSize` | 384 MiB |
+| `maxTotalUncompressedSize` | 1024 MiB |
 | `maxStringBytes` | 1 MiB |
 | `maxArrayElementCount` | 16777216 |
 | `maxChunkAlignment` | 4096 |
@@ -701,6 +702,17 @@ representable.
 Every count is also checked against how many elements could physically fit in the bytes that
 remain, so a declared count of four billion in a twelve-byte chunk fails immediately rather than
 after an enormous allocation.
+
+`maxTotalUncompressedSize` bounds something no per-item limit can: the sum of every chunk's
+**logical** (post-decompression) size. `maxChunkSize` caps one chunk and `maxChunkCount` caps how
+many there are, so without an aggregate their product — 24 PiB at the defaults — is what a reader
+would be willing to allocate for a file holding a few kilobytes of individually legal compressed
+frames. Every chunk counts toward the sum, compressed or not, so the invariant reads the same way
+whatever a file's codecs are; for a wholly uncompressed file the sum is bounded by `maxFileSize`
+regardless, because chunks do not overlap. The sum is accumulated with `CheckedAdd` while the table
+of contents is read and compared to the ceiling **before any chunk's bytes are allocated or handed
+to a decompressor**. The default is deliberately larger than `maxFileSize`, so compression can
+genuinely expand a file rather than be cancelled out by this bound.
 
 ### 12.1 What the limits do and do not guarantee
 

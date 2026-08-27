@@ -190,6 +190,12 @@ namespace CNA::Content::Cnb
         CnbByteReader toc(tocBytes, tocWhere, limits);
         doc.chunks_.reserve(chunkCount);
         std::uint64_t previousOffset = 0u;
+        // plans/plan_cnb.md CNBF-114. Accumulated as the entries are read, so the aggregate is known
+        // before a single byte is allocated for any chunk's contents. Every entry counts, whatever
+        // its codec: for an uncompressed file the sum is bounded by the file's own size anyway
+        // (chunks do not overlap), and keeping the rule uniform means there is one invariant to
+        // state rather than one per codec.
+        std::uint64_t totalUncompressed = 0u;
         for (std::uint32_t i = 0; i < chunkCount; ++i)
         {
             const std::string entryWhere = where + " chunk " + std::to_string(i);
@@ -294,6 +300,23 @@ namespace CNA::Content::Cnb
                     "; a .cnb table of contents must be ordered by ascending offset.");
             }
             previousOffset = entry.offset;
+
+            // Through CheckedAdd, and against a configured ceiling, because neither of the
+            // per-entry limits bounds this: `maxChunkCount * maxChunkSize` is 24 PiB at the
+            // defaults, which is what a few kilobytes of individually legal compressed frames
+            // could otherwise ask a reader to allocate (plans/plan_cnb.md CNBF-114).
+            totalUncompressed =
+                CheckedAdd(totalUncompressed, entry.uncompressedSize,
+                           where + " total unpacked chunk size");
+            if (totalUncompressed > limits.maxTotalUncompressedSize)
+            {
+                throw ContentLoadException(
+                    where + " declares chunks unpacking to at least " +
+                    std::to_string(totalUncompressed) +
+                    " bytes in total, above the configured aggregate limit of " +
+                    std::to_string(limits.maxTotalUncompressedSize) +
+                    " bytes. Refused before allocating anything.");
+            }
 
             doc.chunks_.push_back(entry);
         }
@@ -446,9 +469,15 @@ namespace CNA::Content::Cnb
         const CnbChunkEntry& entry = ChunkAt(index);
         // CNBF-105: a compressed chunk was expanded once at parse time, so this returns the
         // chunk's LOGICAL bytes either way and every caller is unaffected by the codec.
-        if (index < expanded_.size() && !expanded_[index].empty())
+        //
+        // CNBF-114: the test is whether this chunk HAS an expansion, not whether that expansion
+        // happens to be non-empty. A compressed chunk whose logical size is zero expands to no
+        // bytes at all, and an emptiness test would then have fallen through to the branch below
+        // and handed out the stored compressed frame -- non-empty bytes, in a chunk the file says
+        // is empty.
+        if (index < expanded_.size() && expanded_[index].has_value())
         {
-            return std::span<const std::uint8_t>(expanded_[index]);
+            return std::span<const std::uint8_t>(*expanded_[index]);
         }
         return std::span<const std::uint8_t>(bytes_).subspan(
             static_cast<std::size_t>(entry.offset), static_cast<std::size_t>(entry.storedSize));
@@ -475,10 +504,6 @@ namespace CNA::Content::Cnb
             expanded_[i] = DecompressCnbChunk(
                 stored, entry.compression, entry.uncompressedSize, limits_.maxChunkSize,
                 "'" + origin_ + "' chunk " + ChunkIdToString(entry.type));
-            // A zero-length chunk that decompresses to zero length would be indistinguishable
-            // from "not compressed" in the empty-vector test ChunkData() uses. Such a chunk has
-            // no bytes either way, so serving it from `bytes_` is correct -- but say so, because
-            // the alternative is a reader that silently depends on an accident.
         }
     }
 

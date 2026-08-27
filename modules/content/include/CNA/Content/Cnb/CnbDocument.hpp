@@ -29,10 +29,12 @@ namespace CNA::Content::Cnb
         std::uint64_t storedSize = 0u;
 
         /**
-         * @brief Number of bytes the chunk expands to once decompressed.
+         * @brief Number of bytes the chunk expands to once decompressed -- its **logical** size.
          *
-         * Equal to @ref storedSize for every CNB v1 chunk, because the only codec v1 defines is
-         * `CnbCompression::None`.
+         * Equal to @ref storedSize exactly when @ref compression is `CnbCompression::None`, which
+         * the reader requires; for a compressed chunk it is the size the stored frame must expand
+         * to, and the sum of it across every chunk is bounded by
+         * `CnbReadLimits::maxTotalUncompressedSize` (plans/plan_cnb.md `CNBF-114`).
          */
         std::uint64_t uncompressedSize = 0u;
 
@@ -205,7 +207,8 @@ namespace CNA::Content::Cnb
         [[nodiscard]] const CnbChunkEntry& ChunkAt(std::size_t index) const;
 
         /**
-         * @brief The stored bytes of the chunk at @p index.
+         * @brief The **logical** bytes of the chunk at @p index -- decompressed when it was stored
+         *        compressed, and exactly `CnbChunkEntry::uncompressedSize` bytes long either way.
          *
          * @param index Zero-based table-of-contents index.
          * @return A view of the chunk's bytes, valid for this document's lifetime.
@@ -343,9 +346,14 @@ namespace CNA::Content::Cnb
         void DecompressChunks();
 
         std::vector<std::uint8_t> bytes_;
-        /// Expanded bytes for compressed chunks, indexed as `chunks_`. An entry is empty for a
-        /// chunk stored uncompressed, which is the case ChunkData() serves straight from `bytes_`.
-        std::vector<std::vector<std::uint8_t>> expanded_;
+        /// Expanded bytes for compressed chunks, indexed as `chunks_`. Engaged exactly when that
+        /// chunk was decompressed; ChunkData() serves every other chunk straight from `bytes_`.
+        ///
+        /// The engaged/disengaged state is tracked explicitly rather than inferred from an empty
+        /// vector (plans/plan_cnb.md `CNBF-114`): a compressed chunk whose LOGICAL size is zero
+        /// expands to no bytes at all, so an emptiness test would have sent ChunkData() back to
+        /// `bytes_` and handed out the stored compressed frame as if it were the chunk's contents.
+        std::vector<std::optional<std::vector<std::uint8_t>>> expanded_;
         std::string origin_;
         std::uint16_t containerMajor_ = 0u;
         std::uint16_t containerMinor_ = 0u;
