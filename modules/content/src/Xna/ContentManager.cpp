@@ -4,6 +4,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
@@ -5895,6 +5896,32 @@ namespace Microsoft::Xna::Framework::Content
                                         data.kerning, data.defaultCharacter);
         }
 
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb SoundEffect loader (plans/plan_cnb.md CNBF-103A)
+        //
+        // Boxed as a shared_ptr rather than by value, and not for the reason Texture3D is:
+        // SoundEffect is MOVE-ONLY, and std::any requires its contained type to be copy
+        // constructible, so a bare SoundEffect cannot be put in one at all. The specialisation of
+        // Load<SoundEffect> below unwraps and moves out of it.
+        // ---------------------------------------------------------------------------
+
+        std::shared_ptr<Audio::SoundEffect> BuildSoundEffectFromCnbEXT(
+            const CNA::Content::Cnb::CnbSoundEffectData& data, const std::string&)
+        {
+            const auto channels = data.channels == 2u ? Audio::AudioChannels::Stereo
+                                                      : Audio::AudioChannels::Mono;
+            if (data.loopLength == 0u)
+            {
+                return std::make_shared<Audio::SoundEffect>(
+                    data.samples, static_cast<SharpRuntime::intcs>(data.sampleRate), channels);
+            }
+            return std::make_shared<Audio::SoundEffect>(
+                data.samples, 0, static_cast<SharpRuntime::intcs>(data.samples.size()),
+                static_cast<SharpRuntime::intcs>(data.sampleRate), channels,
+                static_cast<SharpRuntime::intcs>(data.loopStart),
+                static_cast<SharpRuntime::intcs>(data.loopLength));
+        }
+
     } // anonymous namespace
 
     // ---------------------------------------------------------------------------
@@ -5973,6 +6000,15 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Content::Cnb::DecodeSpriteFontFromCnb(document), contentManager,
                     assetName));
             });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::SoundEffect,
+            "Microsoft.Xna.Framework.Audio.SoundEffect",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager&,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildSoundEffectFromCnbEXT(
+                    CNA::Content::Cnb::DecodeSoundEffectFromCnb(document), assetName));
+            });
     }
 
 } // namespace Microsoft::Xna::Framework::Content
@@ -5999,6 +6035,31 @@ namespace Microsoft::Xna::Framework::Content
         if (std::filesystem::exists(xnbCandidate))
         {
             return LoadXnbAsset<Audio::SoundEffect>(xnbCandidate, assetName);
+        }
+
+        // plans/plan_cnb.md CNBF-103A. This tier was MISSING: because SoundEffect has its own
+        // Load<> specialisation, it never ran the generic template's .cnb step, so a
+        // SoundEffect.cnb would have fallen straight through to the loose-file reader and the
+        // documented precedence (xnb > cnb > literal > cnj > loose) would have held for every
+        // asset type except this one. Added with the same two shapes the generic tier has: the
+        // implicit "<name>.cnb", and a caller who spells the extension out.
+        //
+        // Through shared_ptr because SoundEffect is move-only and std::any cannot hold it.
+        const std::string cnbCandidate =
+            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
+        if (std::filesystem::exists(cnbCandidate))
+        {
+            return std::move(
+                *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(cnbCandidate, assetName));
+        }
+        if (assetName.size() > 4 && assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
+        {
+            const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
+            if (std::filesystem::exists(literalCnb))
+            {
+                return std::move(
+                    *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(literalCnb, assetName));
+            }
         }
 
         auto readerIt = typeReaders_.find(std::type_index(typeid(Audio::SoundEffect)));

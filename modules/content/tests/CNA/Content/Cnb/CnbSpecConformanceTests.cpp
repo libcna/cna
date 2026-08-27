@@ -29,6 +29,7 @@
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
+#include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureFormat.hpp"
@@ -137,6 +138,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     ExpectSpecContains(spec, "| 3 | `TextureCube` | **version 1**");
     ExpectSpecContains(spec, "| 4 | `SpriteFont` | **version 1**");
     ExpectSpecContains(spec, "| 5 | `Model` | **version 1**");
+    ExpectSpecContains(spec, "| 8 | `SoundEffect` | **version 1**");
     ExpectSpecContains(spec, "| 6 | `AnimationClip` | **version 1**");
     ExpectSpecContains(spec, "| 7 | `Curve` | **version 1**");
     ExpectSpecContains(spec, "`FNV-1a-32(name) | 0x80000000`");
@@ -164,6 +166,11 @@ TEST(CnbSpecConformanceTest, TheDocumentedSchemaStridesMatchTheImplementation)
     EXPECT_EQ(CNA::Content::Cnb::CnbSpriteFontKerningStride, 12u);
     EXPECT_EQ(CNA::Content::Cnb::CnbSpriteFontCharacterStride, 4u);
     EXPECT_EQ(CNA::Content::Cnb::CnbMaxSpriteFontGlyphs, 65536u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbSoundEffectHeaderStride, 28u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbMaxAudioSampleRate, 384000u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbAudioFormatMax, 5u);
+    EXPECT_EQ(static_cast<std::uint32_t>(CNA::Content::Cnb::CnbAudioFormat::Pcm16), 1u);
+    EXPECT_EQ(static_cast<std::uint32_t>(CNA::Content::Cnb::CnbAudioFormat::Vorbis), 5u);
     EXPECT_EQ(CNA::Content::Cnb::CnbNoIndex, 0xFFFFFFFFu);
     EXPECT_EQ(CNA::Content::Cnb::CnbTextureSlotCount, 7u);
     EXPECT_EQ(CNA::Content::Cnb::CnbMaxEffectKind, 5u);
@@ -193,6 +200,8 @@ TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Header), "ACLH");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Tracks), "ACLT");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Keys), "ACLK");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbSoundEffectChunk::Header), "AUDH");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbSoundEffectChunk::Data), "AUDD");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::Header), "FONT");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::GlyphBounds), "GLYP");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbSpriteFontChunk::Cropping), "CROP");

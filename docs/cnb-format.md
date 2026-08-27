@@ -309,7 +309,7 @@ Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this or
 | 5 | `Model` | **version 1**, §11 |
 | 6 | `AnimationClip` | **version 1**, §10 |
 | 7 | `Curve` | **version 1**, §9 |
-| 8 | `SoundEffect` | reserved, not implemented |
+| 8 | `SoundEffect` | **version 1**, §18 |
 | 9 | `Song` | reserved, not implemented |
 | 10 | `Video` | reserved, not implemented |
 | 11 | `Effect` | reserved, not implemented |
@@ -790,8 +790,8 @@ chunk occupies no bytes and takes no part in the layout partition.
 Recorded so the boundary is a decision rather than an omission. Each is tracked in
 `plans/plan_cnb.md`.
 
-* `SoundEffect`, `Song`, `Video` and `Effect` schemas. Their identifiers are frozen; their
-  layouts are not designed.
+* `Song`, `Video` and `Effect` schemas. Their identifiers are frozen; their layouts are not
+  designed.
 * Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
   structure that carries them, and the reader accepts a file that uses them, but no writer in this
   build produces one and this build cannot upload one.
@@ -964,3 +964,51 @@ can catch a reordering, since both orderings are the same number of well-formed 
 
 Strictly ascending also forbids duplicates, which would make one of the two entries unreachable.
 A `defaultCharacter` that is not in the map is likewise refused.
+
+---
+
+## 18. `SoundEffect`, schema version 1
+
+| chunk | count | flags | contents |
+|---|---|---|---|
+| `AUDH` | exactly 1 | Mandatory | format, rate, channels, frame count, loop points |
+| `AUDD` | exactly 1 | Mandatory | the sample bytes, 16-byte aligned |
+
+### 18.1 `AUDH`
+
+| offset | size | field | notes |
+|---|---|---|---|
+| 0 | 4 | `format` | a `CnbAudioFormat` identifier, §18.2 |
+| 4 | 4 | `sampleRate` | Hz; 1…384000 |
+| 8 | 4 | `channels` | 1 (mono) or 2 (stereo); XNA's `AudioChannels` has no third value |
+| 12 | 4 | `frameCount` | sample frames, i.e. samples per channel |
+| 16 | 4 | `loopStart` | first frame of the loop region |
+| 20 | 4 | `loopLength` | frames in the loop region; 0 means no loop |
+| 24 | 4 | `flags` | reserved; must be zero |
+
+`AUDD`'s length must be exactly `frameCount × frameBytes`, and `loopStart + loopLength` must not
+exceed `frameCount`. **The loop check is the one that earns its keep**: an over-long loop is not a
+malformed file in any structural sense — every length and checksum is correct — and without the
+rule it becomes an out-of-range read inside the mixer, at playback time, on someone else's machine.
+
+### 18.2 `CnbAudioFormat`
+
+Its own numbering, for the same reason `CnbTextureFormat` has one: no audio backend's enumerators
+are a serialisation ABI.
+
+| id | name | frame bytes | v1 |
+|---|---|---|---|
+| 0 | invalid | — | rejected |
+| 1 | `Pcm16` | `2 × channels` | **written and read** |
+| 2 | `Pcm8` | `1 × channels` | reserved |
+| 3 | `PcmFloat32` | `4 × channels` | reserved |
+| 4 | `Adpcm` | block format, no fixed frame size | reserved |
+| 5 | `Vorbis` | packet format, no fixed frame size | reserved |
+
+Samples are **headerless** little-endian PCM, not a WAV or other container's raw bytes. That is
+what the runtime's raw-buffer constructor takes, so storing a container would mean parsing one at
+load time for no benefit.
+
+`Adpcm` and `Vorbis` have no fixed frame size, so the `AUDD` length rule above cannot apply to
+them. Neither has a v1 codec; whichever gains one first needs its own length rule rather than
+inheriting this one.
