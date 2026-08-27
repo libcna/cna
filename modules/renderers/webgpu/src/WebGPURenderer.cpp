@@ -360,6 +360,82 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
+        // WEBGPU-83: XNA StencilOperation ordinal -> WGPU. Increment/Decrement (unsaturated) wrap;
+        // the *Saturation variants clamp -- matching the Vulkan renderer's own mapping.
+        [[nodiscard]] WGPUStencilOperation ToWGPUStencilOperation(int xnaOp)
+        {
+            switch (xnaOp)
+            {
+                case 1: return WGPUStencilOperation_Zero;
+                case 2: return WGPUStencilOperation_Replace;
+                case 3: return WGPUStencilOperation_IncrementWrap;
+                case 4: return WGPUStencilOperation_DecrementWrap;
+                case 5: return WGPUStencilOperation_IncrementClamp;
+                case 6: return WGPUStencilOperation_DecrementClamp;
+                case 7: return WGPUStencilOperation_Invert;
+                default: return WGPUStencilOperation_Keep;  // 0 = Keep
+            }
+        }
+
+        // WEBGPU-83: bakes the XNA stencil state into a WGPUDepthStencilState's stencilFront/back +
+        // masks. When disabled, leaves the INIT defaults (a stencil test that always passes and
+        // never writes). Two-sided maps XNA's ccw* ops onto the back face (WebGPU's frontFace is CCW,
+        // so this follows the spec-literal front=CW/back=CCW split; a two-sided differential test is
+        // needed to confirm the winding on real hardware -- documented, and unused by the non-two-
+        // sided path the RenderTarget_DepthStencilUsage acceptance test exercises).
+        void FillWGPUStencilState(WGPUDepthStencilState& ds, const WebGPURenderer::StencilKeyParams& s)
+        {
+            if (!s.enable)
+                return;
+            WGPUStencilFaceState front{};
+            front.compare = ToWGPUCompareFunction(s.func);
+            front.failOp = ToWGPUStencilOperation(s.stencilFail);
+            front.depthFailOp = ToWGPUStencilOperation(s.depthFail);
+            front.passOp = ToWGPUStencilOperation(s.stencilPass);
+            ds.stencilFront = front;
+            if (s.twoSided)
+            {
+                WGPUStencilFaceState back{};
+                back.compare = ToWGPUCompareFunction(s.ccwFunc);
+                back.failOp = ToWGPUStencilOperation(s.ccwFail);
+                back.depthFailOp = ToWGPUStencilOperation(s.ccwDepthFail);
+                back.passOp = ToWGPUStencilOperation(s.ccwPass);
+                ds.stencilBack = back;
+            }
+            else
+            {
+                ds.stencilBack = front;
+            }
+            ds.stencilReadMask = static_cast<std::uint32_t>(s.readMask & 0xFF);
+            ds.stencilWriteMask = static_cast<std::uint32_t>(s.writeMask & 0xFF);
+        }
+
+        // WEBGPU-83: a stencil state's contribution to the pipeline cache key. A disabled stencil
+        // folds a single constant (0) regardless of its stored-but-unused func/op fields, so
+        // different disabled DepthStencilStates never fragment the cache.
+        [[nodiscard]] std::uint64_t HashStencilState(const WebGPURenderer::StencilKeyParams& s)
+        {
+            if (!s.enable)
+                return 0;
+            std::uint64_t h = 1;
+            auto mix = [&h](std::uint64_t v) { h = h * 31u + v; };
+            mix(static_cast<std::uint64_t>(s.func));
+            mix(static_cast<std::uint64_t>(s.stencilPass));
+            mix(static_cast<std::uint64_t>(s.stencilFail));
+            mix(static_cast<std::uint64_t>(s.depthFail));
+            mix(static_cast<std::uint64_t>(s.readMask & 0xFF));
+            mix(static_cast<std::uint64_t>(s.writeMask & 0xFF));
+            mix(s.twoSided ? 1u : 0u);
+            if (s.twoSided)
+            {
+                mix(static_cast<std::uint64_t>(s.ccwFunc));
+                mix(static_cast<std::uint64_t>(s.ccwPass));
+                mix(static_cast<std::uint64_t>(s.ccwFail));
+                mix(static_cast<std::uint64_t>(s.ccwDepthFail));
+            }
+            return h;
+        }
+
         [[nodiscard]] WGPUAddressMode ToAddressMode(int mode)
         {
             switch (mode)
@@ -3195,12 +3271,16 @@ struct VertexOutput {
                                                                             int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
+        // WEBGPU-83: the stencil state is folded into the colored3d cache key locally (Make3DPipelineKey
+        // stays shared/unchanged), so a stencil-enabled draw is a distinct pipeline variant.
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
 
@@ -3267,6 +3347,7 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -8628,6 +8709,10 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate in one
+        // frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         if (params != nullptr)
         {
             const Matrix wvp = world * view * projection;
@@ -9090,11 +9175,16 @@ struct VSOut {
                                                                command.depthWrite, command.depthFunc,
                                                                command.blend, command.blendParams,
                                                                command.cullMode, command.wireframe,
-                                                               command.depthBias, command.slopeScaleDepthBias);
+                                                               command.depthBias, command.slopeScaleDepthBias,
+                                                               command.stencil);  // WEBGPU-83
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic state; the ops/masks are in the
+        // pipeline above). A gate draw and a stamp draw can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());

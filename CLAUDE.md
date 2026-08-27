@@ -542,10 +542,14 @@ attachment 0) and custom WGSL `ShaderEffect`s on the SpriteBatch route too (`WEB
 2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port (2D + 3D, its pixels
 byte-identical to the native Vulkan renderer's). It is also the first CNA renderer to upload
 GPU-native block-compressed textures (`WEBGPU-144`: DXT1/3/5 + BC7 to `WGPUTextureFormat_BC*`, no CPU
-decompress) via the direct `Texture2D`+`SetData` API. The remaining WebGPU gap is having the XNB/DDS
-content loaders reach that native path instead of force-decoding DXT to Color (`WEBGPU-144` Phase 2,
-a capability-gated shared-content-loader change) -- see `docs/webgpu-renderer.md` and
-`plans/plan_webgpu.md`.
+decompress) via the direct `Texture2D`+`SetData` API. `DepthStencilState` **stencil ops**
+(`WEBGPU-83`) now bake into `WGPUStencilFaceState` on the colored3d route (a stamp-then-gate
+sequence works within one render-target bind cycle; the shared `rendertarget_depthstencil_usage`
+acceptance test asserts it). Remaining WebGPU gaps: extend that stencil bake to the other 3D
+families (they store the state but don't yet bake it) and validate two-sided winding; and have the
+XNB/DDS content loaders reach the native compressed path instead of force-decoding DXT to Color
+(`WEBGPU-144` Phase 2, a capability-gated shared-content-loader change) -- see
+`docs/webgpu-renderer.md` and `plans/plan_webgpu.md`.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
 `plans/plan_magnum.md` for its own capability boundary.
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**

@@ -872,6 +872,30 @@ namespace CNA::Internal::Renderers::WebGPU
             int alphaFunc = 0;
         };
 
+        /// WEBGPU-83: the XNA stencil state baked into a pipeline's `WGPUDepthStencilState`, captured
+        /// per draw command (a stamp draw and a gated draw in one frame carry different stencil
+        /// state, so it cannot be read as frame-global at replay). In WebGPU the read/write masks are
+        /// pipeline state (unlike Vulkan's dynamic masks), so they fold into the pipeline cache key
+        /// too; only the reference value is dynamic (`wgpuRenderPassEncoderSetStencilReference`).
+        /// Enum ordinals are XNA's: CompareFunction (Always=0..NotEqual=7), StencilOperation
+        /// (Keep=0, Zero=1, Replace=2, Increment=3, Decrement=4, IncrementSaturation=5,
+        /// DecrementSaturation=6, Invert=7).
+        struct StencilKeyParams
+        {
+            bool enable = false;
+            int func = 0;         ///< front/CW compare
+            int stencilPass = 0;  ///< front/CW ops
+            int stencilFail = 0;
+            int depthFail = 0;
+            int readMask = 0xFF;
+            int writeMask = 0xFF;
+            bool twoSided = false;
+            int ccwFunc = 0;      ///< back/CCW compare + ops (only when twoSided)
+            int ccwPass = 0;
+            int ccwFail = 0;
+            int ccwDepthFail = 0;
+        };
+
         struct SpriteVertex
         {
             float position[3];
@@ -1696,7 +1720,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                        int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);  // WEBGPU-83
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true, vertexStart=0). params != nullptr: DrawPrimitivesEx's real
         // GpuDrawParams dispatch (stride-16 only -- caller must have already verified the stride).
@@ -2002,6 +2027,25 @@ namespace CNA::Internal::Renderers::WebGPU
         int ccwStencilPass_ = 0;
         int ccwStencilFail_ = 0;
         int ccwStencilDepthFail_ = 0;
+        /// WEBGPU-83: snapshots the current stencil state (set by ApplyDepthStencilState) into the
+        /// per-draw StencilKeyParams a colored3d draw command captures.
+        [[nodiscard]] StencilKeyParams CaptureStencilStateEXT() const
+        {
+            StencilKeyParams s;
+            s.enable = stencilEnable_;
+            s.func = stencilFunc_;
+            s.stencilPass = stencilPass_;
+            s.stencilFail = stencilFail_;
+            s.depthFail = stencilDepthFail_;
+            s.readMask = stencilReadMask_;
+            s.writeMask = stencilWriteMask_;
+            s.twoSided = twoSidedStencilMode_;
+            s.ccwFunc = ccwStencilFunc_;
+            s.ccwPass = ccwStencilPass_;
+            s.ccwFail = ccwStencilFail_;
+            s.ccwDepthFail = ccwStencilDepthFail_;
+            return s;
+        }
 
         // WEBGPU-82: per-slot SamplerState (slot 0 is texture0, read by every texture-consuming 3D
         // Queue*Draw() at queue time -- see GetOrCreateSlotSampler()).
@@ -2107,6 +2151,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
+            /// WEBGPU-83: the stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
         };
         WGPUShaderModule coloredShader_ = nullptr;
         WGPUBindGroupLayout coloredBindGroupLayout_ = nullptr;
