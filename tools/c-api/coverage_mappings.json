@@ -17173,6 +17173,92 @@
         "CPP-D196023EB1CF",
         "CPP-E598413DDBEF"
       ]
+    },
+    {
+      "id": "indirect-draw-arguments",
+      "qualified_name_regex": "^CNA::IndirectDraw(?:Indexed)?Arguments(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "`CNA_IndirectDrawArguments` and `CNA_IndirectDrawIndexedArguments` with their initializers.\n\n**These two are the only PODs in the engine-layer header without a `struct_size`/`struct_version` pair, and deliberately so**: the GPU reads them verbatim, so the layout *is* the contract and the ABI may not version or pad them. Compile-time assertions pin sixteen and twenty bytes against the canonical structs on both sides of the boundary.\n\nThey live in the always-compiled graphics module rather than under `CNA_CNAEXT` -- they are the GPU's command format, not part of the engine layer -- so both initializers work in **every** build.",
+      "tests": "`EngineLayerSmoke.c` stage 39 and the layer-absent block, which assert the sizes from C as well as from C++ and check the defaults draw nothing. Both initializers are asserted to succeed without the engine layer.",
+      "status": "implemented",
+      "task": "CBIND-092C",
+      "approved_symbols": [
+        "CPP-0013A57FD984",
+        "CPP-0EAF648478D1",
+        "CPP-1689CEEADBEE",
+        "CPP-31451CCED37E",
+        "CPP-442CDBBDD79C",
+        "CPP-5ADDCD93599B",
+        "CPP-5B1C300585A0",
+        "CPP-75740C24B901",
+        "CPP-8C70758A650A",
+        "CPP-9675C506DE9B",
+        "CPP-A6FBA621C7FD"
+      ]
+    },
+    {
+      "id": "frustum-culler",
+      "qualified_name_regex": "^CNA::Graphics::FrustumCullerEXT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_frustum_culler_ext_*` over its own owned handle, created **without a device** because the canonical class has none. **Nothing here refuses** beyond null arguments: it has no shader and no state that can be wrong.\n\nThe two `isVisible` overloads and the two `cull` overloads become four separately named routes, since C has no overloading and each answers a different question about a different shape. The index culls hand back **indices into the caller's array** rather than copies.\n\n**`cullTransforms` keeps a transform that has no matching bound**, because the canonical test is `i >= bounds.size() || visible(bounds[i])`. A shorter bounds array therefore means \"these ones are always visible\", not \"cull them\" -- the opposite of what a caller who passed a short array by accident would expect, which is why the header states it and the test asserts it with zero bounds.",
+      "tests": "`EngineLayerSmoke.c` stage 39: the frustum is built two ways (camera pair and combined matrix) and shown to give the same matrix; a box in front and a box far behind are asserted to answer **differently**, so a culler that always says yes fails; and three transforms with zero bounds are asserted to return **all three**. Break-proved by asserting none instead, which moves both CNAEXT trees.",
+      "status": "implemented",
+      "task": "CBIND-092C",
+      "approved_symbols": [
+        "CPP-029EB52763F1",
+        "CPP-2CB8F2071826",
+        "CPP-42E409252241",
+        "CPP-45C9D00217F6",
+        "CPP-63E5B96D74D3",
+        "CPP-6692D95DD2B0",
+        "CPP-7473775AC5FA",
+        "CPP-8EFA1D28F2AB",
+        "CPP-B3D86A2193F7",
+        "CPP-F6B57534C235"
+      ]
+    },
+    {
+      "id": "gpu-instance-culler",
+      "qualified_name_regex": "^CNA::Graphics::(?:GpuInstanceCuller(?:::[A-Za-z0-9_~]+)?|GpuCullableInstance(?:::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "class",
+        "struct",
+        "constant",
+        "field",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_gpu_instance_culler_*` over its own owned handle, with `CNA_GpuCullableInstance` as a versioned POD and the binding point as a macro `static_assert`ed against the canonical constant.\n\n**This one refuses rather than falling back, which is the opposite of the particle system and deliberate**: a CPU culling path would be a different algorithm producing a different visible set, so a device without compute gets an honest refusal instead of a silently different picture. That refusal is the canonical `NotSupportedException` arriving as `CNA_RESULT_NOT_SUPPORTED`, which therefore has two causes here -- no engine layer, or no compute -- and the header says to separate them with `cna_engine_layer_get_version`.\n\n**Drawing before culling is `CNA_RESULT_INVALID_STATE`, not `CNA_RESULT_INTERNAL`.** The canonical body throws a `runtime_error` there, which reaches the exception barrier's `std::exception` arm and would be reported as an internal failure -- telling a caller it hit a library bug when it merely called two routes in the wrong order. The C layer mirrors the private `culled_` flag on exactly the two transitions the canonical class uses (set by a successful cull, cleared by an upload) so the answer can say what it means.\n\n`draw` issues an indirect draw against **whatever mesh is bound**; the culler owns the instances and the command, not the geometry. `read_visible_count_ext` answers zero before a cull rather than refusing -- a count is a number.",
+      "tests": "`EngineLayerSmoke.c` stage 39, both arms keyed on the measured support. On EasyGL the three-step protocol is exercised in order and out of order: drawing before culling is asserted `INVALID_STATE`, four different `cull` refusals are asserted **not** to count as a cull, and a fresh upload is asserted to reset the culled state. The reachable success arm is the zero-instance draw, where the canonical body returns before touching the device -- asserting a drawing draw would assert that the fixture had a mesh, not that the route works. On headless every step is asserted `NOT_SUPPORTED` with the layer version non-zero. Break-proved: asserting `INTERNAL` for the ordering error moves only the tree that takes the success arm.",
+      "status": "implemented",
+      "task": "CBIND-092C",
+      "approved_symbols": [
+        "CPP-3FCDB210D823",
+        "CPP-4344ED83C6D5",
+        "CPP-4AFD97089F5E",
+        "CPP-59668D595F36",
+        "CPP-65038887D0CC",
+        "CPP-71E8BCB4FC6E",
+        "CPP-78B588C16138",
+        "CPP-9A97B3D18749",
+        "CPP-A0000F85B772",
+        "CPP-AB5B292D1D4D",
+        "CPP-CECF392E8043",
+        "CPP-DC391B39DB97",
+        "CPP-EAD03E9F98E3",
+        "CPP-F393200BCB8B",
+        "CPP-F7AEE0436950",
+        "CPP-F8AAB386BC46"
+      ]
     }
   ]
 }

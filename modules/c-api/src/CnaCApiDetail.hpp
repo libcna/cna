@@ -258,6 +258,10 @@ enum class ObjectKind : uint32_t {
     // CBIND-092B.
     InstancedRenderer = 163,
     LodGroup = 164,
+
+    // CBIND-092C.
+    FrustumCuller = 165,
+    GpuInstanceCuller = 166,
     Test = UINT32_MAX
 };
 

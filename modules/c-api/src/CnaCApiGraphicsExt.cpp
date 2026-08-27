@@ -2,6 +2,7 @@
 
 #include "CNA/C/engine_layer.h"
 #include "CNA/C/graphics_ext.h"
+#include "CNA/IndirectDrawArguments.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "CnaCApiDetail.hpp"
@@ -211,6 +212,53 @@ CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* const outMaterial)
         }
     }
     return StoreValue(outMaterial, defaults);
+}
+
+/* CBIND-092C. The two indirect-draw argument structs are the GPU's own command format, not part of
+ * the engine layer -- they live in the always-compiled graphics module -- so these initializers
+ * work in every build. Their SIZE is the contract, since the GPU reads them verbatim, and the
+ * assertions below pin it on both sides of the boundary. */
+static_assert(
+    sizeof(CNA_IndirectDrawArguments) == sizeof(CNA::IndirectDrawArguments) &&
+    sizeof(CNA_IndirectDrawArguments) == 16,
+    "the GPU reads this struct verbatim; it must be exactly four 32-bit words on both sides");
+static_assert(
+    sizeof(CNA_IndirectDrawIndexedArguments) == sizeof(CNA::IndirectDrawIndexedArguments) &&
+    sizeof(CNA_IndirectDrawIndexedArguments) == 20,
+    "the GPU reads this struct verbatim; it must be exactly five 32-bit words on both sides");
+
+CNA_Result cna_indirect_draw_arguments_init(CNA_IndirectDrawArguments* const outArguments)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outArguments == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The arguments are null.");
+        }
+        const CNA::IndirectDrawArguments defaults;
+        outArguments->vertex_count = defaults.VertexCount;
+        outArguments->instance_count = defaults.InstanceCount;
+        outArguments->first_vertex = defaults.FirstVertex;
+        outArguments->base_instance = defaults.BaseInstance;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_indirect_draw_indexed_arguments_init(
+    CNA_IndirectDrawIndexedArguments* const outArguments)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outArguments == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The arguments are null.");
+        }
+        const CNA::IndirectDrawIndexedArguments defaults;
+        outArguments->index_count = defaults.IndexCount;
+        outArguments->instance_count = defaults.InstanceCount;
+        outArguments->first_index = defaults.FirstIndex;
+        outArguments->base_vertex = defaults.BaseVertex;
+        outArguments->base_instance = defaults.BaseInstance;
+        return CNA_RESULT_SUCCESS;
+    });
 }
 
 /* CBIND-091C. The area light is the second value in this slice whose canonical type lives in the

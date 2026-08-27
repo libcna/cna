@@ -11172,6 +11172,425 @@ CNA_C_API CNA_Result cna_lod_group_ext_set_screen_space_parameters(
 CNA_C_API CNA_Result cna_lod_group_ext_projected_radius_pixels(
     CNA_LodGroupEXTHandle group, float distance, float* out_pixels);
 
+/**
+ * @brief The arguments of an indirect draw, in the exact layout the GPU reads.
+ *
+ * **Sixteen bytes, four 32-bit words, and the layout is the contract** -- the GPU reads this
+ * verbatim, so it is not a structure the ABI may version or pad. It therefore has no `struct_size`
+ * or `struct_version`, unlike every other POD in this header, and a compile-time assertion pins its
+ * size on both sides of the boundary.
+ */
+typedef struct CNA_IndirectDrawArguments {
+    /** @brief How many vertices to fetch. */
+    uint32_t vertex_count;
+    /** @brief How many instances to draw; one for an ordinary draw, zero to draw nothing. */
+    uint32_t instance_count;
+    /** @brief The first vertex, in elements of the bound stream. */
+    uint32_t first_vertex;
+    /**
+     * @brief The first instance.
+     *
+     * **Must be zero on GL ES.** ES 3.1 has no base-instance parameter and the word is required to
+     * be zero; a non-zero value there is undefined rather than diagnosed, and cannot be checked
+     * anywhere -- by the time the draw runs the value lives in GPU memory.
+     */
+    uint32_t base_instance;
+} CNA_IndirectDrawArguments;
+
+/**
+ * @brief The arguments of an indexed indirect draw, in the exact layout the GPU reads.
+ *
+ * Same contract as @ref CNA_IndirectDrawArguments, one word longer: **twenty bytes, five words.**
+ */
+typedef struct CNA_IndirectDrawIndexedArguments {
+    /** @brief How many indices to fetch. */
+    uint32_t index_count;
+    /** @brief How many instances to draw. */
+    uint32_t instance_count;
+    /** @brief The first index, in index elements. */
+    uint32_t first_index;
+    /** @brief Added to every decoded index, in vertex elements; signed, as the API is. */
+    int32_t base_vertex;
+    /** @brief The first instance; must be zero on GL ES, for the reason above. */
+    uint32_t base_instance;
+} CNA_IndirectDrawIndexedArguments;
+
+/**
+ * @brief Fills indirect draw arguments with the canonical defaults.
+ *
+ * Works in **every** build, because the canonical struct is not part of the engine layer -- it is
+ * the GPU's own command format and lives in the always-compiled graphics module.
+ *
+ * @param out_arguments Receives all-zero arguments, which draw nothing.
+ * @return `CNA_RESULT_SUCCESS` in every build, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_indirect_draw_arguments_init(CNA_IndirectDrawArguments* out_arguments);
+
+/**
+ * @brief Fills indexed indirect draw arguments with the canonical defaults.
+ *
+ * @param out_arguments Receives all-zero arguments, which draw nothing.
+ * @return `CNA_RESULT_SUCCESS` in every build, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_indirect_draw_indexed_arguments_init(
+    CNA_IndirectDrawIndexedArguments* out_arguments);
+
+/**
+ * @brief Owned handle for the CPU frustum culler.
+ *
+ * A frustum and the tests that use it. **Nothing here refuses**: it has no device, no shader and
+ * no state that can be wrong, so every route succeeds and the interesting behaviour is in what the
+ * answers are rather than in when they are refused.
+ */
+typedef CNA_Handle CNA_FrustumCullerEXTHandle;
+
+/**
+ * @brief Creates a frustum culler.
+ *
+ * @param out_culler Receives the culler; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_create(CNA_FrustumCullerEXTHandle* out_culler);
+
+/**
+ * @brief Releases a frustum culler.
+ *
+ * @param culler The culler.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_destroy(CNA_FrustumCullerEXTHandle culler);
+
+/**
+ * @brief Sets the frustum from a combined view-projection matrix.
+ *
+ * @param culler The culler.
+ * @param view_projection The combined matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_set_view_projection(
+    CNA_FrustumCullerEXTHandle culler, const CNA_Matrix* view_projection);
+
+/**
+ * @brief Sets the frustum from a view and a projection.
+ *
+ * Exactly @ref cna_frustum_culler_ext_set_view_projection of their product, in that order.
+ *
+ * @param culler The culler.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_set_camera(
+    CNA_FrustumCullerEXTHandle culler, const CNA_Matrix* view, const CNA_Matrix* projection);
+
+/**
+ * @brief Returns the frustum the culler is testing against.
+ *
+ * @param culler The culler.
+ * @param out_frustum Receives the frustum.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_get_frustum(
+    CNA_FrustumCullerEXTHandle culler, CNA_BoundingFrustum* out_frustum);
+
+/**
+ * @brief Tests one box against the frustum.
+ *
+ * @param culler The culler.
+ * @param box The box.
+ * @param out_visible Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_is_box_visible(
+    CNA_FrustumCullerEXTHandle culler, const CNA_BoundingBox* box, CNA_Bool* out_visible);
+
+/**
+ * @brief Tests one sphere against the frustum.
+ *
+ * Bound separately from the box test rather than as one overload, because C has no overloading and
+ * the two answer different questions about different shapes.
+ *
+ * @param culler The culler.
+ * @param sphere The sphere.
+ * @param out_visible Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_is_sphere_visible(
+    CNA_FrustumCullerEXTHandle culler, const CNA_BoundingSphere* sphere, CNA_Bool* out_visible);
+
+/**
+ * @brief Returns the indices of the visible boxes.
+ *
+ * @param culler The culler.
+ * @param bounds The boxes to test.
+ * @param bounds_count How many there are.
+ * @param destination The index array, or null to ask for the count.
+ * @param capacity How many indices it holds.
+ * @param out_count Receives how many are visible.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null array with a non-zero count or a null
+ * count, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_cull_boxes(
+    CNA_FrustumCullerEXTHandle culler,
+    const CNA_BoundingBox* bounds,
+    uint64_t bounds_count,
+    uint64_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Returns the indices of the visible spheres.
+ *
+ * @param culler The culler.
+ * @param bounds The spheres to test.
+ * @param bounds_count How many there are.
+ * @param destination The index array, or null to ask for the count.
+ * @param capacity How many indices it holds.
+ * @param out_count Receives how many are visible.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null array with a non-zero count or a null
+ * count, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_cull_spheres(
+    CNA_FrustumCullerEXTHandle culler,
+    const CNA_BoundingSphere* bounds,
+    uint64_t bounds_count,
+    uint64_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Returns the transforms whose bounds are visible.
+ *
+ * **A transform with no matching bound is KEPT, not dropped.** The canonical body tests
+ * `i >= bounds.size() || visible(bounds[i])`, so a shorter bounds array means "these ones are
+ * always visible" rather than "cull them" -- which is the opposite of what a caller who
+ * accidentally passes a short array would expect, and is why it is stated here.
+ *
+ * @param culler The culler.
+ * @param transforms The transforms.
+ * @param transform_count How many there are.
+ * @param bounds The bounds, which may be fewer than the transforms.
+ * @param bounds_count How many bounds there are.
+ * @param destination The output array, or null to ask for the count.
+ * @param capacity How many transforms it holds.
+ * @param out_count Receives how many are visible.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null array with a non-zero count or a null
+ * count, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_frustum_culler_ext_cull_transforms(
+    CNA_FrustumCullerEXTHandle culler,
+    const CNA_Matrix* transforms,
+    uint64_t transform_count,
+    const CNA_BoundingBox* bounds,
+    uint64_t bounds_count,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief The storage-buffer binding point a culled instance shader reads from. */
+#define CNA_GPU_INSTANCE_BINDING 6
+
+/**
+ * @brief One instance a GPU culler may or may not keep.
+ */
+typedef struct CNA_GpuCullableInstance {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief The instance's world transform. */
+    CNA_Matrix world;
+    /** @brief Its bounds, in the same space the culling frustum is built in. */
+    CNA_BoundingBox bounds;
+} CNA_GpuCullableInstance;
+
+/**
+ * @brief Fills a cullable instance with the canonical defaults.
+ *
+ * @param out_instance Receives an instance with an identity world and an empty box.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_cullable_instance_init(CNA_GpuCullableInstance* out_instance);
+
+/**
+ * @brief Owned handle for the GPU instance culler.
+ *
+ * **This one refuses rather than falling back**, which is the opposite of
+ * @ref CNA_ParticleSystemHandle and deliberate: a CPU culling path would be a different algorithm
+ * producing a different visible set, so a device without compute gets an honest refusal instead of
+ * a silently different picture. @ref cna_gpu_instance_culler_is_supported asks first, and
+ * @ref cna_gpu_instance_culler_copy_unsupported_reason says why.
+ *
+ * That refusal arrives as `CNA_RESULT_NOT_SUPPORTED`, the canonical answer, which therefore has
+ * **two** possible causes here: the library was built without the engine layer, or this renderer
+ * cannot run the culling shader. Tell them apart with @ref cna_engine_layer_get_version -- a
+ * non-zero version means the layer is present and the renderer is the reason.
+ *
+ * The culler is a **three-step protocol**: upload instances, cull them, then draw. Drawing before
+ * culling is refused as a state error rather than drawing nothing, because "nothing was visible"
+ * and "you have not culled yet" look identical on screen.
+ */
+typedef CNA_Handle CNA_GpuInstanceCullerHandle;
+
+/**
+ * @brief Creates a GPU instance culler.
+ *
+ * Creating one always succeeds, whether or not the renderer can run it; ask
+ * @ref cna_gpu_instance_culler_is_supported afterwards.
+ *
+ * @param graphics_device The device to cull with.
+ * @param out_culler Receives the culler; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_create(
+    CNA_Handle graphics_device, CNA_GpuInstanceCullerHandle* out_culler);
+
+/**
+ * @brief Releases a GPU instance culler.
+ *
+ * @param culler The culler.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_destroy(CNA_GpuInstanceCullerHandle culler);
+
+/**
+ * @brief Reports whether this renderer can run the culling shader.
+ *
+ * @param culler The culler.
+ * @param out_supported Receives the answer measured at construction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_is_supported(
+    CNA_GpuInstanceCullerHandle culler, CNA_Bool* out_supported);
+
+/**
+ * @brief Copies the reason the culler cannot run, if it cannot.
+ *
+ * Empty when it can.
+ *
+ * @param culler The culler.
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_copy_unsupported_reason(
+    CNA_GpuInstanceCullerHandle culler, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Uploads the instances to cull.
+ *
+ * Uploading **resets the culled state**: the visible set belongs to the instances it was computed
+ * from, so a new upload means the next draw must be preceded by a new cull.
+ *
+ * @param culler The culler.
+ * @param instances The instances, or null only when the count is zero.
+ * @param count How many there are.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when this renderer cannot cull,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null array with a non-zero count or a malformed instance,
+ * or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_set_instances(
+    CNA_GpuInstanceCullerHandle culler, const CNA_GpuCullableInstance* instances, uint64_t count);
+
+/**
+ * @brief Returns how many instances are uploaded.
+ *
+ * @param culler The culler.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_get_instance_count(
+    CNA_GpuInstanceCullerHandle culler, int32_t* out_count);
+
+/**
+ * @brief Culls the uploaded instances against a camera and builds the indirect draw command.
+ *
+ * The command is written from the CPU with an instance count of **zero** and the shader adds to it,
+ * which is why the count only means anything after this has run.
+ *
+ * @param culler The culler.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @param index_count How many indices the drawn mesh has; must be positive.
+ * @param first_index The first index; must not be negative.
+ * @param base_vertex The base vertex; must not be negative.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when this renderer cannot cull,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a non-positive index count, a negative offset or a null
+ * matrix, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_cull(
+    CNA_GpuInstanceCullerHandle culler,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    int32_t index_count,
+    int32_t first_index,
+    int32_t base_vertex);
+
+/**
+ * @brief Draws the instances the last cull kept.
+ *
+ * **Refused with `CNA_RESULT_INVALID_STATE` before anything has been culled.** The canonical body
+ * throws a `runtime_error` there, which the exception barrier would otherwise report as an internal
+ * failure -- and telling a caller it hit a library bug when it merely called two routes in the
+ * wrong order would send it looking in the wrong place entirely.
+ *
+ * **The caller must have bound the mesh.** This issues an indirect indexed draw against whatever
+ * vertex and index buffers are currently bound -- the culler owns the instance data and the draw
+ * command, not the geometry -- so calling it with nothing bound is a native failure rather than a
+ * draw of nothing. With **zero instances** uploaded it returns before touching the device at all,
+ * and therefore succeeds whatever is or is not bound.
+ *
+ * @param culler The culler.
+ * @param primitive_type What to draw.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when nothing has been culled yet,
+ * `CNA_RESULT_NOT_SUPPORTED` when this renderer cannot cull, `CNA_RESULT_INVALID_ARGUMENT` for an
+ * undefined primitive type, or a native failure when no mesh is bound.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_draw(
+    CNA_GpuInstanceCullerHandle culler, CNA_PrimitiveType primitive_type);
+
+/**
+ * @brief Reads back how many instances the last cull kept.
+ *
+ * Answers **zero** rather than refusing when nothing has been culled -- a count is a number, and
+ * zero is the honest one before a cull has run.
+ *
+ * @param culler The culler.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_read_visible_count_ext(
+    CNA_GpuInstanceCullerHandle culler, int32_t* out_count);
+
+/**
+ * @brief Copies the GLSL a shader includes to read a culled instance.
+ *
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gpu_instance_culler_copy_instance_lookup_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

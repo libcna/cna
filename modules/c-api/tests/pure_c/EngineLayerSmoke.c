@@ -1099,6 +1099,77 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-092C. Culling. The two indirect-draw initializers are the GPU's own command format and
+       live outside the engine layer, so they SUCCEED here; everything else refuses. */
+    {
+        CNA_FrustumCullerEXTHandle culler = (CNA_FrustumCullerEXTHandle)UINT64_C(0x5A5A5A5A);
+        CNA_GpuInstanceCullerHandle gpu = (CNA_GpuInstanceCullerHandle)UINT64_C(0x5A5A5A5A);
+        CNA_IndirectDrawArguments indirect;
+        CNA_IndirectDrawIndexedArguments indexed;
+        CNA_GpuCullableInstance instance;
+        CNA_BoundingFrustum frustum;
+        CNA_BoundingBox box;
+        CNA_BoundingSphere sphere;
+        CNA_Matrix matrix;
+        uint64_t cull_count = UINT64_C(13);
+        if (cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        box.min.x = 0.0F; box.min.y = 0.0F; box.min.z = 0.0F;
+        box.max.x = 1.0F; box.max.y = 1.0F; box.max.z = 1.0F;
+        sphere.center = box.min; sphere.radius = 1.0F;
+        if (sizeof(CNA_IndirectDrawArguments) != 16U ||
+            sizeof(CNA_IndirectDrawIndexedArguments) != 20U ||
+            cna_indirect_draw_arguments_init(&indirect) != CNA_RESULT_SUCCESS ||
+            indirect.instance_count != UINT32_C(0) ||
+            cna_indirect_draw_indexed_arguments_init(&indexed) != CNA_RESULT_SUCCESS ||
+            indexed.base_vertex != INT32_C(0)) {
+            return 0;
+        }
+        if (cna_gpu_cullable_instance_init(&instance) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_create(&culler) != CNA_RESULT_NOT_SUPPORTED ||
+            culler != CNA_INVALID_HANDLE ||
+            cna_frustum_culler_ext_set_view_projection(culler, &matrix) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_set_camera(culler, &matrix, &matrix) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_get_frustum(culler, &frustum) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_is_box_visible(culler, &box, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_is_sphere_visible(culler, &sphere, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_cull_boxes(culler, &box, UINT64_C(1), 0, UINT64_C(0),
+                                              &cull_count) != CNA_RESULT_NOT_SUPPORTED ||
+            cull_count != UINT64_C(0) ||
+            cna_frustum_culler_ext_cull_spheres(culler, &sphere, UINT64_C(1), 0, UINT64_C(0),
+                                                &cull_count) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_cull_transforms(culler, &matrix, UINT64_C(1), &box,
+                                                   UINT64_C(1), 0, UINT64_C(0), &cull_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_frustum_culler_ext_destroy(culler) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (cna_gpu_instance_culler_create(graphics_device, &gpu) != CNA_RESULT_NOT_SUPPORTED ||
+            gpu != CNA_INVALID_HANDLE ||
+            cna_gpu_instance_culler_is_supported(gpu, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_copy_unsupported_reason(gpu, 0, UINT64_C(0), &cull_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_set_instances(gpu, &instance, UINT64_C(1)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_get_instance_count(gpu, &samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_cull(gpu, &matrix, &matrix, INT32_C(36), INT32_C(0),
+                                         INT32_C(0)) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_draw(gpu, CNA_PRIMITIVE_TRIANGLE_LIST) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_read_visible_count_ext(gpu, &samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_copy_instance_lookup_glsl(0, UINT64_C(0), &cull_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_gpu_instance_culler_destroy(gpu) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -7429,6 +7500,243 @@ static int validate_instancing_and_lod(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-092C. Three contracts carry this stage.
+
+   cullTransforms KEEPS a transform with no matching bound rather than dropping it -- the canonical
+   test is `i >= bounds.size() || visible(bounds[i])`. That is the opposite of what a caller who
+   accidentally passes a short array would expect, so a short array is asserted here on purpose.
+
+   The GPU culler REFUSES rather than falling back, which is the opposite of the particle system:
+   a CPU culling path would be a different algorithm producing a different visible set. So the
+   stage runs both arms keyed on the measured support.
+
+   And drawing before culling is a state error, not an internal one: the canonical runtime_error
+   would reach the barrier's std::exception arm as CNA_RESULT_INTERNAL, which would tell a caller
+   it hit a library bug when it merely called two routes in the wrong order. */
+static int validate_culling(const CNA_Handle graphics_device)
+{
+    CNA_FrustumCullerEXTHandle culler = CNA_INVALID_HANDLE;
+    CNA_GpuInstanceCullerHandle gpu = CNA_INVALID_HANDLE;
+    CNA_IndirectDrawArguments indirect;
+    CNA_IndirectDrawIndexedArguments indexed;
+    CNA_GpuCullableInstance instances[4];
+    CNA_BoundingFrustum frustum;
+    CNA_BoundingBox boxes[3];
+    CNA_BoundingSphere spheres[2];
+    CNA_Matrix transforms[3];
+    CNA_Matrix visible_transforms[3];
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    uint64_t indices[8];
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool supported = UINT8_C(9);
+    uint64_t count = UINT64_C(0);
+    uint64_t bytes = UINT64_C(0);
+    int32_t number = INT32_C(-1);
+    int index;
+    int ok = 1;
+
+    /* The two GPU command structs work in EVERY build: they are the GPU's own format, not part of
+       the engine layer. Their SIZE is the contract -- sixteen and twenty bytes. */
+    ok = sizeof(CNA_IndirectDrawArguments) == 16U &&
+        sizeof(CNA_IndirectDrawIndexedArguments) == 20U;
+    ok = ok && cna_indirect_draw_arguments_init(&indirect) == CNA_RESULT_SUCCESS &&
+        indirect.vertex_count == UINT32_C(0) && indirect.instance_count == UINT32_C(0) &&
+        indirect.first_vertex == UINT32_C(0) && indirect.base_instance == UINT32_C(0);
+    ok = ok && cna_indirect_draw_arguments_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_indirect_draw_indexed_arguments_init(&indexed) == CNA_RESULT_SUCCESS &&
+        indexed.index_count == UINT32_C(0) && indexed.base_vertex == INT32_C(0);
+    ok = ok && cna_indirect_draw_indexed_arguments_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* A perspective projection so the frustum is a real one rather than a unit cube. */
+    if (cna_matrix_create_perspective_field_of_view(
+            1.0F, 1.0F, 1.0F, 100.0F, &projection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* ---- the CPU culler: nothing here refuses ---- */
+    ok = ok && cna_frustum_culler_ext_create(0) == CNA_RESULT_INVALID_ARGUMENT;
+    if (!ok || cna_frustum_culler_ext_create(&culler) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_frustum_culler_ext_set_camera(culler, &view, &projection) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_frustum_culler_ext_set_camera(culler, 0, &projection) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_frustum_culler_ext_get_frustum(culler, &frustum) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_frustum_culler_ext_get_frustum(culler, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    /* set_camera is exactly set_view_projection of the product, so setting the same frustum the
+       other way round must give the same matrix back. */
+    {
+        CNA_Matrix product;
+        CNA_BoundingFrustum again;
+        ok = ok && cna_matrix_multiply(view, projection, &product) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_frustum_culler_ext_set_view_projection(culler, &product) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_frustum_culler_ext_get_frustum(culler, &again) == CNA_RESULT_SUCCESS;
+        ok = ok && again.matrix.m11 == frustum.matrix.m11 && again.matrix.m44 == frustum.matrix.m44;
+        ok = ok && cna_frustum_culler_ext_set_view_projection(culler, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    /* One box in front of the camera and one far behind it. */
+    boxes[0].min.x = -1.0F; boxes[0].min.y = -1.0F; boxes[0].min.z = -10.0F;
+    boxes[0].max.x = 1.0F;  boxes[0].max.y = 1.0F;  boxes[0].max.z = -8.0F;
+    boxes[1].min.x = -1.0F; boxes[1].min.y = -1.0F; boxes[1].min.z = 500.0F;
+    boxes[1].max.x = 1.0F;  boxes[1].max.y = 1.0F;  boxes[1].max.z = 502.0F;
+    boxes[2] = boxes[0];
+    ok = ok && cna_frustum_culler_ext_is_box_visible(culler, &boxes[0], &flag) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_frustum_culler_ext_is_box_visible(culler, &boxes[1], &supported) ==
+        CNA_RESULT_SUCCESS;
+    /* The two boxes must not answer the same, or the frustum is not being tested at all. */
+    ok = ok && flag != supported;
+    ok = ok && cna_frustum_culler_ext_is_box_visible(culler, 0, &flag) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    spheres[0].center = boxes[0].min; spheres[0].radius = 1.0F;
+    spheres[1].center = boxes[1].min; spheres[1].radius = 1.0F;
+    ok = ok && cna_frustum_culler_ext_is_sphere_visible(culler, &spheres[0], &flag) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_frustum_culler_ext_is_sphere_visible(culler, 0, &flag) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The index cull asks for the count first and hands back INDICES into the input array. */
+    ok = ok && cna_frustum_culler_ext_cull_boxes(culler, boxes, UINT64_C(3), 0, UINT64_C(0),
+                                                  &count) != CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_frustum_culler_ext_cull_boxes(
+            culler, boxes, UINT64_C(3), indices, UINT64_C(8), &count) == CNA_RESULT_SUCCESS;
+    /* Boxes 0 and 2 are the same and box 1 is far away, so the visible set is either {0,2} or
+       empty -- never a set containing 1 without 0. */
+    ok = ok && (count == UINT64_C(0) || (indices[0] == UINT64_C(0)));
+    ok = ok && cna_frustum_culler_ext_cull_boxes(culler, 0, UINT64_C(3), indices, UINT64_C(8),
+                                                  &count) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_frustum_culler_ext_cull_boxes(culler, boxes, UINT64_C(0), indices,
+                                                  UINT64_C(8), &count) == CNA_RESULT_SUCCESS &&
+        count == UINT64_C(0);
+    ok = ok && cna_frustum_culler_ext_cull_spheres(
+            culler, spheres, UINT64_C(2), indices, UINT64_C(8), &count) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_frustum_culler_ext_cull_spheres(culler, 0, UINT64_C(2), indices, UINT64_C(8),
+                                                    &count) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* THE surprising rule: a transform with NO matching bound is KEPT. Three transforms and ZERO
+       bounds must therefore return all three, not none. */
+    for (index = 0; index < 3; ++index) {
+        ok = ok && cna_matrix_get_identity(&transforms[index]) == CNA_RESULT_SUCCESS;
+    }
+    ok = ok && cna_frustum_culler_ext_cull_transforms(
+            culler, transforms, UINT64_C(3), 0, UINT64_C(0), visible_transforms, UINT64_C(3),
+            &count) == CNA_RESULT_SUCCESS && count == UINT64_C(3);
+    /* One bound, three transforms: the two without a bound survive whatever the first does. */
+    ok = ok && cna_frustum_culler_ext_cull_transforms(
+            culler, transforms, UINT64_C(3), &boxes[1], UINT64_C(1), visible_transforms,
+            UINT64_C(3), &count) == CNA_RESULT_SUCCESS && count >= UINT64_C(2);
+    ok = ok && cna_frustum_culler_ext_cull_transforms(
+            culler, transforms, UINT64_C(3), boxes, UINT64_C(3), 0, UINT64_C(0), &count) !=
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_frustum_culler_ext_cull_transforms(
+            culler, 0, UINT64_C(3), boxes, UINT64_C(3), visible_transforms, UINT64_C(3),
+            &count) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_frustum_culler_ext_destroy(culler) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_frustum_culler_ext_destroy(culler) != CNA_RESULT_SUCCESS;
+
+    /* ---- the GPU culler ---- */
+    ok = ok && cna_gpu_cullable_instance_init(&instances[0]) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_gpu_cullable_instance_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_gpu_instance_culler_copy_instance_lookup_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    if (!ok || cna_gpu_instance_culler_create(graphics_device, &gpu) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_gpu_instance_culler_is_supported(gpu, &supported) == CNA_RESULT_SUCCESS &&
+        (supported == CNA_TRUE || supported == CNA_FALSE);
+    for (index = 0; index < 4; ++index) {
+        ok = ok && cna_gpu_cullable_instance_init(&instances[index]) == CNA_RESULT_SUCCESS;
+        instances[index].bounds.min.x = -1.0F; instances[index].bounds.min.y = -1.0F;
+        instances[index].bounds.min.z = -10.0F;
+        instances[index].bounds.max.x = 1.0F; instances[index].bounds.max.y = 1.0F;
+        instances[index].bounds.max.z = -8.0F;
+    }
+
+    if (supported == CNA_TRUE) {
+        /* The success arm: upload, cull, draw -- in that order, and only in that order. */
+        ok = ok && cna_gpu_instance_culler_set_instances(gpu, instances, UINT64_C(4)) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_gpu_instance_culler_get_instance_count(gpu, &number) ==
+            CNA_RESULT_SUCCESS && number == INT32_C(4);
+        /* Drawing before culling is INVALID_STATE, not INTERNAL and not a silent no-op. */
+        ok = ok && cna_gpu_instance_culler_draw(gpu, CNA_PRIMITIVE_TRIANGLE_LIST) ==
+            CNA_RESULT_INVALID_STATE;
+        /* A count is a number: zero before a cull, not a refusal. */
+        ok = ok && cna_gpu_instance_culler_read_visible_count_ext(gpu, &number) ==
+            CNA_RESULT_SUCCESS && number == INT32_C(0);
+        ok = ok && cna_gpu_instance_culler_cull(gpu, &view, &projection, INT32_C(0), INT32_C(0),
+                                                 INT32_C(0)) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_gpu_instance_culler_cull(gpu, &view, &projection, INT32_C(36),
+                                                 INT32_C(-1), INT32_C(0)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_gpu_instance_culler_cull(gpu, &view, &projection, INT32_C(36), INT32_C(0),
+                                                 INT32_C(-1)) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_gpu_instance_culler_cull(gpu, 0, &projection, INT32_C(36), INT32_C(0),
+                                                 INT32_C(0)) == CNA_RESULT_INVALID_ARGUMENT;
+        /* None of those refusals may have counted as a cull. */
+        ok = ok && cna_gpu_instance_culler_draw(gpu, CNA_PRIMITIVE_TRIANGLE_LIST) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_gpu_instance_culler_cull(gpu, &view, &projection, INT32_C(36), INT32_C(0),
+                                                 INT32_C(0)) == CNA_RESULT_SUCCESS;
+        /* An undefined topology is refused before anything is drawn, and the refusal does not
+           clear the culled state. */
+        ok = ok && cna_gpu_instance_culler_draw(gpu, UINT32_C(99)) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_gpu_instance_culler_read_visible_count_ext(gpu, &number) ==
+            CNA_RESULT_SUCCESS && number >= INT32_C(0);
+        /* draw() issues a real indirect draw against the bound mesh, and this suite binds none --
+           so the reachable success arm is the ZERO-instance one, where the canonical body returns
+           before touching the device. Asserting a drawing draw here would be asserting that the
+           test fixture had a mesh, not that the route works. */
+        ok = ok && cna_gpu_instance_culler_set_instances(gpu, instances, UINT64_C(0)) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_gpu_instance_culler_get_instance_count(gpu, &number) ==
+            CNA_RESULT_SUCCESS && number == INT32_C(0);
+        ok = ok && cna_gpu_instance_culler_cull(gpu, &view, &projection, INT32_C(36), INT32_C(0),
+                                                 INT32_C(0)) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_gpu_instance_culler_draw(gpu, CNA_PRIMITIVE_TRIANGLE_LIST) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_gpu_instance_culler_set_instances(gpu, instances, UINT64_C(4)) ==
+            CNA_RESULT_SUCCESS;
+        /* Uploading again RESETS the culled state: the visible set belonged to the old upload. */
+        ok = ok && cna_gpu_instance_culler_set_instances(gpu, instances, UINT64_C(2)) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_gpu_instance_culler_draw(gpu, CNA_PRIMITIVE_TRIANGLE_LIST) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_gpu_instance_culler_copy_unsupported_reason(gpu, 0, UINT64_C(0), &bytes) ==
+            CNA_RESULT_SUCCESS && bytes == UINT64_C(0);
+    } else {
+        /* The refusal arm. This culler does NOT fall back, and the reason is readable. */
+        int32_t layer_version = INT32_C(0);
+        ok = ok && cna_engine_layer_get_version(&layer_version) == CNA_RESULT_SUCCESS &&
+            layer_version > INT32_C(0);
+        ok = ok && cna_gpu_instance_culler_set_instances(gpu, instances, UINT64_C(4)) ==
+            CNA_RESULT_NOT_SUPPORTED;
+        ok = ok && cna_gpu_instance_culler_cull(gpu, &view, &projection, INT32_C(36), INT32_C(0),
+                                                 INT32_C(0)) == CNA_RESULT_NOT_SUPPORTED;
+        ok = ok && cna_gpu_instance_culler_draw(gpu, CNA_PRIMITIVE_TRIANGLE_LIST) ==
+            CNA_RESULT_NOT_SUPPORTED;
+        ok = ok && cna_gpu_instance_culler_read_visible_count_ext(gpu, &number) ==
+            CNA_RESULT_SUCCESS && number == INT32_C(0);
+        ok = ok && cna_gpu_instance_culler_copy_unsupported_reason(gpu, 0, UINT64_C(0), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    }
+    ok = ok && cna_gpu_instance_culler_set_instances(gpu, 0, UINT64_C(4)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_gpu_instance_culler_copy_unsupported_reason(gpu, 0, UINT64_C(0), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_gpu_instance_culler_destroy(gpu) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_gpu_instance_culler_destroy(gpu) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -7578,6 +7886,10 @@ static CNA_Result on_load(
         }
         if (!validate_instancing_and_lod(graphics_device)) {
             state->failed_stage = 38;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_culling(graphics_device)) {
+            state->failed_stage = 39;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

@@ -97,6 +97,8 @@
 #include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/AtmosphericSky.hpp"
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
+#include "CNA/Graphics/FrustumCullerEXT.hpp"
+#include "CNA/Graphics/GpuInstanceCuller.hpp"
 #include "CNA/Graphics/InstancedRendererEXT.hpp"
 #include "CNA/Graphics/LightProbeBaker.hpp"
 #include "CNA/Graphics/LodGroupEXT.hpp"
@@ -5923,6 +5925,141 @@ CNA_Result cna_lod_group_ext_set_screen_space_parameters(CNA_LodGroupEXTHandle p
 CNA_Result cna_lod_group_ext_projected_radius_pixels(CNA_LodGroupEXTHandle p0, float p1, float* p2)
 {
     (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_create(CNA_FrustumCullerEXTHandle* p0)
+{
+    (void)p0;
+    if (p0 != nullptr) { *p0 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_destroy(CNA_FrustumCullerEXTHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_set_view_projection(CNA_FrustumCullerEXTHandle p0, const CNA_Matrix* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_set_camera(CNA_FrustumCullerEXTHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_get_frustum(CNA_FrustumCullerEXTHandle p0, CNA_BoundingFrustum* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_is_box_visible(CNA_FrustumCullerEXTHandle p0, const CNA_BoundingBox* p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_is_sphere_visible(CNA_FrustumCullerEXTHandle p0, const CNA_BoundingSphere* p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_cull_boxes(CNA_FrustumCullerEXTHandle p0, const CNA_BoundingBox* p1, uint64_t p2, uint64_t* p3, uint64_t p4, uint64_t* p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    if (p5 != nullptr) { *p5 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_cull_spheres(CNA_FrustumCullerEXTHandle p0, const CNA_BoundingSphere* p1, uint64_t p2, uint64_t* p3, uint64_t p4, uint64_t* p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    if (p5 != nullptr) { *p5 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_frustum_culler_ext_cull_transforms(CNA_FrustumCullerEXTHandle p0, const CNA_Matrix* p1, uint64_t p2, const CNA_BoundingBox* p3, uint64_t p4, CNA_Matrix* p5, uint64_t p6, uint64_t* p7)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5; (void)p6; (void)p7;
+    if (p7 != nullptr) { *p7 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_cullable_instance_init(CNA_GpuCullableInstance* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_create(CNA_Handle p0, CNA_GpuInstanceCullerHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_destroy(CNA_GpuInstanceCullerHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_is_supported(CNA_GpuInstanceCullerHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_copy_unsupported_reason(CNA_GpuInstanceCullerHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_set_instances(CNA_GpuInstanceCullerHandle p0, const CNA_GpuCullableInstance* p1, uint64_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_get_instance_count(CNA_GpuInstanceCullerHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_cull(CNA_GpuInstanceCullerHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2, int32_t p3, int32_t p4, int32_t p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_draw(CNA_GpuInstanceCullerHandle p0, CNA_PrimitiveType p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_read_visible_count_ext(CNA_GpuInstanceCullerHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gpu_instance_culler_copy_instance_lookup_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
     return ExtensionUnavailable();
 }
 
@@ -21264,6 +21401,505 @@ CNA_Result cna_lod_group_ext_projected_radius_pixels(
     return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
         return StoreValue(outPixels, g->value->projectedRadiusPixels(distance));
     });
+}
+
+namespace {
+
+struct FrustumCullerResource final {
+    std::shared_ptr<Ext::FrustumCullerEXT> value;
+};
+
+struct GpuInstanceCullerResource final {
+    std::shared_ptr<Ext::GpuInstanceCuller> value;
+    CNA_Handle parentGame;
+    // The canonical `culled_` flag is private, and draw() answers "nothing has been culled yet"
+    // with a runtime_error -- which reaches the barrier's std::exception arm and would be reported
+    // as CNA_RESULT_INTERNAL, telling a caller it hit a library bug when it merely called two
+    // routes in the wrong order. Mirroring the flag here is what lets that be INVALID_STATE, and
+    // it is mirrored on exactly the two transitions the canonical class uses: set by a successful
+    // cull, cleared by an upload.
+    bool culled = false;
+};
+
+static_assert(CNA_GPU_INSTANCE_BINDING == Ext::GpuInstanceCuller::kInstanceBinding);
+
+#define CNA_WITH_FRUSTUM(handle, body)                                                             \
+    WithMap<FrustumCullerResource>((handle), ObjectKind::FrustumCuller, "FrustumCullerEXT", body)
+
+template <typename TBody>
+[[nodiscard]] CNA_Result WithGpuCuller(const CNA_Handle handle, TBody&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GpuInstanceCullerResource> resource;
+        if (const CNA_Result result = GetEngineResource(
+                handle, ObjectKind::GpuInstanceCuller, "GpuInstanceCuller", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return body(resource);
+    });
+}
+
+[[nodiscard]] CNA_Result ToNativeCullableInstance(
+    const CNA_GpuCullableInstance* const instance, Ext::GpuCullableInstance* const out)
+{
+    if (instance == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The instance is null.");
+    }
+    if (instance->struct_size < static_cast<uint32_t>(sizeof(CNA_GpuCullableInstance)) ||
+        instance->struct_version == UINT32_C(0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The cullable-instance structure is malformed.");
+    }
+    out->World = ToNativeMatrix(instance->world);
+    out->Bounds = BoundingBox(
+        ToNativeVector3(instance->bounds.min), ToNativeVector3(instance->bounds.max));
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_gpu_cullable_instance_init(CNA_GpuCullableInstance* const outInstance)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInstance == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The instance is null.");
+        }
+        const Ext::GpuCullableInstance defaults;
+        *outInstance = CNA_GpuCullableInstance{};
+        outInstance->struct_size = static_cast<uint32_t>(sizeof(CNA_GpuCullableInstance));
+        outInstance->struct_version = UINT32_C(1);
+        outInstance->world = ToCMatrix(defaults.World);
+        outInstance->bounds.min =
+            Vec3(defaults.Bounds.Min.X, defaults.Bounds.Min.Y, defaults.Bounds.Min.Z);
+        outInstance->bounds.max =
+            Vec3(defaults.Bounds.Max.X, defaults.Bounds.Max.Y, defaults.Bounds.Max.Z);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_frustum_culler_ext_create(CNA_FrustumCullerEXTHandle* const outCuller)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCuller == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The output handle is null.");
+        }
+        *outCuller = CNA_INVALID_HANDLE;
+        const auto resource = std::make_shared<FrustumCullerResource>(
+            FrustumCullerResource{std::make_shared<Ext::FrustumCullerEXT>()});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::FrustumCuller, resource, outCuller);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result), "The owned handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_frustum_culler_ext_destroy(const CNA_FrustumCullerEXTHandle culler)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<FrustumCullerResource> resource;
+        if (const CNA_Result result = GetEngineResource(
+                culler, ObjectKind::FrustumCuller, "FrustumCullerEXT", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(culler);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_frustum_culler_ext_set_view_projection(
+    const CNA_FrustumCullerEXTHandle culler, const CNA_Matrix* const viewProjection)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            if (viewProjection == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The matrix is null.");
+            }
+            c->value->setViewProjection(ToNativeMatrix(*viewProjection));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_frustum_culler_ext_set_camera(
+    const CNA_FrustumCullerEXTHandle culler,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            if (view == nullptr || projection == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "A matrix is null.");
+            }
+            c->value->setCamera(ToNativeMatrix(*view), ToNativeMatrix(*projection));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_frustum_culler_ext_get_frustum(
+    const CNA_FrustumCullerEXTHandle culler, CNA_BoundingFrustum* const outFrustum)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            return StoreValue(
+                outFrustum,
+                CNA_BoundingFrustum{ToCMatrix(c->value->getFrustum().getMatrixProperty())});
+        });
+}
+
+CNA_Result cna_frustum_culler_ext_is_box_visible(
+    const CNA_FrustumCullerEXTHandle culler,
+    const CNA_BoundingBox* const box,
+    CNA_Bool* const outVisible)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            BoundingBox native;
+            if (const CNA_Result result = ToNativeBounds(box, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            return StoreValue(
+                outVisible, static_cast<CNA_Bool>(c->value->isVisible(native) ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_frustum_culler_ext_is_sphere_visible(
+    const CNA_FrustumCullerEXTHandle culler,
+    const CNA_BoundingSphere* const sphere,
+    CNA_Bool* const outVisible)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            if (sphere == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The sphere is null.");
+            }
+            const BoundingSphere native(ToNativeVector3(sphere->center), sphere->radius);
+            return StoreValue(
+                outVisible,
+                static_cast<CNA_Bool>(c->value->isVisible(native) ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_frustum_culler_ext_cull_boxes(
+    const CNA_FrustumCullerEXTHandle culler,
+    const CNA_BoundingBox* const bounds,
+    const uint64_t boundsCount,
+    uint64_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            if (bounds == nullptr && boundsCount != 0U) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bounds array is null.");
+            }
+            std::vector<BoundingBox> natives;
+            natives.reserve(static_cast<std::size_t>(boundsCount));
+            for (uint64_t index = 0U; index < boundsCount; ++index) {
+                BoundingBox native;
+                if (const CNA_Result result = ToNativeBounds(&bounds[index], &native);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                natives.push_back(native);
+            }
+            std::vector<std::size_t> visible;
+            (void)c->value->cull(natives, visible);
+            std::vector<uint64_t> values;
+            values.reserve(visible.size());
+            for (const std::size_t index : visible) {
+                values.push_back(static_cast<uint64_t>(index));
+            }
+            return CopyValueRange(values, destination, capacity, outCount);
+        });
+}
+
+CNA_Result cna_frustum_culler_ext_cull_spheres(
+    const CNA_FrustumCullerEXTHandle culler,
+    const CNA_BoundingSphere* const bounds,
+    const uint64_t boundsCount,
+    uint64_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            if (bounds == nullptr && boundsCount != 0U) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bounds array is null.");
+            }
+            std::vector<BoundingSphere> natives;
+            natives.reserve(static_cast<std::size_t>(boundsCount));
+            for (uint64_t index = 0U; index < boundsCount; ++index) {
+                natives.emplace_back(
+                    ToNativeVector3(bounds[index].center), bounds[index].radius);
+            }
+            std::vector<std::size_t> visible;
+            (void)c->value->cull(natives, visible);
+            std::vector<uint64_t> values;
+            values.reserve(visible.size());
+            for (const std::size_t index : visible) {
+                values.push_back(static_cast<uint64_t>(index));
+            }
+            return CopyValueRange(values, destination, capacity, outCount);
+        });
+}
+
+CNA_Result cna_frustum_culler_ext_cull_transforms(
+    const CNA_FrustumCullerEXTHandle culler,
+    const CNA_Matrix* const transforms,
+    const uint64_t transformCount,
+    const CNA_BoundingBox* const bounds,
+    const uint64_t boundsCount,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_FRUSTUM(culler,
+        [&](const std::shared_ptr<FrustumCullerResource>& c) -> CNA_Result {
+            if ((transforms == nullptr && transformCount != 0U) ||
+                (bounds == nullptr && boundsCount != 0U)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "An input array is null.");
+            }
+            std::vector<Microsoft::Xna::Framework::Matrix> nativeTransforms;
+            nativeTransforms.reserve(static_cast<std::size_t>(transformCount));
+            for (uint64_t index = 0U; index < transformCount; ++index) {
+                nativeTransforms.push_back(ToNativeMatrix(transforms[index]));
+            }
+            std::vector<BoundingBox> nativeBounds;
+            nativeBounds.reserve(static_cast<std::size_t>(boundsCount));
+            for (uint64_t index = 0U; index < boundsCount; ++index) {
+                BoundingBox native;
+                if (const CNA_Result result = ToNativeBounds(&bounds[index], &native);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                nativeBounds.push_back(native);
+            }
+            std::vector<Microsoft::Xna::Framework::Matrix> visible;
+            // The short-bounds rule is the canonical body's, and it is passed through rather than
+            // "fixed": a transform with no matching bound is KEPT.
+            (void)c->value->cullTransforms(nativeTransforms, nativeBounds, visible);
+            std::vector<CNA_Matrix> values;
+            values.reserve(visible.size());
+            for (const auto& matrix : visible) {
+                values.push_back(ToCMatrix(matrix));
+            }
+            return CopyValueRange(values, destination, capacity, outCount);
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_GpuInstanceCullerHandle* const outCuller)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCuller == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The output handle is null.");
+        }
+        *outCuller = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<GpuInstanceCullerResource>(
+            GpuInstanceCullerResource{
+                std::make_shared<Ext::GpuInstanceCuller>(*graphicsDevice->value),
+                graphicsDevice->parentGame});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::GpuInstanceCuller, resource, outCuller);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result), "The owned handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_instance_culler_destroy(const CNA_GpuInstanceCullerHandle culler)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<GpuInstanceCullerResource> resource;
+        if (const CNA_Result result = GetEngineResource(
+                culler, ObjectKind::GpuInstanceCuller, "GpuInstanceCuller", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(culler);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(resource->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gpu_instance_culler_is_supported(
+    const CNA_GpuInstanceCullerHandle culler, CNA_Bool* const outSupported)
+{
+    return WithGpuCuller(culler,
+        [&](const std::shared_ptr<GpuInstanceCullerResource>& c) -> CNA_Result {
+            return StoreValue(
+                outSupported,
+                static_cast<CNA_Bool>(c->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_copy_unsupported_reason(
+    const CNA_GpuInstanceCullerHandle culler,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return WithGpuCuller(culler,
+        [&](const std::shared_ptr<GpuInstanceCullerResource>& c) -> CNA_Result {
+            return CopyFormattedString(
+                destination, capacity, outBytes,
+                [&] { return c->value->getUnsupportedReason(); });
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_set_instances(
+    const CNA_GpuInstanceCullerHandle culler,
+    const CNA_GpuCullableInstance* const instances,
+    const uint64_t count)
+{
+    return WithGpuCuller(culler,
+        [&](const std::shared_ptr<GpuInstanceCullerResource>& c) -> CNA_Result {
+            if (instances == nullptr && count != 0U) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The instance array is null.");
+            }
+            std::vector<Ext::GpuCullableInstance> natives;
+            natives.reserve(static_cast<std::size_t>(count));
+            for (uint64_t index = 0U; index < count; ++index) {
+                Ext::GpuCullableInstance native;
+                if (const CNA_Result result =
+                        ToNativeCullableInstance(&instances[index], &native);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                natives.push_back(native);
+            }
+            // The canonical NotSupportedException passes through as NOT_SUPPORTED; the header says
+            // what that means here and how to tell it from "built without the layer".
+            c->value->setInstances(natives);
+            // The visible set belongs to the instances it was computed from.
+            c->culled = false;
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_get_instance_count(
+    const CNA_GpuInstanceCullerHandle culler, int32_t* const outCount)
+{
+    return WithGpuCuller(culler,
+        [&](const std::shared_ptr<GpuInstanceCullerResource>& c) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(c->value->getInstanceCount()));
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_cull(
+    const CNA_GpuInstanceCullerHandle culler,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const int32_t indexCount,
+    const int32_t firstIndex,
+    const int32_t baseVertex)
+{
+    return WithGpuCuller(culler,
+        [&](const std::shared_ptr<GpuInstanceCullerResource>& c) -> CNA_Result {
+            if (view == nullptr || projection == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "A matrix is null.");
+            }
+            c->value->cull(
+                ToNativeMatrix(*view), ToNativeMatrix(*projection), static_cast<int>(indexCount),
+                static_cast<int>(firstIndex), static_cast<int>(baseVertex));
+            c->culled = true;
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_draw(
+    const CNA_GpuInstanceCullerHandle culler, const CNA_PrimitiveType primitiveType)
+{
+    return WithGpuCuller(culler,
+        [&](const std::shared_ptr<GpuInstanceCullerResource>& c) -> CNA_Result {
+            if (primitiveType > CNA_PRIMITIVE_POINT_LIST_EXT) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The primitive topology is not recognized.");
+            }
+            // Supported first, so an unsupported renderer answers NOT_SUPPORTED rather than
+            // "you have not culled yet" -- it never could have.
+            if (!c->value->isSupported()) {
+                c->value->draw(static_cast<Microsoft::Xna::Framework::Graphics::PrimitiveType>(primitiveType));
+                return CNA_RESULT_SUCCESS;
+            }
+            if (!c->culled) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "Nothing has been culled yet; cull before drawing.");
+            }
+            c->value->draw(static_cast<Microsoft::Xna::Framework::Graphics::PrimitiveType>(primitiveType));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_read_visible_count_ext(
+    const CNA_GpuInstanceCullerHandle culler, int32_t* const outCount)
+{
+    return WithGpuCuller(culler,
+        [&](const std::shared_ptr<GpuInstanceCullerResource>& c) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(c->value->readVisibleCountEXT()));
+        });
+}
+
+CNA_Result cna_gpu_instance_culler_copy_instance_lookup_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes,
+        [] { return Ext::GpuInstanceCuller::getInstanceLookupGlsl(); });
 }
 
 #endif // CNA_CNAEXT
