@@ -225,7 +225,8 @@ validation scene above, independently confirming the SpriteBatch pipeline, Textu
 resize/present paths against a second, unrelated codebase.
 
 `WEBGPU-131` closes the native 2D baseline on this evidence: `WEBGPU-124`–`WEBGPU-130` are all
-verified. 3D effects, render targets and MRT remain open (Phase 57 onward in `plans/plan_webgpu.md`).
+verified. (At the time of this 2026-07-12 record, 3D effects, render targets and MRT were still open;
+all have since shipped — see the "Important limitations" section below for the current boundary.)
 
 ## GPU readback and a real translucency fix (2026-07-12)
 
@@ -473,16 +474,14 @@ targeted `Clear()` must not leak into the backbuffer's own render pass" architec
 the `RenderTarget2D` section's own Check E), `mipMap=true` throwing, and `MultiSampleCount`
 honesty.
 
-A genuinely new, previously-untested finding surfaced while writing this test (documented, not
-fixed — pre-existing and renderer-wide, not specific to `RenderTargetCube`): `QueueSprite()` computes
-every sprite's clip-space geometry from the BACKBUFFER's own logical dimensions unconditionally,
-never from whatever render target is currently bound. A `SpriteBatch.Draw()` issued while a
-smaller/different-sized off-screen target is bound therefore does not necessarily cover the whole
-bound target the way a caller would expect — confirmed empirically (a 32×32 cube face bound under a
-64×64 backbuffer only had one quadrant painted by a destination-rect-(0,0,32,32) `SpriteBatch.Draw`
-call). `webgpu_rendertargetcube_test.cpp`'s own Check C works around this by painting each face with
-a real 3D (`BasicEffect`) draw instead of `SpriteBatch`, which is not subject to this backbuffer-
-relative ortho mapping.
+A finding surfaced while writing this test — that `QueueSprite()` computed every sprite's clip-space
+geometry from the BACKBUFFER's logical dimensions unconditionally, never from the currently-bound
+render target — **has since been fixed** (REMED-GFX-019: `QueueSprite` now derives clip space from the
+bound target's own dimensions; the letterboxed-backbuffer edge was closed by `WEBGPU-141`(A)). A
+`SpriteBatch.Draw()` into an off-screen `RenderTarget2D`/cube face now maps 1:1 into that target's own
+pixels, verified by `WebGPU_SpriteBatch_RenderTarget`. (The historical note that
+`webgpu_rendertargetcube_test.cpp` Check C paints with a 3D draw to avoid this remains true of that
+test, but is no longer a workaround for a live bug.)
 
 ## Real mip generation for Texture2D/TextureCube (2026-07-18)
 
@@ -597,6 +596,17 @@ which wgpu-native validates against, not its logical size -- Phase 1's single 4x
 exact -- a fully occluded draw reads back 0 and a visible one a full target of samples
 (`WebGPU_OcclusionQuery`). A query whose draws span more than one render-pass segment records only its
 first segment.
+
+**Stock-effect fog is at full parity** (`WEBGPU-145`–`148`, plus the pre-existing
+`EnvironmentMapEffect` fog): every FNA stock 3D effect that exposes `FogEnabled`/`FogStart`/`FogEnd`/
+`FogColor` -- `BasicEffect` (colored/textured/vertex-colour-textured/lit per-pixel + per-vertex),
+`AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect` -- now applies FNA's `ApplyFog`. The design
+carries the CPU-prepared FNA view-space fog vector (`EffectHelpers.SetFogVector`, already on
+`GpuDrawParams.fogVector`) plus `fogColor` in the shared primary uniform block (widened 128→160 bytes);
+each WGSL family computes `fogFactor = 1 - saturate(dot(vec4(pos,1), fogVector))` in the vertex stage
+(the SKINNED position for `SkinnedEffect`, matching FNA) and `rgb = mix(fogColor, rgb, fogFactor)` in
+the fragment stage. Tests: `WebGPU_BasicEffect_Fog`/`AlphaTestEffect_Fog`/`DualTextureEffect_Fog`/
+`SkinnedEffect_Fog` (each uses `FogStart==FogEnd`→`FogColor` as the drop-the-fog discriminator).
 
 `FillMode::WireFrame` is deliberately **not** on the open list: it is not "unimplemented" but
 **reported unsupported and refused** (`WEBGPU-115`) -- the same shape as the MRT (`WEBGPU-134`)
