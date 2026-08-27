@@ -1302,16 +1302,31 @@ static int validate_shadow_maps(const CNA_Handle graphics_device)
         /* The skinned caster is a second effect with the same borrow rules; a map that reported
            itself supported must hand out both, and each one has to be released. */
         ok = ok && cna_shadow_map_get_skinned_caster_effect(map, &skinned) == CNA_RESULT_SUCCESS;
-        if (ok && supported == CNA_TRUE) {
-            ok = skinned != CNA_INVALID_HANDLE &&
-                cna_effect_destroy(skinned) == CNA_RESULT_SUCCESS;
+        /* CBIND-097. Each borrow is released when the getter handed back a real handle, which is
+           NOT the same question as whether the map is supported: the shadow texture is a render
+           target that exists whether or not the caster shader links, so on a renderer without
+           shaders the texture borrow is taken and the two effect borrows are not. Releasing on
+           `supported` instead left that one texture borrow outstanding and the map undestroyable
+           -- the whole of this suite's failure on HEADLESS with the layer on. */
+        if (ok) {
+            ok = (supported == CNA_TRUE) ==
+                (caster != CNA_INVALID_HANDLE && skinned != CNA_INVALID_HANDLE);
         }
-        if (ok && supported == CNA_TRUE) {
-            ok = caster != CNA_INVALID_HANDLE && texture != CNA_INVALID_HANDLE;
-            /* A borrow keeps the map alive, so destroying the map is refused while one is out. */
-            ok = ok && cna_shadow_map_destroy(map) != CNA_RESULT_SUCCESS;
-            ok = ok && cna_effect_destroy(caster) == CNA_RESULT_SUCCESS;
-            ok = ok && cna_render_target_destroy(texture) == CNA_RESULT_SUCCESS;
+        if (ok) {
+            /* A borrow keeps the map alive, so destroying it is refused while one is out. The
+               texture alone is enough to assert that, which is why this now runs on every
+               renderer rather than only where the caster links. */
+            ok = texture != CNA_INVALID_HANDLE &&
+                cna_shadow_map_destroy(map) != CNA_RESULT_SUCCESS;
+        }
+        if (ok && skinned != CNA_INVALID_HANDLE) {
+            ok = cna_effect_destroy(skinned) == CNA_RESULT_SUCCESS;
+        }
+        if (ok && caster != CNA_INVALID_HANDLE) {
+            ok = cna_effect_destroy(caster) == CNA_RESULT_SUCCESS;
+        }
+        if (ok && texture != CNA_INVALID_HANDLE) {
+            ok = cna_render_target_destroy(texture) == CNA_RESULT_SUCCESS;
         }
         if (!ok) {
             (void)cna_shadow_map_destroy(map);
@@ -1548,8 +1563,27 @@ static int validate_cascaded_and_cube(const CNA_Handle graphics_device)
                 CNA_RESULT_SUCCESS && expected == size;
         }
         ok = ok && cna_cube_shadow_map_update(cube, &point) == CNA_RESULT_SUCCESS;
-        ok = ok && cna_cube_shadow_map_begin(cube, INT32_C(0)) == CNA_RESULT_SUCCESS;
-        ok = ok && cna_cube_shadow_map_end(cube) == CNA_RESULT_SUCCESS;
+        /* CBIND-097. Binding a cube face is a separate question from whether the caster shader
+           links, and a renderer can refuse it: HEADLESS does. Whichever way it goes, the face
+           bracket must leave the map usable -- that is the invariant the canonical begin() marks
+           the pass open *after* the bind specifically to protect, so that one refused face does
+           not turn the map into an object that can never be used again. Both branches assert
+           something; neither is a skip. */
+        if (ok) {
+            const CNA_Result opened = cna_cube_shadow_map_begin(cube, INT32_C(0));
+            if (opened == CNA_RESULT_SUCCESS) {
+                ok = cna_cube_shadow_map_end(cube) == CNA_RESULT_SUCCESS;
+            } else {
+                /* No pass was opened, so end() must say so rather than unbinding a target the
+                   map never bound... */
+                ok = cna_cube_shadow_map_end(cube) != CNA_RESULT_SUCCESS;
+                /* ...and a second attempt must fail the same way it did the first time, not with
+                   "a face pass is already open". This is the recovery invariant, and asserting it
+                   is only possible on a renderer that refuses. */
+                ok = ok && cna_cube_shadow_map_begin(cube, INT32_C(0)) == opened;
+                ok = ok && cna_cube_shadow_map_end(cube) != CNA_RESULT_SUCCESS;
+            }
+        }
         ok = ok && cna_cube_shadow_map_get_light_position(cube, &position) == CNA_RESULT_SUCCESS;
         ok = ok && cna_cube_shadow_map_get_light_range(cube, &scalar) == CNA_RESULT_SUCCESS;
         ok = ok && cna_cube_shadow_map_set_depth_bias(cube, 0.125F) == CNA_RESULT_SUCCESS;
