@@ -823,7 +823,15 @@ The caster effects and the shadow texture are **borrows** that keep the map aliv
 **Three arms measured, and the third found something that is not in this slice.** Arm 1 (`cmake-build-debug`, `CNA_CNAEXT=OFF`) and arm 2 (`cmake-build-cnaext`, OPENGLES3/EasyGL) both pass, with the arm proved to execute by breaking it. Arm 3 — the same tree reconfigured to HEADLESS with `CNA_CNAEXT=ON` — **fails, and fails identically with this slice's test removed**, so it is pre-existing. See `CBIND-097`. |
 
 Preconditions already read out of the body: `add` refuses past `kMaxLights` (256) rather than growing, **because the uploaded buffer and the shader's index width are sized from that bound**; `add` and `replaceAt` refuse a light `isUsable` rejects; and `replaceAt`, `removeAt`, `getAt` and `getBoundsAt` refuse an index the set does not hold. Each becomes an assertion. |
-| CBIND-086B | Bind the cluster grid, the light assignment and the upload buffer | 46 | ⬜ | `ClusteredLightGrid`, `ClusteredLightAssignment` and `ClusteredLightBuffer` — the three that consume a light set. Read every `throw` and every `clamp` in all three bodies first and decide per site (see *Working practice* below). Expect the buffer to be the one with a device: if it hands out its uploaded storage, settle retention under `CBIND-084B`'s counted-borrow rules **before** writing the route. |
+| CBIND-086B | Bind the cluster grid, the light assignment and the upload buffer | 46 | ✅ | **Done 2026-08-27.** 36 routes; exports 3,113 → 3,149. Passed on the first run — the third consecutive slice to do so under the grep-first practice.
+
+**Every site was classified, not copied.** A grid dimension outside its range is a **contract** and is refused, because the cluster count is what the light-index list is sized from and a quietly smaller grid would size a list the caller did not mean. `sliceForViewDistance` is a **correction** and stays clamped, because a point outside the frustum belongs to the nearest slice — which is what a renderer wants when a light straddles the edge.
+
+**One off-by-one worth the reading.** `sliceDistance` accepts the slice count *inclusively*: there is one more boundary than slice, and the last names the far edge. The obvious `>=` bound would have silently lost the far plane, and nothing else in the suite would have noticed — so it is asserted from both sides.
+
+**The buffer's lifetime question dissolved on reading, the way the light set's did.** It owns three textures and **lends none of them** — the canonical class keeps them private and exposes only `bind` — so there is no borrow to count and destruction is never refused. The pool's pattern would have been the wrong one to copy, for the second time in this phase.
+
+`adopt`'s four refusals are kept apart rather than flattened, because each says something different about what the caller got wrong; `lightsInCluster` returns a span into the assignment's own storage and the C form copies, so a recompute cannot dangle it; and `upload` refuses a mismatched trio, because an inconsistent one would light the wrong objects with the wrong lamps rather than fail visibly. |
 | CBIND-086C | Bind the clustered forward effect and the compute path | 42 | ⬜ | `ClusteredForwardEffect`, `ClusteredLightCompute`, and `ClusteredShadowPolicyEXT::select`, which `CBIND-085C1` deferred here because it takes a `ClusteredLightSetEXT`. **Delete that symbol's `SYMBOL_OWNER_OVERRIDES` entry in the same commit that binds it** — an override that outlives its deferral points a planned row at a finished task, which is `CBIND-079`'s defect in miniature.
 
 **Three arms, three measurements**, because the compute path's success arm runs on exactly one renderer: `cmake-build-cnaext` on OPENGLES3/EasyGL for the success path (proved by breaking it and watching the exit code move to its own stage), the same tree reconfigured to HEADLESS for the compute-absent refusal, and `cmake-build-debug` with `CNA_CNAEXT=OFF` for the outputs-untouched path. |
@@ -900,8 +908,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-27, after `CBIND-086A`):** 513 headers / 8,306 symbols —
-**6,808 implemented, 15 approved partial, 1,024 planned, 459 not applicable.** ABI `0.9.0`, 3,113
+**Snapshot (2026-08-27, after `CBIND-086B`):** 513 headers / 8,306 symbols —
+**6,854 implemented, 15 approved partial, 978 planned, 459 not applicable.** ABI `0.9.0`, 3,149
 exported symbols — the same 2,942 with `CNA_CNAEXT` on and off, which is the engine layer's ABI
 promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.

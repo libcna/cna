@@ -2203,6 +2203,218 @@ static int validate_clustered_light_set(const CNA_Handle graphics_device)
         cna_clustered_light_set_destroy(set) != CNA_RESULT_SUCCESS;
 }
 
+
+/* CBIND-086B. Every contract and every clamp below was read out of the three canonical bodies
+ * before this was written, and each is asserted as whichever it is. */
+static int validate_cluster_grid_and_buffer(const CNA_Handle graphics_device)
+{
+    CNA_ClusteredLightGridHandle grid = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightAssignmentHandle assignment = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightBufferHandle buffer = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightSetHandle lights = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightEXT light;
+    CNA_Matrix projection;
+    CNA_Matrix view;
+    CNA_BoundingBox bounds;
+    CNA_BoundingSphere spheres[4];
+    CNA_Bool flag = UINT8_C(9);
+    int32_t value = -1;
+    uint64_t count = UINT64_C(0);
+    float scalar = -1.0F;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_clustered_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* A dimension outside its range is REFUSED, not clamped: the cluster count is what the
+       light-index list is sized from, so a grid quietly smaller than asked for would size a list
+       the caller did not mean. */
+    if (cna_clustered_light_grid_create(graphics_device, INT32_C(0), INT32_C(8), INT32_C(24),
+                                        &grid) != CNA_RESULT_INVALID_ARGUMENT ||
+        grid != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_clustered_light_grid_create(
+            graphics_device, CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT + 1, INT32_C(8), INT32_C(24),
+            &grid) != CNA_RESULT_INVALID_ARGUMENT ||
+        grid != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_clustered_light_grid_create(
+            graphics_device, INT32_C(4), INT32_C(4), CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT + 1,
+            &grid) != CNA_RESULT_INVALID_ARGUMENT ||
+        grid != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_clustered_light_grid_create(graphics_device, INT32_C(4), INT32_C(4), INT32_C(8),
+                                        &grid) != CNA_RESULT_SUCCESS ||
+        grid == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    ok = cna_clustered_light_grid_get_tiles_x(grid, &value) == CNA_RESULT_SUCCESS &&
+        value == INT32_C(4);
+    ok = ok && cna_clustered_light_grid_get_tiles_y(grid, &value) == CNA_RESULT_SUCCESS &&
+        value == INT32_C(4);
+    ok = ok && cna_clustered_light_grid_get_slice_count(grid, &value) == CNA_RESULT_SUCCESS &&
+        value == INT32_C(8);
+    /* The cluster count is the product, and the flat index must agree with it at the far corner. */
+    ok = ok && cna_clustered_light_grid_get_cluster_count(grid, &value) == CNA_RESULT_SUCCESS &&
+        value == INT32_C(4 * 4 * 8);
+    ok = ok && cna_clustered_light_grid_cluster_index(grid, INT32_C(3), INT32_C(3), INT32_C(7),
+                                                      &value) == CNA_RESULT_SUCCESS &&
+        value == INT32_C(4 * 4 * 8 - 1);
+    ok = ok && cna_clustered_light_grid_cluster_index(grid, INT32_C(4), INT32_C(0), INT32_C(0),
+                                                      &value) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_grid_cluster_index(grid, INT32_C(0), INT32_C(0), INT32_C(-1),
+                                                      &value) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Before a projection the grid has no shape, and cluster bounds say so rather than guessing. */
+    ok = ok && cna_clustered_light_grid_has_projection(grid, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_clustered_light_grid_cluster_bounds(grid, INT32_C(0), INT32_C(0), INT32_C(0),
+                                                       &bounds) == CNA_RESULT_INVALID_STATE;
+    /* The planes must be able to space the slices: the spacing is a ratio of the two. */
+    ok = ok && cna_clustered_light_grid_set_projection(grid, &projection, 0.0F, 100.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_grid_set_projection(grid, &projection, 10.0F, 1.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_grid_set_projection(grid, 0, 1.0F, 100.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_grid_set_projection(grid, &projection, 1.0F, 100.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_grid_has_projection(grid, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_clustered_light_grid_get_near_plane(grid, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.0F;
+    ok = ok && cna_clustered_light_grid_get_far_plane(grid, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 100.0F;
+    ok = ok && cna_clustered_light_grid_get_inverse_projection(grid, &projection) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_grid_cluster_bounds(grid, INT32_C(0), INT32_C(0), INT32_C(0),
+                                                       &bounds) == CNA_RESULT_SUCCESS;
+
+    /* THE SLICE COUNT ITSELF IS A VALID BOUNDARY: there is one more boundary than slice, and the
+       last names the far edge. A `>=` check here would silently lose the far plane. */
+    ok = ok && cna_clustered_light_grid_slice_distance(grid, INT32_C(0), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_clustered_light_grid_slice_distance(grid, INT32_C(8), &scalar) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_grid_slice_distance(grid, INT32_C(9), &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_grid_slice_distance(grid, INT32_C(-1), &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    /* Placing a distance CLAMPS into the grid rather than refusing: a point outside the frustum
+       belongs to the nearest slice, which is what a renderer wants at the edge. */
+    ok = ok && cna_clustered_light_grid_slice_for_view_distance(grid, -50.0F, &value) ==
+        CNA_RESULT_SUCCESS && value == INT32_C(0);
+    ok = ok && cna_clustered_light_grid_slice_for_view_distance(grid, 1.0e9F, &value) ==
+        CNA_RESULT_SUCCESS && value == INT32_C(7);
+
+    if (!ok) { (void)cna_clustered_light_grid_destroy(grid); return 0; }
+
+    if (cna_clustered_light_assignment_create(graphics_device, &assignment) !=
+            CNA_RESULT_SUCCESS ||
+        cna_clustered_light_set_create(graphics_device, &lights) != CNA_RESULT_SUCCESS) {
+        (void)cna_clustered_light_grid_destroy(grid);
+        return 0;
+    }
+
+    ok = cna_clustered_light_set_add(lights, &light, &value) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_set_copy_bounds(lights, spheres, UINT64_C(4), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(1);
+    ok = ok && cna_clustered_light_assignment_assign(assignment, grid, &view, spheres, count) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_assignment_get_light_count(assignment, &value) ==
+        CNA_RESULT_SUCCESS && value == INT32_C(1);
+    ok = ok && cna_clustered_light_assignment_get_cluster_count(assignment, &value) ==
+        CNA_RESULT_SUCCESS && value == INT32_C(4 * 4 * 8);
+    ok = ok && cna_clustered_light_assignment_get_total_reference_count(assignment, &value) ==
+        CNA_RESULT_SUCCESS && value >= INT32_C(0);
+    ok = ok && cna_clustered_light_assignment_get_max_lights_per_cluster(assignment, &value) ==
+        CNA_RESULT_SUCCESS && value >= INT32_C(0);
+    /* One more offset than cluster: the offsets are boundaries, not slots. */
+    ok = ok && cna_clustered_light_assignment_copy_offsets(assignment, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(4 * 4 * 8 + 1);
+    ok = ok && cna_clustered_light_assignment_copy_indices(assignment, 0, UINT64_C(0), &count) !=
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_assignment_copy_lights_in_cluster(
+        assignment, INT32_C(0), 0, UINT64_C(0), &count) != CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_assignment_copy_lights_in_cluster(
+        assignment, INT32_C(9999), 0, UINT64_C(0), &count) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* adopt has four distinct refusals, and each answers with its own message rather than one
+       flattened invalid_argument. */
+    {
+        int32_t offsets[3];
+        int32_t indices[2];
+        offsets[0] = INT32_C(0); offsets[1] = INT32_C(1); offsets[2] = INT32_C(2);
+        indices[0] = INT32_C(0); indices[1] = INT32_C(0);
+        ok = ok && cna_clustered_light_assignment_adopt(
+            assignment, INT32_C(1), offsets, UINT64_C(3), indices, UINT64_C(2)) ==
+            CNA_RESULT_SUCCESS;
+        offsets[0] = INT32_C(1);
+        ok = ok && cna_clustered_light_assignment_adopt(
+            assignment, INT32_C(1), offsets, UINT64_C(3), indices, UINT64_C(2)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        offsets[0] = INT32_C(0); offsets[2] = INT32_C(5);
+        ok = ok && cna_clustered_light_assignment_adopt(
+            assignment, INT32_C(1), offsets, UINT64_C(3), indices, UINT64_C(2)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        offsets[1] = INT32_C(2); offsets[2] = INT32_C(1);
+        ok = ok && cna_clustered_light_assignment_adopt(
+            assignment, INT32_C(1), offsets, UINT64_C(3), indices, UINT64_C(1)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        offsets[0] = INT32_C(0); offsets[1] = INT32_C(1); offsets[2] = INT32_C(2);
+        indices[1] = INT32_C(9);
+        ok = ok && cna_clustered_light_assignment_adopt(
+            assignment, INT32_C(1), offsets, UINT64_C(3), indices, UINT64_C(2)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+    ok = ok && cna_clustered_light_assignment_clear(assignment) == CNA_RESULT_SUCCESS;
+
+    if (!ok) {
+        (void)cna_clustered_light_assignment_destroy(assignment);
+        (void)cna_clustered_light_set_destroy(lights);
+        (void)cna_clustered_light_grid_destroy(grid);
+        return 0;
+    }
+
+    if (cna_clustered_light_buffer_create(graphics_device, &buffer) != CNA_RESULT_SUCCESS) {
+        (void)cna_clustered_light_assignment_destroy(assignment);
+        (void)cna_clustered_light_set_destroy(lights);
+        (void)cna_clustered_light_grid_destroy(grid);
+        return 0;
+    }
+    /* Nothing uploaded yet, so binding refuses rather than binding stale textures. */
+    ok = cna_clustered_light_buffer_is_uploaded(buffer, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_clustered_light_buffer_bind(buffer, CNA_INVALID_HANDLE, INT32_C(0)) ==
+        CNA_RESULT_INVALID_STATE;
+    /* A mismatched trio is refused: after clear() the assignment describes no clusters, so it no
+       longer matches the grid, and uploading it would light the wrong objects. */
+    ok = ok && cna_clustered_light_buffer_upload(buffer, lights, grid, assignment) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_assignment_assign(assignment, grid, &view, spheres, count) !=
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_buffer_copy_light_lookup_glsl(0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count > UINT64_C(0);
+    ok = ok && cna_clustered_light_buffer_get_light_count(buffer, &value) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_buffer_get_cluster_count(buffer, &value) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_buffer_get_reference_count(buffer, &value) ==
+        CNA_RESULT_SUCCESS;
+
+    /* Values and private textures throughout: every destroy succeeds first time. */
+    ok = ok && cna_clustered_light_buffer_destroy(buffer) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_assignment_destroy(assignment) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_set_destroy(lights) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_grid_destroy(grid) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -2264,6 +2476,10 @@ static CNA_Result on_load(
         }
         if (!validate_clustered_light_set(graphics_device)) {
             state->failed_stage = 16;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_cluster_grid_and_buffer(graphics_device)) {
+            state->failed_stage = 17;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

@@ -15598,6 +15598,101 @@
         "CPP-E0D05C9AC6BD",
         "CPP-F12C7C347EB7"
       ]
+    },
+    {
+      "id": "clustered-light-grid",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredLightGrid(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`cna_clustered_light_grid_*` over an owned handle; a pure CPU object, parented to a game only for lifetime accounting. The two constructors become one route, since the default one is the three-argument one with the defaults, which are exposed as `CNA_CLUSTER_GRID_DEFAULT_*_EXT` with a `static_assert` against the canonical constants.\n\nEach site was classified rather than copied: a dimension outside its range is a **contract** and is refused, because the cluster count is what the light-index list is sized from and a quietly smaller grid would size a list the caller did not mean; `sliceForViewDistance` is a **correction** and stays clamped, because a point outside the frustum belongs to the nearest slice. `sliceDistance` accepts the slice count **inclusively** -- there is one more boundary than slice and the last names the far edge, so a `>=` bound would silently lose the far plane, which is asserted.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-086B",
+      "approved_symbols": [
+        "CPP-054C6A46A962",
+        "CPP-05ED1F3D2366",
+        "CPP-060733AAF72D",
+        "CPP-12B6023ABE9C",
+        "CPP-34F1F3056F86",
+        "CPP-39C9B73FE4E3",
+        "CPP-42FBE0309947",
+        "CPP-5554D491139B",
+        "CPP-6DE2BD9AA131",
+        "CPP-7CA2EFE014FD",
+        "CPP-7DBF5A952F91",
+        "CPP-81317A414A18",
+        "CPP-85729221A04D",
+        "CPP-868B9AB3DE62",
+        "CPP-99636F854B18",
+        "CPP-AD7A24FEB9A3",
+        "CPP-B29B19F98E1A",
+        "CPP-B9EE7A9E997B",
+        "CPP-CA39B86C793C",
+        "CPP-CF069004884A",
+        "CPP-FC6E351F26F3"
+      ]
+    },
+    {
+      "id": "clustered-light-assignment",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredLightAssignment(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`cna_clustered_light_assignment_*` over an owned handle. `assign` takes the bounding spheres `cna_clustered_light_set_copy_bounds` produces, so a caller sorts the set it already built rather than describing the lights twice. `lightsInCluster` returns a `std::span` into the assignment's own storage; the C form **copies**, so the result stays correct after a recompute and there is no view to dangle. `getIndices` and `getOffsets` take the same count/copy form, and the offset count is one more than the cluster count because offsets are boundaries.\n\n`adopt`'s four refusals are kept apart -- offsets must begin at zero, must not go backwards, must end at the index count, and no index may name a light outside the set -- because the firewall would flatten them into one message and each says something different about what the caller got wrong.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-086B",
+      "approved_symbols": [
+        "CPP-168E8A653BAA",
+        "CPP-4237E1D0383F",
+        "CPP-69710E8B9F7E",
+        "CPP-6B8731017904",
+        "CPP-77906DCB42E0",
+        "CPP-8426BCD7F101",
+        "CPP-8A9BB5D1F63B",
+        "CPP-8EA90E15B8CE",
+        "CPP-99B54073CF82",
+        "CPP-A6E5A4C800F5",
+        "CPP-C3344155F7ED",
+        "CPP-C7440A77A144",
+        "CPP-E4294C9E8B5E"
+      ]
+    },
+    {
+      "id": "clustered-light-buffer",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredLightBuffer(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_clustered_light_buffer_*` over an owned handle. **It lends nothing**: the canonical class keeps its three textures private and exposes only `bind`, so unlike the render-target pool there is no borrow to count and destruction is never refused -- settled by reading the class rather than by copying the nearest precedent. `upload` refuses a mismatched set/grid/assignment trio, because the assignment's light indices are positions in the set and its cluster indices positions in the grid, so an inconsistent upload would light the wrong objects with the wrong lamps rather than fail visibly. `bind` refuses before an upload, and requires a `ShaderEffect` specifically, which is what the canonical signature takes. `getLightLookupGlsl` takes the string copy-out form.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-086B",
+      "approved_symbols": [
+        "CPP-169580D653E5",
+        "CPP-29D42B2EB13A",
+        "CPP-34F7A128A91D",
+        "CPP-49E8C2315661",
+        "CPP-4C1BBEF80BA5",
+        "CPP-58179FEE3C02",
+        "CPP-876F9C17B6E1",
+        "CPP-BD874EBD9F56",
+        "CPP-BE5E8282F386",
+        "CPP-D30306B74A75",
+        "CPP-F48EF8C683EB",
+        "CPP-F70530DFB419"
+      ]
     }
   ]
 }

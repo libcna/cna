@@ -3521,6 +3521,546 @@ CNA_C_API CNA_Result cna_clustered_light_set_copy_bounds(
  */
 CNA_C_API CNA_Result cna_clustered_light_set_destroy(CNA_ClusteredLightSetHandle set);
 
+/* ---------------------------------------------------------------------------------------------
+ * The cluster grid, the light assignment and the upload buffer
+ *
+ * Three objects that consume a light set. The grid divides the view frustum into clusters, the
+ * assignment sorts lights into them, and the buffer uploads the result for a shader to read. The
+ * grid and the assignment are pure CPU objects; only the buffer needs a device.
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief The most tiles a cluster grid takes along either screen axis. */
+#define CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT INT32_C(128)
+/** @brief The most depth slices a cluster grid takes. */
+#define CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT INT32_C(256)
+/** @brief The default tile count along X. */
+#define CNA_CLUSTER_GRID_DEFAULT_TILES_X_EXT INT32_C(16)
+/** @brief The default tile count along Y. */
+#define CNA_CLUSTER_GRID_DEFAULT_TILES_Y_EXT INT32_C(8)
+/** @brief The default depth-slice count. */
+#define CNA_CLUSTER_GRID_DEFAULT_SLICE_COUNT_EXT INT32_C(24)
+
+/**
+ * @brief Owned handle for one cluster grid.
+ *
+ * A pure CPU object; it is parented to a game only so its lifetime is accounted for.
+ */
+typedef CNA_Handle CNA_ClusteredLightGridHandle;
+
+/**
+ * @brief Creates a cluster grid.
+ *
+ * @param game The owning game.
+ * @param tiles_x Tiles along X, from 1 to `CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT`.
+ * @param tiles_y Tiles along Y, same range.
+ * @param slice_count Depth slices, from 1 to `CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT`.
+ * @param out_grid Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a dimension outside its range —
+ * the cluster count is what the light-index list is sized from, so it is refused rather than
+ * clamped — `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_create(
+    CNA_Handle game,
+    int32_t tiles_x,
+    int32_t tiles_y,
+    int32_t slice_count,
+    CNA_ClusteredLightGridHandle* out_grid);
+
+/**
+ * @brief Returns the grid's tile count along X.
+ *
+ * @param grid The grid.
+ * @param out_tiles Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_get_tiles_x(
+    CNA_ClusteredLightGridHandle grid,
+    int32_t* out_tiles);
+
+/**
+ * @brief Returns the grid's tile count along Y.
+ *
+ * @param grid The grid.
+ * @param out_tiles Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_get_tiles_y(
+    CNA_ClusteredLightGridHandle grid,
+    int32_t* out_tiles);
+
+/**
+ * @brief Returns the grid's depth-slice count.
+ *
+ * @param grid The grid.
+ * @param out_slices Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_get_slice_count(
+    CNA_ClusteredLightGridHandle grid,
+    int32_t* out_slices);
+
+/**
+ * @brief Returns how many clusters the grid holds.
+ *
+ * @param grid The grid.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_get_cluster_count(
+    CNA_ClusteredLightGridHandle grid,
+    int32_t* out_count);
+
+/**
+ * @brief Returns the flat index of a cluster coordinate.
+ *
+ * @param grid The grid.
+ * @param x Tile along X.
+ * @param y Tile along Y.
+ * @param slice Depth slice.
+ * @param out_index Receives the flat index.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a coordinate outside the grid,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_cluster_index(
+    CNA_ClusteredLightGridHandle grid,
+    int32_t x,
+    int32_t y,
+    int32_t slice,
+    int32_t* out_index);
+
+/**
+ * @brief Gives the grid its shape from a camera projection.
+ *
+ * @param grid The grid.
+ * @param projection The camera's projection matrix; must be invertible.
+ * @param near_plane The near distance; must be positive.
+ * @param far_plane The far distance; must exceed the near.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the planes cannot space the
+ * slices — the spacing is a ratio of the two, so a zero near plane has no logarithm and an
+ * inverted pair has no grid — or when the matrix will not invert, `CNA_RESULT_NOT_SUPPORTED`
+ * without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_set_projection(
+    CNA_ClusteredLightGridHandle grid,
+    const CNA_Matrix* projection,
+    float near_plane,
+    float far_plane);
+
+/**
+ * @brief Reports whether the grid has been given a projection.
+ *
+ * Until it has, it has no shape: @ref cna_clustered_light_grid_cluster_bounds refuses and an
+ * assignment cannot sort into it.
+ *
+ * @param grid The grid.
+ * @param out_has Receives `CNA_TRUE` when a projection has been set.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_has_projection(
+    CNA_ClusteredLightGridHandle grid,
+    CNA_Bool* out_has);
+
+/**
+ * @brief Returns the near distance the grid was given.
+ *
+ * @param grid The grid.
+ * @param out_near Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_get_near_plane(
+    CNA_ClusteredLightGridHandle grid,
+    float* out_near);
+
+/**
+ * @brief Returns the far distance the grid was given.
+ *
+ * @param grid The grid.
+ * @param out_far Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_get_far_plane(
+    CNA_ClusteredLightGridHandle grid,
+    float* out_far);
+
+/**
+ * @brief Returns the inverse of the projection the grid was given.
+ *
+ * @param grid The grid.
+ * @param out_matrix Receives the inverse.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_get_inverse_projection(
+    CNA_ClusteredLightGridHandle grid,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Returns the view distance at which a depth slice begins.
+ *
+ * **The slice count itself is a valid argument**, and names the far edge of the last slice — there
+ * are one more boundaries than slices. A caller that rejected it would lose the far plane.
+ *
+ * @param grid The grid.
+ * @param slice The slice boundary, from zero to the slice count **inclusive**.
+ * @param out_distance Receives the distance; zero when no projection has been set.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a boundary outside that range,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_slice_distance(
+    CNA_ClusteredLightGridHandle grid,
+    int32_t slice,
+    float* out_distance);
+
+/**
+ * @brief Returns which slice covers a view distance.
+ *
+ * The result is **clamped** into the grid rather than refused, exactly as the canonical function
+ * clamps it: a point behind the near plane belongs to the first slice and one beyond the far
+ * plane to the last, which is what a renderer wants when a light straddles the frustum edge.
+ *
+ * @param grid The grid.
+ * @param view_distance The distance to place.
+ * @param out_slice Receives the slice index.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_slice_for_view_distance(
+    CNA_ClusteredLightGridHandle grid,
+    float view_distance,
+    int32_t* out_slice);
+
+/**
+ * @brief Returns the view-space bounds of one cluster.
+ *
+ * @param grid The grid.
+ * @param x Tile along X.
+ * @param y Tile along Y.
+ * @param slice Depth slice.
+ * @param out_bounds Receives the bounds.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a coordinate outside the grid,
+ * `CNA_RESULT_INVALID_STATE` when no projection has been set — the grid has no shape yet —
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_cluster_bounds(
+    CNA_ClusteredLightGridHandle grid,
+    int32_t x,
+    int32_t y,
+    int32_t slice,
+    CNA_BoundingBox* out_bounds);
+
+/**
+ * @brief Releases the grid.
+ *
+ * @param grid The grid; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_grid_destroy(CNA_ClusteredLightGridHandle grid);
+
+/** @brief The most lights one assignment sorts; a scene needing more wants a second grid. */
+#define CNA_CLUSTERED_ASSIGNMENT_MAX_LIGHTS_EXT INT32_C(1024)
+
+/**
+ * @brief Owned handle for one light-to-cluster assignment.
+ *
+ * A pure CPU object. Its index and offset arrays are read by copy, so nothing it returns keeps it
+ * alive and destruction is never refused.
+ */
+typedef CNA_Handle CNA_ClusteredLightAssignmentHandle;
+
+/**
+ * @brief Creates an empty assignment.
+ *
+ * @param game The owning game.
+ * @param out_assignment Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_create(
+    CNA_Handle game,
+    CNA_ClusteredLightAssignmentHandle* out_assignment);
+
+/**
+ * @brief Sorts a set of light bounds into a grid's clusters.
+ *
+ * The bounds are what @ref cna_clustered_light_set_copy_bounds produces, so a caller sorts the set
+ * it already built rather than describing the lights twice.
+ *
+ * @param assignment The assignment.
+ * @param grid The grid to sort into; must have a projection.
+ * @param view The camera's view matrix.
+ * @param bounds Array of light bounding spheres, in light-index order.
+ * @param bounds_count How many spheres, at most `CNA_CLUSTERED_ASSIGNMENT_MAX_LIGHTS_EXT`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for more lights than the index list
+ * is sized for, `CNA_RESULT_INVALID_STATE` when the grid has no projection,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_assign(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    CNA_ClusteredLightGridHandle grid,
+    const CNA_Matrix* view,
+    const CNA_BoundingSphere* bounds,
+    uint64_t bounds_count);
+
+/**
+ * @brief Forgets every assignment.
+ *
+ * @param assignment The assignment.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_clear(
+    CNA_ClusteredLightAssignmentHandle assignment);
+
+/**
+ * @brief Takes an assignment computed elsewhere — on the GPU, or by a caller's own sorter.
+ *
+ * The offsets describe where each cluster's run of light indices begins, so there is one more
+ * offset than cluster.
+ *
+ * @param assignment The assignment.
+ * @param light_count How many lights the indices may name.
+ * @param offsets Cluster offsets; must begin at zero, never go backwards, and end at
+ *        @p index_count.
+ * @param offset_count How many offsets; at least one.
+ * @param indices Light indices; each must be below @p light_count.
+ * @param index_count How many indices.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the offsets do not begin at
+ * zero, go backwards, do not end at the index count, or an index names a light that is not in the
+ * set, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_adopt(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t light_count,
+    const int32_t* offsets,
+    uint64_t offset_count,
+    const int32_t* indices,
+    uint64_t index_count);
+
+/**
+ * @brief Returns how many lights the assignment describes.
+ *
+ * @param assignment The assignment.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_get_light_count(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* out_count);
+
+/**
+ * @brief Returns how many clusters the assignment describes.
+ *
+ * @param assignment The assignment.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_get_cluster_count(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* out_count);
+
+/**
+ * @brief Copies out the light indices assigned to one cluster.
+ *
+ * The canonical accessor returns a span into the assignment's own storage; the C form copies,
+ * so the result stays correct after the assignment is recomputed.
+ *
+ * @param assignment The assignment.
+ * @param cluster_index Which cluster.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives how many lights that cluster has.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` for a
+ * cluster outside the assigned range, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_copy_lights_in_cluster(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t cluster_index,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Copies out the whole index array.
+ *
+ * @param assignment The assignment.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives how many indices there are.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_copy_indices(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Copies out the whole offset array.
+ *
+ * @param assignment The assignment.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives how many offsets there are — one more than the cluster count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_copy_offsets(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Returns how many light references the assignment holds in total.
+ *
+ * @param assignment The assignment.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_get_total_reference_count(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* out_count);
+
+/**
+ * @brief Returns the largest number of lights any one cluster holds.
+ *
+ * The number worth watching: it sizes the shader's per-cluster loop.
+ *
+ * @param assignment The assignment.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_get_max_lights_per_cluster(
+    CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* out_count);
+
+/**
+ * @brief Releases the assignment.
+ *
+ * @param assignment The assignment; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_assignment_destroy(
+    CNA_ClusteredLightAssignmentHandle assignment);
+
+/**
+ * @brief Owned handle for one clustered light upload buffer.
+ *
+ * The buffer owns three textures and **lends none of them**: the canonical class exposes no
+ * accessor for them, only @ref cna_clustered_light_buffer_bind, so there is no borrow to count and
+ * destruction is never refused for an outstanding view.
+ */
+typedef CNA_Handle CNA_ClusteredLightBufferHandle;
+
+/**
+ * @brief Creates a clustered light upload buffer.
+ *
+ * @param graphics_device The device to upload on.
+ * @param out_buffer Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_create(
+    CNA_Handle graphics_device,
+    CNA_ClusteredLightBufferHandle* out_buffer);
+
+/**
+ * @brief Uploads a light set, a grid and an assignment as one consistent trio.
+ *
+ * The three must agree: the assignment's light indices are positions in the set and its cluster
+ * indices are positions in the grid. A mismatched trio is **refused**, because uploading it would
+ * light the wrong objects with the wrong lamps rather than fail visibly.
+ *
+ * @param buffer The buffer.
+ * @param lights The light set.
+ * @param grid The grid.
+ * @param assignment The assignment.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the trio disagrees,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_upload(
+    CNA_ClusteredLightBufferHandle buffer,
+    CNA_ClusteredLightSetHandle lights,
+    CNA_ClusteredLightGridHandle grid,
+    CNA_ClusteredLightAssignmentHandle assignment);
+
+/**
+ * @brief Binds the uploaded buffer's three textures to consecutive units of an effect.
+ *
+ * @param buffer The buffer.
+ * @param effect The shader effect to bind into.
+ * @param first_unit The first of three consecutive texture units.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when nothing has been uploaded — there
+ * is no light list to bind — `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_bind(
+    CNA_ClusteredLightBufferHandle buffer,
+    CNA_EffectHandle effect,
+    int32_t first_unit);
+
+/**
+ * @brief Reports whether anything has been uploaded yet.
+ *
+ * @param buffer The buffer.
+ * @param out_uploaded Receives `CNA_TRUE` once an upload has succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_is_uploaded(
+    CNA_ClusteredLightBufferHandle buffer,
+    CNA_Bool* out_uploaded);
+
+/**
+ * @brief Returns how many lights the last upload carried.
+ *
+ * @param buffer The buffer.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_get_light_count(
+    CNA_ClusteredLightBufferHandle buffer,
+    int32_t* out_count);
+
+/**
+ * @brief Returns how many clusters the last upload carried.
+ *
+ * @param buffer The buffer.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_get_cluster_count(
+    CNA_ClusteredLightBufferHandle buffer,
+    int32_t* out_count);
+
+/**
+ * @brief Returns how many light references the last upload carried.
+ *
+ * @param buffer The buffer.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_get_reference_count(
+    CNA_ClusteredLightBufferHandle buffer,
+    int32_t* out_count);
+
+/**
+ * @brief Copies the GLSL a shader needs to read the uploaded light list.
+ *
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_copy_light_lookup_glsl(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Releases the buffer and its textures.
+ *
+ * @param buffer The buffer; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_buffer_destroy(CNA_ClusteredLightBufferHandle buffer);
+
 #ifdef __cplusplus
 }
 #endif

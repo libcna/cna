@@ -22,7 +22,10 @@
 #ifdef CNA_CNAEXT
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/CascadedShadowMap.hpp"
+#include "CNA/Graphics/ClusteredLightAssignment.hpp"
+#include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
+#include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
 #include "CNA/Graphics/ClusteredLightType.hpp"
 #include "CNA/Graphics/ClusteredShadowPolicyEXT.hpp"
@@ -2411,6 +2414,225 @@ CNA_Result cna_clustered_light_set_copy_bounds(CNA_ClusteredLightSetHandle p0, C
 }
 
 CNA_Result cna_clustered_light_set_destroy(CNA_ClusteredLightSetHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_create(CNA_Handle p0, int32_t p1, int32_t p2, int32_t p3, CNA_ClusteredLightGridHandle* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    if (p4 != nullptr) { *p4 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_get_tiles_x(CNA_ClusteredLightGridHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_get_tiles_y(CNA_ClusteredLightGridHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_get_slice_count(CNA_ClusteredLightGridHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_get_cluster_count(CNA_ClusteredLightGridHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_cluster_index(CNA_ClusteredLightGridHandle p0, int32_t p1, int32_t p2, int32_t p3, int32_t* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_set_projection(CNA_ClusteredLightGridHandle p0, const CNA_Matrix* p1, float p2, float p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_has_projection(CNA_ClusteredLightGridHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_get_near_plane(CNA_ClusteredLightGridHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_get_far_plane(CNA_ClusteredLightGridHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_get_inverse_projection(CNA_ClusteredLightGridHandle p0, CNA_Matrix* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_slice_distance(CNA_ClusteredLightGridHandle p0, int32_t p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_slice_for_view_distance(CNA_ClusteredLightGridHandle p0, float p1, int32_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_cluster_bounds(CNA_ClusteredLightGridHandle p0, int32_t p1, int32_t p2, int32_t p3, CNA_BoundingBox* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_grid_destroy(CNA_ClusteredLightGridHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_create(CNA_Handle p0, CNA_ClusteredLightAssignmentHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_assign(CNA_ClusteredLightAssignmentHandle p0, CNA_ClusteredLightGridHandle p1, const CNA_Matrix* p2, const CNA_BoundingSphere* p3, uint64_t p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_clear(CNA_ClusteredLightAssignmentHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_adopt(CNA_ClusteredLightAssignmentHandle p0, int32_t p1, const int32_t* p2, uint64_t p3, const int32_t* p4, uint64_t p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_get_light_count(CNA_ClusteredLightAssignmentHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_get_cluster_count(CNA_ClusteredLightAssignmentHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_copy_lights_in_cluster(CNA_ClusteredLightAssignmentHandle p0, int32_t p1, int32_t* p2, uint64_t p3, uint64_t* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_copy_indices(CNA_ClusteredLightAssignmentHandle p0, int32_t* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_copy_offsets(CNA_ClusteredLightAssignmentHandle p0, int32_t* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_get_total_reference_count(CNA_ClusteredLightAssignmentHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_get_max_lights_per_cluster(CNA_ClusteredLightAssignmentHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_assignment_destroy(CNA_ClusteredLightAssignmentHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_create(CNA_Handle p0, CNA_ClusteredLightBufferHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_upload(CNA_ClusteredLightBufferHandle p0, CNA_ClusteredLightSetHandle p1, CNA_ClusteredLightGridHandle p2, CNA_ClusteredLightAssignmentHandle p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_bind(CNA_ClusteredLightBufferHandle p0, CNA_EffectHandle p1, int32_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_is_uploaded(CNA_ClusteredLightBufferHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_get_light_count(CNA_ClusteredLightBufferHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_get_cluster_count(CNA_ClusteredLightBufferHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_get_reference_count(CNA_ClusteredLightBufferHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_copy_light_lookup_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_buffer_destroy(CNA_ClusteredLightBufferHandle p0)
 {
     (void)p0;
     return ExtensionUnavailable();
@@ -7724,6 +7946,745 @@ CNA_Result cna_clustered_light_set_destroy(const CNA_ClusteredLightSetHandle set
                 "The owned light-set handle could not be released.");
         }
         RemoveOwnedGraphicsResourceFor(set->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+struct ClusteredLightGridResource final {
+    std::shared_ptr<Ext::ClusteredLightGrid> value;
+    CNA_Handle parentGame;
+};
+
+struct ClusteredLightAssignmentResource final {
+    std::shared_ptr<Ext::ClusteredLightAssignment> value;
+    CNA_Handle parentGame;
+};
+
+struct ClusteredLightBufferResource final {
+    std::shared_ptr<Ext::ClusteredLightBuffer> value;
+    CNA_Handle parentGame;
+};
+
+static_assert(
+    Ext::ClusteredLightGrid::kMaxTilesPerAxis == CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT &&
+    Ext::ClusteredLightGrid::kMaxSliceCount == CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT &&
+    Ext::ClusteredLightGrid::kDefaultTilesX == CNA_CLUSTER_GRID_DEFAULT_TILES_X_EXT &&
+    Ext::ClusteredLightGrid::kDefaultTilesY == CNA_CLUSTER_GRID_DEFAULT_TILES_Y_EXT &&
+    Ext::ClusteredLightGrid::kDefaultSliceCount == CNA_CLUSTER_GRID_DEFAULT_SLICE_COUNT_EXT);
+static_assert(
+    Ext::ClusteredLightAssignment::kMaxLights == CNA_CLUSTERED_ASSIGNMENT_MAX_LIGHTS_EXT);
+
+[[nodiscard]] CNA_Result RequireClusterCoordinate(
+    const Ext::ClusteredLightGrid& grid, const int32_t x, const int32_t y, const int32_t slice)
+{
+    if (x < 0 || x >= grid.getTilesX() || y < 0 || y >= grid.getTilesY() ||
+        slice < 0 || slice >= grid.getSliceCount()) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The cluster coordinate is outside the grid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// A count/copy body shared by the four int32 array read-backs on the assignment.
+template<typename TSource>
+[[nodiscard]] CNA_Result CopyInt32Range(
+    const TSource& source, int32_t* const destination, const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The destination or required-count output is invalid.");
+    }
+    const auto count = static_cast<uint64_t>(source.size());
+    *outCount = count;
+    if (capacity < count) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination cannot hold every element.");
+    }
+    uint64_t written = 0U;
+    for (const int value : source) {
+        destination[written++] = static_cast<int32_t>(value);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_clustered_light_grid_create(
+    const CNA_Handle gameHandle,
+    const int32_t tilesX,
+    const int32_t tilesY,
+    const int32_t sliceCount,
+    CNA_ClusteredLightGridHandle* const outGrid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outGrid == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The grid output handle is null.");
+        }
+        *outGrid = CNA_INVALID_HANDLE;
+        // Refused rather than clamped: the cluster count is what the light-index list is sized
+        // from, so a grid quietly smaller than asked for would size a list the caller did not mean.
+        if (tilesX < 1 || tilesX > CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT ||
+            tilesY < 1 || tilesY > CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT ||
+            sliceCount < 1 || sliceCount > CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "A grid dimension is outside its range: the screen axes take 1 to 128 tiles and "
+                "the depth axis 1 to 256 slices.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ClusteredLightGrid>(
+            static_cast<int>(tilesX), static_cast<int>(tilesY), static_cast<int>(sliceCount));
+        const auto resource = std::make_shared<ClusteredLightGridResource>(
+            ClusteredLightGridResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::ClusteredLightGrid, resource, outGrid);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned cluster-grid handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#define CNA_WITH_GRID(handle, body)                                                                \
+    WithMap<ClusteredLightGridResource>(                                                           \
+        (handle), ObjectKind::ClusteredLightGrid, "ClusteredLightGrid", body)
+#define CNA_WITH_ASSIGNMENT(handle, body)                                                          \
+    WithMap<ClusteredLightAssignmentResource>(                                                     \
+        (handle), ObjectKind::ClusteredLightAssignment, "ClusteredLightAssignment", body)
+#define CNA_WITH_LIGHT_BUFFER(handle, body)                                                        \
+    WithMap<ClusteredLightBufferResource>(                                                         \
+        (handle), ObjectKind::ClusteredLightBuffer, "ClusteredLightBuffer", body)
+
+CNA_Result cna_clustered_light_grid_get_tiles_x(
+    const CNA_ClusteredLightGridHandle grid, int32_t* const outTiles)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result { return StoreValue(outTiles, static_cast<int32_t>(g->value->getTilesX())); });
+}
+
+CNA_Result cna_clustered_light_grid_get_tiles_y(
+    const CNA_ClusteredLightGridHandle grid, int32_t* const outTiles)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result { return StoreValue(outTiles, static_cast<int32_t>(g->value->getTilesY())); });
+}
+
+CNA_Result cna_clustered_light_grid_get_slice_count(
+    const CNA_ClusteredLightGridHandle grid, int32_t* const outSlices)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            return StoreValue(outSlices, static_cast<int32_t>(g->value->getSliceCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_grid_get_cluster_count(
+    const CNA_ClusteredLightGridHandle grid, int32_t* const outCount)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(g->value->getClusterCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_grid_cluster_index(
+    const CNA_ClusteredLightGridHandle grid,
+    const int32_t x, const int32_t y, const int32_t slice, int32_t* const outIndex)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireClusterCoordinate(*g->value, x, y, slice);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            return StoreValue(
+                outIndex,
+                static_cast<int32_t>(g->value->clusterIndex(
+                    static_cast<int>(x), static_cast<int>(y), static_cast<int>(slice))));
+        });
+}
+
+CNA_Result cna_clustered_light_grid_set_projection(
+    const CNA_ClusteredLightGridHandle grid,
+    const CNA_Matrix* const projection, const float nearPlane, const float farPlane)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            if (const CNA_Result result =
+                    RequireMatrixArgument(projection, "The projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (!(nearPlane > 0.0F) || !(farPlane > nearPlane)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The near distance must be positive and the far distance must exceed it: the "
+                    "slice spacing is a ratio of the two.");
+            }
+            g->value->setProjection(ToNativeMatrix(*projection), nearPlane, farPlane);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_grid_has_projection(
+    const CNA_ClusteredLightGridHandle grid, CNA_Bool* const outHas)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            return StoreValue(
+                outHas, static_cast<CNA_Bool>(g->value->hasProjection() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_light_grid_get_near_plane(
+    const CNA_ClusteredLightGridHandle grid, float* const outNear)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result { return StoreValue(outNear, g->value->getNearPlane()); });
+}
+
+CNA_Result cna_clustered_light_grid_get_far_plane(
+    const CNA_ClusteredLightGridHandle grid, float* const outFar)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result { return StoreValue(outFar, g->value->getFarPlane()); });
+}
+
+CNA_Result cna_clustered_light_grid_get_inverse_projection(
+    const CNA_ClusteredLightGridHandle grid, CNA_Matrix* const outMatrix)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result { return StoreValue(outMatrix, ToCMatrix(g->value->getInverseProjection())); });
+}
+
+CNA_Result cna_clustered_light_grid_slice_distance(
+    const CNA_ClusteredLightGridHandle grid, const int32_t slice, float* const outDistance)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            // Inclusive of the slice count: there is one more boundary than slice, and the last
+            // names the far edge. A `>=` here would lose the far plane.
+            if (slice < 0 || slice > static_cast<int32_t>(g->value->getSliceCount())) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The slice boundary is outside the grid.");
+            }
+            return StoreValue(outDistance, g->value->sliceDistance(static_cast<int>(slice)));
+        });
+}
+
+CNA_Result cna_clustered_light_grid_slice_for_view_distance(
+    const CNA_ClusteredLightGridHandle grid, const float viewDistance, int32_t* const outSlice)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            // Clamped, not refused: a point outside the frustum belongs to the nearest slice,
+            // which is what a renderer wants when a light straddles the edge.
+            return StoreValue(
+                outSlice, static_cast<int32_t>(g->value->sliceForViewDistance(viewDistance)));
+        });
+}
+
+CNA_Result cna_clustered_light_grid_cluster_bounds(
+    const CNA_ClusteredLightGridHandle grid,
+    const int32_t x, const int32_t y, const int32_t slice, CNA_BoundingBox* const outBounds)
+{
+    return CNA_WITH_GRID(grid, [&](const std::shared_ptr<ClusteredLightGridResource>& g)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireClusterCoordinate(*g->value, x, y, slice);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (!g->value->hasProjection()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "The grid has no projection, so it has no shape yet.");
+            }
+            if (outBounds == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bounds output is null.");
+            }
+            const auto bounds = g->value->clusterBounds(
+                static_cast<int>(x), static_cast<int>(y), static_cast<int>(slice));
+            outBounds->min = Vec3(bounds.Min.X, bounds.Min.Y, bounds.Min.Z);
+            outBounds->max = Vec3(bounds.Max.X, bounds.Max.Y, bounds.Max.Z);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_grid_destroy(const CNA_ClusteredLightGridHandle gridHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ClusteredLightGridResource> grid;
+        if (const CNA_Result result = GetEngineResource(
+                gridHandle, ObjectKind::ClusteredLightGrid, "ClusteredLightGrid", &grid);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(gridHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned cluster-grid handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(grid->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clustered_light_assignment_create(
+    const CNA_Handle gameHandle, CNA_ClusteredLightAssignmentHandle* const outAssignment)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAssignment == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The assignment output handle is null.");
+        }
+        *outAssignment = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ClusteredLightAssignment>();
+        const auto resource = std::make_shared<ClusteredLightAssignmentResource>(
+            ClusteredLightAssignmentResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::ClusteredLightAssignment, resource, outAssignment);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned assignment handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clustered_light_assignment_assign(
+    const CNA_ClusteredLightAssignmentHandle assignment,
+    const CNA_ClusteredLightGridHandle gridHandle,
+    const CNA_Matrix* const view,
+    const CNA_BoundingSphere* const bounds,
+    const uint64_t boundsCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            if (bounds == nullptr && boundsCount != 0U) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bounds array is null.");
+            }
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (boundsCount > static_cast<uint64_t>(CNA_CLUSTERED_ASSIGNMENT_MAX_LIGHTS_EXT)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "More lights than the assignment accepts: the index list is sized from that "
+                    "bound, and a scene needing more wants a second grid.");
+            }
+            std::shared_ptr<ClusteredLightGridResource> grid;
+            if (const CNA_Result result = GetEngineResource(
+                    gridHandle, ObjectKind::ClusteredLightGrid, "ClusteredLightGrid", &grid);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (!grid->value->hasProjection()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "The grid has no projection, so it has no clusters to sort into yet.");
+            }
+            std::vector<BoundingSphere> nativeBounds;
+            nativeBounds.reserve(static_cast<std::size_t>(boundsCount));
+            for (uint64_t sphere = 0U; sphere < boundsCount; ++sphere) {
+                nativeBounds.emplace_back(
+                    Microsoft::Xna::Framework::Vector3(
+                        bounds[sphere].center.x, bounds[sphere].center.y, bounds[sphere].center.z),
+                    bounds[sphere].radius);
+            }
+            a->value->assign(*grid->value, ToNativeMatrix(*view), nativeBounds);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_clear(
+    const CNA_ClusteredLightAssignmentHandle assignment)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            a->value->clear();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_adopt(
+    const CNA_ClusteredLightAssignmentHandle assignment,
+    const int32_t lightCount,
+    const int32_t* const offsets,
+    const uint64_t offsetCount,
+    const int32_t* const indices,
+    const uint64_t indexCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            if ((offsets == nullptr && offsetCount != 0U) ||
+                (indices == nullptr && indexCount != 0U)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "An adopted array is null.");
+            }
+            // The canonical checks, made here so each answers with its own message rather than
+            // arriving as one flattened invalid_argument from the firewall.
+            if (lightCount < 0 || offsetCount == 0U || offsets[0] != INT32_C(0)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The offsets must begin at zero and describe at least one cluster.");
+            }
+            if (static_cast<uint64_t>(offsets[offsetCount - 1U]) != indexCount) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The last offset must be the length of the index array.");
+            }
+            for (uint64_t offset = 1U; offset < offsetCount; ++offset) {
+                if (offsets[offset] < offsets[offset - 1U]) {
+                    return Fail(
+                        CNA_RESULT_INVALID_ARGUMENT,
+                        CNA_ERROR_CATEGORY_ARGUMENT,
+                        "The offsets go backwards.");
+                }
+            }
+            for (uint64_t index = 0U; index < indexCount; ++index) {
+                if (indices[index] < 0 || indices[index] >= lightCount) {
+                    return Fail(
+                        CNA_RESULT_INVALID_ARGUMENT,
+                        CNA_ERROR_CATEGORY_ARGUMENT,
+                        "An index names a light that is not in the set.");
+                }
+            }
+            std::vector<int> nativeOffsets;
+            nativeOffsets.reserve(static_cast<std::size_t>(offsetCount));
+            for (uint64_t offset = 0U; offset < offsetCount; ++offset) {
+                nativeOffsets.push_back(static_cast<int>(offsets[offset]));
+            }
+            std::vector<int> nativeIndices;
+            nativeIndices.reserve(static_cast<std::size_t>(indexCount));
+            for (uint64_t index = 0U; index < indexCount; ++index) {
+                nativeIndices.push_back(static_cast<int>(indices[index]));
+            }
+            a->value->adopt(
+                static_cast<int>(lightCount), std::move(nativeOffsets), std::move(nativeIndices));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_get_light_count(
+    const CNA_ClusteredLightAssignmentHandle assignment, int32_t* const outCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(a->value->getLightCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_get_cluster_count(
+    const CNA_ClusteredLightAssignmentHandle assignment, int32_t* const outCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(a->value->getClusterCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_copy_lights_in_cluster(
+    const CNA_ClusteredLightAssignmentHandle assignment,
+    const int32_t clusterIndex,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            if (clusterIndex < 0 ||
+                clusterIndex >= static_cast<int32_t>(a->value->getClusterCount())) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The cluster index is outside the assigned range.");
+            }
+            const auto span = a->value->lightsInCluster(static_cast<int>(clusterIndex));
+            return CopyInt32Range(span, destination, capacity, outCount);
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_copy_indices(
+    const CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* const destination, const uint64_t capacity, uint64_t* const outCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            return CopyInt32Range(a->value->getIndices(), destination, capacity, outCount);
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_copy_offsets(
+    const CNA_ClusteredLightAssignmentHandle assignment,
+    int32_t* const destination, const uint64_t capacity, uint64_t* const outCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            return CopyInt32Range(a->value->getOffsets(), destination, capacity, outCount);
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_get_total_reference_count(
+    const CNA_ClusteredLightAssignmentHandle assignment, int32_t* const outCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(a->value->getTotalReferenceCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_get_max_lights_per_cluster(
+    const CNA_ClusteredLightAssignmentHandle assignment, int32_t* const outCount)
+{
+    return CNA_WITH_ASSIGNMENT(assignment,
+        [&](const std::shared_ptr<ClusteredLightAssignmentResource>& a) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(a->value->getMaxLightsPerCluster()));
+        });
+}
+
+CNA_Result cna_clustered_light_assignment_destroy(
+    const CNA_ClusteredLightAssignmentHandle assignmentHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ClusteredLightAssignmentResource> assignment;
+        if (const CNA_Result result = GetEngineResource(
+                assignmentHandle, ObjectKind::ClusteredLightAssignment, "ClusteredLightAssignment",
+                &assignment);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(assignmentHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned assignment handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(assignment->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clustered_light_buffer_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_ClusteredLightBufferHandle* const outBuffer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBuffer == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The light-buffer output handle is null.");
+        }
+        *outBuffer = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ClusteredLightBuffer>(*graphicsDevice->value);
+        const auto resource = std::make_shared<ClusteredLightBufferResource>(
+            ClusteredLightBufferResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::ClusteredLightBuffer, resource, outBuffer);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned light-buffer handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_clustered_light_buffer_upload(
+    const CNA_ClusteredLightBufferHandle buffer,
+    const CNA_ClusteredLightSetHandle lights,
+    const CNA_ClusteredLightGridHandle gridHandle,
+    const CNA_ClusteredLightAssignmentHandle assignment)
+{
+    return CNA_WITH_LIGHT_BUFFER(buffer,
+        [&](const std::shared_ptr<ClusteredLightBufferResource>& b) -> CNA_Result {
+            std::shared_ptr<ClusteredLightSetResource> set;
+            if (const CNA_Result result = GetEngineResource(
+                    lights, ObjectKind::ClusteredLightSet, "ClusteredLightSetEXT", &set);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::shared_ptr<ClusteredLightGridResource> grid;
+            if (const CNA_Result result = GetEngineResource(
+                    gridHandle, ObjectKind::ClusteredLightGrid, "ClusteredLightGrid", &grid);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::shared_ptr<ClusteredLightAssignmentResource> assigned;
+            if (const CNA_Result result = GetEngineResource(
+                    assignment, ObjectKind::ClusteredLightAssignment, "ClusteredLightAssignment",
+                    &assigned);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // The trio must describe one another. Uploading a mismatched set would light the wrong
+            // objects with the wrong lamps rather than fail, which is why this is a refusal and
+            // not a best effort.
+            if (assigned->value->getLightCount() != set->value->getCount() ||
+                assigned->value->getClusterCount() != grid->value->getClusterCount()) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The assignment describes a different set of lights or a different grid.");
+            }
+            b->value->upload(*set->value, *grid->value, *assigned->value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_buffer_bind(
+    const CNA_ClusteredLightBufferHandle buffer,
+    const CNA_EffectHandle effect,
+    const int32_t firstUnit)
+{
+    return CNA_WITH_LIGHT_BUFFER(buffer,
+        [&](const std::shared_ptr<ClusteredLightBufferResource>& b) -> CNA_Result {
+            if (!b->value->isUploaded()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "Nothing has been uploaded, so there is no light list to bind.");
+            }
+            std::shared_ptr<EffectResource> effectResource;
+            if (const CNA_Result result = GetEffectForPass(effect, &effectResource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            auto* const shader = dynamic_cast<Microsoft::Xna::Framework::Graphics::ShaderEffect*>(
+                effectResource->value.get());
+            if (shader == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The clustered light buffer binds into a ShaderEffect, and this effect is not "
+                    "one.");
+            }
+            b->value->bind(*shader, static_cast<int>(firstUnit));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_buffer_is_uploaded(
+    const CNA_ClusteredLightBufferHandle buffer, CNA_Bool* const outUploaded)
+{
+    return CNA_WITH_LIGHT_BUFFER(buffer,
+        [&](const std::shared_ptr<ClusteredLightBufferResource>& b) -> CNA_Result {
+            return StoreValue(
+                outUploaded, static_cast<CNA_Bool>(b->value->isUploaded() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_light_buffer_get_light_count(
+    const CNA_ClusteredLightBufferHandle buffer, int32_t* const outCount)
+{
+    return CNA_WITH_LIGHT_BUFFER(buffer,
+        [&](const std::shared_ptr<ClusteredLightBufferResource>& b) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(b->value->getLightCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_buffer_get_cluster_count(
+    const CNA_ClusteredLightBufferHandle buffer, int32_t* const outCount)
+{
+    return CNA_WITH_LIGHT_BUFFER(buffer,
+        [&](const std::shared_ptr<ClusteredLightBufferResource>& b) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(b->value->getClusterCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_buffer_get_reference_count(
+    const CNA_ClusteredLightBufferHandle buffer, int32_t* const outCount)
+{
+    return CNA_WITH_LIGHT_BUFFER(buffer,
+        [&](const std::shared_ptr<ClusteredLightBufferResource>& b) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(b->value->getReferenceCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_buffer_copy_light_lookup_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(destination, capacity, outBytes, [] {
+        return Ext::ClusteredLightBuffer::getLightLookupGlsl();
+    });
+}
+
+CNA_Result cna_clustered_light_buffer_destroy(const CNA_ClusteredLightBufferHandle bufferHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ClusteredLightBufferResource> buffer;
+        if (const CNA_Result result = GetEngineResource(
+                bufferHandle, ObjectKind::ClusteredLightBuffer, "ClusteredLightBuffer", &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // No borrow count: the buffer's three textures are private and it lends none of them.
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(bufferHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned light-buffer handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(buffer->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

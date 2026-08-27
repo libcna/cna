@@ -215,6 +215,11 @@ enum class ObjectKind : uint32_t {
     DepthNormalPrepass = 138,
     // plans/plan_binding.md CBIND-086A: a collection of values, so no borrow count.
     ClusteredLightSet = 139,
+    // plans/plan_binding.md CBIND-086B. The grid and the assignment are pure CPU objects; the
+    // buffer owns three textures and lends none of them, so none of the three counts a borrow.
+    ClusteredLightGrid = 140,
+    ClusteredLightAssignment = 141,
+    ClusteredLightBuffer = 142,
     Test = UINT32_MAX
 };
 
