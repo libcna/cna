@@ -166,17 +166,52 @@ namespace CNA::Content::Cnb
         inline constexpr std::uint32_t KnownMask = Mandatory;
     }
 
-    /** @brief Per-chunk compression codec identifiers. */
+    /**
+     * @brief Per-chunk compression codec identifiers.
+     *
+     * **The numeric values are wire format and frozen.** Codec 2 is Zstandard in every `.cnb` ever
+     * written, whether or not a given build implements it, so these numbers never move.
+     *
+     * Whether a build can actually *use* a codec is a separate, runtime question:
+     * `IsCnbCompressionSupported()` answers it. Zstandard is implemented when CNA is built with
+     * libzstd (`CNA_CNB_ZSTD`, `AUTO` by default); LZ4 and Deflate have identifiers and no
+     * implementation. Compression is opt-in per chunk and off by default — see
+     * `docs/cnb-compression-measurements.md` for why that default is measured rather than cautious.
+     */
     enum class CnbCompression : std::uint32_t
     {
-        /** @brief Stored uncompressed; the only codec CNB v1 defines. */
+        /** @brief Stored uncompressed. Always available, and the default. */
         None = 0u,
-        /** @brief Reserved for a future LZ4 codec. Rejected by this implementation. */
-        ReservedLz4 = 1u,
-        /** @brief Reserved for a future Zstandard codec. Rejected by this implementation. */
-        ReservedZstd = 2u,
-        /** @brief Reserved for a future Deflate codec. Rejected by this implementation. */
-        ReservedDeflate = 3u,
+
+        /** @brief LZ4. Identifier assigned; no implementation in this build. */
+        Lz4 = 1u,
+
+        /**
+         * @brief Zstandard. Implemented when CNA is built with libzstd; ask
+         *        `IsCnbCompressionSupported()` rather than assuming.
+         */
+        Zstd = 2u,
+
+        /** @brief Deflate. Identifier assigned; no implementation in this build. */
+        Deflate = 3u,
+
+        /**
+         * @brief Former name of Lz4, kept so existing source keeps compiling.
+         * @deprecated Use CnbCompression::Lz4.
+         */
+        ReservedLz4 = Lz4,
+
+        /**
+         * @brief Former name of Zstd, from when no codec was implemented.
+         * @deprecated Use CnbCompression::Zstd.
+         */
+        ReservedZstd = Zstd,
+
+        /**
+         * @brief Former name of Deflate, kept so existing source keeps compiling.
+         * @deprecated Use CnbCompression::Deflate.
+         */
+        ReservedDeflate = Deflate,
     };
 
     /**
@@ -201,7 +236,7 @@ namespace CNA::Content::Cnb
         /** @brief `Microsoft::Xna::Framework::Graphics::TextureCube`. Implemented, schema version 1. */
         inline constexpr std::uint32_t TextureCube = 0x00000003u;
 
-        /** @brief `Microsoft::Xna::Framework::Graphics::SpriteFont`. Identifier reserved; no v1 schema. */
+        /** @brief `Microsoft::Xna::Framework::Graphics::SpriteFont`. Implemented, schema version 1; embeds its atlas. */
         inline constexpr std::uint32_t SpriteFont = 0x00000004u;
 
         /** @brief `Microsoft::Xna::Framework::Graphics::Model`. Implemented, schema version 1. */
@@ -213,16 +248,23 @@ namespace CNA::Content::Cnb
         /** @brief `Microsoft::Xna::Framework::Curve`. Implemented, schema version 1. */
         inline constexpr std::uint32_t Curve = 0x00000007u;
 
-        /** @brief `Microsoft::Xna::Framework::Audio::SoundEffect`. Identifier reserved; no v1 schema. */
+        /** @brief `Microsoft::Xna::Framework::Audio::SoundEffect`. Implemented, schema version 1. */
         inline constexpr std::uint32_t SoundEffect = 0x00000008u;
 
-        /** @brief `Microsoft::Xna::Framework::Media::Song`. Identifier reserved; no v1 schema. */
+        /** @brief `Microsoft::Xna::Framework::Media::Song`. Implemented, schema version 1; metadata plus a streaming reference. */
         inline constexpr std::uint32_t Song = 0x00000009u;
 
-        /** @brief `Microsoft::Xna::Framework::Media::Video`. Identifier reserved; no v1 schema. */
+        /** @brief `Microsoft::Xna::Framework::Media::Video`. Implemented, schema version 1; metadata plus a streaming reference. */
         inline constexpr std::uint32_t Video = 0x0000000Au;
 
-        /** @brief `Microsoft::Xna::Framework::Graphics::Effect`. Identifier reserved; no v1 schema. */
+        /**
+         * @brief `Microsoft::Xna::Framework::Graphics::Effect`. Identifier reserved; **no schema, by
+         *        design**.
+         *
+         * The only built-in identifier without one. CNA has many renderers, so a `.cnb` carrying a
+         * single API's shader bytecode would be useless on the others; this waits for the FX/shader
+         * pipeline and renderer abstraction to settle rather than for someone to find time.
+         */
         inline constexpr std::uint32_t Effect = 0x0000000Bu;
 
         /** @brief Lowest identifier reserved for future CNA use. */

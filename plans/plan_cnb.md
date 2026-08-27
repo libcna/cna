@@ -1,5 +1,9 @@
 # plan_cnb.md — CNB, the CNA-native compiled binary content format
 
+> **Current state:** §16.2 is the authoritative matrix — wire schema, runtime loader, writer
+> API and producer are four different claims and it keeps them apart. Earlier tables in this
+> document are historical snapshots and are banner-marked as such.
+
 > **Location note.** The task brief asked for `plan_cnb.md`. Every other engineering plan in this
 > repository lives in `plans/` (`plans/plan_cnj.md`, `plans/plan_xnb.md`, `plans/plan_gltf.md`, …) and is
 > cited from source comments as `plans/plan_<topic>.md`. This file follows that convention so the
@@ -665,6 +669,10 @@ process and device setup, and a timing claim that cannot be reproduced is worse 
 
 ## 9. Stability gate
 
+> **Historical snapshot.** The per-component verdicts here were superseded by §12, then §12.1,
+> and the authoritative current state is now **§16.2**. Kept for the gate criteria it records.
+
+
 CNB v1 is declared stable only when all of the following hold; the current answer is recorded
 against each.
 
@@ -830,6 +838,11 @@ state could legitimately produce all still load.
 
 ## 12. Stability reassessment after the hardening pass
 
+> **Historical snapshot.** Superseded by §12.1 and then by **§16.2**, which is the one table to
+> read for current state. Kept because the *reasoning* for splitting stability per component is
+> still the reasoning that applies.
+
+
 §9 declared "the implemented parts of CNB are v1-stable" as a single verdict. That was too coarse:
 the byte-level format and the C++ extension API are different things with different audiences and
 different costs to change, and this pass changed one of them. Reassessed per component.
@@ -876,6 +889,10 @@ from what was built; the golden vector arrays pin the result. Where any two disa
 
 ## 13. Remaining `CNBF-*` work
 
+> **Historical snapshot — superseded by §15.5 and then by §16.** Several rows here were closed or
+> reclassified afterwards; do not read this table as a to-do list.
+
+
 Unchanged in substance from §6's out-of-scope table, restated with what the hardening pass learned.
 **Superseded by §15**, which breaks these rows into implementable tasks and fixes their order.
 
@@ -897,6 +914,11 @@ work, because the container is finished and the asset ecosystem is not.
 ---
 
 ## 14. Verification state at the end of the hardening pass
+
+> **Historical snapshot**, dated to the hardening pass. Later sessions added schemas, producers
+> and tests, so these counts are not current. Current verification is in §16 and the session
+> reports.
+
 
 **Branch `cnb`, working tree clean, no merge performed.** `git log --merges 1e70b234f..HEAD` is
 empty. Every file touched since the branch point is under `modules/content/`, `docs/cnb-format.md`,
@@ -961,6 +983,11 @@ tests a `BuildPartEffectEXT` regression would break — are green.
 ---
 
 ## 15. Gap analysis against `misc/cnb.md`, and the roadmap that follows from it
+
+> **Historical snapshot of the gap analysis**, with its state columns updated once. The roadmap
+> it produced is largely complete; **§16.2 is the authoritative current-state table.** Kept
+> because the analysis is what justified the order the work was done in.
+
 
 Recorded 2026-08-27, after the owner compared the delivered branch against the original proposal.
 The finding is not that anything is broken — it is that **two different things were both being
@@ -1099,7 +1126,7 @@ is many. Conflating them would damage both.
 | CNBF-104 | **`Effect` schema.** | Deliberately late. CNA has many renderers, so a `.cnb` carrying only D3D bytecode is useless on Vulkan/GL/Metal/WebGPU. The eventual shape is metadata + parameters + *per-profile* shader payloads (GLSL / SPIR-V / DXIL / MSL …) or a CNA IR. **Do not start until the FX/shader pipeline and renderer abstraction have settled.** | ⬜ |
 | CNBF-105 | **Chunk compression.** | Measured first, as the task required, and the measurement changed the answer. Full numbers and recipe in `docs/cnb-compression-measurements.md`. **The premise was wrong**: "PNG/OGG are already compressed" is true of the *source* files and false of what CNB stores — a PNG becomes raw `Rgba8` at compile time and an Ogg becomes raw `Pcm16`, so CNB is exactly where the data is uncompressed. zstd-3 on real content: **51 %** off a photographic texture, **27 %** off audio, **15 %** off vertex data. But decompression only *saves load time* below 456–1469 MB/s, and this machine reads at 2.5 GB/s — so on desktop NVMe compression makes loading **slower**. Size always wins; time only sometimes does. Hence: Zstandard implemented as codec 2, **off by default**, chosen **per chunk** — which retroactively justifies the per-chunk `compression` field. A chunk is compressed only if it actually shrank; `CMET`/`XREF` never are, so an inspector can read a file's identity without the codec. Every golden vector is still byte-identical, so the default is provably inert. | ✅ |
 | CNBF-105-fixture | **A methodology finding, kept because it nearly produced a wrong answer.** | The first run used the repo's own image fixture as "the photograph" and reported **0.6 %** — a 160× saving. That fixture is a synthetic placeholder (405 unique colours across 120 000 pixels; two others are a *single colour*), so compression looked like the most valuable feature in the project when it is actually 51 %. The tell was visible before the content was checked: zstd-3 produced a *larger* output than zstd-1 and zstd-9 larger still, and non-monotonic ratios across levels mean degenerate input, not a strange codec. Recorded in the measurements document so future performance work here checks what a fixture contains before quoting a number from it. | ✅ |
-| CNBF-106 | **Direct glTF → `.cnb`.** | Landed as `cna_tool_gltf_to_cnb`. The requirement was negative — no second interpretation of glTF — and it is met the strongest way available: the tool is **built from `gltf_to_cnj.cpp` itself**, with its `main()` suppressed, so the two front-ends share a translation unit rather than a library. There is one implementation, so they cannot disagree. Proven, not asserted: a test compiles the same fixture both ways and requires the bytes to be **identical** (2704 B on `skin-four-weighted.gltf`). The staging `.cnj` is written to a temporary directory the tool removes, so a project keeps no `.cnj` it does not want; `--keep-cnj` makes it visible on request. | ✅ |
+| CNBF-106A | **Direct glTF → `.cnb`.** (Renamed from `CNBF-106`, whose title said *glTF/PNG/WAV* and which was marked done when only the glTF third existed. The PNG and WAV thirds are `CNBF-109` and `CNBF-110`; the commit history is left alone and the engineering record corrected here.) | Landed as `cna_tool_gltf_to_cnb`. The requirement was negative — no second interpretation of glTF — and it is met the strongest way available: the tool is **built from `gltf_to_cnj.cpp` itself**, with its `main()` suppressed, so the two front-ends share a translation unit rather than a library. There is one implementation, so they cannot disagree. Proven, not asserted: a test compiles the same fixture both ways and requires the bytes to be **identical** (2704 B on `skin-four-weighted.gltf`). The staging `.cnj` is written to a temporary directory the tool removes, so a project keeps no `.cnj` it does not want; `--keep-cnj` makes it visible on request. | ✅ |
 | CNBF-106B | **Collapse the `.cnj` staging step into an in-memory canonical form.** | Deliberately **not** done with `CNBF-106`, and the reason is worth recording rather than rediscovering. The conversion writes its sidecars from a dozen call sites inside one working function, so hoisting them into a returned value is a change to the **`.cnj` path** — which is the reference `CnbModelEquivalenceTest` compares the `.cnb` path against. Doing it under the same task would have meant changing the oracle and the thing under test together. The user-facing behaviour does not depend on it: the byte-equality test above is what "one interpretation" actually means operationally. | ⬜ |
 | CNBF-107 | **`.cnapak`.** Many logical assets in one file. Outside this sequence; a separate project. | ⬜ |
 | CNBF-108 | **mmap / zero-copy chunk access.** | Benchmarked, and **closed as the wrong optimisation** — not deferred. Full numbers in `docs/cnb-mmap-measurements.md`. On a 32 MiB `.cnb`, reading the file costs 7.0 ms and mmap+touch 2.3 ms, so mmap could save **4.7 ms** — while verifying the file's CRC-32C cost **62.5 ms**, nine times the I/O it protects, because the checksum was a byte-at-a-time table at ~512 MB/s. Folding the same CRC in hardware saves **59.2 ms**, i.e. **12.6× the mmap win**, for a change to one function instead of the container's whole ownership model. The `mmap`-alone row is why this needed measuring: mapping 32 MiB takes 5 µs and looks like the whole load vanished, but nothing has been read — and CNB touches every byte immediately, because it verifies them. §4 of the measurements records what would change the answer. | ✅ closed, not implemented |
@@ -1127,3 +1154,80 @@ What remains is `Effect` — which waits on the shader pipeline by design, not b
 `CNBF-107` (`.cnapak`, a different project) and one internal refactor, `CNBF-106B`. `CNBF-105` and
 `CNBF-108` were both settled by measurement: compression implemented as opt-in, mmap closed as the
 wrong optimisation.
+
+---
+
+## 16. Producer/tooling completeness (`CNBF-109`–`CNBF-113`)
+
+Recorded 2026-08-27. An audit of the tree found the asymmetry this section closes:
+
+> CNB's runtime/schema side had grown much broader than its producer side.
+
+Ten of eleven built-in identifiers had a wire schema, a runtime loader and a writer API — and
+`cna_tool_cnj_to_cnb` still compiled exactly three of them. "10/11 schemas" was true and misleading
+at the same time, because a schema nobody can produce an asset for is not a usable format.
+
+**The architectural rule this work follows, and the reason it is worth stating:** a content
+compiler must be *headless*. No `GraphicsDevice`, no audio device, no window, no renderer — it runs
+on a build machine, in a container, in CI. The tempting shortcut is to reuse the runtime loaders:
+construct a `Texture2D`, read the pixels back off the GPU, encode those. That would make the
+compiler depend on a working display and driver, and it is exactly what was avoided. The path is
+always:
+
+```text
+source bytes  ->  canonical CPU representation  ->  Cnb*Data  ->  Encode*ToCnb()
+```
+
+| ID | Task | Notes | Status |
+|---|---|---|---|
+| CNBF-109 | **Direct image → `Texture2D` `.cnb`.** | Through `CNA::Internal::Graphics::ImageLoader`, which was already a pure-data RGBA8 decoder with no GPU dependency — so there is **no second image decoder**, and a compiled `.cnb` holds the pixels the runtime would have loaded from the same file. Colour keying is applied **only when explicitly requested**: the `.cnj` route has a document to ask, a direct compile does not, and silently rewriting someone's art is a worse default than making them say so. A keyed pixel keeps its RGB and loses only its alpha, matching the runtime rule — zeroing the colour too would change what a bilinear filter blends toward at a keyed edge. | ✅ |
+| CNBF-110 | **Direct WAV → `SoundEffect` `.cnb`.** | A **pure-data** RIFF/WAVE parser had to be written, and the reason is recorded because "don't duplicate a decoder" was the standing rule: CNA's runtime WAV path decodes through the mixer engine (`GetMixer()`), which needs an audio device a compiler cannot have. The parser is deliberately narrow rather than a second general decoder — it accepts the PCM formats that convert to `Pcm16` **exactly** (16-bit as-is, 8-bit unsigned widened by `(s-128)<<8`) and refuses 24-bit, 32-bit, IEEE float and ADPCM **by name**, because every one of those is a lossy conversion and that is an authoring decision rather than a compiler's. A `smpl` chunk's first loop entry becomes the loop region, using the rules the runtime already applies. | ✅ |
+| CNBF-111 | **Extend `cna_tool_cnj_to_cnb` to every type whose `.cnj` has a coherent representation.** | `Texture2D`, `Texture3D`, `SpriteFont` and `SoundEffect` added; supported types go from **3 to 7**. Sidecars resolve through `ResolveCnjSourceFileSafely`, the same containment helper the runtime readers use — a compiler that resolved paths more permissively would be the soft way into a file the runtime refuses. **`SpriteFont` compiles to one self-contained `.cnb`**: its atlas is decoded through `CNBF-109`'s image path and embedded, and a test loads the result from a directory holding nothing else. | ✅ |
+| CNBF-112 | **One CLI front end for direct source compilation: `cna_tool_source_to_cnb`.** | One executable rather than seven near-identical ones; the input's extension already says what it is. Images → `Texture2D`, WAV → `SoundEffect`, and `--as song`/`--as video` for the metadata-plus-reference schemas. Song/Video metadata is **arguments, not guesses**: duration, frame size and frame rate would need a multimedia decoder CNA does not expose headlessly, so the tool requires them rather than inventing them. | ✅ |
+| CNBF-113 | **`TextureCube` producer.** | **Deliberately open.** It is the one implemented schema with no producer. Its source format is DDS and CNA's only DDS decoder lives inside `TextureCube::DDSFromStreamEXT`, which takes a `GraphicsDevice`. Writing a second DDS parser to get around that would be a fragile duplicate of a fiddly format, and the compiler refuses `TextureCube` with a message that says *why* rather than reading like an unknown type. Correct partial completion beats a second DDS implementation. | ⬜ |
+
+### 16.1 What changed, in one table
+
+| | before this session | after |
+|---|---|---|
+| `cnj_to_cnb` types | Curve, AnimationClip, Model | + Texture2D, Texture3D, SpriteFont, SoundEffect (**3 → 7**) |
+| direct source tools | `gltf_to_cnb` | + `source_to_cnb` (image, WAV, Song, Video) |
+| schemas with **no** producer | Texture2D, Texture3D, TextureCube, SpriteFont, SoundEffect, Song, Video (**7**) | TextureCube (**1**) |
+| PNG → `.cnb` | no | **yes** |
+| WAV → `.cnb` | no | **yes** |
+| SpriteFont `.cnj` → one file | no | **yes**, atlas embedded |
+
+### 16.2 The authoritative current-state matrix
+
+Superseding every earlier table in this document. "Supported" is four different claims and this
+table keeps them apart, because conflating them is what produced the gap in the first place.
+
+| asset type | wire schema | runtime loader | writer API | `.cnj` → `.cnb` | direct source → `.cnb` | golden vector | negative tests |
+|---|---|---|---|---|---|---|---|
+| `Texture2D` | ✅ §16 | ✅ | ✅ | ✅ | ✅ image | via `TextureCube` | ✅ |
+| `Texture3D` | ✅ §16 | ✅ | ✅ | ✅ | — (raw sidecar is a `.cnj` concept) | via `TextureCube` | ✅ |
+| `TextureCube` | ✅ §16 | ✅ | ✅ | ⬜ `CNBF-113` | ⬜ `CNBF-113` | ✅ | ✅ |
+| `SpriteFont` | ✅ §17 | ✅ | ✅ | ✅ atlas embedded | — (a font is authored, not a single source file) | — | ✅ |
+| `Model` | ✅ §11 | ✅ | ✅ | ✅ | ✅ glTF | ✅ | ✅ |
+| `AnimationClip` | ✅ §10 | ✅ | ✅ | ✅ | ✅ glTF | ✅ | ✅ |
+| `Curve` | ✅ §9 | ✅ | ✅ | ✅ | — | ✅ | ✅ |
+| `SoundEffect` | ✅ §18 | ✅ | ✅ | ✅ | ✅ WAV | — | ✅ |
+| `Song` | ✅ §19 | ✅ | ✅ | — (no `Song` `.cnj`) | ✅ wraps a media file | — | ✅ |
+| `Video` | ✅ §19 | ✅ | ✅ | — (no `Video` `.cnj`) | ✅ explicit metadata | — | ✅ |
+| `Effect` | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | — | — |
+
+### 16.3 Four separate completeness numbers
+
+Stated separately on purpose. A single percentage is what let "10/11 schemas" read as "usable
+content pipeline" when seven of those ten had no way to produce an asset.
+
+| axis | state |
+|---|---|
+| **Container** | Frozen and finished. Nothing in this session touched a serialized byte. |
+| **Wire schemas** | **10 of 11.** `Effect` waits on the FX/shader architecture, by design. |
+| **Runtime loaders** | **10 of 10** implemented schemas load through `ContentManager`. |
+| **Producer ecosystem** | **9 of 10.** Only `TextureCube` has no supported way to produce one. |
+
+An honest sentence: a game can now compile textures, fonts, sounds, curves, animation clips and
+models — from `.cnj` documents, from glTF, from images and from WAV files — with a headless
+deterministic toolchain. It cannot yet compile a cube map.

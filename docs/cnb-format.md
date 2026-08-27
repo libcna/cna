@@ -823,6 +823,10 @@ chunk occupies no bytes and takes no part in the layout partition.
 Recorded so the boundary is a decision rather than an omission. Each is tracked in
 `plans/plan_cnb.md`.
 
+**Read this list against §15.1.** "Implemented" is four separate claims — a wire schema, a runtime
+loader, a writer API, and a command-line producer — and this document has previously blurred them.
+A type can be fully readable at runtime and still have no supported way to *produce* one.
+
 * The `Effect` schema. Its identifier is frozen; its layout is not designed, and deliberately so:
   CNA has many renderers, and a `.cnb` carrying one API's shader bytecode would be useless on the
   others. It waits for the shader pipeline and renderer abstraction to settle.
@@ -830,14 +834,52 @@ Recorded so the boundary is a decision rather than an omission. Each is tracked 
 * Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
   structure that carries them, and the reader accepts a file that uses them, but no writer in this
   build produces one and this build cannot upload one.
-* Chunk compression (§8).
-* Direct glTF / PNG / WAV → `.cnb` importers. The only compiler is `.cnj` → `.cnb`.
+* ~~Chunk compression (§8).~~ **Implemented** — Zstandard, codec 2, opt-in per chunk and off by
+  default, available when CNA is built with libzstd. See §8.
 * Memory-mapped, zero-copy chunk access. **Measured and rejected**, not pending: mmap would save
   4.7 ms of a 32 MiB load while the CRC verification it cannot avoid cost 62.5 ms, so the effort
   went into hardware CRC-32C instead and made the same load 6.4× faster. See
   `docs/cnb-mmap-measurements.md`, including what would change the answer. The `alignment` field
   keeps its meaning regardless.
 * A package format bundling many assets. That would be a different format.
+
+### 15.1 Four different meanings of "supported"
+
+| asset type | wire schema | runtime loader | writer API | CLI producer |
+|---|---|---|---|---|
+| `Texture2D` | §16 | yes | `EncodeTexture2DToCnb` | **yes** — image source, and `.cnj` |
+| `TextureCube` | §16 | yes | `EncodeTextureCubeToCnb` | **no** — see below |
+| `Texture3D` | §16 | yes | `EncodeTexture3DToCnb` | **yes** — `.cnj` (raw RGBA sidecar) |
+| `SpriteFont` | §17 | yes | `EncodeSpriteFontToCnb` | **yes** — `.cnj`, atlas absorbed |
+| `Model` | §11 | yes | `EncodeModelToCnb` | **yes** — glTF direct, and `.cnj` |
+| `AnimationClip` | §10 | yes | `EncodeAnimationClipToCnb` | **yes** — `.cnj` |
+| `Curve` | §9 | yes | `EncodeCurveToCnb` | **yes** — `.cnj` |
+| `SoundEffect` | §18 | yes | `EncodeSoundEffectToCnb` | **yes** — WAV source, and `.cnj`. PCM16 and 8-bit unsigned PCM only |
+| `Song` | §19 | yes | `EncodeSongToCnb` | **yes** — wraps a media file; no `Song` `.cnj` exists |
+| `Video` | §19 | yes | `EncodeVideoToCnb` | **yes**, with required metadata arguments; no `Video` `.cnj` exists |
+| `Effect` | — | — | — | — |
+
+`TextureCube` is the one implemented schema with no producer. Its source format is DDS, and CNA's
+only DDS decoder is inside `TextureCube::DDSFromStreamEXT`, which needs a `GraphicsDevice`. A
+content compiler must be headless, and a second DDS parser written to avoid that would be a
+fragile duplicate of a fiddly format. The gap is recorded rather than papered over.
+
+`Video`'s producer cannot invent metadata: duration, frame size and frame rate would need a
+multimedia decoder CNA does not expose headlessly, so they are **required arguments** rather than
+values guessed from the file.
+
+### 15.2 What produces what
+
+| producer | reads | writes |
+|---|---|---|
+| `cna_tool_cnj_to_cnb` | a `.cnj` document and its sidecars | `Curve`, `AnimationClip`, `Model`, `Texture2D`, `Texture3D`, `SpriteFont`, `SoundEffect` |
+| `cna_tool_gltf_to_cnb` | `.gltf`/`.glb` | `Model.cnb`, byte-identical to the two-step route |
+| `cna_tool_source_to_cnb` | PNG/JPEG/… , WAV, and media files | `Texture2D`/`SoundEffect`/`Song`/`Video` `.cnb` |
+| `cna_tool_cnb_info` | any `.cnb` | nothing; inspects and validates |
+
+Every one of them is **headless and deterministic**: no `GraphicsDevice`, no audio device, no
+clock, no randomness. Given identical source bytes, options and logical name, each produces
+identical output bytes.
 
 ---
 

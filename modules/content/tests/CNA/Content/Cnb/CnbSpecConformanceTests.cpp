@@ -30,6 +30,7 @@
 #include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
+#include "CNA/Content/Cnb/CnbChunkCompression.hpp"
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
@@ -44,6 +45,7 @@ using CNA::Content::Cnb::DefaultCnbReadLimits;
 using CNA::Content::Cnb::EncodeCurveToCnb;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 
+using CNA::Content::Cnb::CnbCompression;
 namespace CnbAssetTypeId = CNA::Content::Cnb::CnbAssetTypeId;
 namespace CnbChunkFlags = CNA::Content::Cnb::CnbChunkFlags;
 namespace Format = CNA::Content::Cnb::Format;
@@ -549,6 +551,26 @@ TEST(CnbSpecConformanceTest, TheDocumentedTextureShapeRulesAreTheOnesTheCodeEnfo
     // Depth > 1 is a Texture3D and nothing else.
     EXPECT_THROW((void)CNA::Content::Cnb::EncodeTexture2DToCnb(deep), ContentLoadException);
     EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeTexture3DToCnb(deep));
+}
+
+TEST(CnbSpecConformanceTest, TheDocumentDistinguishesSchemaFromProducerSupport)
+{
+    // plans/plan_cnb.md CNBF-109..113. "Supported" was one word covering four different claims,
+    // and conflating them is how the tree ended up with ten schemas and three compilable types.
+    // §15.1 keeps them apart; this pins that it still does, and that the one real gap is named.
+    const std::string spec = ReadSpec();
+    if (spec.empty()) { GTEST_SKIP() << "docs/cnb-format.md was not found"; }
+
+    ExpectSpecContains(spec, "Four different meanings of \"supported\"");
+    ExpectSpecContains(spec, "| asset type | wire schema | runtime loader | writer API | CLI producer |");
+    ExpectSpecContains(spec, "`TextureCube` is the one implemented schema with no producer");
+    ExpectSpecContains(spec, "cna_tool_source_to_cnb");
+    ExpectSpecContains(spec, "headless and deterministic");
+
+    // §15.2 lists what cnj_to_cnb compiles. The list is a claim about code, so it names all seven
+    // types rather than saying "the matching .cnb" -- a vague row cannot go stale visibly.
+    ExpectSpecContains(spec, "`Curve`, `AnimationClip`, `Model`, `Texture2D`, `Texture3D`, "
+                             "`SpriteFont`, `SoundEffect`");
 }
 
 TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)
