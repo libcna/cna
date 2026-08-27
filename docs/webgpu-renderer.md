@@ -267,13 +267,15 @@ family's pipeline cache key (WebGPU keeps the masks as *pipeline* state, unlike 
 masks; a disabled stencil folds a constant, so non-stencil draws keep their existing keys), and
 applies the reference dynamically per draw (`wgpuRenderPassEncoderSetStencilReference`). This makes
 a stamp-then-gate stencil sequence (e.g. `Always`/`Replace` then `Equal`/`Keep`) work within one
-render-target bind cycle. Two tests prove it on the real GPU: the shared
+render-target bind cycle. Three tests prove it on the real GPU: the shared
 `rendertarget_depthstencil_usage` acceptance test (colored3d route, its `stencilInRT`/
-`stencilPreserves` flags flipped true, discriminating check C2) and the WebGPU-local
+`stencilPreserves` flags flipped true, discriminating check C2); the WebGPU-local
 `WebGPU_StencilFamily` test (Textured3D route — stamps then gates and asserts the gate is *rejected*
-outside the stamped region). Still open: only a **two-sided-winding** differential test (both proven
-routes use non-two-sided stencil; the two-sided front/back mapping is implemented but not yet
-pixel-validated).
+outside the stamped region); and `WebGPU_StencilTwoSided` (`DepthStencilState.TwoSidedStencilMode` —
+a back-facing triangle picks up the `CounterClockwise*` ops, differential vs the two-sided=false
+control, matching the EasyGL cross-renderer parity contract). The two-sided front/back mapping
+(front = the primary/CW ops → `stencilFront`, back = the CCW ops → `stencilBack`) is therefore
+pixel-verified, not merely implemented.
 
 ## PbrEffect (unskinned metallic-roughness BRDF)
 

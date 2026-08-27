@@ -111,6 +111,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_StencilFamily COMMAND cna_test_webgpu_stencil_family
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-83 (Phase 3): DepthStencilState.TwoSidedStencilMode -- a back-facing triangle must pick
+    # up the CounterClockwise* stencil ops (differential vs the two-sided=false control), the
+    # cross-renderer parity contract from easygl_depthstencilstate_stencil_twosided_test.cpp.
+    cna_webgpu_test(cna_test_webgpu_stencil_twosided webgpu_stencil_twosided_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_StencilTwoSided COMMAND cna_test_webgpu_stencil_twosided
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)
