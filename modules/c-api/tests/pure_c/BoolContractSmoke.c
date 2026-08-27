@@ -455,6 +455,20 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_instanced_renderer_ext_set_fallback_enabled(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_instanced_renderer_ext_set_fallback_enabled\n",
+               (unsigned)result);
+        ++accepted;
+    }
+    result = cna_instanced_renderer_ext_set_tints_enabled(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_instanced_renderer_ext_set_tints_enabled\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_invite_accepted_event_info_init(0, UINT8_C(9), 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -827,6 +841,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 109 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 111 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

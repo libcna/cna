@@ -254,6 +254,10 @@ enum class ObjectKind : uint32_t {
 
     // CBIND-092A.
     ParticleSystem = 162,
+
+    // CBIND-092B.
+    InstancedRenderer = 163,
+    LodGroup = 164,
     Test = UINT32_MAX
 };
 

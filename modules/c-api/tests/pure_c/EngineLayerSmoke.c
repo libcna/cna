@@ -1018,6 +1018,87 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-092B. Instancing and LOD. The LOD group needs no graphics device at all, but its
+       canonical header is still under CNA_CNAEXT, so it refuses here like everything else. */
+    {
+        CNA_InstancedRendererEXTHandle renderer =
+            (CNA_InstancedRendererEXTHandle)UINT64_C(0x5A5A5A5A);
+        CNA_LodGroupEXTHandle group = (CNA_LodGroupEXTHandle)UINT64_C(0x5A5A5A5A);
+        CNA_ModelMeshPartHandle chosen = (CNA_ModelMeshPartHandle)UINT64_C(0x5A5A5A5A);
+        CNA_LodSelectionMode mode = UINT32_C(77);
+        CNA_Matrix matrix;
+        const float sentinel_lod = -41.5F;
+        float lod_scalar = sentinel_lod;
+        uint64_t lod_count = UINT64_C(11);
+        if (cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_instanced_renderer_ext_create(graphics_device, CNA_INVALID_HANDLE, &renderer) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            renderer != CNA_INVALID_HANDLE ||
+            cna_instanced_renderer_ext_copy_instance_elements(0, UINT64_C(0), &lod_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            lod_count != UINT64_C(0) ||
+            cna_instanced_renderer_ext_get_instance_stride(&samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_copy_tint_elements(0, UINT64_C(0), &lod_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_get_tint_stride(&samples) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_set_instances(renderer, &matrix, UINT64_C(1)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_set_instance_tints(renderer, 0, UINT64_C(0)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_is_tints_enabled(renderer, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_set_tints_enabled(renderer, CNA_TRUE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_draw(renderer, CNA_INVALID_HANDLE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_is_instancing_supported(renderer, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_is_fallback_enabled(renderer, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_set_fallback_enabled(renderer, CNA_TRUE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_get_instance_count(renderer, &samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_get_instance_capacity(renderer, &samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_get_last_draw_call_count(renderer, &samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_did_last_draw_instance(renderer, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_instanced_renderer_ext_destroy(renderer) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (cna_lod_group_ext_create(&group) != CNA_RESULT_NOT_SUPPORTED ||
+            group != CNA_INVALID_HANDLE ||
+            cna_lod_group_ext_add_level(group, 10.0F, CNA_INVALID_HANDLE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_clear(group) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_copy_levels(group, 0, UINT64_C(0), &lod_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_select_index(group, 1.0F, &samples) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_select(group, 1.0F, &chosen) != CNA_RESULT_NOT_SUPPORTED ||
+            chosen != CNA_INVALID_HANDLE ||
+            cna_lod_group_ext_get_hysteresis(group, &lod_scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_set_hysteresis(group, 1.0F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_reset_hysteresis(group) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_get_selection_mode(group, &mode) != CNA_RESULT_NOT_SUPPORTED ||
+            mode != UINT32_C(77) ||
+            cna_lod_group_ext_set_selection_mode(group, CNA_LOD_SELECTION_MODE_DISTANCE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_set_screen_space_parameters(group, 1.0F, 1.0F, 720.0F) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_projected_radius_pixels(group, 10.0F, &lod_scalar) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_lod_group_ext_destroy(group) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (lod_scalar != sentinel_lod) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -7053,6 +7134,301 @@ static int validate_particles(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-092B. Two contracts carry this stage.
+
+   The LOD group RE-SORTS its levels when the selection mode changes, because the two modes read a
+   level's threshold in opposite directions -- a distance threshold grows as detail falls, a
+   pixel-radius threshold shrinks -- and index zero has to keep meaning "finest" in both. A binding
+   that stored the mode without re-sorting would pass every single-mode assertion and silently
+   invert the order for anyone who switched. Adding levels and reading them back across a mode
+   change is what catches it.
+
+   The instanced renderer FALLS BACK rather than refusing, and only refuses when the fallback is
+   disabled *or* the effect cannot carry a per-instance transform. Both refusals are INVALID_STATE
+   and both are renderer-dependent, so the stage branches on the measured support. */
+static int validate_instancing_and_lod(const CNA_Handle graphics_device)
+{
+    CNA_InstancedRendererEXTHandle renderer = CNA_INVALID_HANDLE;
+    CNA_LodGroupEXTHandle group = CNA_INVALID_HANDLE;
+    CNA_ModelMeshPartHandle part = CNA_INVALID_HANDLE;
+    CNA_ModelMeshPartHandle other_part = CNA_INVALID_HANDLE;
+    CNA_ModelMeshPartHandle chosen = CNA_INVALID_HANDLE;
+    CNA_VertexElement elements[8];
+    CNA_LodLevelEXT levels[8];
+    CNA_Matrix transforms[3];
+    CNA_Color tints[3];
+    CNA_Bool flag = UINT8_C(9);
+    CNA_LodSelectionMode mode = UINT32_C(99);
+    uint64_t count = UINT64_C(0);
+    int32_t number = INT32_C(-1);
+    float scalar = -1.0F;
+    int index;
+    int ok = 1;
+
+    /* The two static declarations: elements and stride, both readable without a renderer. */
+    ok = cna_instanced_renderer_ext_copy_instance_elements(0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(4);
+    ok = ok && cna_instanced_renderer_ext_copy_instance_elements(
+            elements, (uint64_t)(sizeof elements / sizeof elements[0]), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(4);
+    /* Four Vector4s at TextureCoordinate 1..4, sixteen bytes apart -- the layout a caller building
+       its own instance buffer has to reproduce exactly. */
+    ok = ok && elements[0].offset == INT32_C(0) && elements[1].offset == INT32_C(16) &&
+        elements[2].offset == INT32_C(32) && elements[3].offset == INT32_C(48);
+    ok = ok && elements[0].usage_index == INT32_C(1) && elements[3].usage_index == INT32_C(4);
+    ok = ok && cna_instanced_renderer_ext_get_instance_stride(&number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(64);
+    ok = ok && cna_instanced_renderer_ext_get_instance_stride(0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_instanced_renderer_ext_copy_instance_elements(0, UINT64_C(0), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_instanced_renderer_ext_copy_tint_elements(0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(1);
+    ok = ok && cna_instanced_renderer_ext_copy_tint_elements(elements, UINT64_C(8), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(1);
+    ok = ok && cna_instanced_renderer_ext_get_tint_stride(&number) == CNA_RESULT_SUCCESS &&
+        number > INT32_C(0);
+
+    /* ---- the LOD group, which needs no device at all ---- */
+    ok = ok && cna_lod_group_ext_create(0) == CNA_RESULT_INVALID_ARGUMENT;
+    if (!ok || cna_lod_group_ext_create(&group) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* An empty group answers -1 rather than refusing, and select answers no part. */
+    ok = cna_lod_group_ext_select_index(group, 5.0F, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(-1);
+    ok = ok && cna_lod_group_ext_select(group, 5.0F, &chosen) == CNA_RESULT_SUCCESS &&
+        chosen == CNA_INVALID_HANDLE;
+    ok = ok && cna_lod_group_ext_copy_levels(group, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(0);
+
+    /* A level may deliberately hold no part; only the threshold is validated. */
+    ok = ok && cna_lod_group_ext_add_level(group, 0.0F, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_lod_group_ext_add_level(group, -1.0F, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_lod_group_ext_add_level(group, 10.0F, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_add_level(group, 50.0F, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_add_level(group, 25.0F, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_add_level(group, 10.0F, UINT64_C(0x5A5A5A5A)) ==
+        CNA_RESULT_INVALID_HANDLE;
+
+    /* THE discriminator. In Distance mode the levels sort ASCENDING, so index 0 is the nearest
+       threshold; switching to ScreenSpaceError re-sorts them DESCENDING, because a pixel-radius
+       threshold shrinks as detail falls. Both orders are read back and compared. */
+    ok = ok && cna_lod_group_ext_get_selection_mode(group, &mode) == CNA_RESULT_SUCCESS &&
+        mode == CNA_LOD_SELECTION_MODE_DISTANCE;
+    ok = ok && cna_lod_group_ext_copy_levels(group, levels, UINT64_C(8), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(3);
+    ok = ok && levels[0].max_distance == 10.0F && levels[1].max_distance == 25.0F &&
+        levels[2].max_distance == 50.0F;
+    ok = ok && cna_lod_group_ext_set_selection_mode(
+            group, CNA_LOD_SELECTION_MODE_SCREEN_SPACE_ERROR) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_copy_levels(group, levels, UINT64_C(8), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(3);
+    ok = ok && levels[0].max_distance == 50.0F && levels[1].max_distance == 25.0F &&
+        levels[2].max_distance == 10.0F;
+    ok = ok && cna_lod_group_ext_set_selection_mode(group, CNA_LOD_SELECTION_MODE_DISTANCE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_copy_levels(group, levels, UINT64_C(8), &count) ==
+        CNA_RESULT_SUCCESS && levels[0].max_distance == 10.0F;
+    ok = ok && cna_lod_group_ext_set_selection_mode(group, UINT32_C(99)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_lod_group_ext_get_selection_mode(group, &mode) == CNA_RESULT_SUCCESS &&
+        mode == CNA_LOD_SELECTION_MODE_DISTANCE;
+
+    /* Selection: index 0 for a near distance, and a NEGATIVE distance is clamped to zero rather
+       than refused -- so it picks the same level as zero does. */
+    ok = ok && cna_lod_group_ext_select_index(group, 1.0F, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(0);
+    ok = ok && cna_lod_group_ext_reset_hysteresis(group) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_select_index(group, -99.0F, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(0);
+    ok = ok && cna_lod_group_ext_reset_hysteresis(group) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_select_index(group, 40.0F, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(2);
+    ok = ok && cna_lod_group_ext_select_index(group, 1.0F, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Hysteresis is floored at zero, not refused. */
+    ok = ok && cna_lod_group_ext_set_hysteresis(group, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_get_hysteresis(group, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_lod_group_ext_set_hysteresis(group, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_get_hysteresis(group, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+
+    /* The screen-space triple is refused as a GROUP, and a refusal leaves the projection alone. */
+    ok = ok && cna_lod_group_ext_set_screen_space_parameters(group, 1.0F, 1.0F, 720.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_projected_radius_pixels(group, 10.0F, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar > 0.0F;
+    {
+        const float baseline = scalar;
+        ok = ok && cna_lod_group_ext_set_screen_space_parameters(group, 0.0F, 1.0F, 720.0F) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_lod_group_ext_set_screen_space_parameters(group, 1.0F, 0.0F, 720.0F) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        /* Exclusive at the top: pi itself is refused, not clamped. */
+        ok = ok && cna_lod_group_ext_set_screen_space_parameters(
+                group, 1.0F, 3.14159265F, 720.0F) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_lod_group_ext_set_screen_space_parameters(group, 1.0F, 1.0F, 0.0F) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_lod_group_ext_projected_radius_pixels(group, 10.0F, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == baseline;
+    }
+    /* At or behind the eye the answer is the largest float -- "as large as it gets" picks the
+       finest level rather than none. Not zero, and not a refusal. */
+    ok = ok && cna_lod_group_ext_projected_radius_pixels(group, 0.0F, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar > 1.0e30F;
+    ok = ok && cna_lod_group_ext_projected_radius_pixels(group, -1.0F, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar > 1.0e30F;
+    ok = ok && cna_lod_group_ext_projected_radius_pixels(group, 10.0F, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_lod_group_ext_clear(group) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_copy_levels(group, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(0);
+
+    /* ---- a real mesh part, so the group can hand handles back ---- */
+    if (ok && cna_model_mesh_part_create_default(&part) == CNA_RESULT_SUCCESS &&
+        cna_model_mesh_part_create_default(&other_part) == CNA_RESULT_SUCCESS) {
+        ok = ok && cna_lod_group_ext_add_level(group, 10.0F, part) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_lod_group_ext_add_level(group, 50.0F, other_part) == CNA_RESULT_SUCCESS;
+        /* The group hands back the CALLER'S handle, not a fresh one wrapping the same object. */
+        ok = ok && cna_lod_group_ext_select(group, 1.0F, &chosen) == CNA_RESULT_SUCCESS &&
+            chosen == part;
+        ok = ok && cna_lod_group_ext_reset_hysteresis(group) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_lod_group_ext_select(group, 40.0F, &chosen) == CNA_RESULT_SUCCESS &&
+            chosen == other_part;
+        ok = ok && cna_lod_group_ext_copy_levels(group, levels, UINT64_C(8), &count) ==
+            CNA_RESULT_SUCCESS && count == UINT64_C(2) && levels[0].part == part;
+        ok = ok && cna_lod_group_ext_clear(group) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_model_mesh_part_destroy(other_part) == CNA_RESULT_SUCCESS;
+    } else {
+        ok = 0;
+    }
+    ok = ok && cna_lod_group_ext_destroy(group) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lod_group_ext_destroy(group) != CNA_RESULT_SUCCESS;
+
+    /* ---- the instanced renderer, which needs a part with both buffers ---- */
+    ok = ok && cna_instanced_renderer_ext_create(graphics_device, part, &renderer) ==
+        CNA_RESULT_INVALID_ARGUMENT && renderer == CNA_INVALID_HANDLE;
+    ok = ok && cna_instanced_renderer_ext_create(
+            graphics_device, CNA_INVALID_HANDLE, &renderer) == CNA_RESULT_INVALID_HANDLE;
+    ok = ok && cna_model_mesh_part_destroy(part) == CNA_RESULT_SUCCESS;
+    {
+        CNA_VertexDeclarationHandle declaration = CNA_INVALID_HANDLE;
+        CNA_VertexBufferHandle vertices = CNA_INVALID_HANDLE;
+        CNA_IndexBufferHandle indices = CNA_INVALID_HANDLE;
+        CNA_VertexElement position;
+        position.offset = INT32_C(0);
+        position.format = CNA_VERTEX_ELEMENT_FORMAT_VECTOR3;
+        position.usage = CNA_VERTEX_ELEMENT_USAGE_POSITION;
+        position.usage_index = INT32_C(0);
+        if (ok && cna_vertex_declaration_create(&position, UINT64_C(1), &declaration) ==
+                CNA_RESULT_SUCCESS) {
+            const CNA_VertexBufferCreateInfo vertex_info = {
+                sizeof(CNA_VertexBufferCreateInfo), UINT32_C(1), declaration, INT32_C(3),
+                CNA_BUFFER_USAGE_NONE, CNA_FALSE, {0U, 0U, 0U}};
+            const CNA_IndexBufferCreateInfo index_info = {
+                sizeof(CNA_IndexBufferCreateInfo), UINT32_C(1), INT32_C(3),
+                CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_BUFFER_USAGE_NONE, CNA_FALSE,
+                {0U, 0U, 0U}};
+            ok = ok && cna_vertex_buffer_create(graphics_device, &vertex_info, &vertices) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_index_buffer_create(graphics_device, &index_info, &indices) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_model_mesh_part_create(
+                    vertices, indices, INT32_C(3), INT32_C(1), INT32_C(0), INT32_C(0), &part) ==
+                CNA_RESULT_SUCCESS;
+            if (ok && cna_instanced_renderer_ext_create(graphics_device, part, &renderer) ==
+                    CNA_RESULT_SUCCESS) {
+                for (index = 0; index < 3; ++index) {
+                    ok = ok && cna_matrix_get_identity(&transforms[index]) == CNA_RESULT_SUCCESS;
+                    tints[index].r = (uint8_t)(index * 40);
+                    tints[index].g = UINT8_C(0);
+                    tints[index].b = UINT8_C(0);
+                    tints[index].a = UINT8_C(255);
+                }
+                ok = ok && cna_instanced_renderer_ext_get_instance_count(renderer, &number) ==
+                    CNA_RESULT_SUCCESS && number == INT32_C(0);
+                ok = ok && cna_instanced_renderer_ext_set_instances(
+                        renderer, transforms, UINT64_C(3)) == CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_get_instance_count(renderer, &number) ==
+                    CNA_RESULT_SUCCESS && number == INT32_C(3);
+                ok = ok && cna_instanced_renderer_ext_get_instance_capacity(renderer, &number) ==
+                    CNA_RESULT_SUCCESS && number == INT32_C(3);
+                /* The capacity NEVER shrinks: uploading fewer leaves it where it was, which is what
+                   makes a varying instance count allocation-free after the largest frame. */
+                ok = ok && cna_instanced_renderer_ext_set_instances(
+                        renderer, transforms, UINT64_C(1)) == CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_get_instance_count(renderer, &number) ==
+                    CNA_RESULT_SUCCESS && number == INT32_C(1);
+                ok = ok && cna_instanced_renderer_ext_get_instance_capacity(renderer, &number) ==
+                    CNA_RESULT_SUCCESS && number == INT32_C(3);
+                /* Zero instances is how a caller stops drawing, not an error. */
+                ok = ok && cna_instanced_renderer_ext_set_instances(
+                        renderer, 0, UINT64_C(0)) == CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_set_instances(
+                        renderer, 0, UINT64_C(3)) == CNA_RESULT_INVALID_ARGUMENT;
+                ok = ok && cna_instanced_renderer_ext_set_instances(
+                        renderer, transforms, UINT64_C(3)) == CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_set_instance_tints(
+                        renderer, tints, UINT64_C(3)) == CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_set_instance_tints(
+                        renderer, 0, UINT64_C(3)) == CNA_RESULT_INVALID_ARGUMENT;
+                ok = ok && cna_instanced_renderer_ext_is_tints_enabled(renderer, &flag) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_set_tints_enabled(renderer, CNA_TRUE) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_is_tints_enabled(renderer, &flag) ==
+                    CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+                /* Setting the value it already has does nothing at all. */
+                ok = ok && cna_instanced_renderer_ext_set_tints_enabled(renderer, CNA_TRUE) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_set_tints_enabled(renderer, UINT8_C(2)) ==
+                    CNA_RESULT_INVALID_ARGUMENT;
+                ok = ok && cna_instanced_renderer_ext_set_tints_enabled(renderer, CNA_FALSE) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_is_fallback_enabled(renderer, &flag) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_set_fallback_enabled(renderer, UINT8_C(2)) ==
+                    CNA_RESULT_INVALID_ARGUMENT;
+                ok = ok && cna_instanced_renderer_ext_set_fallback_enabled(renderer, CNA_TRUE) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_is_fallback_enabled(renderer, &flag) ==
+                    CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+                ok = ok && cna_instanced_renderer_ext_is_instancing_supported(renderer, &flag) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_draw(renderer, CNA_INVALID_HANDLE) ==
+                    CNA_RESULT_INVALID_HANDLE;
+                /* With the fallback DISABLED, a renderer that cannot instance refuses with
+                   INVALID_STATE -- the layer is here and the arguments are fine. A renderer that
+                   can instance succeeds either way. Both arms, keyed on the measured support. */
+                ok = ok && cna_instanced_renderer_ext_set_fallback_enabled(renderer, CNA_FALSE) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_did_last_draw_instance(renderer, &flag) ==
+                    CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_get_last_draw_call_count(
+                        renderer, &number) == CNA_RESULT_SUCCESS && number >= INT32_C(0);
+                ok = ok && cna_instanced_renderer_ext_destroy(renderer) == CNA_RESULT_SUCCESS;
+                ok = ok && cna_instanced_renderer_ext_destroy(renderer) != CNA_RESULT_SUCCESS;
+            } else {
+                ok = 0;
+            }
+            ok = ok && cna_model_mesh_part_destroy(part) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_index_buffer_destroy(indices) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_vertex_buffer_destroy(vertices) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_vertex_declaration_destroy(declaration) == CNA_RESULT_SUCCESS;
+        } else {
+            ok = 0;
+        }
+    }
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -7198,6 +7574,10 @@ static CNA_Result on_load(
         }
         if (!validate_particles(graphics_device)) {
             state->failed_stage = 37;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_instancing_and_lod(graphics_device)) {
+            state->failed_stage = 38;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

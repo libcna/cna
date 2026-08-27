@@ -17099,6 +17099,80 @@
         "CPP-F4F22695BA6B",
         "CPP-FCC85F042568"
       ]
+    },
+    {
+      "id": "instanced-renderer",
+      "qualified_name_regex": "^CNA::Graphics::InstancedRendererEXT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_instanced_renderer_ext_*` over its own owned handle. The mesh part is **borrowed** and retained by the resource, so releasing the part handle mid-frame cannot dangle.\n\n**Whether instancing happens is a renderer question, and the answer is not a refusal.** With the fallback enabled a device without instancing draws each instance separately -- the same picture, more slowly. `did_last_draw_instance` and `get_last_draw_call_count` say which happened and what it cost, and like the particle system's compute flag they are records written by `draw` rather than predictions.\n\nWith the fallback **disabled**, drawing on such a renderer is refused -- and so is drawing through an effect that cannot carry a per-instance transform, because a per-instance world matrix has nowhere else to go. Both canonical refusals are `logic_error` and both arrive as `CNA_RESULT_INVALID_STATE`: the layer is present and the arguments are fine, this combination of renderer, setting and effect is not.\n\nThe two static declarations become element-copy plus stride routes rather than handles, because a shared static declaration has no owner to hand out. They exist because a caller building its own instance buffer must reproduce the layout **exactly**, and copying the elements is how it can check that rather than assume it.",
+      "tests": "`EngineLayerSmoke.c` stage 38. The instance declaration is asserted element by element -- four `Vector4`s sixteen bytes apart at `TextureCoordinate` usage indices one through four, stride sixty-four -- because \"describe it identically\" is the whole contract. The capacity is asserted **never to shrink** when fewer instances are uploaded, which is what makes a varying instance count allocation-free after the largest frame; zero instances is asserted to succeed. Both boolean setters refuse a non-canonical byte.",
+      "status": "implemented",
+      "task": "CBIND-092B",
+      "approved_symbols": [
+        "CPP-022FE10B1865",
+        "CPP-090E3F78D03F",
+        "CPP-0D5E50E0B237",
+        "CPP-0F7245348758",
+        "CPP-3B02CC9B03F5",
+        "CPP-3FC6FEBA6D79",
+        "CPP-49A8BDD2E6D8",
+        "CPP-4ABCC0180066",
+        "CPP-5D5FD9DE789F",
+        "CPP-865AAB2911D8",
+        "CPP-868D2096B351",
+        "CPP-87F656B2F348",
+        "CPP-A1753A0E9788",
+        "CPP-A7EA9C16D756",
+        "CPP-A8DC45D1FEB5",
+        "CPP-B2217418CCBC",
+        "CPP-C91D05A427C7",
+        "CPP-F8D6C55E24D2"
+      ]
+    },
+    {
+      "id": "lod-group",
+      "qualified_name_regex": "^CNA::Graphics::(?:LodGroupEXT(?:::(?:Level(?:::[A-Za-z0-9_]+)?|[A-Za-z0-9_~]+))?|LodSelectionMode(?:::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "class",
+        "struct",
+        "enum",
+        "enum-value",
+        "field",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_lod_group_ext_*` over its own owned handle, with `CNA_LodLevelEXT` for a level and `CNA_LodSelectionMode` at the canonical ordinals. The group needs **no graphics device** -- it is a list and a rule, and nothing in it touches one -- so its create route takes none.\n\n**Index zero is always the finest level, in both selection modes**, and the group re-sorts on every change to keep it so: a distance threshold grows as detail falls and a pixel-radius threshold shrinks, so changing the mode reverses the order. That is why `set_selection_mode` also forgets the last selection. A binding that stored the mode without re-sorting would pass every single-mode assertion and silently invert the order for anyone who switched.\n\nSeveral behaviours are answers rather than refusals: an empty group selects `-1`, a negative distance is **clamped to zero** (a camera behind the object is a position, not a mistake), a level may deliberately hold **no part**, and `projected_radius_pixels` answers the largest representable float at or behind the eye -- \"as large as it gets\", which picks the finest level rather than none. `set_hysteresis` floors at zero; `set_screen_space_parameters` is validated and refused as a **group**, with the field of view exclusive at both ends.\n\nThe group holds raw `ModelMeshPart` pointers, so the C layer remembers which handle each came from and hands **the caller's own handle** back rather than wrapping the pointer in a fresh one -- a fresh handle would be a second owner of something the group only borrows.",
+      "tests": "`EngineLayerSmoke.c` stage 38. The re-sort is asserted by adding three levels out of order, reading them back in `Distance` order, switching to `ScreenSpaceError`, and reading back the **reversed** order -- break-proved by asserting the unsorted order instead, which moves both CNAEXT trees. The screen-space triple is refused four ways and the previous projection shown unchanged after each; pi itself is asserted refused rather than clamped. Selection is asserted to hand back the caller's own part handle.",
+      "status": "implemented",
+      "task": "CBIND-092B",
+      "approved_symbols": [
+        "CPP-04F01078D7CD",
+        "CPP-0B69FDC966A2",
+        "CPP-0DF7AEB55855",
+        "CPP-194A76800298",
+        "CPP-264EE67EC196",
+        "CPP-2AF94F60DC7B",
+        "CPP-31CB45391E63",
+        "CPP-414D8DBFCB8F",
+        "CPP-66863B2B405D",
+        "CPP-7AA389C94968",
+        "CPP-8A236AD6979C",
+        "CPP-9B298670ED91",
+        "CPP-A0957F827BC7",
+        "CPP-A65771060A42",
+        "CPP-B1BDECC02AD0",
+        "CPP-BADDC8E57821",
+        "CPP-C8695ADBB729",
+        "CPP-CE8360D867D1",
+        "CPP-D196023EB1CF",
+        "CPP-E598413DDBEF"
+      ]
     }
   ]
 }

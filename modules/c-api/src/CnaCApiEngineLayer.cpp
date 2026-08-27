@@ -90,12 +90,16 @@
 #include "CNA/Graphics/MaterialBinding.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "CNA/Graphics/AreaLightBrdfTable.hpp"
 #include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/AtmosphericSky.hpp"
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
+#include "CNA/Graphics/InstancedRendererEXT.hpp"
 #include "CNA/Graphics/LightProbeBaker.hpp"
+#include "CNA/Graphics/LodGroupEXT.hpp"
 #include "CNA/Graphics/ParticleSystem.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
@@ -5721,6 +5725,204 @@ CNA_Result cna_particle_system_copy_particle_lookup_glsl(char* p0, uint64_t p1, 
 {
     (void)p0; (void)p1; (void)p2;
     if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_create(CNA_Handle p0, CNA_ModelMeshPartHandle p1, CNA_InstancedRendererEXTHandle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_destroy(CNA_InstancedRendererEXTHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_copy_instance_elements(CNA_VertexElement* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_get_instance_stride(int32_t* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_copy_tint_elements(CNA_VertexElement* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_get_tint_stride(int32_t* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_set_instances(CNA_InstancedRendererEXTHandle p0, const CNA_Matrix* p1, uint64_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_set_instance_tints(CNA_InstancedRendererEXTHandle p0, const CNA_Color* p1, uint64_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_is_tints_enabled(CNA_InstancedRendererEXTHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_set_tints_enabled(CNA_InstancedRendererEXTHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_draw(CNA_InstancedRendererEXTHandle p0, CNA_EffectHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_is_instancing_supported(CNA_InstancedRendererEXTHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_is_fallback_enabled(CNA_InstancedRendererEXTHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_set_fallback_enabled(CNA_InstancedRendererEXTHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_get_instance_count(CNA_InstancedRendererEXTHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_get_instance_capacity(CNA_InstancedRendererEXTHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_get_last_draw_call_count(CNA_InstancedRendererEXTHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_instanced_renderer_ext_did_last_draw_instance(CNA_InstancedRendererEXTHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_create(CNA_LodGroupEXTHandle* p0)
+{
+    (void)p0;
+    if (p0 != nullptr) { *p0 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_destroy(CNA_LodGroupEXTHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_add_level(CNA_LodGroupEXTHandle p0, float p1, CNA_ModelMeshPartHandle p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_clear(CNA_LodGroupEXTHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_copy_levels(CNA_LodGroupEXTHandle p0, CNA_LodLevelEXT* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_select_index(CNA_LodGroupEXTHandle p0, float p1, int32_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_select(CNA_LodGroupEXTHandle p0, float p1, CNA_ModelMeshPartHandle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_get_hysteresis(CNA_LodGroupEXTHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_set_hysteresis(CNA_LodGroupEXTHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_reset_hysteresis(CNA_LodGroupEXTHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_get_selection_mode(CNA_LodGroupEXTHandle p0, CNA_LodSelectionMode* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_set_selection_mode(CNA_LodGroupEXTHandle p0, CNA_LodSelectionMode p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_set_screen_space_parameters(CNA_LodGroupEXTHandle p0, float p1, float p2, float p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lod_group_ext_projected_radius_pixels(CNA_LodGroupEXTHandle p0, float p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
     return ExtensionUnavailable();
 }
 
@@ -20516,6 +20718,552 @@ CNA_Result cna_particle_system_copy_particle_lookup_glsl(
     return CopyFormattedString(
         destination, capacity, outBytes,
         [] { return Ext::ParticleSystem::getParticleLookupGlsl(); });
+}
+
+namespace {
+
+#define CNA_WITH_INSTANCED(handle, body)                                                           \
+    WithEngineObject<Ext::InstancedRendererEXT>(                                                   \
+        (handle), ObjectKind::InstancedRenderer, "InstancedRendererEXT", body)
+#define CNA_WITH_LOD(handle, body)                                                                 \
+    WithEngineObject<Ext::LodGroupEXT>((handle), ObjectKind::LodGroup, "LodGroupEXT", body)
+
+[[nodiscard]] CNA_Result CopyDeclarationElements(
+    const Microsoft::Xna::Framework::Graphics::VertexDeclaration& declaration,
+    CNA_VertexElement* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The vertex-element output buffer is invalid.");
+    }
+    const auto& elements = declaration.GetVertexElements();
+    const auto required = static_cast<uint64_t>(elements.size());
+    *outCount = required;
+    if (capacity < required) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The vertex-element output buffer is too small.");
+    }
+    for (uint64_t index = 0U; index < required; ++index) {
+        destination[index] =
+            CNA::C::Detail::ToCVertexElement(elements[static_cast<std::size_t>(index)]);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// A LOD level may deliberately hold no part, so CNA_INVALID_HANDLE is a value here rather than a
+// mistake; only a handle that is neither is refused.
+[[nodiscard]] CNA_Result ResolveOptionalMeshPart(
+    const CNA_ModelMeshPartHandle handle,
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart>* const outPart)
+{
+    outPart->reset();
+    if (handle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return CNA::C::Detail::GetOwnedModelMeshPartValue(handle, outPart);
+}
+
+[[nodiscard]] CNA_Result RequireLodSelectionMode(const CNA_LodSelectionMode mode)
+{
+    if (mode > CNA_LOD_SELECTION_MODE_SCREEN_SPACE_ERROR) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The LOD selection mode is not a defined identity.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// The group hands back raw ModelMeshPart pointers. Turning one back into the handle the caller
+// added is done by remembering the pairing rather than by wrapping the pointer: a fresh handle
+// would be a second owner of something the group only borrows.
+struct LodPartRegistry final {
+    std::vector<std::pair<
+        Microsoft::Xna::Framework::Graphics::ModelMeshPart*, CNA_ModelMeshPartHandle>> pairs;
+    std::vector<std::shared_ptr<void>> retained;
+
+    void remember(
+        const std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart>& part,
+        const CNA_ModelMeshPartHandle handle)
+    {
+        if (part == nullptr) {
+            return;
+        }
+        for (const auto& pair : pairs) {
+            if (pair.first == part.get()) {
+                return;
+            }
+        }
+        pairs.emplace_back(part.get(), handle);
+        retained.push_back(part);
+    }
+
+    [[nodiscard]] CNA_ModelMeshPartHandle lookUp(
+        Microsoft::Xna::Framework::Graphics::ModelMeshPart* const part) const
+    {
+        if (part == nullptr) {
+            return CNA_INVALID_HANDLE;
+        }
+        for (const auto& pair : pairs) {
+            if (pair.first == part) {
+                return pair.second;
+            }
+        }
+        return CNA_INVALID_HANDLE;
+    }
+
+    void clear()
+    {
+        pairs.clear();
+        retained.clear();
+    }
+};
+
+} // namespace
+
+CNA_Result cna_instanced_renderer_ext_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ModelMeshPartHandle partHandle,
+    CNA_InstancedRendererEXTHandle* const outRenderer)
+{
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart> part;
+    if (const CNA_Result result =
+            CNA::C::Detail::GetOwnedModelMeshPartValue(partHandle, &part);
+        result != CNA_RESULT_SUCCESS) {
+        if (outRenderer != nullptr) {
+            *outRenderer = CNA_INVALID_HANDLE;
+        }
+        return result;
+    }
+    return CreateEngineObject<Ext::InstancedRendererEXT>(
+        graphicsDeviceHandle, ObjectKind::InstancedRenderer, outRenderer,
+        std::static_pointer_cast<void>(part), part.get());
+}
+
+CNA_Result cna_instanced_renderer_ext_destroy(const CNA_InstancedRendererEXTHandle renderer)
+{
+    return DestroyEngineObject<Ext::InstancedRendererEXT>(
+        renderer, ObjectKind::InstancedRenderer, "InstancedRendererEXT");
+}
+
+CNA_Result cna_instanced_renderer_ext_copy_instance_elements(
+    CNA_VertexElement* const destination, const uint64_t capacity, uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyDeclarationElements(
+            Ext::InstancedRendererEXT::getInstanceDeclaration(), destination, capacity, outCount);
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_get_instance_stride(int32_t* const outStride)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outStride,
+            static_cast<int32_t>(
+                Ext::InstancedRendererEXT::getInstanceDeclaration().getVertexStrideProperty()));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_copy_tint_elements(
+    CNA_VertexElement* const destination, const uint64_t capacity, uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyDeclarationElements(
+            Ext::InstancedRendererEXT::getTintDeclaration(), destination, capacity, outCount);
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_get_tint_stride(int32_t* const outStride)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outStride,
+            static_cast<int32_t>(
+                Ext::InstancedRendererEXT::getTintDeclaration().getVertexStrideProperty()));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_set_instances(
+    const CNA_InstancedRendererEXTHandle renderer,
+    const CNA_Matrix* const transforms,
+    const uint64_t count)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        if (transforms == nullptr && count != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The transform array is null.");
+        }
+        std::vector<Microsoft::Xna::Framework::Matrix> values;
+        values.reserve(static_cast<std::size_t>(count));
+        for (uint64_t index = 0U; index < count; ++index) {
+            values.push_back(ToNativeMatrix(transforms[index]));
+        }
+        r->value->setInstances(values);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_set_instance_tints(
+    const CNA_InstancedRendererEXTHandle renderer,
+    const CNA_Color* const tints,
+    const uint64_t count)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        if (tints == nullptr && count != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The tint array is null.");
+        }
+        std::vector<Microsoft::Xna::Framework::Color> values;
+        values.reserve(static_cast<std::size_t>(count));
+        for (uint64_t index = 0U; index < count; ++index) {
+            values.emplace_back(tints[index].r, tints[index].g, tints[index].b, tints[index].a);
+        }
+        r->value->setInstanceTints(values);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_is_tints_enabled(
+    const CNA_InstancedRendererEXTHandle renderer, CNA_Bool* const outEnabled)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        return StoreValue(
+            outEnabled, static_cast<CNA_Bool>(r->value->isTintsEnabled() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_set_tints_enabled(
+    const CNA_InstancedRendererEXTHandle renderer, const CNA_Bool enabled)
+{
+    if (const CNA_Result result = CNA::C::Detail::ValidateCanonicalBool(enabled, "enabled");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        r->value->setTintsEnabled(enabled == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_draw(
+    const CNA_InstancedRendererEXTHandle renderer, const CNA_EffectHandle effectHandle)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffectForPass(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Both canonical refusals are logic_error, and both are state rather than argument errors:
+        // the layer is here and the arguments are fine, this combination of renderer, setting and
+        // effect is not. The exception barrier maps logic_error to INVALID_STATE, so they arrive
+        // with their own messages without being restated here.
+        r->value->draw(*effect->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_is_instancing_supported(
+    const CNA_InstancedRendererEXTHandle renderer, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        return StoreValue(
+            outSupported,
+            static_cast<CNA_Bool>(r->value->isInstancingSupported() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_is_fallback_enabled(
+    const CNA_InstancedRendererEXTHandle renderer, CNA_Bool* const outEnabled)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        return StoreValue(
+            outEnabled,
+            static_cast<CNA_Bool>(r->value->isFallbackEnabled() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_set_fallback_enabled(
+    const CNA_InstancedRendererEXTHandle renderer, const CNA_Bool enabled)
+{
+    if (const CNA_Result result = CNA::C::Detail::ValidateCanonicalBool(enabled, "enabled");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        r->value->setFallbackEnabled(enabled == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_get_instance_count(
+    const CNA_InstancedRendererEXTHandle renderer, int32_t* const outCount)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        return StoreValue(outCount, static_cast<int32_t>(r->value->getInstanceCount()));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_get_instance_capacity(
+    const CNA_InstancedRendererEXTHandle renderer, int32_t* const outCapacity)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        return StoreValue(outCapacity, static_cast<int32_t>(r->value->getInstanceCapacity()));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_get_last_draw_call_count(
+    const CNA_InstancedRendererEXTHandle renderer, int32_t* const outCount)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        return StoreValue(outCount, static_cast<int32_t>(r->value->getLastDrawCallCount()));
+    });
+}
+
+CNA_Result cna_instanced_renderer_ext_did_last_draw_instance(
+    const CNA_InstancedRendererEXTHandle renderer, CNA_Bool* const outInstanced)
+{
+    return CNA_WITH_INSTANCED(renderer, [&](const auto& r) -> CNA_Result {
+        return StoreValue(
+            outInstanced,
+            static_cast<CNA_Bool>(r->value->didLastDrawInstance() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+namespace {
+
+struct LodGroupResource final {
+    std::shared_ptr<Ext::LodGroupEXT> value;
+    CNA_Handle parentGame;
+    std::shared_ptr<void> borrowed;
+    LodPartRegistry parts;
+};
+
+} // namespace
+
+CNA_Result cna_lod_group_ext_create(CNA_LodGroupEXTHandle* const outGroup)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outGroup == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The output handle is null.");
+        }
+        *outGroup = CNA_INVALID_HANDLE;
+        // No device: the canonical group is a list and a rule, and nothing in it touches one.
+        const auto resource = std::make_shared<LodGroupResource>(
+            LodGroupResource{std::make_shared<Ext::LodGroupEXT>(), CNA_INVALID_HANDLE, nullptr,
+                             LodPartRegistry{}});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::LodGroup, resource, outGroup);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result), "The owned handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+template <typename TBody>
+[[nodiscard]] CNA_Result WithLodGroup(const CNA_Handle handle, TBody&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<LodGroupResource> resource;
+        if (const CNA_Result result =
+                GetEngineResource(handle, ObjectKind::LodGroup, "LodGroupEXT", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return body(resource);
+    });
+}
+
+} // namespace
+
+CNA_Result cna_lod_group_ext_destroy(const CNA_LodGroupEXTHandle group)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<LodGroupResource> resource;
+        if (const CNA_Result result =
+                GetEngineResource(group, ObjectKind::LodGroup, "LodGroupEXT", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(group);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_add_level(
+    const CNA_LodGroupEXTHandle group,
+    const float maxDistance,
+    const CNA_ModelMeshPartHandle partHandle)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart> part;
+        if (const CNA_Result result = ResolveOptionalMeshPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!(maxDistance > 0.0F)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The maximum distance must be positive.");
+        }
+        g->value->addLevel(maxDistance, part.get());
+        g->parts.remember(part, partHandle);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_clear(const CNA_LodGroupEXTHandle group)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        g->value->clear();
+        g->parts.clear();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_copy_levels(
+    const CNA_LodGroupEXTHandle group,
+    CNA_LodLevelEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        std::vector<CNA_LodLevelEXT> values;
+        for (const auto& level : g->value->getLevels()) {
+            CNA_LodLevelEXT value{};
+            value.part = g->parts.lookUp(level.Part);
+            value.max_distance = level.MaxDistance;
+            value.reserved0 = UINT32_C(0);
+            values.push_back(value);
+        }
+        return CopyValueRange(values, destination, capacity, outCount);
+    });
+}
+
+CNA_Result cna_lod_group_ext_select_index(
+    const CNA_LodGroupEXTHandle group, const float distance, int32_t* const outIndex)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        return StoreValue(outIndex, static_cast<int32_t>(g->value->selectIndex(distance)));
+    });
+}
+
+CNA_Result cna_lod_group_ext_select(
+    const CNA_LodGroupEXTHandle group,
+    const float distance,
+    CNA_ModelMeshPartHandle* const outPart)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        if (outPart == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The part output handle is null.");
+        }
+        *outPart = g->parts.lookUp(g->value->select(distance));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_get_hysteresis(
+    const CNA_LodGroupEXTHandle group, float* const outMargin)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        return StoreValue(outMargin, g->value->getHysteresis());
+    });
+}
+
+CNA_Result cna_lod_group_ext_set_hysteresis(const CNA_LodGroupEXTHandle group, const float margin)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        g->value->setHysteresis(margin);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_reset_hysteresis(const CNA_LodGroupEXTHandle group)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        g->value->resetHysteresis();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_get_selection_mode(
+    const CNA_LodGroupEXTHandle group, CNA_LodSelectionMode* const outMode)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        return StoreValue(
+            outMode, static_cast<CNA_LodSelectionMode>(g->value->getSelectionMode()));
+    });
+}
+
+CNA_Result cna_lod_group_ext_set_selection_mode(
+    const CNA_LodGroupEXTHandle group, const CNA_LodSelectionMode mode)
+{
+    if (const CNA_Result result = RequireLodSelectionMode(mode);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        g->value->setSelectionMode(static_cast<Ext::LodSelectionMode>(mode));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_set_screen_space_parameters(
+    const CNA_LodGroupEXTHandle group,
+    const float radius,
+    const float verticalFov,
+    const float viewportHeight)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        // Checked here as a group so the message names the whole triple rather than being whichever
+        // of the three the canonical body happened to test first; the canonical throws are still
+        // the authority on the ranges.
+        if (!(radius > 0.0F) || !(verticalFov > 0.0F) || verticalFov >= 3.14159265F ||
+            !(viewportHeight > 0.0F)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The radius and viewport height must be positive and the vertical field of view "
+                "must be in (0, pi).");
+        }
+        g->value->setScreenSpaceParameters(radius, verticalFov, viewportHeight);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_lod_group_ext_projected_radius_pixels(
+    const CNA_LodGroupEXTHandle group, const float distance, float* const outPixels)
+{
+    return WithLodGroup(group, [&](const std::shared_ptr<LodGroupResource>& g) -> CNA_Result {
+        return StoreValue(outPixels, g->value->projectedRadiusPixels(distance));
+    });
 }
 
 #endif // CNA_CNAEXT

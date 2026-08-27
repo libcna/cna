@@ -10,7 +10,9 @@
 #include "CNA/C/graphics_ext.h"
 #include "CNA/C/graphics_state.h"
 #include "CNA/C/math_values.h"
+#include "CNA/C/models.h"
 #include "CNA/C/render_target.h"
+#include "CNA/C/vertex_resources.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -10713,6 +10715,462 @@ CNA_C_API CNA_Result cna_particle_system_random(uint32_t seed, float* out_value)
  */
 CNA_C_API CNA_Result cna_particle_system_copy_particle_lookup_glsl(
     char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Owned handle for the instanced renderer.
+ *
+ * Draws one mesh part many times. **Whether it can do so with one draw call is a renderer
+ * question**, and the answer is not a refusal: with the fallback enabled the renderer draws each
+ * instance separately, so a device without instancing gets the same picture more slowly.
+ * @ref cna_instanced_renderer_ext_did_last_draw_instance says which happened, and
+ * @ref cna_instanced_renderer_ext_get_last_draw_call_count says what it cost.
+ *
+ * **With the fallback disabled, drawing on such a renderer is refused** -- and so is drawing
+ * through an effect that cannot carry a per-instance transform, because a per-instance world
+ * matrix has nowhere else to go. Both are `CNA_RESULT_INVALID_STATE`: the layer is present and the
+ * arguments are fine, the combination of this renderer, this setting and this effect is not.
+ */
+typedef CNA_Handle CNA_InstancedRendererEXTHandle;
+
+/**
+ * @brief Creates an instanced renderer over one mesh part.
+ *
+ * The part is **borrowed** and must outlive the renderer.
+ *
+ * @param graphics_device The device to draw with.
+ * @param part The mesh part to instance; must have both buffers and draw at least one primitive.
+ * @param out_renderer Receives the renderer; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a part that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a part with no vertex or index buffer, a part that draws no
+ * primitives, an invalid device or a null output, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_create(
+    CNA_Handle graphics_device,
+    CNA_ModelMeshPartHandle part,
+    CNA_InstancedRendererEXTHandle* out_renderer);
+
+/**
+ * @brief Releases an instanced renderer.
+ *
+ * @param renderer The renderer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_destroy(CNA_InstancedRendererEXTHandle renderer);
+
+/**
+ * @brief Copies the elements of the per-instance transform stream's declaration.
+ *
+ * Four `Vector4` elements at `TextureCoordinate` usage indices one through four, sixty-four bytes
+ * in total. Exposed because a caller building its own instance buffer has to describe it
+ * **identically**, and copying the elements is how it can check that rather than assume it.
+ *
+ * @param destination The array, or null to ask for the count.
+ * @param capacity How many elements it holds.
+ * @param out_element_count Receives the number of elements.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_element_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null count,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_copy_instance_elements(
+    CNA_VertexElement* destination, uint64_t capacity, uint64_t* out_element_count);
+
+/**
+ * @brief Returns the byte stride of the per-instance transform stream.
+ *
+ * @param out_stride Receives the stride, which is sixty-four.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_get_instance_stride(int32_t* out_stride);
+
+/**
+ * @brief Copies the elements of the optional per-instance tint stream's declaration.
+ *
+ * One `Color` element at `Color` usage index one.
+ *
+ * @param destination The array, or null to ask for the count.
+ * @param capacity How many elements it holds.
+ * @param out_element_count Receives the number of elements.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_element_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null count,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_copy_tint_elements(
+    CNA_VertexElement* destination, uint64_t capacity, uint64_t* out_element_count);
+
+/**
+ * @brief Returns the byte stride of the per-instance tint stream.
+ *
+ * @param out_stride Receives the stride.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_get_tint_stride(int32_t* out_stride);
+
+/**
+ * @brief Uploads the per-instance world transforms.
+ *
+ * The buffer **grows when it has to and is otherwise reused**, so re-uploading the same number of
+ * instances every frame allocates nothing after the first. Uploading zero instances is not an
+ * error: it is how a caller stops drawing without destroying the renderer.
+ *
+ * @param renderer The renderer.
+ * @param transforms The world matrices, or null only when the count is zero.
+ * @param count How many there are.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null array with a non-zero
+ * count, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_set_instances(
+    CNA_InstancedRendererEXTHandle renderer, const CNA_Matrix* transforms, uint64_t count);
+
+/**
+ * @brief Uploads the per-instance tints.
+ *
+ * Independent of @ref cna_instanced_renderer_ext_set_tints_enabled: the tints can be uploaded
+ * while disabled and are simply not bound.
+ *
+ * @param renderer The renderer.
+ * @param tints The tints, or null only when the count is zero.
+ * @param count How many there are.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null array with a non-zero
+ * count, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_set_instance_tints(
+    CNA_InstancedRendererEXTHandle renderer, const CNA_Color* tints, uint64_t count);
+
+/**
+ * @brief Reports whether the tint stream is bound.
+ *
+ * @param renderer The renderer.
+ * @param out_enabled Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_is_tints_enabled(
+    CNA_InstancedRendererEXTHandle renderer, CNA_Bool* out_enabled);
+
+/**
+ * @brief Binds or unbinds the tint stream.
+ *
+ * Setting the value it already has does nothing at all -- the canonical setter returns early rather
+ * than re-uploading.
+ *
+ * @param renderer The renderer.
+ * @param enabled `CNA_TRUE` to bind it; a non-canonical byte is refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_set_tints_enabled(
+    CNA_InstancedRendererEXTHandle renderer, CNA_Bool enabled);
+
+/**
+ * @brief Draws every uploaded instance.
+ *
+ * @param renderer The renderer.
+ * @param effect The effect to draw with; the per-instance fallback additionally requires one that
+ * carries matrices.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an effect that is not one,
+ * `CNA_RESULT_INVALID_STATE` when this renderer cannot instance and the fallback is disabled, or
+ * when the fallback is enabled and the effect cannot carry a per-instance transform,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_draw(
+    CNA_InstancedRendererEXTHandle renderer, CNA_EffectHandle effect);
+
+/**
+ * @brief Reports whether this renderer can draw instances in one call.
+ *
+ * @param renderer The renderer.
+ * @param out_supported Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_is_instancing_supported(
+    CNA_InstancedRendererEXTHandle renderer, CNA_Bool* out_supported);
+
+/**
+ * @brief Reports whether the per-instance fallback is allowed.
+ *
+ * @param renderer The renderer.
+ * @param out_enabled Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_is_fallback_enabled(
+    CNA_InstancedRendererEXTHandle renderer, CNA_Bool* out_enabled);
+
+/**
+ * @brief Allows or forbids the per-instance fallback.
+ *
+ * @param renderer The renderer.
+ * @param enabled `CNA_TRUE` to allow it; a non-canonical byte is refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_set_fallback_enabled(
+    CNA_InstancedRendererEXTHandle renderer, CNA_Bool enabled);
+
+/**
+ * @brief Returns how many instances are uploaded.
+ *
+ * @param renderer The renderer.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_get_instance_count(
+    CNA_InstancedRendererEXTHandle renderer, int32_t* out_count);
+
+/**
+ * @brief Returns how many instances the buffer can hold without growing.
+ *
+ * Never shrinks: uploading fewer instances than before leaves the capacity where it was, which is
+ * what makes a varying instance count allocation-free after the largest frame.
+ *
+ * @param renderer The renderer.
+ * @param out_capacity Receives the capacity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_get_instance_capacity(
+    CNA_InstancedRendererEXTHandle renderer, int32_t* out_capacity);
+
+/**
+ * @brief Returns how many draw calls the last draw actually issued.
+ *
+ * One when the draw was instanced, one per instance when it fell back.
+ *
+ * @param renderer The renderer.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_get_last_draw_call_count(
+    CNA_InstancedRendererEXTHandle renderer, int32_t* out_count);
+
+/**
+ * @brief Reports whether the last draw was instanced rather than falling back.
+ *
+ * A record of what happened, like the particle system's compute flag: it is written by `draw` and
+ * means nothing before the first one.
+ *
+ * @param renderer The renderer.
+ * @param out_instanced Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_instanced_renderer_ext_did_last_draw_instance(
+    CNA_InstancedRendererEXTHandle renderer, CNA_Bool* out_instanced);
+
+/** @brief Fixed-width identity for how a LOD group picks a level. */
+typedef uint32_t CNA_LodSelectionMode;
+/** @brief Pick by distance from the camera. */
+#define CNA_LOD_SELECTION_MODE_DISTANCE UINT32_C(0)
+/** @brief Pick by how many pixels the object's radius projects to. */
+#define CNA_LOD_SELECTION_MODE_SCREEN_SPACE_ERROR UINT32_C(1)
+
+/**
+ * @brief One level of a LOD group.
+ *
+ * `max_distance` is read differently by the two selection modes -- as a distance in one and as a
+ * pixel radius in the other -- which is why the group **re-sorts its levels when the mode
+ * changes**: a distance threshold grows as detail falls and a pixel threshold shrinks, and index
+ * zero has to keep meaning "finest" in both.
+ */
+typedef struct CNA_LodLevelEXT {
+    /** @brief The mesh part this level draws, which may be `CNA_INVALID_HANDLE`. */
+    CNA_ModelMeshPartHandle part;
+    /** @brief The threshold this level applies up to, read per the group's selection mode. */
+    float max_distance;
+    /** @brief Reserved for future use; must be zero. */
+    uint32_t reserved0;
+} CNA_LodLevelEXT;
+
+/**
+ * @brief Owned handle for a LOD group.
+ *
+ * A list of levels and the rule that picks one. **Index zero is always the finest level**, in both
+ * selection modes -- the group sorts on every change, in the direction the mode implies -- so a
+ * returned index and the hysteresis that damps it mean the same thing whichever mode is set.
+ */
+typedef CNA_Handle CNA_LodGroupEXTHandle;
+
+/**
+ * @brief Creates an empty LOD group.
+ *
+ * @param out_group Receives the group; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_create(CNA_LodGroupEXTHandle* out_group);
+
+/**
+ * @brief Releases a LOD group.
+ *
+ * The mesh parts it holds are **borrowed** and are not released with it.
+ *
+ * @param group The group.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_destroy(CNA_LodGroupEXTHandle group);
+
+/**
+ * @brief Adds a level and re-sorts the group.
+ *
+ * **The part may be `CNA_INVALID_HANDLE`** -- a level that draws nothing is how a group fades an
+ * object out entirely at distance -- but the threshold must be positive.
+ *
+ * @param group The group.
+ * @param max_distance The threshold, read per the selection mode; must be positive.
+ * @param part The mesh part, or `CNA_INVALID_HANDLE` to draw nothing at this level; borrowed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a part that is neither a mesh part
+ * nor `CNA_INVALID_HANDLE`, `CNA_RESULT_INVALID_ARGUMENT` for a threshold that is not positive,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_add_level(
+    CNA_LodGroupEXTHandle group, float max_distance, CNA_ModelMeshPartHandle part);
+
+/**
+ * @brief Removes every level and forgets the last selection.
+ *
+ * @param group The group.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_clear(CNA_LodGroupEXTHandle group);
+
+/**
+ * @brief Copies the levels out, in the group's own order.
+ *
+ * That order is the group's, not the caller's: levels come back finest-first, which is not
+ * necessarily the order they were added in.
+ *
+ * @param group The group.
+ * @param destination The array, or null to ask for the count.
+ * @param capacity How many levels it holds.
+ * @param out_count Receives the number of levels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_copy_levels(
+    CNA_LodGroupEXTHandle group,
+    CNA_LodLevelEXT* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Picks a level for a distance and returns its index.
+ *
+ * **An empty group answers `-1` rather than refusing**, and a negative distance is **clamped to
+ * zero** rather than refused -- a camera behind the object is a position, not a mistake.
+ *
+ * @param group The group.
+ * @param distance The distance from the camera.
+ * @param out_index Receives the level index, or `-1` when the group is empty.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_select_index(
+    CNA_LodGroupEXTHandle group, float distance, int32_t* out_index);
+
+/**
+ * @brief Picks a level for a distance and returns its mesh part.
+ *
+ * Answers `CNA_INVALID_HANDLE` both when the group is empty and when the chosen level deliberately
+ * draws nothing; @ref cna_lod_group_ext_select_index separates those two.
+ *
+ * @param group The group.
+ * @param distance The distance from the camera.
+ * @param out_part Receives the part, borrowed, or `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_select(
+    CNA_LodGroupEXTHandle group, float distance, CNA_ModelMeshPartHandle* out_part);
+
+/**
+ * @brief Returns the hysteresis margin.
+ *
+ * @param group The group.
+ * @param out_margin Receives the margin.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_get_hysteresis(
+    CNA_LodGroupEXTHandle group, float* out_margin);
+
+/**
+ * @brief Sets the hysteresis margin that damps switching at a threshold.
+ *
+ * **Floored at zero**, so a negative margin reads back as zero rather than being refused.
+ *
+ * @param group The group.
+ * @param margin The margin.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_set_hysteresis(
+    CNA_LodGroupEXTHandle group, float margin);
+
+/**
+ * @brief Forgets the last selection, so the next one is unaffected by hysteresis.
+ *
+ * @param group The group.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_reset_hysteresis(CNA_LodGroupEXTHandle group);
+
+/**
+ * @brief Returns how the group picks a level.
+ *
+ * @param group The group.
+ * @param out_mode Receives the mode.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_get_selection_mode(
+    CNA_LodGroupEXTHandle group, CNA_LodSelectionMode* out_mode);
+
+/**
+ * @brief Changes how the group picks a level.
+ *
+ * **Re-sorts the levels and forgets the last selection**, because the two modes read a level's
+ * threshold in opposite directions: a distance threshold grows as detail falls, a pixel-radius
+ * threshold shrinks. Setting the mode it already has does nothing at all.
+ *
+ * @param group The group.
+ * @param mode The mode; an undefined identity is refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined mode,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_set_selection_mode(
+    CNA_LodGroupEXTHandle group, CNA_LodSelectionMode mode);
+
+/**
+ * @brief Sets the three numbers screen-space selection needs.
+ *
+ * **Validated as a group and refused as a group**: none of the three is applied unless all three
+ * are usable, so a refusal leaves the previous projection intact rather than half-updated. The
+ * field of view is exclusive at both ends -- zero projects nothing and pi projects everything.
+ *
+ * @param group The group.
+ * @param radius The object's bounding radius; must be positive.
+ * @param vertical_fov The camera's vertical field of view in radians; must be in `(0, pi)`.
+ * @param viewport_height The viewport height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when any of the three is outside its
+ * range, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_set_screen_space_parameters(
+    CNA_LodGroupEXTHandle group, float radius, float vertical_fov, float viewport_height);
+
+/**
+ * @brief Returns how many pixels the object's radius projects to at a distance.
+ *
+ * **At or behind the eye the answer is the largest representable float**, not zero and not a
+ * refusal: the projection is meaningless there, and "as large as it gets" selects the finest level
+ * rather than none.
+ *
+ * @param group The group.
+ * @param distance The distance from the camera.
+ * @param out_pixels Receives the projected radius in pixels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lod_group_ext_projected_radius_pixels(
+    CNA_LodGroupEXTHandle group, float distance, float* out_pixels);
 
 #ifdef __cplusplus
 }

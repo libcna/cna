@@ -2,6 +2,7 @@
 
 #include "CNA/C/vertex_resources.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -210,6 +211,18 @@ template<typename TCallable>
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+// CBIND-092B. Declared in CnaCApiGraphicsDetail.hpp so the engine layer can describe the instanced
+// renderer's static declarations with the same mapping this file already uses.
+CNA_VertexElement ToCVertexElement(
+    const Microsoft::Xna::Framework::Graphics::VertexElement& value) noexcept
+{
+    return ToC(value);
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_vertex_declaration_create_empty(
     CNA_VertexDeclarationHandle* const outDeclaration)

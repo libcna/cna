@@ -2236,6 +2236,24 @@ CNA_Result cna_model_mesh_part_create(
     });
 }
 
+namespace CNA::C::Detail {
+
+// CBIND-092B. Declared in CnaCApiGraphicsDetail.hpp; defined here because PartResource is private
+// to this adapter.
+CNA_Result GetOwnedModelMeshPartValue(
+    const CNA_Handle handle,
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart>* const outPart)
+{
+    std::shared_ptr<PartResource> resource;
+    if (const CNA_Result result = GetPart(handle, &resource); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outPart = resource->value;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
+
 CNA_Result cna_model_mesh_part_destroy(const CNA_ModelMeshPartHandle partHandle)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

@@ -2580,6 +2580,24 @@
   "cna_input_devices_subscribe_mouse_connected_ext",
   "cna_input_devices_subscribe_mouse_disconnected_ext",
   "cna_input_devices_unsubscribe_ext",
+  "cna_instanced_renderer_ext_copy_instance_elements",
+  "cna_instanced_renderer_ext_copy_tint_elements",
+  "cna_instanced_renderer_ext_create",
+  "cna_instanced_renderer_ext_destroy",
+  "cna_instanced_renderer_ext_did_last_draw_instance",
+  "cna_instanced_renderer_ext_draw",
+  "cna_instanced_renderer_ext_get_instance_capacity",
+  "cna_instanced_renderer_ext_get_instance_count",
+  "cna_instanced_renderer_ext_get_instance_stride",
+  "cna_instanced_renderer_ext_get_last_draw_call_count",
+  "cna_instanced_renderer_ext_get_tint_stride",
+  "cna_instanced_renderer_ext_is_fallback_enabled",
+  "cna_instanced_renderer_ext_is_instancing_supported",
+  "cna_instanced_renderer_ext_is_tints_enabled",
+  "cna_instanced_renderer_ext_set_fallback_enabled",
+  "cna_instanced_renderer_ext_set_instance_tints",
+  "cna_instanced_renderer_ext_set_instances",
+  "cna_instanced_renderer_ext_set_tints_enabled",
   "cna_invite_accepted_event_info_init",
   "cna_joystick_capabilities_equals",
   "cna_joystick_capabilities_init",
@@ -2740,6 +2758,20 @@
   "cna_locale_get_country_size_at_ext",
   "cna_locale_get_language_size_at_ext",
   "cna_locale_get_preferred_count_ext",
+  "cna_lod_group_ext_add_level",
+  "cna_lod_group_ext_clear",
+  "cna_lod_group_ext_copy_levels",
+  "cna_lod_group_ext_create",
+  "cna_lod_group_ext_destroy",
+  "cna_lod_group_ext_get_hysteresis",
+  "cna_lod_group_ext_get_selection_mode",
+  "cna_lod_group_ext_projected_radius_pixels",
+  "cna_lod_group_ext_reset_hysteresis",
+  "cna_lod_group_ext_select",
+  "cna_lod_group_ext_select_index",
+  "cna_lod_group_ext_set_hysteresis",
+  "cna_lod_group_ext_set_screen_space_parameters",
+  "cna_lod_group_ext_set_selection_mode",
   "cna_logger_debug",
   "cna_logger_debug_if",
   "cna_logger_error",
@@ -5399,6 +5431,8 @@
   "CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT": 6,
   "CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT": 32768,
   "CNA_LIGHT_SHAFT_STEP_COUNT_EXT": 24,
+  "CNA_LOD_SELECTION_MODE_DISTANCE": 0,
+  "CNA_LOD_SELECTION_MODE_SCREEN_SPACE_ERROR": 1,
   "CNA_LOG_CATEGORY_APPLICATION": 0,
   "CNA_LOG_CATEGORY_AUDIO": 3,
   "CNA_LOG_CATEGORY_ERROR": 1,
@@ -6475,6 +6509,10 @@
    8,
    8
   ],
+  "CNA_InstancedRendererEXTHandle": [
+   8,
+   8
+  ],
   "CNA_JoystickEventRegistrationHandle": [
    8,
    8
@@ -6530,6 +6568,14 @@
   "CNA_LightProbeVolumeHandle": [
    8,
    8
+  ],
+  "CNA_LodGroupEXTHandle": [
+   8,
+   8
+  ],
+  "CNA_LodSelectionMode": [
+   4,
+   4
   ],
   "CNA_LogCategory": [
    4,
@@ -10525,6 +10571,24 @@
     ]
    },
    "size": 24
+  },
+  "CNA_LodLevelEXT": {
+   "align": 8,
+   "fields": {
+    "max_distance": [
+     8,
+     4
+    ],
+    "part": [
+     0,
+     8
+    ],
+    "reserved0": [
+     12,
+     4
+    ]
+   },
+   "size": 16
   },
   "CNA_Matrix": {
    "align": 4,
