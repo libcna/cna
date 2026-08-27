@@ -4,6 +4,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbMediaCodec.hpp"
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
@@ -5922,6 +5923,47 @@ namespace Microsoft::Xna::Framework::Content
                 static_cast<SharpRuntime::intcs>(data.loopLength));
         }
 
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb Song and Video loaders (plans/plan_cnb.md CNBF-103B)
+        //
+        // Both are metadata plus a streaming reference, so what these do is resolve the reference
+        // to a real path and hand it to the runtime type's trusted-metadata constructor. The
+        // media file is never read here: Video's own constructor deliberately does not touch the
+        // file at construction time either.
+        // ---------------------------------------------------------------------------
+
+        std::string ResolveMediaStreamPathEXT(ContentManager& cm, const std::string& reference,
+                                              const std::string& assetName)
+        {
+            const std::string resolved = cm.ResolveExistingAssetPath(cm.BuildAssetPath(reference));
+            if (!std::filesystem::exists(resolved))
+            {
+                throw ContentLoadException("'" + assetName + "' streams '" + reference +
+                                           "', which was not found beside it.");
+            }
+            return resolved;
+        }
+
+        Media::Song BuildSongFromCnbEXT(const CNA::Content::Cnb::CnbSongData& data,
+                                         ContentManager& cm, const std::string& assetName)
+        {
+            return Media::Song(ResolveMediaStreamPathEXT(cm, data.streamReference, assetName),
+                               data.name.empty() ? assetName : data.name,
+                               static_cast<SharpRuntime::intcs>(data.durationMs));
+        }
+
+        Media::Video BuildVideoFromCnbEXT(const CNA::Content::Cnb::CnbVideoData& data,
+                                           ContentManager& cm, const std::string& assetName)
+        {
+            return Media::Video(ResolveMediaStreamPathEXT(cm, data.streamReference, assetName),
+                                &cm.getGraphicsDeviceInternal(),
+                                static_cast<SharpRuntime::intcs>(data.durationMs),
+                                static_cast<SharpRuntime::intcs>(data.width),
+                                static_cast<SharpRuntime::intcs>(data.height),
+                                data.framesPerSecond,
+                                static_cast<Media::VideoSoundtrackType>(data.soundtrackType));
+        }
+
     } // anonymous namespace
 
     // ---------------------------------------------------------------------------
@@ -6008,6 +6050,22 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return std::any(BuildSoundEffectFromCnbEXT(
                     CNA::Content::Cnb::DecodeSoundEffectFromCnb(document), assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Song, "Microsoft.Xna.Framework.Media.Song",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildSongFromCnbEXT(
+                    CNA::Content::Cnb::DecodeSongFromCnb(document), contentManager, assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Video, "Microsoft.Xna.Framework.Media.Video",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildVideoFromCnbEXT(
+                    CNA::Content::Cnb::DecodeVideoFromCnb(document), contentManager, assetName));
             });
     }
 

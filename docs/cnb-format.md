@@ -310,8 +310,8 @@ Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this or
 | 6 | `AnimationClip` | **version 1**, §10 |
 | 7 | `Curve` | **version 1**, §9 |
 | 8 | `SoundEffect` | **version 1**, §18 |
-| 9 | `Song` | reserved, not implemented |
-| 10 | `Video` | reserved, not implemented |
+| 9 | `Song` | **version 1**, §19 |
+| 10 | `Video` | **version 1**, §19 |
 | 11 | `Effect` | reserved, not implemented |
 
 A custom identifier is `CnbAssetTypeIdFromName(utf8)` = `FNV-1a-32(name) | 0x80000000`, i.e. 31
@@ -790,8 +790,10 @@ chunk occupies no bytes and takes no part in the layout partition.
 Recorded so the boundary is a decision rather than an omission. Each is tracked in
 `plans/plan_cnb.md`.
 
-* `Song`, `Video` and `Effect` schemas. Their identifiers are frozen; their layouts are not
-  designed.
+* The `Effect` schema. Its identifier is frozen; its layout is not designed, and deliberately so:
+  CNA has many renderers, and a `.cnb` carrying one API's shader bytecode would be useless on the
+  others. It waits for the shader pipeline and renderer abstraction to settle.
+* **Embedded** audio or video streams. §19 stores a reference, by design.
 * Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
   structure that carries them, and the reader accepts a file that uses them, but no writer in this
   build produces one and this build cannot upload one.
@@ -1012,3 +1014,51 @@ load time for no benefit.
 `Adpcm` and `Vorbis` have no fixed frame size, so the `AUDD` length rule above cannot apply to
 them. Neither has a v1 codec; whichever gains one first needs its own length rule rather than
 inheriting this one.
+
+---
+
+## 19. `Song` and `Video`, schema version 1
+
+| chunk | count | flags | contents |
+|---|---|---|---|
+| `SNGH` | exactly 1 (`Song`) | Mandatory | duration, flags, display name |
+| `VIDH` | exactly 1 (`Video`) | Mandatory | duration, frame size, rate, soundtrack type |
+| `XREF` | exactly 1 entry | Mandatory | the media file to stream |
+
+### 19.1 Why these carry a reference and not the media
+
+A `SoundEffect` owns its samples (§18). A song or a video does not, and the difference is not
+stylistic. Such a file can be hundreds of megabytes and wants streaming, seeking and buffering;
+embedding it would push the whole thing through the container's chunk machinery and into memory
+just to play its first second. So a `Song`/`Video` `.cnb` says **what to stream and how**, and the
+media file stays beside it.
+
+The reference lives in `XREF` rather than in the schema chunk, which is what makes the dependency
+visible to `cna_tool_cnb_info --refs` — a build script can therefore discover that the `.ogg` has to
+ship without knowing anything about the `Song` schema. Exactly one entry is required: the media
+file is the whole point of the asset, and a second reference would be a dependency nothing knows
+how to interpret. `expectedAssetTypeId` is `0`, because the target is a media file on disk rather
+than a CNA asset with an identifier of its own.
+
+### 19.2 `SNGH`
+
+| offset | size | field | notes |
+|---|---|---|---|
+| 0 | 4 | `durationMs` | 0 when the compiler could not determine it |
+| 4 | 4 | `flags` | reserved; must be zero |
+| 8 | … | `name` | length-prefixed UTF-8 display name; may be empty |
+
+### 19.3 `VIDH`
+
+| offset | size | field | notes |
+|---|---|---|---|
+| 0 | 4 | `durationMs` | 0 when unknown |
+| 4 | 4 | `width` | 1…65536 |
+| 8 | 4 | `height` | 1…65536 |
+| 12 | 4 | `framesPerSecond` | `f32`; must be finite and greater than zero |
+| 16 | 4 | `soundtrackType` | `VideoSoundtrackType`: 0 Music, 1 Dialog, 2 MusicAndDialog |
+| 20 | 4 | `flags` | reserved; must be zero |
+
+The frame-rate rule is checked on **both** sides. A NaN or infinite `f32` is a perfectly
+well-formed bit pattern that §2.1 says the container stores verbatim, so the schema layer is the
+only one that can refuse it — and it would otherwise divide badly inside a player.
