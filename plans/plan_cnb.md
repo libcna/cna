@@ -1184,15 +1184,18 @@ source bytes  ->  canonical CPU representation  ->  Cnb*Data  ->  Encode*ToCnb()
 | CNBF-110 | **Direct WAV → `SoundEffect` `.cnb`.** | A **pure-data** RIFF/WAVE parser had to be written, and the reason is recorded because "don't duplicate a decoder" was the standing rule: CNA's runtime WAV path decodes through the mixer engine (`GetMixer()`), which needs an audio device a compiler cannot have. The parser is deliberately narrow rather than a second general decoder — it accepts the PCM formats that convert to `Pcm16` **exactly** (16-bit as-is, 8-bit unsigned widened by `(s-128)<<8`) and refuses 24-bit, 32-bit, IEEE float and ADPCM **by name**, because every one of those is a lossy conversion and that is an authoring decision rather than a compiler's. A `smpl` chunk's first loop entry becomes the loop region, using the rules the runtime already applies. | ✅ |
 | CNBF-111 | **Extend `cna_tool_cnj_to_cnb` to every type whose `.cnj` has a coherent representation.** | `Texture2D`, `Texture3D`, `SpriteFont` and `SoundEffect` added; supported types go from **3 to 7**. Sidecars resolve through `ResolveCnjSourceFileSafely`, the same containment helper the runtime readers use — a compiler that resolved paths more permissively would be the soft way into a file the runtime refuses. **`SpriteFont` compiles to one self-contained `.cnb`**: its atlas is decoded through `CNBF-109`'s image path and embedded, and a test loads the result from a directory holding nothing else. | ✅ |
 | CNBF-112 | **One CLI front end for direct source compilation: `cna_tool_source_to_cnb`.** | One executable rather than seven near-identical ones; the input's extension already says what it is. Images → `Texture2D`, WAV → `SoundEffect`, and `--as song`/`--as video` for the metadata-plus-reference schemas. Song/Video metadata is **arguments, not guesses**: duration, frame size and frame rate would need a multimedia decoder CNA does not expose headlessly, so the tool requires them rather than inventing them. | ✅ |
-| CNBF-113 | **`TextureCube` producer.** | **Deliberately open.** It is the one implemented schema with no producer. Its source format is DDS and CNA's only DDS decoder lives inside `TextureCube::DDSFromStreamEXT`, which takes a `GraphicsDevice`. Writing a second DDS parser to get around that would be a fragile duplicate of a fiddly format, and the compiler refuses `TextureCube` with a message that says *why* rather than reading like an unknown type. Correct partial completion beats a second DDS implementation. | ⬜ |
+| CNBF-113 | **`TextureCube` producer.** | ✅ **Done, and the earlier discovery note was wrong in a useful way.** It read: *"CNA's only DDS decoder lives inside `TextureCube::DDSFromStreamEXT`, which takes a `GraphicsDevice`"*. The first half was right, the conclusion was not — that function's `GraphicsDevice` was only used by its **last two statements**. Everything before them (header parse, cube and squareness validation, mip walk, DXT1/3/5 decompression through `DxtUtil` to RGBA8) was already pure CPU code that merely happened to be *located* somewhere unreachable. So no second DDS parser was written: the existing logic moved down into `CNA::Internal::Graphics::DecodeDdsCube`, and both consumers sit above it. | ✅ |
+| CNBF-113-arch | **The shape the extraction took.** | `DDS bytes → DecodeDdsCube → DecodedDdsCube{width, mipCount, faces[6][mip] RGBA8}`, then `TextureCube::DDSFromStreamEXT` uploads it and the CNB producer turns it into `CnbTextureData`. The neutral struct's level order is face-major then mip — which is both the DDS on-disk order *and* what `CnbTextureRepresentation::levels` documents — so the producer moves the data across without reindexing it. The decoder lives in the **graphics** module: CNB depends on graphics, not the other way round, and putting a CNB type in the graphics module to share a decoder would have been the wrong direction. Diagnostics take a caller-supplied prefix, so runtime messages still name `TextureCube::DDSFromStreamEXT` exactly as before. | ✅ |
+| CNBF-113-scope | **Scope deliberately not widened by the move.** | DXT1/DXT3/DXT5, square faces, cube maps only. DX10 extended headers, uncompressed and HDR DDS variants are refused exactly as they were. A negative test asserts each refusal, because "while I'm in here" is how a move becomes a rewrite. One check *was* added: a zero or negative face size, which the header flags alone do not rule out and which would otherwise have produced six silently empty faces. | ✅ |
+| CNBF-113-rgba | **Why the `.cnb` holds RGBA8 rather than the DXT blocks.** | Not a shortcut. The runtime DDS path already decompresses to RGBA8 on the CPU, because CNA implements no compressed GPU texture format end-to-end on any renderer, and texture schema 1's contract is the portable `Rgba8` baseline. Storing the blocks would produce a file this build could not upload. | ✅ |
 
 ### 16.1 What changed, in one table
 
 | | before this session | after |
 |---|---|---|
-| `cnj_to_cnb` types | Curve, AnimationClip, Model | + Texture2D, Texture3D, SpriteFont, SoundEffect (**3 → 7**) |
+| `cnj_to_cnb` types | Curve, AnimationClip, Model | + Texture2D, Texture3D, TextureCube, SpriteFont, SoundEffect (**3 → 8**) |
 | direct source tools | `gltf_to_cnb` | + `source_to_cnb` (image, WAV, Song, Video) |
-| schemas with **no** producer | Texture2D, Texture3D, TextureCube, SpriteFont, SoundEffect, Song, Video (**7**) | TextureCube (**1**) |
+| schemas with **no** producer | Texture2D, Texture3D, TextureCube, SpriteFont, SoundEffect, Song, Video (**7**) | **none** |
 | PNG → `.cnb` | no | **yes** |
 | WAV → `.cnb` | no | **yes** |
 | SpriteFont `.cnj` → one file | no | **yes**, atlas embedded |
@@ -1206,7 +1209,7 @@ table keeps them apart, because conflating them is what produced the gap in the 
 |---|---|---|---|---|---|---|---|
 | `Texture2D` | ✅ §16 | ✅ | ✅ | ✅ | ✅ image | via `TextureCube` | ✅ |
 | `Texture3D` | ✅ §16 | ✅ | ✅ | ✅ | — (raw sidecar is a `.cnj` concept) | via `TextureCube` | ✅ |
-| `TextureCube` | ✅ §16 | ✅ | ✅ | ⬜ `CNBF-113` | ⬜ `CNBF-113` | ✅ | ✅ |
+| `TextureCube` | ✅ §16 | ✅ | ✅ | ✅ DDS `.cnj` | ✅ DDS | ✅ | ✅ |
 | `SpriteFont` | ✅ §17 | ✅ | ✅ | ✅ atlas embedded | — (a font is authored, not a single source file) | — | ✅ |
 | `Model` | ✅ §11 | ✅ | ✅ | ✅ | ✅ glTF | ✅ | ✅ |
 | `AnimationClip` | ✅ §10 | ✅ | ✅ | ✅ | ✅ glTF | ✅ | ✅ |
@@ -1226,8 +1229,12 @@ content pipeline" when seven of those ten had no way to produce an asset.
 | **Container** | Frozen and finished. Nothing in this session touched a serialized byte. |
 | **Wire schemas** | **10 of 11.** `Effect` waits on the FX/shader architecture, by design. |
 | **Runtime loaders** | **10 of 10** implemented schemas load through `ContentManager`. |
-| **Producer ecosystem** | **9 of 10.** Only `TextureCube` has no supported way to produce one. |
+| **Producer ecosystem** | **10 of 10.** Every implemented schema has a supported, headless, deterministic way to produce an asset. |
 
-An honest sentence: a game can now compile textures, fonts, sounds, curves, animation clips and
-models — from `.cnj` documents, from glTF, from images and from WAV files — with a headless
-deterministic toolchain. It cannot yet compile a cube map.
+An honest sentence: a game can compile every asset type CNB implements — textures, cube maps,
+volume textures, fonts, sounds, songs, videos, curves, animation clips and models — from `.cnj`
+documents, from glTF, from images, from WAV and from DDS, with a headless deterministic toolchain
+that needs no GPU, no audio device and no display.
+
+`Effect` is the one built-in identifier with no schema, and it is waiting on the FX/shader
+architecture rather than on anyone's time.

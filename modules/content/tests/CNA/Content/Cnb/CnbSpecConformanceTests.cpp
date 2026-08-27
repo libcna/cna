@@ -563,14 +563,14 @@ TEST(CnbSpecConformanceTest, TheDocumentDistinguishesSchemaFromProducerSupport)
 
     ExpectSpecContains(spec, "Four different meanings of \"supported\"");
     ExpectSpecContains(spec, "| asset type | wire schema | runtime loader | writer API | CLI producer |");
-    ExpectSpecContains(spec, "`TextureCube` is the one implemented schema with no producer");
+    ExpectSpecContains(spec, "Every implemented schema now has a producer");
     ExpectSpecContains(spec, "cna_tool_source_to_cnb");
     ExpectSpecContains(spec, "headless and deterministic");
 
     // §15.2 lists what cnj_to_cnb compiles. The list is a claim about code, so it names all seven
     // types rather than saying "the matching .cnb" -- a vague row cannot go stale visibly.
     ExpectSpecContains(spec, "`Curve`, `AnimationClip`, `Model`, `Texture2D`, `Texture3D`, "
-                             "`SpriteFont`, `SoundEffect`");
+                             "`TextureCube`, `SpriteFont`, `SoundEffect`");
 }
 
 TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)

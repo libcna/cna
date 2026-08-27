@@ -848,7 +848,7 @@ A type can be fully readable at runtime and still have no supported way to *prod
 | asset type | wire schema | runtime loader | writer API | CLI producer |
 |---|---|---|---|---|
 | `Texture2D` | §16 | yes | `EncodeTexture2DToCnb` | **yes** — image source, and `.cnj` |
-| `TextureCube` | §16 | yes | `EncodeTextureCubeToCnb` | **no** — see below |
+| `TextureCube` | §16 | yes | `EncodeTextureCubeToCnb` | **yes** — DDS source, and `.cnj` |
 | `Texture3D` | §16 | yes | `EncodeTexture3DToCnb` | **yes** — `.cnj` (raw RGBA sidecar) |
 | `SpriteFont` | §17 | yes | `EncodeSpriteFontToCnb` | **yes** — `.cnj`, atlas absorbed |
 | `Model` | §11 | yes | `EncodeModelToCnb` | **yes** — glTF direct, and `.cnj` |
@@ -859,10 +859,13 @@ A type can be fully readable at runtime and still have no supported way to *prod
 | `Video` | §19 | yes | `EncodeVideoToCnb` | **yes**, with required metadata arguments; no `Video` `.cnj` exists |
 | `Effect` | — | — | — | — |
 
-`TextureCube` is the one implemented schema with no producer. Its source format is DDS, and CNA's
-only DDS decoder is inside `TextureCube::DDSFromStreamEXT`, which needs a `GraphicsDevice`. A
-content compiler must be headless, and a second DDS parser written to avoid that would be a
-fragile duplicate of a fiddly format. The gap is recorded rather than papered over.
+Every implemented schema now has a producer. `TextureCube` was the last gap: its source is DDS, and
+the DDS decoder used to sit inside `TextureCube::DDSFromStreamEXT` where only code that could
+create a GPU texture could reach it. It was **extracted rather than duplicated** — the parsing and
+DXT decompression were already pure CPU work, so they moved into
+`CNA::Internal::Graphics::DecodeDdsCube` and both the runtime and the compiler now sit above the
+same decoder. A compiled cube map holds decompressed `Rgba8`, which is what the runtime path
+produces anyway.
 
 `Video`'s producer cannot invent metadata: duration, frame size and frame rate would need a
 multimedia decoder CNA does not expose headlessly, so they are **required arguments** rather than
@@ -872,9 +875,9 @@ values guessed from the file.
 
 | producer | reads | writes |
 |---|---|---|
-| `cna_tool_cnj_to_cnb` | a `.cnj` document and its sidecars | `Curve`, `AnimationClip`, `Model`, `Texture2D`, `Texture3D`, `SpriteFont`, `SoundEffect` |
+| `cna_tool_cnj_to_cnb` | a `.cnj` document and its sidecars | `Curve`, `AnimationClip`, `Model`, `Texture2D`, `Texture3D`, `TextureCube`, `SpriteFont`, `SoundEffect` |
 | `cna_tool_gltf_to_cnb` | `.gltf`/`.glb` | `Model.cnb`, byte-identical to the two-step route |
-| `cna_tool_source_to_cnb` | PNG/JPEG/… , WAV, and media files | `Texture2D`/`SoundEffect`/`Song`/`Video` `.cnb` |
+| `cna_tool_source_to_cnb` | PNG/JPEG/… , DDS, WAV, and media files | `Texture2D`/`TextureCube`/`SoundEffect`/`Song`/`Video` `.cnb` |
 | `cna_tool_cnb_info` | any `.cnb` | nothing; inspects and validates |
 
 Every one of them is **headless and deterministic**: no `GraphicsDevice`, no audio device, no
