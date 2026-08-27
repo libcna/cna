@@ -9948,6 +9948,365 @@ CNA_C_API CNA_Result cna_render_pipeline_get_skybox(
 CNA_C_API CNA_Result cna_render_pipeline_set_skybox(
     CNA_RenderPipelineHandle pipeline, CNA_SkyboxHandle skybox);
 
+/** @brief Fixed-width identity for the shape an area light emits from. */
+typedef uint32_t CNA_AreaLightShapeEXT;
+/** @brief A rectangle, described by its centre and two half-axes. */
+#define CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT UINT32_C(0)
+/** @brief A disc in the plane of the same two half-axes; approximated as a polygon. */
+#define CNA_AREA_LIGHT_SHAPE_DISC_EXT UINT32_C(1)
+/** @brief A capsule-like tube along the first half-axis, with the second as its radius. */
+#define CNA_AREA_LIGHT_SHAPE_TUBE_EXT UINT32_C(2)
+
+/**
+ * @brief A light with a shape, as a lit effect receives one.
+ *
+ * The third kind of light, after XNA's directional one and CNA's `CNA_PunctualLightEXT`: a light
+ * that is a *surface*, which is what almost every real light is. The difference is not brightness
+ * but the shape of what the light does -- a window is a bright rectangle in a polished floor, and
+ * that is not something a point light can be tuned into producing.
+ *
+ * The shape is a **centre and two half-axes** rather than four corners, so all three shapes share
+ * one description and none can be given a non-planar or self-intersecting outline. `right_axis`
+ * and `up_axis` are half-extents: their lengths are half the rectangle's width and height, and the
+ * emitting side is the one they cross towards.
+ *
+ * **There are no area-light shadows.** A soft-edged shadow needs many samples of the light's
+ * surface or a ray query, and this layer has neither, so an area light lights what faces it whether
+ * or not anything stands in the way. Stated here because the failure looks like a shadow bug.
+ *
+ * Like @ref CNA_ImageBasedLightEXT, the canonical type lives in an always-compiled XNA header, so
+ * @ref cna_area_light_ext_init and @ref cna_area_light_ext_is_valid work in **every** build.
+ */
+typedef struct CNA_AreaLightEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief Which shape the light emits from. */
+    CNA_AreaLightShapeEXT shape;
+    /** @brief Whether the light emits from both faces of its surface. */
+    CNA_Bool two_sided;
+    /** @brief Reserved bytes; must be zero. */
+    uint8_t reserved0[3];
+    /** @brief World-space centre of the emitting surface. */
+    CNA_Vector3 position;
+    /** @brief Half-axis across the surface; its length is half the width. */
+    CNA_Vector3 right_axis;
+    /** @brief Half-axis up the surface; half the height, or the tube's radius. */
+    CNA_Vector3 up_axis;
+    /** @brief Emitted colour, linear and unbounded -- values above one are meaningful in HDR. */
+    CNA_Vector3 color;
+    /** @brief Multiplier applied to @ref color. */
+    float intensity;
+    /** @brief Distance past which the light contributes nothing, measured from @ref position. */
+    float range;
+} CNA_AreaLightEXT;
+
+/**
+ * @brief Fills an area light with the canonical defaults.
+ *
+ * @param out_light Receives a rectangle at the origin, half a unit across each way, white, at
+ * intensity one and range twenty.
+ * @return `CNA_RESULT_SUCCESS` in every build, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_area_light_ext_init(CNA_AreaLightEXT* out_light);
+
+/**
+ * @brief Reports whether the light describes a surface that can actually emit.
+ *
+ * **Seven arms, and one of them depends on the shape.** Every vector must be finite; the intensity
+ * finite and not negative; the range finite and above zero; both axes long enough to have a
+ * direction. Then: a **tube** is a line with a radius, so any two non-zero axes will do, while a
+ * rectangle and a disc are *surfaces* and additionally need axes that are not parallel -- parallel
+ * axes enclose no area, which the form factor answers with a division by zero rather than with
+ * darkness. Applying the parallel-axis test to a tube would reject a perfectly good light.
+ *
+ * @param light The light.
+ * @param out_valid Receives the answer.
+ * @return `CNA_RESULT_SUCCESS` in every build, `CNA_RESULT_INVALID_ARGUMENT` for a null or
+ * malformed structure.
+ */
+CNA_C_API CNA_Result cna_area_light_ext_is_valid(
+    const CNA_AreaLightEXT* light, CNA_Bool* out_valid);
+
+/** @brief The default edge length of a generated area-light BRDF table. */
+#define CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SIZE 32
+
+/** @brief The default number of samples each of its entries integrates. */
+#define CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SAMPLE_COUNT 64
+
+/**
+ * @brief One entry of the area-light BRDF table.
+ *
+ * The four numbers a shader needs to turn a lobe into a coverage weight: how much energy the lobe
+ * carries, how much of it is Fresnel, and the average direction it points, split into its tangent
+ * and normal components.
+ */
+typedef struct CNA_AreaLightBrdfTerms {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief Total energy of the lobe. */
+    float magnitude;
+    /** @brief The Fresnel-weighted share of it. */
+    float fresnel;
+    /** @brief Tangent component of the average direction. */
+    float average_tangent;
+    /** @brief Normal component of the average direction. */
+    float average_normal;
+} CNA_AreaLightBrdfTerms;
+
+/**
+ * @brief Owned handle for a generated area-light BRDF table.
+ *
+ * Generated once and shared: it depends on neither a scene nor an environment, only on the size
+ * and sample count it was built with. The generation is measurable rather than merely slow --
+ * @ref cna_area_light_brdf_table_get_generation_milliseconds reports what it actually cost.
+ */
+typedef CNA_Handle CNA_AreaLightBrdfTableHandle;
+
+/**
+ * @brief Creates a BRDF table at the default size and sample count.
+ *
+ * @param graphics_device The device the table's texture is created on.
+ * @param out_table Receives the table; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_create(
+    CNA_Handle graphics_device, CNA_AreaLightBrdfTableHandle* out_table);
+
+/**
+ * @brief Creates a BRDF table at a chosen size and sample count.
+ *
+ * Both are validated **as a pair and refused as a pair**, matching the canonical constructor: a
+ * table half-built at the wrong size is worse than no table.
+ *
+ * @param graphics_device The device the table's texture is created on.
+ * @param size The edge length; must be positive.
+ * @param sample_count Samples per entry; must be positive.
+ * @param out_table Receives the table; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when either is below one, for an
+ * invalid device or a null output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_create_with_size(
+    CNA_Handle graphics_device,
+    int32_t size,
+    int32_t sample_count,
+    CNA_AreaLightBrdfTableHandle* out_table);
+
+/**
+ * @brief Releases a BRDF table.
+ *
+ * @param table The table.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_destroy(CNA_AreaLightBrdfTableHandle table);
+
+/**
+ * @brief Returns the table's texture.
+ *
+ * The handle **borrows**: it keeps the table alive while it exists, and releasing it releases only
+ * the handle, never the texture.
+ *
+ * @param table The table.
+ * @param out_texture Receives the texture, or `CNA_INVALID_HANDLE` when the renderer could not
+ * store one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_get_texture(
+    CNA_AreaLightBrdfTableHandle table, CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the table's edge length.
+ *
+ * @param table The table.
+ * @param out_size Receives the size.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_get_size(
+    CNA_AreaLightBrdfTableHandle table, int32_t* out_size);
+
+/**
+ * @brief Returns how many samples each entry integrated.
+ *
+ * @param table The table.
+ * @param out_sample_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_get_sample_count(
+    CNA_AreaLightBrdfTableHandle table, int32_t* out_sample_count);
+
+/**
+ * @brief Returns how long generating the table actually took.
+ *
+ * @param table The table.
+ * @param out_milliseconds Receives the measurement.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_get_generation_milliseconds(
+    CNA_AreaLightBrdfTableHandle table, double* out_milliseconds);
+
+/**
+ * @brief Evaluates one entry of the table without building one.
+ *
+ * The same integration a generated table stores, for a single (roughness, cos theta) pair -- which
+ * is how a caller checks a shader's lookup against the CPU.
+ *
+ * **Both inputs are clamped, and not to the range an eye expects**: the roughness is clamped to
+ * `0.02` through `1`, not zero through one, because a perfect mirror has a lobe of zero width and
+ * no samples land in it; the cosine is clamped to `0.001` through `1` for the same reason at
+ * grazing angles. The sample count is the one argument that is **refused** rather than clamped.
+ *
+ * @param roughness The surface roughness; clamped to `[0.02, 1]`.
+ * @param cos_theta The cosine of the view angle; clamped to `[0.001, 1]`.
+ * @param sample_count Samples to integrate; must be positive.
+ * @param out_terms Receives the four terms.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a sample count below one or a
+ * null or malformed output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_evaluate(
+    float roughness, float cos_theta, int32_t sample_count, CNA_AreaLightBrdfTerms* out_terms);
+
+/**
+ * @brief Copies the GLSL that looks the table up into a caller buffer.
+ *
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the byte count, including the terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_brdf_table_copy_lookup_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/** @brief How many corners an area light's quad has. */
+#define CNA_AREA_LIGHT_QUAD_CORNER_COUNT 4
+
+/**
+ * @brief Returns the four corners of the quad a light is integrated as.
+ *
+ * **Shape-dependent, and that is the point**: a rectangle uses its axes as they are, a disc scales
+ * them so a polygon matches the disc's area, and a tube is *billboarded* -- turned so its face
+ * points at the surface, because a cylinder looks like a rectangle from wherever it is seen. One
+ * quad therefore serves all three shapes instead of a second integrator for tubes.
+ *
+ * @param light The light.
+ * @param surface The world-space point being lit; only a tube's quad depends on it.
+ * @param out_quad Receives @ref CNA_AREA_LIGHT_QUAD_CORNER_COUNT corners, counter-clockwise from
+ * the lower left.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_shading_quad_of(
+    const CNA_AreaLightEXT* light, const CNA_Vector3* surface, CNA_Vector3* out_quad);
+
+/**
+ * @brief Returns how much of a shading lobe the quad covers.
+ *
+ * @param quad @ref CNA_AREA_LIGHT_QUAD_CORNER_COUNT corners, as @ref cna_area_light_shading_quad_of
+ * produces them.
+ * @param surface The world-space point being lit.
+ * @param lobe_axis The direction the lobe points.
+ * @param lobe_scale The lobe's width, from @ref cna_area_light_shading_lobe_scale_for.
+ * @param two_sided Whether the light emits from both faces.
+ * @param out_coverage Receives the coverage; zero when the quad is behind the surface.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_shading_coverage(
+    const CNA_Vector3* quad,
+    const CNA_Vector3* surface,
+    const CNA_Vector3* lobe_axis,
+    float lobe_scale,
+    CNA_Bool two_sided,
+    float* out_coverage);
+
+/**
+ * @brief Returns one area light's whole contribution to one surface point.
+ *
+ * @param light The light.
+ * @param surface The world-space point being lit.
+ * @param normal The surface normal.
+ * @param camera_position Where the surface is being viewed from.
+ * @param base_color The surface's base colour.
+ * @param metallic How metallic the surface is.
+ * @param roughness How rough the surface is.
+ * @param out_contribution Receives the contribution, unbounded above, and zero when the light
+ * cannot reach the point.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_shading_contribution(
+    const CNA_AreaLightEXT* light,
+    const CNA_Vector3* surface,
+    const CNA_Vector3* normal,
+    const CNA_Vector3* camera_position,
+    const CNA_Vector3* base_color,
+    float metallic,
+    float roughness,
+    CNA_Vector3* out_contribution);
+
+/**
+ * @brief Returns the lobe width a roughness implies.
+ *
+ * Clamps the roughness to zero through one, squares it, and then **floors the result at `0.02`**,
+ * so a mirror still has a lobe with a width rather than a line -- a zero-width lobe covers nothing
+ * and a polished surface would show no area light at all.
+ *
+ * @param roughness The surface roughness.
+ * @param out_scale Receives the lobe width.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_shading_lobe_scale_for(float roughness, float* out_scale);
+
+/**
+ * @brief Copies the GLSL of the shading model into a caller buffer.
+ *
+ * The same arithmetic the routes above run, so a shader and a test can be checked against each
+ * other rather than against two separate implementations.
+ *
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the byte count, including the terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_area_light_shading_copy_shading_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Gives the forward effect an area light and the table to shade it with.
+ *
+ * The light is **copied**; the table is **borrowed** and must outlive the effect's use of it. Both
+ * halves are required, which is why this is one route rather than two: an effect given a light and
+ * no table would have nothing to integrate the lobe against.
+ *
+ * **A degenerate light CLEARS the area light rather than being refused.** That is what the
+ * canonical setter does -- a light with parallel axes or zero range would divide by zero in the
+ * form factor, and unsetting it is how the effect stays drawable -- so this route succeeds and the
+ * effect ends up with no area light at all. Call @ref cna_clustered_forward_effect_has_area_light
+ * afterwards to find out which happened; a successful call is not evidence that a light was set.
+ * A *malformed structure* is a different thing and is refused.
+ *
+ * @param effect The effect.
+ * @param light The light to apply; a degenerate one clears instead of applying.
+ * @param table The BRDF table to shade it with.
+ * @return `CNA_RESULT_SUCCESS` -- including when a degenerate light cleared instead of applying --
+ * `CNA_RESULT_INVALID_HANDLE` for an invalid table, `CNA_RESULT_INVALID_ARGUMENT` for a null or
+ * malformed light structure, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_area_light(
+    CNA_ClusteredForwardEffectHandle effect,
+    const CNA_AreaLightEXT* light,
+    CNA_AreaLightBrdfTableHandle table);
+
 #ifdef __cplusplus
 }
 #endif

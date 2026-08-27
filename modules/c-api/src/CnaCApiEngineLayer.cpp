@@ -89,7 +89,10 @@
 #include "CNA/Graphics/GpuTimer.hpp"
 #include "CNA/Graphics/MaterialBinding.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "CNA/Graphics/AreaLightBrdfTable.hpp"
+#include "CNA/Graphics/AreaLightShading.hpp"
 #include "CNA/Graphics/AtmosphericSky.hpp"
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
 #include "CNA/Graphics/LightProbeBaker.hpp"
@@ -236,6 +239,7 @@ using CNA::C::Detail::SetTrackedRenderTargetBindings;
 using CNA::C::Detail::Texture2DResource;
 
 namespace Ext = CNA::Graphics;
+namespace ExtXna = Microsoft::Xna::Framework::Graphics;
 
 static_assert(
     NativeOrdinal(Ext::DepthEncoding::Automatic) == CNA_DEPTH_ENCODING_AUTOMATIC &&
@@ -5472,6 +5476,101 @@ CNA_Result cna_render_pipeline_get_skybox(CNA_RenderPipelineHandle p0, CNA_Skybo
 CNA_Result cna_render_pipeline_set_skybox(CNA_RenderPipelineHandle p0, CNA_SkyboxHandle p1)
 {
     (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_create(CNA_Handle p0, CNA_AreaLightBrdfTableHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_create_with_size(CNA_Handle p0, int32_t p1, int32_t p2, CNA_AreaLightBrdfTableHandle* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_destroy(CNA_AreaLightBrdfTableHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_get_texture(CNA_AreaLightBrdfTableHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_get_size(CNA_AreaLightBrdfTableHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_get_sample_count(CNA_AreaLightBrdfTableHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_get_generation_milliseconds(CNA_AreaLightBrdfTableHandle p0, double* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_evaluate(float p0, float p1, int32_t p2, CNA_AreaLightBrdfTerms* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_brdf_table_copy_lookup_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_shading_quad_of(const CNA_AreaLightEXT* p0, const CNA_Vector3* p1, CNA_Vector3* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_shading_coverage(const CNA_Vector3* p0, const CNA_Vector3* p1, const CNA_Vector3* p2, float p3, CNA_Bool p4, float* p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_shading_contribution(const CNA_AreaLightEXT* p0, const CNA_Vector3* p1, const CNA_Vector3* p2, const CNA_Vector3* p3, const CNA_Vector3* p4, float p5, float p6, CNA_Vector3* p7)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5; (void)p6; (void)p7;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_shading_lobe_scale_for(float p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_area_light_shading_copy_shading_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_area_light(CNA_ClusteredForwardEffectHandle p0, const CNA_AreaLightEXT* p1, CNA_AreaLightBrdfTableHandle p2)
+{
+    (void)p0; (void)p1; (void)p2;
     return ExtensionUnavailable();
 }
 
@@ -11604,6 +11703,10 @@ struct ClusteredForwardEffectResource final {
     std::shared_ptr<Ext::ClusteredForwardEffect> value;
     CNA_Handle parentGame;
     uint64_t activeBorrowCount = 0U;
+    // CBIND-091C. The canonical setAreaLight keeps a raw pointer to the BRDF table. Retaining the
+    // table resource here means releasing the table handle mid-frame cannot leave that pointer
+    // dangling; the contract is still "borrowed", this just makes the documented one survivable.
+    std::shared_ptr<void> areaLightTable;
 };
 
 struct ClusteredLightComputeResource final {
@@ -19539,6 +19642,332 @@ CNA_Result cna_render_pipeline_set_skybox(
         p->value->setSkybox(resource->value.get());
         p->skybox = skybox;
         p->skyboxRetention = resource;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+#define CNA_WITH_BRDF_TABLE(handle, body)                                                          \
+    WithEngineObject<Ext::AreaLightBrdfTable>(                                                     \
+        (handle), ObjectKind::AreaLightBrdfTable, "AreaLightBrdfTable", body)
+
+static_assert(
+    CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SIZE == Ext::AreaLightBrdfTable::kDefaultSize &&
+    CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SAMPLE_COUNT ==
+        Ext::AreaLightBrdfTable::kDefaultSampleCount &&
+    CNA_AREA_LIGHT_QUAD_CORNER_COUNT ==
+        static_cast<int>(std::tuple_size<Ext::AreaLightShading::Quad>::value));
+
+// The area light is a value type from an always-compiled header, so the conversion lives beside the
+// two value routes in CnaCApiGraphicsExt.cpp and is repeated here rather than exported: it is four
+// lines, and exporting it would put a CNAEXT-shaped helper in a file that must compile without the
+// layer.
+[[nodiscard]] CNA_Result ToNativeAreaLightHere(
+    const CNA_AreaLightEXT* const light, ExtXna::AreaLightEXT* const out)
+{
+    if (light == nullptr) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+    }
+    if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_AreaLightEXT)) ||
+        light->struct_version == UINT32_C(0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The area-light structure is malformed.");
+    }
+    if (light->shape > CNA_AREA_LIGHT_SHAPE_TUBE_EXT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The area-light shape is not a defined identity.");
+    }
+    out->Shape = static_cast<ExtXna::AreaLightShapeEXT>(light->shape);
+    out->Position = ToNativeVector3(light->position);
+    out->RightAxis = ToNativeVector3(light->right_axis);
+    out->UpAxis = ToNativeVector3(light->up_axis);
+    out->Color = ToNativeVector3(light->color);
+    out->Intensity = light->intensity;
+    out->Range = light->range;
+    out->TwoSided = light->two_sided != CNA_FALSE;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ToNativeQuad(
+    const CNA_Vector3* const quad, Ext::AreaLightShading::Quad* const out)
+{
+    if (quad == nullptr) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The quad is null.");
+    }
+    for (int corner = 0; corner < CNA_AREA_LIGHT_QUAD_CORNER_COUNT; ++corner) {
+        (*out)[static_cast<std::size_t>(corner)] = ToNativeVector3(quad[corner]);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_area_light_brdf_table_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_AreaLightBrdfTableHandle* const outTable)
+{
+    return CreateEngineObject<Ext::AreaLightBrdfTable>(
+        graphicsDeviceHandle, ObjectKind::AreaLightBrdfTable, outTable, nullptr,
+        Ext::AreaLightBrdfTable::kDefaultSize, Ext::AreaLightBrdfTable::kDefaultSampleCount);
+}
+
+CNA_Result cna_area_light_brdf_table_create_with_size(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t size,
+    const int32_t sampleCount,
+    CNA_AreaLightBrdfTableHandle* const outTable)
+{
+    // Checked as a pair before construction so the message names both, rather than being whichever
+    // half the canonical condition happened to test first.
+    if (size <= INT32_C(0) || sampleCount <= INT32_C(0)) {
+        if (outTable != nullptr) {
+            *outTable = CNA_INVALID_HANDLE;
+        }
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The size and the sample count must both be positive.");
+    }
+    return CreateEngineObject<Ext::AreaLightBrdfTable>(
+        graphicsDeviceHandle, ObjectKind::AreaLightBrdfTable, outTable, nullptr,
+        static_cast<int>(size), static_cast<int>(sampleCount));
+}
+
+CNA_Result cna_area_light_brdf_table_destroy(const CNA_AreaLightBrdfTableHandle table)
+{
+    return DestroyEngineObject<Ext::AreaLightBrdfTable>(
+        table, ObjectKind::AreaLightBrdfTable, "AreaLightBrdfTable");
+}
+
+CNA_Result cna_area_light_brdf_table_get_texture(
+    const CNA_AreaLightBrdfTableHandle table, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_BRDF_TABLE(table, [&](const auto& t) -> CNA_Result {
+        if (outTexture == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        auto* const texture = t->value->getTexture();
+        if (texture == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        // Aliasing the resource, so the handle keeps the TABLE alive and releasing it releases
+        // nothing but the handle.
+        return CNA::C::Detail::CreateOwnedTexture2D(
+            std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D>(t, texture),
+            t->parentGame, outTexture);
+    });
+}
+
+CNA_Result cna_area_light_brdf_table_get_size(
+    const CNA_AreaLightBrdfTableHandle table, int32_t* const outSize)
+{
+    return CNA_WITH_BRDF_TABLE(table, [&](const auto& t) -> CNA_Result {
+        return StoreValue(outSize, static_cast<int32_t>(t->value->getSize()));
+    });
+}
+
+CNA_Result cna_area_light_brdf_table_get_sample_count(
+    const CNA_AreaLightBrdfTableHandle table, int32_t* const outSampleCount)
+{
+    return CNA_WITH_BRDF_TABLE(table, [&](const auto& t) -> CNA_Result {
+        return StoreValue(outSampleCount, static_cast<int32_t>(t->value->getSampleCount()));
+    });
+}
+
+CNA_Result cna_area_light_brdf_table_get_generation_milliseconds(
+    const CNA_AreaLightBrdfTableHandle table, double* const outMilliseconds)
+{
+    return CNA_WITH_BRDF_TABLE(table, [&](const auto& t) -> CNA_Result {
+        return StoreValue(outMilliseconds, t->value->getGenerationMilliseconds());
+    });
+}
+
+CNA_Result cna_area_light_brdf_table_evaluate(
+    const float roughness,
+    const float cosTheta,
+    const int32_t sampleCount,
+    CNA_AreaLightBrdfTerms* const outTerms)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTerms == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The terms are null.");
+        }
+        if (outTerms->struct_size < static_cast<uint32_t>(sizeof(CNA_AreaLightBrdfTerms)) ||
+            outTerms->struct_version == UINT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The terms structure is malformed.");
+        }
+        if (sampleCount <= INT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The sample count must be positive.");
+        }
+        const auto terms = Ext::AreaLightBrdfTable::evaluate(
+            roughness, cosTheta, static_cast<int>(sampleCount));
+        outTerms->magnitude = terms.Magnitude;
+        outTerms->fresnel = terms.Fresnel;
+        outTerms->average_tangent = terms.AverageTangent;
+        outTerms->average_normal = terms.AverageNormal;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_area_light_brdf_table_copy_lookup_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes, [] { return Ext::AreaLightBrdfTable::getLookupGlsl(); });
+}
+
+CNA_Result cna_area_light_shading_quad_of(
+    const CNA_AreaLightEXT* const light,
+    const CNA_Vector3* const surface,
+    CNA_Vector3* const outQuad)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ExtXna::AreaLightEXT native;
+        if (const CNA_Result result = ToNativeAreaLightHere(light, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireVector3Argument(surface, "The surface is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outQuad == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The quad is null.");
+        }
+        const auto quad = Ext::AreaLightShading::quadOf(native, ToNativeVector3(*surface));
+        for (int corner = 0; corner < CNA_AREA_LIGHT_QUAD_CORNER_COUNT; ++corner) {
+            const auto& value = quad[static_cast<std::size_t>(corner)];
+            outQuad[corner] = Vec3(value.X, value.Y, value.Z);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_area_light_shading_coverage(
+    const CNA_Vector3* const quad,
+    const CNA_Vector3* const surface,
+    const CNA_Vector3* const lobeAxis,
+    const float lobeScale,
+    const CNA_Bool twoSided,
+    float* const outCoverage)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::AreaLightShading::Quad native{};
+        if (const CNA_Result result = ToNativeQuad(quad, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireVector3Argument(surface, "The surface is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireVector3Argument(lobeAxis, "The lobe axis is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outCoverage,
+            Ext::AreaLightShading::coverage(
+                native, ToNativeVector3(*surface), ToNativeVector3(*lobeAxis), lobeScale,
+                twoSided != CNA_FALSE));
+    });
+}
+
+CNA_Result cna_area_light_shading_contribution(
+    const CNA_AreaLightEXT* const light,
+    const CNA_Vector3* const surface,
+    const CNA_Vector3* const normal,
+    const CNA_Vector3* const cameraPosition,
+    const CNA_Vector3* const baseColor,
+    const float metallic,
+    const float roughness,
+    CNA_Vector3* const outContribution)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ExtXna::AreaLightEXT native;
+        if (const CNA_Result result = ToNativeAreaLightHere(light, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireVector3Argument(surface, "The surface is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireVector3Argument(normal, "The normal is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequireVector3Argument(cameraPosition, "The camera position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireVector3Argument(baseColor, "The base colour is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto value = Ext::AreaLightShading::contribution(
+            native, ToNativeVector3(*surface), ToNativeVector3(*normal),
+            ToNativeVector3(*cameraPosition), ToNativeVector3(*baseColor), metallic, roughness);
+        return StoreValue(outContribution, Vec3(value.X, value.Y, value.Z));
+    });
+}
+
+CNA_Result cna_area_light_shading_lobe_scale_for(const float roughness, float* const outScale)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(outScale, Ext::AreaLightShading::lobeScaleFor(roughness));
+    });
+}
+
+CNA_Result cna_area_light_shading_copy_shading_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes, [] { return Ext::AreaLightShading::getShadingGlsl(); });
+}
+
+CNA_Result cna_clustered_forward_effect_set_area_light(
+    const CNA_ClusteredForwardEffectHandle effect,
+    const CNA_AreaLightEXT* const light,
+    const CNA_AreaLightBrdfTableHandle table)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+                                        -> CNA_Result {
+        ExtXna::AreaLightEXT native;
+        if (const CNA_Result result = ToNativeAreaLightHere(light, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<EngineObjectResource<Ext::AreaLightBrdfTable>> resource;
+        if (const CNA_Result result = GetEngineResource(
+                table, ObjectKind::AreaLightBrdfTable, "AreaLightBrdfTable", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Passed through with its degenerate-light behaviour intact: the canonical setter CLEARS
+        // rather than refusing, so this succeeds and leaves the effect with no area light.
+        // has_area_light is how a caller tells the two apart.
+        e->value->setAreaLight(native, *resource->value);
+        // The table is borrowed by the effect, so the effect resource retains it: releasing the
+        // table handle while the effect still shades with it would otherwise dangle.
+        e->areaLightTable = resource;
         return CNA_RESULT_SUCCESS;
     });
 }

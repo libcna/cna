@@ -673,12 +673,12 @@ CNAEXT_SLICE_OWNERS: dict[str, str] = {
 # every field the subset omits. The field therefore waits for CBIND-088, which owns the settings
 # type, while the rest of the struct is bound by CBIND-084C.
 SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
-    # CBIND-086C: the forward effect's area-light setter takes a type CBIND-091C owns, so it waits
-    # for that slice rather than for the one that binds the effect. The effect itself is bound;
-    # only the argument is missing. The two material-extension entries that stood here expired when
-    # CBIND-087A bound PbrMaterialExtensions, and the two light-probe entries expired when
-    # CBIND-091A bound LightProbeEXT and LightProbeVolumeEXT.
-    "CNA::Graphics::ClusteredForwardEffect::setAreaLight": "CBIND-091C",
+    # Every entry that stood here has expired. The two material-extension ones went when CBIND-087A
+    # bound PbrMaterialExtensions, the four image-based-light ones and the two light-probe ones when
+    # CBIND-091A bound the types that carry them, the two skybox ones when CBIND-091B bound Skybox,
+    # and setAreaLight when CBIND-091C bound AreaLightEXT and the BRDF table. The table is kept
+    # rather than deleted because the discipline it enforces -- a deferral names its owner and is
+    # removed in the commit that binds it -- outlives the entries.
     # The two CBIND-088B skybox entries that stood here expired when CBIND-091B bound Skybox and
     # the pipeline pair that carries it, and the four CBIND-087C image-based-light entries expired
     # when CBIND-091A bound ImageBasedLightEXT.

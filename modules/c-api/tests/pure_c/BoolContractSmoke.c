@@ -105,6 +105,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_area_light_shading_coverage(0, 0, 0, 0, UINT8_C(9), 0);
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_area_light_shading_coverage\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_avatar_animation_update(0, 0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -813,6 +820,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 107 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 108 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

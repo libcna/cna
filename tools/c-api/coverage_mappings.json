@@ -16943,6 +16943,96 @@
         "CPP-E74522246C65",
         "CPP-FBABD943151B"
       ]
+    },
+    {
+      "id": "area-light-value",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:AreaLightEXT(?:::[A-Za-z0-9_~]+)?|AreaLightShapeEXT(?:::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field",
+        "method",
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_AreaLightEXT`, a versioned POD, with `CNA_AreaLightShapeEXT` and its three constants at the canonical ordinals, plus `cna_area_light_ext_init` and `cna_area_light_ext_is_valid`.\n\nLike `CNA_ImageBasedLightEXT`, the canonical type is deliberately in the **always-compiled** XNA header rather than under `CNA_CNAEXT` (`plans/plan_modern.md` `MOD-1222`), so both value routes work in **every** build and read their defaults from the canonical type instead of repeating them as literals.\n\n`IsValidEXT()` is not restated in C -- the route rebuilds the canonical value and asks it. That matters because the predicate has **seven arms and one of them depends on the shape**: a tube is a line with a radius and skips the parallel-axis test that a rectangle and a disc must pass. A reimplementation that applied the test to all three would reject a perfectly good tube, and asking the canonical object cannot get that wrong.",
+      "tests": "`EngineLayerSmoke.c` stage 36 and the layer-absent block. Each refusing arm is asserted on its own so one broken arm cannot hide behind another, and the shape-dependent arm is asserted with the case that isolates it: the *same* parallel axes read invalid as a rectangle, invalid as a disc, and **valid** as a tube. Both routes are asserted to succeed in the layer-absent build, tube exemption included. Break-proved: inverting the tube answer moves both CNAEXT trees; making the value pair refuse without the layer moves only the layer-absent tree.",
+      "status": "implemented",
+      "task": "CBIND-091C",
+      "approved_symbols": [
+        "CPP-00479C214233",
+        "CPP-0DE6703732D2",
+        "CPP-16584B6DD514",
+        "CPP-184CEFE1E480",
+        "CPP-4CD23721A255",
+        "CPP-711360A27D62",
+        "CPP-7F3914679F5D",
+        "CPP-B2638E5B2728",
+        "CPP-B29F2ABD5C22",
+        "CPP-B35220022D19",
+        "CPP-B7CFFB2C8B40",
+        "CPP-C9034DDFA8BF",
+        "CPP-ED7A8E48F3CB",
+        "CPP-F68756D3ECED"
+      ]
+    },
+    {
+      "id": "area-light-brdf-table",
+      "qualified_name_regex": "^CNA::Graphics::AreaLightBrdfTable(?:::(?:Terms(?:::[A-Za-z0-9_]+)?|[A-Za-z0-9_~]+))?$",
+      "kinds": [
+        "class",
+        "struct",
+        "constant",
+        "field",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_area_light_brdf_table_*` over its own owned handle, with `CNA_AreaLightBrdfTerms` for the four numbers one entry carries and the two canonical defaults as macros, `static_assert`ed against the canonical constants.\n\nThe size and sample count are validated **as a pair and refused as a pair**, checked before construction so the message names both rather than being whichever half the canonical condition tested first. `evaluate` is the one route that mixes the two shapes: the sample count is **refused**, while its two float inputs are **clamped to bounds an eye would not guess** -- roughness to `[0.02, 1]`, not zero to one, because a perfect mirror has a lobe of zero width and no samples land in it, and the cosine to `[0.001, 1]` for the same reason at grazing angles.\n\nThe texture handle **borrows**: it keeps the table alive and releasing it releases only the handle.",
+      "tests": "`EngineLayerSmoke.c` stage 36. The clamps are asserted by **equality against the bound**, not by a range -- an out-of-range input must produce exactly what the bound produces, which is what distinguishes a clamp from a wider tolerance. Three bad size/sample pairs are refused with the handle left invalid, and the borrowed texture handle is released twice over to show the table keeps its texture.",
+      "status": "implemented",
+      "task": "CBIND-091C",
+      "approved_symbols": [
+        "CPP-1CDC5CFC9419",
+        "CPP-22B723AE3738",
+        "CPP-2E0269A2DC37",
+        "CPP-592A31F72565",
+        "CPP-69AF2AC6B7DF",
+        "CPP-69B915DD2B76",
+        "CPP-710EC47F951E",
+        "CPP-8022930394D9",
+        "CPP-8D7E24ECB9EC",
+        "CPP-91FF96BC2EAF",
+        "CPP-990FC44976FD",
+        "CPP-9995D8183898",
+        "CPP-AEE59D84D769",
+        "CPP-C3017CBBE75D",
+        "CPP-CDC8E68F8173",
+        "CPP-D03B1CE3A150",
+        "CPP-E66F9FAE3183"
+      ]
+    },
+    {
+      "id": "area-light-shading",
+      "qualified_name_regex": "^(?:CNA::Graphics::AreaLightShading(?:::[A-Za-z0-9_~]+)?|CNA::Graphics::ClusteredForwardEffect::setAreaLight)$",
+      "kinds": [
+        "class",
+        "alias",
+        "method"
+      ],
+      "mapping": "`cna_area_light_shading_*` for the four pure functions and the GLSL, with the canonical `Quad` alias becoming a plain array of `CNA_AREA_LIGHT_QUAD_CORNER_COUNT` vectors, plus the forward effect's area-light setter that was waiting for both this and the table.\n\n`quadOf` is shape-dependent in two ways and the binding preserves both: a disc scales its axes so a polygon matches the disc's area, and a **tube is billboarded** -- turned so its face points at the surface -- so a tube's quad depends on the point being lit while a rectangle's does not. `lobeScaleFor` clamps the roughness, squares it, and then **floors the result at `0.02`**, so a mirror still has a lobe with a width rather than a line.\n\n**`setAreaLight` CLEARS on a degenerate light rather than refusing it**, which is what the canonical setter does -- a light with parallel axes or zero range would divide by zero in the form factor, and unsetting it is how the effect stays drawable. The route therefore succeeds, and the header says plainly that a successful call is not evidence a light was set; `cna_clustered_forward_effect_has_area_light` is. A *malformed structure* is a different thing and is refused.",
+      "tests": "`EngineLayerSmoke.c` stage 36. The quad is asserted for all three shapes and for the surface-dependence split -- a rectangle's quad is shown identical for two different surfaces, a tube's different -- so neither \"ignores the shape\" nor \"billboards everything\" survives. The clear-vs-refuse distinction is pinned by asserting the result code **and** `has_area_light` after a degenerate light, and again after a malformed one, which leaves the previous light in place. Break-proved: asserting the degenerate light was kept moves both CNAEXT trees.",
+      "status": "implemented",
+      "task": "CBIND-091C",
+      "approved_symbols": [
+        "CPP-300E47928B38",
+        "CPP-45D9E0252D45",
+        "CPP-86C39F77099E",
+        "CPP-9D1BBF390309",
+        "CPP-BCF8AFE54088",
+        "CPP-CAF5CA960A2C",
+        "CPP-D6418342919C",
+        "CPP-EDF048297A7E"
+      ]
     }
   ]
 }

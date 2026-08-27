@@ -988,6 +988,22 @@
   "cna_animation_player_get_current_position",
   "cna_animation_player_start_clip",
   "cna_animation_player_update",
+  "cna_area_light_brdf_table_copy_lookup_glsl",
+  "cna_area_light_brdf_table_create",
+  "cna_area_light_brdf_table_create_with_size",
+  "cna_area_light_brdf_table_destroy",
+  "cna_area_light_brdf_table_evaluate",
+  "cna_area_light_brdf_table_get_generation_milliseconds",
+  "cna_area_light_brdf_table_get_sample_count",
+  "cna_area_light_brdf_table_get_size",
+  "cna_area_light_brdf_table_get_texture",
+  "cna_area_light_ext_init",
+  "cna_area_light_ext_is_valid",
+  "cna_area_light_shading_contribution",
+  "cna_area_light_shading_copy_shading_glsl",
+  "cna_area_light_shading_coverage",
+  "cna_area_light_shading_lobe_scale_for",
+  "cna_area_light_shading_quad_of",
   "cna_artist_collection_copy_type_name",
   "cna_artist_collection_destroy",
   "cna_artist_collection_dispose",
@@ -1302,6 +1318,7 @@
   "cna_clustered_forward_effect_has_light_probe",
   "cna_clustered_forward_effect_is_supported",
   "cna_clustered_forward_effect_set_ambient",
+  "cna_clustered_forward_effect_set_area_light",
   "cna_clustered_forward_effect_set_base_color",
   "cna_clustered_forward_effect_set_ior",
   "cna_clustered_forward_effect_set_light_probe",
@@ -4477,6 +4494,12 @@
   "CNA_ALPHA_MODE_MASK_EXT": 1,
   "CNA_ALPHA_MODE_MAXIMUM_EXT": 2,
   "CNA_ALPHA_MODE_OPAQUE_EXT": 0,
+  "CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SAMPLE_COUNT": 64,
+  "CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SIZE": 32,
+  "CNA_AREA_LIGHT_QUAD_CORNER_COUNT": 4,
+  "CNA_AREA_LIGHT_SHAPE_DISC_EXT": 1,
+  "CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT": 0,
+  "CNA_AREA_LIGHT_SHAPE_TUBE_EXT": 2,
   "CNA_ASCII_QUANTIZE_MODE_BLACK_WHITE": 0,
   "CNA_ASCII_QUANTIZE_MODE_COLOR": 1,
   "CNA_AUDIO_CHANNELS_MONO": 1,
@@ -5846,6 +5869,14 @@
    8,
    8
   ],
+  "CNA_AreaLightBrdfTableHandle": [
+   8,
+   8
+  ],
+  "CNA_AreaLightShapeEXT": [
+   4,
+   4
+  ],
   "CNA_ArtistCollectionHandle": [
    8,
    8
@@ -7204,6 +7235,86 @@
     ]
    },
    "size": 24
+  },
+  "CNA_AreaLightBrdfTerms": {
+   "align": 4,
+   "fields": {
+    "average_normal": [
+     20,
+     4
+    ],
+    "average_tangent": [
+     16,
+     4
+    ],
+    "fresnel": [
+     12,
+     4
+    ],
+    "magnitude": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 24
+  },
+  "CNA_AreaLightEXT": {
+   "align": 4,
+   "fields": {
+    "color": [
+     52,
+     12
+    ],
+    "intensity": [
+     64,
+     4
+    ],
+    "position": [
+     16,
+     12
+    ],
+    "range": [
+     68,
+     4
+    ],
+    "reserved0": [
+     13,
+     3
+    ],
+    "right_axis": [
+     28,
+     12
+    ],
+    "shape": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "two_sided": [
+     12,
+     1
+    ],
+    "up_axis": [
+     40,
+     12
+    ]
+   },
+   "size": 72
   },
   "CNA_AttitudeReading": {
    "align": 8,

@@ -2,6 +2,7 @@
 
 #include "CNA/C/engine_layer.h"
 #include "CNA/C/graphics_ext.h"
+#include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
@@ -210,6 +211,87 @@ CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* const outMaterial)
         }
     }
     return StoreValue(outMaterial, defaults);
+}
+
+/* CBIND-091C. The area light is the second value in this slice whose canonical type lives in the
+ * always-compiled XNA header rather than under CNA_CNAEXT, so these two routes work in every build
+ * for the same reason the image-based-light pair below does. */
+CNA_Result cna_area_light_ext_init(CNA_AreaLightEXT* const outLight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLight == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+        }
+        const Microsoft::Xna::Framework::Graphics::AreaLightEXT defaults;
+        *outLight = CNA_AreaLightEXT{};
+        outLight->struct_size = static_cast<uint32_t>(sizeof(CNA_AreaLightEXT));
+        outLight->struct_version = UINT32_C(1);
+        outLight->shape = static_cast<CNA_AreaLightShapeEXT>(defaults.Shape);
+        outLight->two_sided = static_cast<CNA_Bool>(defaults.TwoSided ? CNA_TRUE : CNA_FALSE);
+        outLight->position = CNA_Vector3{defaults.Position.X, defaults.Position.Y,
+                                         defaults.Position.Z};
+        outLight->right_axis = CNA_Vector3{defaults.RightAxis.X, defaults.RightAxis.Y,
+                                           defaults.RightAxis.Z};
+        outLight->up_axis = CNA_Vector3{defaults.UpAxis.X, defaults.UpAxis.Y, defaults.UpAxis.Z};
+        outLight->color = CNA_Vector3{defaults.Color.X, defaults.Color.Y, defaults.Color.Z};
+        outLight->intensity = defaults.Intensity;
+        outLight->range = defaults.Range;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+/* Rebuilding the canonical value and asking it, rather than restating its seven arms here. The
+ * shape-dependent arm -- a tube skips the parallel-axis test -- is exactly the one a reimplementation
+ * gets wrong, and this cannot get it wrong. */
+[[nodiscard]] CNA_Result ToNativeAreaLight(
+    const CNA_AreaLightEXT* const light,
+    Microsoft::Xna::Framework::Graphics::AreaLightEXT* const out)
+{
+    if (light == nullptr) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+    }
+    if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_AreaLightEXT)) ||
+        light->struct_version == UINT32_C(0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The area-light structure is malformed.");
+    }
+    if (light->shape > CNA_AREA_LIGHT_SHAPE_TUBE_EXT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The area-light shape is not a defined identity.");
+    }
+    out->Shape =
+        static_cast<Microsoft::Xna::Framework::Graphics::AreaLightShapeEXT>(light->shape);
+    out->Position = {light->position.x, light->position.y, light->position.z};
+    out->RightAxis = {light->right_axis.x, light->right_axis.y, light->right_axis.z};
+    out->UpAxis = {light->up_axis.x, light->up_axis.y, light->up_axis.z};
+    out->Color = {light->color.x, light->color.y, light->color.z};
+    out->Intensity = light->intensity;
+    out->Range = light->range;
+    out->TwoSided = light->two_sided != CNA_FALSE;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_area_light_ext_is_valid(
+    const CNA_AreaLightEXT* const light, CNA_Bool* const outValid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::Graphics::AreaLightEXT native;
+        if (const CNA_Result result = ToNativeAreaLight(light, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outValid, static_cast<CNA_Bool>(native.IsValidEXT() ? CNA_TRUE : CNA_FALSE));
+    });
 }
 
 /* CBIND-091A. The image-based light is a value, and its canonical type lives in the

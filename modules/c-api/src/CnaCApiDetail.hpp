@@ -248,6 +248,9 @@ enum class ObjectKind : uint32_t {
     EnvironmentProcessor = 158,
     Skybox = 159,
     AtmosphericSky = 160,
+
+    // CBIND-091C.
+    AreaLightBrdfTable = 161,
     Test = UINT32_MAX
 };
 

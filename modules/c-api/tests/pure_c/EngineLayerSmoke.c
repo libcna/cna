@@ -876,6 +876,88 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-091C. Area lights. The value pair works in EVERY build, like the image-based light
+       above and for the same reason -- the canonical type is in the always-compiled XNA header --
+       so it is asserted to SUCCEED here, shape-dependent arm and all. Everything that needs the
+       layer refuses. */
+    {
+        CNA_AreaLightBrdfTableHandle table = (CNA_AreaLightBrdfTableHandle)UINT64_C(0x5A5A5A5A);
+        CNA_AreaLightEXT light;
+        CNA_AreaLightBrdfTerms terms;
+        CNA_Vector3 quad[CNA_AREA_LIGHT_QUAD_CORNER_COUNT];
+        CNA_Vector3 vector;
+        CNA_Bool valid = UINT8_C(9);
+        CNA_Handle cube_scratch = (CNA_Handle)UINT64_C(0x5A5A5A5A);
+        const float sentinel_area = -19.5F;
+        float area_scalar = sentinel_area;
+        uint64_t area_bytes = UINT64_C(3);
+        int corner;
+        vector.x = 0.0F; vector.y = 0.0F; vector.z = 1.0F;
+        for (corner = 0; corner < CNA_AREA_LIGHT_QUAD_CORNER_COUNT; ++corner) {
+            quad[corner] = vector;
+        }
+        terms.struct_size = (uint32_t)sizeof(CNA_AreaLightBrdfTerms);
+        terms.struct_version = UINT32_C(1);
+        if (cna_area_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
+            light.shape != CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT || light.range != 20.0F ||
+            cna_area_light_ext_is_valid(&light, &valid) != CNA_RESULT_SUCCESS ||
+            valid != CNA_TRUE) {
+            return 0;
+        }
+        /* The tube exemption is part of the value contract, so it holds without the layer too. */
+        light.right_axis.x = 0.5F; light.right_axis.y = 0.0F; light.right_axis.z = 0.0F;
+        light.up_axis.x = 0.25F; light.up_axis.y = 0.0F; light.up_axis.z = 0.0F;
+        if (cna_area_light_ext_is_valid(&light, &valid) != CNA_RESULT_SUCCESS ||
+            valid != CNA_FALSE) {
+            return 0;
+        }
+        light.shape = CNA_AREA_LIGHT_SHAPE_TUBE_EXT;
+        if (cna_area_light_ext_is_valid(&light, &valid) != CNA_RESULT_SUCCESS ||
+            valid != CNA_TRUE) {
+            return 0;
+        }
+        if (cna_area_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_area_light_brdf_table_create(graphics_device, &table) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            table != CNA_INVALID_HANDLE ||
+            cna_area_light_brdf_table_create_with_size(
+                graphics_device, INT32_C(8), INT32_C(8), &table) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_brdf_table_get_texture(table, &cube_scratch) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cube_scratch != CNA_INVALID_HANDLE ||
+            cna_area_light_brdf_table_get_size(table, &samples) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_brdf_table_get_sample_count(table, &samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_brdf_table_get_generation_milliseconds(table, &milliseconds) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_brdf_table_evaluate(0.5F, 0.5F, INT32_C(8), &terms) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_brdf_table_copy_lookup_glsl(0, UINT64_C(0), &area_bytes) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            area_bytes != UINT64_C(0) ||
+            cna_area_light_brdf_table_destroy(table) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (cna_area_light_shading_quad_of(&light, &vector, quad) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_shading_coverage(quad, &vector, &vector, 0.25F, CNA_FALSE,
+                                            &area_scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_shading_contribution(
+                &light, &vector, &vector, &vector, &vector, 0.0F, 0.5F, &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_shading_lobe_scale_for(0.5F, &area_scalar) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_area_light_shading_copy_shading_glsl(0, UINT64_C(0), &area_bytes) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_clustered_forward_effect_set_area_light(graphics_device, &light, table) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (area_scalar != sentinel_area || vector.z != 1.0F) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -6400,6 +6482,273 @@ static int validate_sky(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-091C. Two shape-dependent contracts carry this stage, and each is asserted with the case
+   that separates it from the obvious reimplementation:
+
+     - IsValidEXT applies its parallel-axis test to rectangles and discs but NOT to tubes, because
+       a tube is a line with a radius rather than a surface. A binding that applied it everywhere
+       would reject a perfectly good tube, and only a tube-with-parallel-axes finds that.
+     - quadOf treats all three shapes differently, and a tube's quad additionally depends on the
+       surface being lit, because a cylinder is billboarded to face it. Asserting only a rectangle
+       would pass on a binding that ignored the shape entirely. */
+static int validate_area_lights(const CNA_Handle graphics_device)
+{
+    CNA_AreaLightBrdfTableHandle table = CNA_INVALID_HANDLE;
+    CNA_ClusteredForwardEffectHandle effect = CNA_INVALID_HANDLE;
+    CNA_AreaLightEXT light;
+    CNA_AreaLightBrdfTerms terms;
+    CNA_Vector3 quad[CNA_AREA_LIGHT_QUAD_CORNER_COUNT];
+    CNA_Vector3 other[CNA_AREA_LIGHT_QUAD_CORNER_COUNT];
+    CNA_Vector3 surface;
+    CNA_Vector3 vector;
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_Bool valid = UINT8_C(9);
+    CNA_Bool has = UINT8_C(9);
+    uint64_t bytes = UINT64_C(0);
+    double milliseconds = -1.0;
+    int32_t number = INT32_C(-1);
+    float scalar = -1.0F;
+    int ok = 1;
+
+    surface.x = 0.0F; surface.y = 0.0F; surface.z = 4.0F;
+
+    /* ---- the value, which works in every build ---- */
+    ok = cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS &&
+        light.shape == CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT && light.intensity == 1.0F &&
+        light.range == 20.0F && light.two_sided == CNA_FALSE &&
+        light.right_axis.x == 0.5F && light.up_axis.y == 0.5F && light.color.x == 1.0F;
+    ok = ok && cna_area_light_ext_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+    /* The defaults describe a real rectangle, so they are valid as they stand. */
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+        valid == CNA_TRUE;
+    ok = ok && cna_area_light_ext_is_valid(0, &valid) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Each refusing arm on its own, so one broken arm cannot hide behind another. */
+    ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+    light.range = 0.0F;
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+        valid == CNA_FALSE;
+    ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+    light.intensity = -1.0F;
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+        valid == CNA_FALSE;
+    ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+    light.right_axis.x = 0.0F;
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+        valid == CNA_FALSE;
+
+    /* THE shape-dependent arm. The same parallel axes: invalid for a rectangle and a disc, which
+       are surfaces with no area, and VALID for a tube, which is a line with a radius. */
+    ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+    light.right_axis.x = 0.5F; light.right_axis.y = 0.0F; light.right_axis.z = 0.0F;
+    light.up_axis.x = 0.25F; light.up_axis.y = 0.0F; light.up_axis.z = 0.0F;
+    light.shape = CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT;
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+        valid == CNA_FALSE;
+    light.shape = CNA_AREA_LIGHT_SHAPE_DISC_EXT;
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+        valid == CNA_FALSE;
+    light.shape = CNA_AREA_LIGHT_SHAPE_TUBE_EXT;
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_SUCCESS &&
+        valid == CNA_TRUE;
+
+    /* A malformed structure and an undefined shape are argument errors, not "invalid lights". */
+    ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+    light.struct_size = UINT32_C(4);
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+    light.shape = UINT32_C(99);
+    ok = ok && cna_area_light_ext_is_valid(&light, &valid) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+
+    /* ---- the shading maths ---- */
+    /* Clamped to zero-to-one, squared, then FLOORED at 0.02 -- so a mirror still has a lobe. */
+    ok = ok && cna_area_light_shading_lobe_scale_for(1.0F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.0F;
+    ok = ok && cna_area_light_shading_lobe_scale_for(0.5F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    ok = ok && cna_area_light_shading_lobe_scale_for(0.0F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.02F;
+    ok = ok && cna_area_light_shading_lobe_scale_for(-9.0F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.02F;
+    ok = ok && cna_area_light_shading_lobe_scale_for(9.0F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.0F;
+    ok = ok && cna_area_light_shading_lobe_scale_for(0.1F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.02F;
+    ok = ok && cna_area_light_shading_lobe_scale_for(1.0F, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* quadOf, all three shapes -- and the tube's quad depends on the surface, the other two do
+       not. Both halves are asserted: a binding that ignored the shape would fail the first, one
+       that billboarded everything would fail the second. */
+    ok = ok && cna_area_light_shading_quad_of(&light, &surface, quad) == CNA_RESULT_SUCCESS;
+    light.shape = CNA_AREA_LIGHT_SHAPE_DISC_EXT;
+    ok = ok && cna_area_light_shading_quad_of(&light, &surface, other) == CNA_RESULT_SUCCESS;
+    ok = ok && (quad[0].x != other[0].x || quad[0].y != other[0].y);
+    light.shape = CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT;
+    vector.x = 0.0F; vector.y = 0.0F; vector.z = -9.0F;
+    ok = ok && cna_area_light_shading_quad_of(&light, &vector, other) == CNA_RESULT_SUCCESS;
+    /* A rectangle's quad ignores the surface entirely. */
+    ok = ok && quad[0].x == other[0].x && quad[0].y == other[0].y && quad[0].z == other[0].z;
+    light.shape = CNA_AREA_LIGHT_SHAPE_TUBE_EXT;
+    ok = ok && cna_area_light_shading_quad_of(&light, &surface, quad) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_area_light_shading_quad_of(&light, &vector, other) == CNA_RESULT_SUCCESS;
+    /* A tube's does not: it is turned to face whatever is being lit. */
+    ok = ok && (quad[0].x != other[0].x || quad[0].y != other[0].y || quad[0].z != other[0].z);
+    light.shape = CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT;
+    ok = ok && cna_area_light_shading_quad_of(0, &surface, quad) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_shading_quad_of(&light, 0, quad) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_shading_quad_of(&light, &surface, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_area_light_shading_quad_of(&light, &surface, quad) == CNA_RESULT_SUCCESS;
+    vector.x = 0.0F; vector.y = 0.0F; vector.z = -1.0F;
+    ok = ok && cna_area_light_shading_coverage(quad, &surface, &vector, 0.25F, CNA_FALSE,
+                                                &scalar) == CNA_RESULT_SUCCESS && scalar >= 0.0F;
+    /* Facing away: a one-sided light delivers nothing, a two-sided one may. */
+    vector.x = 0.0F; vector.y = 0.0F; vector.z = 1.0F;
+    ok = ok && cna_area_light_shading_coverage(quad, &surface, &vector, 0.25F, CNA_TRUE,
+                                                &scalar) == CNA_RESULT_SUCCESS && scalar >= 0.0F;
+    ok = ok && cna_area_light_shading_coverage(0, &surface, &vector, 0.25F, CNA_FALSE, &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_shading_coverage(quad, 0, &vector, 0.25F, CNA_FALSE, &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_shading_coverage(quad, &surface, 0, 0.25F, CNA_FALSE, &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    vector.x = 0.0F; vector.y = 0.0F; vector.z = 1.0F;
+    {
+        CNA_Vector3 camera;
+        CNA_Vector3 base;
+        CNA_Vector3 result;
+        camera.x = 0.0F; camera.y = 0.0F; camera.z = 8.0F;
+        base.x = 0.8F; base.y = 0.8F; base.z = 0.8F;
+        ok = ok && cna_area_light_shading_contribution(
+                &light, &surface, &vector, &camera, &base, 0.0F, 0.5F, &result) ==
+            CNA_RESULT_SUCCESS && result.x >= 0.0F && result.y >= 0.0F && result.z >= 0.0F;
+        ok = ok && cna_area_light_shading_contribution(
+                0, &surface, &vector, &camera, &base, 0.0F, 0.5F, &result) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_area_light_shading_contribution(
+                &light, 0, &vector, &camera, &base, 0.0F, 0.5F, &result) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_area_light_shading_contribution(
+                &light, &surface, &vector, &camera, 0, 0.0F, 0.5F, &result) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+    ok = ok && cna_area_light_shading_copy_shading_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    ok = ok && cna_area_light_shading_copy_shading_glsl(0, UINT64_C(0), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* ---- the table ---- */
+    terms.struct_size = (uint32_t)sizeof(CNA_AreaLightBrdfTerms);
+    terms.struct_version = UINT32_C(1);
+    terms.magnitude = -1.0F; terms.fresnel = -1.0F;
+    terms.average_tangent = -1.0F; terms.average_normal = -1.0F;
+    /* The sample count is REFUSED; the two float inputs are clamped, and to bounds an eye does not
+       guess -- roughness to 0.02 (not zero) and the cosine to 0.001. Asserted by showing that an
+       out-of-range input answers exactly as the clamp bound does. */
+    ok = ok && cna_area_light_brdf_table_evaluate(0.5F, 0.5F, INT32_C(0), &terms) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_brdf_table_evaluate(0.5F, 0.5F, INT32_C(-4), &terms) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_brdf_table_evaluate(0.5F, 0.5F, INT32_C(8), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_brdf_table_evaluate(0.5F, 0.5F, INT32_C(8), &terms) ==
+        CNA_RESULT_SUCCESS && terms.magnitude >= 0.0F;
+    {
+        CNA_AreaLightBrdfTerms below;
+        CNA_AreaLightBrdfTerms at;
+        below.struct_size = (uint32_t)sizeof(CNA_AreaLightBrdfTerms);
+        below.struct_version = UINT32_C(1);
+        at = below;
+        ok = ok && cna_area_light_brdf_table_evaluate(-5.0F, 0.5F, INT32_C(16), &below) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_area_light_brdf_table_evaluate(0.02F, 0.5F, INT32_C(16), &at) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && below.magnitude == at.magnitude && below.fresnel == at.fresnel;
+        ok = ok && cna_area_light_brdf_table_evaluate(0.5F, -5.0F, INT32_C(16), &below) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_area_light_brdf_table_evaluate(0.5F, 0.001F, INT32_C(16), &at) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && below.magnitude == at.magnitude;
+        below.struct_size = UINT32_C(4);
+        ok = ok && cna_area_light_brdf_table_evaluate(0.5F, 0.5F, INT32_C(8), &below) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+    ok = ok && cna_area_light_brdf_table_copy_lookup_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+
+    /* Refused as a pair, and a refusal leaves the handle invalid. */
+    ok = ok && cna_area_light_brdf_table_create_with_size(
+            graphics_device, INT32_C(0), INT32_C(8), &table) == CNA_RESULT_INVALID_ARGUMENT &&
+        table == CNA_INVALID_HANDLE;
+    ok = ok && cna_area_light_brdf_table_create_with_size(
+            graphics_device, INT32_C(8), INT32_C(0), &table) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_brdf_table_create_with_size(
+            graphics_device, INT32_C(-1), INT32_C(-1), &table) == CNA_RESULT_INVALID_ARGUMENT;
+    if (!ok || cna_area_light_brdf_table_create_with_size(
+            graphics_device, INT32_C(8), INT32_C(8), &table) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_area_light_brdf_table_get_size(table, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(8);
+    ok = ok && cna_area_light_brdf_table_get_sample_count(table, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(8);
+    ok = ok && cna_area_light_brdf_table_get_generation_milliseconds(table, &milliseconds) ==
+        CNA_RESULT_SUCCESS && milliseconds >= 0.0;
+    ok = ok && cna_area_light_brdf_table_get_texture(table, &texture) == CNA_RESULT_SUCCESS;
+    if (ok && texture != CNA_INVALID_HANDLE) {
+        /* The handle borrows: releasing it must not take the table's texture with it. */
+        ok = ok && cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_area_light_brdf_table_get_texture(table, &texture) == CNA_RESULT_SUCCESS &&
+            texture != CNA_INVALID_HANDLE;
+        ok = ok && cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
+    }
+
+    /* ---- the effect pair that was waiting for both ---- */
+    if (ok && cna_clustered_forward_effect_create(graphics_device, &effect) ==
+            CNA_RESULT_SUCCESS) {
+        ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_has_area_light(effect, &has) ==
+            CNA_RESULT_SUCCESS && has == CNA_FALSE;
+        ok = ok && cna_clustered_forward_effect_set_area_light(effect, &light, table) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_has_area_light(effect, &has) ==
+            CNA_RESULT_SUCCESS && has == CNA_TRUE;
+        /* A DEGENERATE light succeeds and CLEARS -- it is not refused. A caller that read only the
+           result code would think it had set a light; has_area_light is what tells it otherwise,
+           and this is the assertion that pins the difference. */
+        light.range = 0.0F;
+        ok = ok && cna_clustered_forward_effect_set_area_light(effect, &light, table) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_has_area_light(effect, &has) ==
+            CNA_RESULT_SUCCESS && has == CNA_FALSE;
+        /* A malformed structure IS refused, and leaves the effect as it was. */
+        ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_set_area_light(effect, &light, table) ==
+            CNA_RESULT_SUCCESS;
+        light.struct_size = UINT32_C(4);
+        ok = ok && cna_clustered_forward_effect_set_area_light(effect, &light, table) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_clustered_forward_effect_has_area_light(effect, &has) ==
+            CNA_RESULT_SUCCESS && has == CNA_TRUE;
+        ok = ok && cna_area_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_set_area_light(effect, &light,
+                                                               CNA_INVALID_HANDLE) ==
+            CNA_RESULT_INVALID_HANDLE;
+        ok = ok && cna_clustered_forward_effect_set_area_light(effect, 0, table) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_clustered_forward_effect_clear_area_light(effect) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_destroy(effect) == CNA_RESULT_SUCCESS;
+    } else {
+        ok = 0;
+    }
+
+    ok = ok && cna_area_light_brdf_table_destroy(table) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_area_light_brdf_table_destroy(table) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -6537,6 +6886,10 @@ static CNA_Result on_load(
         }
         if (!validate_sky(graphics_device)) {
             state->failed_stage = 35;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_area_lights(graphics_device)) {
+            state->failed_stage = 36;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {
