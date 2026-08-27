@@ -1105,7 +1105,15 @@ Two of the three happened immediately after a full rebuild in the same command s
 
 **Why this is a row rather than a note.** A suite that fails once and passes twice is indistinguishable, from a single run, from a real intermittent defect — and the campaign's answer so far has been to rerun and move on, which is how a real one would be missed three times. What is needed is not another rerun but a **reproduction**: run the full suite in a loop under an unchanged tree and count, and if it reproduces, capture the failing run's output rather than the summary. Do not change a test on the strength of the occurrences alone; the owner's standing rule on the first of these was to record it and leave it until it reproduces, and that rule applies to all three.
 
-Evidence: `CBIND-086C` and `CBIND-089B` rows in this plan, and the run logs under each slice's scratchpad. |
+**The reproduction was run, and it did not reproduce.** `CBIND-092A` added a **fourth** occurrence — `CApi_AudioSmoke`, alone, in the `cmake-build-cnaext` full run — which passed both in isolation and in the very next full run, exactly like the first three. That takes the pattern to four occurrences across **five** unrelated suites and rules out any per-suite cause.
+
+Five consecutive full `CApi` runs were then executed against an unchanged, already-built `cmake-build-cnaext`: **97/97 five times, no failure.** So the trigger is not repetition of the suite itself, and the row's proposed loop is now a **negative** result rather than an unrun experiment.
+
+**What that leaves is the one correlation, now stronger.** Three of the four occurrences happened in a command sequence where `cmake --build` ran immediately before `ctest`, in the same invocation; the five clean runs had no build in front of them. That is still a correlation and still not a cause, but it is now the only hypothesis with any support, and it is testable: alternate build-then-run against run-only in the same tree and compare failure rates. It also suggests where to look — something the build touches that a freshly launched suite reads, rather than anything in the suites themselves, none of which share a fixture with the others.
+
+**Not closed**, because a negative reproduction is not a diagnosis. What it does settle is that reruns are not hiding a defect that a plain loop would find.
+
+Evidence: `CBIND-086C`, `CBIND-089B` and `CBIND-092A` rows in this plan, and the run logs under each slice's scratchpad. |
 | CBIND-095 | Close the reopened matrix | — | ✅ | **Closed 2026-08-27.** `CBIND-080`–`CBIND-093` are all ✅, the inventory has **0 planned rows**, `RELEASE_GATE.md` reads **ready**, the ABI baseline is regenerated and all five prose export counts agree with it at 3,746 — the same 3,746 in both builds, measured symbol by symbol.
 
 **This row forbade closing on a green `--check`, so four independent checks were run instead of one.** Each targets a way a previous closure turned out to be an illusion:
