@@ -81,6 +81,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-76: custom-WGSL ShaderEffect on the 3D DrawPrimitives route -- CreateEffectRenderer /
+    # WebGPUEffectRenderer / DeclareUniformBlockEXT, and World reaching the WGSL vertex stage.
+    cna_webgpu_test(cna_test_webgpu_shadereffect_3d webgpu_shadereffect_3d_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_ShaderEffect3D COMMAND cna_test_webgpu_shadereffect_3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)

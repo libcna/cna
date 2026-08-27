@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -570,6 +571,130 @@ namespace CNA::Internal::Renderers::WebGPU
     };
 
     /**
+     * @brief WEBGPU-76: one vertex attribute a custom `ShaderEffect` draw feeds its WGSL vertex
+     * stage, captured by value into the deferred draw command. CNAEXT.
+     *
+     * The bound `VertexBuffer`'s `VertexDeclaration` drives this: `shaderLocation` is the element's
+     * INDEX in the declaration's element list (the same "location = declaration index" convention
+     * EasyGL's custom-effect route uses, so one WGSL source runs unchanged across the renderer
+     * family), `format` is `WebGPUVertexFormatFromVEF(element.format)` (WEBGPU-116) and `offset` is
+     * the element's own byte offset within the vertex.
+     */
+    struct CustomEffectVertexAttr
+    {
+        /** @brief The WGPU vertex format, mapped from the declaration element's `VertexElementFormat`. */
+        WGPUVertexFormat format{};
+        /** @brief The element's byte offset within one vertex. */
+        std::uint64_t offset = 0;
+        /** @brief The WGSL `@location(i)` this attribute feeds — the element's declaration index. */
+        std::uint32_t shaderLocation = 0;
+    };
+
+    /**
+     * @brief WEBGPU-76: the WebGPU implementation of a custom-WGSL `ShaderEffect` (`IEffectRenderer`).
+     * CNAEXT.
+     *
+     * Constructed by `WebGPURenderer::CreateEffectRenderer(vertWgsl, fragWgsl)` from the two source
+     * strings a `ShaderEffect` carries. Unlike EasyGL's loose named GL uniforms, WGSL has no loose
+     * uniforms — every parameter lives in a uniform block — so this renderer implements
+     * `DeclareUniformBlockEXT` (the name→byte-offset bridge the interface documents for exactly this
+     * case) and every `SetUniform*` writes into a CPU-side staging block that a draw uploads to a
+     * `@group(0) @binding(0)` uniform buffer.
+     *
+     * Binding convention the custom WGSL must follow (documented in `docs/webgpu-renderer.md`):
+     *  - `@group(0) @binding(0) var<uniform> …` — the uniform block (visible to both stages);
+     *  - `@group(0) @binding(1) var …: sampler;` and `@binding(2) var …: texture_2d<f32>;` — only
+     *    when the fragment source samples a texture (detected by a source scan for `texture_2d`);
+     *  - vertex entry point `vs_main`, fragment entry point `fs_main`;
+     *  - a vertex input at `@location(i)` for the i-th declared vertex element.
+     *
+     * The renderer sets `World`/`View`/`Projection` (column-major, untransposed) on this effect at
+     * queue time exactly as EasyGL's `BindCustomEffectMatrices` does, so a 3D custom shader reads
+     * those three by name from its uniform block. Pipelines are cached here, keyed by the concrete
+     * render-pass state (vertex layout, target format/count, sample count, blend, depth); the
+     * colour-target count is a parameter so MRT (`WEBGPU-85/86/87`) reuses this builder for N slots.
+     */
+    class WebGPUEffectRenderer final : public IEffectRenderer
+    {
+        friend class WebGPURenderer;
+
+    public:
+        /** @brief Constructs an unbuilt effect owned by @p owner; `CompileProgram` builds it. */
+        explicit WebGPUEffectRenderer(WebGPURenderer* owner);
+        /** @brief Releases the shader modules, layouts, sampler and every cached pipeline. */
+        ~WebGPUEffectRenderer() override;
+
+        /**
+         * @brief Compiles the vertex and fragment WGSL into two `WGPUShaderModule`s.
+         * @param vertSrc Complete WGSL module with a `@vertex fn vs_main`.
+         * @param fragSrc Complete WGSL module with a `@fragment fn fs_main`.
+         * @return True on success; false with `GetCompileError()` set on failure (never throws, so
+         *         the tolerant neutral clone test survives an invalid placeholder source).
+         */
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
+        /** @brief Marks this the active custom effect on the owning renderer. */
+        void Bind() override;
+        /** @brief Clears the active custom effect if it is this one. */
+        void Unbind() override;
+        /** @brief Whether both modules and the layouts were built successfully. */
+        [[nodiscard]] bool IsValid() const override;
+        /** @brief The last compile/validation error, or empty. */
+        [[nodiscard]] std::string GetCompileError() const override;
+
+        /**
+         * @brief Declares the WGSL uniform block's size and member byte offsets by name.
+         * @param blockSizeBytes std140/WGSL-padded size of the whole block.
+         * @param names Member names, @p count of them.
+         * @param offsets Each member's byte offset from the start of the block.
+         * @param count Number of members.
+         */
+        void DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
+                                    const int* offsets, int count) override;
+        /** @brief Writes a float into the staging block at @p name's declared offset. */
+        void SetUniformFloat(const char* name, float value) override;
+        /** @brief Writes an int (as a 32-bit word) into the staging block at @p name's offset. */
+        void SetUniformInt(const char* name, int value) override;
+        /** @brief Writes a vec2 into the staging block at @p name's declared offset. */
+        void SetUniformVec2(const char* name, float x, float y) override;
+        /** @brief Writes a vec3 into the staging block at @p name's declared offset. */
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        /** @brief Writes a vec4 into the staging block at @p name's declared offset. */
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        /** @brief Writes a column-major 4×4 matrix into the staging block at @p name's offset. */
+        void SetUniformMat4(const char* name, const float* matrix) override;
+        /** @brief Writes @p count floats into the staging block at @p name's declared offset. */
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        /** @brief Writes @p count vec2 values into the staging block at @p name's offset. */
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        /** @brief Writes @p count vec3 values into the staging block at @p name's offset. */
+        void SetUniformVec3Array(const char* name, const float* values, int count) override;
+        /** @brief Writes @p count column-major matrices into the staging block at @p name's offset. */
+        void SetUniformMat4Array(const char* name, const float* matrices, int count) override;
+        /** @brief Binds a 2D texture for the custom shader's `@binding(2)`; only unit 0 is used. */
+        void BindTexture(int unit, ITextureRenderer* texture) override;
+
+    private:
+        /// Compiles one WGSL string into a module inside a validation error scope; null on failure.
+        WGPUShaderModule CompileModule(const std::string& wgsl, const char* label);
+        /// Copies @p byteCount bytes from @p data into the staging block at @p name's offset.
+        void WriteUniformBytes(const char* name, const void* data, int byteCount);
+
+        WebGPURenderer* owner_ = nullptr;
+        WGPUShaderModule vertexModule_ = nullptr;
+        WGPUShaderModule fragmentModule_ = nullptr;
+        WGPUBindGroupLayout bindGroupLayout_ = nullptr;
+        WGPUPipelineLayout pipelineLayout_ = nullptr;
+        WGPUSampler sampler_ = nullptr;         ///< Default filtering sampler for `@binding(1)`.
+        bool valid_ = false;
+        bool samplesTexture_ = false;           ///< Source scan: the fragment declares a `texture_2d`.
+        std::string compileError_;
+        std::vector<std::uint8_t> uniformStaging_;          ///< CPU uniform block, uploaded per draw.
+        std::unordered_map<std::string, int> uniformOffsets_;  ///< Member name → byte offset.
+        const ITextureRenderer* boundTexture0_ = nullptr;   ///< App-bound unit-0 texture (or null).
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> pipelineCache_;  ///< Keyed by pass state.
+    };
+
+    /**
      * @brief REMED-GFX-102 normalized, by-value state for one SpriteBatch Begin/End cycle.
      *
      * The six blend factors/functions, attachment write mask, coverage mask, and target
@@ -1073,11 +1198,34 @@ namespace CNA::Internal::Renderers::WebGPU
         /** @brief WEBGPU-84: creates a GPU occlusion query backed by a slot in the shared query set. */
         std::unique_ptr<IOcclusionQueryRenderer> CreateOcclusionQuery() override;
 
+        /**
+         * @brief WEBGPU-76: compiles a custom `ShaderEffect` from a WGSL vertex/fragment source pair.
+         * @param vertSrc WGSL vertex module (entry `vs_main`).
+         * @param fragSrc WGSL fragment module (entry `fs_main`).
+         * @return A `WebGPUEffectRenderer`; invalid (but non-null) when the source fails to compile.
+         */
+        std::unique_ptr<IEffectRenderer> CreateEffectRenderer(const std::string& vertSrc,
+                                                              const std::string& fragSrc) override;
+
+        /**
+         * @brief WEBGPU-76: this renderer genuinely compiles and runs the WGSL source a
+         * `ShaderEffect` carries (unlike Vulkan, which takes SPIR-V, or SOFTWARE/HEADLESS, which
+         * accept a source and ignore it), so a custom effect's pixels are its shader's.
+         */
+        [[nodiscard]] bool ExecutesShaderEffectSourceEXT() const override { return true; }
+
+        /** @brief WEBGPU-76: the source dialect a custom `ShaderEffect` must be written in. */
+        [[nodiscard]] ShaderDialectEXT GetShaderDialectEXT() const override
+        {
+            return ShaderDialectEXT::Wgsl;
+        }
+
     private:
         friend class WebGPURenderTargetRenderer;
         friend class WebGPURenderTargetCubeRenderer;
         friend class WebGPUTextureRenderer;
         friend class WebGPUTextureCubeRenderer;
+        friend class WebGPUEffectRenderer;
         friend class WebGPUSpriteBatchRenderer;
         friend class WebGPUOcclusionQueryRenderer;
         struct LogicalViewport
@@ -1163,7 +1311,8 @@ namespace CNA::Internal::Renderers::WebGPU
             Instanced,    ///< instancedDrawCommands_
             Pbr,          ///< pbrDrawCommands_
             Skinned,      ///< skinnedDrawCommands_
-            SkinnedPbr    ///< skinnedPbrDrawCommands_
+            SkinnedPbr,   ///< skinnedPbrDrawCommands_
+            CustomEffect  ///< customEffectDrawCommands_ (WEBGPU-76)
         };
 
         /**
@@ -2680,5 +2829,52 @@ namespace CNA::Internal::Renderers::WebGPU
         /// plans/plan_gltf.md GLTF-463/GLTF-465: the stride-80 pipelines.
         std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrColorPipelines_;
         std::vector<SkinnedPbrDrawCommand> skinnedPbrDrawCommands_;
+
+        /**
+         * @brief WEBGPU-76: one deferred custom-`ShaderEffect` draw, captured by value at its public
+         * `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` call and replayed later like every other
+         * family. The uniform block bytes are captured per draw (a second draw of the same effect
+         * with different `SetUniform*` values must not see this one's), exactly as the stock
+         * families capture their fixed `uniforms` array; the `effect` pointer supplies only the
+         * per-effect shader modules, layouts and pipeline cache, which do not change between draws.
+         */
+        struct CustomEffectDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;   ///< empty for a non-indexed draw
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            std::uint32_t firstIndex = 0;
+            std::int32_t baseVertex = 0;
+            std::uint64_t arrayStride = 0;                     ///< the bound vertex's byte stride
+            std::vector<CustomEffectVertexAttr> attributes;    ///< derived from the VertexDeclaration
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::vector<std::uint8_t> uniforms;                ///< the effect's uniform block, by value
+            WebGPUSampledTextureEXT texture;                   ///< captured unit-0 texture, if any
+            WebGPUEffectRenderer* effect = nullptr;            ///< program/layout/pipeline-cache owner
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
+            WebGPUViewportSnapshot viewport{};
+            WebGPUScissorSnapshot scissor{};
+        };
+        std::vector<CustomEffectDrawCommand> customEffectDrawCommands_;
+        /// WEBGPU-76: builds the deferred custom-effect command from a `DrawPrimitivesEx` /
+        /// `DrawIndexedPrimitivesEx` call whose `params.customEffectRenderer` is set.
+        void QueueCustomEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
+                                   const Matrix& world, const Matrix& view, const Matrix& projection,
+                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        /// WEBGPU-76: replays one custom-effect command — builds/fetches its pipeline (keyed by the
+        /// concrete pass state, `colorAttachmentCount` currently always 1) and issues the draw.
+        void IssueCustomEffectDraw(WGPURenderPassEncoder pass, const CustomEffectDrawCommand& command,
+                                   WGPUTextureFormat targetFormat, std::uint32_t targetSampleCount,
+                                   ReplayState& state);
     };
 }

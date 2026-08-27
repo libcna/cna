@@ -5841,6 +5841,7 @@ struct VSOut {
         case DrawFamily::Pbr:         return "pbr3d";
         case DrawFamily::Skinned:     return "skinned3d";
         case DrawFamily::SkinnedPbr:  return "skinnedPbr3d";
+        case DrawFamily::CustomEffect: return "customEffect";
         }
         return "unknown";
     }
@@ -6105,6 +6106,7 @@ struct VSOut {
         pbrDrawCommands_.clear();
         skinnedDrawCommands_.clear();
         skinnedPbrDrawCommands_.clear();
+        customEffectDrawCommands_.clear();
     }
 
     // ---- WEBGPU-84: occlusion queries -----------------------------------------------------------
@@ -6246,6 +6248,516 @@ struct VSOut {
         return pixelCount_;
     }
 
+    // ===================================================================================
+    // WEBGPU-76: custom-WGSL ShaderEffect (IEffectRenderer). See WebGPUEffectRenderer's class
+    // doc comment for the binding convention and the design; the draw-path integration is
+    // QueueCustomEffectDraw()/IssueCustomEffectDraw() below plus the branch at the top of
+    // DrawPrimitivesEx()/DrawIndexedPrimitivesEx().
+    // ===================================================================================
+
+    WebGPUEffectRenderer::WebGPUEffectRenderer(WebGPURenderer* owner) : owner_(owner) {}
+
+    WebGPUEffectRenderer::~WebGPUEffectRenderer()
+    {
+        for (auto& [key, pipe] : pipelineCache_)
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        pipelineCache_.clear();
+        if (pipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(pipelineLayout_);
+        if (bindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(bindGroupLayout_);
+        if (sampler_ != nullptr) wgpuSamplerRelease(sampler_);
+        if (fragmentModule_ != nullptr) wgpuShaderModuleRelease(fragmentModule_);
+        if (vertexModule_ != nullptr) wgpuShaderModuleRelease(vertexModule_);
+    }
+
+    WGPUShaderModule WebGPUEffectRenderer::CompileModule(const std::string& wgsl, const char* label)
+    {
+        WGPUShaderSourceWGSL source{};
+        source.chain.sType = WGPUSType_ShaderSourceWGSL;
+        source.code = StringView(wgsl.c_str());
+        WGPUShaderModuleDescriptor descriptor{};
+        descriptor.label = StringView(label);
+        descriptor.nextInChain = &source.chain;
+
+        // A validation error scope around creation turns an invalid WGSL source into a catchable
+        // failure with a message, rather than an uncaught device error -- the same scoped pattern
+        // Supports4xMsaa() uses. Never throws, so the tolerant neutral ShaderEffect clone test
+        // (which hands a placeholder source) survives.
+        struct CompileScopeState { bool completed = false; bool ok = false; std::string message; };
+        CompileScopeState scope;
+        wgpuDevicePushErrorScope(owner_->device_, WGPUErrorFilter_Validation);
+        WGPUShaderModule module = wgpuDeviceCreateShaderModule(owner_->device_, &descriptor);
+        WGPUPopErrorScopeCallbackInfo callback{};
+        callback.mode = kCnaWebGpuCallbackMode;
+        callback.callback = [](WGPUPopErrorScopeStatus status, WGPUErrorType type,
+                               WGPUStringView message, void* userdata1, void*)
+        {
+            auto& s = *static_cast<CompileScopeState*>(userdata1);
+            s.ok = (status == WGPUPopErrorScopeStatus_Success && type == WGPUErrorType_NoError);
+            if (!s.ok) s.message = ToString(message);
+            s.completed = true;
+        };
+        callback.userdata1 = &scope;
+        wgpuDevicePopErrorScope(owner_->device_, callback);
+        WaitForCompletion(owner_->instance_, scope.completed, "ShaderEffect WGSL compile");
+
+        if (!scope.ok || module == nullptr)
+        {
+            if (module != nullptr) { wgpuShaderModuleRelease(module); module = nullptr; }
+            compileError_ = std::string(label) + ": " +
+                            (scope.message.empty() ? "WGSL validation failed" : scope.message);
+            return nullptr;
+        }
+        return module;
+    }
+
+    bool WebGPUEffectRenderer::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        valid_ = false;
+        compileError_.clear();
+        if (fragmentModule_ != nullptr) { wgpuShaderModuleRelease(fragmentModule_); fragmentModule_ = nullptr; }
+        if (vertexModule_ != nullptr) { wgpuShaderModuleRelease(vertexModule_); vertexModule_ = nullptr; }
+
+        if (owner_ == nullptr || owner_->device_ == nullptr)
+        {
+            compileError_ = "WebGPU: no device is available to compile a ShaderEffect";
+            return false;
+        }
+        if (vertSrc.empty() || fragSrc.empty())
+        {
+            compileError_ = "WebGPU: a ShaderEffect requires non-empty vertex and fragment WGSL source";
+            return false;
+        }
+
+        vertexModule_ = CompileModule(vertSrc, "CNA WebGPU ShaderEffect VS");
+        if (vertexModule_ == nullptr) return false;
+        fragmentModule_ = CompileModule(fragSrc, "CNA WebGPU ShaderEffect FS");
+        if (fragmentModule_ == nullptr) return false;
+
+        // Source scan: only a fragment that samples a texture needs the sampler/texture bindings.
+        // A shader that does not sample (e.g. the MRT G-buffer writer) gets a uniform-only layout,
+        // so no unused bind-group entry has to be satisfied with a dummy resource.
+        samplesTexture_ = fragSrc.find("texture_2d") != std::string::npos;
+
+        std::array<WGPUBindGroupLayoutEntry, 3> entries{};
+        entries[0].binding = 0;
+        entries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        entries[0].buffer.type = WGPUBufferBindingType_Uniform;
+        entries[0].buffer.minBindingSize = 0;  // the concrete block size is validated per draw
+        std::size_t entryCount = 1;
+        if (samplesTexture_)
+        {
+            entries[1].binding = 1;
+            entries[1].visibility = WGPUShaderStage_Fragment;
+            entries[1].sampler.type = WGPUSamplerBindingType_Filtering;
+            entries[2].binding = 2;
+            entries[2].visibility = WGPUShaderStage_Fragment;
+            entries[2].texture.sampleType = WGPUTextureSampleType_Float;
+            entries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
+            entries[2].texture.multisampled = false;
+            entryCount = 3;
+
+            WGPUSamplerDescriptor samplerDescriptor{};
+            samplerDescriptor.label = StringView("CNA WebGPU ShaderEffect Sampler");
+            samplerDescriptor.addressModeU = WGPUAddressMode_ClampToEdge;
+            samplerDescriptor.addressModeV = WGPUAddressMode_ClampToEdge;
+            samplerDescriptor.addressModeW = WGPUAddressMode_ClampToEdge;
+            samplerDescriptor.magFilter = WGPUFilterMode_Linear;
+            samplerDescriptor.minFilter = WGPUFilterMode_Linear;
+            samplerDescriptor.mipmapFilter = WGPUMipmapFilterMode_Linear;
+            samplerDescriptor.maxAnisotropy = 1;
+            samplerDescriptor.lodMaxClamp = 32.0f;
+            sampler_ = wgpuDeviceCreateSampler(owner_->device_, &samplerDescriptor);
+        }
+
+        WGPUBindGroupLayoutDescriptor layoutDescriptor{};
+        layoutDescriptor.label = StringView("CNA WebGPU ShaderEffect BindGroupLayout");
+        layoutDescriptor.entryCount = entryCount;
+        layoutDescriptor.entries = entries.data();
+        bindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(owner_->device_, &layoutDescriptor);
+
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU ShaderEffect PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = 1;
+        pipelineLayoutDescriptor.bindGroupLayouts = &bindGroupLayout_;
+        pipelineLayout_ = wgpuDeviceCreatePipelineLayout(owner_->device_, &pipelineLayoutDescriptor);
+
+        if (bindGroupLayout_ == nullptr || pipelineLayout_ == nullptr ||
+            (samplesTexture_ && sampler_ == nullptr))
+        {
+            compileError_ = "WebGPU: failed to create ShaderEffect bind-group/pipeline layout";
+            return false;
+        }
+        valid_ = true;
+        return true;
+    }
+
+    void WebGPUEffectRenderer::Bind()
+    {
+        // The 3D route carries this effect to the renderer through GpuDrawParams::customEffectRenderer
+        // (set by ShaderEffect::FillGpuDrawParams), not through renderer-global "active effect" state,
+        // and every SetUniform* writes into this object's own staging block regardless of bind state.
+        // There is therefore nothing to bind eagerly here, unlike EasyGL's immediate glUseProgram.
+    }
+
+    void WebGPUEffectRenderer::Unbind() {}
+
+    bool WebGPUEffectRenderer::IsValid() const { return valid_; }
+
+    std::string WebGPUEffectRenderer::GetCompileError() const { return compileError_; }
+
+    void WebGPUEffectRenderer::DeclareUniformBlockEXT(int blockSizeBytes, const char* const* names,
+                                                      const int* offsets, int count)
+    {
+        if (blockSizeBytes < 0) blockSizeBytes = 0;
+        uniformStaging_.assign(static_cast<std::size_t>(blockSizeBytes), std::uint8_t{0});
+        uniformOffsets_.clear();
+        for (int i = 0; i < count; ++i)
+            if (names != nullptr && names[i] != nullptr && offsets != nullptr)
+                uniformOffsets_[names[i]] = offsets[i];
+    }
+
+    void WebGPUEffectRenderer::WriteUniformBytes(const char* name, const void* data, int byteCount)
+    {
+        if (name == nullptr) return;
+        auto it = uniformOffsets_.find(name);
+        if (it == uniformOffsets_.end()) return;  // undeclared name: accepted-and-ignored, like EasyGL
+        const std::size_t offset = static_cast<std::size_t>(it->second);
+        if (offset + static_cast<std::size_t>(byteCount) > uniformStaging_.size()) return;
+        std::memcpy(uniformStaging_.data() + offset, data, static_cast<std::size_t>(byteCount));
+    }
+
+    void WebGPUEffectRenderer::SetUniformFloat(const char* name, float value)
+    {
+        WriteUniformBytes(name, &value, 4);
+    }
+
+    void WebGPUEffectRenderer::SetUniformInt(const char* name, int value)
+    {
+        const std::int32_t v = value;
+        WriteUniformBytes(name, &v, 4);
+    }
+
+    void WebGPUEffectRenderer::SetUniformVec2(const char* name, float x, float y)
+    {
+        const float v[2] = {x, y};
+        WriteUniformBytes(name, v, 8);
+    }
+
+    void WebGPUEffectRenderer::SetUniformVec3(const char* name, float x, float y, float z)
+    {
+        const float v[3] = {x, y, z};
+        WriteUniformBytes(name, v, 12);
+    }
+
+    void WebGPUEffectRenderer::SetUniformVec4(const char* name, float x, float y, float z, float w)
+    {
+        const float v[4] = {x, y, z, w};
+        WriteUniformBytes(name, v, 16);
+    }
+
+    void WebGPUEffectRenderer::SetUniformMat4(const char* name, const float* matrix)
+    {
+        WriteUniformBytes(name, matrix, 64);
+    }
+
+    void WebGPUEffectRenderer::SetUniformFloatArray(const char* name, const float* values, int count)
+    {
+        if (values != nullptr && count > 0) WriteUniformBytes(name, values, count * 4);
+    }
+
+    void WebGPUEffectRenderer::SetUniformVec2Array(const char* name, const float* values, int count)
+    {
+        if (values != nullptr && count > 0) WriteUniformBytes(name, values, count * 8);
+    }
+
+    void WebGPUEffectRenderer::SetUniformVec3Array(const char* name, const float* values, int count)
+    {
+        if (values != nullptr && count > 0) WriteUniformBytes(name, values, count * 12);
+    }
+
+    void WebGPUEffectRenderer::SetUniformMat4Array(const char* name, const float* matrices, int count)
+    {
+        if (matrices != nullptr && count > 0) WriteUniformBytes(name, matrices, count * 64);
+    }
+
+    void WebGPUEffectRenderer::BindTexture(int unit, ITextureRenderer* texture)
+    {
+        // Only unit 0 (@binding(2)) is consumed by this renderer's custom-effect pipeline; the raw
+        // pointer is resolved to a keep-alive sampleable view at queue time (QueueCustomEffectDraw),
+        // never dereferenced at replay.
+        if (unit == 0) boundTexture0_ = texture;
+    }
+
+    std::unique_ptr<IEffectRenderer> WebGPURenderer::CreateEffectRenderer(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto renderer = std::make_unique<WebGPUEffectRenderer>(this);
+        if (!vertSrc.empty() && !fragSrc.empty())
+            renderer->CompileProgram(vertSrc, fragSrc);
+        return renderer;
+    }
+
+    void WebGPURenderer::QueueCustomEffectDraw(const IVertexBufferRenderer& vb,
+                                               const IIndexBufferRenderer* ib,
+                                               const Matrix& world, const Matrix& view,
+                                               const Matrix& projection,
+                                               PrimitiveType primitive, int primitiveCount,
+                                               const GpuDrawParams& params)
+    {
+        auto* effect = static_cast<WebGPUEffectRenderer*>(params.customEffectRenderer);
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
+
+        // The renderer supplies World/View/Projection to the custom shader by exactly those names,
+        // column-major and untransposed (WGSL mat4x4 storage), the same way EasyGL's
+        // BindCustomEffectMatrices does -- a 3D custom shader reads them from its uniform block.
+        float worldCM[16], viewCM[16], projCM[16];
+        world.ToColumnMajor(worldCM);
+        view.ToColumnMajor(viewCM);
+        projection.ToColumnMajor(projCM);
+        effect->SetUniformMat4("World", worldCM);
+        effect->SetUniformMat4("View", viewCM);
+        effect->SetUniformMat4("Projection", projCM);
+
+        CustomEffectDrawCommand command;
+        command.effect = effect;
+        // Capture the effect's uniform block BY VALUE now: a second draw of the same effect with
+        // different SetUniform* values must not see this draw's block at replay (the stock families
+        // capture their fixed `uniforms` array for the identical reason).
+        command.uniforms = effect->uniformStaging_;
+        command.texture = ResolveSamplable(effect->boundTexture0_);
+
+        const int vertexStart = params.vertexStart;
+        const std::size_t stride = webgpuVb.Stride();
+        command.arrayStride = static_cast<std::uint64_t>(stride);
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset),
+                                      shadow.end());
+
+        // Attribute location = the element's index in the declaration (the cross-renderer
+        // "location = declaration index" convention -- see CustomEffectVertexAttr's doc comment).
+        const auto& elements = webgpuVb.Declaration().GetElements();
+        command.attributes.reserve(elements.size());
+        for (std::size_t i = 0; i < elements.size(); ++i)
+        {
+            CustomEffectVertexAttr attr;
+            attr.format = WebGPUVertexFormatFromVEF(elements[i].getVertexElementFormatProperty());
+            attr.offset = static_cast<std::uint64_t>(elements[i].getOffsetProperty());
+            attr.shaderLocation = static_cast<std::uint32_t>(i);
+            command.attributes.push_back(attr);
+        }
+
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthWrite = depthWriteEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
+        command.viewport = CaptureViewport();
+        command.scissor = CaptureScissor();
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferRenderer&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.firstIndex = static_cast<std::uint32_t>(params.startIndex);
+            command.baseVertex = params.baseVertex;
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        customEffectDrawCommands_.push_back(std::move(command));
+        RecordDrawOrder(DrawFamily::CustomEffect, customEffectDrawCommands_.size() - 1);
+        framePending_ = true;
+    }
+
+    void WebGPURenderer::IssueCustomEffectDraw(WGPURenderPassEncoder pass,
+                                               const CustomEffectDrawCommand& command,
+                                               WGPUTextureFormat targetFormat,
+                                               std::uint32_t targetSampleCount,
+                                               ReplayState& state)
+    {
+        Begin3DDrawState(pass, state);
+        WebGPUEffectRenderer* effect = command.effect;
+        if (effect == nullptr || !effect->valid_ ||
+            command.vertexCount == 0 || command.vertexData.empty())
+            return;
+
+        // Vertex buffer.
+        WGPUBufferDescriptor vbDescriptor{};
+        vbDescriptor.label = StringView("CNA WebGPU ShaderEffect VertexBuffer");
+        vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        vbDescriptor.size = Align4(command.vertexData.size());
+        WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+        wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+        // Uniform buffer (the block captured at queue time); min 16 bytes so an effect with no
+        // declared block still has a bindable buffer.
+        const std::uint64_t uboSize =
+            std::max<std::uint64_t>(16u, (command.uniforms.size() + 15u) & ~std::uint64_t{15u});
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU ShaderEffect UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = uboSize;
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        if (!command.uniforms.empty())
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), command.uniforms.size());
+
+        // Pipeline: cached on the effect, keyed by the concrete pass state. colorAttachmentCount is
+        // 1 here; MRT (WEBGPU-85/86/87) reuses this builder with N and an N-entry target array.
+        const int colorAttachmentCount = 1;
+        auto mix = [](std::uint64_t h, std::uint64_t v) {
+            return (h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)));
+        };
+        std::uint64_t key = 0;
+        key = mix(key, static_cast<std::uint64_t>(targetFormat));
+        key = mix(key, targetSampleCount);
+        key = mix(key, static_cast<std::uint64_t>(colorAttachmentCount));
+        key = mix(key, static_cast<std::uint64_t>(command.topology));
+        key = mix(key, command.arrayStride);
+        key = mix(key, (command.depthTest ? 1u : 0u) | (command.depthWrite ? 2u : 0u));
+        key = mix(key, static_cast<std::uint64_t>(command.depthFunc));
+        key = mix(key, command.blend ? 1u : 0u);
+        key = mix(key, static_cast<std::uint64_t>(command.blendParams.colorSrc) |
+                       (static_cast<std::uint64_t>(command.blendParams.colorDst) << 8) |
+                       (static_cast<std::uint64_t>(command.blendParams.alphaSrc) << 16) |
+                       (static_cast<std::uint64_t>(command.blendParams.alphaDst) << 24) |
+                       (static_cast<std::uint64_t>(command.blendParams.colorFunc) << 32) |
+                       (static_cast<std::uint64_t>(command.blendParams.alphaFunc) << 40));
+        key = mix(key, static_cast<std::uint64_t>(command.cullMode));
+        for (const auto& a : command.attributes)
+            key = mix(key, (static_cast<std::uint64_t>(a.format) << 40) ^
+                           (a.offset << 8) ^ a.shaderLocation);
+
+        WGPURenderPipeline pipe = nullptr;
+        if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
+        {
+            pipe = it->second;
+        }
+        else
+        {
+            std::vector<WGPUVertexAttribute> attributes;
+            attributes.reserve(command.attributes.size());
+            for (const auto& a : command.attributes)
+            {
+                WGPUVertexAttribute wa{};
+                wa.format = a.format;
+                wa.offset = a.offset;
+                wa.shaderLocation = a.shaderLocation;
+                attributes.push_back(wa);
+            }
+            WGPUVertexBufferLayout vertexBufferLayout{};
+            vertexBufferLayout.arrayStride = command.arrayStride;
+            vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+            vertexBufferLayout.attributeCount = attributes.size();
+            vertexBufferLayout.attributes = attributes.data();
+
+            WGPUColorTargetState target{};
+            target.format = targetFormat;
+            target.writeMask = WGPUColorWriteMask_All;
+            WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+            FillWGPUBlendState(blendState, command.blendParams);
+            target.blend = command.blend ? &blendState : nullptr;
+
+            WGPUFragmentState fragment{};
+            fragment.module = effect->fragmentModule_;
+            fragment.entryPoint = StringView("fs_main");
+            fragment.targetCount = 1;
+            fragment.targets = &target;
+
+            WGPURenderPipelineDescriptor pipeline{};
+            pipeline.label = StringView("CNA WebGPU ShaderEffect Pipeline");
+            pipeline.layout = effect->pipelineLayout_;
+            pipeline.vertex.module = effect->vertexModule_;
+            pipeline.vertex.entryPoint = StringView("vs_main");
+            pipeline.vertex.bufferCount = 1;
+            pipeline.vertex.buffers = &vertexBufferLayout;
+            pipeline.primitive.topology = command.topology;
+            pipeline.primitive.stripIndexFormat = RequiredStripIndexFormat(command);
+            pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+            pipeline.primitive.cullMode = ToWGPUCullMode(command.cullMode);
+            pipeline.multisample.count = targetSampleCount;
+            pipeline.multisample.mask = 0xFFFFFFFFu;
+            pipeline.multisample.alphaToCoverageEnabled = false;
+            pipeline.fragment = &fragment;
+
+            WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+            depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+            depthStencil.depthWriteEnabled =
+                command.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+            depthStencil.depthCompare = command.depthTest
+                ? ToWGPUCompareFunction(command.depthFunc) : WGPUCompareFunction_Always;
+            depthStencil.depthBias = static_cast<std::int32_t>(command.depthBias * 16777215.0f);
+            depthStencil.depthBiasSlopeScale = command.slopeScaleDepthBias;
+            pipeline.depthStencil = &depthStencil;
+
+            pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+            if (pipe == nullptr)
+                throw std::runtime_error("CNA WebGPU: failed to create a ShaderEffect pipeline");
+            effect->pipelineCache_[key] = pipe;
+        }
+
+        // Bind group: UBO at binding 0, and -- when the fragment samples -- the sampler and a
+        // texture view at bindings 1/2 (the app-bound texture, or the shared default white).
+        std::array<WGPUBindGroupEntry, 3> bindEntries{};
+        bindEntries[0].binding = 0;
+        bindEntries[0].buffer = uniformBuffer;
+        bindEntries[0].size = uboSize;
+        std::size_t bindEntryCount = 1;
+        WebGPUSampledTextureEXT resolvedTexture;
+        if (effect->samplesTexture_)
+        {
+            resolvedTexture = command.texture
+                ? command.texture : ResolveSamplable(pbrDefaultWhiteTexture_.get());
+            bindEntries[1].binding = 1;
+            bindEntries[1].sampler = effect->sampler_;
+            bindEntries[2].binding = 2;
+            bindEntries[2].textureView = resolvedTexture.View();
+            bindEntryCount = 3;
+        }
+        WGPUBindGroupDescriptor bindDescriptor{};
+        bindDescriptor.label = StringView("CNA WebGPU ShaderEffect BindGroup");
+        bindDescriptor.layout = effect->bindGroupLayout_;
+        bindDescriptor.entryCount = bindEntryCount;
+        bindDescriptor.entries = bindEntries.data();
+        WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
+
+        ApplyDrawViewport(pass, command.viewport);
+        ApplyDrawScissor(pass, command.scissor);
+        wgpuRenderPassEncoderSetPipeline(pass, pipe);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+        if (command.indexed && !command.indexData.empty())
+        {
+            WGPUBuffer indexBuffer = CreateAndBindDeferredIndexBuffer(
+                device_, queue_, pass, "CNA WebGPU ShaderEffect IndexBuffer",
+                command.indexData, command.index32);
+            wgpuRenderPassEncoderDrawIndexed(
+                pass, command.indexCount, 1, command.firstIndex, command.baseVertex, 0);
+            pendingBufferReleases_.push_back(indexBuffer);
+        }
+        else
+        {
+            wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+        }
+
+        pendingBindGroupReleases_.push_back(bindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+        pendingBufferReleases_.push_back(vertexBuffer);
+    }
+
     void WebGPURenderer::ReplayDrawsInOrder(WGPURenderPassEncoder pass,
                                                     WGPUTextureFormat targetFormat,
                                                     std::uint32_t targetSampleCount,
@@ -6316,6 +6828,10 @@ struct VSOut {
             case DrawFamily::Pbr:         IssuePbrDraw(pass, pbrDrawCommands_[i], state); break;
             case DrawFamily::Skinned:     IssueSkinnedDraw(pass, skinnedDrawCommands_[i], state); break;
             case DrawFamily::SkinnedPbr:  IssueSkinnedPbrDraw(pass, skinnedPbrDrawCommands_[i], state); break;
+            case DrawFamily::CustomEffect:
+                IssueCustomEffectDraw(pass, customEffectDrawCommands_[i], targetFormat,
+                                      targetSampleCount, state);
+                break;
             }
         }
         // WEBGPU-84: a query whose run reached the end of this pass is closed here.
@@ -7707,6 +8223,13 @@ struct VSOut {
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
+        // WEBGPU-76: a bound custom WGSL ShaderEffect owns the whole draw -- its own shaders,
+        // vertex layout and uniforms -- so it is routed before any stock stride dispatch below.
+        if (params.customEffectRenderer != nullptr)
+        {
+            QueueCustomEffectDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         // PBR owns its glTF MASK coverage; standalone AlphaTestEffect wins only for non-PBR
         // draws. Dual-texture then wins over env-map/skinned/
@@ -7810,6 +8333,12 @@ struct VSOut {
     {
         RequireSupportedFillModeEXT(primitive, "ordinary-indexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
+        // WEBGPU-76: a bound custom WGSL ShaderEffect owns the whole draw (see the non-indexed twin).
+        if (params.customEffectRenderer != nullptr)
+        {
+            QueueCustomEffectDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
         const bool needsAlphaTest = !params.pbr &&
                                     (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);

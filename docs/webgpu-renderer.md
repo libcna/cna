@@ -555,8 +555,9 @@ open** in `plans/plan_webgpu.md`:
 - **Per-`RenderTarget2D` `multiSampleCount`** -- a target's own constructor sample count is ignored;
   it mirrors the renderer's global sample count instead. Backbuffer and render-target MSAA otherwise
   work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
-- **Custom WGSL effects** (`ShaderEffect`, `WEBGPU-76`) and custom SpriteBatch effects -- the renderer
-  accepts the stock effects but does not compile user-provided WGSL source.
+- **Custom SpriteBatch effects** -- a `ShaderEffect` passed to `SpriteBatch.Begin(...)` is not yet
+  wired (the WebGPU sprite command carries no effect). Custom WGSL on the 3D `DrawUserPrimitives`/
+  `DrawIndexedPrimitives` route **is** supported (`WEBGPU-76`, see below).
 - `TextureCube`/`RenderTargetCube` mip regeneration.
 
 **Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
@@ -602,6 +603,35 @@ natively submitted, and returned a frame **byte-identical to the `Solid` one**. 
 document is not reachable through the public API and was directly contradicted by the capability
 query, so callers had no way to find out. A renderer must not report a capability as supported while
 silently substituting a different rendering mode.
+
+### Custom WGSL `ShaderEffect` (`WEBGPU-76`)
+
+A `ShaderEffect` constructed with WGSL vertex and fragment source is genuinely compiled and run by
+this renderer on the 3D draw routes (`DrawUserPrimitives` / `DrawUserIndexedPrimitives` /
+`DrawPrimitives` / `DrawIndexedPrimitives`). Unlike Vulkan (which takes SPIR-V) or SOFTWARE/HEADLESS
+(which accept a source and ignore it), WebGPU's pixels are its shader's, so it reports:
+
+- `GraphicsDevice.GetShaderDialectEXT()` → `ShaderDialectEXT::Wgsl` — ask this before supplying source;
+- `GraphicsDevice.ExecutesShaderEffectSourceEXT()` → `true`.
+
+**Authoring contract.** A custom effect's WGSL must follow this renderer's fixed conventions:
+
+| Element | Convention |
+|---|---|
+| Entry points | vertex `vs_main`, fragment `fs_main` (two independent modules — redeclare any shared struct in each) |
+| Vertex inputs | `@location(i)` for the *i*-th element of the bound `VertexDeclaration` (`location = declaration index`, the same convention EasyGL uses) |
+| Uniform block | `@group(0) @binding(0) var<uniform> …` — visible to both stages. Declare its size and each member's byte offset to the framework with `ShaderEffect.DeclareUniformBlockEXT(sizeBytes, names, offsets, count)`; WGSL has no loose uniforms, so this name→offset map is how `SetUniform*(name, …)` reaches the shader |
+| Matrices | the renderer sets `World`, `View`, `Projection` (those exact names, column-major, untransposed) into the block every draw — declare them and read `Projection * View * World * vec4f(pos, 1.0)` |
+| Texture (optional) | if the fragment samples, declare `@group(0) @binding(1) var …: sampler;` and `@group(0) @binding(2) var …: texture_2d<f32>;`. Unit 0 comes from `ShaderEffect.SetTexture(0, tex)`; an unbound unit falls back to a neutral-white texture |
+
+The compiled program, its bind-group/pipeline layouts and its per-pass pipelines are owned by the
+effect; a draw captures the uniform block **by value** at the call, so two draws of the same effect
+with different `SetUniform*` values render correctly. Compilation failures are reported through
+`ShaderEffect.IsEffectValid()` / `GetCompileErrorEXT()`, never as a device error.
+
+**Still open:** custom **SpriteBatch** effects (the sprite path carries no effect yet) and a
+multi-`@location` fragment output for MRT (`WEBGPU-85`/`86`/`87`) — the custom-effect pipeline builder
+already takes a colour-attachment count for the latter. Proven by `WebGPU_ShaderEffect3D`.
 
 **Implementing real wireframe** would mean index-expanding triangles into line topology, since
 wgpu-native offers no polygon mode. That is a genuine implementation task, tracked separately; it is
