@@ -791,6 +791,29 @@ namespace Microsoft::Xna::Framework::Graphics
         UploadValidatedData(source, elementCount, uploadStride, options, true);
     }
 
+    void VertexBuffer::SetDataRawAtWithOptions(const int offsetInBytes, const void* const data,
+                                               const int startIndex, const int elementCount,
+                                               const int stride, SetDataOptions)
+    {
+        // Validated before any pointer arithmetic; SetDataRawAtEXT repeats the checks it owns.
+        if (stride <= 0)
+            throw System::ArgumentException("The vertex stride must be positive.", "stride");
+        if (startIndex < 0)
+            throw System::ArgumentOutOfRangeException(
+                "startIndex", std::to_string(startIndex), "This parameter must not be negative.");
+        (void) CheckedByteOffset(startIndex, static_cast<std::size_t>(stride));
+
+        const auto* source =
+            data == nullptr
+                ? nullptr
+                : static_cast<const std::uint8_t*>(data) +
+                      static_cast<std::size_t>(startIndex) * static_cast<std::size_t>(stride);
+
+        // The streaming hint stops here on purpose -- see the header. The window is composed in
+        // the CPU shadow and uploaded whole, which cannot honour a NoOverwrite promise.
+        SetDataRawAtEXT(offsetInBytes, source, elementCount, stride);
+    }
+
     void VertexBuffer::SetDataRawAtEXT(const int offsetInBytes, const void* const data,
                                        const int count, const int stride)
     {

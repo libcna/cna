@@ -149,6 +149,41 @@ namespace Microsoft::Xna::Framework
         return *this;
     }
 
+    Vector3& Vector3::operator*=(const Vector3& vector3)
+    {
+        X *= vector3.X;
+        Y *= vector3.Y;
+        Z *= vector3.Z;
+        return *this;
+    }
+
+    Vector3& Vector3::operator*=(const float scaleFactor)
+    {
+        X *= scaleFactor;
+        Y *= scaleFactor;
+        Z *= scaleFactor;
+        return *this;
+    }
+
+    Vector3& Vector3::operator/=(const Vector3& vector3)
+    {
+        X /= vector3.X;
+        Y /= vector3.Y;
+        Z /= vector3.Z;
+        return *this;
+    }
+
+    Vector3& Vector3::operator/=(const float divider)
+    {
+        // Matching Vector3::Divide's own reciprocal form, so `v /= s` and `Divide(v, s)` agree
+        // bit for bit rather than differing by one rounding.
+        const float factor = 1.0f / divider;
+        X *= factor;
+        Y *= factor;
+        Z *= factor;
+        return *this;
+    }
+
     std::string Vector3::getDebugDisplayStringProperty() const
     {
         std::ostringstream s;
