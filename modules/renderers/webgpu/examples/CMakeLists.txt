@@ -39,6 +39,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_checksum_test.cmake
         TIMEOUT 30 LABELS "WebGPU")
 
+    # WEBGPU-151: integration test of the real ThirdPartyWebGPU cache logic (cna_webgpu_prepare_cache
+    # + the versioned/hashed stamp + purge helpers): old/legacy stamp migration, correct new stamp,
+    # wrong hash (purge), changed version/asset, interrupted extraction, no archive. Pure CMake.
+    cna_register_renderer_test(NAME WebGPU_CacheMigration COMMAND ${CMAKE_COMMAND}
+        -DMODULE=${CMAKE_SOURCE_DIR}/cmake/WebGPUChecksum.cmake
+        -DWORKDIR=${CMAKE_CURRENT_BINARY_DIR}/webgpu_cache_tmp
+        -P ${CMAKE_SOURCE_DIR}/cmake/tests/webgpu_cache_test.cmake
+        TIMEOUT 30 LABELS "WebGPU")
+
     # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
     # WebGPU_Native2D_Smoke (SKIP_REGULAR_EXPRESSION for a headless/no-display environment),
     # since ReadBackbuffer() needs a real GPU-backed surface exactly like the smoke test does.

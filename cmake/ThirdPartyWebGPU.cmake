@@ -76,21 +76,26 @@ function(cna_configure_webgpu)
         set(_extract_stamp "${_download_dir}/.cna-extracted")
         file(MAKE_DIRECTORY "${_download_dir}")
 
-        if(NOT EXISTS "${_extract_stamp}")
-            # WEBGPU-1: refuse to auto-download a package we have no pinned SHA-256 for.
-            include("${CMAKE_CURRENT_LIST_DIR}/WebGPUChecksum.cmake")
-            cna_webgpu_expected_sha256("${CNA_WEBGPU_VERSION}" "${_asset}" _expected_sha256)
-            if(NOT _expected_sha256)
-                message(FATAL_ERROR
-                    "CNA WebGPU: no pinned SHA-256 for ${_asset} at ${CNA_WEBGPU_VERSION}; refusing to "
-                    "auto-download an unverifiable package. Set CNA_WEBGPU_ROOT, or add the hash to "
-                    "cmake/WebGPUChecksum.cmake.")
-            endif()
+        # WEBGPU-1/151: refuse to auto-download a package we have no pinned SHA-256 for.
+        include("${CMAKE_CURRENT_LIST_DIR}/WebGPUChecksum.cmake")
+        cna_webgpu_expected_sha256("${CNA_WEBGPU_VERSION}" "${_asset}" _expected_sha256)
+        if(NOT _expected_sha256)
+            message(FATAL_ERROR
+                "CNA WebGPU: no pinned SHA-256 for ${_asset} at ${CNA_WEBGPU_VERSION}; refusing to "
+                "auto-download an unverifiable package. Set CNA_WEBGPU_ROOT, or add the hash to "
+                "cmake/WebGPUChecksum.cmake.")
+        endif()
+
+        # WEBGPU-151: evaluate the cache against the VERSIONED+HASHED stamp -- an old stamp (written
+        # before the checksum work) or a changed version/asset/hash forces a re-validation, and a
+        # corrupt/tampered cached archive is purged, so a pre-existing cache is never trusted blindly.
+        cna_webgpu_prepare_cache("${_download_dir}" "${CNA_WEBGPU_VERSION}" "${_asset}" "${_expected_sha256}" _needs_download)
+        if(_needs_download)
             set(_url "https://github.com/gfx-rs/wgpu-native/releases/download/${CNA_WEBGPU_VERSION}/${_asset}")
             message(STATUS "CNA WebGPU: downloading ${_url}")
-            # EXPECTED_HASH makes file(DOWNLOAD) verify the transfer itself; the explicit
-            # cna_webgpu_verify_sha256 below re-checks before extraction (also covering a pre-placed
-            # archive) and fails closed, removing the archive + stamp on mismatch.
+            # EXPECTED_HASH makes file(DOWNLOAD) verify the transfer; the explicit
+            # cna_webgpu_verify_sha256 re-checks before extraction and fails closed (removes archive +
+            # stamp) on mismatch.
             file(DOWNLOAD "${_url}" "${_archive}"
                 SHOW_PROGRESS
                 STATUS _download_status
@@ -104,10 +109,9 @@ function(cna_configure_webgpu)
                     "CNA WebGPU: failed to download wgpu-native (${_download_message}). "
                     "Download ${_asset} manually and set CNA_WEBGPU_ROOT to its extracted directory.")
             endif()
-            # Verify BEFORE extracting; fails closed (removes archive + stamp) on mismatch.
             cna_webgpu_verify_sha256("${_archive}" "${_expected_sha256}" "${_extract_stamp}")
             file(ARCHIVE_EXTRACT INPUT "${_archive}" DESTINATION "${_download_dir}")
-            file(WRITE "${_extract_stamp}" "${CNA_WEBGPU_VERSION}\n${_asset}\n")
+            cna_webgpu_write_stamp("${_extract_stamp}" "${CNA_WEBGPU_VERSION}" "${_asset}" "${_expected_sha256}")
         endif()
         set(_root "${_download_dir}")
     endif()

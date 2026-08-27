@@ -61,3 +61,77 @@ function(cna_webgpu_verify_sha256 archive expected)
     endif()
     message(STATUS "CNA WebGPU: verified SHA-256 of ${archive}")
 endfunction()
+
+# WEBGPU-151: the extract stamp is now VERSIONED + HASHED -- three lines: version, asset, expected
+# SHA-256. A stamp is trusted only if all three match, so an old two-line stamp (written before the
+# checksum work, or by a different version/asset) forces a re-validation instead of being blindly
+# trusted. Writes the stamp in that format.
+function(cna_webgpu_write_stamp stamp version asset expected)
+    file(WRITE "${stamp}" "${version}\n${asset}\n${expected}\n")
+endfunction()
+
+# Sets out TRUE iff `stamp` exists and its three lines are exactly (version, asset, expected).
+function(cna_webgpu_stamp_trusted stamp version asset expected out)
+    set(${out} FALSE PARENT_SCOPE)
+    if(NOT EXISTS "${stamp}")
+        return()
+    endif()
+    file(STRINGS "${stamp}" _lines)
+    list(LENGTH _lines _n)
+    if(_n LESS 3)
+        return()  # legacy / truncated stamp with no pinned hash -> never trusted
+    endif()
+    list(GET _lines 0 _v)
+    list(GET _lines 1 _a)
+    list(GET _lines 2 _h)
+    string(TOLOWER "${_h}" _hl)
+    string(TOLOWER "${expected}" _el)
+    if(_v STREQUAL version AND _a STREQUAL asset AND _hl STREQUAL _el)
+        set(${out} TRUE PARENT_SCOPE)
+    endif()
+endfunction()
+
+# Removes exactly THIS package's cached archive, extract stamp and extracted output (lib/ + include/).
+# Targeted on purpose -- never a wide/recursive delete of _deps or any shared directory.
+function(cna_webgpu_purge_cache download_dir asset)
+    file(REMOVE "${download_dir}/${asset}" "${download_dir}/.cna-extracted")
+    file(REMOVE_RECURSE "${download_dir}/lib" "${download_dir}/include")
+endfunction()
+
+# WEBGPU-151: decide (and repair) the cache state for one package WITHOUT downloading. Sets
+# out_needs_download:
+#   - trusted stamp (version+asset+hash) with the archive still present  -> FALSE (nothing to do).
+#   - authentic cached archive (hash matches) but a missing/legacy/mismatched stamp
+#       (covers a migration from an old stamp AND an interrupted extraction) -> re-extract + write the
+#       versioned/hashed stamp, FALSE (still no download).
+#   - a corrupt/tampered cached archive OR a changed asset/version whose archive no longer matches
+#       -> purge this package's archive/stamp/extracted output and set TRUE.
+#   - no cached archive -> TRUE.
+function(cna_webgpu_prepare_cache download_dir version asset expected out_needs_download)
+    set(_stamp "${download_dir}/.cna-extracted")
+    set(_archive "${download_dir}/${asset}")
+
+    cna_webgpu_stamp_trusted("${_stamp}" "${version}" "${asset}" "${expected}" _trusted)
+    if(_trusted AND EXISTS "${_archive}")
+        set(${out_needs_download} FALSE PARENT_SCOPE)
+        return()
+    endif()
+
+    if(EXISTS "${_archive}")
+        file(SHA256 "${_archive}" _actual)
+        string(TOLOWER "${_actual}" _al)
+        string(TOLOWER "${expected}" _el)
+        if(_al STREQUAL _el)
+            # Authentic archive -- re-extract (idempotent) and upgrade/refresh the stamp.
+            file(ARCHIVE_EXTRACT INPUT "${_archive}" DESTINATION "${download_dir}")
+            cna_webgpu_write_stamp("${_stamp}" "${version}" "${asset}" "${expected}")
+            message(STATUS "CNA WebGPU: re-validated cached ${asset} against its pinned SHA-256")
+            set(${out_needs_download} FALSE PARENT_SCOPE)
+            return()
+        endif()
+        message(STATUS "CNA WebGPU: cached ${asset} failed its pinned SHA-256 -- purging and re-downloading")
+        cna_webgpu_purge_cache("${download_dir}" "${asset}")
+    endif()
+
+    set(${out_needs_download} TRUE PARENT_SCOPE)
+endfunction()
