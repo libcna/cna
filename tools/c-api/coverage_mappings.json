@@ -16708,20 +16708,22 @@
     },
     {
       "id": "light-probe",
-      "qualified_name_regex": "^CNA::Graphics::LightProbeEXT(?:::[A-Za-z0-9_~]+)?$",
+      "qualified_name_regex": "^CNA::Graphics::LightProbeEXT(?:::(?:operator[=!]=|[A-Za-z0-9_~]+))?$",
       "kinds": [
         "class",
         "constant",
         "constructor",
         "destructor",
-        "method"
+        "method",
+        "operator"
       ],
-      "mapping": "`cna_light_probe_ext_*` over its own owned handle. The probe is a value in C++ and stays a value here: `cna_light_probe_ext_copy_from` and `cna_light_probe_ext_equals` exist so a caller can do through the handle what assignment and comparison do through the object, and `cna_light_probe_volume_ext_set_probe` **copies** rather than borrows -- a volume that aliased its source would change under a caller who later scaled that probe.\n\nThe nine-coefficient table is reached one entry at a time and in bulk (`cna_light_probe_ext_copy_coefficients`, which reports the count it needs when the buffer is too small). `kCoefficientCount` and the six visibility directions become `CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT` and `CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT`, and every index route refuses an index outside its table rather than clamping: a clamped index answers with a *different* coefficient, so the surface lights almost right, which is worse than an error.\n\nTwo behaviours read like refusals and are not, and are bound as answers because that is what the bodies do. `visibilityWeight` answers **1.0** -- \"nothing known to be in the way\" -- both when the probe carries no visibility data and when the distance is not positive; and the two visibility distances are floored at zero rather than refused. `irradiance` is likewise clamped non-negative however the coefficients reconstruct.",
-      "tests": "`EngineLayerSmoke.c` stage 32: every coefficient round-trips, both ends of both index ranges are refused, the two not-refusals above are asserted as successes returning 1.0, a copy compares equal until one `scale` breaks it, and a probe written into a volume is shown not to follow its source. The layer-absent build asserts each route refuses and leaves its output untouched.",
+      "mapping": "`cna_light_probe_ext_*` over its own owned handle. The probe is a value in C++ and stays a value here: `cna_light_probe_ext_copy_from` and `cna_light_probe_ext_equals` exist so a caller can do through the handle what assignment and comparison do through the object, and `cna_light_probe_volume_ext_set_probe` **copies** rather than borrows -- a volume that aliased its source would change under a caller who later scaled that probe.\n\nThe nine-coefficient table is reached one entry at a time and in bulk (`cna_light_probe_ext_copy_coefficients`, which reports the count it needs when the buffer is too small). `kCoefficientCount` and the six visibility directions become `CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT` and `CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT`, and every index route refuses an index outside its table rather than clamping: a clamped index answers with a *different* coefficient, so the surface lights almost right, which is worse than an error.\n\nTwo behaviours read like refusals and are not, and are bound as answers because that is what the bodies do. `visibilityWeight` answers **1.0** -- \"nothing known to be in the way\" -- both when the probe carries no visibility data and when the distance is not positive; and the two visibility distances are floored at zero rather than refused. `irradiance` is likewise clamped non-negative however the coefficients reconstruct.\n\nThe two comparison operators map to the same `cna_light_probe_ext_equals` -- `operator!=` is its negation, and a separate route for \"not equal\" would be a second name for one answer.",
+      "tests": "`EngineLayerSmoke.c` stage 32: every coefficient round-trips, both ends of both index ranges are refused, the two not-refusals above are asserted as successes returning 1.0, a copy compares equal until one `scale` breaks it, and a probe written into a volume is shown not to follow its source. The layer-absent build asserts each route refuses and leaves its output untouched. The two operators are covered by the same equality assertions, in both directions.",
       "status": "implemented",
       "task": "CBIND-091A",
       "approved_symbols": [
         "CPP-15313B0B876C",
+        "CPP-1FF2AEEE1709",
         "CPP-3F6EB5939A01",
         "CPP-51ABA87746F2",
         "CPP-656D30137815",
@@ -16731,6 +16733,7 @@
         "CPP-ACD69FB2ED80",
         "CPP-AE9D1B961E15",
         "CPP-BE9D087B4CD7",
+        "CPP-C3B7825B4A91",
         "CPP-C4D68F9B3D98",
         "CPP-CED71F7A266A",
         "CPP-D52031AAFF1C",
