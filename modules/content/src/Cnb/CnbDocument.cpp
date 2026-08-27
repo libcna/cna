@@ -54,7 +54,7 @@ namespace CNA::Content::Cnb
     {
         CnbDocument doc;
         doc.origin_ = origin;
-        doc.limits_ = &limits;
+        doc.limits_ = limits;
         doc.bytes_ = std::move(bytes);
 
         const std::uint64_t fileSize = doc.bytes_.size();
@@ -359,6 +359,12 @@ namespace CNA::Content::Cnb
             }
         }
 
+        // Decoded here rather than on first use, so a parsed document is immutable and every
+        // accessor is a plain const read. It also means a malformed CMET or an unsafe XREF path is
+        // a parse failure rather than a surprise from whichever call happened to touch it first.
+        doc.DecodeMetadata();
+        doc.DecodeExternalReferences();
+
         return doc;
     }
 
@@ -405,7 +411,7 @@ namespace CNA::Content::Cnb
     std::uint32_t CnbDocument::AssetTypeId() const noexcept { return assetTypeId_; }
     std::uint32_t CnbDocument::AssetSchemaVersion() const noexcept { return assetSchemaVersion_; }
     std::size_t CnbDocument::ChunkCount() const noexcept { return chunks_.size(); }
-    const CnbReadLimits& CnbDocument::Limits() const noexcept { return *limits_; }
+    const CnbReadLimits& CnbDocument::Limits() const noexcept { return limits_; }
 
     const CnbChunkEntry& CnbDocument::ChunkAt(std::size_t index) const
     {
@@ -429,7 +435,7 @@ namespace CNA::Content::Cnb
     {
         const CnbChunkEntry& entry = ChunkAt(index);
         return CnbByteReader(ChunkData(index),
-                             "'" + origin_ + "' chunk " + ChunkIdToString(entry.type), *limits_);
+                             "'" + origin_ + "' chunk " + ChunkIdToString(entry.type), limits_);
     }
 
     std::vector<std::size_t> CnbDocument::FindAll(CnbChunkId type) const
@@ -510,10 +516,15 @@ namespace CNA::Content::Cnb
         }
     }
 
-    const CnbMetadata& CnbDocument::Metadata() const
-    {
-        if (metadataDecoded_) { return metadata_; }
+    const CnbMetadata& CnbDocument::Metadata() const noexcept { return metadata_; }
 
+    const std::vector<CnbExternalReference>& CnbDocument::ExternalReferences() const noexcept
+    {
+        return externalReferences_;
+    }
+
+    void CnbDocument::DecodeMetadata()
+    {
         const std::optional<std::size_t> index = FindSingle(CnbContainerChunk::Metadata);
         if (index.has_value())
         {
@@ -528,14 +539,10 @@ namespace CNA::Content::Cnb
             metadata_.contentName = reader.ReadString();
             reader.RequireExhausted();
         }
-        metadataDecoded_ = true;
-        return metadata_;
     }
 
-    const std::vector<CnbExternalReference>& CnbDocument::ExternalReferences() const
+    void CnbDocument::DecodeExternalReferences()
     {
-        if (externalReferencesDecoded_) { return externalReferences_; }
-
         const std::optional<std::size_t> index = FindSingle(CnbContainerChunk::ExternalReferences);
         if (index.has_value())
         {
@@ -597,8 +604,6 @@ namespace CNA::Content::Cnb
             }
             reader.RequireExhausted();
         }
-        externalReferencesDecoded_ = true;
-        return externalReferences_;
     }
 
     const CnbExternalReference& CnbDocument::ExternalReferenceAt(

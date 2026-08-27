@@ -40,12 +40,21 @@ namespace CNA::Content::Cnb
         CnbWriter(std::uint32_t assetTypeId, std::uint32_t assetSchemaVersion);
 
         /**
-         * @brief Sets the optional `CMET` debug metadata chunk.
+         * @brief Sets the `CMET` metadata chunk.
          *
-         * Diagnostic only -- nothing dispatches on it. Both strings are derived from the
-         * compiler's inputs, so setting them does not compromise determinism.
+         * For a **built-in** asset type this is diagnostic only: dispatch is by the header's
+         * numeric identifier, which CNA assigns and freezes.
          *
-         * @param assetTypeName Human-readable type name, e.g. `"Microsoft.Xna.Framework.Curve"`.
+         * For a **custom** asset type it is not optional and not decorative. A custom identifier
+         * is a 31-bit hash of the type name, so the load path proves identity by comparing
+         * @p assetTypeName against the name the loader was registered under. Build() refuses a
+         * custom-typed file that has no name, or whose name does not hash to the declared
+         * identifier (plans/plan_cnb.md `CNBF-H002`).
+         *
+         * Both strings are derived from the compiler's inputs, so setting them does not compromise
+         * determinism.
+         *
+         * @param assetTypeName The type's canonical name, e.g. `"Microsoft.Xna.Framework.Curve"`.
          * @param contentName   The logical content name being compiled, or empty.
          */
         void SetMetadata(std::string assetTypeName, std::string contentName);
@@ -84,7 +93,8 @@ namespace CNA::Content::Cnb
          *
          * @return The complete file bytes.
          * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the result would
-         *         exceed what the format can express.
+         *         exceed what the format can express, or if the asset type is custom and no
+         *         matching canonical type name was set (see SetMetadata()).
          */
         [[nodiscard]] std::vector<std::uint8_t> Build() const;
 

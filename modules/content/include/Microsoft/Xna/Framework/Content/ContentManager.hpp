@@ -309,17 +309,21 @@ namespace Microsoft::Xna::Framework::Content
          *
          * @tparam T            The asset type @p factory produces; must be exactly the `T` later
          *                      passed to `Load<T>()`.
-         * @param assetTypeId   The identifier written into the `.cnb` header. Must not be 0.
-         * @param debugTypeName Human-readable type name, used in diagnostics and to detect an
-         *                      identifier collision between two custom type names.
-         * @param factory       Decodes the container into a T. Must not be empty.
-         * @throws std::invalid_argument if @p assetTypeId, @p debugTypeName or @p factory is
-         *         invalid.
+         * For a custom identifier @p canonicalTypeName is **not** a diagnostic label: it must be
+         * exactly the string passed to `CnbAssetTypeIdFromName()`, and the load path compares it
+         * against the name the file itself carries before dispatching. That is what stops two game
+         * types whose 31-bit hashes collide from decoding each other's content.
+         *
+         * @param assetTypeId       The identifier written into the `.cnb` header. Must not be 0.
+         * @param canonicalTypeName The type's canonical name; must hash to @p assetTypeId.
+         * @param factory           Decodes the container into a T. Must not be empty.
+         * @throws std::invalid_argument if @p assetTypeId, @p canonicalTypeName or @p factory is
+         *         invalid, or if @p canonicalTypeName does not hash to a custom @p assetTypeId.
          * @throws std::logic_error if @p assetTypeId is already registered under a different name.
          */
         template <typename T>
         CNAEXT static void RegisterCnbLoaderEXT(std::uint32_t assetTypeId,
-                                                 const std::string& debugTypeName,
+                                                 const std::string& canonicalTypeName,
                                                  CnbLoaderFn<T> factory)
         {
             if (!factory)
@@ -328,7 +332,7 @@ namespace Microsoft::Xna::Framework::Content
                     "ContentManager::RegisterCnbLoaderEXT<T>(): factory must not be empty.");
             }
             CNA::Content::CnbLoaderRegistry::Register(
-                assetTypeId, debugTypeName,
+                assetTypeId, canonicalTypeName,
                 [factory](const CNA::Content::Cnb::CnbDocument& document, ContentManager& cm,
                           const std::string&) -> std::any
                 { return std::any(factory(document, cm)); });
@@ -504,7 +508,8 @@ namespace Microsoft::Xna::Framework::Content
          * @param assetName Logical asset name, passed to the loader for diagnostics.
          * @return The decoded asset.
          * @throws ContentLoadException if the file is malformed, holds an asset type this build
-         *         has no loader for, or holds a different type than @p T.
+         *         has no loader for, holds a custom type whose canonical name disagrees with the
+         *         registered one, or holds a different type than @p T.
          */
         template <typename T>
         [[nodiscard]] T LoadCnbAsset(const std::string& cnbPath, const std::string& assetName)
@@ -512,19 +517,16 @@ namespace Microsoft::Xna::Framework::Content
             const CNA::Content::Cnb::CnbDocument document =
                 CNA::Content::Cnb::CnbDocument::ParseFile(cnbPath);
 
-            const auto* loader = CNA::Content::CnbLoaderRegistry::Find(document.AssetTypeId());
-            if (loader == nullptr)
-            {
-                throw ContentLoadException(
-                    "'" + cnbPath + "' holds a " +
-                    CNA::Content::Cnb::AssetTypeIdToString(document.AssetTypeId()) +
-                    " asset, which this build of CNA has no .cnb loader for" +
-                    (document.Metadata().present && !document.Metadata().assetTypeName.empty()
-                         ? " (the file names it '" + document.Metadata().assetTypeName + "')."
-                         : "."));
-            }
+            // Through ResolveForDocument rather than a bare numeric lookup: for a CUSTOM asset
+            // type the identifier is only a 31-bit hash, so a numeric match does not prove the
+            // file is that type. The resolver additionally requires the file's own canonical type
+            // name to equal the registered one (plans/plan_cnb.md CNBF-H002). It hands back a COPY of
+            // the loader, so nothing that registers or withdraws a loader on another thread can
+            // pull it out from under the call below (CNBF-H003).
+            const CNA::Content::CnbLoaderRegistry::LoaderFn loader =
+                CNA::Content::CnbLoaderRegistry::ResolveForDocument(document);
 
-            std::any produced = (*loader)(document, *this, assetName);
+            std::any produced = loader(document, *this, assetName);
             try
             {
                 return std::any_cast<T>(std::move(produced));

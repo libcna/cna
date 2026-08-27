@@ -780,8 +780,11 @@ TEST(CnbContainerTest, DuplicateContainerMetadataChunkIsRejected)
     writer.AddChunk(CNA::Content::Cnb::CnbContainerChunk::Metadata, Bytes({0, 0, 0, 0, 0, 0, 0, 0,
                                                                           0, 0, 0, 0}),
                     CnbChunkFlags::None, 4u);
-    const CnbDocument doc = CnbDocument::Parse(writer.Build(), "twometa.cnb");
-    EXPECT_THROW((void)doc.Metadata(), ContentLoadException);
+    // Rejected by Parse() rather than by the accessor: a document decodes its container-level
+    // chunks up front (CNBF-H004), so it is immutable once it exists and a structural problem
+    // surfaces at the point the file is opened rather than at whichever later call happened to
+    // touch it first.
+    EXPECT_THROW((void)CnbDocument::Parse(writer.Build(), "twometa.cnb"), ContentLoadException);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -885,9 +888,11 @@ TEST(CnbContainerTest, ExternalReferenceNamesAreValidatedForPathSafety)
     };
     for (const std::string& name : unsafe)
     {
+        // Refused by Parse(), not by the accessor (CNBF-H004): a file that names a path outside
+        // the content root is malformed, and the moment it is opened is the right moment to say so.
         const std::vector<std::uint8_t> bytes = BuildXrefFile(name);
-        const CnbDocument doc = CnbDocument::Parse(bytes, "refs.cnb");
-        EXPECT_THROW((void)doc.ExternalReferences(), ContentLoadException) << "name '" << name << "'";
+        EXPECT_THROW((void)CnbDocument::Parse(bytes, "refs.cnb"), ContentLoadException)
+            << "name '" << name << "'";
     }
 }
 

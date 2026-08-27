@@ -125,6 +125,28 @@ namespace CNA::Content::Cnb
 
     std::vector<std::uint8_t> CnbWriter::Build() const
     {
+        // plans/plan_cnb.md CNBF-H002: a custom asset type is identified by a 31-bit hash, so the load
+        // path proves identity by comparing the file's canonical type name against the registered
+        // one -- which it can only do if the file carries that name. Refusing here means a file
+        // that could never be loaded cannot be produced in the first place, which is a much better
+        // place to find the mistake than a collision at someone else's load time.
+        if (IsCustomAssetTypeId(assetTypeId_) && (!hasMetadata_ || assetTypeName_.empty()))
+        {
+            throw ContentLoadException(
+                "CnbWriter: asset type " + AssetTypeIdToString(assetTypeId_) +
+                " is a custom type, so the file must carry its canonical type name. Call "
+                "SetMetadata(canonicalTypeName, contentName) with the same name the identifier "
+                "was minted from.");
+        }
+        if (IsCustomAssetTypeId(assetTypeId_) && hasMetadata_ &&
+            CnbAssetTypeIdFromName(assetTypeName_) != assetTypeId_)
+        {
+            throw ContentLoadException(
+                "CnbWriter: asset type " + AssetTypeIdToString(assetTypeId_) +
+                " is not the identifier '" + assetTypeName_ +
+                "' hashes to; the file would be refused at load time as a hash collision.");
+        }
+
         const std::vector<PendingChunk> all = AssembleChunkList();
         if (all.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()))
         {

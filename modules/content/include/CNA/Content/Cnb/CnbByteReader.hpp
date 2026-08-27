@@ -32,6 +32,7 @@ namespace CNA::Content::Cnb
          * @param context Text prefixed verbatim to every exception message, naming the region
          *                (e.g. `"'walk.cnb' chunk ACLK"`).
          * @param limits  Sanity bounds applied to string lengths and array element counts.
+         *                **Copied**, not referenced -- see the note on @ref limits_.
          */
         CnbByteReader(std::span<const std::uint8_t> data, std::string context,
                       const CnbReadLimits& limits = DefaultCnbReadLimits());
@@ -204,6 +205,16 @@ namespace CNA::Content::Cnb
         std::span<const std::uint8_t> data_;
         std::size_t position_ = 0;
         std::string context_;
-        const CnbReadLimits* limits_;
+        /**
+         * @brief The limits this cursor enforces, held **by value**.
+         *
+         * Deliberately a copy of a 24-byte trivially-copyable struct rather than a pointer or a
+         * reference. The obvious call `CnbDocument::Parse(bytes, "foo", CnbReadLimits{})` passes a
+         * temporary that dies at the end of that full-expression, so any cursor or document that
+         * kept its address would dereference freed stack on the very next call -- and the API
+         * gives a caller no way to know that. Copying costs less than the string this cursor
+         * already stores; there is no reason to make lifetime the caller's problem.
+         */
+        CnbReadLimits limits_;
     };
 }

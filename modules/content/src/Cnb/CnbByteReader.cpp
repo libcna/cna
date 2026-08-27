@@ -2,6 +2,8 @@
 
 #include "CNA/Content/Cnb/CnbByteReader.hpp"
 
+#include "CNA/Content/Cnb/CnbArithmetic.hpp"
+
 #include <bit>
 #include <string_view>
 #include <utility>
@@ -14,7 +16,7 @@ namespace CNA::Content::Cnb
 {
     CnbByteReader::CnbByteReader(std::span<const std::uint8_t> data, std::string context,
                                  const CnbReadLimits& limits)
-        : data_(data), context_(std::move(context)), limits_(&limits)
+        : data_(data), context_(std::move(context)), limits_(limits)
     {
     }
 
@@ -139,11 +141,11 @@ namespace CNA::Content::Cnb
     std::string CnbByteReader::ReadString()
     {
         const std::uint32_t byteLength = ReadU32();
-        if (byteLength > limits_->maxStringBytes)
+        if (byteLength > limits_.maxStringBytes)
         {
             Fail("a string declares " + std::to_string(byteLength) +
                  " byte(s), above the configured limit of " +
-                 std::to_string(limits_->maxStringBytes) + ".");
+                 std::to_string(limits_.maxStringBytes) + ".");
         }
         Require(byteLength, "string bytes");
         const auto* first = reinterpret_cast<const char*>(data_.data() + position_);
@@ -159,17 +161,23 @@ namespace CNA::Content::Cnb
     std::uint32_t CnbByteReader::ReadCount(std::uint64_t elementSize, const char* whatIsBeingCounted)
     {
         const std::uint32_t count = ReadU32();
-        if (count > limits_->maxArrayElementCount)
+        if (count > limits_.maxArrayElementCount)
         {
             Fail(std::string("declares ") + std::to_string(count) + " " + whatIsBeingCounted +
                  ", above the configured limit of " +
-                 std::to_string(limits_->maxArrayElementCount) + ".");
+                 std::to_string(limits_.maxArrayElementCount) + ".");
         }
         if (elementSize != 0u)
         {
             // Checked against what physically remains before anything is reserved, so a huge count
             // in a small chunk fails immediately instead of after an enormous allocation.
-            const std::uint64_t needed = static_cast<std::uint64_t>(count) * elementSize;
+            //
+            // Through CheckedMultiply rather than a bare `*`: every current caller passes a small
+            // constant element size, so the product provably fits -- but that is a property of the
+            // callers, not of this function, and the specification promises the operation itself is
+            // safe. Making it unconditionally true costs one predictable branch.
+            const std::uint64_t needed = CheckedMultiply(
+                count, elementSize, context_ + " " + whatIsBeingCounted);
             if (needed > static_cast<std::uint64_t>(Remaining()))
             {
                 Fail(std::string("declares ") + std::to_string(count) + " " + whatIsBeingCounted +

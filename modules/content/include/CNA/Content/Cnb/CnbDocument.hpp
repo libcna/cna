@@ -243,22 +243,27 @@ namespace CNA::Content::Cnb
         void RequireMandatoryChunksUnderstood(std::span<const CnbChunkId> knownTypes) const;
 
         /**
-         * @brief The file's `CMET` metadata, decoded on first use.
+         * @brief The file's `CMET` metadata.
+         *
+         * Decoded during Parse(), not on first use: a document is fully immutable once it exists,
+         * which is what makes it safe to hand the same document to two threads and what lets the
+         * loader registry consult the type name from a `const` context without a data race
+         * (plans/plan_cnb.md `CNBF-H004`).
          *
          * @return The metadata; `CnbMetadata::present` is false when the file has no `CMET` chunk.
-         * @throws Microsoft::Xna::Framework::Content::ContentLoadException if a `CMET` chunk is
-         *         present but malformed.
          */
-        [[nodiscard]] const CnbMetadata& Metadata() const;
+        [[nodiscard]] const CnbMetadata& Metadata() const noexcept;
 
         /**
-         * @brief The file's `XREF` external-reference table, decoded on first use.
+         * @brief The file's `XREF` external-reference table.
+         *
+         * Decoded and validated during Parse() for the same reason as Metadata(), which also means
+         * a file naming an unsafe path is refused at parse time rather than at whichever later
+         * moment happened to touch the table first.
          *
          * @return The table; empty when the file has no `XREF` chunk.
-         * @throws Microsoft::Xna::Framework::Content::ContentLoadException if an `XREF` chunk is
-         *         present but malformed, or names an unsafe path.
          */
-        [[nodiscard]] const std::vector<CnbExternalReference>& ExternalReferences() const;
+        [[nodiscard]] const std::vector<CnbExternalReference>& ExternalReferences() const noexcept;
 
         /**
          * @brief Looks up one external reference by index, with a schema-friendly error message.
@@ -283,11 +288,21 @@ namespace CNA::Content::Cnb
          */
         void RequireAsset(std::uint32_t expectedAssetTypeId, std::uint32_t maxSchemaVersion) const;
 
-        /** @brief The limits this document was parsed with. @return The limits. */
+        /**
+         * @brief The limits this document was parsed with.
+         *
+         * @return A reference to this document's own copy, valid for the document's lifetime --
+         *         not to whatever the caller passed to Parse().
+         */
         [[nodiscard]] const CnbReadLimits& Limits() const noexcept;
 
     private:
         CnbDocument() = default;
+
+        /// Decodes the optional container-level chunks. Called by Parse() once every structural
+        /// invariant holds, which is what lets them use the ordinary bounds-checked accessors.
+        void DecodeMetadata();
+        void DecodeExternalReferences();
 
         std::vector<std::uint8_t> bytes_;
         std::string origin_;
@@ -296,11 +311,16 @@ namespace CNA::Content::Cnb
         std::uint32_t assetTypeId_ = 0u;
         std::uint32_t assetSchemaVersion_ = 0u;
         std::vector<CnbChunkEntry> chunks_;
-        const CnbReadLimits* limits_ = &DefaultCnbReadLimits();
+        /**
+         * @brief The limits this document was parsed with, held **by value**.
+         *
+         * Same reasoning as CnbByteReader::limits_: `Parse(bytes, "foo", CnbReadLimits{})` is the
+         * natural call, and its argument is a temporary. A document that outlived it while holding
+         * its address would hand a dangling reference to every chunk cursor it opens.
+         */
+        CnbReadLimits limits_{};
 
-        mutable bool metadataDecoded_ = false;
-        mutable CnbMetadata metadata_;
-        mutable bool externalReferencesDecoded_ = false;
-        mutable std::vector<CnbExternalReference> externalReferences_;
+        CnbMetadata metadata_;
+        std::vector<CnbExternalReference> externalReferences_;
     };
 }
