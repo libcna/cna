@@ -442,12 +442,29 @@ namespace CNA::Content::Cnb
 
         // --- MBON ---------------------------------------------------------------------------
         CnbByteWriter bones;
-        for (const CnbModelBone& bone : model.bones)
+        for (std::size_t boneIndex = 0; boneIndex < model.bones.size(); ++boneIndex)
         {
+            const CnbModelBone& bone = model.bones[boneIndex];
             if (bone.parent >= 0 && static_cast<std::uint32_t>(bone.parent) >= boneCount)
             {
                 throw ContentLoadException(
                     "CNB Model: bone '" + bone.name + "' names an out-of-range parent index.");
+            }
+            // Parent-before-child, which also makes a cycle structurally impossible. Not an
+            // arbitrary tidiness rule: Model::CopyAbsoluteBoneTransformsTo composes world
+            // transforms in one ascending pass, reading dest[parentIndex] as it goes, so a bone
+            // whose parent comes later reads a slot that has not been written yet and silently
+            // produces a wrong world transform rather than failing. Both source formats already
+            // specify this order ('.cnj' bones are documented parent-before-child, and
+            // SkinningData::SkeletonHierarchy is documented topological), so nothing that can be
+            // authored today is refused by stating it here.
+            if (bone.parent >= 0 && static_cast<std::size_t>(bone.parent) >= boneIndex)
+            {
+                throw ContentLoadException(
+                    "CNB Model: bone " + std::to_string(boneIndex) + " ('" + bone.name +
+                    "') names parent " + std::to_string(bone.parent) +
+                    ", which is not earlier in the table. A bone table must be ordered "
+                    "parent-before-child.");
             }
             bones.WriteU32(strings.Intern(bone.name));
             bones.WriteI32(bone.parent);
@@ -624,7 +641,21 @@ namespace CNA::Content::Cnb
             }
             skeleton.WriteU32(jointCount);
             skeleton.WriteU32(s.rootPrefix.empty() ? 0u : kSkeletonFlagHasRootPrefix);
-            for (const std::int32_t parent : s.hierarchy) { skeleton.WriteI32(parent); }
+            for (std::size_t j = 0; j < s.hierarchy.size(); ++j)
+            {
+                const std::int32_t parent = s.hierarchy[j];
+                // Same rule and the same reason as the bone table above: AnimationPlayer composes
+                // joint world transforms in one ascending pass.
+                if (parent < -1 || (parent >= 0 && static_cast<std::size_t>(parent) >= j))
+                {
+                    throw ContentLoadException(
+                        "CNB Model: skeleton joint " + std::to_string(j) + " names parent " +
+                        std::to_string(parent) +
+                        ", which is not earlier in the table. A skeleton must be ordered "
+                        "parent-before-child.");
+                }
+                skeleton.WriteI32(parent);
+            }
             for (const auto& matrix : s.bindPose) { WriteMatrix(skeleton, matrix); }
             for (const auto& matrix : s.inverseBindPose) { WriteMatrix(skeleton, matrix); }
             for (const auto& matrix : s.rootPrefix) { WriteMatrix(skeleton, matrix); }
@@ -819,6 +850,18 @@ namespace CNA::Content::Cnb
                 {
                     reader.Fail("bone " + std::to_string(b) + " names parent " +
                                 std::to_string(bone.parent) + ", which is out of range.");
+                }
+                // Parent-before-child. A file that violated it would not crash, which is exactly
+                // why it has to be refused: Model::CopyAbsoluteBoneTransformsTo would compose that
+                // bone against a slot it has not written yet and quietly place the geometry
+                // somewhere it does not belong. A cycle is a special case of the same thing and is
+                // ruled out by the same check.
+                if (bone.parent >= 0 && static_cast<std::uint32_t>(bone.parent) >= b)
+                {
+                    reader.Fail("bone " + std::to_string(b) + " names parent " +
+                                std::to_string(bone.parent) +
+                                ", which is not earlier in the table; a bone table must be "
+                                "ordered parent-before-child.");
                 }
                 bone.transform = ReadMatrix(reader);
             }
@@ -1099,6 +1142,13 @@ namespace CNA::Content::Cnb
                 {
                     reader.Fail("joint " + std::to_string(j) + " names parent " +
                                 std::to_string(parent) + ", which is out of range.");
+                }
+                if (parent >= 0 && static_cast<std::uint32_t>(parent) >= j)
+                {
+                    reader.Fail("joint " + std::to_string(j) + " names parent " +
+                                std::to_string(parent) +
+                                ", which is not earlier in the table; a skeleton must be ordered "
+                                "parent-before-child.");
                 }
                 skeleton.hierarchy[j] = parent;
             }

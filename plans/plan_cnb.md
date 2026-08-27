@@ -755,3 +755,56 @@ have caught.
 * The `.clip.bin`/`.skeleton.bin`/`_morph.bin` sidecar readers CNB's compiler front end contains
   assume little-endian, where the pre-existing `.cnj` readers use native order. Identical on every
   target CNA supports; noted because it is a difference rather than an accident.
+
+---
+
+## 11. Hardening pass (`CNBF-H001`–`CNBF-H011`)
+
+A second, independent engineering review of the branch — deliberately not trusting §10's own
+verdict. Its premise was that §10 found four issues *by reading the code*, which means the suites
+that should have defended those properties did not exist; so this pass looked for the same shape of
+gap, and fixed what it found.
+
+**Four defects confirmed, three of them memory- or correctness-unsafe.** Two further problems were
+found while fixing them. One reported concern turned out not to be a defect at all. Every fix ships
+with the test that would have caught it, and where a gate could be checked for teeth it was.
+
+| ID | Issue | Root cause | Fix | Tests | Status |
+|---|---|---|---|---|---|
+| CNBF-H001 | **Dangling read-limit pointer.** `CnbDocument` and `CnbByteReader` each stored `const CnbReadLimits*` into caller-owned storage, so `Parse(bytes, name, CnbReadLimits{})` — the obvious call — left the document holding the address of a temporary that died at the end of that full-expression. Every later chunk read and `Limits()` call dereferenced freed stack. | A reference-semantics choice for a 24-byte trivially-copyable configuration struct, where the API gave the caller no way to know lifetime mattered. | Store **by value** in both. No heap and no `shared_ptr`: the struct is smaller than the `std::string` the reader already holds. | 4 (temporary, out-of-scope named local, direct cursor construction, cursor-inherits-document-limits) | ✅ |
+| CNBF-H002 | **Custom asset types dispatched on 31 bits of hash alone.** A custom id is `FNV-1a-32(name) \| 0x80000000`; two unrelated game types can collide, and the loader was looked up by number with the file's own type name used only in an error message. A colliding file was decoded by the wrong loader in silence. | The collision defence was designed (`Register` refuses two names per id) but only covered types registered *in the same process* — not a file produced by a different program. | The canonical type name is now load-bearing for custom types: `ResolveForDocument` requires it present and equal to the registered name; `Register` refuses a name that does not hash to its id; `CnbWriter::Build` refuses to **produce** a custom file that could never load. Built-ins unchanged — CNA assigns and freezes those ids, so a numeric match *is* proof of identity there. | 7 | ✅ |
+| CNBF-H003 | **Registry data race and pointer invalidation.** A `static std::unordered_map` was mutated without synchronisation while *every* `ContentManager` constructor registers into it, and `Find()` returned a pointer into it that any later registration could invalidate. | Written for a single-threaded assumption that the API does not state and `ContentManager` does not honour. | `std::shared_mutex`; lookups return the loader **by value**. | 2, incl. an 8-thread × 200-iteration test asserting only interleaving-independent outcomes so it can never flake | ✅ |
+| CNBF-H004 | **`const` accessors mutated shared state.** `Metadata()`/`ExternalReferences()` decoded lazily into `mutable` members, which the `const` dispatch path in CNBF-H002 cannot use safely. | Lazy decoding chosen for a cost that does not exist — both chunks are tiny. | Decoded during `Parse()`. A document is now immutable once it exists, and a malformed `CMET` or root-escaping `XREF` is a **parse** failure rather than a surprise from whichever call touched it first. | 2 existing tests moved to the earlier, fail-fast throw | ✅ |
+| CNBF-H005 | **Overflow contract not enforced where it was claimed.** `ReadCount` multiplied its `u32` count by a caller-supplied `u64` element size directly. | Safe for every current caller, but that is a property of the callers while the specification promised the *operation* was safe. | Through `CheckedMultiply`. | 1, using an element size no real caller would pass | ✅ |
+| CNBF-H006 | **Compiler strictness against malformed sidecars was untested.** | — (a coverage gap, not a defect: **15 of the 16 new tests passed on first run**; the checks were written and never exercised. The one failure was the new test's own assertion.) | 16 tests pinning truncation, trailing bytes, ragged geometry, absurd/negative counts, non-finite times, bad tangent-trailer magic/version/count, missing files, root-escaping paths — with a positive control that the uncorrupted fixture compiles, and an explicit statement that CNB is stricter here than the runtime `.cnj` reader. | 16 | ✅ |
+| CNBF-H007 | **Conformance rested on textual scraping.** `CnbSpecConformanceTests` pinned the document to the code, which catches a document that drifts but not the two drifting together, and said nothing about actual bytes. | — | Golden byte vectors generated by a **separate Python implementation of the specification** (`tools/cnb/gen_golden_vectors.py`), asserted in both directions; plus a test that flips one bit of every byte of a vector in turn and requires each to be refused. | 6 | ✅ |
+| CNBF-H008 | **A bone table not ordered parent-before-child was accepted and silently produced wrong world transforms.** `Model::CopyAbsoluteBoneTransformsTo` composes in one ascending pass reading `dest[parentIndex]`, so a forward parent reads a slot not yet written. It does not crash, which is why it had to be refused. | Only the range `parent < boneCount` was validated; the ordering the consuming code assumes was not. | Parent-before-child enforced on encode and decode, for `MBON` and `MSKL`. Also makes cycles structurally impossible. Confirmed against all 15 real corpus fixtures — no authored asset violates it. | 3 | ✅ |
+| CNBF-H009 | **The aggregate-initialisation hazard had no permanent guard.** `CnbModelBone{name, parent, {}}` suppresses the identity default-member-initialiser (the §10 defect). | — | A test that pins the default *and* asserts the braced form still differs, so if someone designs the hazard away the test says so rather than silently passing. | 1 | ✅ |
+| CNBF-H010 | Container coverage gaps: per-type ordinals were only ever exercised with 2–3 chunks despite existing to remove a primitive-count cap; a chunk overlapping the *table of contents* was untested; float bit-exactness was never asserted. | — | 500-chunk ordinal test; chunk-inside-TOC test with all three checksums repaired so the overlap is the only fault; NaN/±Inf/−0/denormal bit-exact round trip, compared as bits because `NaN != NaN` and `-0.0 == 0.0`. | 4 | ✅ |
+| CNBF-H011 | Specification updated for the contract changes, with the new clauses pinned **behaviourally** as well as textually. | — | §5.1, §7, §11, §12, §13 rewritten. Two new conformance tests assert each clause against real behaviour, not only against the sentence. | 2 | ✅ |
+
+### Reported concern that was NOT a defect
+
+The review brief asked whether `count * elementSize` arithmetic was unsafe *in general*. Audited
+across the container, all three schemas, the compiler and the writer: every other such computation
+multiplies a `u32` count by a **compile-time** stride into a `u64`, where the largest representable
+product is under 2⁴¹ and no overflow exists. Only `ReadCount`'s caller-supplied element size was a
+real gap (`CNBF-H005`). The claim in `docs/cnb-format.md` §12 was already accurate and was left
+alone.
+
+### Gates checked for teeth
+
+Not assumed to work — each was broken on purpose and observed to fail:
+
+* Removing the registry's locks makes the concurrency test report real `unordered_map` data races
+  under ThreadSanitizer (`hashtable.h` `_M_find_before_node`, `size`). Restoring them: zero reports.
+* Editing two numbers in `docs/cnb-format.md` alone fails two spec-conformance tests by name.
+* Deleting either new contract clause from the document fails its new conformance test by name.
+
+### Did any serialized CNB v1 byte change?
+
+**No.** The golden vectors — generated independently from the specification — match the writer
+byte-for-byte, and every pre-existing round-trip and determinism test passes unchanged. What
+changed is what a reader *accepts* (stricter: forward bone parents, unnamed custom types) and what
+the writer *refuses to produce* (custom types without a matching canonical name). Files the previous
+state could legitimately produce all still load.

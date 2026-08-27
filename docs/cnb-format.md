@@ -165,13 +165,27 @@ stable under any such insertion. A schema declares which of *its* chunk types ar
 These two are understood by every reader, whatever the asset type, and are always emitted before a
 schema's own chunks.
 
-**`CMET` — optional, at most one. Debug metadata.** Diagnostic only; nothing dispatches on it.
+**`CMET` — at most one. Type identity and provenance.**
 
 ```text
 u32     flags            reserved, must be 0
-String  assetTypeName    e.g. "Microsoft.Xna.Framework.Curve"
+String  assetTypeName    the type's canonical name, e.g. "Microsoft.Xna.Framework.Curve"
 String  contentName      the logical asset name at compile time, or empty
 ```
+
+Whether this chunk is optional depends on the asset type, and the difference is load-bearing:
+
+* For a **built-in** asset type the chunk is **optional and diagnostic**. CNA assigns those
+  identifiers itself and freezes them, so the header's number is a proof of identity on its own.
+* For a **custom** asset type the chunk is **required**, and `assetTypeName` must be exactly the
+  string the identifier was minted from. A custom identifier is a 31-bit hash (§7), so two
+  unrelated game types can legitimately collide, and a numeric match is *not* a proof of identity.
+  A reader must refuse a custom-typed file that carries no name, and must refuse one whose name
+  disagrees with the name its loader was registered under. A writer must refuse to produce either.
+
+Both halves of that rule are implemented: `CnbLoaderRegistry::ResolveForDocument` enforces it on
+read and `CnbWriter::Build` enforces it on write, so a custom file that could never be loaded
+cannot be produced in the first place.
 
 **`XREF` — optional, at most one, marked `Mandatory`. External asset references.**
 
@@ -243,10 +257,23 @@ The header's `assetTypeId` is what selects a loader. There is no type name in th
 | 11 | `Effect` | reserved, not implemented |
 
 A custom identifier is `CnbAssetTypeIdFromName(utf8)` = `FNV-1a-32(name) | 0x80000000`, i.e. 31
-usable bits. **Collisions are possible** and are handled rather than wished away:
-`CnbLoaderRegistry::Register` refuses to register one identifier under two different type names, so
-two colliding game types fail loudly at startup instead of loading each other's files; and the
-optional `CMET` chunk carries the type name so a mismatch can be reported.
+usable bits. **Collisions are possible**, and the format handles them rather than wishing them
+away. Three separate checks, each catching the mistake at a different moment:
+
+1. `CnbLoaderRegistry::Register` refuses an identifier that the supplied canonical name does not
+   actually hash to — catching a hand-written or mistyped identifier at the registration that is
+   wrong, rather than as a baffling collision error at some later load.
+2. `CnbLoaderRegistry::Register` refuses to register one identifier under two different names, so
+   two colliding types in the same process fail loudly at startup instead of loading each other's
+   files.
+3. **Dispatch itself compares names, not just numbers** (§5.1). This is the check that matters for
+   a file produced by a *different* program, where neither of the first two can help: a `.cnb`
+   whose identifier matches but whose `CMET` name does not is refused as a collision.
+
+The rule is deliberately asymmetric — built-in types dispatch on the number alone. Requiring a name
+match for them would make the metadata chunk load-bearing for every asset in existence and break
+any file whose type-name string was ever tidied, in exchange for nothing: CNA controls those
+identifiers and does not reuse them.
 
 Runtime type identity (`std::type_index`) is deliberately not used: its value is not stable across
 processes, let alone builds, so it is not a serialisation ABI.
@@ -391,9 +418,18 @@ this table; `0xFFFFFFFF` means "no string".
 
 ```text
 u32 nameIndex
-i32 parent          -1 for the root; otherwise < boneCount
+i32 parent          -1 for the root; otherwise an EARLIER index in this table
 f32 transform[16]   XNA row-major field order M11..M44
 ```
+
+The bone table **must be ordered parent-before-child**: a bone's `parent` is either `-1` or
+strictly less than the bone's own index. This is not a tidiness rule and it is not optional.
+`Model::CopyAbsoluteBoneTransformsTo` composes world transforms in a single ascending pass, reading
+`dest[parentIndex]` as it goes; a bone whose parent came later would be composed against a slot not
+yet written and would place its geometry somewhere it does not belong — quietly, without an error.
+Requiring the order also makes a cycle structurally impossible. Both source formats already specify
+it (`.cnj` bone arrays are documented parent-before-child, and `SkinningData::SkeletonHierarchy` is
+documented topological), so nothing that can be authored today is refused by stating it here.
 
 **`MMSH`** — three sections, in order:
 
@@ -479,7 +515,7 @@ keyCount × {
 ```text
 u32 jointCount
 u32 flags                       bit 0 = a root-prefix block follows
-jointCount × i32 parent         -1, or < jointCount
+jointCount × i32 parent         -1, or an EARLIER index (parent-before-child, as for MBON)
 jointCount × f32[16] bindPose
 jointCount × f32[16] inverseBindPose
 [jointCount × f32[16] rootPrefix]   present iff flag bit 0
@@ -525,8 +561,15 @@ Every malformed-input failure is a
 `Microsoft::Xna::Framework::Content::ContentLoadException`, the same type the rest of CNA's content
 subsystem throws, so a game's existing `catch` keeps working.
 
-`CnbReadLimits` bounds every count-driven read before anything is allocated. The process-wide
-defaults:
+The container-level `CMET` and `XREF` chunks are decoded during parsing rather than on first use,
+so a parsed document is immutable and every accessor is a plain `const` read. A malformed `CMET`,
+or an `XREF` naming a path outside the content root, is therefore a **parse** failure — reported
+when the file is opened rather than at whichever later call happened to touch it first.
+
+`CnbReadLimits` bounds every count-driven read before anything is allocated. The limits are held
+**by value** by both `CnbDocument` and `CnbByteReader`: they are a small trivially-copyable struct,
+and `Parse(bytes, name, CnbReadLimits{})` is the natural call, so retaining the caller's address
+would make lifetime the caller's problem for no benefit. The process-wide defaults:
 
 | limit | default |
 |---|---|
@@ -577,6 +620,13 @@ This is asserted in-process (`CnbContainerTest.WritingTheSameInputTwiceProducesI
 `CnbModelCodecTest.EncodingIsDeterministic`) and across two separate OS processes
 (`CnbCompilerToolTest.TwoSeparateProcessRunsProduceByteIdenticalOutput`) — two processes share no
 allocator state, static-initialisation order or warm heap, which makes it a much stronger claim.
+
+It is also asserted against bytes this implementation did not produce.
+`CnbGoldenVectorTests.cpp` holds golden byte vectors generated by a separate Python implementation
+of this specification (`tools/cnb/gen_golden_vectors.py`), and requires the writer to reproduce
+them exactly and the reader to decode them to the documented values. A golden file produced by the
+implementation under test would prove only that the implementation agrees with itself; these prove
+it agrees with the specification as an independent reader understood it.
 
 ---
 

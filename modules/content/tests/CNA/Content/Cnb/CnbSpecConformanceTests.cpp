@@ -23,14 +23,17 @@
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
 
 using CNA::Content::Cnb::CnbDocument;
 using CNA::Content::Cnb::CnbWriter;
 using CNA::Content::Cnb::DefaultCnbReadLimits;
 using CNA::Content::Cnb::EncodeCurveToCnb;
+using Microsoft::Xna::Framework::Content::ContentLoadException;
 
 namespace CnbAssetTypeId = CNA::Content::Cnb::CnbAssetTypeId;
 namespace CnbChunkFlags = CNA::Content::Cnb::CnbChunkFlags;
@@ -276,6 +279,85 @@ TEST(CnbSpecConformanceTest, TheAnnotatedHexExampleMatchesTheBytesTheWriterProdu
     EXPECT_EQ(document.ChunkCount(), 2u);
 }
 
+TEST(CnbSpecConformanceTest, TheDocumentedCustomTypeRuleIsTheOneTheCodeEnforces)
+{
+    // plans/plan_cnb.md CNBF-H002/CNBF-H011. Textual scraping alone would let the document and the
+    // implementation drift together, so each clause below is asserted against BEHAVIOUR as well as
+    // against the sentence that promises it.
+    const std::string spec = ReadSpec();
+    if (spec.empty()) { GTEST_SKIP() << "docs/cnb-format.md was not found"; }
+
+    ExpectSpecContains(spec, "For a **custom** asset type the chunk is **required**");
+    ExpectSpecContains(spec, "Dispatch itself compares names, not just numbers");
+    ExpectSpecContains(spec, "built-in types dispatch on the number alone");
+
+    // Behaviour: a writer refuses a custom-typed file with no canonical name.
+    const std::uint32_t customId =
+        CNA::Content::Cnb::CnbAssetTypeIdFromName("SpecConformance.Widget");
+    {
+        CnbWriter writer(customId, 1u);
+        writer.AddChunk(CNA::Content::Cnb::MakeChunkId('w', 'd', 'g', 't'), {1, 2, 3},
+                        CnbChunkFlags::Mandatory, 4u);
+        EXPECT_THROW((void)writer.Build(), ContentLoadException)
+            << "the document says a custom-typed file must carry its canonical name";
+    }
+    // Behaviour: with the name, the same file builds.
+    {
+        CnbWriter writer(customId, 1u);
+        writer.SetMetadata("SpecConformance.Widget", "widgets/one");
+        writer.AddChunk(CNA::Content::Cnb::MakeChunkId('w', 'd', 'g', 't'), {1, 2, 3},
+                        CnbChunkFlags::Mandatory, 4u);
+        EXPECT_NO_THROW((void)writer.Build());
+    }
+    // Behaviour: a built-in type needs no such thing, which is the asymmetry the document states.
+    {
+        CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+        writer.AddChunk(CNA::Content::Cnb::CnbCurveChunk::Header,
+                        std::vector<std::uint8_t>(12u, 0u), CnbChunkFlags::Mandatory, 4u);
+        writer.AddChunk(CNA::Content::Cnb::CnbCurveChunk::Keys, {}, CnbChunkFlags::Mandatory, 4u);
+        EXPECT_NO_THROW((void)writer.Build());
+    }
+}
+
+TEST(CnbSpecConformanceTest, TheDocumentedParentBeforeChildRuleIsTheOneTheCodeEnforces)
+{
+    const std::string spec = ReadSpec();
+    if (spec.empty()) { GTEST_SKIP() << "docs/cnb-format.md was not found"; }
+
+    ExpectSpecContains(spec, "must be ordered parent-before-child");
+    ExpectSpecContains(spec, "-1 for the root; otherwise an EARLIER index in this table");
+    ExpectSpecContains(spec, "parent-before-child, as for MBON");
+
+    // Behaviour: the encoder refuses a forward reference in both tables.
+    CNA::Content::Cnb::CnbModelData model;
+    CNA::Content::Cnb::CnbModelBone root;
+    root.name = "Root";
+    CNA::Content::Cnb::CnbModelBone child;
+    child.name = "Child";
+    child.parent = 2;   // forward
+    CNA::Content::Cnb::CnbModelBone later;
+    later.name = "Later";
+    later.parent = 0;
+    model.bones = {root, child, later};
+    model.hasBoneHierarchy = true;
+
+    CNA::Content::Cnb::CnbModelPart part;
+    part.name = "Only";
+    part.vertexStride = 16u;
+    part.vertexCount = 1u;
+    part.indexCount = 0u;
+    part.indexElementSize = 2u;
+    part.vertexBytes.assign(16u, 0u);
+    model.parts = {part};
+    CNA::Content::Cnb::CnbModelMesh mesh;
+    mesh.name = "Only";
+    mesh.parentBone = 0;
+    mesh.partIndices = {0u};
+    model.meshes = {mesh};
+
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException);
+}
+
 TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)
 {
     const std::string spec = ReadSpec();
@@ -292,4 +374,6 @@ TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)
     ExpectSpecContains(spec, "0 | none | the only codec CNB v1 defines");
     ExpectSpecContains(spec, "**accept** — minor bumps are additive-only");
     ExpectSpecContains(spec, "material variants");
+    ExpectSpecContains(spec, "held\n**by value**");
+    ExpectSpecContains(spec, "decoded during parsing rather than on first use");
 }

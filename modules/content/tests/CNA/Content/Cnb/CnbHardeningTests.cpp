@@ -9,7 +9,11 @@
 // distinction is observable without a sanitizer it is noted in the test itself.
 
 #include <any>
+#include <array>
 #include <atomic>
+#include <bit>
+#include <limits>
+#include <utility>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -22,7 +26,10 @@
 
 #include "CNA/Content/Cnb/CnbByteReader.hpp"
 #include "CNA/Content/Cnb/CnbByteWriter.hpp"
+#include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Content/Cnb/CnbCrc32c.hpp"
+#include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbCurveCodec.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
@@ -474,4 +481,305 @@ TEST(CnbHardeningTest, ReadCountRefusesAProductThatWouldOverflowRatherThanWrappi
 
     // The ordinary path is unaffected: the limit still fires first for a normal element size.
     EXPECT_THROW((void)reader.ReadCount(4u, "things"), ContentLoadException);
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-H008 -- bone and skeleton graph ordering
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    CNA::Content::Cnb::CnbModelPart MakeTrivialPart()
+    {
+        CNA::Content::Cnb::CnbModelPart part;
+        part.name = "Only";
+        part.vertexStride = 16u;
+        part.vertexCount = 3u;
+        part.indexCount = 3u;
+        part.indexElementSize = 2u;
+        part.primitiveTopology = 4u;
+        part.primitiveCount = 1u;
+        part.vertexBytes.assign(16u * 3u, 0u);
+        part.indexBytes.assign(2u * 3u, 0u);
+        return part;
+    }
+
+    CNA::Content::Cnb::CnbModelData MakeModelWithBones(
+        const std::vector<std::pair<std::string, std::int32_t>>& bones)
+    {
+        CNA::Content::Cnb::CnbModelData model;
+        for (const auto& [name, parent] : bones)
+        {
+            CNA::Content::Cnb::CnbModelBone bone;   // never braced -- see CNBF-H009 below
+            bone.name = name;
+            bone.parent = parent;
+            model.bones.push_back(std::move(bone));
+        }
+        model.hasBoneHierarchy = model.bones.size() > 1u;
+        model.parts = {MakeTrivialPart()};
+        CNA::Content::Cnb::CnbModelMesh mesh;
+        mesh.name = "Only";
+        mesh.parentBone = model.bones.empty() ? -1 : 0;
+        mesh.partIndices = {0u};
+        model.meshes = {mesh};
+        return model;
+    }
+}
+
+TEST(CnbHardeningTest, ABoneTableThatIsNotParentBeforeChildIsRefused)
+{
+    // Not a tidiness rule. Model::CopyAbsoluteBoneTransformsTo composes world transforms in ONE
+    // ascending pass, reading dest[parentIndex] as it goes -- so a bone whose parent comes later
+    // reads a slot that has not been written yet and silently places geometry somewhere it does
+    // not belong. It would not crash, which is exactly why the format has to refuse it.
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(
+                     MakeModelWithBones({{"Root", -1}, {"Child", 2}, {"Later", 0}})),
+                 ContentLoadException);
+
+    // A two-bone cycle is the same defect in its worst form, and the same check rules it out.
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(
+                     MakeModelWithBones({{"Root", -1}, {"A", 2}, {"B", 1}})),
+                 ContentLoadException);
+
+    // A bone that is its own parent, likewise.
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(
+                     MakeModelWithBones({{"Root", -1}, {"Self", 1}})),
+                 ContentLoadException);
+
+    // The ordinary shape still encodes.
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(
+        MakeModelWithBones({{"Root", -1}, {"Hips", 0}, {"Head", 1}})));
+}
+
+TEST(CnbHardeningTest, ACorruptBoneParentInAFileIsRefusedByTheDecoder)
+{
+    // The encoder check above protects a caller building a model in memory. A file arriving from
+    // elsewhere gets the same guarantee, which is the one that matters for untrusted input.
+    const std::vector<std::uint8_t> good = CNA::Content::Cnb::EncodeModelToCnb(
+        MakeModelWithBones({{"Root", -1}, {"Hips", 0}, {"Head", 1}}));
+    const CnbDocument source = CnbDocument::Parse(good, "bones.cnb");
+
+    // Rebuild the file with bone 1's parent rewritten to point forward at bone 2.
+    const std::size_t bonesChunk = source.RequireSingle(CNA::Content::Cnb::CnbModelChunk::Bones);
+    const auto data = source.ChunkData(bonesChunk);
+    std::vector<std::uint8_t> bones(data.begin(), data.end());
+    ASSERT_EQ(bones.size(), 3u * CNA::Content::Cnb::CnbModelBoneStride);
+    // Bone 1's parent field: one stride in, then past the u32 name index.
+    const std::size_t parentAt = CNA::Content::Cnb::CnbModelBoneStride + 4u;
+    bones[parentAt] = 0x02u;
+    bones[parentAt + 1] = bones[parentAt + 2] = bones[parentAt + 3] = 0x00u;
+
+    CnbWriter rebuilt(CnbAssetTypeId::Model, 1u);
+    for (std::size_t i = 0; i < source.ChunkCount(); ++i)
+    {
+        const auto& entry = source.ChunkAt(i);
+        if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata) { continue; }
+        const auto chunk = source.ChunkData(i);
+        rebuilt.AddChunk(entry.type,
+                         entry.type == CNA::Content::Cnb::CnbModelChunk::Bones
+                             ? bones
+                             : std::vector<std::uint8_t>(chunk.begin(), chunk.end()),
+                         entry.flags, entry.alignment);
+    }
+
+    const CnbDocument corrupted = CnbDocument::Parse(rebuilt.Build(), "forward-parent.cnb");
+    EXPECT_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(corrupted), ContentLoadException);
+}
+
+TEST(CnbHardeningTest, ASkeletonThatIsNotParentBeforeChildIsRefused)
+{
+    CNA::Content::Cnb::CnbModelData model = MakeModelWithBones({{"Root", -1}});
+    CNA::Content::Cnb::CnbModelSkeleton skeleton;
+    skeleton.hierarchy = {-1, 2, 0};   // joint 1 names a later joint
+    skeleton.bindPose.resize(3);
+    skeleton.inverseBindPose.resize(3);
+    model.skeleton = skeleton;
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException);
+
+    model.skeleton->hierarchy = {-1, 0, 1};
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model));
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-H009 -- the aggregate-initialisation hazard, made permanently visible
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbHardeningTest, ADefaultConstructedBoneCarriesAnIdentityTransform)
+{
+    // The defect this pins was real: `CnbModelBone{name, parent, {}}` is aggregate
+    // initialisation, and supplying `{}` for the transform SUPPRESSES its identity
+    // default-member-initialiser and value-initialises the matrix to all zeros instead. Every
+    // synthesised bone was compiled with a zero transform.
+    //
+    // Two assertions, because they fail for different reasons: the first breaks if someone edits
+    // the default-member-initialiser, the second breaks if someone reintroduces the braced form
+    // in a place this test can see.
+    const CNA::Content::Cnb::CnbModelBone defaulted;
+    const std::array<float, 16> identity{{1.0f, 0.0f, 0.0f, 0.0f,
+                                          0.0f, 1.0f, 0.0f, 0.0f,
+                                          0.0f, 0.0f, 1.0f, 0.0f,
+                                          0.0f, 0.0f, 0.0f, 1.0f}};
+    EXPECT_EQ(defaulted.transform, identity)
+        << "CnbModelBone's default transform must be identity";
+
+    const CNA::Content::Cnb::CnbModelBone braced{"Braced", 0, {}};
+    EXPECT_NE(braced.transform, identity)
+        << "if this now passes, the aggregate-initialisation hazard has been designed away and "
+           "this test should be replaced by one that pins whatever replaced it";
+
+    // ... and a default-constructed bone survives a round trip as identity, which is the property
+    // the compiler actually depends on.
+    CNA::Content::Cnb::CnbModelData model = MakeModelWithBones({{"Root", -1}, {"Child", 0}});
+    const CNA::Content::Cnb::CnbModelData decoded = CNA::Content::Cnb::DecodeModelFromCnb(
+        CnbDocument::Parse(CNA::Content::Cnb::EncodeModelToCnb(model), "identity.cnb"));
+    ASSERT_EQ(decoded.bones.size(), 2u);
+    EXPECT_EQ(decoded.bones[1].transform, identity);
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-H010 -- container coverage the original suite left open
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbHardeningTest, ManyChunksOfOneTypeAreAddressableByOrdinal)
+{
+    // Per-type ordinals exist so a model is not capped at a handful of primitives (that was the
+    // reason the format rejected the 'VB00'/'VB01' sketch). The original suite only ever created
+    // two or three chunks of a type, which does not exercise that at all.
+    constexpr std::uint32_t kCount = 500u;
+    CnbWriter writer(CnbAssetTypeId::Model, 1u);
+    for (std::uint32_t i = 0; i < kCount; ++i)
+    {
+        CnbByteWriter payload;
+        payload.WriteU32(i);
+        writer.AddChunk(kPayload, payload.Take(), CnbChunkFlags::None, 16u);
+    }
+
+    const CnbDocument document = CnbDocument::Parse(writer.Build(), "many.cnb");
+    const std::vector<std::size_t> all = document.FindAll(kPayload);
+    ASSERT_EQ(all.size(), kCount);
+    for (std::uint32_t i = 0; i < kCount; ++i)
+    {
+        CnbByteReader reader = document.OpenChunk(all[i]);
+        EXPECT_EQ(reader.ReadU32(), i) << "ordinal " << i << " addressed the wrong chunk";
+        EXPECT_EQ(document.ChunkAt(all[i]).offset % 16u, 0u) << "ordinal " << i;
+    }
+    // A type with exactly one chunk still has to be a singleton for RequireSingle's purposes.
+    EXPECT_THROW((void)document.RequireSingle(kPayload), ContentLoadException);
+}
+
+TEST(CnbHardeningTest, AChunkOverlappingTheTableOfContentsIsRefused)
+{
+    // The suite tested a table of contents overlapping the header, and chunks overlapping each
+    // other, but not a chunk reaching back into the table. The region partition covers it; this
+    // proves it does.
+    CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+    writer.AddChunk(kPayload, {1, 2, 3, 4}, CnbChunkFlags::None, 4u);
+    std::vector<std::uint8_t> bytes = writer.Build();
+
+    // Point the single chunk at the table of contents rather than at its own payload.
+    const std::size_t entryAt = 64u;
+    const std::uint64_t tocOffset = 64u;
+    for (int i = 0; i < 8; ++i)
+    {
+        bytes[entryAt + 8u + static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>((tocOffset >> (8 * i)) & 0xFFu);
+    }
+    // Repair the chunk checksum for its new location, then the two structural checksums, so the
+    // ONLY thing wrong with the file is the overlap.
+    const std::uint32_t chunkCrc = CNA::Content::Cnb::Crc32c(
+        std::span<const std::uint8_t>(bytes).subspan(static_cast<std::size_t>(tocOffset), 4u));
+    for (int i = 0; i < 4; ++i)
+    {
+        bytes[entryAt + 32u + static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>((chunkCrc >> (8 * i)) & 0xFFu);
+    }
+    const std::uint32_t tocCrc = CNA::Content::Cnb::Crc32c(
+        std::span<const std::uint8_t>(bytes).subspan(64u, 48u));
+    for (int i = 0; i < 4; ++i)
+    {
+        bytes[40u + static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>((tocCrc >> (8 * i)) & 0xFFu);
+    }
+    const std::uint32_t headerCrc = CNA::Content::Cnb::Crc32c(
+        std::span<const std::uint8_t>(bytes).first(44u));
+    for (int i = 0; i < 4; ++i)
+    {
+        bytes[44u + static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>((headerCrc >> (8 * i)) & 0xFFu);
+    }
+
+    EXPECT_THROW((void)CnbDocument::Parse(bytes, "chunk-in-toc.cnb"), ContentLoadException);
+}
+
+TEST(CnbHardeningTest, FloatingPointValuesRoundTripBitForBit)
+{
+    // CNB stores IEEE-754 bit patterns and does not normalise them. NaN, both infinities, negative
+    // zero and a denormal must therefore come back EXACTLY, which value comparison cannot check --
+    // NaN != NaN, and -0.0 == 0.0. Compared as bits.
+    const std::vector<float> floats = {
+        0.0f, -0.0f,
+        std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(),
+        std::numeric_limits<float>::quiet_NaN(),
+        std::numeric_limits<float>::denorm_min(),
+        std::numeric_limits<float>::min(), std::numeric_limits<float>::max(),
+        3.14159265f, -1.0f,
+    };
+    const std::vector<double> doubles = {
+        0.0, -0.0,
+        std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity(),
+        std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::denorm_min(),
+        std::numeric_limits<double>::max(), 2.718281828459045,
+    };
+
+    CnbByteWriter w;
+    for (const float value : floats) { w.WriteF32(value); }
+    for (const double value : doubles) { w.WriteF64(value); }
+    const std::vector<std::uint8_t> bytes = w.Take();
+
+    CnbByteReader reader(bytes, "floats");
+    for (const float expected : floats)
+    {
+        EXPECT_EQ(std::bit_cast<std::uint32_t>(reader.ReadF32()),
+                  std::bit_cast<std::uint32_t>(expected));
+    }
+    for (const double expected : doubles)
+    {
+        EXPECT_EQ(std::bit_cast<std::uint64_t>(reader.ReadF64()),
+                  std::bit_cast<std::uint64_t>(expected));
+    }
+    EXPECT_NO_THROW(reader.RequireExhausted());
+
+    // -0.0f must be distinguishable from 0.0f in the encoding, which is the case value comparison
+    // would silently let through.
+    CnbByteWriter positive;
+    positive.WriteF32(0.0f);
+    CnbByteWriter negative;
+    negative.WriteF32(-0.0f);
+    EXPECT_NE(positive.Take(), negative.Take());
+}
+
+TEST(CnbHardeningTest, AnAssetSchemaRejectsNonFiniteTimesEvenThoughThePrimitiveLayerAcceptsThem)
+{
+    // The two layers have different jobs, and the split is deliberate: the primitive reader stores
+    // whatever bits the file holds, and the schema decides what is meaningful for its own fields.
+    // A NaN duration is refused not because f64 cannot hold it but because System::TimeSpan
+    // cannot -- and that refusal belongs to AnimationClip, not to ReadF64.
+    CnbByteWriter header;
+    header.WriteF64(std::numeric_limits<double>::quiet_NaN());
+    header.WriteU32(0u);
+    header.WriteU32(0u);
+    header.WriteU32(0u);
+
+    CnbWriter writer(CnbAssetTypeId::AnimationClip, 1u);
+    writer.AddChunk(CNA::Content::Cnb::CnbAnimationClipChunk::Header, header.Take(),
+                    CnbChunkFlags::Mandatory, 8u);
+    writer.AddChunk(CNA::Content::Cnb::CnbAnimationClipChunk::Tracks, {},
+                    CnbChunkFlags::Mandatory, 4u);
+    writer.AddChunk(CNA::Content::Cnb::CnbAnimationClipChunk::Keys, {},
+                    CnbChunkFlags::Mandatory, 8u);
+
+    const CnbDocument document = CnbDocument::Parse(writer.Build(), "nan-clip.cnb");
+    EXPECT_THROW((void)CNA::Content::Cnb::DecodeAnimationClipFromCnb(document),
+                 ContentLoadException);
 }
