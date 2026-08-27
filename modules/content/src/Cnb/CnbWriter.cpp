@@ -194,8 +194,10 @@ namespace CNA::Content::Cnb
         // CNBF-105: compress before laying the file out, because a chunk's OFFSET depends on the
         // size it ends up occupying. A chunk is emitted compressed only when that actually made it
         // smaller; one that grew is stored, since it would otherwise cost both bytes and
-        // decompression time. Container-level chunks stay uncompressed so an inspector can read a
-        // file's identity without the codec.
+        // decompression time. Container-level chunks stay uncompressed because a codec is pure
+        // overhead on a chunk that small -- NOT so a codec-less build can inspect the file, which
+        // it cannot: Parse() refuses an unimplemented codec while reading the table of contents
+        // (CNBF-121).
         std::vector<std::vector<std::uint8_t>> stored(all.size());
         std::vector<CnbCompression> codecs(all.size(), CnbCompression::None);
         for (std::size_t i = 0; i < all.size(); ++i)

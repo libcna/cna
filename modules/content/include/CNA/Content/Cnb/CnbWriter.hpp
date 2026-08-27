@@ -101,14 +101,6 @@ namespace CNA::Content::Cnb
         [[nodiscard]] std::size_t SchemaChunkCount() const noexcept;
 
         /**
-         * @brief Assembles the finished `.cnb` image.
-         *
-         * @return The complete file bytes.
-         * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the result would
-         *         exceed what the format can express, or if the asset type is custom and no
-         *         matching canonical type name was set (see SetMetadata()).
-         */
-        /**
          * @brief Compresses this document's schema chunks with @p codec
          *        (plans/plan_cnb.md `CNBF-105`).
          *
@@ -123,9 +115,14 @@ namespace CNA::Content::Cnb
          * decompression time. That decision is per chunk, so a document can hold a compressed
          * 4 MB payload beside a stored 24-byte header.
          *
-         * Container-level chunks (`CMET`, `XREF`) are always stored uncompressed: they are small
-         * enough that a codec is pure overhead, and an inspector should be able to read a file's
-         * identity without the codec being available.
+         * Container-level chunks (`CMET`, `XREF`) are always stored uncompressed, because a codec
+         * is pure overhead on a chunk that small.
+         *
+         * That is **not** enough to let a build without the codec inspect such a file
+         * (plans/plan_cnb.md `CNBF-121`): CnbDocument::Parse() refuses an unimplemented codec while
+         * reading the table of contents, long before any chunk is decoded, so a compressed `.cnb`
+         * cannot be opened at all without the codec. Reading a compressed file's identity without
+         * one would need a metadata-only parser, which does not exist.
          *
          * @param codec The codec to apply. `CnbCompression::None` restores the default.
          * @param level Codec-specific effort; for Zstandard, 1-19. 3 is the measured sweet spot.
@@ -133,6 +130,20 @@ namespace CNA::Content::Cnb
          */
         void SetCompression(CnbCompression codec, int level = 3);
 
+        /**
+         * @brief Assembles the finished `.cnb` image.
+         *
+         * Every file this returns is loadable by CnbDocument::Parse(): the external-reference
+         * names, the chunk identifiers and the custom-type rule are all checked here or at the
+         * call that supplied them, so the writer has no path to a file its own reader refuses
+         * (plans/plan_cnb.md `CNBF-115`).
+         *
+         * @return The complete file bytes.
+         * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the result would
+         *         exceed what the format can express, if an external reference is not a valid
+         *         relative logical name, or if the asset type is custom and no matching canonical
+         *         type name was set (see SetMetadata()).
+         */
         [[nodiscard]] std::vector<std::uint8_t> Build() const;
 
         /**

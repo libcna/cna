@@ -12,6 +12,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -22,7 +23,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "CNA/Content/Cnb/CnbChunkCompression.hpp"
+#include "CNA/Content/Cnb/CnbCrc32c.hpp"
 #include "CNA/Content/Cnb/CnbCurveCodec.hpp"
+#include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -72,7 +76,13 @@ namespace
 
     /// Runs the tool with stdout captured, so the test can assert on what it actually prints
     /// rather than only on whether it succeeded.
-    int RunInfo(const std::vector<std::string>& args, std::string& output)
+    ///
+    /// @p alsoStderr folds the tool's diagnostics into the same capture. Off by default, so the
+    /// output-shape assertions below stay about stdout alone; a test aimed at a REFUSAL turns it
+    /// on, because the reason a refusal gives is the thing being tested (plans/plan_cnb.md
+    /// `CNBF-121`).
+    int RunInfo(const std::vector<std::string>& args, std::string& output,
+                bool alsoStderr = false)
     {
         const std::filesystem::path capture =
             std::filesystem::temp_directory_path() /
@@ -83,6 +93,10 @@ namespace
         posix_spawn_file_actions_init(&actions);
         posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, capture.c_str(),
                                          O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (alsoStderr)
+        {
+            posix_spawn_file_actions_adddup2(&actions, STDOUT_FILENO, STDERR_FILENO);
+        }
 
         std::vector<char*> argv;
         argv.push_back(const_cast<char*>(CNA_CNB_INFO_TOOL_PATH));
@@ -222,4 +236,118 @@ TEST(CnbInfoToolTest, ActsAsAValidatorReportingMalformedFilesThroughItsExitCode)
     WriteBytes(dir.path() / "good.cnb", SampleCurveFile());
     EXPECT_EQ(RunInfo({(dir.path() / "good.cnb").string(), "--quiet"}, output), 0);
     EXPECT_TRUE(output.empty()) << output;
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-121 -- what the inspector says about compression, and what it honestly cannot do
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbInfoToolTest, ReportsEachChunksCodecAndBothOfItsSizes)
+{
+    // With one "size" column a compressed chunk reported its PACKED length, so the only tool that
+    // can describe a `.cnb` could not show that compression was in use at all, nor by how much --
+    // which is exactly the question the per-chunk `compression` field exists to answer.
+    ScratchDir dir;
+
+    // An uncompressed file first: stored and logical must agree on every chunk, and the codec
+    // column must say so, whether or not this build has a codec at all.
+    WriteBytes(dir.path() / "plain.cnb", SampleCurveFile());
+    std::string output;
+    ASSERT_EQ(RunInfo({(dir.path() / "plain.cnb").string()}, output), 0) << output;
+    EXPECT_NE(output.find("stored"), std::string::npos) << output;
+    EXPECT_NE(output.find("logical"), std::string::npos) << output;
+    EXPECT_NE(output.find("codec"), std::string::npos) << output;
+    EXPECT_NE(output.find("none"), std::string::npos) << output;
+    EXPECT_EQ(output.find("Zstandard"), std::string::npos)
+        << "an uncompressed file must not mention a codec it does not use: " << output;
+
+    if (!CNA::Content::Cnb::IsCnbCompressionSupported(CNA::Content::Cnb::CnbCompression::Zstd))
+    {
+        GTEST_SKIP() << "this build has no Zstandard codec, so it can neither write nor read one";
+    }
+
+    // A compressible payload, so the packed and logical sizes genuinely differ and the assertion
+    // is not vacuous.
+    std::vector<std::uint8_t> payload(64u * 1024u);
+    for (std::size_t i = 0; i < payload.size(); ++i)
+    {
+        payload[i] = static_cast<std::uint8_t>((i / 7u) % 23u);
+    }
+    CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+    writer.SetMetadata("Microsoft.Xna.Framework.Curve", "Curves/packed");
+    writer.SetCompression(CNA::Content::Cnb::CnbCompression::Zstd, 3);
+    writer.AddChunk(CNA::Content::Cnb::MakeChunkId('C', 'R', 'V', 'H'),
+                    {1, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0}, CnbChunkFlags::Mandatory, 4u);
+    writer.AddChunk(CNA::Content::Cnb::MakeChunkId('C', 'R', 'V', 'K'), payload,
+                    CnbChunkFlags::Mandatory, 4u);
+    WriteBytes(dir.path() / "packed.cnb", writer.Build());
+
+    ASSERT_EQ(RunInfo({(dir.path() / "packed.cnb").string()}, output), 0) << output;
+    EXPECT_NE(output.find("Zstandard"), std::string::npos)
+        << "the codec a chunk actually uses must be named: " << output;
+    EXPECT_NE(output.find(std::to_string(payload.size())), std::string::npos)
+        << "the logical size must be shown, not only the packed one: " << output;
+    EXPECT_NE(output.find("stored,"), std::string::npos)
+        << "a compressed file must summarise what compression bought: " << output;
+    // CMET and XREF stay uncompressed, so both codecs appear in the same table.
+    EXPECT_NE(output.find("none"), std::string::npos) << output;
+}
+
+TEST(CnbInfoToolTest, ACompressedFileNeedsItsCodecEvenThoughCmetIsStoredUncompressed)
+{
+    // The claim this pins is a NEGATIVE one, and it used to be written the other way round in
+    // three places: "CMET and XREF are never compressed, so an inspector can read a file's
+    // identity without the codec." It cannot. Parse() refuses an unimplemented codec while reading
+    // the TABLE OF CONTENTS, before any chunk is decoded, so the file does not open at all.
+    ScratchDir dir;
+
+    // A file declaring LZ4 -- an identifier CNB has assigned and no build implements -- is the
+    // portable way to stand in for "a codec this build does not have", and it is refused
+    // identically whether or not libzstd is present.
+    CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+    writer.SetMetadata("Microsoft.Xna.Framework.Curve", "Curves/lz4");
+    writer.AddChunk(CNA::Content::Cnb::MakeChunkId('C', 'R', 'V', 'H'),
+                    {1, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0}, CnbChunkFlags::Mandatory, 4u);
+    std::vector<std::uint8_t> bytes = writer.Build();
+
+    // Retype the CRVH entry's codec to LZ4 and repair the structural checksums, which is how a
+    // file gets a codec CnbWriter refuses to produce.
+    const CNA::Content::Cnb::CnbDocument document =
+        CNA::Content::Cnb::CnbDocument::Parse(bytes, "lz4.cnb");
+    const std::size_t index =
+        document.RequireSingle(CNA::Content::Cnb::MakeChunkId('C', 'R', 'V', 'H'));
+    std::uint64_t tocAt = 0u;
+    for (int i = 7; i >= 0; --i) { tocAt = (tocAt << 8) | bytes[32u + static_cast<std::size_t>(i)]; }
+    const std::size_t entry =
+        static_cast<std::size_t>(tocAt) + index * CNA::Content::Cnb::Format::TocEntrySize;
+    bytes[entry + 36u] = 1u;   // CnbCompression::Lz4
+    std::uint32_t chunkCount = 0u;
+    for (int i = 3; i >= 0; --i) { chunkCount = (chunkCount << 8) | bytes[20u + static_cast<std::size_t>(i)]; }
+    const std::uint32_t tocChecksum = CNA::Content::Cnb::Crc32c(
+        std::span<const std::uint8_t>(bytes).subspan(
+            static_cast<std::size_t>(tocAt),
+            chunkCount * CNA::Content::Cnb::Format::TocEntrySize));
+    for (int i = 0; i < 4; ++i)
+    {
+        bytes[40u + static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>((tocChecksum >> (8 * i)) & 0xFFu);
+    }
+    const std::uint32_t headerChecksum = CNA::Content::Cnb::Crc32c(
+        std::span<const std::uint8_t>(bytes).first(
+            CNA::Content::Cnb::Format::HeaderChecksumCoverage));
+    for (int i = 0; i < 4; ++i)
+    {
+        bytes[44u + static_cast<std::size_t>(i)] =
+            static_cast<std::uint8_t>((headerChecksum >> (8 * i)) & 0xFFu);
+    }
+    WriteBytes(dir.path() / "lz4.cnb", bytes);
+
+    std::string output;
+    EXPECT_EQ(RunInfo({(dir.path() / "lz4.cnb").string()}, output, /*alsoStderr=*/true), 1)
+        << "a codec this build does not implement must make the file unopenable: " << output;
+    EXPECT_NE(output.find("LZ4"), std::string::npos)
+        << "the refusal must name the codec, so the answer is 'build CNA with it': " << output;
+    EXPECT_EQ(output.find("Microsoft.Xna.Framework.Curve"), std::string::npos)
+        << "nothing of the file's identity is readable, CMET being uncompressed notwithstanding: "
+        << output;
 }

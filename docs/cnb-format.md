@@ -145,9 +145,9 @@ aligned within an entry.
 | 4 | 4 | `flags` (`u32`) | bit 0 = `Mandatory`; every other bit must be 0 |
 | 8 | 8 | `offset` (`u64`) | absolute file offset of the chunk's stored bytes |
 | 16 | 8 | `storedSize` (`u64`) | bytes the chunk occupies in the file |
-| 24 | 8 | `uncompressedSize` (`u64`) | equal to `storedSize` in CNB v1 |
-| 32 | 4 | `checksum` (`u32`) | CRC-32C of the chunk's stored bytes |
-| 36 | 4 | `compression` (`u32`) | 0 = none; see §8 |
+| 24 | 8 | `uncompressedSize` (`u64`) | the chunk's **logical** size; equal to `storedSize` exactly when `compression` is 0. Their sum across every chunk is bounded by `maxTotalUncompressedSize` (§12) |
+| 32 | 4 | `checksum` (`u32`) | CRC-32C of the chunk's **stored** bytes, so corruption is caught before anything reaches a decompressor |
+| 36 | 4 | `compression` (`u32`) | 0 = none, 2 = Zstandard; see §8 |
 | 40 | 4 | `alignment` (`u32`) | power of two, at most `maxChunkAlignment` (§12, default 4096); `offset % alignment == 0` |
 | 44 | 4 | `reserved` (`u32`) | must be 0 |
 
@@ -260,7 +260,8 @@ not bump the container version, and a container change does not invalidate a sch
 | any bit set in `headerFlags`, or a non-zero reserved byte | reject |
 | unknown chunk type **with** `Mandatory` | reject, naming the type |
 | unknown chunk type **without** `Mandatory` | skip silently |
-| `compression` ≠ 0 | reject, naming the codec |
+| `compression` naming a codec this build implements | **accept**, and expand the chunk at parse time |
+| `compression` naming a codec this build does not implement | reject, naming the codec |
 | `assetSchemaVersion` outside `[1, max for that type]` | reject |
 | duplicate of a schema-declared singleton chunk | reject |
 
@@ -369,7 +370,13 @@ the buffer as zeroes that later code reads as data.
 
 A writer compresses a chunk only when doing so actually made it **smaller**; one that grew is
 stored, because it would otherwise cost both bytes and decompression time. `CMET` and `XREF` are
-never compressed, so an inspector can read a file's identity without the codec.
+never compressed, because a codec is pure overhead on a chunk that small.
+
+**That does not make a compressed file inspectable without the codec.** A reader refuses an
+unimplemented codec while reading the *table of contents*, before any chunk is decoded, so
+`CnbDocument::Parse()` — and therefore `cna_tool_cnb_info` — cannot open such a file at all. Reading
+a compressed file's identity without its codec would need a metadata-only parser, and there is not
+one. The uncompressed `CMET`/`XREF` rule buys size and time, not codec-free inspection.
 
 The field is per **chunk**, not per file. That was a guess when it was written and it has since
 been justified by measurement: a build can compress a 4 MB texture payload and leave a 200-byte

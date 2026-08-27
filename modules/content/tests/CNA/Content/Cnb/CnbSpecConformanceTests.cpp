@@ -144,6 +144,13 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     // written, whether or not a given build implements it.
     ExpectSpecContains(spec, "| 2 | Zstandard | **implemented**");
     ExpectSpecContains(spec, "checksum` covers the **stored** bytes");
+    // plans/plan_cnb.md CNBF-121: three statements the document got wrong before CNBF-105's
+    // compression landed, or asserted the opposite of. Pinned here so they cannot drift back.
+    ExpectSpecContains(spec, "0 = none, 2 = Zstandard");
+    ExpectSpecContains(spec, "the chunk's **logical** size; equal to `storedSize` exactly when");
+    ExpectSpecContains(spec, "| `compression` naming a codec this build implements | **accept**");
+    ExpectSpecContains(spec,
+                       "That does not make a compressed file inspectable without the codec.");
     ExpectSpecContains(spec, "| 5 | `Model` | **version 1**");
     ExpectSpecContains(spec, "| 8 | `SoundEffect` | **version 1**");
     ExpectSpecContains(spec, "| 9 | `Song` | **version 1**");

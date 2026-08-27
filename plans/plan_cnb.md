@@ -392,6 +392,12 @@ carried by fields the compiler refuses loudly (`CNBF-084`) rather than dropping 
 
 ### D10 — Asset types in v1
 
+> **Historical snapshot — superseded by §16.2, the authoritative matrix.** This decision recorded
+> the v1 *starting* scope, and every "future work" claim in it has since been closed: nine of the
+> ten non-`Effect` identifiers now have a schema, a runtime loader, a writer API **and** a
+> producer. `Effect` is the one identifier still without a schema, and by design. Read §16.2 for
+> what is actually implemented; this section is kept for the reasoning that produced the order.
+
 `Curve` (7) and `AnimationClip` (6) prove the container end to end on real CNA types with real
 `ContentManager` integration. `Model` (5) is the milestone that justifies the format. `Texture2D`,
 `SpriteFont`, `SoundEffect`, `Song`, `Video`, `Effect` have **reserved ids** and **no v1 schema** —
@@ -402,6 +408,9 @@ For textures specifically the reserved design note is: a `Texture2D` `.cnb` will
 `TEXn` chunks each declaring `SurfaceFormat` + width/height/mipCount, with RGBA8 as the mandatory
 portable baseline and additional block-compressed representations optional and selected at load
 time by renderer capability. Nothing in the v1 container prevents that; nothing in v1 implements it.
+
+*(What actually shipped: one shared `TEXH`/`TEXR`/`TEXD` layout for all three texture types, with
+the multi-representation structure this note predicted — `docs/cnb-format.md` §16.)*
 
 ### D11 — Determinism
 
@@ -424,8 +433,10 @@ and `CNBF-063` asserts the compiler is byte-deterministic across two separate pr
 7. `chunkCount <= limits.maxChunkCount`
 8. `tocOffset >= 64`, `tocOffset + 48*chunkCount` computed overflow-safe, `<= fileSize`
 9. `tocChecksum` matches CRC-32C of the TOC bytes
-10. per entry: `compression == 0`; `storedSize == uncompressedSize`; `alignment` is a power of two
-    in `[1, 4096]`; `reserved == 0`
+10. per entry: `compression` names a codec this build implements; `storedSize ==
+    uncompressedSize` when that codec is `None`; `alignment` is a power of two in `[1, 4096]`;
+    `reserved == 0`  *(updated by `CNBF-105`, which implemented Zstandard as codec 2; before it,
+    every non-zero codec was rejected)*
 11. per entry: `offset + storedSize` overflow-safe and `<= fileSize`; `offset % alignment == 0`;
     `storedSize <= limits.maxChunkSize`
 12. TOC sorted by ascending `offset`
@@ -441,6 +452,10 @@ and `CNBF-063` asserts the compiler is byte-deterministic across two separate pr
     remaining length where the schema says so
 20. every intra-file index (TOC index, string index, `XREF` index, bone parent, track key range) is
     range-checked before use
+21. the sum of every chunk's `uncompressedSize` is computed overflow-safe and is at most
+    `limits.maxTotalUncompressedSize`  *(added by `CNBF-114`)*
+22. every `XREF` logical name is non-empty, well-formed UTF-8, relative, `/`-separated and free of
+    `..` segments — checked by the same function the writer applies  *(one rule since `CNBF-115`)*
 
 ---
 
@@ -554,19 +569,24 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 | CNBF-091 | file-count / byte-size / open-count measurement, CNJ vs CNB | ✅ | §8 |
 | CNBF-092 | final architectural review pass | ✅ | §10; found and fixed four real issues, one of them a compiler defect |
 
-### Out of scope for v1 (recorded, not started)
+### Out of scope for v1 — as recorded then, and what became of each
 
-| ID | Task | Status | Notes |
-|---|---|---|---|
-| CNBF-100 | Extract a shared `.cnj`/`.cnb` mesh builder out of `ContentManager.cpp` | ⛔ | see D9; the *effect/material* half of it did land, as `BuildPartEffectEXT` |
-| CNBF-101 | `Texture2D`/`TextureCube`/`Texture3D` schemas incl. multi-representation | ⛔ | id reserved, see D10 |
-| CNBF-102 | `SpriteFont` schema | ⛔ | id reserved |
-| CNBF-103 | `SoundEffect` / `Song` / `Video` schemas incl. external streaming payloads | ⛔ | id reserved |
-| CNBF-104 | `Effect` schema | ⛔ | id reserved |
-| CNBF-105 | Chunk compression (LZ4/Zstd) | ⛔ | field reserved, reader rejects ≠ 0 |
-| CNBF-106 | Direct glTF/PNG/WAV → `.cnb` importers | ⛔ | |
-| CNBF-107 | `.cnapak` package format | ⛔ | different project |
-| CNBF-108 | Memory-mapped / zero-copy chunk access | ⛔ | alignment field reserved for it |
+> **Every row here was written before §15 and §16, and seven of the nine have since closed.** The
+> statuses below are the CURRENT ones; the "as recorded then" column preserves what the row said
+> when it was out of scope, because the reason a thing was deferred is worth keeping even after it
+> lands.
+
+| ID | Task | As recorded then | Status now | Notes |
+|---|---|---|---|---|
+| CNBF-100 | Extract a shared `.cnj`/`.cnb` mesh builder out of `ContentManager.cpp` | ⛔ | ⛔ | Still out of scope; see D9. The *effect/material* half of it did land, as `BuildPartEffectEXT`, and `CNBF-118` shared the *document-reading* half for the five non-`Model` types |
+| CNBF-101 | `Texture2D`/`TextureCube`/`Texture3D` schemas incl. multi-representation | ⛔ | ✅ | `docs/cnb-format.md` §16; one shared layout for all three |
+| CNBF-102 | `SpriteFont` schema | ⛔ | ✅ | §17; embeds its atlas |
+| CNBF-103 | `SoundEffect` / `Song` / `Video` schemas incl. external streaming payloads | ⛔ | ✅ | §18, §19; `Song`/`Video` carry metadata plus one `XREF`, by design |
+| CNBF-104 | `Effect` schema | ⛔ | ⛔ | The one built-in identifier with no schema, and deliberately so: CNA has many renderers and a `.cnb` carrying one API's bytecode would be useless on the others |
+| CNBF-105 | Chunk compression (LZ4/Zstd) | ⛔ | ✅ | Zstandard as codec 2, opt-in per chunk, off by default. LZ4 and Deflate keep identifiers and no implementation |
+| CNBF-106 | Direct glTF/PNG/WAV → `.cnb` importers | ⛔ | ✅ | `cna_tool_gltf_to_cnb` and `cna_tool_source_to_cnb` |
+| CNBF-107 | `.cnapak` package format | ⛔ | ⛔ | Still a different project |
+| CNBF-108 | Memory-mapped / zero-copy chunk access | ⛔ | ⛔ | **Measured and rejected**, not pending: mmap would have saved 4.7 ms of a 32 MiB load while the CRC it cannot avoid cost 62.5 ms. `docs/cnb-mmap-measurements.md` |
 
 ---
 
@@ -592,6 +612,12 @@ Status: ✅ done · 🚧 in progress · ⬜ not started · ⛔ deliberately out 
 ---
 
 ## 7a. Test and build state at the end of this work
+
+> **Historical snapshot, dated to the end of the original CNB work.** Every number below was true
+> then and is not now: `CNBF-101`–`CNBF-113` added seven more schemas and their suites, and
+> `CNBF-114`–`CNBF-121` (§17) added more again. For the current counts read §17's closing summary
+> and run the suite; for the *shape* of the testing — one negative test per invariant, fuzz,
+> equivalence, cross-process determinism, sanitizers — read §7 above, which has not changed.
 
 **Suites.** 168 CNB tests across 11 gtest suites, all passing:
 
@@ -702,6 +728,12 @@ fails two of the eight conformance tests by name.
 
 ## 10. Final review (`CNBF-092`)
 
+> **Historical snapshot**, dated to the end of the original CNB work. Its *"Known limitations"*
+> list below is the part that has moved most: "only three asset types have schemas" became ten,
+> and several other rows closed with them. **§16.2 is the authoritative current-state matrix**, and
+> §17 records the remediation pass that followed. Kept for the review's reasoning and for the four
+> defects it names.
+
 Worked through against the implementation, not from memory. Four real issues were found and
 fixed rather than written down — one of them a defect in the compiler that no existing test could
 have caught.
@@ -750,14 +782,17 @@ have caught.
    goes through `CheckedMultiply`; the constant-stride ones do not, because they cannot overflow.
    Corrected to say what is actually true and why.
 
-### Known limitations, stated rather than implied
+### Known limitations, stated rather than implied *(as of `CNBF-092`; see the banner above)*
 
 * Only three asset types have schemas. Eight more identifiers are reserved with no layout.
+  *(Closed by `CNBF-101`–`CNBF-103B`: ten of eleven now have one. `Effect` is the exception, by
+  design.)*
 * The Model schema does not express glTF material variants or the glTF import diagnostic report.
   The compiler refuses the former by name and drops the latter; both are documented.
 * The compiler's Model front end is the one place that re-reads a `.cnj` shape rather than going
   through the reader that already understands it (`D9`). The drift risk is real and is mitigated by
-  the equivalence tests rather than removed.
+  the equivalence tests rather than removed. *(Still true for `Model`. `CNBF-118` closed the same
+  risk for the five headless types by sharing the document reader itself.)*
 * Byte size is not a measured win on small assets (§8). File count and opens-per-load are.
 * Load *time* has not been measured at all, and no claim is made about it.
 * The `.clip.bin`/`.skeleton.bin`/`_morph.bin` sidecar readers CNB's compiler front end contains
@@ -1205,6 +1240,10 @@ source bytes  ->  canonical CPU representation  ->  Cnb*Data  ->  Encode*ToCnb()
 Superseding every earlier table in this document. "Supported" is four different claims and this
 table keeps them apart, because conflating them is what produced the gap in the first place.
 
+*(Still authoritative after §17's remediation pass, which changed no row: `CNBF-114`–`CNBF-121`
+hardened and corrected what these columns describe without adding or removing a producer, a loader
+or a schema.)*
+
 | asset type | wire schema | runtime loader | writer API | `.cnj` → `.cnb` | direct source → `.cnb` | golden vector | negative tests |
 |---|---|---|---|---|---|---|---|
 | `Texture2D` | ✅ §16 | ✅ | ✅ | ✅ | ✅ image | via `TextureCube` | ✅ |
@@ -1261,3 +1300,16 @@ vector still matches, and the determinism assertions (in-process and cross-proce
 | CNBF-118 | **CNJ-to-CNB semantic equivalence, and strict numbers.** | A `.cnj` document was read in two places -- `ContentManager`'s runtime type readers and the `.cnj` -> `.cnb` compiler -- with two different implementations, and they had drifted. The compiler applied a flat `cnjVersion` ceiling of **2** to every type while only `Model`'s runtime reader accepts 2, so a version-2 document of any other type **compiled and then failed to load**. The runtime read `colorKey` by scanning for the substring and calling `std::stoi` (which throws `std::out_of_range`, an exception no content caller catches) while the compiler parsed it as JSON and **clamped** an out-of-range component; the runtime read a whole `SpriteFont` by counting braces in the document text. Neither route checked that a number was finite, integral or inside its destination's range before casting: `2.5` became `2`, a rectangle element that was a string read as `0.0`, a `char` of `0xD800` became a surrogate half no text could match, and `1e400` -- valid JSON grammar -- threw `std::out_of_range` straight out of `std::stod`. `Texture3D`'s byte count was `w * h * d * 4` with no bound on the factors. `absorbedFiles` recorded `filename()`, so two files in different directories collapsed to one name, contradicting its own documented "paths as they were written in the source `.cnj`". | A new `CNA::Internal::CnjCanonicalRead` holds the one reading of every fragment both routes consume -- `RequireCnjFiniteNumber`/`RequireCnjSingle`/`RequireCnjInteger`/`RequireCnjNumberArray`, plus `ReadCnjColorKey`, `ReadCnjTexture3DDescription` and `ReadCnjSpriteFontDescription` -- and **both** routes call it. The runtime's `colorKey` substring scan, its brace-counting `SpriteFont` reader and the now-dead `JsonIntArray4` are gone. The compiler's ceiling is per type and derived from the type name. Dimensions are bounded by `CnjMaxTextureDimension` (65536, the largest a 16-level CNB mip chain can describe), so `w * h * d * 4` provably fits. A JSON number outside `double`'s range is a `JsonParseException` rather than a raw `std::out_of_range`, because RFC 8259 §6 allows an implementation to bound its range and nothing downstream catches `std::out_of_range`. Eight tests, one of which asserts the invariant directly: for each malformed document, the compiler and `ContentManager` must **both** refuse it. | ✅ |
 | CNBF-119 | **Media schema bounds and loader-registry ownership.** | `Song`'s and `Video`'s `durationMs` is a `u32` on the wire and both runtime constructors take an `intcs`, so a value above `INT32_MAX` arrived **negative** and every later `Duration`/`PlayPosition` comparison read backwards -- unchecked at both boundaries. The media `XREF` row's `flags` and `expectedAssetTypeId` were specified by `docs/cnb-format.md` §19.1, written by the encoder and **never read back**. `ContentManager::RegisterCnbLoaderEXT<T>` accepted **any** identifier, so a game could claim `Texture2D`'s or `Curve`'s; and because a repeat registration under a matching name retains the FIRST loader, whether the game's factory or CNA's ended up in the table depended purely on which call ran first, silently either way. `CnbLoaderRegistry::RegisterBuiltIns()`'s documentation claimed "every asset type CNA itself compiles to `.cnb`" while installing two of ten. | `durationMs` bounded at `0x7FFFFFFF` at encode **and** decode -- 24.8 days, so nothing real is refused -- and the ceiling documented in §19.2/§19.3. The media reference's `flags` and `expectedAssetTypeId` are read back and required to be `0`/`Invalid`. A `CnbLoaderOwnership` on `CnbLoaderRegistry::Register` makes the CNA/game boundary explicit: `GameExtension` (the default) accepts a custom identifier only, `CnaBuiltIn` is refused a custom one, and a repeat registration is tolerated only when the name **and** the ownership match -- so the rule holds whichever side registers first. The rule is enforced in exactly one place; `RegisterCnbLoaderEXT` carries no second copy of it. `RegisterBuiltIns()` now documents what it actually installs and why the other eight come from `ContentManager`. Five tests, including one asserting that a `Clear()`ed table needs a `ContentManager` and not merely `RegisterBuiltIns()` to come back. | ✅ |
 | CNBF-120 | **Command-line tools, and the first test that ever ran one of them.** | `cna_tool_source_to_cnb` had **no CMake test wiring at all** -- the only CNB tool without it -- so nothing had ever executed the program: its arguments, its exit codes and the files it leaves behind were entirely unexercised. What that hid: every numeric option went through `std::stoul`/`std::stof`, so `"500abc"` was 500, `"-1"` became `0xFFFFFFFF` through the wraparound plus a narrowing cast, an over-range value was truncated rather than refused, and `--fps nan` and `--fps inf` were accepted outright. `--color-key 1,2,3,4` read three components and ignored the fourth. An option that did not apply to the chosen kind -- `--color-key` on a WAV, `--fps` on a PNG -- was silently dropped, leaving the caller believing something untrue about the output. `create_directories`'s error code was discarded. In `gltf_to_cnb`, `baseName` was unvalidated although it becomes part of every output file name **and** of the staging directory's name; `--unit-scale` used `std::stof`, which consumes a prefix (`"0.01m"` is 0.01) and accepts `nan`/`inf`; and `--keep-cnj` discarded every `create_directories` and `copy` error, so it **exited 0 having copied nothing**. | A shared header-only `tools/common/CnaToolNumericArgs.hpp` parses each numeric option strictly: whole token consumed, sign rejected for an unsigned, range checked before narrowing, non-finite refused. `--color-key` splits first and requires exactly three parts. Each option is checked against the chosen kind and refused by name. Directory-creation and copy errors are reported. `baseName` must be one non-empty filename component and not `.` or `..`; `--unit-scale` must be finite, positive and fully consumed. New `cmake/UnitTests.cmake` wiring plus `CnbSourceToolTests.cpp` -- 8 tests spawning the real executable for the image, WAV, DDS, Song and Video success paths, cross-process byte-identical determinism over all four output kinds, and every malformed invocation asserted to exit 1 **and leave no file behind** -- and 3 more in `CnbGltfDirectToolTests.cpp`. Six of the eleven verified to fail against the previous tools. | ✅ |
+| CNBF-121 | **Documentation and public API quality.** | Four documents disagreed with the tree. `plans/plan_cnb.md`'s §3 `D10` still said the texture, font, audio and media identifiers had "**reserved ids** and **no v1 schema**"; §4's invariant 10 required `compression == 0`; §6's out-of-scope table marked seven closed items ⛔; §7a's counts predated seven schemas. `docs/cnb-format.md` §4 said `uncompressedSize` was "equal to `storedSize` in CNB v1" and §6 said a non-zero `compression` is rejected -- both written before Zstandard landed. `CnjToCnb.hpp` listed **three** supported `.cnj` types when there are eight, and described every one of them as going through a runtime reader when five go through headless importers instead. `CnbWriter.hpp`'s `Build()` Doxygen block sat above `SetCompression()`, so Doxygen documented the wrong function and `Build()` had none. And three places claimed an inspector could read a compressed file's identity without the codec, which is **false**: `Parse()` refuses an unimplemented codec while reading the table of contents, before any chunk is decoded. | Every stale claim either corrected in place or, where the reasoning is worth keeping, left under an unmistakable historical banner naming what superseded it -- `D10`, `§7a` and `§10` gained one, joining `§9`, `§12`, `§13`, `§14` and `§15`; `§4`'s invariant list and `§6`'s table were corrected outright, the latter keeping an "as recorded then" column so a closed deferral still says why it was deferred. `docs/cnb-format.md` §4/§6/§8/§12 corrected for real compression, including the new aggregate limit. `CnjToCnb.hpp` lists all eight types and names the **three different routes** they take, with the reason a runtime reader cannot serve five of them. The `Build()` block moved to `Build()`. `cnb_info` now prints stored size, logical size and the codec per chunk, plus a compression summary -- with one "size" column a compressed chunk reported its packed length and the only tool that can describe a `.cnb` could not show compression was in use. Two tests: one asserting the new columns on both a compressed and an uncompressed file, one asserting that a file using an unimplemented codec is unopenable **and that none of its identity is readable**, `CMET` being uncompressed notwithstanding. | ✅ |
+
+### 17.1 What this pass did and did not change
+
+| | |
+|---|---|
+| **Serialized bytes of a previously valid `.cnb`** | **None.** Every golden vector still matches, and both determinism assertions -- in-process and cross-process -- still hold. Nothing in `CNBF-114`–`CNBF-121` moved a byte a valid producer emits. |
+| **What a reader accepts** | Stricter in five places: an aggregate expansion budget, a DDS header's dimension/mip/face rules, a WAV's `smpl`/RIFF/`fmt ` consistency, a media duration above `INT32_MAX`, and a media `XREF` row's `flags`/`expectedAssetTypeId`. |
+| **What a writer can produce** | Narrower in two: an `XREF` name must satisfy the reader's own rule, and `AddChunk()` refuses a container-defined identifier. Both close paths to a file the writer accepted and the reader rejected. |
+| **What a `.cnj` compiles** | Stricter, and now **identical to the runtime route**: per-type version ceilings, and one shared canonical reading of every fragment both routes consume. |
+| **Public C++ API** | `CnbReadLimits` gained a field; `CnbLoaderRegistry::Register` gained a defaulted parameter; `CnbLoaderRegistry::Register`/`RegisterCnbLoaderEXT` refuse identifier ranges they previously accepted. No signature a caller passes positionally changed. |
+| **Command-line tools** | `cna_tool_source_to_cnb` and `cna_tool_gltf_to_cnb` refuse arguments they previously misread. No accepted invocation produces different output. |
+

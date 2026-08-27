@@ -19,6 +19,13 @@
 // a Model, a Curve or a type this build has never heard of equally well, because everything it
 // prints comes from the container. That is a design check as much as a feature: anything this tool
 // cannot report is something the container failed to make self-describing.
+//
+// One thing it CANNOT do, stated because the opposite was once written down (plans/plan_cnb.md
+// CNBF-121): inspect a compressed `.cnb` without that codec. `CnbDocument::Parse()` refuses an
+// unimplemented codec while reading the table of contents, before any chunk is decoded, so a build
+// without libzstd cannot open a Zstandard-compressed file at all. `CMET` and `XREF` are stored
+// uncompressed for size and speed, not to make codec-free inspection possible; that would need a
+// metadata-only parser, and there is not one.
 
 #include <cstdint>
 #include <cstdlib>
@@ -29,6 +36,7 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbChunkCompression.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 
@@ -120,17 +128,45 @@ int main(int argc, char** argv)
             }
         }
 
+        // plans/plan_cnb.md CNBF-121: stored and logical size are separate columns, and the codec
+        // is named. With one "size" column a compressed chunk reported its packed length, so the
+        // only tool that can describe a `.cnb` could not show that compression was in use at all,
+        // nor by how much -- exactly the question the per-chunk `compression` field exists to
+        // answer.
         std::cout << "\n  " << std::left << std::setw(6) << "chunk" << std::setw(10) << "flags"
-                  << std::right << std::setw(12) << "offset" << std::setw(12) << "size"
-                  << std::setw(6) << "align" << "  checksum\n";
+                  << std::right << std::setw(12) << "offset" << std::setw(12) << "stored"
+                  << std::setw(12) << "logical" << std::setw(6) << "align" << "  "
+                  << std::left << std::setw(10) << "codec" << "checksum\n";
+        std::uint64_t totalStored = 0u;
+        std::uint64_t totalLogical = 0u;
+        bool anyCompressed = false;
         for (std::size_t i = 0; i < document.ChunkCount(); ++i)
         {
             const auto& entry = document.ChunkAt(i);
+            totalStored += entry.storedSize;
+            totalLogical += entry.uncompressedSize;
+            if (entry.compression != CNA::Content::Cnb::CnbCompression::None)
+            {
+                anyCompressed = true;
+            }
             std::cout << "  " << std::left << std::setw(6)
                       << CNA::Content::Cnb::ChunkIdToString(entry.type) << std::setw(10)
                       << (entry.IsMandatory() ? "required" : "optional") << std::right
                       << std::setw(12) << entry.offset << std::setw(12) << entry.storedSize
-                      << std::setw(6) << entry.alignment << "  " << Hex32(entry.checksum) << "\n";
+                      << std::setw(12) << entry.uncompressedSize << std::setw(6)
+                      << entry.alignment << "  " << std::left << std::setw(10)
+                      << CNA::Content::Cnb::CnbCompressionToString(entry.compression)
+                      << Hex32(entry.checksum) << "\n";
+        }
+        if (anyCompressed)
+        {
+            std::cout << "\n  chunk bytes: " << totalStored << " stored, " << totalLogical
+                      << " logical";
+            if (totalLogical != 0u)
+            {
+                std::cout << " (" << (totalStored * 100u / totalLogical) << "% of logical)";
+            }
+            std::cout << "\n";
         }
 
         if (!chunksOnly)
