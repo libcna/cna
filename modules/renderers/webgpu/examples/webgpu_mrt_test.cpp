@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorWriteChannels.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -179,7 +180,7 @@ protected:
         {
             std::printf("[FAIL] MRT ShaderEffect compile failed: 2=%s 4=%s\n",
                         fx2.GetCompileErrorEXT().c_str(), fx4.GetCompileErrorEXT().c_str());
-            std::printf("=== 0/6 PASS ===\n");
+            std::printf("=== 0/10 PASS ===\n");
             result_ = 1;
             Exit();
             return;
@@ -230,8 +231,48 @@ protected:
             check(colorNear(CenterOf(t3), Expected(3)), "4 targets: slot 3 holds its own content");
         }
 
+        // Check C: per-slot ColorWriteChannels (WEBGPU-143). The custom effect writes all four slots,
+        // but each attachment's own BlendState mask keeps only its enabled channel(s) over the black
+        // clear -- slot 0 Red, slot 1 Green, slot 2 Blue, slot 3 All.
+        {
+            RenderTarget2D t0 = MakeTarget(dev);
+            RenderTarget2D t1 = MakeTarget(dev);
+            RenderTarget2D t2 = MakeTarget(dev);
+            RenderTarget2D t3 = MakeTarget(dev);
+            VertexBuffer vb = MakeQuad(dev);
+
+            BlendState bs = BlendState::Opaque;
+            bs.setColorWriteChannelsProperty(ColorWriteChannels::Red);
+            bs.setColorWriteChannels1Property(ColorWriteChannels::Green);
+            bs.setColorWriteChannels2Property(ColorWriteChannels::Blue);
+            bs.setColorWriteChannels3Property(ColorWriteChannels::All);
+            dev.setBlendStateProperty(bs);
+
+            dev.SetRenderTargets({RenderTargetBinding(&t0), RenderTargetBinding(&t1),
+                                  RenderTargetBinding(&t2), RenderTargetBinding(&t3)});
+            dev.setScissorRectangleProperty(Rectangle(0, 0, kSize, kSize));
+            dev.Clear(Color(0, 0, 0, 255));
+            fx4.Apply();
+            fx4.SetUniformVec4("uBase", 200.0f / 255.0f, 120.0f / 255.0f, 40.0f / 255.0f, 1.0f);
+            dev.SetVertexBuffer(&vb);
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            dev.SetVertexBuffer(nullptr);
+            dev.SetRenderTarget(nullptr);
+
+            // slot0 uBase=(200,120,40) masked to R; slot1 .gbra=(120,40,200) masked to G;
+            // slot2 .brga=(40,200,120) masked to B; slot3 .rbga full.
+            check(colorNear(CenterOf(t0), Color(200, 0, 0, 255)),
+                  "ColorWriteChannels: slot 0 masked to Red keeps only R");
+            check(colorNear(CenterOf(t1), Color(0, 40, 0, 255)),
+                  "ColorWriteChannels1: slot 1 masked to Green keeps only G");
+            check(colorNear(CenterOf(t2), Color(0, 0, 120, 255)),
+                  "ColorWriteChannels2: slot 2 masked to Blue keeps only B");
+            check(colorNear(CenterOf(t3), Expected(3)),
+                  "ColorWriteChannels3: slot 3 masked to All keeps its full content");
+        }
+
         std::printf("=== %d/%d PASS ===\n", passCount_, checkCount_);
-        result_ = (passCount_ == checkCount_ && checkCount_ == 6) ? 0 : 1;
+        result_ = (passCount_ == checkCount_ && checkCount_ == 10) ? 0 : 1;
         Exit();
     }
 

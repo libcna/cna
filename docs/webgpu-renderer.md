@@ -662,8 +662,11 @@ attachment count and keyed by it, so a 1-target and a 2-target pipeline are dist
 | Unbind | `SetRenderTarget(nullptr)` / `SetRenderTargets({})` / any single-target or cube-face bind flushes the set into all its targets and drops back to one attachment. |
 
 Every render target here uses the backbuffer's `surfaceFormat_`, so all attachments in an MRT set
-share a format. Per-slot `ColorWriteChannels1..3` and per-slot independent blend are not yet modelled
-(the whole set shares slot 0's blend/write state); MSAA + MRT resolves each attachment independently.
+share a format. Per-slot `ColorWriteChannels`/`1`/`2`/`3` **are** honoured for a custom-effect MRT
+draw (`WEBGPU-143`): slot *i*'s `@location(i)` output is masked by that attachment's own
+`BlendState.ColorWriteChannels`, proven by `WebGPU_MRT`'s Check C. XNA has one blend *equation* for
+all targets, so there is no per-slot independent blend to model; the set shares slot 0's blend
+factors. MSAA + MRT resolves each attachment independently.
 
 **Implementing real wireframe** would mean index-expanding triangles into line topology, since
 wgpu-native offers no polygon mode. That is a genuine implementation task, tracked separately; it is

@@ -540,8 +540,10 @@ queries, custom WGSL `ShaderEffect`s on the 3D route (`WEBGPU-76`,
 2..4 targets, a custom `@location(0..N-1)` shader fans out to every slot, a stock draw writes
 attachment 0) and custom WGSL `ShaderEffect`s on the SpriteBatch route too (`WEBGPU-142`), and since
 2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port (2D + 3D, its pixels
-byte-identical to the native Vulkan renderer's). Still open: GPU-native compressed textures and
-per-slot MRT `ColorWriteChannels`/blend -- see `docs/webgpu-renderer.md` and `plans/plan_webgpu.md`.
+byte-identical to the native Vulkan renderer's). The main remaining WebGPU gap is GPU-native
+compressed textures, which is a cross-renderer/XNA-layer design task (`Texture2D` CPU-decompresses to
+RGBA8 first and the shared `ImageData` has no compressed-format field), not a WebGPU-local one -- see
+`docs/webgpu-renderer.md` and `plans/plan_webgpu.md`.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
 `plans/plan_magnum.md` for its own capability boundary.
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**

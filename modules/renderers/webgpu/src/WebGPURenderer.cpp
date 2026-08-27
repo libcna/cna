@@ -6783,6 +6783,7 @@ struct VSOut {
         command.depthFunc = depthCompareFunction_;
         command.blend = blendEnabled_;
         command.blendParams = blendParams_;
+        command.colorWriteChannels = colorWriteChannels_;  // WEBGPU-143: per-slot MRT write masks
         command.cullMode = cullMode_;
         command.depthBias = depthBias_;
         command.slopeScaleDepthBias = slopeScaleDepthBias_;
@@ -6867,6 +6868,8 @@ struct VSOut {
                        (static_cast<std::uint64_t>(command.blendParams.colorFunc) << 32) |
                        (static_cast<std::uint64_t>(command.blendParams.alphaFunc) << 40));
         key = mix(key, static_cast<std::uint64_t>(command.cullMode));
+        for (int c = 0; c < colorAttachmentCount; ++c)  // WEBGPU-143: per-slot write masks
+            key = mix(key, static_cast<std::uint64_t>(command.colorWriteChannels[static_cast<std::size_t>(c)] & 0xF));
         for (const auto& a : command.attributes)
             key = mix(key, (static_cast<std::uint64_t>(a.format) << 40) ^
                            (a.offset << 8) ^ a.shaderLocation);
@@ -6902,7 +6905,8 @@ struct VSOut {
             for (int c = 0; c < colorAttachmentCount; ++c)
             {
                 targets[static_cast<std::size_t>(c)].format = destination.ColorFormatAt(c);
-                targets[static_cast<std::size_t>(c)].writeMask = WGPUColorWriteMask_All;
+                targets[static_cast<std::size_t>(c)].writeMask =  // WEBGPU-143: per-slot ColorWriteChannels
+                    static_cast<WGPUColorWriteMask>(command.colorWriteChannels[static_cast<std::size_t>(c)] & 0xF);
                 blendStates[static_cast<std::size_t>(c)] = WGPU_BLEND_STATE_INIT;
                 FillWGPUBlendState(blendStates[static_cast<std::size_t>(c)], command.blendParams);
                 targets[static_cast<std::size_t>(c)].blend =
@@ -7140,10 +7144,12 @@ struct VSOut {
         blendParams_.colorFunc = colorBlendFunc;
         blendParams_.alphaFunc = alphaBlendFunc;
         // REMED-GFX-077/GFX-102: both are STATIC wgpu-native pipeline state. The generic 3D caches
-        // and the keyed SpriteBatch cache include them; only active attachment slot 0 applies
-        // because WebGPU MRT remains a separate capability boundary.
+        // and the keyed SpriteBatch cache include the slot-0 mask.
         colorWriteMask_ = writeState.colorWriteChannels[0];
         sampleMask_ = writeState.multiSampleMask;
+        // WEBGPU-143 MRT: keep the full per-slot ColorWriteChannels too, for a custom-effect MRT draw.
+        for (int i = 0; i < 4; ++i)
+            colorWriteChannels_[static_cast<std::size_t>(i)] = writeState.colorWriteChannels[i];
     }
 
     bool WebGPURenderer::SupportsCapability(CNA::GraphicsCapability capability) const

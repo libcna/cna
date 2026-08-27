@@ -1889,6 +1889,11 @@ namespace CNA::Internal::Renderers::WebGPU
         /// pipelines. Defaults match XNA (All / 0xFFFFFFFF).
         int colorWriteMask_ = 15;
         std::uint32_t sampleMask_ = 0xFFFFFFFFu;
+        /// WEBGPU-143 MRT: the full per-slot `BlendState.ColorWriteChannels`/`1`/`2`/`3`. Slot 0 is
+        /// `colorWriteMask_` (kept for the stock/single-target path); a custom-effect MRT draw writes
+        /// its own `@location(0..N-1)`, so each slot honours its own mask here. XNA has one blend
+        /// EQUATION for all targets, so only the write mask is per-slot.
+        std::array<int, 4> colorWriteChannels_ = {15, 15, 15, 15};
         /// XNA ColorWriteChannels (R=1,G=2,B=4,A=8) is bit-identical to WGPUColorWriteMask_*.
         [[nodiscard]] WGPUColorWriteMask CurrentWriteMask() const
         { return static_cast<WGPUColorWriteMask>(colorWriteMask_ & 0xF); }
@@ -2924,6 +2929,9 @@ namespace CNA::Internal::Renderers::WebGPU
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
             bool blend = true;
             BlendKeyParams blendParams{};
+            /// WEBGPU-143 MRT: the per-slot ColorWriteChannels (slot i masks `@location(i)`); a custom
+            /// effect that writes N outputs honours each attachment's own BlendState mask.
+            std::array<int, 4> colorWriteChannels{15, 15, 15, 15};
             int cullMode = 0;
             float depthBias = 0.0f;
             float slopeScaleDepthBias = 0.0f;
