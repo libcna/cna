@@ -232,6 +232,9 @@ enum class ObjectKind : uint32_t {
     RenderPipeline = 148,
     // plans/plan_binding.md CBIND-089A.
     PostProcessChain = 149,
+    // plans/plan_binding.md CBIND-089D: neither derives from PostProcessPass.
+    DecalPass = 150,
+    SpatialUpscalePass = 151,
     Test = UINT32_MAX
 };
 

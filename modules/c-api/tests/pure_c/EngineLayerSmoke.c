@@ -613,6 +613,36 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-089D. The nine remaining passes, including the two that are not passes. */
+    {
+        CNA_PostProcessPassHandle pass = CNA_INVALID_HANDLE;
+        CNA_DecalPassHandle decal = CNA_INVALID_HANDLE;
+        CNA_SpatialUpscalePassHandle upscale = CNA_INVALID_HANDLE;
+        uint64_t number = UINT64_C(0);
+        int32_t count = -1;
+        float scalar = -1.0F;
+        if (cna_bloom_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            pass != CNA_INVALID_HANDLE ||
+            cna_fxaa_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_ascii_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_decal_pass_create(graphics_device, &decal) != CNA_RESULT_NOT_SUPPORTED ||
+            decal != CNA_INVALID_HANDLE ||
+            cna_decal_pass_destroy(decal) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_spatial_upscale_pass_create(graphics_device, &upscale) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            upscale != CNA_INVALID_HANDLE ||
+            cna_spatial_upscale_pass_destroy(upscale) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_bloom_pass_iterations_for_quality(CNA_RENDER_QUALITY_LOW, &count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_bloom_pass_extract_channel(1.0F, 0.5F, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_fxaa_pass_copy_fragment_glsl(0, UINT64_C(0), &number) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_spatial_upscale_pass_is_identity_scale(
+                INT32_C(1), INT32_C(1), INT32_C(1), INT32_C(1), &flag) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -4712,6 +4742,271 @@ static int validate_atmospheric_passes(const CNA_Handle graphics_device)
     return ok;
 }
 
+
+/* CBIND-089D. Nine passes, and the slice's real finding is that two of them are not passes:
+   DecalPass and SpatialUpscalePass do not derive from PostProcessPass, have no apply(), and are
+   driven by their own draw(). They carry their own handles, and the test asserts the shared
+   cna_post_process_pass_* routes REFUSE them -- which is the only way a caller learns the
+   difference from the outside. */
+static int validate_remaining_passes(const CNA_Handle graphics_device)
+{
+    CNA_PostProcessPassHandle bloom = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle lens = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle motion = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle fxaa = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle chroma = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle grain = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle ascii = CNA_INVALID_HANDLE;
+    CNA_DecalPassHandle decal = CNA_INVALID_HANDLE;
+    CNA_SpatialUpscalePassHandle upscale = CNA_INVALID_HANDLE;
+    CNA_AsciiPostProcessEffectHandle effect = CNA_INVALID_HANDLE;
+    CNA_Vector3 vector;
+    CNA_Vector3 read_back;
+    CNA_Matrix view;
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t bytes = UINT64_C(0);
+    float scalar = -1.0F;
+    int32_t number = -1;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_bloom_pass_create(graphics_device, &bloom) != CNA_RESULT_SUCCESS ||
+        cna_lens_flare_pass_create(graphics_device, &lens) != CNA_RESULT_SUCCESS ||
+        cna_motion_blur_pass_create(graphics_device, &motion) != CNA_RESULT_SUCCESS ||
+        cna_fxaa_pass_create(graphics_device, &fxaa) != CNA_RESULT_SUCCESS ||
+        cna_chromatic_aberration_pass_create(graphics_device, &chroma) != CNA_RESULT_SUCCESS ||
+        cna_film_grain_pass_create(graphics_device, &grain) != CNA_RESULT_SUCCESS ||
+        cna_ascii_pass_create(graphics_device, &ascii) != CNA_RESULT_SUCCESS ||
+        cna_decal_pass_create(graphics_device, &decal) != CNA_RESULT_SUCCESS ||
+        cna_spatial_upscale_pass_create(graphics_device, &upscale) != CNA_RESULT_SUCCESS) {
+        (void)cna_post_process_pass_destroy(bloom);
+        (void)cna_post_process_pass_destroy(lens);
+        (void)cna_post_process_pass_destroy(motion);
+        (void)cna_post_process_pass_destroy(fxaa);
+        (void)cna_post_process_pass_destroy(chroma);
+        (void)cna_post_process_pass_destroy(grain);
+        (void)cna_post_process_pass_destroy(ascii);
+        (void)cna_decal_pass_destroy(decal);
+        (void)cna_spatial_upscale_pass_destroy(upscale);
+        return 0;
+    }
+
+    /* The two standalone objects are NOT post-process passes, and the shared routes say so.
+       Without this the difference is invisible from C and a caller would only find it by
+       getting an error at some later point with no explanation. */
+    ok = cna_post_process_pass_destroy(decal) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_copy_name(decal, 0, UINT64_C(0), &bytes) !=
+        CNA_RESULT_BUFFER_TOO_SMALL;
+    ok = ok && cna_post_process_pass_destroy(upscale) != CNA_RESULT_SUCCESS;
+    /* And the seven real passes do answer the shared routes. */
+    ok = ok && cna_post_process_pass_copy_name(bloom, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    ok = ok && cna_post_process_pass_is_supported(fxaa, graphics_device, &flag) ==
+        CNA_RESULT_SUCCESS;
+    /* Cross-type accessors refuse by argument. */
+    ok = ok && cna_bloom_pass_get_threshold(fxaa, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_decal_pass_get_opacity(upscale, &scalar) != CNA_RESULT_SUCCESS;
+
+
+    /* ---- bloom_pass ---- */
+    /* Corrects nothing: an out-of-range value survives in both directions. */
+    ok = ok && cna_bloom_pass_set_threshold(bloom, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_bloom_pass_get_threshold(bloom, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_bloom_pass_set_threshold(bloom, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_bloom_pass_get_threshold(bloom, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 900.0F;
+    /* Corrects nothing: an out-of-range value survives in both directions. */
+    ok = ok && cna_bloom_pass_set_intensity(bloom, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_bloom_pass_get_intensity(bloom, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_bloom_pass_set_intensity(bloom, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_bloom_pass_get_intensity(bloom, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 900.0F;
+    ok = ok && cna_bloom_pass_set_iterations(bloom, INT32_C(9999)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_bloom_pass_get_iterations(bloom, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(9999);
+
+    /* ---- lens_flare_pass ---- */
+    ok = ok && cna_lens_flare_pass_set_threshold(lens, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_set_threshold(lens, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_get_threshold(lens, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_lens_flare_pass_set_threshold(lens, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_get_threshold(lens, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_lens_flare_pass_set_intensity(lens, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_set_intensity(lens, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_get_intensity(lens, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_lens_flare_pass_set_intensity(lens, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_get_intensity(lens, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_lens_flare_pass_set_dispersal(lens, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_get_dispersal(lens, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_lens_flare_pass_set_dispersal(lens, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_lens_flare_pass_get_dispersal(lens, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* ---- motion_blur_pass ---- */
+    ok = ok && cna_motion_blur_pass_set_strength(motion, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_motion_blur_pass_get_strength(motion, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_motion_blur_pass_set_strength(motion, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_motion_blur_pass_get_strength(motion, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_motion_blur_pass_set_max_distance(motion, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_motion_blur_pass_get_max_distance(motion, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.25F;
+    ok = ok && cna_motion_blur_pass_set_max_distance(motion, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_motion_blur_pass_get_max_distance(motion, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* ---- fxaa_pass ---- */
+    /* Corrects nothing: an out-of-range value survives in both directions. */
+    ok = ok && cna_fxaa_pass_set_edge_threshold(fxaa, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_fxaa_pass_get_edge_threshold(fxaa, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_fxaa_pass_set_edge_threshold(fxaa, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_fxaa_pass_get_edge_threshold(fxaa, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 900.0F;
+
+    /* ---- chromatic_aberration_pass ---- */
+    ok = ok && cna_chromatic_aberration_pass_set_strength(chroma, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_chromatic_aberration_pass_get_strength(chroma, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.1F;
+    ok = ok && cna_chromatic_aberration_pass_set_strength(chroma, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_chromatic_aberration_pass_get_strength(chroma, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* ---- film_grain_pass ---- */
+    ok = ok && cna_film_grain_pass_set_intensity(grain, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_film_grain_pass_get_intensity(grain, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_film_grain_pass_set_intensity(grain, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_film_grain_pass_get_intensity(grain, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* ---- decal_pass ---- */
+    ok = ok && cna_decal_pass_set_opacity(decal, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_get_opacity(decal, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_decal_pass_set_opacity(decal, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_get_opacity(decal, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    vector.x = 0.5F; vector.y = -2.0F; vector.z = 3.0F;
+    ok = ok && cna_decal_pass_set_tint(decal, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_get_tint(decal, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == 0.5F && read_back.y == -2.0F && read_back.z == 3.0F;
+    ok = ok && cna_decal_pass_set_tint(decal, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_decal_pass_set_max_slope_angle(decal, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_get_max_slope_angle(decal, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.5707964F;
+    ok = ok && cna_decal_pass_set_max_slope_angle(decal, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_get_max_slope_angle(decal, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* ---- spatial_upscale_pass ---- */
+    ok = ok && cna_spatial_upscale_pass_set_sharpness(upscale, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_spatial_upscale_pass_get_sharpness(upscale, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_spatial_upscale_pass_set_sharpness(upscale, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_spatial_upscale_pass_get_sharpness(upscale, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_spatial_upscale_pass_set_edge_adaptive(upscale, CNA_TRUE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_spatial_upscale_pass_get_edge_adaptive(upscale, &flag) == CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+    ok = ok && cna_spatial_upscale_pass_set_edge_adaptive(upscale, UINT8_C(2)) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* FxaaPass corrects nothing, but the settings bag that can drive the same value DOES floor
+       it. Two surfaces, one number, only one of them correcting -- asserted rather than assumed,
+       which is what the CBIND-087B precedent asks for. */
+    ok = ok && cna_fxaa_pass_set_edge_threshold(fxaa, -1.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_fxaa_pass_get_edge_threshold(fxaa, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -1.0F;
+    {
+        CNA_RenderPipelineSettingsEXT settings;
+        ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+        settings.fxaa_edge_threshold_ext = -1.0F;
+        ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+            settings.fxaa_edge_threshold_ext ==
+                CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT;
+    }
+
+    /* The two per-pass constants and the quality presets. */
+    ok = ok && CNA_LENS_FLARE_GHOST_COUNT_EXT > INT32_C(0) &&
+        CNA_MOTION_BLUR_SAMPLE_COUNT_EXT > INT32_C(0);
+    {
+        int32_t low = -1;
+        int32_t ultra = -2;
+        float low_threshold = -1.0F;
+        float ultra_threshold = -2.0F;
+        ok = ok && cna_bloom_pass_iterations_for_quality(CNA_RENDER_QUALITY_LOW, &low) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_bloom_pass_iterations_for_quality(CNA_RENDER_QUALITY_ULTRA, &ultra) ==
+            CNA_RESULT_SUCCESS && ultra != low;
+        ok = ok && cna_bloom_pass_iterations_for_quality(UINT32_C(99), &low) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_fxaa_pass_edge_threshold_for_quality(CNA_RENDER_QUALITY_LOW,
+                                                            &low_threshold) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_fxaa_pass_edge_threshold_for_quality(CNA_RENDER_QUALITY_ULTRA,
+                                                            &ultra_threshold) ==
+            CNA_RESULT_SUCCESS && ultra_threshold != low_threshold;
+    }
+    ok = ok && cna_bloom_pass_reset_targets(bloom) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_bloom_pass_reset_targets(fxaa) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_fxaa_pass_copy_fragment_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+
+    /* Bright-pass extraction: below the threshold nothing survives, above it something does. */
+    ok = ok && cna_bloom_pass_extract_channel(0.1F, 1.0F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_bloom_pass_extract_channel(2.0F, 1.0F, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar > 0.0F;
+
+    /* The decal box is the unit cube in local space, so the origin is inside and a far point
+       is not -- the only claim worth making without restating the maths. */
+    vector.x = 0.0F; vector.y = 0.0F; vector.z = 0.0F;
+    ok = ok && cna_decal_pass_is_inside_decal_box(&vector, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    vector.x = 99.0F;
+    ok = ok && cna_decal_pass_is_inside_decal_box(&vector, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_decal_pass_is_inside_decal_box(0, &flag) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The decal camera's far plane is IGNORED when not positive, so the previous camera stands;
+       there is no reading it back, so the assertion is that the call is accepted either way. */
+    ok = ok && cna_decal_pass_set_camera(decal, &view, &view, 100.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_set_camera(decal, &view, &view, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_set_camera(decal, 0, &view, 100.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_decal_pass_set_prepass_inputs(decal, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_SUCCESS;
+    /* Drawing with no prepass inputs is a sequencing mistake, not an argument one: the projector
+       has a camera and a decal but nothing to project onto. Whichever way this renderer answers,
+       it must not be SUCCESS with the inputs cleared above. */
+    ok = ok && cna_decal_pass_draw(decal, CNA_INVALID_HANDLE, &view, INT32_C(32),
+                                   INT32_C(32)) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_draw(decal, CNA_INVALID_HANDLE, 0, INT32_C(32), INT32_C(32)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Identity scale is exactly equal sizes; anything else is not. */
+    ok = ok && cna_spatial_upscale_pass_is_identity_scale(
+            INT32_C(64), INT32_C(64), INT32_C(64), INT32_C(64), &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_spatial_upscale_pass_is_identity_scale(
+            INT32_C(64), INT32_C(64), INT32_C(128), INT32_C(64), &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_spatial_upscale_pass_draw(upscale, CNA_INVALID_HANDLE, INT32_C(0), INT32_C(8),
+                                             INT32_C(8), INT32_C(8)) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_spatial_upscale_pass_draw(upscale, CNA_INVALID_HANDLE, INT32_C(8), INT32_C(8),
+                                             INT32_C(8), INT32_C(8)) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The ASCII pass lends its effect: the handle answers, and releasing it does not release the
+       pass. The resource type is shared across translation units rather than redeclared, which is
+       what makes this borrow safe rather than undefined. */
+    ok = ok && cna_ascii_pass_get_effect(ascii, &effect) == CNA_RESULT_SUCCESS &&
+        effect != CNA_INVALID_HANDLE;
+    ok = ok && cna_ascii_post_process_effect_destroy(effect) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_copy_name(ascii, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL;
+    ok = ok && cna_ascii_pass_get_effect(fxaa, &effect) == CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_spatial_upscale_pass_destroy(upscale) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_spatial_upscale_pass_destroy(upscale) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_decal_pass_destroy(decal) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(ascii) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(grain) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(chroma) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(fxaa) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(motion) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(lens) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(bloom) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -4821,6 +5116,10 @@ static CNA_Result on_load(
         }
         if (!validate_atmospheric_passes(graphics_device)) {
             state->failed_stage = 28;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_remaining_passes(graphics_device)) {
+            state->failed_stage = 29;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

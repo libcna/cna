@@ -700,6 +700,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_spatial_upscale_pass_set_edge_adaptive(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_spatial_upscale_pass_set_edge_adaptive\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_sprite_font_set_default_character(0, UINT8_C(9), 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -799,6 +806,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 105 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 106 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

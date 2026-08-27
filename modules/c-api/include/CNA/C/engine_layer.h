@@ -7477,6 +7477,696 @@ CNA_C_API CNA_Result cna_volumetric_fog_pass_set_light(
     const CNA_Vector3* light_direction,
     const CNA_Vector3* light_color);
 
+/* ---------------------------------------------------------------------------------------------
+ * The remaining post-process passes
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief How many ghost images the lens-flare pass draws. */
+#define CNA_LENS_FLARE_GHOST_COUNT_EXT INT32_C(4)
+
+/** @brief How many samples the motion-blur pass takes along its velocity vector. */
+#define CNA_MOTION_BLUR_SAMPLE_COUNT_EXT INT32_C(8)
+
+/**
+ * @brief Owned handle for one deferred-decal projector.
+ *
+ * **Not a post-process pass.** Despite its name, `DecalPass` does not derive from
+ * `PostProcessPass`: it has no `apply`, and it is driven by `cna_decal_pass_draw` per decal rather
+ * than by a chain. It therefore carries its own handle and its own destroy, and the shared
+ * `cna_post_process_pass_*` routes do not accept it.
+ */
+typedef CNA_Handle CNA_DecalPassHandle;
+
+/**
+ * @brief Owned handle for one spatial upscaler.
+ *
+ * **Not a post-process pass**, for the same reason as @ref CNA_DecalPassHandle: it is driven by
+ * `cna_spatial_upscale_pass_draw` with an explicit source and target size rather than by a chain.
+ */
+typedef CNA_Handle CNA_SpatialUpscalePassHandle;
+
+/**
+ * @brief Creates a bloom pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Threshold.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a BloomPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_get_threshold(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Threshold.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a BloomPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_set_threshold(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a BloomPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_get_intensity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a BloomPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_set_intensity(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's Iterations.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a BloomPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_get_iterations(
+    CNA_PostProcessPassHandle pass, int32_t* out_value);
+
+/**
+ * @brief Sets the pass's Iterations.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given; the pyramid clamps the count where it builds it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a BloomPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_set_iterations(
+    CNA_PostProcessPassHandle pass, int32_t value);
+
+/**
+ * @brief Creates a deferred-decal pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_create(
+    CNA_Handle graphics_device, CNA_DecalPassHandle* out_pass);
+
+/**
+ * @brief Releases the decal projector.
+ *
+ * @param pass The projector; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_destroy(CNA_DecalPassHandle pass);
+
+/**
+ * @brief Returns the pass's Opacity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DecalPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_get_opacity(
+    CNA_DecalPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Opacity.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DecalPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_set_opacity(
+    CNA_DecalPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's Tint.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DecalPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_get_tint(
+    CNA_DecalPassHandle pass, CNA_Vector3* out_value);
+
+/**
+ * @brief Sets the pass's Tint.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DecalPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_set_tint(
+    CNA_DecalPassHandle pass, const CNA_Vector3* value);
+
+/**
+ * @brief Returns the pass's MaxSlopeAngle.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DecalPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_get_max_slope_angle(
+    CNA_DecalPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's MaxSlopeAngle.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through a right angle in radians -- a decal cannot project onto a surface facing further away than perpendicular.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DecalPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_set_max_slope_angle(
+    CNA_DecalPassHandle pass, float value);
+
+/**
+ * @brief Creates a lens-flare pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lens_flare_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Threshold.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LensFlarePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lens_flare_pass_get_threshold(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Threshold.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when negative**, zero accepted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LensFlarePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lens_flare_pass_set_threshold(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LensFlarePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lens_flare_pass_get_intensity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when negative**, zero accepted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LensFlarePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lens_flare_pass_set_intensity(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's Dispersal.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LensFlarePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lens_flare_pass_get_dispersal(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Dispersal.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LensFlarePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_lens_flare_pass_set_dispersal(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Creates a motion-blur pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_motion_blur_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Strength.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a MotionBlurPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_motion_blur_pass_get_strength(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Strength.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a MotionBlurPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_motion_blur_pass_set_strength(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's MaxDistance.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a MotionBlurPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_motion_blur_pass_get_max_distance(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's MaxDistance.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through 0.25 -- a different bound from the strength beside it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a MotionBlurPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_motion_blur_pass_set_max_distance(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Creates a FXAA pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fxaa_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's EdgeThreshold.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a FxaaPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fxaa_pass_get_edge_threshold(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's EdgeThreshold.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given -- **the pass corrects nothing**, though the settings bag that can drive it floors the same value at `CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT`; the two are different surfaces and only one of them corrects.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a FxaaPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fxaa_pass_set_edge_threshold(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Creates a spatial-upscale pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_create(
+    CNA_Handle graphics_device, CNA_SpatialUpscalePassHandle* out_pass);
+
+/**
+ * @brief Releases the spatial upscaler.
+ *
+ * @param pass The upscaler; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_destroy(CNA_SpatialUpscalePassHandle pass);
+
+/**
+ * @brief Returns the pass's Sharpness.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SpatialUpscalePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_get_sharpness(
+    CNA_SpatialUpscalePassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Sharpness.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SpatialUpscalePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_set_sharpness(
+    CNA_SpatialUpscalePassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's EdgeAdaptive.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SpatialUpscalePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_get_edge_adaptive(
+    CNA_SpatialUpscalePassHandle pass, CNA_Bool* out_value);
+
+/**
+ * @brief Sets the pass's EdgeAdaptive.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SpatialUpscalePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_set_edge_adaptive(
+    CNA_SpatialUpscalePassHandle pass, CNA_Bool value);
+
+/**
+ * @brief Creates a chromatic-aberration pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_chromatic_aberration_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Strength.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a ChromaticAberrationPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_chromatic_aberration_pass_get_strength(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Strength.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through 0.1.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a ChromaticAberrationPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_chromatic_aberration_pass_set_strength(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Creates a film-grain pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_film_grain_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a FilmGrainPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_film_grain_pass_get_intensity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a FilmGrainPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_film_grain_pass_set_intensity(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Creates a ASCII pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ascii_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Releases the bloom pass's pooled pyramid targets.
+ *
+ * @param pass The pass.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not of that type, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_reset_targets(CNA_PostProcessPassHandle pass);
+
+/**
+ * @brief Returns how many pyramid levels a quality preset asks for.
+ *
+ * A pure function of its argument.
+ *
+ * @param quality The preset.
+ * @param out_iterations Receives the level count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined preset,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_iterations_for_quality(
+    CNA_RenderQuality quality, int32_t* out_iterations);
+
+/**
+ * @brief Returns how much of one channel survives the bright-pass threshold.
+ *
+ * A pure function of its arguments.
+ *
+ * @param value The channel's value.
+ * @param threshold The bright-pass threshold.
+ * @param out_extracted Receives what the bloom pyramid receives.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_bloom_pass_extract_channel(
+    float value, float threshold, float* out_extracted);
+
+/**
+ * @brief Returns the FXAA fragment shader as UTF-8 bytes without a terminator.
+ *
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_fxaa_pass_copy_fragment_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Returns the edge threshold a quality preset asks for.
+ *
+ * A pure function of its argument.
+ *
+ * @param quality The preset.
+ * @param out_threshold Receives the threshold.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined preset,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_fxaa_pass_edge_threshold_for_quality(
+    CNA_RenderQuality quality, float* out_threshold);
+
+/**
+ * @brief Gives the decal pass the depth and normal buffers it projects against.
+ *
+ * Both are borrowed, never owned.
+ *
+ * @param pass The pass.
+ * @param depth The depth texture, or `CNA_INVALID_HANDLE`.
+ * @param normals The normal texture, or `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not of that type, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_set_prepass_inputs(
+    CNA_DecalPassHandle pass, CNA_Handle depth, CNA_Handle normals);
+
+/**
+ * @brief Sets the camera the decal pass unprojects with.
+ *
+ * @param pass The pass.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @param far_plane The far plane; **ignored when not positive**, because the unprojection divides
+ *        by it, so a bad value leaves the previous camera in place rather than breaking the pass.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix or when the pass
+ * is not a DecalPass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_set_camera(
+    CNA_DecalPassHandle pass,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    float far_plane);
+
+/**
+ * @brief Projects one decal into the current target.
+ *
+ * @param pass The pass.
+ * @param decal The decal texture; borrowed.
+ * @param decal_world The decal box's world transform.
+ * @param width Target width in pixels.
+ * @param height Target height in pixels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix or when the pass
+ * is not a DecalPass, `CNA_RESULT_INVALID_STATE` when the pass has no prepass inputs or no camera,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_draw(
+    CNA_DecalPassHandle pass,
+    CNA_Handle decal,
+    const CNA_Matrix* decal_world,
+    int32_t width,
+    int32_t height);
+
+/**
+ * @brief Reports whether a point in the decal's local space falls inside its box.
+ *
+ * A pure function of its argument.
+ *
+ * @param decal_local_position The point, in the decal box's local space.
+ * @param out_inside Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null point,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_decal_pass_is_inside_decal_box(
+    const CNA_Vector3* decal_local_position, CNA_Bool* out_inside);
+
+/**
+ * @brief Upscales a source into the current target.
+ *
+ * @param pass The pass.
+ * @param source The source texture; borrowed.
+ * @param source_width Source width in pixels; must be positive.
+ * @param source_height Source height in pixels; must be positive.
+ * @param target_width Target width in pixels; must be positive.
+ * @param target_height Target height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size, a null
+ * source or when the pass is not a SpatialUpscalePass, `CNA_RESULT_NOT_SUPPORTED` without the
+ * engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_draw(
+    CNA_SpatialUpscalePassHandle pass,
+    CNA_Handle source,
+    int32_t source_width,
+    int32_t source_height,
+    int32_t target_width,
+    int32_t target_height);
+
+/**
+ * @brief Reports whether a source and target size need no scaling at all.
+ *
+ * A pure function of its arguments.
+ *
+ * @param source_width Source width in pixels.
+ * @param source_height Source height in pixels.
+ * @param target_width Target width in pixels.
+ * @param target_height Target height in pixels.
+ * @param out_identity Receives `CNA_TRUE` when the sizes match.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_spatial_upscale_pass_is_identity_scale(
+    int32_t source_width,
+    int32_t source_height,
+    int32_t target_width,
+    int32_t target_height,
+    CNA_Bool* out_identity);
+
+/**
+ * @brief Returns the ASCII pass's effect, borrowed.
+ *
+ * The effect is the pass's own and does **not** keep it alive; releasing the returned handle does
+ * not release the pass, and the pass must outlive it.
+ *
+ * @param pass The pass.
+ * @param out_effect Receives the borrowed effect.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not of that type, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_ascii_pass_get_effect(
+    CNA_PostProcessPassHandle pass, CNA_AsciiPostProcessEffectHandle* out_effect);
+
 #ifdef __cplusplus
 }
 #endif

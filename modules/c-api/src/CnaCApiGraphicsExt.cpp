@@ -3,6 +3,7 @@
 #include "CNA/C/graphics_ext.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
+#include "CnaCApiGraphicsExtDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include <memory>
@@ -23,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/IDisposable.hpp"
 
+using CNA::C::Detail::AsciiEffectResource;
 #include <type_traits>
 #endif
 
@@ -118,11 +120,6 @@ static_assert(
         CNA_DEPTH_EFFECT_MODE_GRAYSCALE_1_BIT &&
     NativeOrdinal(Ext::DepthEffectMode::Palette256) == CNA_DEPTH_EFFECT_MODE_PALETTE_256 &&
     NativeOrdinal(Ext::DepthEffectMode::Palette16) == CNA_DEPTH_EFFECT_MODE_PALETTE_16);
-
-struct AsciiEffectResource final {
-    std::shared_ptr<Ext::AsciiPostProcessEffect> value;
-    CNA_Handle parentGame;
-};
 
 [[nodiscard]] CNA_Result GetAsciiEffect(
     const CNA_Handle handle,

@@ -4,6 +4,7 @@
 #include "CNA/C/matrix.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
+#include "CnaCApiGraphicsExtDetail.hpp"
 #include "CnaCApiRenderTargetDetail.hpp"
 #include "CnaCApiGraphicsStateDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
@@ -28,6 +29,15 @@
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
 #include "CNA/Graphics/AerialPerspectivePass.hpp"
+#include "CNA/Graphics/AsciiPass.hpp"
+#include "CNA/Graphics/BloomPass.hpp"
+#include "CNA/Graphics/ChromaticAberrationPass.hpp"
+#include "CNA/Graphics/DecalPass.hpp"
+#include "CNA/Graphics/FilmGrainPass.hpp"
+#include "CNA/Graphics/FxaaPass.hpp"
+#include "CNA/Graphics/LensFlarePass.hpp"
+#include "CNA/Graphics/MotionBlurPass.hpp"
+#include "CNA/Graphics/SpatialUpscalePass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/HeightFogPass.hpp"
 #include "CNA/Graphics/LightShaftPass.hpp"
@@ -79,6 +89,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+using CNA::C::Detail::AsciiEffectResource;
 #include <array>
 #include <limits>
 #include <tuple>
@@ -4194,6 +4205,347 @@ CNA_Result cna_height_fog_pass_optical_depth(float p0, float p1, float p2, float
 CNA_Result cna_volumetric_fog_pass_set_light(CNA_PostProcessPassHandle p0, CNA_ShadowMapHandle p1, const CNA_Vector3* p2, const CNA_Vector3* p3)
 {
     (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_get_threshold(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_set_threshold(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_set_intensity(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_get_iterations(CNA_PostProcessPassHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_set_iterations(CNA_PostProcessPassHandle p0, int32_t p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_create(CNA_Handle p0, CNA_DecalPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_get_opacity(CNA_DecalPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_set_opacity(CNA_DecalPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_get_tint(CNA_DecalPassHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_set_tint(CNA_DecalPassHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_get_max_slope_angle(CNA_DecalPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_set_max_slope_angle(CNA_DecalPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lens_flare_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lens_flare_pass_get_threshold(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lens_flare_pass_set_threshold(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lens_flare_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lens_flare_pass_set_intensity(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lens_flare_pass_get_dispersal(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_lens_flare_pass_set_dispersal(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_motion_blur_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_motion_blur_pass_get_strength(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_motion_blur_pass_set_strength(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_motion_blur_pass_get_max_distance(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_motion_blur_pass_set_max_distance(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fxaa_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fxaa_pass_get_edge_threshold(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fxaa_pass_set_edge_threshold(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_create(CNA_Handle p0, CNA_SpatialUpscalePassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_get_sharpness(CNA_SpatialUpscalePassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_set_sharpness(CNA_SpatialUpscalePassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_get_edge_adaptive(CNA_SpatialUpscalePassHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_set_edge_adaptive(CNA_SpatialUpscalePassHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_chromatic_aberration_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_chromatic_aberration_pass_get_strength(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_chromatic_aberration_pass_set_strength(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_film_grain_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_film_grain_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_film_grain_pass_set_intensity(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ascii_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_reset_targets(CNA_PostProcessPassHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_iterations_for_quality(CNA_RenderQuality p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_bloom_pass_extract_channel(float p0, float p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fxaa_pass_copy_fragment_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_fxaa_pass_edge_threshold_for_quality(CNA_RenderQuality p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_set_prepass_inputs(CNA_DecalPassHandle p0, CNA_Handle p1, CNA_Handle p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_set_camera(CNA_DecalPassHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2, float p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_draw(CNA_DecalPassHandle p0, CNA_Handle p1, const CNA_Matrix* p2, int32_t p3, int32_t p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_is_inside_decal_box(const CNA_Vector3* p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_draw(CNA_SpatialUpscalePassHandle p0, CNA_Handle p1, int32_t p2, int32_t p3, int32_t p4, int32_t p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_is_identity_scale(int32_t p0, int32_t p1, int32_t p2, int32_t p3, CNA_Bool* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ascii_pass_get_effect(CNA_PostProcessPassHandle p0, CNA_AsciiPostProcessEffectHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_decal_pass_destroy(CNA_DecalPassHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_spatial_upscale_pass_destroy(CNA_SpatialUpscalePassHandle p0)
+{
+    (void)p0;
     return ExtensionUnavailable();
 }
 
@@ -13936,7 +14288,11 @@ template <typename TPass, typename TBody>
                 CNA_ERROR_CATEGORY_ARGUMENT,
                 "That pass is not of the type this route reads.");
         }
-        return body(typed);
+        if constexpr (std::is_invocable_v<TBody, TPass*, const std::shared_ptr<PostProcessPassResource>&>) {
+            return body(typed, resource);
+        } else {
+            return body(typed);
+        }
     });
 }
 
@@ -14649,6 +15005,668 @@ static_assert(
     CNA_VOLUMETRIC_FOG_SLICE_COUNT_EXT == Ext::VolumetricFogPass::kSliceCount &&
     CNA_VOLUMETRIC_FOG_SLICE_RESOLUTION_EXT == Ext::VolumetricFogPass::kSliceResolution &&
     CNA_LIGHT_SHAFT_STEP_COUNT_EXT == Ext::LightShaftPass::kStepCount);
+} // namespace
+namespace {
+
+// CBIND-089D. DecalPass and SpatialUpscalePass are named "Pass" but do not derive from
+// PostProcessPass: neither has apply(), and both are driven by their own draw() with explicit
+// sizes rather than by a chain. They therefore get their own handles and their own object kinds,
+// and the shared cna_post_process_pass_* routes correctly refuse them.
+template <typename TObject>
+struct StandaloneEffectResource final {
+    std::shared_ptr<TObject> value;
+    CNA_Handle parentGame;
+};
+
+template <typename TObject>
+[[nodiscard]] CNA_Result CreateStandaloneEffect(
+    const CNA_Handle graphicsDeviceHandle, const ObjectKind kind, CNA_Handle* const outHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHandle == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The output handle is null.");
+        }
+        *outHandle = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<TObject>(*graphicsDevice->value);
+        const auto resource = std::make_shared<StandaloneEffectResource<TObject>>(
+            StandaloneEffectResource<TObject>{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result = GetRuntimeHandles().Create(kind, resource, outHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result), "The owned handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+template <typename TObject>
+[[nodiscard]] CNA_Result DestroyStandaloneEffect(
+    const CNA_Handle handle, const ObjectKind kind, const char* const what)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<StandaloneEffectResource<TObject>> resource;
+        if (const CNA_Result result = GetEngineResource(handle, kind, what, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(handle);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(resource->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+template <typename TObject, typename TBody>
+[[nodiscard]] CNA_Result WithStandaloneEffect(
+    const CNA_Handle handle, const ObjectKind kind, const char* const what, TBody&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<StandaloneEffectResource<TObject>> resource;
+        if (const CNA_Result result = GetEngineResource(handle, kind, what, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return body(resource->value.get());
+    });
+}
+
+} // namespace
+
+
+CNA_Result cna_bloom_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::BloomPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_bloom_pass_get_threshold(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::BloomPass>(pass, "BloomPass", [&](Ext::BloomPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getThreshold());
+    });
+}
+
+CNA_Result cna_bloom_pass_set_threshold(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::BloomPass>(pass, "BloomPass", [&](Ext::BloomPass* const p) -> CNA_Result {
+        p->setThreshold(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_bloom_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::BloomPass>(pass, "BloomPass", [&](Ext::BloomPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getIntensity());
+    });
+}
+
+CNA_Result cna_bloom_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::BloomPass>(pass, "BloomPass", [&](Ext::BloomPass* const p) -> CNA_Result {
+        p->setIntensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_bloom_pass_get_iterations(
+    const CNA_PostProcessPassHandle pass, int32_t* const outValue)
+{
+    return WithEnginePass<Ext::BloomPass>(pass, "BloomPass", [&](Ext::BloomPass* const p) -> CNA_Result {
+        return StoreValue(outValue, static_cast<int32_t>(p->getIterations()));
+    });
+}
+
+CNA_Result cna_bloom_pass_set_iterations(
+    const CNA_PostProcessPassHandle pass, const int32_t value)
+{
+    return WithEnginePass<Ext::BloomPass>(pass, "BloomPass", [&](Ext::BloomPass* const p) -> CNA_Result {
+        p->setIterations(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_decal_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_DecalPassHandle* const outPass)
+{
+    return CreateStandaloneEffect<Ext::DecalPass>(
+        graphicsDeviceHandle, ObjectKind::DecalPass, outPass);
+}
+
+CNA_Result cna_decal_pass_destroy(const CNA_DecalPassHandle pass)
+{
+    return DestroyStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass");
+}
+CNA_Result cna_decal_pass_get_opacity(
+    const CNA_DecalPassHandle pass, float* const outValue)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getOpacity());
+    });
+}
+
+CNA_Result cna_decal_pass_set_opacity(
+    const CNA_DecalPassHandle pass, const float value)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p) -> CNA_Result {
+        p->setOpacity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_decal_pass_get_tint(
+    const CNA_DecalPassHandle pass, CNA_Vector3* const outValue)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p) -> CNA_Result {
+        const auto v = p->getTint();
+        return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_decal_pass_set_tint(
+    const CNA_DecalPassHandle pass, const CNA_Vector3* const value)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(value, "The value is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        p->setTint(ToNativeVector3(*value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_decal_pass_get_max_slope_angle(
+    const CNA_DecalPassHandle pass, float* const outValue)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getMaxSlopeAngle());
+    });
+}
+
+CNA_Result cna_decal_pass_set_max_slope_angle(
+    const CNA_DecalPassHandle pass, const float value)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p) -> CNA_Result {
+        p->setMaxSlopeAngle(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_lens_flare_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::LensFlarePass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_lens_flare_pass_get_threshold(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::LensFlarePass>(pass, "LensFlarePass", [&](Ext::LensFlarePass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getThreshold());
+    });
+}
+
+CNA_Result cna_lens_flare_pass_set_threshold(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::LensFlarePass>(pass, "LensFlarePass", [&](Ext::LensFlarePass* const p) -> CNA_Result {
+        p->setThreshold(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_lens_flare_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::LensFlarePass>(pass, "LensFlarePass", [&](Ext::LensFlarePass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getIntensity());
+    });
+}
+
+CNA_Result cna_lens_flare_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::LensFlarePass>(pass, "LensFlarePass", [&](Ext::LensFlarePass* const p) -> CNA_Result {
+        p->setIntensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_lens_flare_pass_get_dispersal(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::LensFlarePass>(pass, "LensFlarePass", [&](Ext::LensFlarePass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getDispersal());
+    });
+}
+
+CNA_Result cna_lens_flare_pass_set_dispersal(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::LensFlarePass>(pass, "LensFlarePass", [&](Ext::LensFlarePass* const p) -> CNA_Result {
+        p->setDispersal(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_motion_blur_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::MotionBlurPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_motion_blur_pass_get_strength(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::MotionBlurPass>(pass, "MotionBlurPass", [&](Ext::MotionBlurPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getStrength());
+    });
+}
+
+CNA_Result cna_motion_blur_pass_set_strength(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::MotionBlurPass>(pass, "MotionBlurPass", [&](Ext::MotionBlurPass* const p) -> CNA_Result {
+        p->setStrength(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_motion_blur_pass_get_max_distance(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::MotionBlurPass>(pass, "MotionBlurPass", [&](Ext::MotionBlurPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getMaxDistance());
+    });
+}
+
+CNA_Result cna_motion_blur_pass_set_max_distance(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::MotionBlurPass>(pass, "MotionBlurPass", [&](Ext::MotionBlurPass* const p) -> CNA_Result {
+        p->setMaxDistance(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_fxaa_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::FxaaPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_fxaa_pass_get_edge_threshold(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::FxaaPass>(pass, "FxaaPass", [&](Ext::FxaaPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getEdgeThreshold());
+    });
+}
+
+CNA_Result cna_fxaa_pass_set_edge_threshold(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::FxaaPass>(pass, "FxaaPass", [&](Ext::FxaaPass* const p) -> CNA_Result {
+        p->setEdgeThreshold(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_spatial_upscale_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_SpatialUpscalePassHandle* const outPass)
+{
+    return CreateStandaloneEffect<Ext::SpatialUpscalePass>(
+        graphicsDeviceHandle, ObjectKind::SpatialUpscalePass, outPass);
+}
+
+CNA_Result cna_spatial_upscale_pass_destroy(const CNA_SpatialUpscalePassHandle pass)
+{
+    return DestroyStandaloneEffect<Ext::SpatialUpscalePass>(
+        pass, ObjectKind::SpatialUpscalePass, "SpatialUpscalePass");
+}
+CNA_Result cna_spatial_upscale_pass_get_sharpness(
+    const CNA_SpatialUpscalePassHandle pass, float* const outValue)
+{
+    return WithStandaloneEffect<Ext::SpatialUpscalePass>(
+        pass, ObjectKind::SpatialUpscalePass, "SpatialUpscalePass", [&](Ext::SpatialUpscalePass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getSharpness());
+    });
+}
+
+CNA_Result cna_spatial_upscale_pass_set_sharpness(
+    const CNA_SpatialUpscalePassHandle pass, const float value)
+{
+    return WithStandaloneEffect<Ext::SpatialUpscalePass>(
+        pass, ObjectKind::SpatialUpscalePass, "SpatialUpscalePass", [&](Ext::SpatialUpscalePass* const p) -> CNA_Result {
+        p->setSharpness(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_spatial_upscale_pass_get_edge_adaptive(
+    const CNA_SpatialUpscalePassHandle pass, CNA_Bool* const outValue)
+{
+    return WithStandaloneEffect<Ext::SpatialUpscalePass>(
+        pass, ObjectKind::SpatialUpscalePass, "SpatialUpscalePass", [&](Ext::SpatialUpscalePass* const p) -> CNA_Result {
+        return StoreValue(
+            outValue, static_cast<CNA_Bool>(p->isEdgeAdaptive() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_spatial_upscale_pass_set_edge_adaptive(
+    const CNA_SpatialUpscalePassHandle pass, const CNA_Bool value)
+{
+    if (value != CNA_TRUE && value != CNA_FALSE) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "value must be CNA_TRUE or CNA_FALSE.");
+    }
+    return WithStandaloneEffect<Ext::SpatialUpscalePass>(
+        pass, ObjectKind::SpatialUpscalePass, "SpatialUpscalePass", [&](Ext::SpatialUpscalePass* const p) -> CNA_Result {
+        p->setEdgeAdaptive(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_chromatic_aberration_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::ChromaticAberrationPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_chromatic_aberration_pass_get_strength(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::ChromaticAberrationPass>(pass, "ChromaticAberrationPass", [&](Ext::ChromaticAberrationPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getStrength());
+    });
+}
+
+CNA_Result cna_chromatic_aberration_pass_set_strength(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::ChromaticAberrationPass>(pass, "ChromaticAberrationPass", [&](Ext::ChromaticAberrationPass* const p) -> CNA_Result {
+        p->setStrength(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_film_grain_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::FilmGrainPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_film_grain_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::FilmGrainPass>(pass, "FilmGrainPass", [&](Ext::FilmGrainPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getIntensity());
+    });
+}
+
+CNA_Result cna_film_grain_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::FilmGrainPass>(pass, "FilmGrainPass", [&](Ext::FilmGrainPass* const p) -> CNA_Result {
+        p->setIntensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ascii_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::AsciiPass>(graphicsDeviceHandle, outPass);
+}
+
+CNA_Result cna_bloom_pass_reset_targets(const CNA_PostProcessPassHandle pass)
+{
+    return WithEnginePass<Ext::BloomPass>(pass, "BloomPass", [](Ext::BloomPass* const p)
+        -> CNA_Result {
+            p->resetTargets();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_bloom_pass_iterations_for_quality(
+    const CNA_RenderQuality quality, int32_t* const outIterations)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (quality > UINT32_C(3)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "quality is not a defined CNA_RENDER_QUALITY_* value.");
+        }
+        return StoreValue(
+            outIterations,
+            static_cast<int32_t>(
+                Ext::BloomPass::iterationsForQuality(static_cast<Ext::RenderQuality>(quality))));
+    });
+}
+
+CNA_Result cna_bloom_pass_extract_channel(
+    const float value, const float threshold, float* const outExtracted)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(outExtracted, Ext::BloomPass::extractChannel(value, threshold));
+    });
+}
+
+CNA_Result cna_fxaa_pass_copy_fragment_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes, [] { return Ext::FxaaPass::getFragmentGlsl(); });
+}
+
+CNA_Result cna_fxaa_pass_edge_threshold_for_quality(
+    const CNA_RenderQuality quality, float* const outThreshold)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (quality > UINT32_C(3)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "quality is not a defined CNA_RENDER_QUALITY_* value.");
+        }
+        return StoreValue(
+            outThreshold,
+            Ext::FxaaPass::edgeThresholdForQuality(static_cast<Ext::RenderQuality>(quality)));
+    });
+}
+
+CNA_Result cna_decal_pass_set_prepass_inputs(
+    const CNA_DecalPassHandle pass, const CNA_Handle depth, const CNA_Handle normals)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p)
+        -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* depthTexture = nullptr;
+            Microsoft::Xna::Framework::Graphics::Texture2D* normalTexture = nullptr;
+            std::shared_ptr<Texture2DResource> depthRetention;
+            std::shared_ptr<Texture2DResource> normalRetention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(depth, "depth", &depthTexture, &depthRetention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = ResolveTexture2DArgument(
+                    normals, "normals", &normalTexture, &normalRetention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->setPrepassInputs(depthTexture, normalTexture);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_decal_pass_set_camera(
+    const CNA_DecalPassHandle pass,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const float farPlane)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p)
+        -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireMatrixArgument(projection, "The projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // A non-positive far plane is IGNORED rather than refused: the canonical setter guards
+            // the whole assignment, so the previous camera survives.
+            p->setCamera(ToNativeMatrix(*view), ToNativeMatrix(*projection), farPlane);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_decal_pass_draw(
+    const CNA_DecalPassHandle pass,
+    const CNA_Handle decal,
+    const CNA_Matrix* const decalWorld,
+    const int32_t width,
+    const int32_t height)
+{
+    return WithStandaloneEffect<Ext::DecalPass>(pass, ObjectKind::DecalPass, "DecalPass", [&](Ext::DecalPass* const p)
+        -> CNA_Result {
+            if (const CNA_Result result =
+                    RequireMatrixArgument(decalWorld, "The decal transform is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(decal, "decal", &texture, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            try {
+                p->draw(texture, ToNativeMatrix(*decalWorld), static_cast<int>(width),
+                        static_cast<int>(height));
+            } catch (const std::logic_error&) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "The decal pass has no prepass inputs or no camera yet.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_decal_pass_is_inside_decal_box(
+    const CNA_Vector3* const decalLocalPosition, CNA_Bool* const outInside)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result =
+                RequireVector3Argument(decalLocalPosition, "The position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outInside,
+            static_cast<CNA_Bool>(
+                Ext::DecalPass::isInsideDecalBox(ToNativeVector3(*decalLocalPosition))
+                    ? CNA_TRUE
+                    : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_spatial_upscale_pass_draw(
+    const CNA_SpatialUpscalePassHandle pass,
+    const CNA_Handle source,
+    const int32_t sourceWidth,
+    const int32_t sourceHeight,
+    const int32_t targetWidth,
+    const int32_t targetHeight)
+{
+    return WithStandaloneEffect<Ext::SpatialUpscalePass>(
+        pass, ObjectKind::SpatialUpscalePass, "SpatialUpscalePass", [&](Ext::SpatialUpscalePass* const p) -> CNA_Result {
+            if (sourceWidth <= 0 || sourceHeight <= 0 || targetWidth <= 0 || targetHeight <= 0) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "Every size must be positive.");
+            }
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(source, "source", &texture, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (texture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "There is no source to upscale.");
+            }
+            p->draw(texture, static_cast<int>(sourceWidth), static_cast<int>(sourceHeight),
+                    static_cast<int>(targetWidth), static_cast<int>(targetHeight));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_spatial_upscale_pass_is_identity_scale(
+    const int32_t sourceWidth,
+    const int32_t sourceHeight,
+    const int32_t targetWidth,
+    const int32_t targetHeight,
+    CNA_Bool* const outIdentity)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outIdentity,
+            static_cast<CNA_Bool>(
+                Ext::SpatialUpscalePass::isIdentityScale(
+                    static_cast<int>(sourceWidth), static_cast<int>(sourceHeight),
+                    static_cast<int>(targetWidth), static_cast<int>(targetHeight))
+                    ? CNA_TRUE
+                    : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_ascii_pass_get_effect(
+    const CNA_PostProcessPassHandle pass, CNA_AsciiPostProcessEffectHandle* const outEffect)
+{
+    return WithEnginePass<Ext::AsciiPass>(
+        pass, "AsciiPass",
+        [&](Ext::AsciiPass* const p,
+            const std::shared_ptr<PostProcessPassResource>& resource) -> CNA_Result {
+            if (outEffect == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The effect output handle is null.");
+            }
+            *outEffect = CNA_INVALID_HANDLE;
+            // A borrow onto the pass's own effect: the aliasing constructor keeps the pass alive
+            // for as long as the handle exists, so the reference the canonical getter returns
+            // cannot outlive what it points into. The resource type is shared with
+            // CnaCApiGraphicsExt.cpp rather than redeclared -- see CnaCApiGraphicsExtDetail.hpp.
+            const std::shared_ptr<Ext::AsciiPostProcessEffect> view(
+                resource, &p->getEffect());
+            const auto effectResource = std::make_shared<AsciiEffectResource>(
+                AsciiEffectResource{view, CNA_INVALID_HANDLE});
+            const CNA_Result created = GetRuntimeHandles().Create(
+                ObjectKind::AsciiPostProcessEffect, effectResource, outEffect);
+            if (created != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    created,
+                    ErrorCategoryForResult(created),
+                    "The borrowed ASCII effect handle could not be created.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+namespace {
+static_assert(
+    CNA_LENS_FLARE_GHOST_COUNT_EXT == Ext::LensFlarePass::kGhostCount &&
+    CNA_MOTION_BLUR_SAMPLE_COUNT_EXT == Ext::MotionBlurPass::kSampleCount);
 } // namespace
 
 #endif // CNA_CNAEXT
