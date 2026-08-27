@@ -27,7 +27,10 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
+#include "CNA/Graphics/SsaoPass.hpp"
+#include "CNA/Graphics/SsrPass.hpp"
 #include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
@@ -3714,6 +3717,240 @@ CNA_Result cna_render_pipeline_copy_pass_timing_name_ext(CNA_RenderPipelineHandl
 {
     (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
     if (p4 != nullptr) { *p4 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_get_max_distance(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_set_max_distance(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_get_step_count(CNA_PostProcessPassHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_set_step_count(CNA_PostProcessPassHandle p0, int32_t p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_get_thickness(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_set_thickness(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_get_depth_bias(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_set_depth_bias(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_get_roughness_blur(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_set_roughness_blur(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_get_edge_fade(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_set_edge_fade(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssr_pass_set_intensity(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_get_radius(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_set_radius(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_set_intensity(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_get_sample_count(CNA_PostProcessPassHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_set_sample_count(CNA_PostProcessPassHandle p0, int32_t p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_get_half_resolution(CNA_PostProcessPassHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_set_half_resolution(CNA_PostProcessPassHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_get_focus_distance(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_set_focus_distance(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_get_focal_length(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_set_focal_length(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_get_f_number(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_set_f_number(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_get_max_radius(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_set_max_radius(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_reset_targets(CNA_PostProcessPassHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_copy_kernel(CNA_PostProcessPassHandle p0, CNA_Vector3* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_copy_occlusion_glsl(CNA_Bool p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_ssao_pass_sample_count_for_quality(CNA_RenderQuality p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_of_field_pass_circle_of_confusion_millimetres(float p0, float p1, float p2, float p3, float* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
     return ExtensionUnavailable();
 }
 
@@ -13374,5 +13611,425 @@ CNA_Result cna_render_pipeline_copy_pass_timing_name_ext(
     return CopyFormattedString(
         destination, capacity, outBytes, [timing] { return timing->Name; });
 }
+
+namespace {
+
+// CBIND-089B. The count/copy body CopyInt32Range already provides for int32 arrays, generalised
+// over the element type so a Vector3 array reads the same way. Same contract: nothing is written
+// unless the whole result fits, so a caller never sees a partial array it might mistake for a
+// short one.
+template <typename TElement, typename TSource>
+[[nodiscard]] CNA_Result CopyValueRange(
+    const TSource& source, TElement* const destination, const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The count/copy arguments are inconsistent.");
+    }
+    const auto required = static_cast<uint64_t>(source.size());
+    *outCount = required;
+    if (capacity < required) {
+        return CNA_RESULT_BUFFER_TOO_SMALL;
+    }
+    uint64_t index = 0U;
+    for (const auto& value : source) {
+        destination[index] = value;
+        ++index;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// CBIND-089B. The seventeen post-process passes share one shape: create on a device, then a
+// handful of accessors the pass alone knows. CBIND-084 already bound apply, name, is_supported and
+// destroy on the shared handle, so these two helpers are the whole of what a pass slice adds, and
+// CBIND-089C and CBIND-089D reuse them unchanged.
+template <typename TPass>
+[[nodiscard]] CNA_Result CreateEnginePass(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The pass output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<TPass>(*graphicsDevice->value);
+        return CreatePassHandle(
+            std::move(native), nullptr, graphicsDevice->parentGame, nullptr, CNA_INVALID_HANDLE,
+            outPass);
+    });
+}
+
+// A pass-specific accessor is refused **by argument**, not by handle, when the handle names a
+// different pass: the handle is perfectly valid, it is the concrete type that cannot answer. That
+// is the rule CBIND-085B1 settled for interfaces and it applies unchanged here.
+template <typename TPass, typename TBody>
+[[nodiscard]] CNA_Result WithEnginePass(
+    const CNA_PostProcessPassHandle pass, const char* const what, TBody&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PostProcessPassResource> resource;
+        if (const CNA_Result result = GetEngineResource(
+                pass, ObjectKind::PostProcessPass, "PostProcessPass", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const typed = dynamic_cast<TPass*>(resource->value.get());
+        if (typed == nullptr) {
+            (void)what;
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "That pass is not of the type this route reads.");
+        }
+        return body(typed);
+    });
+}
+
+} // namespace
+
+CNA_Result cna_ssr_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::SsrPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_ssr_pass_get_max_distance(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getMaxDistance());
+    });
+}
+CNA_Result cna_ssr_pass_set_max_distance(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        p->setMaxDistance(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssr_pass_get_step_count(
+    const CNA_PostProcessPassHandle pass, int32_t* const outValue)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        return StoreValue(outValue, static_cast<int32_t>(p->getStepCount()));
+    });
+}
+CNA_Result cna_ssr_pass_set_step_count(
+    const CNA_PostProcessPassHandle pass, const int32_t value)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        p->setStepCount(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssr_pass_get_thickness(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getThickness());
+    });
+}
+CNA_Result cna_ssr_pass_set_thickness(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        p->setThickness(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssr_pass_get_depth_bias(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getDepthBias());
+    });
+}
+CNA_Result cna_ssr_pass_set_depth_bias(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        p->setDepthBias(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssr_pass_get_roughness_blur(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getRoughnessBlur());
+    });
+}
+CNA_Result cna_ssr_pass_set_roughness_blur(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        p->setRoughnessBlur(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssr_pass_get_edge_fade(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getEdgeFade());
+    });
+}
+CNA_Result cna_ssr_pass_set_edge_fade(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        p->setEdgeFade(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssr_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getIntensity());
+    });
+}
+CNA_Result cna_ssr_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsrPass>(pass, "SsrPass", [&](Ext::SsrPass* const p) -> CNA_Result {
+        p->setIntensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssao_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::SsaoPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_ssao_pass_get_radius(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getRadius());
+    });
+}
+CNA_Result cna_ssao_pass_set_radius(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        p->setRadius(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssao_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getIntensity());
+    });
+}
+CNA_Result cna_ssao_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        p->setIntensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssao_pass_get_sample_count(
+    const CNA_PostProcessPassHandle pass, int32_t* const outValue)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        return StoreValue(outValue, static_cast<int32_t>(p->getSampleCount()));
+    });
+}
+CNA_Result cna_ssao_pass_set_sample_count(
+    const CNA_PostProcessPassHandle pass, const int32_t value)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        p->setSampleCount(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_ssao_pass_get_half_resolution(
+    const CNA_PostProcessPassHandle pass, CNA_Bool* const outValue)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        return StoreValue(outValue, static_cast<CNA_Bool>(p->isHalfResolution() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+CNA_Result cna_ssao_pass_set_half_resolution(
+    const CNA_PostProcessPassHandle pass, const CNA_Bool value)
+{
+    if (value != CNA_TRUE && value != CNA_FALSE) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "value must be CNA_TRUE or CNA_FALSE.");
+    }
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p) -> CNA_Result {
+        p->setHalfResolution(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_depth_of_field_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::DepthOfFieldPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_depth_of_field_pass_get_focus_distance(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getFocusDistance());
+    });
+}
+CNA_Result cna_depth_of_field_pass_set_focus_distance(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        p->setFocusDistance(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_depth_of_field_pass_get_focal_length(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getFocalLength());
+    });
+}
+CNA_Result cna_depth_of_field_pass_set_focal_length(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        p->setFocalLength(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_depth_of_field_pass_get_f_number(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getFNumber());
+    });
+}
+CNA_Result cna_depth_of_field_pass_set_f_number(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        p->setFNumber(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_depth_of_field_pass_get_max_radius(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getMaxRadius());
+    });
+}
+CNA_Result cna_depth_of_field_pass_set_max_radius(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::DepthOfFieldPass>(pass, "DepthOfFieldPass", [&](Ext::DepthOfFieldPass* const p) -> CNA_Result {
+        p->setMaxRadius(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_ssao_pass_reset_targets(const CNA_PostProcessPassHandle pass)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [](Ext::SsaoPass* const p)
+        -> CNA_Result {
+            p->resetTargets();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_ssao_pass_copy_kernel(
+    const CNA_PostProcessPassHandle pass,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return WithEnginePass<Ext::SsaoPass>(pass, "SsaoPass", [&](Ext::SsaoPass* const p)
+        -> CNA_Result {
+            const auto& kernel = p->getKernel();
+            std::vector<CNA_Vector3> values;
+            values.reserve(kernel.size());
+            for (const auto& sample : kernel) {
+                values.push_back(Vec3(sample.X, sample.Y, sample.Z));
+            }
+            return CopyValueRange(values, destination, capacity, outCount);
+        });
+}
+
+CNA_Result cna_ssao_pass_copy_occlusion_glsl(
+    const CNA_Bool packed, char* const destination, const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (packed != CNA_TRUE && packed != CNA_FALSE) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "packed must be CNA_TRUE or CNA_FALSE.");
+    }
+    return CopyFormattedString(destination, capacity, outBytes, [packed] {
+        return Ext::SsaoPass::getOcclusionGlsl(packed == CNA_TRUE);
+    });
+}
+
+CNA_Result cna_ssao_pass_sample_count_for_quality(
+    const CNA_RenderQuality quality, int32_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (quality > UINT32_C(3)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "quality is not a defined CNA_RENDER_QUALITY_* value.");
+        }
+        return StoreValue(
+            outCount,
+            static_cast<int32_t>(
+                Ext::SsaoPass::sampleCountForQuality(static_cast<Ext::RenderQuality>(quality))));
+    });
+}
+
+CNA_Result cna_depth_of_field_pass_circle_of_confusion_millimetres(
+    const float depth,
+    const float focusDistance,
+    const float focalLength,
+    const float fNumber,
+    float* const outMillimetres)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outMillimetres,
+            Ext::DepthOfFieldPass::circleOfConfusionMillimetres(
+                depth, focusDistance, focalLength, fNumber));
+    });
+}
+
+namespace {
+// The C constants must name the canonical ones.
+static_assert(
+    CNA_SSR_PASS_MIN_STEP_COUNT_EXT == Ext::SsrPass::kMinStepCount &&
+    CNA_SSR_PASS_MAX_STEP_COUNT_EXT == Ext::SsrPass::kMaxStepCount &&
+    CNA_DEPTH_OF_FIELD_SENSOR_HEIGHT_MILLIMETRES_EXT ==
+        Ext::DepthOfFieldPass::kSensorHeightMillimetres);
+} // namespace
 
 #endif // CNA_CNAEXT

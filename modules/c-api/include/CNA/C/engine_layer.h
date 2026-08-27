@@ -6542,6 +6542,460 @@ CNA_C_API CNA_Result cna_render_pipeline_copy_pass_timing_name_ext(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/* ---------------------------------------------------------------------------------------------
+ * The screen-space passes
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief The fewest ray-march steps the reflection trace will take, whatever it is told. */
+#define CNA_SSR_PASS_MIN_STEP_COUNT_EXT INT32_C(4)
+
+/** @brief The most ray-march steps the reflection trace will take, whatever it is told. */
+#define CNA_SSR_PASS_MAX_STEP_COUNT_EXT INT32_C(64)
+
+/** @brief The sensor height the depth-of-field pass computes its circle of confusion against. */
+#define CNA_DEPTH_OF_FIELD_SENSOR_HEIGHT_MILLIMETRES_EXT 24.0F
+
+/**
+ * @brief Creates a screen-space reflection pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Every pass is released with `cna_post_process_pass_destroy` and driven through the shared
+ * `CNA_PostProcessPassHandle` routes -- this slice adds only what the pass itself knows.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's MaxDistance.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_get_max_distance(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's MaxDistance.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- the canonical setter guards the assignment, so a zero or negative write leaves the previous distance in place rather than disabling the trace.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_set_max_distance(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's StepCount.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_get_step_count(
+    CNA_PostProcessPassHandle pass, int32_t* out_value);
+
+/**
+ * @brief Sets the pass's StepCount.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given; the march clamps it to `CNA_SSR_PASS_MIN_STEP_COUNT_EXT`..`CNA_SSR_PASS_MAX_STEP_COUNT_EXT` **when it applies**, not when it is set, so a caller reads back what it wrote.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_set_step_count(
+    CNA_PostProcessPassHandle pass, int32_t value);
+
+/**
+ * @brief Returns the pass's Thickness.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_get_thickness(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Thickness.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- a guarded assignment; a zero-thickness depth test matches nothing.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_set_thickness(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's DepthBias.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_get_depth_bias(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's DepthBias.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- a guarded assignment.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_set_depth_bias(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's RoughnessBlur.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_get_roughness_blur(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's RoughnessBlur.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through 0.25.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_set_roughness_blur(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's EdgeFade.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_get_edge_fade(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's EdgeFade.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through 0.5 -- a different bound from the roughness blur beside it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_set_edge_fade(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_get_intensity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given -- the canonical setter corrects nothing here.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsrPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssr_pass_set_intensity(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Creates a screen-space ambient occlusion pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Every pass is released with `cna_post_process_pass_destroy` and driven through the shared
+ * `CNA_PostProcessPassHandle` routes -- this slice adds only what the pass itself knows.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Radius.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_get_radius(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Radius.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_set_radius(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_get_intensity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_set_intensity(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's SampleCount.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_get_sample_count(
+    CNA_PostProcessPassHandle pass, int32_t* out_value);
+
+/**
+ * @brief Sets the pass's SampleCount.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_set_sample_count(
+    CNA_PostProcessPassHandle pass, int32_t value);
+
+/**
+ * @brief Returns the pass's HalfResolution.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_get_half_resolution(
+    CNA_PostProcessPassHandle pass, CNA_Bool* out_value);
+
+/**
+ * @brief Sets the pass's HalfResolution.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a SsaoPass or the byte is neither `CNA_TRUE` nor `CNA_FALSE`,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_set_half_resolution(
+    CNA_PostProcessPassHandle pass, CNA_Bool value);
+
+/**
+ * @brief Creates a depth-of-field pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Every pass is released with `cna_post_process_pass_destroy` and driven through the shared
+ * `CNA_PostProcessPassHandle` routes -- this slice adds only what the pass itself knows.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's FocusDistance.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_get_focus_distance(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's FocusDistance.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- a guarded assignment; focusing at zero distance has no meaning.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_set_focus_distance(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's FocalLength.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_get_focal_length(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's FocalLength.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- a guarded assignment.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_set_focal_length(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's FNumber.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_get_f_number(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's FNumber.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- a guarded assignment; the aperture divides by it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_set_f_number(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Returns the pass's MaxRadius.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_get_max_radius(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's MaxRadius.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through 0.25.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a DepthOfFieldPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_set_max_radius(
+    CNA_PostProcessPassHandle pass, float value);
+
+/**
+ * @brief Releases the ambient-occlusion pass's pooled intermediate targets.
+ *
+ * @param pass The pass.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not an SsaoPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_reset_targets(CNA_PostProcessPassHandle pass);
+
+/**
+ * @brief Copies the pass's sampling kernel.
+ *
+ * @param pass The pass.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives the required element count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` when
+ * the pass is not an SsaoPass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ * No partial result is written.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_copy_kernel(
+    CNA_PostProcessPassHandle pass, CNA_Vector3* destination, uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Copies the occlusion GLSL as UTF-8 bytes without a terminator.
+ *
+ * A pure function of its argument, so it needs no pass.
+ *
+ * @param packed `CNA_TRUE` for the packed variant.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` for a
+ * byte that is neither `CNA_TRUE` nor `CNA_FALSE`, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_copy_occlusion_glsl(
+    CNA_Bool packed, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Returns the sample count a quality preset asks for.
+ *
+ * A pure function of its argument.
+ *
+ * @param quality The preset.
+ * @param out_count Receives the sample count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined preset,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_ssao_pass_sample_count_for_quality(
+    CNA_RenderQuality quality, int32_t* out_count);
+
+/**
+ * @brief Returns the circle of confusion for one depth, in millimetres.
+ *
+ * A pure function of its arguments, so it needs no pass.
+ *
+ * @param depth The surface's distance from the camera.
+ * @param focus_distance The distance the lens is focused at.
+ * @param focal_length The lens's focal length.
+ * @param f_number The aperture's f-number.
+ * @param out_millimetres Receives the diameter in millimetres.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_of_field_pass_circle_of_confusion_millimetres(
+    float depth, float focus_distance, float focal_length, float f_number,
+    float* out_millimetres);
+
 #ifdef __cplusplus
 }
 #endif

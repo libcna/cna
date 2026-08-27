@@ -959,7 +959,21 @@ The split is by **pass-specific** row count rather than total, because that is w
 `PassTiming` splits into a plain `CNA_PassTimingEXT` value and a separate name copy, because a C structure cannot own the string and a structure with no lifetime of its own is the easier thing to reason about. Both canonical throws are argument mistakes answered before the chain sees them, with separate messages — a caller fixes a missing source and a zero size differently.
 
 Three arms, all passing. 96/96 in both trees, all nine gates green. |
-| CBIND-089B | Bind the screen-space passes | 56 | ⬜ | `SsrPass` (22), `SsaoPass` (18), `DepthOfFieldPass` (16) — 38 pass-specific rows, the densest accessor surface in the phase. None throws; all three correct, and `SsrPass` alone uses two shapes (three clamps and three guarded assignments), so its bounds must be asserted one at a time the way `CBIND-088A`'s were. |
+| CBIND-089B | Bind the screen-space passes | 56 | ✅ | `SsrPass` (22), `SsaoPass` (18), `DepthOfFieldPass` (16) — 38 pass-specific rows, the densest accessor surface in the phase. None throws; all three correct, and `SsrPass` alone uses two shapes (three clamps and three guarded assignments), so its bounds must be asserted one at a time the way `CBIND-088A`'s were.
+
+**Done 2026-08-27.** 38 routes; exports 3,325 → 3,363, identical in both trees with zero symbols differing.
+
+**The screening grep was wrong in the direction nobody watches for.** It reported five corrections in `SsaoPass`; reading the four setter bodies found **none** — all five live in `apply()`, computing sample positions. A grep that over-counts is as misleading as one that under-counts, and it would have produced four assertions for corrections that do not exist. `SsaoPass` corrects nothing, and the test says so.
+
+**The bounds differ between fields of the same pass.** `SsrPass` clamps its roughness blur to `0..0.25` and its edge fade to `0..0.5` — proved to matter by asserting the edge fade takes its neighbour's bound, which moves the exit code to stage 27 on both arms. Each guarded setter gets the half a clamp does not need: a valid value first, then an out-of-range write that must leave the valid one in place.
+
+**Two helpers now carry the shape for the rest of the phase.** `CreateEnginePass<T>` and `WithEnginePass<T>` are what make `CBIND-089C` and `CBIND-089D` a table rather than thirteen more designs; the second also fixes the refusal rule in one place — a pass-specific accessor called on another pass is refused **by argument**, because the handle is valid and it is the concrete type that cannot answer.
+
+`kMinStepCount`/`kMaxStepCount` are bound as macros and the setter deliberately does not enforce them: the march clamps where it applies, so a caller reads back what it wrote. The test asserts a step count 500 past the documented maximum survives — the third time this campaign has met that convention.
+
+Three arms, all passing. 96/96 in both trees, all nine gates green.
+
+**A flake worth naming rather than shrugging at.** The first full ON-tree run failed four unrelated suites — `CApi_BasicEffectSmoke`, `CApi_ModelSmoke`, `CApi_LifecycleSmoke`, `CApi_InputSnapshotsSmoke` — which then passed in isolation and on two consecutive full reruns, with the virtual display verified alive throughout so the earlier "dead `:101`" explanation does not apply here. That is the **third** occurrence of this shape in the phase, in a third unrelated set of suites. Recorded as `CBIND-101`; not diagnosed from three unreproduced samples, and no test changed on the strength of them. |
 | CBIND-089C | Bind the atmospheric passes | 62 | ⬜ | `AerialPerspectivePass` (17), `VolumetricFogPass` (15), `HeightFogPass` (15), `LightShaftPass` (15) — 38 pass-specific rows. None throws. `AerialPerspectivePass` has eight floors and one clamp, the most correction-dense body of the seventeen; `HeightFogPass` has floors and guarded assignments and **no clamp at all**, which is exactly the combination a `clamp` grep reports as "corrects nothing". |
 | CBIND-089D | Bind the remaining passes | 96 | ⬜ | `BloomPass` (15), `DecalPass` (14), `LensFlarePass` (13), `MotionBlurPass` (11), `FxaaPass` (10), `SpatialUpscalePass` (10), `ChromaticAberrationPass` (8), `FilmGrainPass` (8), `AsciiPass` (7) — 46 pass-specific rows across nine passes: the largest row count and the smallest per-pass surface. `DecalPass`, `SpatialUpscalePass` and `AsciiPass` are the three here that throw. `FxaaPass` corrects nothing at all, which is worth asserting rather than assuming, on the `CBIND-087B` precedent. |
 | CBIND-090 | Bind HDR output, tonemapping and colour grading | 87 | ⬜ | `HdrDisplayOutput`, `TonemapPass`, `TonemappingMode`, `ColorGradePass`, `CubeLut`, `LutInterpolation`, `AutoExposureEXT` and `DisplayColorSpace`. `CubeLut` reads caller-supplied bytes, so it is a byte-facing surface and inherits the release gate's requirement for an independent oracle and a fuzz target — not just a smoke test. |
@@ -997,6 +1011,13 @@ Measured, not assumed: 96 sites use the documented prefix rule (`struct_size <`)
 Two of these are mine — `CNA_ClusteredLightEXT` (`CBIND-086A`) and `CNA_RenderPipelineSettingsEXT` (`CBIND-088A`) — written to match the exact-equality neighbours around them rather than the contract. That is worth naming rather than quietly fixing: **the wrong pattern propagates by imitation, which is why it reached thirteen sites.**
 
 The work: change all thirteen to validate a known prefix, add a test that passes a *smaller* `struct_size` and requires the prefix to be honoured (today's suites only ever pass the exact size, which is why none of them caught this), then append the settings field to `CNA_PostProcessContext` and close `CBIND-088`'s last row. Do not fold the validator change into another slice — it touches four subsystems and deserves its own verification. |
+| CBIND-101 | Unrelated `CApi_*` suites fail together in a full run and pass on rerun | — | ⬜ | **Three occurrences recorded across this phase, in three different sets of suites, none reproducible in isolation.** `CApi_MediaPlayerSmoke` (once, before `CBIND-084`); `CApi_SensorDeviceSmoke` (once, `CBIND-086C`); and `CApi_BasicEffectSmoke`, `CApi_ModelSmoke`, `CApi_LifecycleSmoke`, `CApi_InputSnapshotsSmoke` together (`CBIND-089B`). Every one passed on rerun and in isolation, and the fourth occurrence's four suites have nothing in common with each other or with the slice that was being built.
+
+Two of the three happened immediately after a full rebuild in the same command sequence, which is the only correlation noticed so far and is not evidence. `ctest` was not given `-j`, so a parallel-execution explanation does not fit either.
+
+**Why this is a row rather than a note.** A suite that fails once and passes twice is indistinguishable, from a single run, from a real intermittent defect — and the campaign's answer so far has been to rerun and move on, which is how a real one would be missed three times. What is needed is not another rerun but a **reproduction**: run the full suite in a loop under an unchanged tree and count, and if it reproduces, capture the failing run's output rather than the summary. Do not change a test on the strength of the occurrences alone; the owner's standing rule on the first of these was to record it and leave it until it reproduces, and that rule applies to all three.
+
+Evidence: `CBIND-086C` and `CBIND-089B` rows in this plan, and the run logs under each slice's scratchpad. |
 | CBIND-095 | Close the reopened matrix | — | ⬜ | Closes when `CBIND-080`–`CBIND-093` are ✅ and the inventory has no planned row. `RELEASE_GATE.md` reads **ready** again, `LIMITATIONS.md` covers every new partial with an owner-approved disposition, the ABI baseline is regenerated, and the export count in the docs matches. Do not close this row on the strength of a green `--check` alone: `--check` proves the matrix matches the headers, and the four previous closures each proved that is not the same thing as finished. |
 
 ## Mandatory test layers
@@ -1057,9 +1078,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-27, after `CBIND-089A`):** 513 headers / 8,306 symbols —
-**7,199 implemented, 15 approved partial, 633 planned, 459 not applicable.** ABI `0.9.0`, 3,325
-exported symbols — the same 3,325 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-27, after `CBIND-089B`):** 513 headers / 8,306 symbols —
+**7,255 implemented, 15 approved partial, 577 planned, 459 not applicable.** ABI `0.9.0`, 3,363
+exported symbols — the same 3,363 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 The release gate reads **not ready**, on the one criterion the planned rows fail:

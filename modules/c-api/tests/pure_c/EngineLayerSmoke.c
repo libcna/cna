@@ -567,6 +567,27 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-089B. The three screen-space passes and their two pure functions. */
+    {
+        CNA_PostProcessPassHandle pass = CNA_INVALID_HANDLE;
+        uint64_t number = UINT64_C(0);
+        int32_t count = -1;
+        float scalar = -1.0F;
+        if (cna_ssr_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            pass != CNA_INVALID_HANDLE ||
+            cna_ssao_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_depth_of_field_pass_create(graphics_device, &pass) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_ssr_pass_get_edge_fade(pass, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_ssao_pass_copy_occlusion_glsl(CNA_FALSE, 0, UINT64_C(0), &number) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_ssao_pass_sample_count_for_quality(CNA_RENDER_QUALITY_LOW, &count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_depth_of_field_pass_circle_of_confusion_millimetres(
+                1.0F, 1.0F, 50.0F, 2.8F, &scalar) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -4246,6 +4267,210 @@ static int validate_post_process_chain(const CNA_Handle graphics_device)
     return ok;
 }
 
+
+/* CBIND-089B. Three passes, three correction shapes, and the bounds differ between fields of the
+   same pass -- SsrPass clamps its roughness blur to 0.25 and its edge fade to 0.5. So each bound
+   is asserted on its own, the CBIND-088A rule. The guarded setters need the extra half the clamps
+   do not: a valid value first, then an out-of-range write that must leave the valid one in place,
+   because a guarded assignment is a silent no-op rather than a pin to the bound. And the free
+   fields are written out of range and must survive -- SsrPass's step count especially, which the
+   march clamps when it APPLIES rather than when it is set. */
+static int validate_screen_space_passes(const CNA_Handle graphics_device)
+{
+    CNA_PostProcessPassHandle ssr = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle ssao = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle dof = CNA_INVALID_HANDLE;
+    CNA_Vector3 kernel[64];
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t count = UINT64_C(0);
+    uint64_t bytes = UINT64_C(0);
+    float scalar = -1.0F;
+    int32_t number = -1;
+    int ok = 1;
+
+    if (cna_ssr_pass_create(graphics_device, &ssr) != CNA_RESULT_SUCCESS ||
+        cna_ssao_pass_create(graphics_device, &ssao) != CNA_RESULT_SUCCESS ||
+        cna_depth_of_field_pass_create(graphics_device, &dof) != CNA_RESULT_SUCCESS) {
+        (void)cna_post_process_pass_destroy(ssr);
+        (void)cna_post_process_pass_destroy(ssao);
+        (void)cna_post_process_pass_destroy(dof);
+        return 0;
+    }
+
+    /* A pass-specific accessor is refused BY ARGUMENT when the handle names another pass: the
+       handle is valid, it is the concrete type that cannot answer. */
+    ok = cna_ssr_pass_get_max_distance(ssao, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_ssao_pass_get_radius(ssr, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_depth_of_field_pass_get_f_number(ssr, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+    /* The shared base routes answer for all three, which is what CBIND-084 bound. */
+    ok = ok && cna_post_process_pass_copy_name(ssr, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    ok = ok && cna_post_process_pass_is_supported(ssao, graphics_device, &flag) ==
+        CNA_RESULT_SUCCESS;
+
+
+    /* ---- SsrPass ---- */
+    ok = ok && cna_ssr_pass_set_max_distance(ssr, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_max_distance(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_max_distance(ssr, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_max_distance(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_max_distance(ssr, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_max_distance(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_step_count(ssr, INT32_C(9999)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_step_count(ssr, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(9999);
+    ok = ok && cna_ssr_pass_set_step_count(ssr, INT32_C(-3)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_step_count(ssr, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(-3);
+    ok = ok && cna_ssr_pass_set_thickness(ssr, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_thickness(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_thickness(ssr, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_thickness(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_thickness(ssr, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_thickness(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_depth_bias(ssr, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_depth_bias(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_depth_bias(ssr, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_depth_bias(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_depth_bias(ssr, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_depth_bias(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_ssr_pass_set_roughness_blur(ssr, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_roughness_blur(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    ok = ok && cna_ssr_pass_set_roughness_blur(ssr, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_roughness_blur(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_ssr_pass_set_edge_fade(ssr, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_edge_fade(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.5F;
+    ok = ok && cna_ssr_pass_set_edge_fade(ssr, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_edge_fade(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_ssr_pass_set_intensity(ssr, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_intensity(ssr, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+
+    /* ---- SsaoPass ---- */
+    ok = ok && cna_ssao_pass_set_radius(ssao, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_get_radius(ssao, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_ssao_pass_set_intensity(ssao, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_get_intensity(ssao, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_ssao_pass_set_sample_count(ssao, INT32_C(9999)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_get_sample_count(ssao, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(9999);
+    ok = ok && cna_ssao_pass_set_sample_count(ssao, INT32_C(-3)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_get_sample_count(ssao, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(-3);
+    ok = ok && cna_ssao_pass_set_half_resolution(ssao, CNA_TRUE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_get_half_resolution(ssao, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_ssao_pass_set_half_resolution(ssao, UINT8_C(2)) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* ---- DepthOfFieldPass ---- */
+    ok = ok && cna_depth_of_field_pass_set_focus_distance(dof, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_focus_distance(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_focus_distance(dof, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_focus_distance(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_focus_distance(dof, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_focus_distance(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_focal_length(dof, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_focal_length(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_focal_length(dof, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_focal_length(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_focal_length(dof, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_focal_length(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_f_number(dof, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_f_number(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_f_number(dof, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_f_number(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_f_number(dof, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_f_number(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 3.0F;
+    ok = ok && cna_depth_of_field_pass_set_max_radius(dof, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_max_radius(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    ok = ok && cna_depth_of_field_pass_set_max_radius(dof, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_of_field_pass_get_max_radius(dof, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+
+    /* The step-count bounds are applied where the march runs, not where the value is set, so the
+       constants must exist and the setter must NOT enforce them -- both halves asserted. */
+    ok = ok && CNA_SSR_PASS_MIN_STEP_COUNT_EXT < CNA_SSR_PASS_MAX_STEP_COUNT_EXT;
+    ok = ok && cna_ssr_pass_set_step_count(ssr, CNA_SSR_PASS_MAX_STEP_COUNT_EXT + INT32_C(500)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssr_pass_get_step_count(ssr, &number) == CNA_RESULT_SUCCESS &&
+        number == CNA_SSR_PASS_MAX_STEP_COUNT_EXT + INT32_C(500);
+
+    /* The kernel is a copy, so it stays correct after the pass changes. */
+    ok = ok && cna_ssao_pass_copy_kernel(ssao, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count > UINT64_C(0) &&
+        count <= (uint64_t)(sizeof kernel / sizeof kernel[0]);
+    ok = ok && cna_ssao_pass_copy_kernel(
+            ssao, kernel, (uint64_t)(sizeof kernel / sizeof kernel[0]), &count) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_copy_kernel(ssr, kernel, UINT64_C(64), &count) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_ssao_pass_reset_targets(ssao) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_ssao_pass_reset_targets(ssr) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Two pure functions and one that varies with its flag: the packed and unpacked GLSL must
+       differ, or the flag is being ignored. */
+    ok = ok && cna_ssao_pass_copy_occlusion_glsl(CNA_FALSE, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    ok = ok && cna_ssao_pass_copy_occlusion_glsl(CNA_TRUE, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count != bytes;
+    ok = ok && cna_ssao_pass_copy_occlusion_glsl(UINT8_C(2), 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    /* Low and Ultra must not ask for the same sample count, or the preset does nothing. */
+    ok = ok && cna_ssao_pass_sample_count_for_quality(CNA_RENDER_QUALITY_LOW, &number) ==
+        CNA_RESULT_SUCCESS;
+    {
+        int32_t ultra = -2;
+        ok = ok && cna_ssao_pass_sample_count_for_quality(CNA_RENDER_QUALITY_ULTRA, &ultra) ==
+            CNA_RESULT_SUCCESS && ultra != number;
+    }
+    ok = ok && cna_ssao_pass_sample_count_for_quality(UINT32_C(99), &number) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The circle of confusion is zero exactly at the focus distance and grows away from it. */
+    ok = ok && cna_depth_of_field_pass_circle_of_confusion_millimetres(
+            10.0F, 10.0F, 50.0F, 2.8F, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    {
+        float near_blur = -1.0F;
+        float far_blur = -1.0F;
+        ok = ok && cna_depth_of_field_pass_circle_of_confusion_millimetres(
+                11.0F, 10.0F, 50.0F, 2.8F, &near_blur) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_depth_of_field_pass_circle_of_confusion_millimetres(
+                40.0F, 10.0F, 50.0F, 2.8F, &far_blur) == CNA_RESULT_SUCCESS;
+        ok = ok && far_blur > near_blur && near_blur > 0.0F;
+    }
+    ok = ok && CNA_DEPTH_OF_FIELD_SENSOR_HEIGHT_MILLIMETRES_EXT > 0.0F;
+
+    ok = ok && cna_post_process_pass_destroy(dof) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(ssao) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(ssr) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -4347,6 +4572,10 @@ static CNA_Result on_load(
         }
         if (!validate_post_process_chain(graphics_device)) {
             state->failed_stage = 26;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_screen_space_passes(graphics_device)) {
+            state->failed_stage = 27;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {
