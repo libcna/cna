@@ -217,6 +217,13 @@ namespace
     protected:
         void SetUp() override
         {
+            // The built-ins are normally put in place by any ContentManager constructor, so a test
+            // that runs inside a process where one already exists sees them for free. ctest runs
+            // each case in its OWN process, where nothing has -- and a test that quietly depended
+            // on a sibling to register them would pass under a filtered run and fail under ctest.
+            // It did exactly that; asking for them explicitly is the fix.
+            CnbLoaderRegistry::RegisterBuiltIns();
+
             alphaId = CNA::Content::Cnb::CnbAssetTypeIdFromName("HardeningGame.Alpha");
             CnbLoaderRegistry::Remove(alphaId);
             CnbLoaderRegistry::Register(

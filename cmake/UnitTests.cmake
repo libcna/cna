@@ -221,6 +221,7 @@ if(CNA_BUILD_TESTS)
         # CnbModelEquivalenceTests.cpp spawns cna_tool_gltf_to_cnj the same way, for the same
         # reason: it needs a REAL converted asset, not a hand-built approximation of one.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbModelEquivalenceTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbInfoToolTests\\.cpp$")
     endif()
 
     # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
@@ -516,6 +517,16 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_tool_cnj_to_cnb)
         target_compile_definitions(CnaTests PRIVATE
             CNA_CNJ_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_cnj_to_cnb>"
+        )
+    endif()
+
+    if(TARGET cna_tool_cnb_info)
+        # plans/plan_cnb.md CNBF-H013: CnbInfoToolTests.cpp spawns the inspector as a subprocess, for
+        # the same reason the other tool suites do -- it has its own main() and its contract is its
+        # stdout and its exit code, neither of which a library call exercises.
+        add_dependencies(CnaTests cna_tool_cnb_info)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_CNB_INFO_TOOL_PATH="$<TARGET_FILE:cna_tool_cnb_info>"
         )
     endif()
 
