@@ -185,6 +185,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_DualTextureEffect_Fog COMMAND cna_test_webgpu_dualtextureeffect_fog
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-148: SkinnedEffect fog across all four skinned WGSL modules ({per-pixel,per-vertex}
+    # lighting x {stride-52, stride-56 vertex colour}). Fog uses the SKINNED view-space position.
+    cna_webgpu_test(cna_test_webgpu_skinnedeffect_fog webgpu_skinnedeffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SkinnedEffect_Fog COMMAND cna_test_webgpu_skinnedeffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.

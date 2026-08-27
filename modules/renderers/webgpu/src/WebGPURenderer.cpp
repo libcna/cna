@@ -10883,8 +10883,9 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // therefore adds that prepared term after `lightSum*diffuseColor`; it must not multiply
         // emissiveColor by DiffuseColor or Alpha again. No alpha-test
         // (SkinnedEffect never sets GpuDrawParams::alphaTest away from its always-pass default).
-        // Fog: the primary Uniforms block already carries the fog tail (WEBGPU-145), but these
-        // skinned shaders do not yet apply it -- SkinnedEffect fog is tracked as WEBGPU-148.
+        // Fog (WEBGPU-148): the primary Uniforms block carries the fog tail (fogColor/fogVector,
+        // WEBGPU-145); each skinned shader computes fogFactor from the SKINNED view-space position
+        // (matching FNA SkinnedEffect and Vulkan's skinned3d.vert.glsl) and applies ApplyFog last.
         static constexpr char shaderSource[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,
@@ -10892,6 +10893,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -10934,6 +10937,7 @@ struct VertexOutput {
     @location(0) uv: vec2f,
     @location(1) worldNormal: vec3f,
     @location(2) worldPos: vec3f,
+    @location(3) fogFactor: f32,
 };
 
 fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
@@ -10969,6 +10973,10 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     let skinnedPos = skinMat * vec4f(input.position, 1.0);
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
+    // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // skinned3d.vert.glsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
     // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
@@ -11007,7 +11015,8 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     let texColor = textureSample(tex, texSampler, input.uv);
     var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
-    return color;
+    // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11036,6 +11045,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -11080,6 +11091,7 @@ struct VertexOutput {
     @location(1) worldNormal: vec3f,
     @location(2) worldPos: vec3f,
     @location(3) color: vec4f,
+    @location(4) fogFactor: f32,
 };
 
 fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
@@ -11100,6 +11112,10 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let skinnedPos = skinMat * vec4f(input.position, 1.0);
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
+    // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // skinned3d.vert.glsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
     // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
@@ -11139,7 +11155,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
     color = vec4f(color.rgb * vc.rgb, color.a);
-    return color;
+    // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11163,6 +11180,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -11205,6 +11224,7 @@ struct VertexOutput {
     @location(0) uv: vec2f,
     @location(1) litRGB: vec3f,
     @location(2) specularRGB: vec3f,
+    @location(3) fogFactor: f32,
 };
 
 fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
@@ -11225,6 +11245,10 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let skinnedPos = skinMat * vec4f(input.position, 1.0);
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
+    // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // skinned3d.vert.glsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
     // (inverse-transpose of World, CPU-precomputed into lp.normalMatrixCol* by
@@ -11259,7 +11283,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let texColor = textureSample(tex, texSampler, input.uv);
     var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
-    return color;
+    // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11279,6 +11304,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -11323,6 +11350,7 @@ struct VertexOutput {
     @location(1) litRGB: vec3f,
     @location(2) specularRGB: vec3f,
     @location(3) color: vec4f,
+    @location(4) fogFactor: f32,
 };
 
 fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
@@ -11343,6 +11371,10 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     let skinnedPos = skinMat * vec4f(input.position, 1.0);
     output.position = u.mvp * skinnedPos;
     output.uv = input.uv;
+    // WEBGPU-148: FNA fog keep factor from the SKINNED view-space position (matches FNA
+    // SkinnedEffect, which skins the position before ComputeCommonVSOutput, and Vulkan's
+    // skinned3d.vert.glsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(skinnedPos.xyz, 1.0), u.fogVector), 0.0, 1.0);
     output.color = input.color;
     let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
     // REMED-GFX-006: compose the bone-skin normal with the outer world normal matrix
@@ -11381,7 +11413,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
     color = vec4f(color.rgb * vc.rgb, color.a);
-    return color;
+    // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11397,7 +11430,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         layoutEntries[0].binding = 0;
         layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
-        layoutEntries[0].buffer.minBindingSize = 128;
+        // WEBGPU-148: the primary UBO grew to 160 bytes (fog tail); 0 = validate per draw.
+        layoutEntries[0].buffer.minBindingSize = 0;
         layoutEntries[1].binding = 1;
         layoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
