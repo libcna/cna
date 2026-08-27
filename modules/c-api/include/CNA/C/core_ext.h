@@ -779,6 +779,33 @@ CNA_C_API CNA_Result cna_graphics_renderer_copy_current_name(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/**
+ * @brief Declares the product title the runtime reports.
+ *
+ * The C++ side offers this two ways -- a call and an `AssemblyTitleAttributeEXT` declared at
+ * namespace scope, which runs the same assignment at static initialization the way a C# assembly
+ * attribute does. **C has no static-initialization form to bind**, so the attribute struct maps to
+ * this call: a C caller sets the title from `main` instead of declaring it beside the code.
+ *
+ * The title is process-wide and unvalidated -- an empty title is a title.
+ *
+ * @param title The product title.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a malformed string view.
+ */
+CNA_C_API CNA_Result cna_assembly_set_title_ext(CNA_StringView title);
+
+/**
+ * @brief Copies the product title declared by @ref cna_assembly_set_title_ext.
+ *
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * or `CNA_RESULT_INVALID_ARGUMENT` for a null count.
+ */
+CNA_C_API CNA_Result cna_assembly_copy_title_ext(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

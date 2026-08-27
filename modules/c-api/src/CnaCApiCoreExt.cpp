@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/core_ext.h"
+#include "CNA/AssemblyInfo.hpp"
 #include "CnaCApiDetail.hpp"
 
 #include "CNA/DesktopOS.hpp"
@@ -1250,5 +1251,49 @@ CNA_Result cna_graphics_renderer_copy_current_name(
             destination,
             capacity,
             outBytes);
+    });
+}
+
+// CBIND-093. The assembly title. AssemblyInfo.hpp is not under CNA_CNAEXT, so these two work in
+// every build; the canonical AssemblyTitleAttributeEXT has no C form, because C has no
+// static-initialization construct to bind -- a C caller sets the title from main instead.
+
+CNA_Result cna_assembly_set_title_ext(const CNA_StringView title)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string copied;
+        if (const CNA_Result result = CNA::C::Detail::CopyStringView(title, true, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return CNA::C::Detail::Fail(
+                result, CNA::C::Detail::ErrorCategoryForResult(result),
+                "The assembly title is not valid UTF-8 text.");
+        }
+        CNA::SetAssemblyTitleEXT(copied);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_assembly_copy_title_ext(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CNA::C::Detail::CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return CNA::C::Detail::Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The required-byte output is null.");
+        }
+        const std::string& title = CNA::GetAssemblyTitleEXT();
+        *outBytes = static_cast<uint64_t>(title.size());
+        if (capacity < title.size()) {
+            return CNA::C::Detail::Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold the complete title.");
+        }
+        if (!title.empty()) {
+            std::memcpy(destination, title.data(), title.size());
+        }
+        return CNA_RESULT_SUCCESS;
     });
 }

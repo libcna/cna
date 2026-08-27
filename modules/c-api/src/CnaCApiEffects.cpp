@@ -8310,3 +8310,113 @@ CNA_Result cna_depth_effect_set_dither_mode(
 }
 
 #endif // CNA_CNAEXT
+
+// CBIND-093. The last three ShaderEffect members: the compile error and the two array uniforms.
+// They live here with the rest of the shader-effect surface rather than in the engine layer,
+// because ShaderEffect is an always-compiled graphics type and these work in every build.
+
+CNA_Result cna_shader_effect_copy_compile_error_ext(
+    const CNA_EffectHandle effectHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The Effect string output buffer is invalid.");
+        }
+        // The canonical accessor returns by value, unlike the other string getters here, so the
+        // text is held rather than referenced while it is measured and copied.
+        const std::string text = shader->GetCompileErrorEXT();
+        *outBytes = static_cast<uint64_t>(text.size());
+        if (capacity < text.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold the complete compile error.");
+        }
+        if (!text.empty()) {
+            std::memcpy(destination, text.data(), text.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+// Both array setters take a tightly packed float array and a count. The count is refused when
+// negative rather than treated as zero: a negative count is a caller mistake, and reading it as
+// "none" would hide it.
+[[nodiscard]] CNA_Result RequireUniformArray(
+    const float* const values, const int32_t count, const char* const what)
+{
+    if (count < INT32_C(0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The count is negative.");
+    }
+    if (values == nullptr && count != INT32_C(0)) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, what);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_shader_effect_set_uniform_vec3_array(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const float* const values,
+    const int32_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequireUniformArray(values, count, "The vector array is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformVec3Array(copiedName.c_str(), values, static_cast<int>(count));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_mat4_array(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const float* const matrices,
+    const int32_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequireUniformArray(matrices, count, "The matrix array is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformMat4Array(copiedName.c_str(), matrices, static_cast<int>(count));
+        return CNA_RESULT_SUCCESS;
+    });
+}

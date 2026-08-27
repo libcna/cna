@@ -2372,3 +2372,137 @@ CNA_Result cna_occlusion_query_destroy(const CNA_OcclusionQueryHandle occlusionQ
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// CBIND-093. The GraphicsDevice EXT surface: ten queries and one command that the engine-layer
+// slices needed but never bound, because each is a method on the always-compiled device rather
+// than on an engine-layer object. They live here with their siblings and work in every build.
+
+CNA_Result cna_graphics_device_notify_content_lost_resources_ext(
+    const CNA_Handle graphicsDeviceHandle)
+{
+    return DeviceCommand(
+        graphicsDeviceHandle,
+        [](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) { device.NotifyContentLostResourcesEXT(); });
+}
+
+CNA_Result cna_graphics_device_supports_surface_format_as_render_target_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_SurfaceFormat format,
+    CNA_Bool* const outSupported)
+{
+    return DeviceQuery<CNA_Bool>(
+        graphicsDeviceHandle, outSupported, [format](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return device.SupportsSurfaceFormatAsRenderTargetEXT(
+                       static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(format))
+                ? CNA_TRUE
+                : CNA_FALSE;
+        });
+}
+
+CNA_Result cna_graphics_device_executes_shader_effect_source_ext(
+    const CNA_Handle graphicsDeviceHandle, CNA_Bool* const outExecutes)
+{
+    return DeviceQuery<CNA_Bool>(
+        graphicsDeviceHandle, outExecutes, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return device.ExecutesShaderEffectSourceEXT() ? CNA_TRUE : CNA_FALSE;
+        });
+}
+
+CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
+    const CNA_Handle graphicsDeviceHandle, CNA_Bool* const outSupported)
+{
+    return DeviceQuery<CNA_Bool>(
+        graphicsDeviceHandle, outSupported, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return device.SupportsImageBasedLightingEXT() ? CNA_TRUE : CNA_FALSE;
+        });
+}
+
+CNA_Result cna_graphics_device_get_display_color_space_ext(
+    const CNA_Handle graphicsDeviceHandle, uint32_t* const outSpace)
+{
+    return DeviceQuery<uint32_t>(
+        graphicsDeviceHandle, outSpace, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return static_cast<uint32_t>(device.GetDisplayColorSpaceEXT());
+        });
+}
+
+namespace {
+
+// CBIND-090 defined the colour-space identities; this is the same bound, restated here rather than
+// exported, because the two routes below are the only users outside the engine layer.
+[[nodiscard]] CNA_Result ValidateDisplayColorSpaceOrdinal(const uint32_t space) noexcept
+{
+    if (space > UINT32_C(2)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The display colour space is not a defined identity.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_graphics_device_set_display_color_space_ext(
+    const CNA_Handle graphicsDeviceHandle, const uint32_t space, CNA_Bool* const outChanged)
+{
+    if (const CNA_Result result = ValidateDisplayColorSpaceOrdinal(space);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    // Reports whether it worked rather than refusing: a display that cannot enter a space is an
+    // ordinary answer, not a caller mistake.
+    return DeviceQuery<CNA_Bool>(
+        graphicsDeviceHandle, outChanged, [space](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return device.SetDisplayColorSpaceEXT(static_cast<CNA::DisplayColorSpace>(space))
+                ? CNA_TRUE
+                : CNA_FALSE;
+        });
+}
+
+CNA_Result cna_graphics_device_supports_display_color_space_ext(
+    const CNA_Handle graphicsDeviceHandle, const uint32_t space, CNA_Bool* const outSupported)
+{
+    if (const CNA_Result result = ValidateDisplayColorSpaceOrdinal(space);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return DeviceQuery<CNA_Bool>(
+        graphicsDeviceHandle, outSupported, [space](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return device.SupportsDisplayColorSpaceEXT(
+                       static_cast<CNA::DisplayColorSpace>(space))
+                ? CNA_TRUE
+                : CNA_FALSE;
+        });
+}
+
+CNA_Result cna_graphics_device_get_max_compute_work_group_count_ext(
+    const CNA_Handle graphicsDeviceHandle, const int32_t axis, int32_t* const outCount)
+{
+    // An axis outside zero to two answers zero rather than being refused, which is the canonical
+    // behaviour: a caller looping over axes gets a usable number instead of an error to special-case.
+    return DeviceQuery<int32_t>(
+        graphicsDeviceHandle, outCount, [axis](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return static_cast<int32_t>(
+                device.GetMaxComputeWorkGroupCountEXT(static_cast<int>(axis)));
+        });
+}
+
+CNA_Result cna_graphics_device_get_max_compute_work_group_size_ext(
+    const CNA_Handle graphicsDeviceHandle, const int32_t axis, int32_t* const outSize)
+{
+    return DeviceQuery<int32_t>(
+        graphicsDeviceHandle, outSize, [axis](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return static_cast<int32_t>(
+                device.GetMaxComputeWorkGroupSizeEXT(static_cast<int>(axis)));
+        });
+}
+
+CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
+    const CNA_Handle graphicsDeviceHandle, int32_t* const outInvocations)
+{
+    return DeviceQuery<int32_t>(
+        graphicsDeviceHandle, outInvocations, [](const Microsoft::Xna::Framework::Graphics::GraphicsDevice& device) {
+            return static_cast<int32_t>(device.GetMaxComputeWorkGroupInvocationsEXT());
+        });
+}

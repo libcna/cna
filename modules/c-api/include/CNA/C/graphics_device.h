@@ -1357,6 +1357,153 @@ CNA_C_API CNA_Result cna_occlusion_query_has_renderer(
  */
 CNA_C_API CNA_Result cna_occlusion_query_destroy(CNA_OcclusionQueryHandle occlusion_query);
 
+/**
+ * @brief Tells every content-losable resource on this device that its content is gone.
+ *
+ * Iterates a **snapshot** of the device's resources, because a subscriber is free to dispose the
+ * resource it is told about and that would rewrite the list underneath the loop.
+ *
+ * @param graphics_device The device.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_notify_content_lost_resources_ext(
+    CNA_Handle graphics_device);
+
+/**
+ * @brief Reports whether a surface format can be used as a render target here.
+ *
+ * Asks exactly the question `RenderTarget2D`'s constructor asks, so the two can never disagree: a
+ * format this accepts is one the constructor accepts, and one it refuses is one the constructor
+ * refuses.
+ *
+ * @param graphics_device The device.
+ * @param format The format.
+ * @param out_supported Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_supports_surface_format_as_render_target_ext(
+    CNA_Handle graphics_device, CNA_SurfaceFormat format, CNA_Bool* out_supported);
+
+/**
+ * @brief Reports whether this renderer actually executes a shader effect's source.
+ *
+ * **Not the same question as the `CustomEffects` capability**, and this is the one that matters
+ * before writing a shader: SOFTWARE and HEADLESS *accept* any source and keep rendering with their
+ * own fixed path, and Vulkan takes SPIR-V rather than GLSL. Asking only the capability is how a
+ * pass reports success while drawing nothing.
+ *
+ * @param graphics_device The device.
+ * @param out_executes Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_executes_shader_effect_source_ext(
+    CNA_Handle graphics_device, CNA_Bool* out_executes);
+
+/**
+ * @brief Reports whether this renderer can shade with an image-based light.
+ *
+ * The companion query to `CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS` for the image-based-lighting
+ * path, on the same reasoning as @ref cna_graphics_device_executes_shader_effect_source_ext.
+ *
+ * @param graphics_device The device.
+ * @param out_supported Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_supports_image_based_lighting_ext(
+    CNA_Handle graphics_device, CNA_Bool* out_supported);
+
+/**
+ * @brief Returns the colour space the display is currently in.
+ *
+ * @param graphics_device The device.
+ * @param out_space Receives the colour space.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_display_color_space_ext(
+    CNA_Handle graphics_device, uint32_t* out_space);
+
+/**
+ * @brief Asks the display to change colour space.
+ *
+ * **Reports whether it worked rather than refusing**: a display that cannot enter a space is an
+ * ordinary answer, not a caller mistake, so this succeeds with `out_changed` false. Only an
+ * undefined colour-space identity is refused.
+ *
+ * @param graphics_device The device.
+ * @param space The colour space.
+ * @param out_changed Receives whether the display changed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for an undefined space or a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_display_color_space_ext(
+    CNA_Handle graphics_device, uint32_t space, CNA_Bool* out_changed);
+
+/**
+ * @brief Reports whether the display can enter a colour space.
+ *
+ * **Answered by trying it and putting it back**, because there is no separate query on the renderer
+ * boundary and inventing one would let the two answers drift apart. A caller watching the display
+ * may therefore observe a momentary change; the space in force afterwards is the one that was in
+ * force before.
+ *
+ * @param graphics_device The device.
+ * @param space The colour space.
+ * @param out_supported Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for an undefined space or a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_supports_display_color_space_ext(
+    CNA_Handle graphics_device, uint32_t space, CNA_Bool* out_supported);
+
+/**
+ * @brief Returns the largest compute work-group count along one axis.
+ *
+ * **An axis outside zero to two answers zero rather than being refused**, which is the canonical
+ * behaviour: the answer to "how many groups along axis 7" is none, and a caller looping over axes
+ * gets a usable number instead of an error to special-case.
+ *
+ * @param graphics_device The device.
+ * @param axis The axis, zero through two.
+ * @param out_count Receives the count, or zero for an axis outside the range.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_max_compute_work_group_count_ext(
+    CNA_Handle graphics_device, int32_t axis, int32_t* out_count);
+
+/**
+ * @brief Returns the largest compute work-group size along one axis.
+ *
+ * An axis outside zero to two answers zero, as above.
+ *
+ * @param graphics_device The device.
+ * @param axis The axis, zero through two.
+ * @param out_size Receives the size, or zero for an axis outside the range.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_max_compute_work_group_size_ext(
+    CNA_Handle graphics_device, int32_t axis, int32_t* out_size);
+
+/**
+ * @brief Returns the largest total number of invocations one work group may have.
+ *
+ * Not the product of the three per-axis sizes: a group may be within every axis limit and still
+ * exceed this one.
+ *
+ * @param graphics_device The device.
+ * @param out_invocations Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null output, or an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_max_compute_work_group_invocations_ext(
+    CNA_Handle graphics_device, int32_t* out_invocations);
+
 #ifdef __cplusplus
 }
 #endif

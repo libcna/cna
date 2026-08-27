@@ -1243,6 +1243,62 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-093. Almost everything in this slice is a method on the always-compiled GraphicsDevice,
+       ShaderEffect or CNA core, so it SUCCEEDS here -- only the two indirect draws need the engine
+       layer, because their argument buffer is a StorageBuffer. Asserting the whole slice refuses
+       would have been the easy mistake; each half is asserted for what it actually is. */
+    {
+        CNA_StorageBufferHandle arguments = (CNA_StorageBufferHandle)UINT64_C(0x5A5A5A5A);
+        CNA_Bool device_flag = UINT8_C(9);
+        uint32_t colour_space = UINT32_C(99);
+        int32_t device_number = INT32_C(-1);
+        uint64_t title_bytes = UINT64_C(0);
+        static const char absent_title[] = "CnaBindingAbsent";
+        const CNA_StringView absent_view = {absent_title, sizeof(absent_title) - 1U};
+        if (cna_graphics_device_notify_content_lost_resources_ext(graphics_device) !=
+                CNA_RESULT_SUCCESS ||
+            cna_graphics_device_supports_surface_format_as_render_target_ext(
+                graphics_device, CNA_SURFACE_FORMAT_COLOR, &device_flag) != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_executes_shader_effect_source_ext(
+                graphics_device, &device_flag) != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_supports_image_based_lighting_ext(
+                graphics_device, &device_flag) != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_get_display_color_space_ext(graphics_device, &colour_space) !=
+                CNA_RESULT_SUCCESS ||
+            cna_graphics_device_supports_display_color_space_ext(
+                graphics_device, UINT32_C(0), &device_flag) != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_set_display_color_space_ext(
+                graphics_device, colour_space, &device_flag) != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_set_display_color_space_ext(
+                graphics_device, UINT32_C(99), &device_flag) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_graphics_device_get_max_compute_work_group_count_ext(
+                graphics_device, INT32_C(0), &device_number) != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_get_max_compute_work_group_count_ext(
+                graphics_device, INT32_C(9), &device_number) != CNA_RESULT_SUCCESS ||
+            device_number != INT32_C(0) ||
+            cna_graphics_device_get_max_compute_work_group_size_ext(
+                graphics_device, INT32_C(0), &device_number) != CNA_RESULT_SUCCESS ||
+            cna_graphics_device_get_max_compute_work_group_invocations_ext(
+                graphics_device, &device_number) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        /* The assembly title needs no graphics at all. */
+        if (cna_assembly_set_title_ext(absent_view) != CNA_RESULT_SUCCESS ||
+            cna_assembly_copy_title_ext(0, UINT64_C(0), &title_bytes) !=
+                CNA_RESULT_BUFFER_TOO_SMALL ||
+            title_bytes != (uint64_t)(sizeof(absent_title) - 1U)) {
+            return 0;
+        }
+        /* Only these two need the layer. */
+        if (cna_graphics_device_draw_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, arguments, INT32_C(0)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_graphics_device_draw_indexed_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, arguments, INT32_C(0)) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -8035,6 +8091,253 @@ static int validate_debug_draw(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-093. The phase's remainder: the GraphicsDevice EXT surface, the last three ShaderEffect
+   members, the assembly title, the two indirect draws, and the proof that SkinnedEffect resolves
+   the shadow-receiver contract through the same generic routes BasicEffect already does.
+
+   That last one is CBIND-087C's shape: no new routes, because the fourteen `cna_effect_*_ext`
+   routes refuse BY ARGUMENT rather than by handle kind. What has to be proved is that these two
+   effects are among the arguments they accept -- a rule claiming the rows without a test would be
+   an assertion, not evidence.
+
+   Two contracts here are answers rather than refusals, and both are the kind that reads like a
+   bug: an out-of-range compute axis answers ZERO, and asking whether a display supports a colour
+   space CHANGES IT AND PUTS IT BACK. */
+static int validate_device_ext_surface(const CNA_Handle graphics_device)
+{
+    CNA_EffectHandle skinned = CNA_INVALID_HANDLE;
+    CNA_EffectHandle shader = CNA_INVALID_HANDLE;
+    CNA_StorageBufferHandle arguments = CNA_INVALID_HANDLE;
+    CNA_ShadowCascadeStateEXT cascades;
+    CNA_PunctualLightEXT light;
+    CNA_Matrix matrix;
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool changed = UINT8_C(9);
+    uint32_t space = UINT32_C(99);
+    uint32_t before = UINT32_C(99);
+    uint64_t bytes = UINT64_C(0);
+    int32_t number = INT32_C(-1);
+    float scalar = -1.0F;
+    int axis;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS ||
+        cna_shadow_cascade_state_ext_init(&cascades) != CNA_RESULT_SUCCESS ||
+        cna_punctual_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* ---- SkinnedEffect resolves the same contract BasicEffect does ---- */
+    if (cna_skinned_effect_create(graphics_device, &skinned) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_effect_set_shadows_enabled_ext(skinned, CNA_TRUE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_is_shadows_enabled_ext(skinned, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_effect_set_shadow_depth_bias_ext(skinned, 0.25F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_depth_bias_ext(skinned, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    ok = ok && cna_effect_set_shadow_filter_radius_ext(skinned, INT32_C(2)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_filter_radius_ext(skinned, &number) ==
+        CNA_RESULT_SUCCESS && number == INT32_C(2);
+    ok = ok && cna_effect_set_light_view_projection_ext(skinned, &matrix) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_light_view_projection_ext(skinned, &matrix) == CNA_RESULT_SUCCESS;
+    cascades.count = INT32_C(3);
+    ok = ok && cna_effect_set_shadow_cascades_ext(skinned, &cascades) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_cascades_ext(skinned, &cascades) == CNA_RESULT_SUCCESS &&
+        cascades.count == INT32_C(3);
+    ok = ok && cna_effect_set_punctual_light_ext(skinned, &light) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_punctual_light_ext(skinned, &light) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_set_shadow_map_ext(skinned, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+    {
+        CNA_Handle map = UINT64_C(7);
+        ok = ok && cna_effect_get_shadow_map_ext(skinned, &map) == CNA_RESULT_SUCCESS &&
+            map == CNA_INVALID_HANDLE;
+    }
+    ok = ok && cna_effect_destroy(skinned) == CNA_RESULT_SUCCESS;
+
+    /* ---- the GraphicsDevice EXT queries ---- */
+    ok = ok && cna_graphics_device_notify_content_lost_resources_ext(graphics_device) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_graphics_device_notify_content_lost_resources_ext(CNA_INVALID_HANDLE) !=
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_graphics_device_supports_surface_format_as_render_target_ext(
+            graphics_device, CNA_SURFACE_FORMAT_COLOR, &flag) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_graphics_device_supports_surface_format_as_render_target_ext(
+            graphics_device, CNA_SURFACE_FORMAT_COLOR, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_graphics_device_executes_shader_effect_source_ext(graphics_device, &flag) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_graphics_device_supports_image_based_lighting_ext(graphics_device, &flag) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_graphics_device_executes_shader_effect_source_ext(CNA_INVALID_HANDLE, &flag) !=
+        CNA_RESULT_SUCCESS;
+
+    /* The colour space: undefined identities are refused, and the "supports" query is answered by
+       TRYING it and putting it back -- so the space in force afterwards is the one from before. */
+    ok = ok && cna_graphics_device_get_display_color_space_ext(graphics_device, &before) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_graphics_device_supports_display_color_space_ext(
+            graphics_device, UINT32_C(0), &flag) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_graphics_device_get_display_color_space_ext(graphics_device, &space) ==
+        CNA_RESULT_SUCCESS && space == before;
+    ok = ok && cna_graphics_device_supports_display_color_space_ext(
+            graphics_device, UINT32_C(99), &flag) == CNA_RESULT_INVALID_ARGUMENT;
+    /* Setting reports whether it worked rather than refusing: a display that cannot enter a space
+       is an ordinary answer. */
+    ok = ok && cna_graphics_device_set_display_color_space_ext(
+            graphics_device, UINT32_C(0), &changed) == CNA_RESULT_SUCCESS &&
+        (changed == CNA_TRUE || changed == CNA_FALSE);
+    ok = ok && cna_graphics_device_set_display_color_space_ext(
+            graphics_device, UINT32_C(99), &changed) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_graphics_device_set_display_color_space_ext(
+            graphics_device, before, &changed) == CNA_RESULT_SUCCESS;
+
+    /* THE surprising one: an axis outside zero-to-two answers ZERO rather than being refused, so a
+       caller looping over axes gets a usable number instead of an error to special-case. */
+    for (axis = 0; axis < 3; ++axis) {
+        ok = ok && cna_graphics_device_get_max_compute_work_group_count_ext(
+                graphics_device, (int32_t)axis, &number) == CNA_RESULT_SUCCESS &&
+            number >= INT32_C(0);
+        ok = ok && cna_graphics_device_get_max_compute_work_group_size_ext(
+                graphics_device, (int32_t)axis, &number) == CNA_RESULT_SUCCESS &&
+            number >= INT32_C(0);
+    }
+    ok = ok && cna_graphics_device_get_max_compute_work_group_count_ext(
+            graphics_device, INT32_C(3), &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(0);
+    ok = ok && cna_graphics_device_get_max_compute_work_group_count_ext(
+            graphics_device, INT32_C(-1), &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(0);
+    ok = ok && cna_graphics_device_get_max_compute_work_group_size_ext(
+            graphics_device, INT32_C(7), &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(0);
+    ok = ok && cna_graphics_device_get_max_compute_work_group_invocations_ext(
+            graphics_device, &number) == CNA_RESULT_SUCCESS && number >= INT32_C(0);
+    ok = ok && cna_graphics_device_get_max_compute_work_group_invocations_ext(
+            graphics_device, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* ---- the last three ShaderEffect members ---- */
+    {
+        static const char vertex[] =
+            "#version 300 es\nvoid main() { gl_Position = vec4(0.0); }\n";
+        static const char fragment[] =
+            "#version 300 es\nprecision mediump float;\nout vec4 c;\nvoid main() { c = vec4(1.0); }\n";
+        static const char name[] = "uValues";
+        const CNA_StringView vertex_view = {vertex, sizeof(vertex) - 1U};
+        const CNA_StringView fragment_view = {fragment, sizeof(fragment) - 1U};
+        const CNA_StringView name_view = {name, sizeof(name) - 1U};
+        float values[9];
+        float matrices[32];
+        int index;
+        for (index = 0; index < 9; ++index) { values[index] = (float)index; }
+        for (index = 0; index < 32; ++index) { matrices[index] = (float)index; }
+        if (ok && cna_shader_effect_create(graphics_device, vertex_view, fragment_view,
+                                            &shader) == CNA_RESULT_SUCCESS) {
+            /* An empty compile error is NOT evidence the shader ran: a renderer that never
+               compiles the source has nothing to report either. */
+            ok = ok && cna_shader_effect_copy_compile_error_ext(
+                    shader, 0, UINT64_C(0), &bytes) != CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_shader_effect_copy_compile_error_ext(shader, 0, UINT64_C(0), 0) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+            /* Three floats per element, tightly packed -- nine floats is three vectors. */
+            ok = ok && cna_shader_effect_set_uniform_vec3_array(
+                    shader, name_view, values, INT32_C(3)) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_shader_effect_set_uniform_vec3_array(
+                    shader, name_view, 0, INT32_C(0)) == CNA_RESULT_SUCCESS;
+            /* A negative count is a caller mistake, not "none". */
+            ok = ok && cna_shader_effect_set_uniform_vec3_array(
+                    shader, name_view, values, INT32_C(-1)) == CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_shader_effect_set_uniform_vec3_array(
+                    shader, name_view, 0, INT32_C(3)) == CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_shader_effect_set_uniform_mat4_array(
+                    shader, name_view, matrices, INT32_C(2)) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_shader_effect_set_uniform_mat4_array(
+                    shader, name_view, matrices, INT32_C(-1)) == CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_shader_effect_set_uniform_mat4_array(
+                    shader, name_view, 0, INT32_C(2)) == CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_effect_destroy(shader) == CNA_RESULT_SUCCESS;
+        } else {
+            ok = 0;
+        }
+        /* The three routes refuse an effect that is not a shader effect -- by ARGUMENT, since any
+           effect handle is a valid handle. */
+        {
+            CNA_EffectHandle basic = CNA_INVALID_HANDLE;
+            if (ok && cna_basic_effect_create(graphics_device, &basic) == CNA_RESULT_SUCCESS) {
+                ok = ok && cna_shader_effect_copy_compile_error_ext(
+                        basic, 0, UINT64_C(0), &bytes) != CNA_RESULT_SUCCESS;
+                ok = ok && cna_shader_effect_set_uniform_vec3_array(
+                        basic, name_view, values, INT32_C(3)) != CNA_RESULT_SUCCESS;
+                ok = ok && cna_shader_effect_set_uniform_mat4_array(
+                        basic, name_view, matrices, INT32_C(2)) != CNA_RESULT_SUCCESS;
+                ok = ok && cna_effect_destroy(basic) == CNA_RESULT_SUCCESS;
+            } else {
+                ok = 0;
+            }
+        }
+    }
+
+    /* ---- the two indirect draws ---- */
+    if (ok && cna_storage_buffer_create(graphics_device, UINT64_C(64), &arguments) ==
+            CNA_RESULT_SUCCESS) {
+        /* Argument refusals are checked before the draw is attempted, so they answer the same on
+           every renderer. */
+        ok = ok && cna_graphics_device_draw_primitives_indirect_ext(
+                graphics_device, UINT32_C(99), arguments, INT32_C(0)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_graphics_device_draw_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, arguments, INT32_C(-1)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_graphics_device_draw_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, CNA_INVALID_HANDLE, INT32_C(0)) ==
+            CNA_RESULT_INVALID_HANDLE;
+        ok = ok && cna_graphics_device_draw_indexed_primitives_indirect_ext(
+                graphics_device, UINT32_C(99), arguments, INT32_C(0)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_graphics_device_draw_indexed_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, arguments, INT32_C(-4)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_graphics_device_draw_indexed_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, CNA_INVALID_HANDLE, INT32_C(0)) ==
+            CNA_RESULT_INVALID_HANDLE;
+        ok = ok && cna_storage_buffer_destroy(arguments) == CNA_RESULT_SUCCESS;
+    } else {
+        /* No compute means no storage buffer to point at, which is a renderer boundary rather than
+           a defect; the argument refusals above are unreachable without one. */
+        ok = ok && cna_graphics_device_draw_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, CNA_INVALID_HANDLE, INT32_C(0)) !=
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_graphics_device_draw_indexed_primitives_indirect_ext(
+                graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, CNA_INVALID_HANDLE, INT32_C(0)) !=
+            CNA_RESULT_SUCCESS;
+    }
+
+    /* ---- the assembly title, which works in every build ---- */
+    {
+        static const char title[] = "CnaBindingSuite";
+        const CNA_StringView title_view = {title, sizeof(title) - 1U};
+        char read_back[64];
+        ok = ok && cna_assembly_set_title_ext(title_view) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_assembly_copy_title_ext(0, UINT64_C(0), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && bytes == (uint64_t)(sizeof(title) - 1U);
+        ok = ok && cna_assembly_copy_title_ext(read_back, UINT64_C(64), &bytes) ==
+            CNA_RESULT_SUCCESS && bytes == (uint64_t)(sizeof(title) - 1U) &&
+            read_back[0] == 'C';
+        ok = ok && cna_assembly_copy_title_ext(read_back, UINT64_C(64), 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        /* An empty title is a title, not a refusal. */
+        {
+            const CNA_StringView empty_view = {title, UINT64_C(0)};
+            ok = ok && cna_assembly_set_title_ext(empty_view) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_assembly_copy_title_ext(0, UINT64_C(0), &bytes) ==
+                CNA_RESULT_SUCCESS && bytes == UINT64_C(0);
+        }
+        ok = ok && cna_assembly_set_title_ext(title_view) == CNA_RESULT_SUCCESS;
+    }
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -8192,6 +8495,10 @@ static CNA_Result on_load(
         }
         if (!validate_debug_draw(graphics_device)) {
             state->failed_stage = 40;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_device_ext_surface(graphics_device)) {
+            state->failed_stage = 41;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

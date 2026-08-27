@@ -6193,6 +6193,18 @@ CNA_Result cna_debug_draw_add_cascade_gizmo(CNA_DebugDrawHandle p0, CNA_Cascaded
     return ExtensionUnavailable();
 }
 
+CNA_Result cna_graphics_device_draw_primitives_indirect_ext(CNA_Handle p0, CNA_PrimitiveType p1, CNA_StorageBufferHandle p2, int32_t p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_graphics_device_draw_indexed_primitives_indirect_ext(CNA_Handle p0, CNA_PrimitiveType p1, CNA_StorageBufferHandle p2, int32_t p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
 CNA_Result cna_light_probe_volume_ext_get_bounds(CNA_LightProbeVolumeHandle p0, CNA_BoundingBox* p1)
 {
     (void)p0; (void)p1;
@@ -22406,6 +22418,83 @@ CNA_Result cna_debug_draw_add_cascade_gizmo(
         Ext::addCascadeGizmo(*d->value, *target->value, ToNativeColour(colour));
         return CNA_RESULT_SUCCESS;
     });
+}
+
+namespace {
+
+// The indirect draws take a StorageBuffer, which is engine-layer-only, so they live here rather
+// than beside the other GraphicsDevice EXT queries in CnaCApiGraphicsDevice.cpp.
+template <typename TDraw>
+[[nodiscard]] CNA_Result DrawIndirect(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_PrimitiveType primitiveType,
+    const CNA_StorageBufferHandle argumentBuffer,
+    const int32_t argumentByteOffset,
+    TDraw&& draw)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<StorageBufferResource> buffer;
+        if (const CNA_Result result = GetEngineResource(
+                argumentBuffer, ObjectKind::StorageBuffer, "StorageBuffer", &buffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (primitiveType > CNA_PRIMITIVE_POINT_LIST_EXT) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The primitive topology is not recognized.");
+        }
+        if (argumentByteOffset < INT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The argument byte offset must not be negative.");
+        }
+        draw(
+            *graphicsDevice->value,
+            static_cast<Microsoft::Xna::Framework::Graphics::PrimitiveType>(primitiveType),
+            *buffer->value->getRendererEXT(), static_cast<int>(argumentByteOffset));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+} // namespace
+
+CNA_Result cna_graphics_device_draw_primitives_indirect_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_PrimitiveType primitiveType,
+    const CNA_StorageBufferHandle argumentBuffer,
+    const int32_t argumentByteOffset)
+{
+    return DrawIndirect(
+        graphicsDeviceHandle, primitiveType, argumentBuffer, argumentByteOffset,
+        [](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+           const Microsoft::Xna::Framework::Graphics::PrimitiveType type,
+           const CNA::Internal::Renderers::IStorageBufferRenderer& buffer, const int offset) {
+            device.DrawPrimitivesIndirectEXT(type, buffer, offset);
+        });
+}
+
+CNA_Result cna_graphics_device_draw_indexed_primitives_indirect_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_PrimitiveType primitiveType,
+    const CNA_StorageBufferHandle argumentBuffer,
+    const int32_t argumentByteOffset)
+{
+    return DrawIndirect(
+        graphicsDeviceHandle, primitiveType, argumentBuffer, argumentByteOffset,
+        [](Microsoft::Xna::Framework::Graphics::GraphicsDevice& device,
+           const Microsoft::Xna::Framework::Graphics::PrimitiveType type,
+           const CNA::Internal::Renderers::IStorageBufferRenderer& buffer, const int offset) {
+            device.DrawIndexedPrimitivesIndirectEXT(type, buffer, offset);
+        });
 }
 
 #endif // CNA_CNAEXT

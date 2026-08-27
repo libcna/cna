@@ -11910,6 +11910,49 @@ CNA_C_API CNA_Result cna_debug_draw_add_cluster_slice_gizmo(
 CNA_C_API CNA_Result cna_debug_draw_add_cascade_gizmo(
     CNA_DebugDrawHandle debug, CNA_CascadedShadowMapHandle cascades, CNA_Color colour);
 
+/**
+ * @brief Draws primitives whose count and offsets the GPU reads from a buffer.
+ *
+ * The buffer must hold @ref CNA_IndirectDrawArguments at the given byte offset, and it is the
+ * caller's job to have bound the vertex stream -- this supplies the *arguments*, not the geometry.
+ * The point of an indirect draw is that a compute shader may have written those arguments after
+ * the CPU submitted the call, which is why the count is not a parameter here.
+ *
+ * @param graphics_device The device.
+ * @param primitive_type What to draw.
+ * @param argument_buffer The storage buffer holding the arguments.
+ * @param argument_byte_offset Where in it they start; must not be negative.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device or buffer that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a negative offset or an undefined primitive type,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer or on a renderer with no indirect draw, or
+ * an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_primitives_indirect_ext(
+    CNA_Handle graphics_device,
+    CNA_PrimitiveType primitive_type,
+    CNA_StorageBufferHandle argument_buffer,
+    int32_t argument_byte_offset);
+
+/**
+ * @brief Draws indexed primitives whose count and offsets the GPU reads from a buffer.
+ *
+ * As above, with @ref CNA_IndirectDrawIndexedArguments; the index buffer must be bound too.
+ *
+ * @param graphics_device The device.
+ * @param primitive_type What to draw.
+ * @param argument_buffer The storage buffer holding the arguments.
+ * @param argument_byte_offset Where in it they start; must not be negative.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a device or buffer that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a negative offset or an undefined primitive type,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer or on a renderer with no indirect draw, or
+ * an error.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_indexed_primitives_indirect_ext(
+    CNA_Handle graphics_device,
+    CNA_PrimitiveType primitive_type,
+    CNA_StorageBufferHandle argument_buffer,
+    int32_t argument_byte_offset);
+
 #ifdef __cplusplus
 }
 #endif

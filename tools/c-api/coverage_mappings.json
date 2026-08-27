@@ -17298,6 +17298,107 @@
         "CPP-F77CC9E9D5FE",
         "CPP-F8ADBD28E26B"
       ]
+    },
+    {
+      "id": "stock-effect-shadow-receiver",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::(?:Basic|Skinned)Effect::(?:set|get|is)(?:ShadowMapEXT|LightViewProjectionEXT|ShadowsEnabledEXT|ShadowDepthBiasEXT|ShadowFilterRadiusEXT|ShadowCascadesEXT|PunctualLightEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The same fourteen `cna_effect_*_ext` routes `CBIND-087C` bound for the PBR effects. **No new routes**: they refuse **by argument** through a `dynamic_cast` rather than by handle kind, so every effect that implements the contract is served by one set of names. What remained for these two was to show they are among the arguments those routes accept -- a rule claiming the rows without a test would be an assertion, not evidence.",
+      "tests": "`BasicEffect` by `EngineLayerSmoke.c`'s `validate_shadow_receiver`, which already drove all fourteen through a basic effect; `SkinnedEffect` by stage 41, which drives the same fourteen through a skinned one. Break-proved: inverting the first skinned assertion moves both CNAEXT trees.",
+      "status": "implemented",
+      "task": "CBIND-093",
+      "approved_symbols": [
+        "CPP-1BC84B16BF84",
+        "CPP-1D09F3630B43",
+        "CPP-233E4F7198B2",
+        "CPP-3AC4A5DDB897",
+        "CPP-3D00AAFDA76A",
+        "CPP-50C28E589825",
+        "CPP-50D8E3B261B9",
+        "CPP-7DEB81720358",
+        "CPP-7EA8A9495882",
+        "CPP-7F317FBE065C",
+        "CPP-8A552FBE7337",
+        "CPP-99EB6018C9F1",
+        "CPP-9CBEE01BCF41",
+        "CPP-A1E1BC055ED3",
+        "CPP-A6A701DBC3CB",
+        "CPP-ADD666299480",
+        "CPP-B4F58DB1062F",
+        "CPP-B675BDF032E4",
+        "CPP-BC397A6E46EC",
+        "CPP-C1D3E294DB68",
+        "CPP-C40C208CABDF",
+        "CPP-CF05201775D4",
+        "CPP-D2C68C324997",
+        "CPP-D97CE907961A",
+        "CPP-E4FAE4E33391",
+        "CPP-E8F416E2EC5A",
+        "CPP-EAF670E478B7",
+        "CPP-F948F5771154"
+      ]
+    },
+    {
+      "id": "graphics-device-ext-surface",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:DrawPrimitivesIndirectEXT|DrawIndexedPrimitivesIndirectEXT|NotifyContentLostResourcesEXT|SupportsSurfaceFormatAsRenderTargetEXT|ExecutesShaderEffectSourceEXT|SupportsImageBasedLightingEXT|GetDisplayColorSpaceEXT|SetDisplayColorSpaceEXT|SupportsDisplayColorSpaceEXT|GetMaxComputeWorkGroupCountEXT|GetMaxComputeWorkGroupSizeEXT|GetMaxComputeWorkGroupInvocationsEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_graphics_device_*_ext`. Ten of the twelve are methods on the **always-compiled** device and live in `graphics_device.h` with their siblings, working in every build; only the two indirect draws are in `engine_layer.h`, because their argument buffer is a `CNA_StorageBufferHandle`.\n\nThree behaviours are answers rather than refusals. An **out-of-range compute axis answers zero** -- the answer to \"how many groups along axis 7\" is none, and a caller looping over axes gets a usable number instead of an error to special-case. `SetDisplayColorSpaceEXT` **reports whether it worked** rather than refusing, because a display that cannot enter a space is an ordinary answer; only an undefined identity is refused. And `SupportsDisplayColorSpaceEXT` is answered by **trying it and putting it back**, because there is no separate query on the renderer boundary and inventing one would let the two answers drift -- the header says so, since a caller watching the display may see a momentary change.\n\n`ExecutesShaderEffectSourceEXT` and `SupportsImageBasedLightingEXT` are the queries `CLAUDE.md` names as the ones that answer what the `CustomEffects` capability cannot: SOFTWARE and HEADLESS accept any source and keep rendering with their own path.",
+      "tests": "`EngineLayerSmoke.c` stage 41 and the layer-absent block. The axis contract is asserted at three out-of-range values and break-proved by expecting a refusal instead. The colour-space round trip is asserted to leave the space it found. The ten always-compiled routes are asserted to **succeed** without the engine layer and the two indirect draws to refuse -- asserting the whole slice refuses would have been the easy mistake.",
+      "status": "implemented",
+      "task": "CBIND-093",
+      "approved_symbols": [
+        "CPP-01EDFEC5A390",
+        "CPP-180B6CE5EBD6",
+        "CPP-2A710E82F069",
+        "CPP-4470A1B69F2B",
+        "CPP-7400AD54389F",
+        "CPP-7F7FA5BD2AD9",
+        "CPP-9CA75AC34505",
+        "CPP-A4567FAB599F",
+        "CPP-A70BE72C8207",
+        "CPP-BF64D81BEFEB",
+        "CPP-E8920C6A0386",
+        "CPP-F52AE4C696B4"
+      ]
+    },
+    {
+      "id": "shader-effect-remainder",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ShaderEffect::(?:GetCompileErrorEXT|SetUniformVec3Array|SetUniformMat4Array)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_shader_effect_copy_compile_error_ext` and the two array uniform setters, in `effects.h` with the rest of the shader-effect surface -- `ShaderEffect` is an always-compiled graphics type, so these work in every build.\n\n**An empty compile error is not evidence the shader ran**: a renderer that never compiled the source has nothing to report either, which the header says because the opposite reading is the natural one. The `vec3` array is **three floats per element, tightly packed** -- a caller that pads to `vec4` is describing a different array than the shader declares. A **negative count is refused** rather than read as zero, because reading it as \"none\" would hide the mistake.",
+      "tests": "`EngineLayerSmoke.c` stage 41: both setters are driven with a real shader effect and refused for a negative count, a null array with a non-zero count, and an effect that is not a shader effect.",
+      "status": "implemented",
+      "task": "CBIND-093",
+      "approved_symbols": [
+        "CPP-0C8F216E8FA5",
+        "CPP-7A033057D906",
+        "CPP-D3699E70D515"
+      ]
+    },
+    {
+      "id": "assembly-title",
+      "qualified_name_regex": "^CNA::(?:SetAssemblyTitleEXT|GetAssemblyTitleEXT|AssemblyTitleAttributeEXT(?:::[A-Za-z0-9_~]+)?)$",
+      "kinds": [
+        "function",
+        "struct",
+        "constructor"
+      ],
+      "mapping": "`cna_assembly_set_title_ext` and `cna_assembly_copy_title_ext` in `core_ext.h`. `AssemblyInfo.hpp` is not under `CNA_CNAEXT`, so both work in every build.\n\n**`AssemblyTitleAttributeEXT` maps to the setter rather than to a type of its own.** Its whole purpose is to run the assignment at *static initialization* from a namespace-scope declaration, the way a C# assembly attribute does -- and C has no static-initialization construct to bind. A C caller sets the title from `main` instead, which is the same effect reached the only way C can reach it. Recorded here rather than left as an unexplained omission.\n\nThe title is process-wide and unvalidated: an empty title is a title, not a refusal.",
+      "tests": "`EngineLayerSmoke.c` stage 41 and the layer-absent block: the title round-trips, the size query reports the length without a terminator, an empty title is asserted to succeed and read back as zero bytes, and both routes are asserted to work without the engine layer.",
+      "status": "implemented",
+      "task": "CBIND-093",
+      "approved_symbols": [
+        "CPP-377DA68EF228",
+        "CPP-9682A3291787",
+        "CPP-E543EEEE10EE",
+        "CPP-FF531D6AB2D4"
+      ]
     }
   ]
 }
