@@ -9893,7 +9893,7 @@ CNA_C_API CNA_Result cna_atmospheric_sky_set_intensity(
  *
  * @param destination The buffer, or null to ask for the size.
  * @param capacity The buffer size in bytes.
- * @param out_bytes Receives the byte count, including the terminator.
+ * @param out_bytes Receives the required byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in
  * `out_bytes`, `CNA_RESULT_INVALID_ARGUMENT` for a null count,
  * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
@@ -10176,7 +10176,7 @@ CNA_C_API CNA_Result cna_area_light_brdf_table_evaluate(
  *
  * @param destination The buffer, or null to ask for the size.
  * @param capacity The buffer size in bytes.
- * @param out_bytes Receives the byte count, including the terminator.
+ * @param out_bytes Receives the required byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
  * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
  * layer, or an error.
@@ -10213,10 +10213,12 @@ CNA_C_API CNA_Result cna_area_light_shading_quad_of(
  * @param surface The world-space point being lit.
  * @param lobe_axis The direction the lobe points.
  * @param lobe_scale The lobe's width, from @ref cna_area_light_shading_lobe_scale_for.
- * @param two_sided Whether the light emits from both faces.
+ * @param two_sided Whether the light emits from both faces; a non-canonical byte is refused,
+ * because taking any non-zero as true would silently mean "two-sided" -- a different amount of
+ * light rather than a different error.
  * @param out_coverage Receives the coverage; zero when the quad is behind the surface.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
- * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument or a
+ * non-canonical boolean, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
  */
 CNA_C_API CNA_Result cna_area_light_shading_coverage(
     const CNA_Vector3* quad,
@@ -10273,7 +10275,7 @@ CNA_C_API CNA_Result cna_area_light_shading_lobe_scale_for(float roughness, floa
  *
  * @param destination The buffer, or null to ask for the size.
  * @param capacity The buffer size in bytes.
- * @param out_bytes Receives the byte count, including the terminator.
+ * @param out_bytes Receives the required byte count without a terminator.
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
  * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
  * layer, or an error.
@@ -10306,6 +10308,411 @@ CNA_C_API CNA_Result cna_clustered_forward_effect_set_area_light(
     CNA_ClusteredForwardEffectHandle effect,
     const CNA_AreaLightEXT* light,
     CNA_AreaLightBrdfTableHandle table);
+
+/** @brief The default number of particle slots a system allocates. */
+#define CNA_PARTICLE_SYSTEM_DEFAULT_CAPACITY 1024
+
+/** @brief The storage-buffer binding point a particle vertex shader reads from. */
+#define CNA_PARTICLE_BINDING 7
+
+/**
+ * @brief What an emitter throws, how fast, and what happens to it afterwards.
+ *
+ * **Assigned as given.** No field here is clamped or refused on the way in -- an emission rate the
+ * capacity cannot sustain is accepted and then *reported*, by
+ * @ref cna_particle_system_is_emission_rate_clamped, rather than being quietly corrected. That is
+ * the shape to expect from this whole struct: it is a description, and the system says what it
+ * could actually do with it.
+ */
+typedef struct CNA_ParticleEmitterSettings {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief Where particles are born, in world space. */
+    CNA_Vector3 position;
+    /** @brief The centre of the emission cone; normalised internally. */
+    CNA_Vector3 direction;
+    /** @brief Constant acceleration, in units per second squared. */
+    CNA_Vector3 gravity;
+    /** @brief Colour at birth, unclamped so it can be an HDR emitter. */
+    CNA_Vector4 start_color;
+    /** @brief Colour at death. */
+    CNA_Vector4 end_color;
+    /** @brief The cone's half angle in radians; zero emits a line, pi a full sphere. */
+    float cone_angle;
+    /** @brief How fast a particle leaves, in units per second. */
+    float speed;
+    /** @brief How much that speed varies, as a fraction of it. */
+    float speed_variance;
+    /** @brief How long a particle lives, in seconds. */
+    float lifetime;
+    /** @brief How much that lifetime varies, as a fraction of it. */
+    float lifetime_variance;
+    /** @brief Linear drag per second; zero is a vacuum. */
+    float drag;
+    /** @brief How many particles are born per second. */
+    float emission_rate;
+    /** @brief A particle's size at birth, in world units. */
+    float start_size;
+    /** @brief Its size at death. */
+    float end_size;
+} CNA_ParticleEmitterSettings;
+
+/**
+ * @brief Fills emitter settings with the canonical defaults.
+ *
+ * @param out_settings Receives the defaults.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_emitter_settings_init(CNA_ParticleEmitterSettings* out_settings);
+
+/**
+ * @brief One particle, in the layout both the compute shader and the CPU simulation use.
+ *
+ * The fourth component of `position` and `velocity` is padding `std430` requires, not a `w`
+ * anything reads. `state` carries age, lifetime, the seed the last spawn used, and how many times
+ * the slot has respawned, in that order.
+ */
+typedef struct CNA_Particle {
+    /** @brief Position in world space; the fourth component is padding. */
+    CNA_Vector4 position;
+    /** @brief Velocity in world space; the fourth component is padding. */
+    CNA_Vector4 velocity;
+    /** @brief Age, lifetime, last spawn seed, and respawn count. */
+    CNA_Vector4 state;
+} CNA_Particle;
+
+/**
+ * @brief Fills a particle with the canonical defaults.
+ *
+ * @param out_particle Receives a particle at the origin, at rest, aged zero with a lifetime of one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_init(CNA_Particle* out_particle);
+
+/**
+ * @brief Owned handle for a particle system: an emitter, a simulation and a draw.
+ *
+ * **Particles are simulated on the GPU where the device has compute and on the CPU where it does
+ * not, and the two are one simulation rather than two implementations of one idea** -- the spawn
+ * values come from an integer hash that is bit-identical in GLSL and C++, and the integration is
+ * the same four lines in the same order. @ref cna_particle_system_uses_compute says which path the
+ * last update took.
+ *
+ * **Falling back to the CPU is right here**, unlike GPU culling: the CPU path produces the same
+ * particles, only more slowly, so a device without compute gets a correct effect rather than an
+ * empty screen. @ref cna_particle_system_copy_unsupported_reason says why the GPU path was not
+ * taken, when it was not.
+ *
+ * **Particles never die permanently**: a slot whose age passes its lifetime respawns at the
+ * emitter. The emission rate and the lifetime together decide how many slots are in use, so a rate
+ * the capacity cannot sustain is **clamped in the count, not in the settings** -- the settings read
+ * back exactly as they were written, and
+ * @ref cna_particle_system_is_emission_rate_clamped is how a caller finds out.
+ */
+typedef CNA_Handle CNA_ParticleSystemHandle;
+
+/**
+ * @brief Creates a particle system at the default capacity.
+ *
+ * @param graphics_device The device to simulate and draw with.
+ * @param out_system Receives the system; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_create(
+    CNA_Handle graphics_device, CNA_ParticleSystemHandle* out_system);
+
+/**
+ * @brief Creates a particle system with a chosen number of slots.
+ *
+ * @param graphics_device The device to simulate and draw with.
+ * @param capacity How many particle slots to allocate; must be positive.
+ * @param out_system Receives the system; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a capacity below one, an invalid
+ * device or a null output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_create_with_capacity(
+    CNA_Handle graphics_device, int32_t capacity, CNA_ParticleSystemHandle* out_system);
+
+/**
+ * @brief Releases a particle system.
+ *
+ * @param system The system.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_destroy(CNA_ParticleSystemHandle system);
+
+/**
+ * @brief Returns how many particle slots the system allocated.
+ *
+ * @param system The system.
+ * @param out_capacity Receives the capacity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_get_capacity(
+    CNA_ParticleSystemHandle system, int32_t* out_capacity);
+
+/**
+ * @brief Returns the emitter settings.
+ *
+ * @param system The system.
+ * @param out_settings Receives the settings exactly as they were last set.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_get_settings(
+    CNA_ParticleSystemHandle system, CNA_ParticleEmitterSettings* out_settings);
+
+/**
+ * @brief Replaces the emitter settings.
+ *
+ * **Assigned whole and unvalidated**, which is the canonical behaviour: an unsustainable emission
+ * rate is not refused and not clamped here, it shows up in
+ * @ref cna_particle_system_get_active_count and @ref cna_particle_system_is_emission_rate_clamped.
+ * Particles already alive keep going; only newly respawned ones use the new settings.
+ *
+ * @param system The system.
+ * @param settings The settings to apply.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_set_settings(
+    CNA_ParticleSystemHandle system, const CNA_ParticleEmitterSettings* settings);
+
+/**
+ * @brief Respawns every slot, with ages staggered across one lifetime.
+ *
+ * Staggered deliberately, so emission is continuous from the first frame instead of arriving as a
+ * single puff followed by nothing for a lifetime.
+ *
+ * @param system The system.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_reset(CNA_ParticleSystemHandle system);
+
+/**
+ * @brief Advances the simulation.
+ *
+ * An elapsed time that is not positive is a **silent no-op**, not a refusal: a paused frame is an
+ * ordinary thing to hand a simulation, and the canonical body returns rather than complaining.
+ *
+ * @param system The system.
+ * @param elapsed_seconds How far to advance; zero or negative does nothing.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_update(
+    CNA_ParticleSystemHandle system, float elapsed_seconds);
+
+/**
+ * @brief Draws every active particle as one instanced draw.
+ *
+ * Drawing with no active particles **succeeds and draws nothing** -- an emission rate of zero is a
+ * setting, not a mistake. A null texture is refused, because there is nothing to draw *with*.
+ *
+ * @param system The system.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @param texture The particle texture; required.
+ * @return `CNA_RESULT_SUCCESS` -- including when nothing was drawn -- `CNA_RESULT_INVALID_HANDLE`
+ * for a texture that is not one, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_draw(
+    CNA_ParticleSystemHandle system,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    CNA_Handle texture);
+
+/**
+ * @brief Supplies the depth image particles fade against, and the camera it was drawn with.
+ *
+ * @param system The system.
+ * @param depth The prepass depth image, or `CNA_INVALID_HANDLE` to stop fading; **borrowed**.
+ * @param far_plane The far plane it was normalised by; must be positive to take effect.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a handle that is neither a texture
+ * nor `CNA_INVALID_HANDLE`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_set_depth_input_ext(
+    CNA_ParticleSystemHandle system, CNA_Handle depth, float far_plane);
+
+/**
+ * @brief Returns how sharply particles fade into the depth behind them.
+ *
+ * @param system The system.
+ * @param out_softness Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_get_softness_ext(
+    CNA_ParticleSystemHandle system, float* out_softness);
+
+/**
+ * @brief Sets how sharply particles fade into the depth behind them.
+ *
+ * **Floored at zero**, so a negative value reads back as zero rather than being refused.
+ *
+ * @param system The system.
+ * @param softness The fade distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_set_softness_ext(
+    CNA_ParticleSystemHandle system, float softness);
+
+/**
+ * @brief Reports whether the **last** @ref cna_particle_system_update ran on the GPU.
+ *
+ * A record of what happened, not a prediction: it is written by `update` and by nothing else, so
+ * @ref cna_particle_system_set_simulation_on_cpu_ext does **not** change this answer until the next
+ * update runs. Ask it after stepping, not after switching.
+ *
+ * Before the first update it reads `CNA_FALSE`, because no update has run on the GPU yet.
+ *
+ * @param system The system.
+ * @param out_uses_compute Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_uses_compute(
+    CNA_ParticleSystemHandle system, CNA_Bool* out_uses_compute);
+
+/**
+ * @brief Reports whether the CPU path has been forced.
+ *
+ * Distinct from @ref cna_particle_system_uses_compute, which reports what is *happening*: this
+ * reports what was *asked for*, and the two differ on a device with no compute at all.
+ *
+ * @param system The system.
+ * @param out_forced Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_is_simulation_on_cpu_ext(
+    CNA_ParticleSystemHandle system, CNA_Bool* out_forced);
+
+/**
+ * @brief Forces the simulation onto the CPU, or lets it use the GPU again.
+ *
+ * **Particles are carried across rather than restarted.** A simulation that snapped back to the
+ * emitter because a setting changed would be a visible glitch and an invisible bug, so switching
+ * either way preserves what is on screen. Setting the value it already has does nothing at all.
+ *
+ * @param system The system.
+ * @param forced `CNA_TRUE` to force the CPU path; any other non-canonical byte is refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_set_simulation_on_cpu_ext(
+    CNA_ParticleSystemHandle system, CNA_Bool forced);
+
+/**
+ * @brief Copies the reason the GPU path was not taken, if it was not.
+ *
+ * Empty when the GPU path is running.
+ *
+ * @param system The system.
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_copy_unsupported_reason(
+    CNA_ParticleSystemHandle system, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Returns how many slots are actually in use.
+ *
+ * The emission rate multiplied by the lifetime, rounded, and **capped at the capacity** -- which is
+ * where an unsustainable rate is absorbed. Zero when the product is not positive.
+ *
+ * @param system The system.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_get_active_count(
+    CNA_ParticleSystemHandle system, int32_t* out_count);
+
+/**
+ * @brief Reports whether the emission rate exceeds what the capacity can sustain.
+ *
+ * True exactly when rate times lifetime is **strictly greater** than the capacity, so a rate that
+ * fills the system exactly is not clamped.
+ *
+ * @param system The system.
+ * @param out_clamped Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_is_emission_rate_clamped(
+    CNA_ParticleSystemHandle system, CNA_Bool* out_clamped);
+
+/**
+ * @brief Copies the particles out, whichever path is simulating them.
+ *
+ * The one route that brings particles to the caller. Ordinary drawing never does -- the vertex
+ * shader reads the same buffer the compute shader wrote -- so this exists for tests and tools
+ * rather than for the frame.
+ *
+ * @param system The system.
+ * @param destination The array, or null to ask for the count.
+ * @param capacity How many particles it holds.
+ * @param out_count Receives the number available, which is the system's capacity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_copy_particles_ext(
+    CNA_ParticleSystemHandle system,
+    CNA_Particle* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Advances one particle by one step, exactly as either simulation does.
+ *
+ * The four lines both paths run, exposed so a caller can check a shader against the CPU rather than
+ * against a second implementation of the same idea.
+ *
+ * @param particle The particle to advance, in place.
+ * @param index Its slot index, which seeds the respawn.
+ * @param settings The emitter settings.
+ * @param elapsed_seconds How far to advance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_step(
+    CNA_Particle* particle,
+    int32_t index,
+    const CNA_ParticleEmitterSettings* settings,
+    float elapsed_seconds);
+
+/**
+ * @brief Returns the same pseudo-random value the shader's hash returns.
+ *
+ * Integer arithmetic wraps identically in GLSL and C++, so this is **bit-identical** to the GPU's
+ * answer rather than merely similar -- which is what lets the two simulations be compared at all.
+ *
+ * @param seed The seed.
+ * @param out_value Receives a value in `[0, 1)`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_random(uint32_t seed, float* out_value);
+
+/**
+ * @brief Copies the GLSL a vertex shader includes to read a particle.
+ *
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null count, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_particle_system_copy_particle_lookup_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
 
 #ifdef __cplusplus
 }

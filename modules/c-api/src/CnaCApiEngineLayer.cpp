@@ -96,6 +96,7 @@
 #include "CNA/Graphics/AtmosphericSky.hpp"
 #include "CNA/Graphics/EnvironmentProcessor.hpp"
 #include "CNA/Graphics/LightProbeBaker.hpp"
+#include "CNA/Graphics/ParticleSystem.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
@@ -5571,6 +5572,155 @@ CNA_Result cna_area_light_shading_copy_shading_glsl(char* p0, uint64_t p1, uint6
 CNA_Result cna_clustered_forward_effect_set_area_light(CNA_ClusteredForwardEffectHandle p0, const CNA_AreaLightEXT* p1, CNA_AreaLightBrdfTableHandle p2)
 {
     (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_emitter_settings_init(CNA_ParticleEmitterSettings* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_init(CNA_Particle* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_create(CNA_Handle p0, CNA_ParticleSystemHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_create_with_capacity(CNA_Handle p0, int32_t p1, CNA_ParticleSystemHandle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_destroy(CNA_ParticleSystemHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_get_capacity(CNA_ParticleSystemHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_get_settings(CNA_ParticleSystemHandle p0, CNA_ParticleEmitterSettings* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_set_settings(CNA_ParticleSystemHandle p0, const CNA_ParticleEmitterSettings* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_reset(CNA_ParticleSystemHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_update(CNA_ParticleSystemHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_draw(CNA_ParticleSystemHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2, CNA_Handle p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_set_depth_input_ext(CNA_ParticleSystemHandle p0, CNA_Handle p1, float p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_get_softness_ext(CNA_ParticleSystemHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_set_softness_ext(CNA_ParticleSystemHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_uses_compute(CNA_ParticleSystemHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_is_simulation_on_cpu_ext(CNA_ParticleSystemHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_set_simulation_on_cpu_ext(CNA_ParticleSystemHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_copy_unsupported_reason(CNA_ParticleSystemHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_get_active_count(CNA_ParticleSystemHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_is_emission_rate_clamped(CNA_ParticleSystemHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_copy_particles_ext(CNA_ParticleSystemHandle p0, CNA_Particle* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_step(CNA_Particle* p0, int32_t p1, const CNA_ParticleEmitterSettings* p2, float p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_random(uint32_t p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_particle_system_copy_particle_lookup_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
     return ExtensionUnavailable();
 }
 
@@ -19868,6 +20018,13 @@ CNA_Result cna_area_light_shading_coverage(
     float* const outCoverage)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
+        // Same discipline, and it matters here: a non-canonical byte would silently mean
+        // "two-sided", which is a different amount of light rather than a different error.
+        if (const CNA_Result result =
+                CNA::C::Detail::ValidateCanonicalBool(twoSided, "two_sided");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
         Ext::AreaLightShading::Quad native{};
         if (const CNA_Result result = ToNativeQuad(quad, &native);
             result != CNA_RESULT_SUCCESS) {
@@ -19885,7 +20042,7 @@ CNA_Result cna_area_light_shading_coverage(
             outCoverage,
             Ext::AreaLightShading::coverage(
                 native, ToNativeVector3(*surface), ToNativeVector3(*lobeAxis), lobeScale,
-                twoSided != CNA_FALSE));
+                twoSided == CNA_TRUE));
     });
 }
 
@@ -19970,6 +20127,395 @@ CNA_Result cna_clustered_forward_effect_set_area_light(
         e->areaLightTable = resource;
         return CNA_RESULT_SUCCESS;
     });
+}
+
+namespace {
+
+#define CNA_WITH_PARTICLES(handle, body)                                                           \
+    WithEngineObject<Ext::ParticleSystem>(                                                         \
+        (handle), ObjectKind::ParticleSystem, "ParticleSystem", body)
+
+static_assert(
+    CNA_PARTICLE_SYSTEM_DEFAULT_CAPACITY == Ext::ParticleSystem::kDefaultCapacity &&
+    CNA_PARTICLE_BINDING == Ext::ParticleSystem::kParticleBinding);
+
+[[nodiscard]] CNA_Vector4 ToCVector4(const Microsoft::Xna::Framework::Vector4& v) noexcept
+{
+    return CNA_Vector4{v.X, v.Y, v.Z, v.W};
+}
+
+[[nodiscard]] Microsoft::Xna::Framework::Vector4 ToNativeVector4(const CNA_Vector4& v) noexcept
+{
+    return {v.x, v.y, v.z, v.w};
+}
+
+[[nodiscard]] CNA_Result ToNativeEmitterSettings(
+    const CNA_ParticleEmitterSettings* const settings, Ext::ParticleEmitterSettings* const out)
+{
+    if (settings == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The settings are null.");
+    }
+    if (settings->struct_size < static_cast<uint32_t>(sizeof(CNA_ParticleEmitterSettings)) ||
+        settings->struct_version == UINT32_C(0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The emitter-settings structure is malformed.");
+    }
+    out->Position = ToNativeVector3(settings->position);
+    out->Direction = ToNativeVector3(settings->direction);
+    out->Gravity = ToNativeVector3(settings->gravity);
+    out->StartColor = ToNativeVector4(settings->start_color);
+    out->EndColor = ToNativeVector4(settings->end_color);
+    out->ConeAngle = settings->cone_angle;
+    out->Speed = settings->speed;
+    out->SpeedVariance = settings->speed_variance;
+    out->Lifetime = settings->lifetime;
+    out->LifetimeVariance = settings->lifetime_variance;
+    out->Drag = settings->drag;
+    out->EmissionRate = settings->emission_rate;
+    out->StartSize = settings->start_size;
+    out->EndSize = settings->end_size;
+    return CNA_RESULT_SUCCESS;
+}
+
+void FromNativeEmitterSettings(
+    const Ext::ParticleEmitterSettings& source, CNA_ParticleEmitterSettings* const out)
+{
+    out->struct_size = static_cast<uint32_t>(sizeof(CNA_ParticleEmitterSettings));
+    out->struct_version = UINT32_C(1);
+    out->position = Vec3(source.Position.X, source.Position.Y, source.Position.Z);
+    out->direction = Vec3(source.Direction.X, source.Direction.Y, source.Direction.Z);
+    out->gravity = Vec3(source.Gravity.X, source.Gravity.Y, source.Gravity.Z);
+    out->start_color = ToCVector4(source.StartColor);
+    out->end_color = ToCVector4(source.EndColor);
+    out->cone_angle = source.ConeAngle;
+    out->speed = source.Speed;
+    out->speed_variance = source.SpeedVariance;
+    out->lifetime = source.Lifetime;
+    out->lifetime_variance = source.LifetimeVariance;
+    out->drag = source.Drag;
+    out->emission_rate = source.EmissionRate;
+    out->start_size = source.StartSize;
+    out->end_size = source.EndSize;
+}
+
+[[nodiscard]] CNA_Particle ToCParticle(const Ext::Particle& p) noexcept
+{
+    CNA_Particle value{};
+    value.position = ToCVector4(p.Position);
+    value.velocity = ToCVector4(p.Velocity);
+    value.state = ToCVector4(p.State);
+    return value;
+}
+
+} // namespace
+
+CNA_Result cna_particle_emitter_settings_init(CNA_ParticleEmitterSettings* const outSettings)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSettings == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The settings are null.");
+        }
+        *outSettings = CNA_ParticleEmitterSettings{};
+        FromNativeEmitterSettings(Ext::ParticleEmitterSettings{}, outSettings);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_init(CNA_Particle* const outParticle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outParticle == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The particle is null.");
+        }
+        *outParticle = ToCParticle(Ext::Particle{});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_ParticleSystemHandle* const outSystem)
+{
+    return CreateEngineObject<Ext::ParticleSystem>(
+        graphicsDeviceHandle, ObjectKind::ParticleSystem, outSystem, nullptr,
+        Ext::ParticleSystem::kDefaultCapacity);
+}
+
+CNA_Result cna_particle_system_create_with_capacity(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t capacity,
+    CNA_ParticleSystemHandle* const outSystem)
+{
+    if (capacity <= INT32_C(0)) {
+        if (outSystem != nullptr) {
+            *outSystem = CNA_INVALID_HANDLE;
+        }
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The capacity must be positive.");
+    }
+    return CreateEngineObject<Ext::ParticleSystem>(
+        graphicsDeviceHandle, ObjectKind::ParticleSystem, outSystem, nullptr,
+        static_cast<int>(capacity));
+}
+
+CNA_Result cna_particle_system_destroy(const CNA_ParticleSystemHandle system)
+{
+    return DestroyEngineObject<Ext::ParticleSystem>(
+        system, ObjectKind::ParticleSystem, "ParticleSystem");
+}
+
+CNA_Result cna_particle_system_get_capacity(
+    const CNA_ParticleSystemHandle system, int32_t* const outCapacity)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        return StoreValue(outCapacity, static_cast<int32_t>(s->value->getCapacity()));
+    });
+}
+
+CNA_Result cna_particle_system_get_settings(
+    const CNA_ParticleSystemHandle system, CNA_ParticleEmitterSettings* const outSettings)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        if (outSettings == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The settings are null.");
+        }
+        if (outSettings->struct_size <
+                static_cast<uint32_t>(sizeof(CNA_ParticleEmitterSettings)) ||
+            outSettings->struct_version == UINT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The emitter-settings structure is malformed.");
+        }
+        FromNativeEmitterSettings(s->value->getSettings(), outSettings);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_set_settings(
+    const CNA_ParticleSystemHandle system, const CNA_ParticleEmitterSettings* const settings)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        Ext::ParticleEmitterSettings native;
+        if (const CNA_Result result = ToNativeEmitterSettings(settings, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Assigned whole and unvalidated, exactly as the canonical setter does: an unsustainable
+        // emission rate is reported by is_emission_rate_clamped, not corrected here.
+        s->value->setSettings(native);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_reset(const CNA_ParticleSystemHandle system)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        s->value->reset();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_update(
+    const CNA_ParticleSystemHandle system, const float elapsedSeconds)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        // A non-positive step is a no-op on the canonical side, not a refusal: a paused frame is an
+        // ordinary thing to hand a simulation.
+        s->value->update(elapsedSeconds);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_draw(
+    const CNA_ParticleSystemHandle system,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const CNA_Handle texture)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        if (view == nullptr || projection == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "A matrix is null.");
+        }
+        std::shared_ptr<Texture2DResource> particleTexture;
+        if (const CNA_Result result = GetOwnedTexture2D(texture, &particleTexture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        s->value->draw(
+            ToNativeMatrix(*view), ToNativeMatrix(*projection), particleTexture->value.get());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_set_depth_input_ext(
+    const CNA_ParticleSystemHandle system, const CNA_Handle depth, const float farPlane)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        if (depth == CNA_INVALID_HANDLE) {
+            s->value->setDepthInputEXT(nullptr, farPlane);
+            s->borrowed.reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        std::shared_ptr<Texture2DResource> image;
+        if (const CNA_Result result = GetOwnedTexture2D(depth, &image);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        s->value->setDepthInputEXT(image->value.get(), farPlane);
+        // Retained so releasing the depth handle mid-frame cannot leave the system pointing at a
+        // freed image; the contract is still "borrowed".
+        s->borrowed = image;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_get_softness_ext(
+    const CNA_ParticleSystemHandle system, float* const outSoftness)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        return StoreValue(outSoftness, s->value->getSoftnessEXT());
+    });
+}
+
+CNA_Result cna_particle_system_set_softness_ext(
+    const CNA_ParticleSystemHandle system, const float softness)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        s->value->setSoftnessEXT(softness);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_uses_compute(
+    const CNA_ParticleSystemHandle system, CNA_Bool* const outUsesCompute)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        return StoreValue(
+            outUsesCompute, static_cast<CNA_Bool>(s->value->usesCompute() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_particle_system_is_simulation_on_cpu_ext(
+    const CNA_ParticleSystemHandle system, CNA_Bool* const outForced)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        return StoreValue(
+            outForced,
+            static_cast<CNA_Bool>(s->value->isSimulationOnCpuEXT() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_particle_system_set_simulation_on_cpu_ext(
+    const CNA_ParticleSystemHandle system, const CNA_Bool forced)
+{
+    // CBIND-067's discipline: refused BEFORE the handle is resolved, so the answer is the same
+    // whatever handle came with it. `forced != CNA_FALSE` -- which is what this said first -- reads
+    // as "accepted the byte" to CApiBoolContractSmoke, and it is: a 2 would mean CNA_TRUE.
+    if (const CNA_Result result = CNA::C::Detail::ValidateCanonicalBool(forced, "forced");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        s->value->setSimulationOnCpuEXT(forced == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_copy_unsupported_reason(
+    const CNA_ParticleSystemHandle system,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        return CopyFormattedString(
+            destination, capacity, outBytes, [&] { return s->value->getUnsupportedReason(); });
+    });
+}
+
+CNA_Result cna_particle_system_get_active_count(
+    const CNA_ParticleSystemHandle system, int32_t* const outCount)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        return StoreValue(outCount, static_cast<int32_t>(s->value->getActiveCount()));
+    });
+}
+
+CNA_Result cna_particle_system_is_emission_rate_clamped(
+    const CNA_ParticleSystemHandle system, CNA_Bool* const outClamped)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        return StoreValue(
+            outClamped,
+            static_cast<CNA_Bool>(s->value->isEmissionRateClamped() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_particle_system_copy_particles_ext(
+    const CNA_ParticleSystemHandle system,
+    CNA_Particle* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_PARTICLES(system, [&](const auto& s) -> CNA_Result {
+        const auto particles = s->value->readParticlesEXT();
+        std::vector<CNA_Particle> values;
+        values.reserve(particles.size());
+        for (const auto& particle : particles) {
+            values.push_back(ToCParticle(particle));
+        }
+        return CopyValueRange(values, destination, capacity, outCount);
+    });
+}
+
+CNA_Result cna_particle_system_step(
+    CNA_Particle* const particle,
+    const int32_t index,
+    const CNA_ParticleEmitterSettings* const settings,
+    const float elapsedSeconds)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (particle == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The particle is null.");
+        }
+        Ext::ParticleEmitterSettings native;
+        if (const CNA_Result result = ToNativeEmitterSettings(settings, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Ext::Particle value{};
+        value.Position = ToNativeVector4(particle->position);
+        value.Velocity = ToNativeVector4(particle->velocity);
+        value.State = ToNativeVector4(particle->state);
+        Ext::ParticleSystem::step(value, static_cast<int>(index), native, elapsedSeconds);
+        *particle = ToCParticle(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_particle_system_random(const uint32_t seed, float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(outValue, Ext::ParticleSystem::random(seed));
+    });
+}
+
+CNA_Result cna_particle_system_copy_particle_lookup_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes,
+        [] { return Ext::ParticleSystem::getParticleLookupGlsl(); });
 }
 
 #endif // CNA_CNAEXT

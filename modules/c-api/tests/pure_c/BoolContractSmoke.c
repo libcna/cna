@@ -623,6 +623,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_particle_system_set_simulation_on_cpu_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_particle_system_set_simulation_on_cpu_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_pbr_effect_set_double_sided_ext(0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -820,6 +827,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 108 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 109 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

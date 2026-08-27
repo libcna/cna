@@ -958,6 +958,66 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-092A. Particles. Unlike the area light and the image-based light, the canonical
+       particle types live under CNA_CNAEXT, so even their value initializers refuse here -- the
+       difference is where the canonical header lives, not whether the type is a POD. */
+    {
+        CNA_ParticleSystemHandle system = (CNA_ParticleSystemHandle)UINT64_C(0x5A5A5A5A);
+        CNA_ParticleEmitterSettings emitter;
+        CNA_Particle particle;
+        CNA_Matrix matrix;
+        const float sentinel_particle = -23.5F;
+        float particle_scalar = sentinel_particle;
+        uint64_t particle_count = UINT64_C(5);
+        if (cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        emitter.struct_size = (uint32_t)sizeof(CNA_ParticleEmitterSettings);
+        emitter.struct_version = UINT32_C(1);
+        if (cna_particle_emitter_settings_init(&emitter) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_init(&particle) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_create(graphics_device, &system) != CNA_RESULT_NOT_SUPPORTED ||
+            system != CNA_INVALID_HANDLE ||
+            cna_particle_system_create_with_capacity(graphics_device, INT32_C(8), &system) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_get_capacity(system, &samples) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_get_settings(system, &emitter) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_set_settings(system, &emitter) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_reset(system) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_update(system, 0.016F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_draw(system, &matrix, &matrix, CNA_INVALID_HANDLE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_set_depth_input_ext(system, CNA_INVALID_HANDLE, 100.0F) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_get_softness_ext(system, &particle_scalar) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_set_softness_ext(system, 1.0F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_uses_compute(system, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_is_simulation_on_cpu_ext(system, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_set_simulation_on_cpu_ext(system, CNA_TRUE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_copy_unsupported_reason(system, 0, UINT64_C(0), &particle_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            particle_count != UINT64_C(0) ||
+            cna_particle_system_get_active_count(system, &samples) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_is_emission_rate_clamped(system, &flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_copy_particles_ext(system, 0, UINT64_C(0), &particle_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_step(&particle, INT32_C(0), &emitter, 0.5F) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_random(UINT32_C(1), &particle_scalar) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_copy_particle_lookup_glsl(0, UINT64_C(0), &particle_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_particle_system_destroy(system) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (particle_scalar != sentinel_particle) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -6613,6 +6673,8 @@ static int validate_area_lights(const CNA_Handle graphics_device)
         CNA_RESULT_INVALID_ARGUMENT;
     ok = ok && cna_area_light_shading_coverage(quad, &surface, 0, 0.25F, CNA_FALSE, &scalar) ==
         CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_area_light_shading_coverage(quad, &surface, &vector, 0.25F, UINT8_C(2),
+                                                &scalar) == CNA_RESULT_INVALID_ARGUMENT;
 
     vector.x = 0.0F; vector.y = 0.0F; vector.z = 1.0F;
     {
@@ -6746,6 +6808,248 @@ static int validate_area_lights(const CNA_Handle graphics_device)
 
     ok = ok && cna_area_light_brdf_table_destroy(table) == CNA_RESULT_SUCCESS;
     ok = ok && cna_area_light_brdf_table_destroy(table) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
+/* CBIND-092A. The particle system's distinguishing contract is that an unsustainable emission rate
+   is NOT corrected on the way in: the settings read back exactly as written, and the clamp appears
+   in the active count and in a separate query. A binding that clamped the setter would look
+   friendlier and would make get_settings lie. Both halves are asserted here.
+
+   The second one is the CPU/GPU split. Falling back is correct for particles -- unlike GPU culling
+   -- so the fallback path is a success arm, not a refusal arm, and forcing it must CARRY the
+   particles across rather than restarting them. */
+static int validate_particles(const CNA_Handle graphics_device)
+{
+    CNA_ParticleSystemHandle system = CNA_INVALID_HANDLE;
+    CNA_ParticleEmitterSettings settings;
+    CNA_ParticleEmitterSettings read_back;
+    CNA_Particle particle;
+    CNA_Particle before;
+    CNA_Particle particles[64];
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool forced = UINT8_C(9);
+    uint64_t count = UINT64_C(0);
+    uint64_t bytes = UINT64_C(0);
+    int32_t number = INT32_C(-1);
+    float scalar = -1.0F;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The two value types. */
+    ok = cna_particle_emitter_settings_init(&settings) == CNA_RESULT_SUCCESS &&
+        settings.cone_angle == 0.35F && settings.speed == 4.0F && settings.lifetime == 2.0F &&
+        settings.emission_rate == 200.0F && settings.gravity.y == -9.81F &&
+        settings.direction.y == 1.0F && settings.start_size == 0.25F && settings.end_size == 0.0F;
+    ok = ok && cna_particle_emitter_settings_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_particle_init(&particle) == CNA_RESULT_SUCCESS &&
+        particle.position.x == 0.0F && particle.state.y == 1.0F;
+    ok = ok && cna_particle_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The static hash is bit-identical to the shader's, so it is deterministic and in range --
+       and two different seeds must not answer the same, or the "random" is a constant. */
+    ok = ok && cna_particle_system_random(UINT32_C(1), &scalar) == CNA_RESULT_SUCCESS &&
+        scalar >= 0.0F && scalar < 1.0F;
+    {
+        float again = -1.0F;
+        float other = -1.0F;
+        ok = ok && cna_particle_system_random(UINT32_C(1), &again) == CNA_RESULT_SUCCESS &&
+            again == scalar;
+        ok = ok && cna_particle_system_random(UINT32_C(2), &other) == CNA_RESULT_SUCCESS &&
+            other != scalar;
+    }
+    ok = ok && cna_particle_system_random(UINT32_C(1), 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_particle_system_copy_particle_lookup_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+
+    /* step advances the particle in place, and a zero step leaves it exactly where it was. */
+    ok = ok && cna_particle_init(&particle) == CNA_RESULT_SUCCESS;
+    before = particle;
+    ok = ok && cna_particle_system_step(&particle, INT32_C(0), &settings, 0.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && particle.position.x == before.position.x &&
+        particle.position.y == before.position.y && particle.state.x == before.state.x;
+    ok = ok && cna_particle_system_step(&particle, INT32_C(0), &settings, 0.5F) ==
+        CNA_RESULT_SUCCESS;
+    /* Age advanced, so the step did something. */
+    ok = ok && particle.state.x > before.state.x;
+    ok = ok && cna_particle_system_step(0, INT32_C(0), &settings, 0.5F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_particle_system_step(&particle, INT32_C(0), 0, 0.5F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    {
+        CNA_ParticleEmitterSettings bad = settings;
+        bad.struct_size = UINT32_C(4);
+        ok = ok && cna_particle_system_step(&particle, INT32_C(0), &bad, 0.5F) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    /* ---- the system ---- */
+    ok = ok && cna_particle_system_create_with_capacity(graphics_device, INT32_C(0), &system) ==
+        CNA_RESULT_INVALID_ARGUMENT && system == CNA_INVALID_HANDLE;
+    ok = ok && cna_particle_system_create_with_capacity(graphics_device, INT32_C(-8), &system) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    if (!ok || cna_particle_system_create_with_capacity(
+            graphics_device, INT32_C(64), &system) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_particle_system_get_capacity(system, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(64);
+
+    /* THE contract. A rate of 200/s with a 2s lifetime wants 400 particles from a 64-slot system:
+       the settings come back unchanged, the active count is capped at the capacity, and the
+       clamp is reported separately. */
+    read_back.struct_size = (uint32_t)sizeof(CNA_ParticleEmitterSettings);
+    read_back.struct_version = UINT32_C(1);
+    ok = ok && cna_particle_system_set_settings(system, &settings) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_get_settings(system, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.emission_rate == 200.0F && read_back.lifetime == 2.0F;
+    ok = ok && cna_particle_system_get_active_count(system, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(64);
+    ok = ok && cna_particle_system_is_emission_rate_clamped(system, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+
+    /* A rate the capacity can sustain: not clamped, and the count is the product rounded. */
+    settings.emission_rate = 10.0F;
+    settings.lifetime = 2.0F;
+    ok = ok && cna_particle_system_set_settings(system, &settings) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_get_active_count(system, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(20);
+    ok = ok && cna_particle_system_is_emission_rate_clamped(system, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    /* Exactly filling it is NOT clamped -- the test is strictly greater. */
+    settings.emission_rate = 32.0F;
+    ok = ok && cna_particle_system_set_settings(system, &settings) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_get_active_count(system, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(64);
+    ok = ok && cna_particle_system_is_emission_rate_clamped(system, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    /* A non-positive product is zero active, not a negative count. */
+    settings.emission_rate = 0.0F;
+    ok = ok && cna_particle_system_set_settings(system, &settings) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_get_active_count(system, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(0);
+    settings.emission_rate = 10.0F;
+    ok = ok && cna_particle_system_set_settings(system, &settings) == CNA_RESULT_SUCCESS;
+
+    ok = ok && cna_particle_system_set_settings(system, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    {
+        CNA_ParticleEmitterSettings bad = settings;
+        bad.struct_size = UINT32_C(4);
+        ok = ok && cna_particle_system_set_settings(system, &bad) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_particle_system_get_settings(system, &bad) == CNA_RESULT_INVALID_ARGUMENT;
+    }
+    ok = ok && cna_particle_system_get_settings(system, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Softness is floored, not refused. */
+    ok = ok && cna_particle_system_set_softness_ext(system, 2.5F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_get_softness_ext(system, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 2.5F;
+    ok = ok && cna_particle_system_set_softness_ext(system, -3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_get_softness_ext(system, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+
+    /* A non-positive step is a no-op, not a refusal. */
+    ok = ok && cna_particle_system_reset(system) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_update(system, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_update(system, -1.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_update(system, 1.0F / 60.0F) == CNA_RESULT_SUCCESS;
+
+    ok = ok && cna_particle_system_uses_compute(system, &flag) == CNA_RESULT_SUCCESS &&
+        (flag == CNA_TRUE || flag == CNA_FALSE);
+    /* The reason is empty exactly when the GPU path is running -- that is the contract, and it is
+       the reason this route exists at all. Asking for the size of an empty reason SUCCEEDS with a
+       count of zero, because this ABI's copy routes report the text length without a terminator;
+       a non-empty one is BUFFER_TOO_SMALL. Both arms are asserted, keyed on which path ran. */
+    {
+        const CNA_Result sized =
+            cna_particle_system_copy_unsupported_reason(system, 0, UINT64_C(0), &bytes);
+        if (flag == CNA_TRUE) {
+            ok = ok && sized == CNA_RESULT_SUCCESS && bytes == UINT64_C(0);
+        } else {
+            ok = ok && sized == CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+        }
+    }
+    ok = ok && cna_particle_system_copy_unsupported_reason(system, 0, UINT64_C(0), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Reading back asks for the count first; the count is the CAPACITY, not the active count --
+       every slot exists whether or not it is in use. */
+    ok = ok && cna_particle_system_copy_particles_ext(system, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(64);
+    ok = ok && cna_particle_system_copy_particles_ext(
+            system, particles, (uint64_t)(sizeof particles / sizeof particles[0]), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(64);
+    ok = ok && cna_particle_system_copy_particles_ext(system, particles, UINT64_C(64), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Forcing the CPU path CARRIES the particles across rather than restarting them: the first
+       slot must still be where the GPU (or CPU) had put it, not back at the emitter. */
+    ok = ok && cna_particle_system_is_simulation_on_cpu_ext(system, &forced) ==
+        CNA_RESULT_SUCCESS;
+    before = particles[1];
+    ok = ok && cna_particle_system_set_simulation_on_cpu_ext(system, CNA_TRUE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_is_simulation_on_cpu_ext(system, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+    /* uses_compute records what the LAST update did, so forcing the CPU does not change it until
+       an update actually runs. Asserting it immediately after the switch is the mistake this
+       ordering exists to catch, and it is why the step below is here rather than optional. */
+    ok = ok && cna_particle_system_update(system, 1.0F / 60.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_uses_compute(system, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_particle_system_copy_particles_ext(system, particles, UINT64_C(64), &count) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && particles[1].state.y == before.state.y;
+    /* Setting the value it already has does nothing at all. */
+    ok = ok && cna_particle_system_set_simulation_on_cpu_ext(system, CNA_TRUE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_update(system, 1.0F / 60.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_set_simulation_on_cpu_ext(system, UINT8_C(2)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_particle_system_set_simulation_on_cpu_ext(system, forced) ==
+        CNA_RESULT_SUCCESS;
+
+    /* Drawing: a null texture is refused, an empty system succeeds and draws nothing. */
+    ok = ok && cna_particle_system_draw(system, &view, &projection, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_INVALID_HANDLE;
+    {
+        const CNA_Texture2DCreateInfo info = {
+            sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 4U, 4U, CNA_FALSE, {0U, 0U, 0U},
+            CNA_SURFACE_FORMAT_COLOR};
+        if (ok && cna_texture2d_create(graphics_device, &info, &texture) == CNA_RESULT_SUCCESS) {
+            ok = ok && cna_particle_system_draw(system, &view, &projection, texture) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_particle_system_draw(system, 0, &projection, texture) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+            settings.emission_rate = 0.0F;
+            ok = ok && cna_particle_system_set_settings(system, &settings) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_particle_system_get_active_count(system, &number) ==
+                CNA_RESULT_SUCCESS && number == INT32_C(0);
+            /* Nothing active: still a success, not a refusal. */
+            ok = ok && cna_particle_system_draw(system, &view, &projection, texture) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_particle_system_set_depth_input_ext(system, texture, 100.0F) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_particle_system_set_depth_input_ext(
+                    system, CNA_INVALID_HANDLE, 100.0F) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_particle_system_set_depth_input_ext(
+                    system, UINT64_C(0x5A5A5A5A), 100.0F) == CNA_RESULT_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
+        } else {
+            ok = 0;
+        }
+    }
+
+    ok = ok && cna_particle_system_destroy(system) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_particle_system_destroy(system) != CNA_RESULT_SUCCESS;
     return ok;
 }
 
@@ -6890,6 +7194,10 @@ static CNA_Result on_load(
         }
         if (!validate_area_lights(graphics_device)) {
             state->failed_stage = 36;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_particles(graphics_device)) {
+            state->failed_stage = 37;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

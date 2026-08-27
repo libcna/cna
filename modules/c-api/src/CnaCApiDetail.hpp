@@ -251,6 +251,9 @@ enum class ObjectKind : uint32_t {
 
     // CBIND-091C.
     AreaLightBrdfTable = 161,
+
+    // CBIND-092A.
+    ParticleSystem = 162,
     Test = UINT32_MAX
 };
 

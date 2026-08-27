@@ -3289,6 +3289,30 @@
   "cna_packet_writer_write_vector2",
   "cna_packet_writer_write_vector3",
   "cna_packet_writer_write_vector4",
+  "cna_particle_emitter_settings_init",
+  "cna_particle_init",
+  "cna_particle_system_copy_particle_lookup_glsl",
+  "cna_particle_system_copy_particles_ext",
+  "cna_particle_system_copy_unsupported_reason",
+  "cna_particle_system_create",
+  "cna_particle_system_create_with_capacity",
+  "cna_particle_system_destroy",
+  "cna_particle_system_draw",
+  "cna_particle_system_get_active_count",
+  "cna_particle_system_get_capacity",
+  "cna_particle_system_get_settings",
+  "cna_particle_system_get_softness_ext",
+  "cna_particle_system_is_emission_rate_clamped",
+  "cna_particle_system_is_simulation_on_cpu_ext",
+  "cna_particle_system_random",
+  "cna_particle_system_reset",
+  "cna_particle_system_set_depth_input_ext",
+  "cna_particle_system_set_settings",
+  "cna_particle_system_set_simulation_on_cpu_ext",
+  "cna_particle_system_set_softness_ext",
+  "cna_particle_system_step",
+  "cna_particle_system_update",
+  "cna_particle_system_uses_compute",
   "cna_pbr_effect_apply_material",
   "cna_pbr_effect_create",
   "cna_pbr_effect_extract_material",
@@ -5497,6 +5521,8 @@
   "CNA_PACKED_VECTOR_FORMAT_RGBA64": 14,
   "CNA_PACKED_VECTOR_FORMAT_SHORT2": 15,
   "CNA_PACKED_VECTOR_FORMAT_SHORT4": 16,
+  "CNA_PARTICLE_BINDING": 7,
+  "CNA_PARTICLE_SYSTEM_DEFAULT_CAPACITY": 1024,
   "CNA_PBR_MATERIAL_EXT_VERSION": 1,
   "CNA_PBR_TEXTURE_BASE_COLOR": 0,
   "CNA_PBR_TEXTURE_EMISSIVE": 3,
@@ -6758,6 +6784,10 @@
    8
   ],
   "CNA_PacketWriterHandle": [
+   8,
+   8
+  ],
+  "CNA_ParticleSystemHandle": [
    8,
    8
   ],
@@ -10985,6 +11015,94 @@
     ]
    },
    "size": 8
+  },
+  "CNA_Particle": {
+   "align": 4,
+   "fields": {
+    "position": [
+     0,
+     16
+    ],
+    "state": [
+     32,
+     16
+    ],
+    "velocity": [
+     16,
+     16
+    ]
+   },
+   "size": 48
+  },
+  "CNA_ParticleEmitterSettings": {
+   "align": 4,
+   "fields": {
+    "cone_angle": [
+     76,
+     4
+    ],
+    "direction": [
+     20,
+     12
+    ],
+    "drag": [
+     96,
+     4
+    ],
+    "emission_rate": [
+     100,
+     4
+    ],
+    "end_color": [
+     60,
+     16
+    ],
+    "end_size": [
+     108,
+     4
+    ],
+    "gravity": [
+     32,
+     12
+    ],
+    "lifetime": [
+     88,
+     4
+    ],
+    "lifetime_variance": [
+     92,
+     4
+    ],
+    "position": [
+     8,
+     12
+    ],
+    "speed": [
+     80,
+     4
+    ],
+    "speed_variance": [
+     84,
+     4
+    ],
+    "start_color": [
+     44,
+     16
+    ],
+    "start_size": [
+     104,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 112
   },
   "CNA_PassTimingEXT": {
    "align": 8,
