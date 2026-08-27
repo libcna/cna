@@ -774,17 +774,24 @@ TEST(CnbContainerTest, MissingRequiredChunkIsRejectedByRequireSingle)
 
 TEST(CnbContainerTest, DuplicateContainerMetadataChunkIsRejected)
 {
-    // Two CMET chunks cannot be produced by CnbWriter, so build the situation by hand.
+    // Two CMET chunks cannot be produced by CnbWriter -- AddChunk refuses a container-defined
+    // identifier outright (CNBF-115) -- so the second one is made by writing an ordinary chunk of
+    // the same shape and retyping its table-of-contents entry. The point is to reach the READER's
+    // singleton rule with a file that arrived from somewhere else.
     CnbWriter writer(CnbAssetTypeId::Curve, 1u);
     writer.SetMetadata("A", "B");
-    writer.AddChunk(CNA::Content::Cnb::CnbContainerChunk::Metadata, Bytes({0, 0, 0, 0, 0, 0, 0, 0,
-                                                                          0, 0, 0, 0}),
+    writer.AddChunk(MakeChunkId('c', 'm', 'e', 't'), Bytes({0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}),
                     CnbChunkFlags::None, 4u);
+    RawCnb raw{writer.Build()};
+    raw.PatchU32(raw.EntryOffset(1u) + kEntType,
+                 CNA::Content::Cnb::CnbContainerChunk::Metadata.value);
+    raw.FixStructuralChecksums();
+
     // Rejected by Parse() rather than by the accessor: a document decodes its container-level
     // chunks up front (CNBF-H004), so it is immutable once it exists and a structural problem
     // surfaces at the point the file is opened rather than at whichever later call happened to
     // touch it first.
-    EXPECT_THROW((void)CnbDocument::Parse(writer.Build(), "twometa.cnb"), ContentLoadException);
+    EXPECT_THROW((void)CnbDocument::Parse(raw.bytes, "twometa.cnb"), ContentLoadException);
 }
 
 // --------------------------------------------------------------------------------------------
@@ -868,10 +875,17 @@ namespace
         payload.WriteBytes(std::span<const std::uint8_t>(
             reinterpret_cast<const std::uint8_t*>(logicalName.data()), logicalName.size()));
 
+        // Emitted as an ordinary chunk and then retyped, because CnbWriter refuses to add a
+        // container-defined identifier through AddChunk (CNBF-115) and SetExternalReferences()
+        // now applies the very rule this test has to reach the reader's copy of.
         CnbWriter writer(CnbAssetTypeId::Model, 1u);
-        writer.AddChunk(CNA::Content::Cnb::CnbContainerChunk::ExternalReferences, payload.Take(),
+        writer.AddChunk(MakeChunkId('x', 'r', 'e', 'f'), payload.Take(),
                         CnbChunkFlags::Mandatory, 4u);
-        return writer.Build();
+        RawCnb raw{writer.Build()};
+        raw.PatchU32(raw.EntryOffset(0u) + kEntType,
+                     CNA::Content::Cnb::CnbContainerChunk::ExternalReferences.value);
+        raw.FixStructuralChecksums();
+        return raw.bytes;
     }
 }
 
@@ -1070,5 +1084,105 @@ TEST(CnbContainerTest, EveryPrimitiveReadIsBoundsCheckedRatherThanTruncating)
     {
         CnbByteReader r(tiny, "test");
         EXPECT_THROW(r.RequireExhausted(), ContentLoadException);
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-115 -- writer/reader symmetry: everything Build() accepts must be loadable
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbContainerTest, TheLogicalNameRuleIsOneFunctionAndCoversEveryRefusal)
+{
+    using CNA::Content::Cnb::CnbLogicalNameProblem;
+
+    // Acceptable: relative, '/'-separated, no traversal, well-formed UTF-8 (including non-ASCII,
+    // which a name is allowed to be -- a content tree is not obliged to be English).
+    EXPECT_TRUE(CnbLogicalNameProblem("music/theme").empty());
+    EXPECT_TRUE(CnbLogicalNameProblem("a").empty());
+    EXPECT_TRUE(CnbLogicalNameProblem("levels/1/..hidden").empty()) << "'..hidden' is not '..'";
+    EXPECT_TRUE(CnbLogicalNameProblem("musique/thèm").empty());
+
+    EXPECT_FALSE(CnbLogicalNameProblem("").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem("music\\theme").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem("/etc/passwd").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem("C:/windows").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem("../secret").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem("music/../../secret").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem("trailing/..").empty());
+    EXPECT_FALSE(CnbLogicalNameProblem(std::string("bad\xC3", 4)).empty()) << "truncated UTF-8";
+}
+
+TEST(CnbContainerTest, WriterRefusesAnExternalReferenceItsOwnReaderWouldReject)
+{
+    // The asymmetry this closes: the reader has always refused these names, and the writer used to
+    // emit them -- so an encoder could produce a file its own decoder rejects. Each case is
+    // asserted through Build(), which is the boundary a schema encoder actually crosses.
+    for (const char* hostile : {"", "..\\/secret", "/etc/passwd", "D:/x", "../secret",
+                                "a/../../b"})
+    {
+        CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+        writer.AddChunk(kAlpha, Bytes({1}), CnbChunkFlags::None, 4u);
+        CnbExternalReference reference;
+        reference.logicalName = hostile;
+        writer.SetExternalReferences({reference});
+        EXPECT_THROW((void)writer.Build(), ContentLoadException)
+            << "Build() accepted the reference '" << hostile << "'";
+    }
+}
+
+TEST(CnbContainerTest, WriterRefusesToAddAContainerDefinedChunkAsASchemaChunk)
+{
+    // Adding a second CMET or XREF produced a file Build() accepted and Parse() refused, because
+    // the reader requires each to be a singleton. Caught at the AddChunk() that is wrong.
+    for (const CnbChunkId reserved : {CNA::Content::Cnb::CnbContainerChunk::Metadata,
+                                      CNA::Content::Cnb::CnbContainerChunk::ExternalReferences})
+    {
+        CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+        EXPECT_THROW(writer.AddChunk(reserved, Bytes({0, 0, 0, 0}), CnbChunkFlags::None, 4u),
+                     ContentLoadException)
+            << "AddChunk accepted the container-defined identifier "
+            << CNA::Content::Cnb::ChunkIdToString(reserved);
+        EXPECT_EQ(writer.SchemaChunkCount(), 0u);
+    }
+}
+
+TEST(CnbContainerTest, EveryFileBuildAcceptsIsStructurallyLoadable)
+{
+    // The invariant the two tests above exist to protect, stated directly: whatever combination of
+    // writer calls succeeds, the bytes it produced parse. Exercised over the shapes a schema
+    // encoder actually produces -- with and without metadata, with and without references, with a
+    // mandatory chunk, with an empty chunk, with a non-default alignment.
+    struct Shape
+    {
+        const char* what;
+        bool metadata;
+        bool references;
+    };
+    for (const Shape& shape : {Shape{"bare", false, false}, Shape{"cmet", true, false},
+                               Shape{"xref", false, true}, Shape{"both", true, true}})
+    {
+        CnbWriter writer(CnbAssetTypeId::Curve, 1u);
+        if (shape.metadata) { writer.SetMetadata("Microsoft.Xna.Framework.Curve", "sym/curve"); }
+        if (shape.references)
+        {
+            CnbExternalReference reference;
+            reference.logicalName = "textures/atlas";
+            reference.expectedAssetTypeId = CnbAssetTypeId::Texture2D;
+            writer.SetExternalReferences({reference});
+        }
+        writer.AddChunk(kAlpha, Bytes({1, 2, 3}), CnbChunkFlags::Mandatory, 4u);
+        writer.AddChunk(kBeta, {}, CnbChunkFlags::None, 64u);
+        writer.AddChunk(kGamma, Bytes({7}), CnbChunkFlags::None, 4096u);
+
+        std::vector<std::uint8_t> bytes;
+        ASSERT_NO_THROW(bytes = writer.Build()) << shape.what;
+        CnbDocument document = CnbDocument::Parse(bytes, "symmetry.cnb");
+        const CnbChunkId known[] = {kAlpha, kBeta, kGamma};
+        EXPECT_NO_THROW(document.RequireMandatoryChunksUnderstood(known)) << shape.what;
+        EXPECT_EQ(document.Metadata().present, shape.metadata) << shape.what;
+        EXPECT_EQ(document.ExternalReferences().size(), shape.references ? 1u : 0u) << shape.what;
+        EXPECT_EQ(document.FindAll(CNA::Content::Cnb::CnbContainerChunk::Metadata).size(),
+                  shape.metadata ? 1u : 0u)
+            << shape.what;
     }
 }

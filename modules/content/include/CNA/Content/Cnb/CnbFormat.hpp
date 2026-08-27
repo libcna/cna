@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <string_view>
 
 namespace CNA::Content::Cnb
 {
@@ -306,6 +307,28 @@ namespace CNA::Content::Cnb
      * @return The built-in type's name, or a hexadecimal rendering for a custom/unknown one.
      */
     [[nodiscard]] std::string AssetTypeIdToString(std::uint32_t assetTypeId);
+
+    /**
+     * @brief Describes why @p logicalName is not a legal `.cnb` external-reference name, or
+     *        returns an empty string when it is (plans/plan_cnb.md `CNBF-115`).
+     *
+     * **The single definition of the rule, applied on both sides of the format.** An `XREF` name
+     * goes straight into `ContentManager`'s path resolution, so the reader has always refused a
+     * name that could carry a traversal into it. Having the writer apply a *different* rule -- or
+     * none -- means an encoder can produce a file its own decoder refuses, which is the class of
+     * defect this function exists to make impossible: `CnbDocument`, `CnbWriter` and every media
+     * codec now ask this one function.
+     *
+     * A name is legal when it is non-empty, well-formed UTF-8, relative (does not begin with `/`
+     * and is not drive-qualified like `C:`), `/`-separated (no backslash), and contains no `..`
+     * segment. `ContentManager`'s own containment checks still run afterwards; this is defence in
+     * depth rather than a replacement for them.
+     *
+     * @param logicalName The candidate name.
+     * @return A human-readable description of the first problem found, or an empty string when
+     *         @p logicalName is acceptable.
+     */
+    [[nodiscard]] std::string CnbLogicalNameProblem(std::string_view logicalName);
 
     /** @brief Chunk identifiers the container itself defines, independent of any asset schema. */
     namespace CnbContainerChunk

@@ -63,21 +63,32 @@ namespace CNA::Content::Cnb
         /**
          * @brief Sets the optional `XREF` external-reference table.
          *
+         * Each name is validated when Build() assembles the file, against the container's own
+         * rule -- `CnbLogicalNameProblem()`, the same function the reader applies (relative,
+         * `/`-separated, well-formed UTF-8, no `..` segment). Sharing the rule is what stops the
+         * writer producing a file its own reader would refuse (plans/plan_cnb.md `CNBF-115`).
+         *
          * @param references The assets this file refers to by logical name, in the order the
          *                   schema's own indices expect.
          */
         void SetExternalReferences(std::vector<CnbExternalReference> references);
 
         /**
-         * @brief Appends one chunk.
+         * @brief Appends one schema chunk.
+         *
+         * The container-defined identifiers `CMET` and `XREF` are **refused** here: the writer
+         * emits each of them at most once, from SetMetadata() and SetExternalReferences(), and a
+         * schema adding one as an ordinary chunk would produce a file carrying two of a singleton
+         * the reader requires to be unique -- accepted by Build() and refused by
+         * CnbDocument::Parse() (plans/plan_cnb.md `CNBF-115`).
          *
          * @param type      The chunk's four-character identifier; every byte must be printable
-         *                  ASCII.
+         *                  ASCII, and it must not be a container-defined identifier.
          * @param data      The chunk's bytes. Moved.
          * @param flags     Chunk flags; see CnbChunkFlags.
          * @param alignment Power-of-two byte alignment the chunk's offset will satisfy.
-         * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the identifier,
-         *         flags or alignment are invalid.
+         * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the identifier is
+         *         malformed or container-defined, or the flags or alignment are invalid.
          */
         void AddChunk(CnbChunkId type, std::vector<std::uint8_t> data,
                       std::uint32_t flags = CnbChunkFlags::None, std::uint32_t alignment = 4u);

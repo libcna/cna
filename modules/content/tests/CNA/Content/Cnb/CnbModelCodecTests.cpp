@@ -718,11 +718,19 @@ TEST(CnbModelCodecTest, DecoderRejectsAMissingMandatoryChunk)
         const CnbDocument source = Parse(bytes);
 
         CnbWriter writer(CnbAssetTypeId::Model, 1u);
+        if (!source.ExternalReferences().empty())
+        {
+            writer.SetExternalReferences(source.ExternalReferences());
+        }
         for (std::size_t i = 0; i < source.ChunkCount(); ++i)
         {
             const auto& entry = source.ChunkAt(i);
             if (entry.type == omit) { continue; }
-            if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata) { continue; }
+            if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata ||
+                entry.type == CNA::Content::Cnb::CnbContainerChunk::ExternalReferences)
+            {
+                continue;
+            }
             const auto data = source.ChunkData(i);
             writer.AddChunk(entry.type, std::vector<std::uint8_t>(data.begin(), data.end()),
                             entry.flags, entry.alignment);
@@ -739,10 +747,18 @@ TEST(CnbModelCodecTest, DecoderRejectsAnUnknownMandatoryChunk)
     const CnbDocument source = Parse(bytes);
 
     CnbWriter writer(CnbAssetTypeId::Model, 1u);
+    if (!source.ExternalReferences().empty())
+    {
+        writer.SetExternalReferences(source.ExternalReferences());
+    }
     for (std::size_t i = 0; i < source.ChunkCount(); ++i)
     {
         const auto& entry = source.ChunkAt(i);
-        if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata) { continue; }
+        if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata ||
+            entry.type == CNA::Content::Cnb::CnbContainerChunk::ExternalReferences)
+        {
+            continue;
+        }
         const auto data = source.ChunkData(i);
         writer.AddChunk(entry.type, std::vector<std::uint8_t>(data.begin(), data.end()),
                         entry.flags, entry.alignment);

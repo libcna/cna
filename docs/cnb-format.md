@@ -231,13 +231,20 @@ count × {
 }
 ```
 
-`logicalName` is validated on read: non-empty, well-formed UTF-8, no backslash, not starting with
-`/`, not drive-qualified (`X:`), and containing no `..` segment. `ContentManager`'s own containment
-checks still run afterwards; this is defence in depth, so a compiled file can never hand
-path-traversal input to the resolver in the first place.
+`logicalName` is validated on read **and on write**, by one shared function
+(`CnbLogicalNameProblem()`): non-empty, well-formed UTF-8, no backslash, not starting with `/`, not
+drive-qualified (`X:`), and containing no `..` segment. `ContentManager`'s own containment checks
+still run afterwards; this is defence in depth, so a compiled file can never hand path-traversal
+input to the resolver in the first place. Sharing the rule is what stops a writer producing a file
+its own reader refuses — the reader used to be alone in applying it.
 
 `XREF` is marked `Mandatory` on purpose: a reader that could not see the names an asset depends on
 would load a visibly incomplete asset and say nothing.
+
+**Both container chunks are singletons, and the writer cannot emit a second of either.** `CMET` and
+`XREF` come from `CnbWriter::SetMetadata()`/`SetExternalReferences()`; passing one of their
+identifiers to `CnbWriter::AddChunk()` is refused, because a schema adding one as an ordinary chunk
+would produce a file the writer accepted and the reader rejects.
 
 ---
 

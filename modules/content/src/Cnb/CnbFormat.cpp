@@ -4,6 +4,8 @@
 
 #include <stdexcept>
 
+#include "CNA/Content/Cnb/CnbByteReader.hpp"
+
 namespace CNA::Content::Cnb
 {
     namespace
@@ -88,4 +90,38 @@ namespace CNA::Content::Cnb
         return (IsCustomAssetTypeId(assetTypeId) ? "custom type " : "unknown type ") +
                ToHex32(assetTypeId);
     }
+
+    std::string CnbLogicalNameProblem(std::string_view logicalName)
+    {
+        // The order matters only for which message a caller sees first; every one of these is a
+        // refusal. Kept as one function so a reader, a writer and a media codec cannot drift apart
+        // about what a legal reference looks like (plans/plan_cnb.md CNBF-115).
+        if (logicalName.empty()) { return "is empty"; }
+        if (!CnbByteReader::IsWellFormedUtf8(logicalName))
+        {
+            return "is not well-formed UTF-8";
+        }
+        if (logicalName.find('\\') != std::string_view::npos)
+        {
+            return "contains a backslash; .cnb logical names use '/' only";
+        }
+        if (logicalName.front() == '/') { return "is an absolute path"; }
+        if (logicalName.size() >= 2u && logicalName[1] == ':')
+        {
+            return "is a drive-qualified absolute path";
+        }
+        for (std::size_t start = 0u; start <= logicalName.size();)
+        {
+            const std::size_t slash = logicalName.find('/', start);
+            const std::size_t end = slash == std::string_view::npos ? logicalName.size() : slash;
+            if (logicalName.substr(start, end - start) == "..")
+            {
+                return "contains a '..' segment";
+            }
+            if (slash == std::string_view::npos) { break; }
+            start = slash + 1u;
+        }
+        return {};
+    }
+
 }

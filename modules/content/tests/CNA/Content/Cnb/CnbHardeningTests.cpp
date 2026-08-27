@@ -174,24 +174,15 @@ namespace
                                               const std::string& declaredTypeName,
                                               bool includeMetadata = true)
     {
-        // Written through the raw chunk API rather than CnbWriter's own custom-type checks, so a
-        // test can construct the very files CnbWriter now refuses to produce -- which is what a
-        // reader has to survive receiving from somewhere else.
-        CnbByteWriter meta;
-        meta.WriteU32(0u);
-        meta.WriteString(declaredTypeName);
-        meta.WriteString("Levels/first");
-
+        // Built under a BUILT-IN placeholder identifier and then patched to the custom one, so a
+        // test can construct the very files CnbWriter's custom-type checks now refuse to produce --
+        // which is what a reader has to survive receiving from somewhere else.
         CnbByteWriter payload;
         payload.WriteU32(7u);
 
         CnbWriter writer(CnbAssetTypeId::Curve, 1u);  // placeholder; patched below
+        if (includeMetadata) { writer.SetMetadata(declaredTypeName, "Levels/first"); }
         writer.AddChunk(kPayload, payload.Take(), CnbChunkFlags::Mandatory, 4u);
-        if (includeMetadata)
-        {
-            writer.AddChunk(CNA::Content::Cnb::CnbContainerChunk::Metadata, meta.Take(),
-                            CnbChunkFlags::None, 4u);
-        }
         std::vector<std::uint8_t> bytes = writer.Build();
 
         // Patch the header's asset type in place and repair the two structural checksums, which
@@ -577,10 +568,21 @@ TEST(CnbHardeningTest, ACorruptBoneParentInAFileIsRefusedByTheDecoder)
     bones[parentAt + 1] = bones[parentAt + 2] = bones[parentAt + 3] = 0x00u;
 
     CnbWriter rebuilt(CnbAssetTypeId::Model, 1u);
+    // The container-level chunks travel through their own setters: AddChunk refuses a
+    // container-defined identifier (CNBF-115), and re-encoding the table by hand would test this
+    // suite's copy of the XREF layout rather than the model decoder this test is aimed at.
+    if (!source.ExternalReferences().empty())
+    {
+        rebuilt.SetExternalReferences(source.ExternalReferences());
+    }
     for (std::size_t i = 0; i < source.ChunkCount(); ++i)
     {
         const auto& entry = source.ChunkAt(i);
-        if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata) { continue; }
+        if (entry.type == CNA::Content::Cnb::CnbContainerChunk::Metadata ||
+            entry.type == CNA::Content::Cnb::CnbContainerChunk::ExternalReferences)
+        {
+            continue;
+        }
         const auto chunk = source.ChunkData(i);
         rebuilt.AddChunk(entry.type,
                          entry.type == CNA::Content::Cnb::CnbModelChunk::Bones

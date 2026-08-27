@@ -74,6 +74,20 @@ namespace CNA::Content::Cnb
                 "CnbWriter: chunk alignment must be a power of two no greater than " +
                 std::to_string(DefaultCnbReadLimits().maxChunkAlignment) + ".");
         }
+        // plans/plan_cnb.md CNBF-115: CMET and XREF belong to the container, and the writer emits
+        // each of them at most once, from SetMetadata()/SetExternalReferences(). Letting a schema
+        // add one as an ordinary chunk would produce a file with two of a singleton the reader
+        // requires to be unique -- accepted by Build() and refused by Parse(), which is exactly the
+        // asymmetry a writer must not be able to create.
+        if (type == CnbContainerChunk::Metadata || type == CnbContainerChunk::ExternalReferences)
+        {
+            throw ContentLoadException(
+                "CnbWriter: '" + ChunkIdToString(type) +
+                "' is a container-defined chunk and cannot be added as a schema chunk. Use " +
+                (type == CnbContainerChunk::Metadata ? std::string("SetMetadata()")
+                                                     : std::string("SetExternalReferences()")) +
+                ".");
+        }
         chunks_.push_back(PendingChunk{type, flags, alignment, std::move(data)});
     }
 
@@ -108,6 +122,17 @@ namespace CNA::Content::Cnb
                 {
                     throw ContentLoadException(
                         "CnbWriter: external reference flags are reserved and must be zero.");
+                }
+                // plans/plan_cnb.md CNBF-115: the SAME rule the reader applies, from the same
+                // function. Before this the reader refused names the writer would happily emit, so
+                // an encoder could produce a file its own decoder rejected.
+                if (const std::string problem = CnbLogicalNameProblem(ref.logicalName);
+                    !problem.empty())
+                {
+                    throw ContentLoadException(
+                        "CnbWriter: external reference '" + ref.logicalName + "' " + problem +
+                        ". A .cnb logical name must be a relative, '/'-separated, well-formed "
+                        "UTF-8 path with no '..' segment.");
                 }
                 w.WriteU32(ref.flags);
                 w.WriteU32(ref.expectedAssetTypeId);

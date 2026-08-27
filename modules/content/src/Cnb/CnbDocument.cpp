@@ -641,39 +641,14 @@ namespace CNA::Content::Cnb
 
                 // A logical name goes straight into ContentManager's path resolution. It is
                 // checked here as well as there, because a compiled file should never be able to
-                // hand path-traversal input to the resolver in the first place.
-                const std::string& name = ref.logicalName;
-                if (name.empty())
+                // hand path-traversal input to the resolver in the first place -- and through the
+                // shared rule (CNBF-115), so the writer cannot come to disagree with this about
+                // what a legal reference is.
+                if (const std::string problem = CnbLogicalNameProblem(ref.logicalName);
+                    !problem.empty())
                 {
-                    reader.Fail("external reference " + std::to_string(i) + " has an empty name.");
-                }
-                if (name.find('\\') != std::string::npos)
-                {
-                    reader.Fail("external reference " + std::to_string(i) + " ('" + name +
-                                "') contains a backslash; .cnb logical names use '/' only.");
-                }
-                if (name.front() == '/')
-                {
-                    reader.Fail("external reference " + std::to_string(i) + " ('" + name +
-                                "') is an absolute path.");
-                }
-                if (name.size() >= 2 && name[1] == ':')
-                {
-                    reader.Fail("external reference " + std::to_string(i) + " ('" + name +
-                                "') is a drive-qualified absolute path.");
-                }
-                std::size_t segmentStart = 0;
-                while (segmentStart <= name.size())
-                {
-                    const std::size_t slash = name.find('/', segmentStart);
-                    const std::size_t end = slash == std::string::npos ? name.size() : slash;
-                    if (name.compare(segmentStart, end - segmentStart, "..") == 0)
-                    {
-                        reader.Fail("external reference " + std::to_string(i) + " ('" + name +
-                                    "') contains a '..' segment.");
-                    }
-                    if (slash == std::string::npos) { break; }
-                    segmentStart = slash + 1;
+                    reader.Fail("external reference " + std::to_string(i) + " ('" +
+                                ref.logicalName + "') " + problem + ".");
                 }
 
                 externalReferences_.push_back(std::move(ref));

@@ -25,9 +25,13 @@ namespace CNA::Content::Cnb
             throw ContentLoadException(std::string("CNB ") + label + ": " + what);
         }
 
-        /// Builds the single-entry XREF table both schemas use for their media file. The reference
-        /// is validated by CnbWriter itself (relative, `/`-separated, no `..`), so this only has
-        /// to reject the empty case the table would otherwise accept as a legal-looking nothing.
+        /// Builds the single-entry XREF table both schemas use for their media file.
+        ///
+        /// The name is checked against the container's own rule (CnbLogicalNameProblem, the same
+        /// function CnbDocument and CnbWriter call -- plans/plan_cnb.md CNBF-115) rather than
+        /// against a copy of it. This schema's reference comes straight from a compiler's command
+        /// line, which is exactly where a traversal would enter, and the message names the media
+        /// reference rather than an anonymous XREF row so the user learns which argument was wrong.
         std::vector<CnbExternalReference> MakeStreamReference(const char* label,
                                                               const std::string& streamReference)
         {
@@ -37,35 +41,11 @@ namespace CNA::Content::Cnb
                                 " .cnb carries metadata and a reference, not the media itself, so "
                                 "the reference is the one thing it cannot omit.");
             }
-            // The READER enforces these rules on every XREF name (docs/cnb-format.md §5.1), but
-            // the writer did not -- so an encoder could produce a file its own decoder refuses.
-            // Every other CNB schema is written so that cannot happen, and this schema is the
-            // first whose reference comes straight from a compiler's command line, which is
-            // exactly where a traversal would enter. Checked here rather than in CnbWriter so the
-            // frozen container layer is not touched.
-            if (streamReference.find('\\') != std::string::npos)
+            if (const std::string problem = CnbLogicalNameProblem(streamReference);
+                !problem.empty())
             {
-                Fail(label, "'" + streamReference +
-                                "' contains a backslash; .cnb logical names use '/' only.");
-            }
-            if (streamReference.front() == '/' ||
-                (streamReference.size() >= 2u && streamReference[1] == ':'))
-            {
-                Fail(label, "'" + streamReference +
-                                "' is an absolute path; a media reference is always relative to "
-                                "the content root.");
-            }
-            for (std::size_t start = 0u; start <= streamReference.size();)
-            {
-                const std::size_t slash = streamReference.find('/', start);
-                const std::size_t end =
-                    slash == std::string::npos ? streamReference.size() : slash;
-                if (streamReference.compare(start, end - start, "..") == 0)
-                {
-                    Fail(label, "'" + streamReference + "' contains a '..' segment.");
-                }
-                if (slash == std::string::npos) { break; }
-                start = slash + 1u;
+                Fail(label, "media reference '" + streamReference + "' " + problem +
+                                "; a media reference is always relative to the content root.");
             }
             CnbExternalReference reference;
             reference.flags = 0u;
