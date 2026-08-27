@@ -225,6 +225,9 @@ enum class ObjectKind : uint32_t {
     ClusteredLightCompute = 144,
     // plans/plan_binding.md CBIND-087A.
     PbrMaterialExtensions = 145,
+    // plans/plan_binding.md CBIND-087D.
+    TransparentDrawList = 146,
+    WeightedBlendedTransparency = 147,
     Test = UINT32_MAX
 };
 

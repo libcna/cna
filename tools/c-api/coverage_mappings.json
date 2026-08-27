@@ -15979,6 +15979,94 @@
         "CPP-E1933E24DF91",
         "CPP-ED90421EF7F6"
       ]
+    },
+    {
+      "id": "gltf-material-bridge",
+      "qualified_name_regex": "^CNA::Graphics::(?:GltfMaterialTexturesEXT(?:::[A-Za-z0-9_]+)?|GltfMaterialExtensionTexturesEXT(?:::[A-Za-z0-9_]+)?|materialFromGltfEXT|materialExtensionsFromGltfEXT)$",
+      "kinds": [
+        "struct",
+        "field",
+        "method",
+        "function"
+      ],
+      "mapping": "`cna_gltf_material_bridge_build_material` and `_build_extensions`, over four versioned PODs: `CNA_GltfMaterialTexturesEXT`, `CNA_GltfMaterialExtensionTexturesEXT` and the two source structures with their `_init` routines.\n\n**The canonical bridge is written against a C++20 *concept*, not a type**, so that the importer's own record satisfies it without this layer knowing that record. A concept has no C form and is not a callable operation, so the C bridge takes a structure that names exactly the members each concept requires, and the implementation builds a local type from it to meet the constraint. The concept stays the contract; the structure is how C reaches it.\n\n**One value is not carried exactly, and that is canonical rather than a limit of the binding:** glTF's `baseColorFactor` is four floats and a material's albedo is a `Color`, so it is quantised to eight bits per channel. Everything else round-trips. The `_init` routines fill the glTF specification's own defaults -- 1.0 metallic and roughness, 1.5 IOR, 0.5 alpha cutoff -- not this layer's, because an omitted glTF factor means the specification's value.\n\nTextures are borrowed, never owned. An undefined alpha mode is refused rather than cast through into the material, the same rule every enum identity in this ABI follows.",
+      "tests": "`EngineLayerSmoke.c` stage 23, which asserts the glTF defaults rather than this layer's, sees the base-colour quantisation with a fractional value (1.0 would survive any quantiser), refuses a malformed structure and an undefined alpha mode, and builds extensions whose transmission predicate then reports true. The layer-absent build asserts every route refuses, the two `_init` routines included -- a caller that can fill a source but not use it has been told nothing useful.",
+      "status": "implemented",
+      "task": "CBIND-087D",
+      "approved_symbols": [
+        "CPP-25BB13B375AF",
+        "CPP-47A7CAC1BE4F",
+        "CPP-6791F7A4A0A8",
+        "CPP-68228D5F3288",
+        "CPP-9E45D7385261",
+        "CPP-B05202E65C65",
+        "CPP-C08698F12E26",
+        "CPP-C4720368D3E1",
+        "CPP-D38D45707622",
+        "CPP-DCC258D65ACB",
+        "CPP-EC18319C9AC3",
+        "CPP-EFADA6027EE2",
+        "CPP-F7A9D20C3848",
+        "CPP-FD2730B79464"
+      ]
+    },
+    {
+      "id": "transparent-draw-list",
+      "qualified_name_regex": "^CNA::Graphics::TransparentDrawList(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_transparent_draw_list_*` over an owned handle; a pure CPU object that touches no device. `submit` takes a `CNA_TransparentDrawCallback` and a context in place of the canonical `std::function`, following the campaign's callback convention.\n\n**The class has exactly one refusal and it is a contract:** an entry with nothing to draw is a caller mistake, so a null callback is refused at submission rather than stored and discovered when the draw runs. A failing callback stops `draw_sorted` and **its own result reaches the caller unchanged**, so a caller learns which draw failed instead of finding a partly drawn frame; the failure travels as a private exception across the canonical `std::function` and is unwrapped at the boundary rather than being flattened by the firewall.\n\n`drawSorted` and `getSortedOrderEXT` take a **view matrix**, not a camera position, matching the canonical signature rather than asking a caller to derive the position twice. `sortKey` measures to the **nearest point of the box**, so a camera inside a box keys at zero.",
+      "tests": "`EngineLayerSmoke.c` stage 23, which submits near-first and requires the sorted order to reverse it, asserts the zero key for a camera inside the box (a centre-distance implementation would pass a test that only compared two disjoint boxes), refuses a null callback and null bounds without changing the count, and proves a failing callback stops the draw at the first entry and returns its own result.",
+      "status": "implemented",
+      "task": "CBIND-087D",
+      "approved_symbols": [
+        "CPP-075999C92E38",
+        "CPP-61248BE48C8A",
+        "CPP-875784AF86AE",
+        "CPP-99390458B658",
+        "CPP-AC6058DA47FD",
+        "CPP-B09E2ACFAEB5",
+        "CPP-B73C10A70A48",
+        "CPP-D91E73F0C8DE",
+        "CPP-F0872B290634",
+        "CPP-F66BBEBB5902",
+        "CPP-F8059B5EF508"
+      ]
+    },
+    {
+      "id": "weighted-blended-transparency",
+      "qualified_name_regex": "^CNA::Graphics::WeightedBlendedTransparency(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_weighted_blended_transparency_*` over an owned handle. Both targets are borrowed and exist exactly when the resolve does.\n\n**The eight canonical throws are two different mistakes and are kept apart.** `invalid_argument` becomes `CNA_RESULT_INVALID_ARGUMENT` and `logic_error` becomes `CNA_RESULT_INVALID_STATE`, because a caller acts on them differently: fix the number, or fix the order of the calls. Flattening them -- which the firewall would do unaided -- would tell a caller that a size of zero and a bracket left open are the same error. Both are checked ahead of the canonical call so the result is decided here rather than recovered from an exception type.\n\n`weight` clamps twice, and both are **corrections**: the curve is unbounded near zero depth, and a weight that overflows would poison the whole accumulation buffer rather than one fragment.\n\n**`begin` opens the bracket only where the resolve is supported**, so on a renderer without it `isAccumulating` stays false and the matching `end` refuses. That is canonical behaviour, **reproduced rather than corrected** -- see `CBIND-098`, which records it as a defect with a reproduction rather than fixing engine-layer code from a binding slice.",
+      "tests": "`EngineLayerSmoke.c` stage 23, which asserts the argument and state refusals are different results, exercises every sequencing mistake while the bracket is open, and branches on `is_supported` so **both** the opening and the non-opening path assert -- the non-opening one pins `CBIND-098` in place, so a later fix shows up as a test that must change. Proved to execute on both branches by inverting the accumulating assertion and watching the exit code move to stage 23 on EasyGL and on HEADLESS alike.",
+      "status": "implemented",
+      "task": "CBIND-087D",
+      "approved_symbols": [
+        "CPP-02F826A77D08",
+        "CPP-0EDDA959894C",
+        "CPP-14A448DDDDF4",
+        "CPP-1E294DBD144B",
+        "CPP-235E9A754CA8",
+        "CPP-3D6FDE471041",
+        "CPP-5C54E25A4D23",
+        "CPP-84AA128FF3FC",
+        "CPP-A5D1FCC0AF84",
+        "CPP-BA23BA5B1058",
+        "CPP-CD5116671A90",
+        "CPP-D9CE7001F7B0",
+        "CPP-DC883251E480",
+        "CPP-E48700BBB0D1",
+        "CPP-E8C91643FED1"
+      ]
     }
   ]
 }

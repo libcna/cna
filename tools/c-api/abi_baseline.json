@@ -2061,6 +2061,12 @@
   "cna_gesture_sample_init_from_values",
   "cna_gesture_sample_init_from_values_ext",
   "cna_get_abi_version",
+  "cna_gltf_material_bridge_build_extensions",
+  "cna_gltf_material_bridge_build_material",
+  "cna_gltf_material_extension_source_ext_init",
+  "cna_gltf_material_extension_textures_ext_init",
+  "cna_gltf_material_source_ext_init",
+  "cna_gltf_material_textures_ext_init",
   "cna_gpu_timer_begin",
   "cna_gpu_timer_copy_unsupported_reason",
   "cna_gpu_timer_create",
@@ -3855,6 +3861,15 @@
   "cna_touch_state_insert",
   "cna_touch_state_remove",
   "cna_touch_state_remove_at",
+  "cna_transparent_draw_list_camera_position_of",
+  "cna_transparent_draw_list_clear",
+  "cna_transparent_draw_list_copy_sorted_order_ext",
+  "cna_transparent_draw_list_create",
+  "cna_transparent_draw_list_destroy",
+  "cna_transparent_draw_list_draw_sorted",
+  "cna_transparent_draw_list_get_count",
+  "cna_transparent_draw_list_sort_key",
+  "cna_transparent_draw_list_submit",
   "cna_url_launcher_open_ext",
   "cna_vector2_add",
   "cna_vector2_barycentric",
@@ -4102,6 +4117,19 @@
   "cna_wave_bank_get_is_prepared",
   "cna_wave_bank_get_type_name_size",
   "cna_wave_bank_subscribe_disposing_ext",
+  "cna_weighted_blended_transparency_begin",
+  "cna_weighted_blended_transparency_copy_accumulation_glsl",
+  "cna_weighted_blended_transparency_copy_unsupported_reason",
+  "cna_weighted_blended_transparency_create",
+  "cna_weighted_blended_transparency_destroy",
+  "cna_weighted_blended_transparency_end",
+  "cna_weighted_blended_transparency_get_accumulation_texture_ext",
+  "cna_weighted_blended_transparency_get_revealage_texture_ext",
+  "cna_weighted_blended_transparency_is_accumulating",
+  "cna_weighted_blended_transparency_is_supported",
+  "cna_weighted_blended_transparency_resize",
+  "cna_weighted_blended_transparency_resolve",
+  "cna_weighted_blended_transparency_weight",
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
@@ -6570,6 +6598,10 @@
    4,
    4
   ],
+  "CNA_TransparentDrawListHandle": [
+   8,
+   8
+  ],
   "CNA_Unsupported3DGraphicsCallBehavior": [
    4,
    4
@@ -6617,6 +6649,10 @@
   "CNA_VideoSoundtrackType": [
    4,
    4
+  ],
+  "CNA_WeightedBlendedTransparencyHandle": [
+   8,
+   8
   ]
  },
  "schema_version": 1,
@@ -8972,6 +9008,198 @@
     ]
    },
    "size": 144
+  },
+  "CNA_GltfMaterialExtensionSourceEXT": {
+   "align": 4,
+   "fields": {
+    "attenuation_color_ext": [
+     44,
+     12
+    ],
+    "attenuation_distance_ext": [
+     40,
+     4
+    ],
+    "clearcoat_factor_ext": [
+     8,
+     4
+    ],
+    "clearcoat_roughness_factor_ext": [
+     12,
+     4
+    ],
+    "iridescence_factor_ext": [
+     56,
+     4
+    ],
+    "iridescence_ior_ext": [
+     60,
+     4
+    ],
+    "iridescence_thickness_maximum_ext": [
+     68,
+     4
+    ],
+    "iridescence_thickness_minimum_ext": [
+     64,
+     4
+    ],
+    "sheen_color_factor_ext": [
+     16,
+     12
+    ],
+    "sheen_roughness_factor_ext": [
+     28,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "thickness_factor_ext": [
+     36,
+     4
+    ],
+    "transmission_factor_ext": [
+     32,
+     4
+    ]
+   },
+   "size": 72
+  },
+  "CNA_GltfMaterialExtensionTexturesEXT": {
+   "align": 8,
+   "fields": {
+    "clearcoat": [
+     8,
+     8
+    ],
+    "clearcoat_normal": [
+     24,
+     8
+    ],
+    "clearcoat_roughness": [
+     16,
+     8
+    ],
+    "iridescence": [
+     64,
+     8
+    ],
+    "iridescence_thickness": [
+     72,
+     8
+    ],
+    "sheen_color": [
+     32,
+     8
+    ],
+    "sheen_roughness": [
+     40,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "thickness": [
+     56,
+     8
+    ],
+    "transmission": [
+     48,
+     8
+    ]
+   },
+   "size": 80
+  },
+  "CNA_GltfMaterialSourceEXT": {
+   "align": 4,
+   "fields": {
+    "alpha_cutoff": [
+     76,
+     4
+    ],
+    "alpha_mode": [
+     72,
+     4
+    ],
+    "base_color_factor": [
+     8,
+     16
+    ],
+    "double_sided": [
+     80,
+     1
+    ],
+    "emissive_factor": [
+     32,
+     12
+    ],
+    "ior_ext": [
+     52,
+     4
+    ],
+    "metallic_factor": [
+     24,
+     4
+    ],
+    "normal_scale": [
+     44,
+     4
+    ],
+    "occlusion_strength": [
+     48,
+     4
+    ],
+    "reserved": [
+     81,
+     3
+    ],
+    "roughness_factor": [
+     28,
+     4
+    ],
+    "specular_color_factor_ext": [
+     60,
+     12
+    ],
+    "specular_factor_ext": [
+     56,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 308
+  },
+  "CNA_GltfMaterialTexturesEXT": {
+   "align": 8,
+   "fields": {
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 64
   },
   "CNA_GraphicsAdapterInfo": {
    "align": 8,

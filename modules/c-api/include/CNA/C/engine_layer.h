@@ -5273,6 +5273,477 @@ CNA_C_API CNA_Result cna_pbr_material_ext_get_hash_code(
 CNA_C_API CNA_Result cna_pbr_material_ext_copy_to_string(
     const CNA_PbrMaterialEXT* material, char* destination, uint64_t capacity, uint64_t* out_bytes);
 
+/* ---------------------------------------------------------------------------------------------
+ * The glTF material bridge and the transparency pipeline
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief The textures an imported glTF material's core slots resolve to; any entry may be invalid. */
+typedef struct CNA_GltfMaterialTexturesEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief One texture per `CNA_PBR_TEXTURE_*` slot, in slot order. */
+    CNA_Handle slots[CNA_PBR_TEXTURE_SLOT_COUNT];
+} CNA_GltfMaterialTexturesEXT;
+
+/** @brief The textures an imported glTF material's extension slots resolve to; any may be invalid. */
+typedef struct CNA_GltfMaterialExtensionTexturesEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief `KHR_materials_clearcoat.clearcoatTexture`. */
+    CNA_Handle clearcoat;
+    /** @brief `KHR_materials_clearcoat.clearcoatRoughnessTexture`. */
+    CNA_Handle clearcoat_roughness;
+    /** @brief `KHR_materials_clearcoat.clearcoatNormalTexture`. */
+    CNA_Handle clearcoat_normal;
+    /** @brief `KHR_materials_sheen.sheenColorTexture`. */
+    CNA_Handle sheen_color;
+    /** @brief `KHR_materials_sheen.sheenRoughnessTexture`. */
+    CNA_Handle sheen_roughness;
+    /** @brief `KHR_materials_transmission.transmissionTexture`. */
+    CNA_Handle transmission;
+    /** @brief `KHR_materials_volume.thicknessTexture`. */
+    CNA_Handle thickness;
+    /** @brief `KHR_materials_iridescence.iridescenceTexture`. */
+    CNA_Handle iridescence;
+    /** @brief `KHR_materials_iridescence.iridescenceThicknessTexture`. */
+    CNA_Handle iridescence_thickness;
+} CNA_GltfMaterialExtensionTexturesEXT;
+
+/**
+ * @brief One imported glTF material's core factors.
+ *
+ * The canonical bridge is written against a **concept**, not a type, so that the importer's own
+ * record satisfies it without this layer knowing that record. A concept has no C form, so the C
+ * bridge takes this structure instead: it names exactly the members the concept requires.
+ */
+typedef struct CNA_GltfMaterialSourceEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief `pbrMetallicRoughness.baseColorFactor`, four floats. */
+    CNA_Vector4 base_color_factor;
+    /** @brief `pbrMetallicRoughness.metallicFactor`. */
+    float metallic_factor;
+    /** @brief `pbrMetallicRoughness.roughnessFactor`. */
+    float roughness_factor;
+    /** @brief `emissiveFactor`. */
+    CNA_Vector3 emissive_factor;
+    /** @brief `normalTexture.scale`. */
+    float normal_scale;
+    /** @brief `occlusionTexture.strength`. */
+    float occlusion_strength;
+    /** @brief `KHR_materials_ior.ior`. */
+    float ior_ext;
+    /** @brief `KHR_materials_specular.specularFactor`. */
+    float specular_factor_ext;
+    /** @brief `KHR_materials_specular.specularColorFactor`. */
+    CNA_Vector3 specular_color_factor_ext;
+    /** @brief `alphaMode`. */
+    CNA_AlphaModeEXT alpha_mode;
+    /** @brief `alphaCutoff`. */
+    float alpha_cutoff;
+    /** @brief `doubleSided`. */
+    CNA_Bool double_sided;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[3];
+    /** @brief `KHR_texture_transform` texture-coordinate set per slot. */
+    int32_t texture_coordinate_sets_ext[CNA_PBR_TEXTURE_SLOT_COUNT];
+    /** @brief `KHR_texture_transform` transform per slot. */
+    CNA_TextureTransformEXT texture_transforms_ext[CNA_PBR_TEXTURE_SLOT_COUNT];
+} CNA_GltfMaterialSourceEXT;
+
+/** @brief One imported glTF material's extension factors, mirroring the extension concept. */
+typedef struct CNA_GltfMaterialExtensionSourceEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief `KHR_materials_clearcoat.clearcoatFactor`. */
+    float clearcoat_factor_ext;
+    /** @brief `KHR_materials_clearcoat.clearcoatRoughnessFactor`. */
+    float clearcoat_roughness_factor_ext;
+    /** @brief `KHR_materials_sheen.sheenColorFactor`. */
+    CNA_Vector3 sheen_color_factor_ext;
+    /** @brief `KHR_materials_sheen.sheenRoughnessFactor`. */
+    float sheen_roughness_factor_ext;
+    /** @brief `KHR_materials_transmission.transmissionFactor`. */
+    float transmission_factor_ext;
+    /** @brief `KHR_materials_volume.thicknessFactor`. */
+    float thickness_factor_ext;
+    /** @brief `KHR_materials_volume.attenuationDistance`. */
+    float attenuation_distance_ext;
+    /** @brief `KHR_materials_volume.attenuationColor`. */
+    CNA_Vector3 attenuation_color_ext;
+    /** @brief `KHR_materials_iridescence.iridescenceFactor`. */
+    float iridescence_factor_ext;
+    /** @brief `KHR_materials_iridescence.iridescenceIor`. */
+    float iridescence_ior_ext;
+    /** @brief `KHR_materials_iridescence.iridescenceThicknessMinimum`. */
+    float iridescence_thickness_minimum_ext;
+    /** @brief `KHR_materials_iridescence.iridescenceThicknessMaximum`. */
+    float iridescence_thickness_maximum_ext;
+} CNA_GltfMaterialExtensionSourceEXT;
+
+/**
+ * @brief Fills a core glTF material source with the glTF specification's default factors.
+ *
+ * @param out_source Receives the defaults along with `struct_size` and `struct_version`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gltf_material_source_ext_init(CNA_GltfMaterialSourceEXT* out_source);
+
+/**
+ * @brief Fills an extension glTF material source with the specification's default factors.
+ *
+ * @param out_source Receives the defaults along with `struct_size` and `struct_version`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gltf_material_extension_source_ext_init(
+    CNA_GltfMaterialExtensionSourceEXT* out_source);
+
+/** @brief Fills a core texture set with invalid handles and its versioning fields. */
+CNA_C_API CNA_Result cna_gltf_material_textures_ext_init(CNA_GltfMaterialTexturesEXT* out_textures);
+
+/** @brief Fills an extension texture set with invalid handles and its versioning fields. */
+CNA_C_API CNA_Result cna_gltf_material_extension_textures_ext_init(
+    CNA_GltfMaterialExtensionTexturesEXT* out_textures);
+
+/**
+ * @brief Builds a PBR material from one imported glTF material and its resolved textures.
+ *
+ * **One value is not carried exactly, and that is the canonical behaviour rather than a limit of
+ * this binding:** glTF's `baseColorFactor` is four floats and a material's albedo factor is a
+ * `CNA_Color`, so it is quantised to eight bits per channel. Everything else round-trips.
+ *
+ * The textures are borrowed, never owned; the material records them as the canonical type does.
+ *
+ * @param source The material's core factors.
+ * @param textures The textures its core slots resolved to.
+ * @param out_material Receives the material.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gltf_material_bridge_build_material(
+    const CNA_GltfMaterialSourceEXT* source,
+    const CNA_GltfMaterialTexturesEXT* textures,
+    CNA_PbrMaterialEXT* out_material);
+
+/**
+ * @brief Builds PBR material extensions from one imported glTF material's extension factors.
+ *
+ * @param source The material's extension factors.
+ * @param textures The textures its extension slots resolved to.
+ * @param out_extensions An existing extensions handle to fill.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_gltf_material_bridge_build_extensions(
+    const CNA_GltfMaterialExtensionSourceEXT* source,
+    const CNA_GltfMaterialExtensionTexturesEXT* textures,
+    CNA_PbrMaterialExtensionsHandle out_extensions);
+
+/**
+ * @brief Owned handle for one back-to-front transparent draw list.
+ *
+ * A pure CPU object: it holds bounding boxes and callbacks and touches no device.
+ */
+typedef CNA_Handle CNA_TransparentDrawListHandle;
+
+/**
+ * @brief Called once per submitted entry, in the order the list decides.
+ *
+ * @param context The pointer given to @ref cna_transparent_draw_list_submit.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the draw that asked for it.
+ */
+typedef CNA_Result (*CNA_TransparentDrawCallback)(void* context);
+
+/**
+ * @brief Creates an empty transparent draw list.
+ *
+ * @param out_list Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_create(CNA_TransparentDrawListHandle* out_list);
+
+/**
+ * @brief Releases the draw list.
+ *
+ * @param list The list; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_destroy(CNA_TransparentDrawListHandle list);
+
+/**
+ * @brief Removes every entry.
+ *
+ * @param list The list.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_clear(CNA_TransparentDrawListHandle list);
+
+/**
+ * @brief Adds one entry with the bounds that decide its place in the order.
+ *
+ * @param list The list.
+ * @param bounds The entry's world-space bounds.
+ * @param draw The callback to run when the entry's turn comes; must not be null, because an entry
+ *        with nothing to draw is a caller mistake rather than an empty draw.
+ * @param context Passed to @p draw unchanged; may be null.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null callback or bounds,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_submit(
+    CNA_TransparentDrawListHandle list,
+    const CNA_BoundingBox* bounds,
+    CNA_TransparentDrawCallback draw,
+    void* context);
+
+/**
+ * @brief Returns how many entries the list holds.
+ *
+ * @param list The list.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_get_count(
+    CNA_TransparentDrawListHandle list, uint64_t* out_count);
+
+/**
+ * @brief Runs every entry's callback, farthest from the camera first.
+ *
+ * A callback that fails stops the draw and its result is returned, so a caller learns which draw
+ * failed rather than finding a partly drawn frame.
+ *
+ * @param list The list.
+ * @param view The camera's view matrix; the camera position is derived from it, matching the
+ *        canonical signature rather than asking a caller to derive it twice.
+ * @return `CNA_RESULT_SUCCESS`, the failing callback's result, `CNA_RESULT_INVALID_ARGUMENT` for a
+ * null matrix, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_draw_sorted(
+    CNA_TransparentDrawListHandle list, const CNA_Matrix* view);
+
+/**
+ * @brief Copies the order `draw_sorted` would use, as indices into submission order.
+ *
+ * @param list The list.
+ * @param view The camera's view matrix.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives the required element count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` for a
+ * null matrix, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error. No partial result
+ * is written.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_copy_sorted_order_ext(
+    CNA_TransparentDrawListHandle list,
+    const CNA_Matrix* view,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Returns the sort key for one entry's bounds, which is its distance from the camera.
+ *
+ * A pure function of its arguments. The distance is measured to the **nearest point of the box**,
+ * so a camera inside the box sorts at zero rather than to the box's centre.
+ *
+ * @param bounds The bounds.
+ * @param camera_position The camera's world-space position.
+ * @param out_key Receives the key.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_sort_key(
+    const CNA_BoundingBox* bounds, const CNA_Vector3* camera_position, float* out_key);
+
+/**
+ * @brief Returns the camera position implied by a view matrix.
+ *
+ * A pure function of its argument.
+ *
+ * @param view The view matrix.
+ * @param out_position Receives the position.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_transparent_draw_list_camera_position_of(
+    const CNA_Matrix* view, CNA_Vector3* out_position);
+
+/**
+ * @brief Owned handle for one weighted-blended order-independent transparency resolve.
+ */
+typedef CNA_Handle CNA_WeightedBlendedTransparencyHandle;
+
+/**
+ * @brief Creates a weighted-blended transparency resolve at a given target size.
+ *
+ * @param graphics_device The device to allocate targets on.
+ * @param width Target width in pixels; must be positive.
+ * @param height Target height in pixels; must be positive.
+ * @param out_transparency Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_create(
+    CNA_Handle graphics_device,
+    int32_t width,
+    int32_t height,
+    CNA_WeightedBlendedTransparencyHandle* out_transparency);
+
+/**
+ * @brief Releases the resolve.
+ *
+ * @param transparency The resolve; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_destroy(
+    CNA_WeightedBlendedTransparencyHandle transparency);
+
+/**
+ * @brief Reports whether this renderer can run the resolve.
+ *
+ * @param transparency The resolve.
+ * @param out_supported Receives `CNA_TRUE` when it can.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_is_supported(
+    CNA_WeightedBlendedTransparencyHandle transparency, CNA_Bool* out_supported);
+
+/**
+ * @brief Copies why the resolve is unavailable, as UTF-8 bytes without a terminator.
+ *
+ * @param transparency The resolve.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_copy_unsupported_reason(
+    CNA_WeightedBlendedTransparencyHandle transparency,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Resizes both accumulation targets.
+ *
+ * @param transparency The resolve.
+ * @param width New width in pixels; must be positive.
+ * @param height New height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size,
+ * `CNA_RESULT_INVALID_STATE` while accumulation is open, `CNA_RESULT_NOT_SUPPORTED` without the
+ * engine layer, or an error. The two are kept apart because a bad size is a caller's argument
+ * mistake and an open bracket is a caller's sequencing mistake.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_resize(
+    CNA_WeightedBlendedTransparencyHandle transparency, int32_t width, int32_t height);
+
+/**
+ * @brief Opens accumulation, binding and clearing both targets.
+ *
+ * **On a renderer that cannot run the resolve this succeeds without opening anything**, so
+ * @ref cna_weighted_blended_transparency_is_accumulating still reports `CNA_FALSE` and a matching
+ * @ref cna_weighted_blended_transparency_end refuses. That is the canonical behaviour, reproduced
+ * rather than corrected; ask `is_supported` before bracketing, or treat `end`'s refusal on an
+ * unsupported renderer as expected. See `plans/plan_binding.md` `CBIND-098`.
+ *
+ * @param transparency The resolve.
+ * @param far_plane The camera's far plane; must be positive, because the weight divides by it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive far plane,
+ * `CNA_RESULT_INVALID_STATE` when accumulation is already open, `CNA_RESULT_NOT_SUPPORTED`
+ * without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_begin(
+    CNA_WeightedBlendedTransparencyHandle transparency, float far_plane);
+
+/**
+ * @brief Closes accumulation.
+ *
+ * @param transparency The resolve.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when accumulation is not open,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_end(
+    CNA_WeightedBlendedTransparencyHandle transparency);
+
+/**
+ * @brief Resolves the accumulated transparency into the active target.
+ *
+ * @param transparency The resolve.
+ * @param width Viewport width in pixels; must be positive.
+ * @param height Viewport height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size,
+ * `CNA_RESULT_INVALID_STATE` while accumulation is still open, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_resolve(
+    CNA_WeightedBlendedTransparencyHandle transparency, int32_t width, int32_t height);
+
+/**
+ * @brief Reports whether accumulation is open.
+ *
+ * @param transparency The resolve.
+ * @param out_accumulating Receives `CNA_TRUE` while it is.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_is_accumulating(
+    CNA_WeightedBlendedTransparencyHandle transparency, CNA_Bool* out_accumulating);
+
+/**
+ * @brief Returns the accumulation target, borrowed.
+ *
+ * @param transparency The resolve.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_get_accumulation_texture_ext(
+    CNA_WeightedBlendedTransparencyHandle transparency, CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the revealage target, borrowed.
+ *
+ * @param transparency The resolve.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_get_revealage_texture_ext(
+    CNA_WeightedBlendedTransparencyHandle transparency, CNA_Handle* out_texture);
+
+/**
+ * @brief Copies the GLSL of the accumulation pass as UTF-8 bytes without a terminator.
+ *
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_copy_accumulation_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Returns the blending weight for one fragment's depth and coverage.
+ *
+ * A pure function of its arguments. The depth ratio is **clamped** to zero-to-one and the weight
+ * itself to a finite range, because the curve is unbounded near zero depth and a weight that
+ * overflows would poison the whole accumulation buffer rather than one fragment.
+ *
+ * @param view_depth The fragment's view-space depth.
+ * @param alpha The fragment's coverage.
+ * @param far_plane The camera's far plane.
+ * @param out_weight Receives the weight.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_weighted_blended_transparency_weight(
+    float view_depth, float alpha, float far_plane, float* out_weight);
+
 #ifdef __cplusplus
 }
 #endif

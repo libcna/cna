@@ -487,6 +487,31 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-087D. The bridge and both transparency objects refuse without the layer, and the two
+       value initializers refuse with them rather than half-working: a caller that can fill a
+       source structure but not use it has been told nothing useful. */
+    {
+        CNA_TransparentDrawListHandle list = CNA_INVALID_HANDLE;
+        CNA_WeightedBlendedTransparencyHandle wbt = CNA_INVALID_HANDLE;
+        CNA_GltfMaterialSourceEXT source;
+        CNA_GltfMaterialTexturesEXT gltf_textures;
+        CNA_PbrMaterialEXT built;
+        uint64_t number = UINT64_C(0);
+        if (cna_gltf_material_source_ext_init(&source) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gltf_material_textures_ext_init(&gltf_textures) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_gltf_material_bridge_build_material(&source, &gltf_textures, &built) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_transparent_draw_list_create(&list) != CNA_RESULT_NOT_SUPPORTED ||
+            list != CNA_INVALID_HANDLE ||
+            cna_transparent_draw_list_camera_position_of(0, 0) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_weighted_blended_transparency_create(
+                graphics_device, INT32_C(8), INT32_C(8), &wbt) != CNA_RESULT_NOT_SUPPORTED ||
+            wbt != CNA_INVALID_HANDLE ||
+            cna_weighted_blended_transparency_copy_accumulation_glsl(0, UINT64_C(0), &number) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -3287,6 +3312,290 @@ static int validate_pbr_effect_receiver(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-087D. Counts how many times each entry's callback ran, and in what order. */
+typedef struct DrawProbe {
+    int order[8];
+    int count;
+    int fail_at;
+} DrawProbe;
+
+static CNA_Result draw_probe_entry(void* const context)
+{
+    DrawProbe* const probe = (DrawProbe*)context;
+    if (probe->count < 8) {
+        probe->order[probe->count] = probe->count;
+    }
+    ++probe->count;
+    if (probe->fail_at > 0 && probe->count == probe->fail_at) {
+        return CNA_RESULT_IO;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+/* CBIND-087D. Three subsystems whose contracts differ sharply, which is why they are asserted
+   apart: the bridge corrects nothing and only quantises one value, the draw list has exactly one
+   refusal, and the weighted-blended resolve mixes argument mistakes with sequencing mistakes and
+   must not flatten them into one result. */
+static int validate_transparency_and_bridge(const CNA_Handle graphics_device)
+{
+    CNA_TransparentDrawListHandle list = CNA_INVALID_HANDLE;
+    CNA_WeightedBlendedTransparencyHandle wbt = CNA_INVALID_HANDLE;
+    CNA_PbrMaterialExtensionsHandle extensions = CNA_INVALID_HANDLE;
+    CNA_GltfMaterialSourceEXT source;
+    CNA_GltfMaterialExtensionSourceEXT extension_source;
+    CNA_GltfMaterialTexturesEXT textures;
+    CNA_GltfMaterialExtensionTexturesEXT extension_textures;
+    CNA_PbrMaterialEXT material;
+    CNA_BoundingBox near_box;
+    CNA_BoundingBox far_box;
+    CNA_Matrix view;
+    CNA_Vector3 camera;
+    CNA_Vector3 position;
+    DrawProbe probe;
+    int32_t order[8];
+    uint64_t count = UINT64_C(0);
+    uint64_t bytes = UINT64_C(0);
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool supported = UINT8_C(9);
+    float key_near = -1.0F;
+    float key_far = -1.0F;
+    float weight = -1.0F;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_gltf_material_source_ext_init(&source) != CNA_RESULT_SUCCESS ||
+        cna_gltf_material_extension_source_ext_init(&extension_source) != CNA_RESULT_SUCCESS ||
+        cna_gltf_material_textures_ext_init(&textures) != CNA_RESULT_SUCCESS ||
+        cna_gltf_material_extension_textures_ext_init(&extension_textures) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* ---- the glTF bridge ------------------------------------------------------------------ */
+
+    /* The canonical bridge is written against a concept rather than a type; the C form names the
+       members the concept requires. The defaults are glTF's own, not this layer's. */
+    ok = source.metallic_factor == 1.0F && source.roughness_factor == 1.0F &&
+        source.ior_ext == 1.5F && source.alpha_cutoff == 0.5F &&
+        source.base_color_factor.w == 1.0F;
+    ok = ok && extension_source.iridescence_ior_ext == 1.3F &&
+        extension_source.attenuation_color_ext.x == 1.0F;
+    ok = ok && cna_gltf_material_bridge_build_material(&source, &textures, &material) ==
+        CNA_RESULT_SUCCESS;
+    /* Every factor round-trips except the base colour, which the canonical bridge quantises to
+       eight bits per channel because a material's albedo is a Color. 1.0 survives that exactly,
+       so a fractional value is used to see the quantisation rather than to assume it. */
+    ok = ok && material.metallic_factor == 1.0F && material.roughness_factor == 1.0F &&
+        material.ior == 1.5F && material.alpha_cutoff == 0.5F;
+    source.base_color_factor.x = 0.5F;
+    ok = ok && cna_gltf_material_bridge_build_material(&source, &textures, &material) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && material.albedo_color.r == 128U;
+    /* A malformed structure is refused rather than read past its own declared size. */
+    source.struct_size = UINT32_C(4);
+    ok = ok && cna_gltf_material_bridge_build_material(&source, &textures, &material) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_gltf_material_source_ext_init(&source) == CNA_RESULT_SUCCESS;
+    /* An undefined alpha mode is refused rather than cast through into the material. */
+    source.alpha_mode = UINT32_C(9);
+    ok = ok && cna_gltf_material_bridge_build_material(&source, &textures, &material) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_gltf_material_source_ext_init(&source) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_gltf_material_bridge_build_material(0, &textures, &material) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    if (ok && cna_pbr_material_extensions_create(&extensions) == CNA_RESULT_SUCCESS) {
+        extension_source.transmission_factor_ext = 0.5F;
+        ok = cna_gltf_material_bridge_build_extensions(
+                &extension_source, &extension_textures, extensions) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_pbr_material_extensions_is_transmission_enabled(extensions, &flag) ==
+            CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+        ok = ok && cna_pbr_material_extensions_get_iridescence_ior(extensions, &weight) ==
+            CNA_RESULT_SUCCESS && weight == 1.3F;
+        ok = ok && cna_gltf_material_bridge_build_extensions(
+                0, &extension_textures, extensions) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_pbr_material_extensions_destroy(extensions) == CNA_RESULT_SUCCESS;
+    }
+
+    /* ---- the transparent draw list -------------------------------------------------------- */
+
+    near_box.min.x = -1.0F; near_box.min.y = -1.0F; near_box.min.z = -3.0F;
+    near_box.max.x = 1.0F;  near_box.max.y = 1.0F;  near_box.max.z = -1.0F;
+    far_box.min.x = -1.0F;  far_box.min.y = -1.0F;  far_box.min.z = -30.0F;
+    far_box.max.x = 1.0F;   far_box.max.y = 1.0F;   far_box.max.z = -28.0F;
+    camera.x = 0.0F; camera.y = 0.0F; camera.z = 0.0F;
+
+    /* The sort key is the distance to the NEAREST point of the box, not to its centre, so a
+       camera inside the box keys at zero. Both facts are asserted, because a centre-distance
+       implementation would pass a test that only compared two disjoint boxes. */
+    ok = ok && cna_transparent_draw_list_sort_key(&near_box, &camera, &key_near) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_transparent_draw_list_sort_key(&far_box, &camera, &key_far) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && key_far > key_near;
+    {
+        CNA_BoundingBox around;
+        float inside = -1.0F;
+        around.min.x = -1.0F; around.min.y = -1.0F; around.min.z = -1.0F;
+        around.max.x = 1.0F;  around.max.y = 1.0F;  around.max.z = 1.0F;
+        ok = ok && cna_transparent_draw_list_sort_key(&around, &camera, &inside) ==
+            CNA_RESULT_SUCCESS && inside == 0.0F;
+    }
+    ok = ok && cna_transparent_draw_list_sort_key(0, &camera, &key_near) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_transparent_draw_list_camera_position_of(&view, &position) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_transparent_draw_list_camera_position_of(0, &position) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    if (!ok || cna_transparent_draw_list_create(&list) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_transparent_draw_list_get_count(list, &count) == CNA_RESULT_SUCCESS &&
+        count == UINT64_C(0);
+    /* An entry with nothing to draw is a caller mistake, refused at submission rather than
+       stored and discovered when the draw runs. */
+    ok = ok && cna_transparent_draw_list_submit(list, &near_box, 0, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_transparent_draw_list_submit(list, 0, draw_probe_entry, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_transparent_draw_list_get_count(list, &count) == CNA_RESULT_SUCCESS &&
+        count == UINT64_C(0);
+
+    probe.count = 0;
+    probe.fail_at = 0;
+    /* Submitted near-first, so a back-to-front order must reverse them. */
+    ok = ok && cna_transparent_draw_list_submit(list, &near_box, draw_probe_entry, &probe) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_transparent_draw_list_submit(list, &far_box, draw_probe_entry, &probe) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_transparent_draw_list_get_count(list, &count) == CNA_RESULT_SUCCESS &&
+        count == UINT64_C(2);
+    ok = ok && cna_transparent_draw_list_copy_sorted_order_ext(list, &view, 0, UINT64_C(0),
+                                                               &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(2);
+    ok = ok && cna_transparent_draw_list_copy_sorted_order_ext(
+            list, &view, order, (uint64_t)(sizeof order / sizeof order[0]), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(2);
+    /* Farthest first: the second entry submitted is the one drawn first. */
+    ok = ok && order[0] == INT32_C(1) && order[1] == INT32_C(0);
+    ok = ok && cna_transparent_draw_list_draw_sorted(list, &view) == CNA_RESULT_SUCCESS &&
+        probe.count == 2;
+    ok = ok && cna_transparent_draw_list_draw_sorted(list, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* A failing callback stops the draw and its own result reaches the caller unchanged, so a
+       caller learns which draw failed rather than finding a partly drawn frame. */
+    probe.count = 0;
+    probe.fail_at = 1;
+    ok = ok && cna_transparent_draw_list_draw_sorted(list, &view) == CNA_RESULT_IO &&
+        probe.count == 1;
+
+    ok = ok && cna_transparent_draw_list_clear(list) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_transparent_draw_list_get_count(list, &count) == CNA_RESULT_SUCCESS &&
+        count == UINT64_C(0);
+    ok = ok && cna_transparent_draw_list_destroy(list) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_transparent_draw_list_destroy(list) != CNA_RESULT_SUCCESS;
+
+    /* ---- weighted-blended order-independent transparency ----------------------------------- */
+
+    /* The weight clamps at both ends: the curve is unbounded near zero depth, and a weight that
+       overflows would poison the whole accumulation buffer rather than one fragment. */
+    ok = ok && cna_weighted_blended_transparency_weight(0.0F, 1.0F, 100.0F, &weight) ==
+        CNA_RESULT_SUCCESS && weight <= 3e3F;
+    ok = ok && cna_weighted_blended_transparency_weight(1e9F, 1.0F, 100.0F, &weight) ==
+        CNA_RESULT_SUCCESS && weight >= 1e-2F;
+    ok = ok && cna_weighted_blended_transparency_copy_accumulation_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+
+    /* A non-positive size is refused rather than corrected: the targets are allocated from it. */
+    ok = ok && cna_weighted_blended_transparency_create(graphics_device, INT32_C(0), INT32_C(8),
+                                                        &wbt) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && wbt == CNA_INVALID_HANDLE;
+    if (!ok || cna_weighted_blended_transparency_create(graphics_device, INT32_C(16), INT32_C(16),
+                                                        &wbt) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_weighted_blended_transparency_is_supported(wbt, &supported) == CNA_RESULT_SUCCESS &&
+        (supported == CNA_TRUE || supported == CNA_FALSE);
+    ok = ok && cna_weighted_blended_transparency_copy_unsupported_reason(wbt, 0, UINT64_C(0),
+                                                                         &bytes) ==
+        (supported == CNA_TRUE ? CNA_RESULT_SUCCESS : CNA_RESULT_BUFFER_TOO_SMALL);
+    ok = ok && ((supported == CNA_TRUE) == (bytes == UINT64_C(0)));
+
+    /* An argument mistake and a sequencing mistake are DIFFERENT results, and keeping them apart
+       is the point: the canonical code throws invalid_argument and logic_error, and a caller acts
+       on them differently -- fix the number, or fix the order of the calls. */
+    ok = ok && cna_weighted_blended_transparency_resize(wbt, INT32_C(0), INT32_C(8)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_weighted_blended_transparency_begin(wbt, 0.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_weighted_blended_transparency_begin(wbt, -1.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_weighted_blended_transparency_end(wbt) == CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_weighted_blended_transparency_is_accumulating(wbt, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+    ok = ok && cna_weighted_blended_transparency_resize(wbt, INT32_C(8), INT32_C(8)) ==
+        CNA_RESULT_SUCCESS;
+
+    /* CBIND-098, reproduced rather than corrected. begin() opens the bracket only where the
+       resolve is supported, so on a renderer without it isAccumulating() stays false and the
+       matching end() refuses. Both branches assert; neither is a skip, and the unsupported branch
+       is the one that pins the defect in place so a later fix is visible as a test change. */
+    ok = ok && cna_weighted_blended_transparency_begin(wbt, 100.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_weighted_blended_transparency_is_accumulating(wbt, &flag) ==
+        CNA_RESULT_SUCCESS && flag == supported;
+    if (ok && supported == CNA_TRUE) {
+        /* While the bracket is open, both reconfigurations are sequencing mistakes. */
+        ok = ok && cna_weighted_blended_transparency_resize(wbt, INT32_C(4), INT32_C(4)) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_weighted_blended_transparency_resolve(wbt, INT32_C(8), INT32_C(8)) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_weighted_blended_transparency_begin(wbt, 100.0F) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_weighted_blended_transparency_end(wbt) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_weighted_blended_transparency_resolve(wbt, INT32_C(0), INT32_C(8)) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_weighted_blended_transparency_resolve(wbt, INT32_C(8), INT32_C(8)) ==
+            CNA_RESULT_SUCCESS;
+    } else {
+        /* `ok = ok && ...`, never `ok = ...`: a plain assignment here would discard every failure
+           the validator had already recorded, and this branch is the one the unsupported arm
+           takes -- so the arm that pins CBIND-098 in place would have been the arm that could not
+           fail. Found by breaking the assertion above and watching arm 3 keep passing. */
+        ok = ok && cna_weighted_blended_transparency_end(wbt) == CNA_RESULT_INVALID_STATE;
+    }
+    ok = ok && cna_weighted_blended_transparency_is_accumulating(wbt, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+
+    /* Both targets are borrowed, and exist exactly when the resolve does. */
+    {
+        CNA_Handle accumulation = CNA_INVALID_HANDLE;
+        CNA_Handle revealage = CNA_INVALID_HANDLE;
+        ok = ok && cna_weighted_blended_transparency_get_accumulation_texture_ext(
+                wbt, &accumulation) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_weighted_blended_transparency_get_revealage_texture_ext(wbt, &revealage) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && (accumulation != CNA_INVALID_HANDLE) == (supported == CNA_TRUE);
+        ok = ok && (revealage != CNA_INVALID_HANDLE) == (supported == CNA_TRUE);
+        if (accumulation != CNA_INVALID_HANDLE) {
+            ok = ok && cna_render_target_destroy(accumulation) == CNA_RESULT_SUCCESS;
+        }
+        if (revealage != CNA_INVALID_HANDLE) {
+            ok = ok && cna_render_target_destroy(revealage) == CNA_RESULT_SUCCESS;
+        }
+    }
+
+    /* One cleanup path, whatever went wrong above: destroying a resolve with its bracket still
+       open aborts inside the canonical destructor, so a failing assertion must not be able to
+       take the suite down with it. CBIND-085B1 learned this the same way -- by watching a
+       deliberate break turn a failed assertion into a core dump. */
+    if (cna_weighted_blended_transparency_is_accumulating(wbt, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE) {
+        (void)cna_weighted_blended_transparency_end(wbt);
+    }
+    ok = ok && cna_weighted_blended_transparency_destroy(wbt) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_weighted_blended_transparency_destroy(wbt) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -3372,6 +3681,10 @@ static CNA_Result on_load(
         }
         if (!validate_pbr_effect_receiver(graphics_device)) {
             state->failed_stage = 22;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_transparency_and_bridge(graphics_device)) {
+            state->failed_stage = 23;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

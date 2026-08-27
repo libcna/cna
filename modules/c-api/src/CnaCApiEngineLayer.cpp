@@ -27,7 +27,10 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/GltfMaterialBridge.hpp"
 #include "CNA/Graphics/TransparencyMode.hpp"
+#include "CNA/Graphics/TransparentDrawList.hpp"
+#include "CNA/Graphics/WeightedBlendedTransparency.hpp"
 #include "CNA/Graphics/ThinFilmIridescence.hpp"
 #include "CNA/Graphics/ClusteredLightCompute.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
@@ -3236,6 +3239,176 @@ CNA_Result cna_pbr_material_ext_get_hash_code(const CNA_PbrMaterialEXT* p0, uint
 }
 
 CNA_Result cna_pbr_material_ext_copy_to_string(const CNA_PbrMaterialEXT* p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gltf_material_source_ext_init(CNA_GltfMaterialSourceEXT* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gltf_material_extension_source_ext_init(CNA_GltfMaterialExtensionSourceEXT* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gltf_material_textures_ext_init(CNA_GltfMaterialTexturesEXT* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gltf_material_extension_textures_ext_init(CNA_GltfMaterialExtensionTexturesEXT* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gltf_material_bridge_build_material(const CNA_GltfMaterialSourceEXT* p0, const CNA_GltfMaterialTexturesEXT* p1, CNA_PbrMaterialEXT* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_gltf_material_bridge_build_extensions(const CNA_GltfMaterialExtensionSourceEXT* p0, const CNA_GltfMaterialExtensionTexturesEXT* p1, CNA_PbrMaterialExtensionsHandle p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_create(CNA_TransparentDrawListHandle* p0)
+{
+    (void)p0;
+    if (p0 != nullptr) { *p0 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_destroy(CNA_TransparentDrawListHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_clear(CNA_TransparentDrawListHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_submit(CNA_TransparentDrawListHandle p0, const CNA_BoundingBox* p1, CNA_TransparentDrawCallback p2, void* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_get_count(CNA_TransparentDrawListHandle p0, uint64_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_draw_sorted(CNA_TransparentDrawListHandle p0, const CNA_Matrix* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_copy_sorted_order_ext(CNA_TransparentDrawListHandle p0, const CNA_Matrix* p1, int32_t* p2, uint64_t p3, uint64_t* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_sort_key(const CNA_BoundingBox* p0, const CNA_Vector3* p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_transparent_draw_list_camera_position_of(const CNA_Matrix* p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_create(CNA_Handle p0, int32_t p1, int32_t p2, CNA_WeightedBlendedTransparencyHandle* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_destroy(CNA_WeightedBlendedTransparencyHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_is_supported(CNA_WeightedBlendedTransparencyHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_copy_unsupported_reason(CNA_WeightedBlendedTransparencyHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_resize(CNA_WeightedBlendedTransparencyHandle p0, int32_t p1, int32_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_begin(CNA_WeightedBlendedTransparencyHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_end(CNA_WeightedBlendedTransparencyHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_resolve(CNA_WeightedBlendedTransparencyHandle p0, int32_t p1, int32_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_is_accumulating(CNA_WeightedBlendedTransparencyHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_get_accumulation_texture_ext(CNA_WeightedBlendedTransparencyHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_get_revealage_texture_ext(CNA_WeightedBlendedTransparencyHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_copy_accumulation_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_weighted_blended_transparency_weight(float p0, float p1, float p2, float* p3)
 {
     (void)p0; (void)p1; (void)p2; (void)p3;
     return ExtensionUnavailable();
@@ -10904,5 +11077,749 @@ static_assert(
     static_cast<uint32_t>(Ext::PbrTextureSlot::SpecularColor) ==
         CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT);
 } // namespace
+
+namespace {
+
+struct TransparentDrawListResource final {
+    std::shared_ptr<Ext::TransparentDrawList> value;
+};
+
+struct WeightedBlendedTransparencyResource final {
+    std::shared_ptr<Ext::WeightedBlendedTransparency> value;
+    CNA_Handle parentGame;
+};
+
+// CBIND-087D. A callback that fails must stop the draw and reach the caller unchanged, so the
+// failure travels as an exception across the canonical std::function and is unwrapped here rather
+// than being flattened into one generic result by the firewall.
+struct TransparentDrawFailure final {
+    CNA_Result result;
+};
+
+[[nodiscard]] CNA_Result RequireStruct(
+    const uint32_t size, const uint32_t version, const uint32_t expectedSize, const char* what)
+{
+    if (size != expectedSize || version == 0U) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, what);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+#define CNA_WITH_DRAWLIST(handle, body)                                                            \
+    WithMap<TransparentDrawListResource>(                                                          \
+        (handle), ObjectKind::TransparentDrawList, "TransparentDrawList", body)
+#define CNA_WITH_WBT(handle, body)                                                                 \
+    WithMap<WeightedBlendedTransparencyResource>(                                                  \
+        (handle), ObjectKind::WeightedBlendedTransparency, "WeightedBlendedTransparency", body)
+
+CNA_Result cna_gltf_material_source_ext_init(CNA_GltfMaterialSourceEXT* const outSource)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSource == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The source is null.");
+        }
+        *outSource = CNA_GltfMaterialSourceEXT{};
+        outSource->struct_size = static_cast<uint32_t>(sizeof(CNA_GltfMaterialSourceEXT));
+        outSource->struct_version = UINT32_C(1);
+        // The glTF specification's defaults, not this layer's: an omitted factor means these.
+        outSource->base_color_factor = CNA_Vector4{1.0F, 1.0F, 1.0F, 1.0F};
+        outSource->metallic_factor = 1.0F;
+        outSource->roughness_factor = 1.0F;
+        outSource->normal_scale = 1.0F;
+        outSource->occlusion_strength = 1.0F;
+        outSource->ior_ext = 1.5F;
+        outSource->specular_factor_ext = 1.0F;
+        outSource->specular_color_factor_ext = Vec3(1.0F, 1.0F, 1.0F);
+        outSource->alpha_mode = CNA_ALPHA_MODE_OPAQUE_EXT;
+        outSource->alpha_cutoff = 0.5F;
+        for (int slot = 0; slot < CNA_PBR_TEXTURE_SLOT_COUNT; ++slot) {
+            if (const CNA_Result result =
+                    cna_texture_transform_ext_init(&outSource->texture_transforms_ext[slot]);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gltf_material_extension_source_ext_init(
+    CNA_GltfMaterialExtensionSourceEXT* const outSource)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSource == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The source is null.");
+        }
+        *outSource = CNA_GltfMaterialExtensionSourceEXT{};
+        outSource->struct_size =
+            static_cast<uint32_t>(sizeof(CNA_GltfMaterialExtensionSourceEXT));
+        outSource->struct_version = UINT32_C(1);
+        outSource->attenuation_color_ext = Vec3(1.0F, 1.0F, 1.0F);
+        outSource->iridescence_ior_ext = 1.3F;
+        outSource->iridescence_thickness_minimum_ext = 100.0F;
+        outSource->iridescence_thickness_maximum_ext = 400.0F;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gltf_material_textures_ext_init(CNA_GltfMaterialTexturesEXT* const outTextures)
+{
+    if (outTextures == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The textures are null.");
+    }
+    *outTextures = CNA_GltfMaterialTexturesEXT{};
+    outTextures->struct_size = static_cast<uint32_t>(sizeof(CNA_GltfMaterialTexturesEXT));
+    outTextures->struct_version = UINT32_C(1);
+    for (int slot = 0; slot < CNA_PBR_TEXTURE_SLOT_COUNT; ++slot) {
+        outTextures->slots[slot] = CNA_INVALID_HANDLE;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result cna_gltf_material_extension_textures_ext_init(
+    CNA_GltfMaterialExtensionTexturesEXT* const outTextures)
+{
+    if (outTextures == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The textures are null.");
+    }
+    *outTextures = CNA_GltfMaterialExtensionTexturesEXT{};
+    outTextures->struct_size =
+        static_cast<uint32_t>(sizeof(CNA_GltfMaterialExtensionTexturesEXT));
+    outTextures->struct_version = UINT32_C(1);
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result cna_gltf_material_bridge_build_material(
+    const CNA_GltfMaterialSourceEXT* const source,
+    const CNA_GltfMaterialTexturesEXT* const textures,
+    CNA_PbrMaterialEXT* const outMaterial)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (source == nullptr || textures == nullptr || outMaterial == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "A bridge argument is null.");
+        }
+        if (const CNA_Result result = RequireStruct(
+                source->struct_size, source->struct_version,
+                static_cast<uint32_t>(sizeof(CNA_GltfMaterialSourceEXT)),
+                "The glTF material source is malformed.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireStruct(
+                textures->struct_size, textures->struct_version,
+                static_cast<uint32_t>(sizeof(CNA_GltfMaterialTexturesEXT)),
+                "The glTF texture set is malformed.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        // The canonical bridge is written against a concept, so the C source structure is turned
+        // into a local type that satisfies it. The concept is the contract; this is how C meets it.
+        struct Source final {
+            Microsoft::Xna::Framework::Vector4 baseColorFactor;
+            float metallicFactor;
+            float roughnessFactor;
+            Microsoft::Xna::Framework::Vector3 emissiveFactor;
+            float normalScale;
+            float occlusionStrength;
+            float iorEXT;
+            float specularFactorEXT;
+            Microsoft::Xna::Framework::Vector3 specularColorFactorEXT;
+            Microsoft::Xna::Framework::Graphics::AlphaModeEXT alphaMode;
+            float alphaCutoff;
+            bool doubleSided;
+            std::array<int, Ext::kPbrTextureSlotCount> textureCoordinateSetsEXT;
+            std::array<Microsoft::Xna::Framework::Graphics::TextureTransformEXT,
+                       Ext::kPbrTextureSlotCount> textureTransformsEXT;
+        } native{};
+
+        native.baseColorFactor = {
+            source->base_color_factor.x, source->base_color_factor.y,
+            source->base_color_factor.z, source->base_color_factor.w};
+        native.metallicFactor = source->metallic_factor;
+        native.roughnessFactor = source->roughness_factor;
+        native.emissiveFactor = ToNativeVector3(source->emissive_factor);
+        native.normalScale = source->normal_scale;
+        native.occlusionStrength = source->occlusion_strength;
+        native.iorEXT = source->ior_ext;
+        native.specularFactorEXT = source->specular_factor_ext;
+        native.specularColorFactorEXT = ToNativeVector3(source->specular_color_factor_ext);
+        if (source->alpha_mode > UINT32_C(2)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The alpha mode is not a defined CNA_ALPHA_MODE_EXT_* value.");
+        }
+        native.alphaMode =
+            static_cast<Microsoft::Xna::Framework::Graphics::AlphaModeEXT>(source->alpha_mode);
+        native.alphaCutoff = source->alpha_cutoff;
+        if (source->double_sided != CNA_TRUE && source->double_sided != CNA_FALSE) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "double_sided must be CNA_TRUE or CNA_FALSE.");
+        }
+        native.doubleSided = source->double_sided == CNA_TRUE;
+
+        Ext::GltfMaterialTexturesEXT nativeTextures{};
+        for (int slot = 0; slot < Ext::kPbrTextureSlotCount; ++slot) {
+            native.textureCoordinateSetsEXT[static_cast<std::size_t>(slot)] =
+                source->texture_coordinate_sets_ext[slot];
+            const CNA_TextureTransformEXT& t = source->texture_transforms_ext[slot];
+            auto& nativeTransform = native.textureTransformsEXT[static_cast<std::size_t>(slot)];
+            nativeTransform.Offset = {t.offset.x, t.offset.y};
+            nativeTransform.Scale = {t.scale.x, t.scale.y};
+            nativeTransform.Rotation = t.rotation;
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result = ResolveTexture2DArgument(
+                    textures->slots[slot], "glTF texture slot", &texture, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            nativeTextures.Slots[static_cast<std::size_t>(slot)] = texture;
+        }
+
+        const Ext::PbrMaterial built = Ext::materialFromGltfEXT(native, nativeTextures);
+        FromNativePbrMaterial(built, outMaterial);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gltf_material_bridge_build_extensions(
+    const CNA_GltfMaterialExtensionSourceEXT* const source,
+    const CNA_GltfMaterialExtensionTexturesEXT* const textures,
+    const CNA_PbrMaterialExtensionsHandle outExtensions)
+{
+    return WithMap<PbrMaterialExtensionsResource>(
+        outExtensions, ObjectKind::PbrMaterialExtensions, "PbrMaterialExtensions",
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            if (source == nullptr || textures == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "A bridge argument is null.");
+            }
+            if (const CNA_Result result = RequireStruct(
+                    source->struct_size, source->struct_version,
+                    static_cast<uint32_t>(sizeof(CNA_GltfMaterialExtensionSourceEXT)),
+                    "The glTF extension source is malformed.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireStruct(
+                    textures->struct_size, textures->struct_version,
+                    static_cast<uint32_t>(sizeof(CNA_GltfMaterialExtensionTexturesEXT)),
+                    "The glTF extension texture set is malformed.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            struct Source final {
+                float clearcoatFactorEXT;
+                float clearcoatRoughnessFactorEXT;
+                Microsoft::Xna::Framework::Vector3 sheenColorFactorEXT;
+                float sheenRoughnessFactorEXT;
+                float transmissionFactorEXT;
+                float thicknessFactorEXT;
+                float attenuationDistanceEXT;
+                Microsoft::Xna::Framework::Vector3 attenuationColorEXT;
+                float iridescenceFactorEXT;
+                float iridescenceIorEXT;
+                float iridescenceThicknessMinimumEXT;
+                float iridescenceThicknessMaximumEXT;
+            } native{};
+            native.clearcoatFactorEXT = source->clearcoat_factor_ext;
+            native.clearcoatRoughnessFactorEXT = source->clearcoat_roughness_factor_ext;
+            native.sheenColorFactorEXT = ToNativeVector3(source->sheen_color_factor_ext);
+            native.sheenRoughnessFactorEXT = source->sheen_roughness_factor_ext;
+            native.transmissionFactorEXT = source->transmission_factor_ext;
+            native.thicknessFactorEXT = source->thickness_factor_ext;
+            native.attenuationDistanceEXT = source->attenuation_distance_ext;
+            native.attenuationColorEXT = ToNativeVector3(source->attenuation_color_ext);
+            native.iridescenceFactorEXT = source->iridescence_factor_ext;
+            native.iridescenceIorEXT = source->iridescence_ior_ext;
+            native.iridescenceThicknessMinimumEXT = source->iridescence_thickness_minimum_ext;
+            native.iridescenceThicknessMaximumEXT = source->iridescence_thickness_maximum_ext;
+
+            Ext::GltfMaterialExtensionTexturesEXT nativeTextures{};
+            const CNA_Handle handles[] = {
+                textures->clearcoat, textures->clearcoat_roughness, textures->clearcoat_normal,
+                textures->sheen_color, textures->sheen_roughness, textures->transmission,
+                textures->thickness, textures->iridescence, textures->iridescence_thickness};
+            Microsoft::Xna::Framework::Graphics::Texture2D** const slots[] = {
+                &nativeTextures.Clearcoat, &nativeTextures.ClearcoatRoughness,
+                &nativeTextures.ClearcoatNormal, &nativeTextures.SheenColor,
+                &nativeTextures.SheenRoughness, &nativeTextures.Transmission,
+                &nativeTextures.Thickness, &nativeTextures.Iridescence,
+                &nativeTextures.IridescenceThickness};
+            for (std::size_t slot = 0; slot < std::size(handles); ++slot) {
+                Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+                std::shared_ptr<Texture2DResource> retention;
+                if (const CNA_Result result = ResolveTexture2DArgument(
+                        handles[slot], "glTF extension texture", &texture, &retention);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                *slots[slot] = texture;
+                if (texture != nullptr && retention != nullptr) {
+                    e->textureParentGame = retention->parentGame;
+                }
+            }
+            *e->value = Ext::materialExtensionsFromGltfEXT(native, nativeTextures);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_transparent_draw_list_create(CNA_TransparentDrawListHandle* const outList)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outList == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The draw-list output handle is null.");
+        }
+        *outList = CNA_INVALID_HANDLE;
+        const auto resource = std::make_shared<TransparentDrawListResource>(
+            TransparentDrawListResource{std::make_shared<Ext::TransparentDrawList>()});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::TransparentDrawList, resource, outList);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned draw-list handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_transparent_draw_list_destroy(const CNA_TransparentDrawListHandle listHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TransparentDrawListResource> list;
+        if (const CNA_Result result = GetEngineResource(
+                listHandle, ObjectKind::TransparentDrawList, "TransparentDrawList", &list);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(listHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned draw-list handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_transparent_draw_list_clear(const CNA_TransparentDrawListHandle list)
+{
+    return CNA_WITH_DRAWLIST(list,
+        [](const std::shared_ptr<TransparentDrawListResource>& l) -> CNA_Result {
+            l->value->clear();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_transparent_draw_list_submit(
+    const CNA_TransparentDrawListHandle list,
+    const CNA_BoundingBox* const bounds,
+    const CNA_TransparentDrawCallback draw,
+    void* const context)
+{
+    return CNA_WITH_DRAWLIST(list,
+        [&](const std::shared_ptr<TransparentDrawListResource>& l) -> CNA_Result {
+            if (bounds == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bounds are null.");
+            }
+            // The canonical submit() refuses an empty callable; in C a null function pointer is
+            // that same mistake, and it is refused here rather than stored and discovered later.
+            if (draw == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "There is nothing to draw.");
+            }
+            BoundingBox nativeBounds;
+            if (const CNA_Result result = ToNativeBounds(bounds, &nativeBounds);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            l->value->submit(nativeBounds, [draw, context]() {
+                const CNA_Result result = draw(context);
+                if (result != CNA_RESULT_SUCCESS) {
+                    throw TransparentDrawFailure{result};
+                }
+            });
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_transparent_draw_list_get_count(
+    const CNA_TransparentDrawListHandle list, uint64_t* const outCount)
+{
+    return CNA_WITH_DRAWLIST(list,
+        [&](const std::shared_ptr<TransparentDrawListResource>& l) -> CNA_Result {
+            return StoreValue(outCount, static_cast<uint64_t>(l->value->getCount()));
+        });
+}
+
+CNA_Result cna_transparent_draw_list_draw_sorted(
+    const CNA_TransparentDrawListHandle list, const CNA_Matrix* const view)
+{
+    return CNA_WITH_DRAWLIST(list,
+        [&](const std::shared_ptr<TransparentDrawListResource>& l) -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // A failing callback stops the draw and its own result reaches the caller unchanged,
+            // so a caller learns which draw failed instead of finding a partly drawn frame.
+            try {
+                l->value->drawSorted(ToNativeMatrix(*view));
+            } catch (const TransparentDrawFailure& failure) {
+                return failure.result;
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_transparent_draw_list_copy_sorted_order_ext(
+    const CNA_TransparentDrawListHandle list,
+    const CNA_Matrix* const view,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    std::shared_ptr<TransparentDrawListResource> resource;
+    if (const CNA_Result result = GetEngineResource(
+            list, ObjectKind::TransparentDrawList, "TransparentDrawList", &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outCount != nullptr) {
+            *outCount = UINT64_C(0);
+        }
+        return result;
+    }
+    if (view == nullptr) {
+        if (outCount != nullptr) {
+            *outCount = UINT64_C(0);
+        }
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The view is null.");
+    }
+    const std::vector<int> order = resource->value->getSortedOrderEXT(ToNativeMatrix(*view));
+    return CopyInt32Range(order, destination, capacity, outCount);
+}
+
+CNA_Result cna_transparent_draw_list_sort_key(
+    const CNA_BoundingBox* const bounds,
+    const CNA_Vector3* const cameraPosition,
+    float* const outKey)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (bounds == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The bounds are null.");
+        }
+        if (const CNA_Result result =
+                RequireVector3Argument(cameraPosition, "The camera position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        BoundingBox nativeBounds;
+        if (const CNA_Result result = ToNativeBounds(bounds, &nativeBounds);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outKey,
+            Ext::TransparentDrawList::sortKey(nativeBounds, ToNativeVector3(*cameraPosition)));
+    });
+}
+
+CNA_Result cna_transparent_draw_list_camera_position_of(
+    const CNA_Matrix* const view, CNA_Vector3* const outPosition)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto v = Ext::TransparentDrawList::cameraPositionOf(ToNativeMatrix(*view));
+        return StoreValue(outPosition, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_weighted_blended_transparency_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t width,
+    const int32_t height,
+    CNA_WeightedBlendedTransparencyHandle* const outTransparency)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTransparency == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The transparency output handle is null.");
+        }
+        *outTransparency = CNA_INVALID_HANDLE;
+        if (width <= 0 || height <= 0) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The target size must be positive.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::WeightedBlendedTransparency>(
+            *graphicsDevice->value, static_cast<int>(width), static_cast<int>(height));
+        const auto resource = std::make_shared<WeightedBlendedTransparencyResource>(
+            WeightedBlendedTransparencyResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::WeightedBlendedTransparency, resource, outTransparency);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned transparency handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_weighted_blended_transparency_destroy(
+    const CNA_WeightedBlendedTransparencyHandle transparencyHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<WeightedBlendedTransparencyResource> transparency;
+        if (const CNA_Result result = GetEngineResource(
+                transparencyHandle, ObjectKind::WeightedBlendedTransparency,
+                "WeightedBlendedTransparency", &transparency);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(transparencyHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned transparency handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(transparency->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_weighted_blended_transparency_is_supported(
+    const CNA_WeightedBlendedTransparencyHandle transparency, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            return StoreValue(
+                outSupported,
+                static_cast<CNA_Bool>(t->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_copy_unsupported_reason(
+    const CNA_WeightedBlendedTransparencyHandle transparency,
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    std::shared_ptr<WeightedBlendedTransparencyResource> resource;
+    if (const CNA_Result result = GetEngineResource(
+            transparency, ObjectKind::WeightedBlendedTransparency, "WeightedBlendedTransparency",
+            &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(destination, capacity, outBytes, [&resource] {
+        return resource->value->getUnsupportedReason();
+    });
+}
+
+CNA_Result cna_weighted_blended_transparency_resize(
+    const CNA_WeightedBlendedTransparencyHandle transparency,
+    const int32_t width,
+    const int32_t height)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            // A bad size is an argument mistake and an open bracket is a sequencing mistake; the
+            // canonical code throws two different exception types and they stay apart here.
+            if (width <= 0 || height <= 0) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The size must be positive.");
+            }
+            if (t->value->isAccumulating()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "Accumulation is open.");
+            }
+            t->value->resize(static_cast<int>(width), static_cast<int>(height));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_begin(
+    const CNA_WeightedBlendedTransparencyHandle transparency, const float farPlane)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            if (!(farPlane > 0.0F)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The far plane must be positive.");
+            }
+            if (t->value->isAccumulating()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "Accumulation is already open.");
+            }
+            // On a renderer that cannot run the resolve this opens nothing, so isAccumulating()
+            // stays false and a matching end() refuses. Reproduced rather than corrected; see
+            // plans/plan_binding.md CBIND-098.
+            t->value->begin(farPlane);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_end(
+    const CNA_WeightedBlendedTransparencyHandle transparency)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            if (!t->value->isAccumulating()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "Accumulation is not open.");
+            }
+            t->value->end();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_resolve(
+    const CNA_WeightedBlendedTransparencyHandle transparency,
+    const int32_t width,
+    const int32_t height)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            if (width <= 0 || height <= 0) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The size must be positive.");
+            }
+            if (t->value->isAccumulating()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "Accumulation is still open.");
+            }
+            t->value->resolve(static_cast<int>(width), static_cast<int>(height));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_is_accumulating(
+    const CNA_WeightedBlendedTransparencyHandle transparency, CNA_Bool* const outAccumulating)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            return StoreValue(
+                outAccumulating,
+                static_cast<CNA_Bool>(t->value->isAccumulating() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_get_accumulation_texture_ext(
+    const CNA_WeightedBlendedTransparencyHandle transparency, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            auto* const texture = t->value->getAccumulationTextureEXT();
+            if (texture == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(t, texture);
+            return CreateBorrowedRenderTarget2D(view, t->parentGame, t, outTexture);
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_get_revealage_texture_ext(
+    const CNA_WeightedBlendedTransparencyHandle transparency, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_WBT(transparency,
+        [&](const std::shared_ptr<WeightedBlendedTransparencyResource>& t) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            auto* const texture = t->value->getRevealageTextureEXT();
+            if (texture == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(t, texture);
+            return CreateBorrowedRenderTarget2D(view, t->parentGame, t, outTexture);
+        });
+}
+
+CNA_Result cna_weighted_blended_transparency_copy_accumulation_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(destination, capacity, outBytes, [] {
+        return Ext::WeightedBlendedTransparency::getAccumulationGlsl();
+    });
+}
+
+CNA_Result cna_weighted_blended_transparency_weight(
+    const float viewDepth, const float alpha, const float farPlane, float* const outWeight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        // Both clamps are corrections: the curve is unbounded near zero depth, and a weight that
+        // overflows poisons the whole accumulation buffer rather than one fragment.
+        return StoreValue(
+            outWeight, Ext::WeightedBlendedTransparency::weight(viewDepth, alpha, farPlane));
+    });
+}
 
 #endif // CNA_CNAEXT
