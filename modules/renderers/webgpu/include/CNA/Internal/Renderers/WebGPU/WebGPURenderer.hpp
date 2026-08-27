@@ -174,6 +174,15 @@ namespace CNA::Internal::Renderers::WebGPU
         int width_ = 0;
         int height_ = 0;
         int mipLevels_ = 1;
+        /// WEBGPU-144: the XNA SurfaceFormat ordinal and its resolved WGPU format. A block-compressed
+        /// texture uploads its BC blocks natively (no CPU decompress); `blockBytes_` is the bytes per
+        /// 4x4 block (8 for BC1, 16 for BC2/3/7). `compressedLevels_` is the authoritative per-mip
+        /// block store the framework's `GetData` reads back (Texture2D keeps no compressed shadow).
+        int surfaceFormat_ = 0;
+        WGPUTextureFormat wgpuFormat_ = WGPUTextureFormat_RGBA8Unorm;
+        bool compressed_ = false;
+        int blockBytes_ = 4;
+        std::vector<std::vector<std::uint8_t>> compressedLevels_;
     };
 
     /// WEBGPU-53/54: off-screen render target backing a RenderTarget2D. Owns its own colour
@@ -1231,6 +1240,17 @@ namespace CNA::Internal::Renderers::WebGPU
             return ShaderDialectEXT::Wgsl;
         }
 
+        /**
+         * @brief WEBGPU-144: whether a block-compressed format is uploaded to the GPU natively
+         * (as BC blocks) rather than CPU-decompressed to RGBA8 first. True for the DXT/BC7 formats
+         * when the adapter/device advertises `WGPUFeatureName_TextureCompressionBC` (checked at
+         * device creation); the framework then routes SetData/GetData through the block path.
+         */
+        [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
+
+        /** @brief WEBGPU-144: the BC formats this renderer stores natively are Supported; else Defer. */
+        [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
+
     private:
         friend class WebGPURenderTargetRenderer;
         friend class WebGPURenderTargetCubeRenderer;
@@ -1772,6 +1792,9 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUAdapter adapter_ = nullptr;
         WGPUDevice device_ = nullptr;
         WGPUQueue queue_ = nullptr;
+        /// WEBGPU-144: true when the adapter advertised WGPUFeatureName_TextureCompressionBC and it
+        /// was requested at device creation, so BC1/2/3/7 textures upload natively.
+        bool bcSupported_ = false;
         WGPUSurfaceConfiguration surfaceConfig_{};
         // REMED-GFX-131: two distinct formats, deliberately separated.
         //

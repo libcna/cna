@@ -99,6 +99,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_SpriteBatch_ShaderEffect COMMAND cna_test_webgpu_spritebatch_shadereffect
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-144: GPU-native block-compressed textures -- a DXT1/BC1 block uploads to a BC texture
+    # and the GPU decodes it at sample time (no CPU decompression), plus an exact block round-trip.
+    cna_webgpu_test(cna_test_webgpu_compressed_texture webgpu_compressed_texture_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_CompressedTexture COMMAND cna_test_webgpu_compressed_texture
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)

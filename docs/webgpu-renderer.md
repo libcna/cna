@@ -544,11 +544,10 @@ readback (`WEBGPU-51`), and -- since 2026-08-26 -- the browser path (`WEBGPU-119
 described in their own sections above and are no longer "limitations". What is **genuinely still
 open** in `plans/plan_webgpu.md`:
 
-- **Real GPU-native compressed texture formats** (`WEBGPU-111`) -- a cross-renderer/XNA-layer gap,
-  not WebGPU-specific: no CNA renderer does real block-compressed GPU upload today (`Texture2D`
-  CPU-decompresses DXT to RGBA8 first, and the common `ImageData` struct has no compressed-format
-  field). The dev machine's adapter does support `WGPUFeatureName_TextureCompressionBC`, so this is a
-  design task, not a hardware dead end.
+- **Compressed content loading** (`WEBGPU-144` Phase 2) -- GPU-native block-compressed upload itself
+  works (see below), but the XNB content reader and the DDS/`Texture2D::FromStream` path still
+  force-decode DXT to `Color`, so DXT/BC7 loaded from `.xnb`/`.dds` files does not yet reach the
+  native path. Reaching it needs a capability-gated change to the shared content loaders.
 - **Per-`RenderTarget2D` `multiSampleCount`** -- a target's own constructor sample count is ignored;
   it mirrors the renderer's global sample count instead. Backbuffer and render-target MSAA otherwise
   work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
@@ -561,6 +560,16 @@ count (a mismatch, a cube face, a null target, or a count > 4 is refused with a
 fans out to every attachment; a built-in (stock/SpriteBatch) draw writes attachment 0 only (`writeMask`
 0 on the rest) -- the same "the stock pipeline writes attachment 0" behaviour every other renderer has.
 Depth/stencil is single and shared by the pass. See the MRT section below for the full boundary.
+
+**GPU-native block-compressed textures are supported** (`WEBGPU-144`): when the adapter advertises
+`WGPUFeatureName_TextureCompressionBC` (requested at device creation), DXT1/3/5 and BC7 (and their
+sRGB variants) upload their raw 4x4 blocks to a `WGPUTextureFormat_BC{1,2,3,7}*` texture and the GPU
+decodes them at sample time -- no CPU decompression. This is the first CNA renderer to do so;
+`Texture2D`'s existing compressed block-transfer contract (`IsCompressedTransferFormatEXT`) routes the
+bytes, and the renderer keeps the per-mip blocks as the authoritative `GetData` store.
+`WebGPU_CompressedTexture` proves a DXT1 and a DXT5 texture sample correctly and round-trip their exact
+block bytes. Reachable today via the direct `Texture2D(device, w, h, mipMap, SurfaceFormat::Dxt*)` +
+`SetData(blockBytes, count)` API; content-file loading is the remaining Phase-2 gap (see limitations).
 
 **Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
 `CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`, and the sample count is

@@ -32,6 +32,7 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"  // WEBGPU-142: Effect::GetEffectRendererPtr()
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"  // WEBGPU-144: BC format classify
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -71,6 +72,32 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] std::uint64_t Align4(std::uint64_t value)
         {
             return std::max(kMinimumBufferSize, (value + 3u) & ~std::uint64_t{3u});
+        }
+
+        // WEBGPU-144: resolves an XNA SurfaceFormat ordinal to the WGPU texture format used to store
+        // it. Block-compressed formats (DXT1/3/5, BC7, and their sRGB variants) map to the matching
+        // WGPUTextureFormat_BC* and are uploaded as raw 4x4 blocks (blockBytes bytes each); every
+        // other format is treated as the renderer's plain RGBA8Unorm.
+        struct WebGPUTexFormatInfo
+        {
+            WGPUTextureFormat format = WGPUTextureFormat_RGBA8Unorm;
+            bool compressed = false;
+            int blockBytes = 4;  ///< bytes per 4x4 block (compressed) / per texel (RGBA8)
+        };
+
+        [[nodiscard]] WebGPUTexFormatInfo ClassifyWebGPUTextureFormat(int surfaceFormat)
+        {
+            using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
+            switch (static_cast<SurfaceFormat>(surfaceFormat))
+            {
+            case SurfaceFormat::Dxt1:        return {WGPUTextureFormat_BC1RGBAUnorm, true, 8};
+            case SurfaceFormat::Dxt3:        return {WGPUTextureFormat_BC2RGBAUnorm, true, 16};
+            case SurfaceFormat::Dxt5:        return {WGPUTextureFormat_BC3RGBAUnorm, true, 16};
+            case SurfaceFormat::Dxt5SrgbEXT: return {WGPUTextureFormat_BC3RGBAUnormSrgb, true, 16};
+            case SurfaceFormat::Bc7EXT:      return {WGPUTextureFormat_BC7RGBAUnorm, true, 16};
+            case SurfaceFormat::Bc7SrgbEXT:  return {WGPUTextureFormat_BC7RGBAUnormSrgb, true, 16};
+            default:                         return {WGPUTextureFormat_RGBA8Unorm, false, 4};
+            }
         }
 
         [[nodiscard]] WGPUBuffer CreateAndBindDeferredIndexBuffer(
@@ -986,7 +1013,16 @@ namespace CNA::Internal::Renderers::WebGPU
         if (width_ <= 0 || height_ <= 0)
             throw std::invalid_argument("CNA WebGPU: texture dimensions must be positive");
 
-        if (!data.pixels.empty())
+        // WEBGPU-144: block-compressed textures (DXT/BC7) store their BC blocks natively.
+        const WebGPUTexFormatInfo info = ClassifyWebGPUTextureFormat(data.surfaceFormat);
+        surfaceFormat_ = data.surfaceFormat;
+        wgpuFormat_ = info.format;
+        compressed_ = info.compressed;
+        blockBytes_ = info.blockBytes;
+        if (compressed_)
+            compressedLevels_.resize(static_cast<std::size_t>(mipLevels_));
+
+        if (!compressed_ && !data.pixels.empty())
         {
             const std::size_t required = static_cast<std::size_t>(width_) * static_cast<std::size_t>(height_) * 4u;
             if (data.pixels.size() < required)
@@ -1001,11 +1037,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // render-pass-based mip blit (see that method's own doc comment) -- only actually used
         // when mipLevels_ > 1 and initial pixel data is supplied below, but declared
         // unconditionally since usage flags are fixed at texture-creation time.
+        // WEBGPU-144: a block-compressed texture is never a render attachment and never mip-generated
+        // (its mips are supplied pre-compressed), so RenderAttachment is dropped for it; CopySrc/Dst
+        // stay for block upload/readback.
         descriptor.usage = WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopyDst |
-                           WGPUTextureUsage_CopySrc | WGPUTextureUsage_RenderAttachment;
+                           WGPUTextureUsage_CopySrc |
+                           (compressed_ ? WGPUTextureUsage_None : WGPUTextureUsage_RenderAttachment);
         descriptor.dimension = WGPUTextureDimension_2D;
         descriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
-        descriptor.format = WGPUTextureFormat_RGBA8Unorm;
+        descriptor.format = wgpuFormat_;
         descriptor.mipLevelCount = static_cast<std::uint32_t>(mipLevels_);
         descriptor.sampleCount = 1;
         texture_ = wgpuDeviceCreateTexture(owner.Device(), &descriptor);
@@ -1022,7 +1062,14 @@ namespace CNA::Internal::Renderers::WebGPU
         sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, view_);
 
         if (!data.pixels.empty())
-            UpdatePixels(data.pixels.data(), width_ * 4);
+        {
+            // WEBGPU-144: the compressed ctor buffer is level 0's blocks (zero-filled by the
+            // Texture2D ctor, then overwritten by SetData -> UpdatePixelsLevel).
+            if (compressed_)
+                UpdatePixelsLevel(0, data.pixels.data(), width_, height_);
+            else
+                UpdatePixels(data.pixels.data(), width_ * 4);
+        }
     }
 
     WebGPUTextureRenderer::~WebGPUTextureRenderer()
@@ -1079,6 +1126,26 @@ namespace CNA::Internal::Renderers::WebGPU
         destination.mipLevel = static_cast<std::uint32_t>(level);
         destination.aspect = WGPUTextureAspect_All;
 
+        // WEBGPU-144: a block-compressed level's data is `rgba` reinterpreted as BC blocks. The copy
+        // layout is expressed in blocks (bytesPerRow = block-cols * blockBytes, rowsPerImage =
+        // block-rows) while the extent stays the level's texel dimensions; the blocks are also kept
+        // in `compressedLevels_` as the authoritative store the framework's GetData reads back.
+        if (compressed_)
+        {
+            const int blockCols = (levelW + 3) / 4;
+            const int blockRows = (levelH + 3) / 4;
+            const std::size_t byteCount =
+                static_cast<std::size_t>(blockCols) * blockRows * static_cast<std::size_t>(blockBytes_);
+            compressedLevels_[static_cast<std::size_t>(level)].assign(rgba, rgba + byteCount);
+
+            WGPUTexelCopyBufferLayout layout{};
+            layout.bytesPerRow = static_cast<std::uint32_t>(blockCols * blockBytes_);
+            layout.rowsPerImage = static_cast<std::uint32_t>(blockRows);
+            const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
+            wgpuQueueWriteTexture(owner_->Queue(), &destination, rgba, byteCount, &layout, &extent);
+            return;
+        }
+
         WGPUTexelCopyBufferLayout layout{};
         layout.bytesPerRow = static_cast<std::uint32_t>(levelW * 4);
         layout.rowsPerImage = static_cast<std::uint32_t>(levelH);
@@ -1103,6 +1170,40 @@ namespace CNA::Internal::Renderers::WebGPU
             return false;
         if (level < 0 || level >= mipLevels_)
             throw std::out_of_range("CNA WebGPU: Texture2D.GetData: mip level out of range");
+
+        // WEBGPU-144: a compressed texture is its own authoritative block store (Texture2D keeps no
+        // compressed CPU shadow). Return the requested block sub-rectangle's raw bytes -- the
+        // framework guarantees x/y/w/h are already block-aligned and in bounds.
+        if (compressed_)
+        {
+            const std::size_t lvl = static_cast<std::size_t>(level);
+            if (lvl >= compressedLevels_.size() || compressedLevels_[lvl].empty())
+                return false;
+            const int lW = MipDim(width_, level);
+            const int levelBlockCols = (lW + 3) / 4;
+            const int rectBlockCols = (w + 3) / 4;
+            const int rectBlockRows = (h + 3) / 4;
+            const std::size_t needed =
+                static_cast<std::size_t>(rectBlockCols) * rectBlockRows * static_cast<std::size_t>(blockBytes_);
+            if (dataLength < static_cast<int>(needed)) return false;
+            const int blockX = x / 4;
+            const int blockY = y / 4;
+            const std::size_t levelRowBytes =
+                static_cast<std::size_t>(levelBlockCols) * static_cast<std::size_t>(blockBytes_);
+            const std::size_t rectRowBytes =
+                static_cast<std::size_t>(rectBlockCols) * static_cast<std::size_t>(blockBytes_);
+            const std::vector<std::uint8_t>& blocks = compressedLevels_[lvl];
+            for (int row = 0; row < rectBlockRows; ++row)
+            {
+                const std::size_t srcOff =
+                    static_cast<std::size_t>(blockY + row) * levelRowBytes +
+                    static_cast<std::size_t>(blockX) * static_cast<std::size_t>(blockBytes_);
+                if (srcOff + rectRowBytes > blocks.size()) return false;
+                std::memcpy(static_cast<std::uint8_t*>(data) + static_cast<std::size_t>(row) * rectRowBytes,
+                            blocks.data() + srcOff, rectRowBytes);
+            }
+            return true;
+        }
 
         const int levelW = MipDim(width_, level);
         const int levelH = MipDim(height_, level);
@@ -2558,9 +2659,19 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: adapter request failed: " + adapterState.error);
         adapter_ = adapterState.adapter;
 
+        // WEBGPU-144: request native block-compressed texture support when the adapter has it, so
+        // BC1/2/3/7 (DXT/BC7) textures upload as blocks instead of being CPU-decompressed to RGBA8.
+        bcSupported_ = wgpuAdapterHasFeature(adapter_, WGPUFeatureName_TextureCompressionBC) != 0;
+        std::array<WGPUFeatureName, 1> requiredFeatures{WGPUFeatureName_TextureCompressionBC};
+
         DeviceRequestState deviceState;
         WGPUDeviceDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU Device");
+        if (bcSupported_)
+        {
+            descriptor.requiredFeatureCount = requiredFeatures.size();
+            descriptor.requiredFeatures = requiredFeatures.data();
+        }
         descriptor.defaultQueue.label = StringView("CNA WebGPU Queue");
         descriptor.uncapturedErrorCallbackInfo.callback = OnUncapturedError;
         descriptor.uncapturedErrorCallbackInfo.userdata1 = &uncapturedErrorCount_;
@@ -7177,6 +7288,22 @@ struct VSOut {
         // false arm that stood here while the feature was a no-op is therefore gone, and the
         // capability falls through to the shared permissive default, which reports true.
         return IGraphicsRenderer::SupportsCapability(capability);
+    }
+
+    bool WebGPURenderer::IsCompressedTransferFormatEXT(int surfaceFormat) const
+    {
+        // WEBGPU-144: only when the device actually enabled the BC feature. Then the DXT/BC7 formats
+        // transfer as blocks, and WebGPUTextureRenderer uploads them to a WGPUTextureFormat_BC*.
+        return bcSupported_ && ClassifyWebGPUTextureFormat(surfaceFormat).compressed;
+    }
+
+    RendererFormatVerdict WebGPURenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const
+    {
+        // WEBGPU-144: a BC format is genuinely Supported when the device can store it natively;
+        // otherwise defer to the framework's own rule (which CPU-decompresses to Color elsewhere).
+        if (bcSupported_ && ClassifyWebGPUTextureFormat(surfaceFormat).compressed)
+            return RendererFormatVerdict::Supported;
+        return RendererFormatVerdict::Defer;
     }
 
     void WebGPURenderer::RequireSupportedFillModeEXT(PrimitiveType primitive,
