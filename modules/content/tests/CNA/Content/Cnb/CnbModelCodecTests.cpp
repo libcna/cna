@@ -68,7 +68,20 @@ namespace
         part.primitiveTopology = 4u; // glTF mode 4, TRIANGLES
         part.primitiveCount = indices / 3u;
         part.vertexBytes = Ramp(static_cast<std::size_t>(stride) * vertices, 1u);
-        part.indexBytes = Ramp(static_cast<std::size_t>(indexElementSize) * indices, 7u);
+        // Real indices, every one addressing a vertex this part actually has. A byte ramp was
+        // convenient and wrong: a ModelMeshPart draws `vertices` vertices from zero, so an index
+        // at or above that is an out-of-range GPU fetch -- which the codec now refuses, and which
+        // this fixture would otherwise have been quietly asserting was fine.
+        part.indexBytes.assign(static_cast<std::size_t>(indexElementSize) * indices, 0u);
+        for (std::uint32_t i = 0; i < indices; ++i)
+        {
+            const std::uint32_t value = vertices == 0u ? 0u : i % vertices;
+            for (std::uint32_t b = 0; b < indexElementSize; ++b)
+            {
+                part.indexBytes[static_cast<std::size_t>(i) * indexElementSize + b] =
+                    static_cast<std::uint8_t>((value >> (8u * b)) & 0xFFu);
+            }
+        }
         return part;
     }
 

@@ -765,8 +765,10 @@ verdict. Its premise was that §10 found four issues *by reading the code*, whic
 that should have defended those properties did not exist; so this pass looked for the same shape of
 gap, and fixed what it found.
 
-**Four defects confirmed, three of them memory- or correctness-unsafe.** Two further problems were
-found while fixing them. One reported concern turned out not to be a defect at all. Every fix ships
+**Four defects confirmed, three of them memory- or correctness-unsafe.** Four further problems were
+found while fixing and testing them — `CNBF-H004`, `CNBF-H008` and the two in `CNBF-H012`, of which
+`CNBF-H008` and `CNBF-H012` are correctness bugs in their own right. One reported concern turned out
+not to be a defect at all. Every fix ships
 with the test that would have caught it, and where a gate could be checked for teeth it was.
 
 | ID | Issue | Root cause | Fix | Tests | Status |
@@ -781,6 +783,7 @@ with the test that would have caught it, and where a gate could be checked for t
 | CNBF-H008 | **A bone table not ordered parent-before-child was accepted and silently produced wrong world transforms.** `Model::CopyAbsoluteBoneTransformsTo` composes in one ascending pass reading `dest[parentIndex]`, so a forward parent reads a slot not yet written. It does not crash, which is why it had to be refused. | Only the range `parent < boneCount` was validated; the ordering the consuming code assumes was not. | Parent-before-child enforced on encode and decode, for `MBON` and `MSKL`. Also makes cycles structurally impossible. Confirmed against all 15 real corpus fixtures — no authored asset violates it. | 3 | ✅ |
 | CNBF-H009 | **The aggregate-initialisation hazard had no permanent guard.** `CnbModelBone{name, parent, {}}` suppresses the identity default-member-initialiser (the §10 defect). | — | A test that pins the default *and* asserts the braced form still differs, so if someone designs the hazard away the test says so rather than silently passing. | 1 | ✅ |
 | CNBF-H010 | Container coverage gaps: per-type ordinals were only ever exercised with 2–3 chunks despite existing to remove a primitive-count cap; a chunk overlapping the *table of contents* was untested; float bit-exactness was never asserted. | — | 500-chunk ordinal test; chunk-inside-TOC test with all three checksums repaired so the overlap is the only fault; NaN/±Inf/−0/denormal bit-exact round trip, compared as bits because `NaN != NaN` and `-0.0 == 0.0`. | 4 | ✅ |
+| CNBF-H012 | **Two more Model holes found while testing the above.** `primitiveCount` was stored but never cross-checked, so a part could claim more primitives than its indices describe and draw past its own index buffer. And index *values* were never range-checked, so an index at or above `vertexCount` reached the GPU as an out-of-range fetch. | Redundant data trusted rather than verified; and a validation pass nobody had asked for because the compiler always produced consistent files. | `primitiveCount` cross-checked against the topology on encode and decode, using a derivation written independently of the importer's own so the check is not a tautology. Every index range-checked at decode — one pass over bytes already being copied. | 4, incl. a per-topology sweep so the rule is not assumed to be "triangles" | ✅ |
 | CNBF-H011 | Specification updated for the contract changes, with the new clauses pinned **behaviourally** as well as textually. | — | §5.1, §7, §11, §12, §13 rewritten. Two new conformance tests assert each clause against real behaviour, not only against the sentence. | 2 | ✅ |
 
 ### Reported concern that was NOT a defect
@@ -799,6 +802,9 @@ Not assumed to work — each was broken on purpose and observed to fail:
 * Removing the registry's locks makes the concurrency test report real `unordered_map` data races
   under ThreadSanitizer (`hashtable.h` `_M_find_before_node`, `size`). Restoring them: zero reports.
 * Editing two numbers in `docs/cnb-format.md` alone fails two spec-conformance tests by name.
+* The new `primitiveCount` and index-range checks immediately failed four of this branch's own
+  synthetic fixtures, which had been asserting that a byte-ramp index buffer was fine. Those
+  fixtures now build real index runs — the tests were weaker than they looked.
 * Deleting either new contract clause from the document fails its new conformance test by name.
 
 ### Did any serialized CNB v1 byte change?

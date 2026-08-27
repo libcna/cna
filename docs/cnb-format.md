@@ -450,7 +450,7 @@ partCount × {                     56 bytes each
     u32 indexCount                indexElementSize * indexCount == the MIDX chunk's length
     u32 indexElementSize          2 or 4
     u32 primitiveTopology         glTF primitive mode, 0..6
-    u32 primitiveCount
+    u32 primitiveCount            MUST equal what topology + indexCount imply (see below)
     u32 effectKind                0 Basic, 1 Skinned, 2 DualTexture, 3 Pbr, 4 SkinnedPbr, 5 External
     u32 externalEffectRef         XREF index when effectKind == 5, else 0xFFFFFFFF
     u32 materialIndex             index into MMAT
@@ -459,6 +459,24 @@ partCount × {                     56 bytes each
 u32 slotCount
 slotCount × u32 partIndex
 ```
+
+`primitiveCount` is redundant — the topology and the index count determine it — and redundant data
+in a binary format is only safe if it is cross-checked, so a reader **must** verify it rather than
+trust it. A part claiming more primitives than its indices describe would draw past the end of its
+own index buffer. The rule per topology, over `n` indices:
+
+| topology | primitives |
+|---|---|
+| 0 points | `n` |
+| 1 lines | `n / 2` |
+| 2 line loop, 3 line strip | `n - 1`, or 0 when `n` is 0 |
+| 4 triangles | `n / 3` |
+| 5 triangle strip, 6 triangle fan | `n - 2`, or 0 when `n` is below 3 |
+
+**Every index must be less than the part's `vertexCount`.** A `ModelMeshPart` draws `vertexCount`
+vertices starting at zero, so an index at or above that is out of range by construction and reaches
+the GPU as an out-of-range fetch. A reader validates the whole index buffer, which costs one pass
+over bytes it is already copying.
 
 `indexElementSize` is **declared, not inferred**. The `.cnj` pipeline derives the index width from
 the vertex count (32-bit above 65535, matching XNA's stock model processor) and derives the counts
@@ -592,6 +610,31 @@ representable.
 Every count is also checked against how many elements could physically fit in the bytes that
 remain, so a declared count of four billion in a twelve-byte chunk fails immediately rather than
 after an enormous allocation.
+
+### 12.1 What the limits do and do not guarantee
+
+Stated plainly, because the difference matters to anyone deciding whether these bounds are enough
+for their situation.
+
+**They do guarantee** that no single count, length or offset read from a file can cause an
+allocation, a read or an arithmetic operation that the file's own size does not justify. Every
+count is checked against its configured ceiling *and* against how many elements could physically
+fit in the bytes that remain, before anything is reserved.
+
+**They do not constitute a total memory budget.** The limits are per-item, not a running account,
+and CNB deliberately does not implement an accounting allocator. Two consequences follow, and both
+are properties of the format rather than oversights:
+
+* A file bounded by `maxFileSize` can decode to **more** memory than its own size. That is inherent
+  to a compiled format: 16-bit indices widen to 32-bit for morph normal recomputation, a
+  `CnbModelPart` is a much larger object than its 56-byte descriptor row, and a string table row is
+  a `std::string`. The expansion is bounded and proportional — a small multiple, not unbounded —
+  because every array's element count is tied to bytes actually present in the file.
+* Nothing bounds the number of `.cnb` files a program loads at once. That is `ContentManager`'s
+  concern and the application's, not the container's.
+
+An application with a hard memory ceiling should therefore set `CnbReadLimits::maxFileSize` from
+that ceiling with headroom, rather than assuming the per-item limits add up to one.
 
 Two counts additionally carry a **schema-level** ceiling, because their in-memory footprint is many
 times their encoded size and the generic array limit alone would still allow an unreasonable

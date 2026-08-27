@@ -783,3 +783,96 @@ TEST(CnbHardeningTest, AnAssetSchemaRejectsNonFiniteTimesEvenThoughThePrimitiveL
     EXPECT_THROW((void)CNA::Content::Cnb::DecodeAnimationClipFromCnb(document),
                  ContentLoadException);
 }
+
+// --------------------------------------------------------------------------------------------
+// CNBF-H012 -- redundant and out-of-range geometry metadata
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbHardeningTest, APrimitiveCountThatItsIndicesDoNotDescribeIsRefused)
+{
+    // primitiveCount is derivable from the topology and the index count, so storing it is
+    // redundant -- and redundant data in a binary format is only safe if it is cross-checked. A
+    // part claiming more primitives than its indices describe draws past the end of its own index
+    // buffer, which is a GPU-side out-of-range read the loader has no business forwarding.
+    CNA::Content::Cnb::CnbModelData model = MakeModelWithBones({{"Root", -1}});
+    model.parts[0].primitiveCount = 99u;   // 3 triangle-list indices describe exactly 1
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException);
+
+    // Too few is just as wrong as too many: the two numbers must agree exactly.
+    model.parts[0].primitiveCount = 0u;
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException);
+
+    model.parts[0].primitiveCount = 1u;
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model));
+}
+
+TEST(CnbHardeningTest, ThePrimitiveCountRuleFollowsTheTopologyRatherThanAssumingTriangles)
+{
+    // Each topology counts differently, and a check that assumed triangle lists would wave every
+    // strip and fan through. Six indices: 6 points, 3 lines, 5 line-strip segments, 2 triangles,
+    // 4 strip/fan triangles.
+    const std::vector<std::pair<std::uint32_t, std::uint32_t>> topologyAndCount = {
+        {0u, 6u}, {1u, 3u}, {2u, 5u}, {3u, 5u}, {4u, 2u}, {5u, 4u}, {6u, 4u}};
+
+    for (const auto& [topology, expected] : topologyAndCount)
+    {
+        CNA::Content::Cnb::CnbModelData model = MakeModelWithBones({{"Root", -1}});
+        model.parts[0].vertexCount = 6u;
+        model.parts[0].vertexBytes.assign(16u * 6u, 0u);
+        model.parts[0].indexCount = 6u;
+        model.parts[0].indexBytes.assign(2u * 6u, 0u);
+        for (std::uint8_t i = 0; i < 6u; ++i) { model.parts[0].indexBytes[i * 2u] = i; }
+        model.parts[0].primitiveTopology = topology;
+
+        model.parts[0].primitiveCount = expected;
+        EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model))
+            << "topology " << topology << " should accept " << expected;
+
+        model.parts[0].primitiveCount = expected + 1u;
+        EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException)
+            << "topology " << topology << " should reject " << (expected + 1u);
+    }
+}
+
+TEST(CnbHardeningTest, AnIndexAddressingAVertexThePartDoesNotHaveIsRefused)
+{
+    // Reaches the GPU as an out-of-range fetch, so it is refused at decode -- one pass over bytes
+    // that are being copied anyway.
+    CNA::Content::Cnb::CnbModelData model = MakeModelWithBones({{"Root", -1}});
+    // vertexCount is 3; point the last index at vertex 3.
+    model.parts[0].indexBytes[4] = 0x03u;
+
+    // The encoder does not scan index values (it trusts the caller that built the arrays), so the
+    // file is produced -- and the DECODER, which is where untrusted bytes arrive, refuses it.
+    const std::vector<std::uint8_t> bytes = CNA::Content::Cnb::EncodeModelToCnb(model);
+    const CnbDocument document = CnbDocument::Parse(bytes, "wild-index.cnb");
+    try
+    {
+        (void)CNA::Content::Cnb::DecodeModelFromCnb(document);
+        FAIL() << "expected an out-of-range index to be refused";
+    }
+    catch (const ContentLoadException& e)
+    {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("addresses vertex 3"), std::string::npos) << message;
+        EXPECT_NE(message.find("only 3"), std::string::npos) << message;
+    }
+}
+
+TEST(CnbHardeningTest, ThirtyTwoBitIndicesAreRangeCheckedToo)
+{
+    CNA::Content::Cnb::CnbModelData model = MakeModelWithBones({{"Root", -1}});
+    model.parts[0].indexElementSize = 4u;
+    model.parts[0].indexBytes.assign(4u * 3u, 0u);
+    for (std::uint32_t i = 0; i < 3u; ++i) { model.parts[0].indexBytes[i * 4u] = static_cast<std::uint8_t>(i); }
+
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(CnbDocument::Parse(
+        CNA::Content::Cnb::EncodeModelToCnb(model), "wide-ok.cnb")));
+
+    // A value that only shows up above the low byte -- the check must read the whole element, not
+    // just the first byte.
+    model.parts[0].indexBytes[4u + 1u] = 0x01u;   // index 1 becomes 0x0100 = 256
+    EXPECT_THROW((void)CNA::Content::Cnb::DecodeModelFromCnb(CnbDocument::Parse(
+                     CNA::Content::Cnb::EncodeModelToCnb(model), "wide-bad.cnb")),
+                 ContentLoadException);
+}

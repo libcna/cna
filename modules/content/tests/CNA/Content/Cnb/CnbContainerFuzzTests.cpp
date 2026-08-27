@@ -120,7 +120,9 @@ namespace
         part.material.baseColorTexture = "Textures/fuzz";
         part.material.normalMap = "Textures/fuzz_n";
         part.vertexBytes.assign(32u * 6u, 0x5Au);
-        part.indexBytes.assign(2u * 6u, 0x03u);
+        // 0,1,2,3,4,5 as little-endian u16 -- indices must address vertices this part has.
+        part.indexBytes.assign(2u * 6u, 0u);
+        for (std::uint8_t i = 0; i < 6u; ++i) { part.indexBytes[i * 2u] = i; }
 
         CnbMorphData morph;
         morph.vertexCount = 6u;

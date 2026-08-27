@@ -269,6 +269,55 @@ namespace CNA::Content::Cnb
             return material;
         }
 
+        /// The primitive count a topology and index count imply. Duplicated here rather than
+        /// called through CNA::Internal::GltfImport::PrimitiveCountForTopology so that the codec
+        /// stays free of the glTF importer -- and, more to the point, so the cross-check below is
+        /// an INDEPENDENT statement of the rule rather than a tautology against the same function
+        /// the compiler used to produce the value.
+        [[nodiscard]] std::uint64_t DerivePrimitiveCount(std::uint32_t topology,
+                                                          std::uint64_t indexCount)
+        {
+            switch (topology)
+            {
+                case 0: return indexCount;                              // points
+                case 1: return indexCount / 2u;                         // lines
+                case 2:                                                  // line loop
+                case 3: return indexCount > 0u ? indexCount - 1u : 0u;  // line strip
+                case 4: return indexCount / 3u;                         // triangles
+                case 5:                                                  // triangle strip
+                case 6: return indexCount > 2u ? indexCount - 2u : 0u;  // triangle fan
+                default: return 0u;
+            }
+        }
+
+        /// Every index must address a vertex the part actually has.
+        ///
+        /// A ModelMeshPart draws `vertexCount` vertices starting at zero, so an index at or above
+        /// that count is out of range by construction -- and it reaches the GPU as an out-of-range
+        /// fetch, which is a class of problem a content loader should not be forwarding. One pass
+        /// over bytes that are being copied anyway, so the cost is not worth trading for it.
+        void RequireIndicesInRange(std::span<const std::uint8_t> indexBytes,
+                                   std::uint32_t indexElementSize, std::uint32_t vertexCount,
+                                   CnbByteReader& reader, const std::string& where)
+        {
+            const std::size_t count = indexElementSize == 0u ? 0u : indexBytes.size() / indexElementSize;
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                const std::size_t at = i * indexElementSize;
+                std::uint32_t index = 0;
+                for (std::uint32_t b = 0; b < indexElementSize; ++b)
+                {
+                    index |= static_cast<std::uint32_t>(indexBytes[at + b]) << (8u * b);
+                }
+                if (index >= vertexCount)
+                {
+                    reader.Fail(where + " index " + std::to_string(i) + " addresses vertex " +
+                                std::to_string(index) + ", but the part has only " +
+                                std::to_string(vertexCount) + ".");
+                }
+            }
+        }
+
         void WriteMorph(CnbByteWriter& writer, const CnbMorphData& morph)
         {
             const std::uint32_t targetCount = ToU32(morph.targets.size(), "a morph target count");
@@ -527,6 +576,20 @@ namespace CNA::Content::Cnb
                 throw ContentLoadException(where + " has primitive topology " +
                                             std::to_string(part.primitiveTopology) +
                                             ", which is not a glTF primitive mode (0-6).");
+            }
+            // primitiveCount is derivable from the topology and the index count, so storing it is
+            // redundant -- and redundant data in a binary format is only safe if it is
+            // cross-checked. A part claiming more primitives than its indices describe would draw
+            // past the end of its own index buffer.
+            const std::uint64_t derivedPrimitives =
+                DerivePrimitiveCount(part.primitiveTopology, part.indexCount);
+            if (part.primitiveCount != derivedPrimitives)
+            {
+                throw ContentLoadException(
+                    where + " declares " + std::to_string(part.primitiveCount) +
+                    " primitives, but " + std::to_string(part.indexCount) +
+                    " indices at topology " + std::to_string(part.primitiveTopology) +
+                    " describe " + std::to_string(derivedPrimitives) + ".");
             }
 
             const auto vertexOrdinal = ToU32(vertexChunks.size(), "a vertex chunk ordinal");
@@ -1055,6 +1118,19 @@ namespace CNA::Content::Cnb
                                 " bytes, but its index chunk holds " +
                                 std::to_string(indexBytes.size()) + " byte(s).");
                 }
+                const std::uint64_t derivedPrimitives =
+                    DerivePrimitiveCount(part.primitiveTopology, part.indexCount);
+                if (part.primitiveCount != derivedPrimitives)
+                {
+                    reader.Fail(where + " declares " + std::to_string(part.primitiveCount) +
+                                " primitives, but " + std::to_string(part.indexCount) +
+                                " indices at topology " + std::to_string(part.primitiveTopology) +
+                                " describe " + std::to_string(derivedPrimitives) +
+                                "; a part must not draw past its own index buffer.");
+                }
+                RequireIndicesInRange(indexBytes, part.indexElementSize, part.vertexCount, reader,
+                                      where);
+
                 part.vertexBytes.assign(vertexBytes.begin(), vertexBytes.end());
                 part.indexBytes.assign(indexBytes.begin(), indexBytes.end());
 
