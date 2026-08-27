@@ -383,9 +383,13 @@ protected:
                         dr, sg, db, sa, "ColorWriteChannels Green|Alpha preserves R/B");
         }
 
-        // A new static equation creates exactly one compatibility entry. Reusing it across
-        // target -> backbuffer -> target, a second target object, and a second texture object
-        // proves target/texture/object identity is absent from the key.
+        // A new static equation creates one compatibility entry per distinct pass depth format.
+        // The `first`/`second` targets are DepthFormat::None (no depth attachment) while the
+        // backbuffer carries Depth24Stencil8, so WEBGPU-39 makes the backbuffer draw a second
+        // pipeline -- depth FORMAT is part of the sprite key because a WebGPU pipeline's
+        // depthStencil format must match the active pass. Target/texture/object IDENTITY is still
+        // absent from the key: returning to `first`, a second None target object, and a second
+        // texture object all reuse the single None-depth entry.
         {
             BlendState compatibility;
             compatibility.setColorSourceBlendProperty(Blend::DestinationColor);
@@ -436,10 +440,11 @@ protected:
             const std::size_t afterSecondTarget = renderer.GetSpritePipelineCacheSizeEXT();
 
             Check(afterFirstTarget == before + 1,
-                  "new static blend compatibility creates exactly one sprite pipeline");
-            Check(afterBackbuffer == afterFirstTarget && afterReturn == afterFirstTarget &&
-                      afterSecondTarget == afterFirstTarget,
-                  "compatible target objects/backbuffer/textures reuse one sprite pipeline");
+                  "new static blend compatibility on a None-depth target creates exactly one sprite pipeline");
+            Check(afterBackbuffer == afterFirstTarget + 1,
+                  "the Depth24Stencil8 backbuffer needs its own sprite pipeline (WEBGPU-39: depth format, not identity)");
+            Check(afterReturn == afterBackbuffer && afterSecondTarget == afterBackbuffer,
+                  "compatible None-depth target objects/textures reuse one sprite pipeline");
             std::printf("[INFO] compatibility cache cardinality: before=%zu firstRT=%zu "
                         "backbuffer=%zu returnRT=%zu secondRT=%zu\n",
                         before, afterFirstTarget, afterBackbuffer, afterReturn, afterSecondTarget);

@@ -378,6 +378,26 @@ namespace CNA::Internal::Renderers::WebGPU
             }
         }
 
+        // WEBGPU-39: maps XNA DepthFormat -> the exact WGPU depth attachment format the other CNA
+        // backends (Vulkan PickDepthFormat / EasyGL / Bgfx MapDepthFormat) also use, per render target.
+        // None has no depth attachment at all. All of Depth16Unorm/Depth24Plus/Depth24PlusStencil8 are
+        // core WebGPU formats (always available). hasStencil is true only for the combined format.
+        struct DepthAttachmentEXT { WGPUTextureFormat format; bool hasStencil; bool hasDepth; };
+        [[nodiscard]] DepthAttachmentEXT MapDepthFormatEXT(int depthFormat)
+        {
+            switch (depthFormat)  // DepthFormat: None=0, Depth16=1, Depth24=2, Depth24Stencil8=3
+            {
+                case 1:  return { WGPUTextureFormat_Depth16Unorm,        false, true };
+                case 2:  return { WGPUTextureFormat_Depth24Plus,         false, true };
+                case 3:  return { WGPUTextureFormat_Depth24PlusStencil8, true,  true };
+                default: return { WGPUTextureFormat_Undefined,           false, false }; // None
+            }
+        }
+        [[nodiscard]] bool DepthFormatHasStencilEXT(WGPUTextureFormat f)
+        {
+            return f == WGPUTextureFormat_Depth24PlusStencil8 || f == WGPUTextureFormat_Depth32FloatStencil8;
+        }
+
         // WEBGPU-83: bakes the XNA stencil state into a WGPUDepthStencilState's stencilFront/back +
         // masks. When disabled, leaves the INIT defaults (a stencil test that always passes and
         // never writes). Two-sided maps XNA's ccw* ops onto the back face (WebGPU's frontFace is CCW,
@@ -758,7 +778,8 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint64_t salt,
             int colorWriteMask,
             std::uint32_t sampleMask,
-            int colorAttachmentCount = 1)
+            int colorAttachmentCount = 1,
+            WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8)
         {
             std::uint64_t key = static_cast<std::uint64_t>(topology);
             // REMED-GFX-105: RequiredStripIndexFormat() canonicalizes this to Undefined for
@@ -796,6 +817,11 @@ namespace CNA::Internal::Renderers::WebGPU
             // before -- the instanced/viewport/scissor CARDINALITY tests still see the same variants.
             if (colorAttachmentCount > 1)
                 key = key * 31u + static_cast<std::uint64_t>(colorAttachmentCount);
+            // WEBGPU-39: a pipeline built for one depth attachment format is incompatible with a pass
+            // that uses another (WebGPU rejects the mismatch). Folded only when != the default
+            // Depth24PlusStencil8, so every existing (backbuffer/Depth24Stencil8) key is byte-identical.
+            if (depthFormat != WGPUTextureFormat_Depth24PlusStencil8)
+                key = key * 31u + static_cast<std::uint64_t>(depthFormat);
             return key;
         }
 
@@ -1631,10 +1657,11 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: RenderTargetCube mip-chain regeneration "
                                      "(mipMap=true) is not implemented on this renderer -- see "
                                      "plans/plan_webgpu.md WEBGPU-114");
-        // Always allocates a Depth24PlusStencil8 attachment regardless of the requested
-        // depthFormat -- identical simplification to WebGPURenderTargetRenderer's own constructor
-        // (see that class's constructor comment for the full rationale).
-        (void) depthFormat;
+        // WEBGPU-39: map the requested XNA DepthFormat to the exact WGPU depth attachment format (like
+        // WebGPURenderTargetRenderer). DepthFormat::None -> no depth texture/attachment/pipeline state.
+        const DepthAttachmentEXT depthMap = MapDepthFormatEXT(depthFormat);
+        depthFormat_ = depthMap.format;
+        depthHasStencil_ = depthMap.hasStencil;
 
         // Colour texture: this instance's own surfaceFormat_ snapshot (matching
         // WebGPURenderTargetRenderer's own choice), NOT WGPUTextureFormat_RGBA8Unorm
@@ -1706,35 +1733,38 @@ namespace CNA::Internal::Renderers::WebGPU
         // Depth+stencil: one shared attachment reused across all 6 faces -- safe because only one
         // face is ever bound/rendered-into at a time (see WebGPURenderer::
         // currentRenderTargetCubeFace_'s own doc comment).
-        WGPUTextureDescriptor depthDescriptor{};
-        depthDescriptor.label = StringView("CNA WebGPU RenderTargetCube DepthStencil");
-        depthDescriptor.usage = WGPUTextureUsage_RenderAttachment;
-        depthDescriptor.dimension = WGPUTextureDimension_2D;
-        depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
-        depthDescriptor.format = WGPUTextureFormat_Depth24PlusStencil8;
-        depthDescriptor.mipLevelCount = 1;
-        depthDescriptor.sampleCount = 1;
-        depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
-        if (depthTexture_ == nullptr)
+        if (depthMap.hasDepth)
         {
-            for (WGPUTextureView view : faceViews_) wgpuTextureViewRelease(view);
-            wgpuTextureViewRelease(cubeView_);
-            wgpuTextureRelease(texture_);
-            cubeView_ = nullptr;
-            texture_ = nullptr;
-            throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil texture");
-        }
-        depthView_ = wgpuTextureCreateView(depthTexture_, nullptr);
-        if (depthView_ == nullptr)
-        {
-            wgpuTextureRelease(depthTexture_);
-            for (WGPUTextureView view : faceViews_) wgpuTextureViewRelease(view);
-            wgpuTextureViewRelease(cubeView_);
-            wgpuTextureRelease(texture_);
-            depthTexture_ = nullptr;
-            cubeView_ = nullptr;
-            texture_ = nullptr;
-            throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil view");
+            WGPUTextureDescriptor depthDescriptor{};
+            depthDescriptor.label = StringView("CNA WebGPU RenderTargetCube DepthStencil");
+            depthDescriptor.usage = WGPUTextureUsage_RenderAttachment;
+            depthDescriptor.dimension = WGPUTextureDimension_2D;
+            depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
+            depthDescriptor.format = depthMap.format;
+            depthDescriptor.mipLevelCount = 1;
+            depthDescriptor.sampleCount = 1;
+            depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
+            if (depthTexture_ == nullptr)
+            {
+                for (WGPUTextureView view : faceViews_) wgpuTextureViewRelease(view);
+                wgpuTextureViewRelease(cubeView_);
+                wgpuTextureRelease(texture_);
+                cubeView_ = nullptr;
+                texture_ = nullptr;
+                throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil texture");
+            }
+            depthView_ = wgpuTextureCreateView(depthTexture_, nullptr);
+            if (depthView_ == nullptr)
+            {
+                wgpuTextureRelease(depthTexture_);
+                for (WGPUTextureView view : faceViews_) wgpuTextureViewRelease(view);
+                wgpuTextureViewRelease(cubeView_);
+                wgpuTextureRelease(texture_);
+                depthTexture_ = nullptr;
+                cubeView_ = nullptr;
+                texture_ = nullptr;
+                throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil view");
+            }
         }
         sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, cubeView_);
     }
@@ -2127,52 +2157,47 @@ namespace CNA::Internal::Renderers::WebGPU
             throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D colour view");
         }
 
-        // WEBGPU-53/54/9: every GetOrCreatePipeline*3D() unconditionally declares a
-        // Depth24PlusStencil8 depth-stencil state -- this renderer has no "pipeline with no depth
-        // attachment" variant at all (matching how the swapchain's own depthTexture_ is likewise
-        // always allocated unconditionally, see RecreateDepthTexture()) -- so, mirroring
-        // VulkanRenderer's own documented "always allocates a combined depth+stencil
-        // buffer using its device-wide format regardless of the exact value requested"
-        // simplification (see IGraphicsRenderer::CreateRenderTarget2D's own doc comment), this
-        // render target ALWAYS allocates a real Depth24PlusStencil8 attachment too, even when
-        // depthFormat is DepthFormat::None, purely so a 3D draw into it stays pipeline-compatible.
-        // This is invisible to game code: HasRealDepthBuffer()'s inherited IRenderTargetRenderer
-        // default still reports based on what was actually REQUESTED (the depthFormatWasRequested
-        // parameter GraphicsDevice::Clear() computes from RenderTarget2D::
-        // getDepthStencilFormatProperty()), not on this internal implementation detail, so
-        // GraphicsDevice.Clear(ClearOptions::DepthBuffer) is still correctly masked out for a
-        // target that requested DepthFormat::None, exactly as it is on every other renderer.
-        (void) depthFormat;
-        WGPUTextureDescriptor depthDescriptor{};
-        depthDescriptor.label = StringView("CNA WebGPU RenderTarget2D DepthStencil");
-        depthDescriptor.usage = WGPUTextureUsage_RenderAttachment;
-        depthDescriptor.dimension = WGPUTextureDimension_2D;
-        depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
-        depthDescriptor.format = WGPUTextureFormat_Depth24PlusStencil8;
-        depthDescriptor.mipLevelCount = 1;
-        // WEBGPU-58: matches the colour attachment's own sample count exactly, whatever that ends
-        // up being below (wgpu-native validation requires every attachment in a render pass to
-        // agree) -- 1 outside MSAA, identical to this texture's behaviour before MSAA existed.
-        depthDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
-        depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
-        if (depthTexture_ == nullptr)
+        // WEBGPU-39: map the requested XNA DepthFormat to the exact WGPU depth attachment format,
+        // matching Vulkan/EasyGL/Bgfx (which each pick a distinct depth format per render target).
+        // DepthFormat::None gets NO depth attachment at all: no depth texture is created, the pass
+        // omits the depth-stencil attachment, and pipelines drawn into this target carry no
+        // depth-stencil state -- so depth is neither tested nor written, exactly as on every other
+        // backend. Depth16->Depth16Unorm, Depth24->Depth24Plus, Depth24Stencil8->Depth24PlusStencil8.
+        const DepthAttachmentEXT depthMap = MapDepthFormatEXT(depthFormat);
+        depthFormat_ = depthMap.format;
+        depthHasStencil_ = depthMap.hasStencil;
+        if (depthMap.hasDepth)
         {
-            wgpuTextureViewRelease(colorView_);
-            wgpuTextureRelease(colorTexture_);
-            colorView_ = nullptr;
-            colorTexture_ = nullptr;
-            throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D depth-stencil texture");
-        }
-        depthView_ = wgpuTextureCreateView(depthTexture_, nullptr);
-        if (depthView_ == nullptr)
-        {
-            wgpuTextureRelease(depthTexture_);
-            wgpuTextureViewRelease(colorView_);
-            wgpuTextureRelease(colorTexture_);
-            depthTexture_ = nullptr;
-            colorView_ = nullptr;
-            colorTexture_ = nullptr;
-            throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D depth-stencil view");
+            WGPUTextureDescriptor depthDescriptor{};
+            depthDescriptor.label = StringView("CNA WebGPU RenderTarget2D DepthStencil");
+            depthDescriptor.usage = WGPUTextureUsage_RenderAttachment;
+            depthDescriptor.dimension = WGPUTextureDimension_2D;
+            depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(width_), static_cast<std::uint32_t>(height_), 1};
+            depthDescriptor.format = depthMap.format;
+            depthDescriptor.mipLevelCount = 1;
+            // WEBGPU-58: matches the colour attachment's own sample count exactly (wgpu-native
+            // validation requires every attachment in a render pass to agree) -- 1 outside MSAA.
+            depthDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
+            depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
+            if (depthTexture_ == nullptr)
+            {
+                wgpuTextureViewRelease(colorView_);
+                wgpuTextureRelease(colorTexture_);
+                colorView_ = nullptr;
+                colorTexture_ = nullptr;
+                throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D depth-stencil texture");
+            }
+            depthView_ = wgpuTextureCreateView(depthTexture_, nullptr);
+            if (depthView_ == nullptr)
+            {
+                wgpuTextureRelease(depthTexture_);
+                wgpuTextureViewRelease(colorView_);
+                wgpuTextureRelease(colorTexture_);
+                depthTexture_ = nullptr;
+                colorView_ = nullptr;
+                colorTexture_ = nullptr;
+                throw std::runtime_error("CNA WebGPU: failed to create RenderTarget2D depth-stencil view");
+            }
         }
 
         // WEBGPU-58: mirror the owner's CURRENT global sampleCount_ unconditionally -- see this
@@ -3131,6 +3156,7 @@ struct VertexOutput {
         key.targetFormat = snapshot.targetFormat;
         key.sampleCount = snapshot.sampleCount;
         key.colorAttachmentCount = replayColorAttachmentCount_;  // WEBGPU-86 MRT (see ExpandStockColorTargetsEXT)
+        key.depthFormat = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
 
         if (const auto found = spritePipelines_.find(key); found != spritePipelines_.end())
             return found->second;
@@ -3187,14 +3213,15 @@ struct VertexOutput {
         pipeline.multisample.alphaToCoverageEnabled = false;
         pipeline.fragment = &fragment;
 
-        // Present() always uses the shared Depth24PlusStencil8 attachment. The SpriteBatch
-        // pipeline must declare the same attachment format even though 2D sprites do not write
-        // depth, otherwise wgpu-native rejects the render pass as incompatible.
+        // WEBGPU-39: the SpriteBatch pipeline must declare exactly the active pass's depth
+        // attachment format (replayDepthFormat_) even though 2D sprites do not write depth,
+        // otherwise wgpu-native rejects the render pass as incompatible -- and no depthStencil at
+        // all when the target has none (DepthFormat::None -> replayDepthFormat_ == Undefined).
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = WGPUOptionalBool_False;
         depthStencil.depthCompare = WGPUCompareFunction_Always;
-        pipeline.depthStencil = &depthStencil;
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         // BlendState::AlphaBlend reaches FillWGPUBlendState as One/InverseSourceAlpha for both
         // colour/alpha, preserving CNA/XNA's premultiplied-alpha convention. NonPremultiplied is
@@ -3327,7 +3354,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
@@ -3383,7 +3410,7 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -3395,8 +3422,8 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -3580,7 +3607,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
@@ -3636,7 +3663,7 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -3648,8 +3675,8 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -3670,7 +3697,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
@@ -3729,7 +3756,7 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -3741,8 +3768,8 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -4042,7 +4069,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
@@ -4101,7 +4128,7 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -4113,8 +4140,8 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -4134,7 +4161,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
@@ -4193,7 +4220,7 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -4205,8 +4232,8 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -4384,7 +4411,7 @@ struct VertexOutput {
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = (stride == 24) ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -4482,7 +4509,7 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -4494,8 +4521,8 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -4703,7 +4730,7 @@ struct VertexOutput {
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -4786,7 +4813,7 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -4798,8 +4825,8 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -5036,7 +5063,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
             return it->second;
@@ -5089,13 +5116,13 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -5457,7 +5484,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
             return it->second;
@@ -5546,13 +5573,13 @@ struct VertexOutput {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -6217,10 +6244,10 @@ struct VSOut {
             // so the pipeline must declare a matching (disabled) depth-stencil state -- exactly the
             // stock sprite pipeline's own choice.
             WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-            depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+            depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
             depthStencil.depthWriteEnabled = WGPUOptionalBool_False;
             depthStencil.depthCompare = WGPUCompareFunction_Always;
-            pipeline.depthStencil = &depthStencil;
+            pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
             pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
             if (pipe == nullptr)
@@ -6578,11 +6605,17 @@ struct VSOut {
             depthAttachment.depthStoreOp = WGPUStoreOp_Store;
             depthAttachment.depthClearValue = segment.clear.depth ? segment.clear.depthValue : clearDepth_;
             depthAttachment.depthReadOnly = false;
-            depthAttachment.stencilLoadOp = clearStencil ? WGPULoadOp_Clear : WGPULoadOp_Load;
-            depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
-            depthAttachment.stencilClearValue =
-                segment.clear.stencil ? segment.clear.stencilValue : clearStencil_;
-            depthAttachment.stencilReadOnly = false;
+            // WEBGPU-39: only a stencil-carrying depth format (Depth24PlusStencil8) may name stencil
+            // load/store ops; wgpu-native rejects them on a depth-only attachment (Depth16/Depth24), so
+            // they stay Undefined there.
+            if (destination.depthHasStencil)
+            {
+                depthAttachment.stencilLoadOp = clearStencil ? WGPULoadOp_Clear : WGPULoadOp_Load;
+                depthAttachment.stencilStoreOp = WGPUStoreOp_Store;
+                depthAttachment.stencilClearValue =
+                    segment.clear.stencil ? segment.clear.stencilValue : clearStencil_;
+                depthAttachment.stencilReadOnly = false;
+            }
 
             WGPURenderPassDescriptor passDescriptor{};
             passDescriptor.label = StringView(destination.passLabel);
@@ -7274,14 +7307,14 @@ struct VSOut {
             pipeline.fragment = &fragment;
 
             WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-            depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+            depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
             depthStencil.depthWriteEnabled =
                 command.depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
             depthStencil.depthCompare = command.depthTest
                 ? ToWGPUCompareFunction(command.depthFunc) : WGPUCompareFunction_Always;
             depthStencil.depthBias = static_cast<std::int32_t>(command.depthBias * 16777215.0f);
             depthStencil.depthBiasSlopeScale = command.slopeScaleDepthBias;
-            pipeline.depthStencil = &depthStencil;
+            pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
             pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
             if (pipe == nullptr)
@@ -7361,6 +7394,11 @@ struct VSOut {
         // WEBGPU-86 MRT: every pipeline built during this replay must match this pass's attachment
         // count. Stock builders read it via ExpandStockColorTargetsEXT and fold it into their key.
         replayColorAttachmentCount_ = std::max(1, destination.colorAttachmentCount);
+        // WEBGPU-39: every pipeline built while replaying this pass matches the pass's own depth
+        // attachment format (None -> Undefined -> no depth-stencil state / no depth attachment).
+        replayDepthFormat_ = destination.depthView != nullptr ? destination.depthFormat
+                                                              : WGPUTextureFormat_Undefined;
+        replayDepthHasStencil_ = destination.depthView != nullptr && destination.depthHasStencil;
         const bool trace = TraceDrawOrder();
 
         ReplayState state{};
@@ -8069,6 +8107,8 @@ struct VSOut {
         destination.colorView = target->ColorAttachmentView();
         destination.resolveView = target->ResolveTargetView();
         destination.depthView = target->DepthView();
+        destination.depthFormat = target->DepthFormat();       // WEBGPU-39
+        destination.depthHasStencil = target->DepthHasStencil();
         destination.colorFormat = target->ColorFormat();
         destination.sampleCount = static_cast<std::uint32_t>(std::max(1, target->GetMultiSampleCount()));
         destination.width = target->GetWidth();
@@ -8165,6 +8205,8 @@ struct VSOut {
         destination.colorView = target->ColorAttachmentView(face);
         destination.resolveView = nullptr;
         destination.depthView = target->DepthView();
+        destination.depthFormat = target->DepthFormat();       // WEBGPU-39
+        destination.depthHasStencil = target->DepthHasStencil();
         destination.colorFormat = target->ColorFormat();
         destination.sampleCount = 1;
         destination.width = target->GetSize();
@@ -10485,7 +10527,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? pbrColorPipelines_ : pbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -10560,7 +10602,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -10572,8 +10614,8 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -11485,7 +11527,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = preferVertexLit
             ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
@@ -11572,7 +11614,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -11584,8 +11626,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)
@@ -12162,7 +12204,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_, replayDepthFormat_)
                                   ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? skinnedPbrColorPipelines_ : skinnedPbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
@@ -12240,7 +12282,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         pipeline.fragment = &fragment;
 
         WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
-        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.format = replayDepthFormat_;  // WEBGPU-39: match the active pass's depth format
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
@@ -12252,8 +12294,8 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
-        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
-        pipeline.depthStencil = &depthStencil;
+        if (replayDepthHasStencil_) FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-39/83  // WEBGPU-83
+        pipeline.depthStencil = (replayDepthFormat_ != WGPUTextureFormat_Undefined) ? &depthStencil : nullptr;  // WEBGPU-39
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         if (created == nullptr)

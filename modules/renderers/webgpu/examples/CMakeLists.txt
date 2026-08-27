@@ -154,6 +154,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_StencilTwoSided COMMAND cna_test_webgpu_stencil_twosided
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-39: RenderTarget2D honours its DepthFormat exactly instead of always allocating
+    # Depth24Stencil8. None -> no depth test (far fragment overwrites), Depth16/Depth24 -> depth
+    # test works with NO stencil op named on the pass, Depth24Stencil8 -> depth test + a working
+    # stamp/gate stencil round trip on the target's own attachment.
+    cna_webgpu_test(cna_test_webgpu_depthformat webgpu_depthformat_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DepthFormat COMMAND cna_test_webgpu_depthformat
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)

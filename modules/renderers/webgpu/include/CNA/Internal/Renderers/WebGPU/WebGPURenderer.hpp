@@ -187,18 +187,19 @@ namespace CNA::Internal::Renderers::WebGPU
 
     /// WEBGPU-53/54: off-screen render target backing a RenderTarget2D. Owns its own colour
     /// texture (always created in this renderer's chosen swapchain format, surfaceFormat_ -- see
-    /// this class's .cpp constructor comment for why) and its own depth+stencil texture (always
-    /// Depth24PlusStencil8, regardless of the requested DepthFormat, mirroring
-    /// VulkanRenderer's own "always allocate a combined depth+stencil buffer using the
-    /// device-wide format regardless of the exact value requested" documented simplification --
-    /// see IGraphicsRenderer::CreateRenderTarget2D's own doc comment). Mip regeneration is
+    /// this class's .cpp constructor comment for why) and its own depth texture. WEBGPU-39: the
+    /// depth texture is created in the EXACT format the requested DepthFormat maps to via
+    /// MapDepthFormatEXT() (None -> no depth texture at all; Depth16 -> Depth16Unorm; Depth24 ->
+    /// Depth24Plus; Depth24Stencil8 -> Depth24PlusStencil8), the same per-value mapping
+    /// VulkanRenderer::PickDepthFormat()/EasyGL/Bgfx already do -- not a device-wide fixed format.
+    /// DepthFormat()/DepthHasStencil() report what was actually allocated so the pass attachment,
+    /// pipeline depthStencil state and stencil load/store ops all match. Mip regeneration is
     /// deliberately NOT implemented yet: CreateRenderTarget2D() throws for mipMap=true rather
     /// than silently under-delivering a requested mip chain.
     /// WEBGPU-58: MSAA is real, but -- unlike VulkanRenderTargetRenderer's own per-instance
     /// "requestedMultiSampleCount>0 AND owner_->sampleCount_>1" opt-in gate -- this renderer
     /// unconditionally mirrors the OWNER's CURRENT global sampleCount_ at construction time,
-    /// ignoring the per-instance requested value entirely (the same "regardless of the exact
-    /// value requested" simplification already established for DepthFormat above). This is
+    /// ignoring the per-instance requested value entirely. This is
     /// necessary, not just simpler: WebGPURenderer's ~10 GetOrCreatePipeline*3D() families
     /// bake ONE single renderer-global WGPUMultisampleState.count into every pipeline object (see
     /// that class's own sampleCount_ comment) rather than selecting between an MSAA/non-MSAA
@@ -257,6 +258,10 @@ namespace CNA::Internal::Renderers::WebGPU
         /// REMED-GFX-102: exact colour-attachment format captured by this target object. Sprite
         /// pipeline identity uses format compatibility, never this target object's identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
+        /// WEBGPU-39: this target's depth attachment WGPU format (Undefined for DepthFormat::None) and
+        /// whether it carries a stencil aspect. Pipelines drawn into this target declare exactly this.
+        [[nodiscard]] WGPUTextureFormat DepthFormat() const { return depthFormat_; }
+        [[nodiscard]] bool DepthHasStencil() const { return depthHasStencil_; }
 
     private:
         WebGPURenderer* owner_ = nullptr;
@@ -266,6 +271,9 @@ namespace CNA::Internal::Renderers::WebGPU
         WGPUTextureFormat colorFormat_ = WGPUTextureFormat_Undefined;
         WGPUTexture colorTexture_ = nullptr;
         WGPUTextureView colorView_ = nullptr;
+        /// WEBGPU-39: mapped depth attachment format (Undefined = None, no depth texture created).
+        WGPUTextureFormat depthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+        bool depthHasStencil_ = true;
         /// REMED-GFX-167: keeps colorTexture_/colorView_ — the pair a consumer draw SAMPLES —
         /// alive for any queued command still carrying it. The depth and multisample attachments
         /// below are deliberately not in it: they are only ever a render pass's own attachments,
@@ -397,6 +405,9 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] WGPUTextureView ColorAttachmentView(int face) const { return faceViews_[static_cast<std::size_t>(face)]; }
         /// The one depth+stencil view shared by all 6 faces (only one is ever bound at once).
         [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
+        /// WEBGPU-39: mapped depth attachment format (Undefined for DepthFormat::None) + stencil aspect.
+        [[nodiscard]] WGPUTextureFormat DepthFormat() const { return depthFormat_; }
+        [[nodiscard]] bool DepthHasStencil() const { return depthHasStencil_; }
         /// REMED-GFX-102: exact colour-attachment format shared by all faces. Sprite pipeline
         /// identity uses this format, not the cube object or face identity.
         [[nodiscard]] WGPUTextureFormat ColorFormat() const { return colorFormat_; }
@@ -423,6 +434,9 @@ namespace CNA::Internal::Renderers::WebGPU
         std::array<WGPUTextureView, 6> faceViews_{};
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
+        /// WEBGPU-39: mapped depth attachment format (Undefined = None, no depth texture created).
+        WGPUTextureFormat depthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+        bool depthHasStencil_ = true;
         bool preserveContents_ = false;
     };
 
@@ -949,6 +963,9 @@ namespace CNA::Internal::Renderers::WebGPU
             /// WEBGPU-86 MRT: a sprite drawn into an MRT set needs a matching N-target pipeline
             /// (writing attachment 0 only); 1 for the backbuffer / single target / cube face.
             int colorAttachmentCount = 1;
+            /// WEBGPU-39: the active pass's depth attachment format (Undefined for DepthFormat::None).
+            /// A sprite pipeline must declare the same depth format as the pass it draws into.
+            WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
 
             [[nodiscard]] bool operator==(const SpritePipelineKey& other) const noexcept
             {
@@ -959,7 +976,8 @@ namespace CNA::Internal::Renderers::WebGPU
                     colorWriteMask == other.colorWriteMask &&
                     multiSampleMask == other.multiSampleMask &&
                     targetFormat == other.targetFormat && sampleCount == other.sampleCount &&
-                    colorAttachmentCount == other.colorAttachmentCount;
+                    colorAttachmentCount == other.colorAttachmentCount &&
+                    depthFormat == other.depthFormat;
             }
         };
 
@@ -985,6 +1003,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 mix(static_cast<std::size_t>(key.targetFormat));
                 mix(static_cast<std::size_t>(key.sampleCount));
                 mix(static_cast<std::size_t>(key.colorAttachmentCount));
+                mix(static_cast<std::size_t>(key.depthFormat));
                 return hash;
             }
         };
@@ -1470,6 +1489,11 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUTextureView colorView = nullptr;    ///< Slot 0 colour attachment (multisampled if any).
             WGPUTextureView resolveView = nullptr;  ///< Slot 0 resolve target, or null when 1x.
             WGPUTextureView depthView = nullptr;    ///< Depth/stencil attachment, or null. Shared by MRT.
+            /// WEBGPU-39: the depth attachment's WGPU format (Undefined when depthView is null, i.e.
+            /// DepthFormat::None). Pipelines built for this pass must declare exactly this format.
+            WGPUTextureFormat depthFormat = WGPUTextureFormat_Depth24PlusStencil8;
+            /// WEBGPU-39: whether depthFormat carries a stencil aspect (only Depth24PlusStencil8 does).
+            bool depthHasStencil = true;
             WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined;  ///< Slot 0 colour format.
             std::uint32_t sampleCount = 1;
             int width = 0;
@@ -2112,6 +2136,16 @@ namespace CNA::Internal::Renderers::WebGPU
         /// builder (via `ExpandStockColorTargetsEXT`) and folded into its cache key. 1 outside MRT,
         /// so single-target pipelines are byte-identical to before.
         int replayColorAttachmentCount_ = 1;
+
+        /// WEBGPU-39: the WGPU depth format of the render pass currently being replayed/built. Every 3D
+        /// pipeline's depthStencil.format and the pipeline cache key read this, so a pipeline built for a
+        /// Depth16 target is distinct from one for Depth24PlusStencil8 (WebGPU rejects a format mismatch
+        /// between pipeline and attachment). Set from the active target's own depth format at replay.
+        WGPUTextureFormat replayDepthFormat_ = WGPUTextureFormat_Depth24PlusStencil8;
+        /// WEBGPU-39: whether the active pass's depth format carries a stencil aspect (only the combined
+        /// Depth24PlusStencil8 does). Stencil ops (WEBGPU-83) are baked only when true; the depth pass's
+        /// own stencil load/store ops are likewise omitted for a depth-only format.
+        bool replayDepthHasStencil_ = true;
 
         /// WEBGPU-86 MRT: fills a stock draw's EXTRA colour targets (slots 1..N-1) for the pass's
         /// attachment count and returns that count. Slot 0 is left default -- the builder holds a

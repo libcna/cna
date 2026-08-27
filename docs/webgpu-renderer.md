@@ -369,11 +369,15 @@ triangle seam) proves the vertex-lit/pixel-lit dispatch selects two genuinely di
 target: its own colour texture, always created in the swapchain's own chosen format
 (`surfaceFormat_`) rather than `Texture2D`'s `RGBA8Unorm` so every existing
 `GetOrCreatePipeline*3D()` (each hardcodes `target.format = surfaceFormat_` at pipeline-creation
-time) renders into it unchanged, with zero new pipeline-cache dimensions; and its own combined
-depth+stencil texture, always `Depth24PlusStencil8` regardless of the requested `DepthFormat`
-(mirroring `VulkanRenderer`'s own "always allocates a combined depth+stencil buffer using
-its device-wide format regardless of the exact value requested" simplification), because every
-pipeline here unconditionally declares a depth-stencil state.
+time) renders into it unchanged, with zero new pipeline-cache dimensions; and its own depth
+texture created in the exact format the requested `DepthFormat` maps to (`WEBGPU-39`,
+`MapDepthFormatEXT()`: `None`→no depth texture, `Depth16`→`Depth16Unorm`, `Depth24`→`Depth24Plus`,
+`Depth24Stencil8`→`Depth24PlusStencil8`, the same per-value mapping `VulkanRenderer::PickDepthFormat()`/
+EasyGL/Bgfx do). The pass's depth attachment, the pipeline's `depthStencil` state (null for `None`,
+where no depth test happens) and the stencil load/store ops (named only on a stencil-carrying format)
+are all threaded from that real format via `replayDepthFormat_`/`replayDepthHasStencil_`, and the
+format is part of the 3D and sprite pipeline keys so a pass with a different depth format gets its own
+pipeline. Observably verified by `WebGPU_DepthFormat`.
 
 The trickier part was this renderer's existing single-deferred-render-pass-per-frame architecture:
 every queued `Clear()`/3D-draw/`SpriteBatch` command normally collapses into one render pass
@@ -465,8 +469,9 @@ the per-instance buffer is genuinely read per-instance, not e.g. always instance
 support — before this, `CreateRenderTargetCube()` was `IGraphicsRenderer`'s own nullptr-returning
 default. It owns ONE shared 6-array-layer colour `WGPUTexture` (the same layout
 `WebGPUTextureCubeRenderer`, WEBGPU-56/113, already established for a plain `TextureCube`) plus ONE
-shared `size`×`size` `Depth24PlusStencil8` depth+stencil texture reused across all 6 faces — safe
-because only ONE face is ever bound/rendered-into at a time, mirroring
+shared `size`×`size` depth texture — created in the exact format the requested `DepthFormat` maps to
+(`WEBGPU-39`, `MapDepthFormatEXT()`; `None` allocates no depth texture at all) — reused across all 6
+faces, safe because only ONE face is ever bound/rendered-into at a time, mirroring
 `VulkanRenderTargetCubeRenderer`'s identical shared-depth-image choice. Each face gets its own
 `WGPUTextureViewDimension_2D` view (the render-pass colour attachment); one further
 `WGPUTextureViewDimension_Cube` view spans all 6 layers for sampling back.
