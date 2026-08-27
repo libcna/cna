@@ -148,6 +148,14 @@ TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2ReadsTwoBytesPerTexel)
 // bytes per texel is a truncated or mislabelled file, not a wider texture.
 TEST_F(Texture2DContentTypeReaderTest, NormalizedByte2RejectsAFourBytePerTexelLevel)
 {
+    using namespace CNA::Testing::Renderers;
+    // Same guard as NormalizedByte2ReadsTwoBytesPerTexel above: the reader constructs the texture
+    // before it validates the per-level byte count, so on a renderer that cannot create a
+    // NormalizedByte2 texture at all (e.g. WebGPU) construction throws a runtime_error first and the
+    // expected ContentLoadException is never reached. The malformed-level rejection this test pins
+    // is renderer-independent in intent, but only observable where the format is supported.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES3, OpenGL33, WebGL2, Skia);
+
     ContentManager cm;
     cm.setGraphicsDevice(gd);
 
