@@ -625,6 +625,65 @@ TEST(CnbSourceToolTest, WriteFileAtomicallyPreservesTheDestinationWhenItCannotFi
     EXPECT_FALSE(std::filesystem::exists(dir.path() / "nope"));
 }
 
+TEST(CnbSourceToolTest, WriteFileAtomicallyStepsOverATakenTemporaryNameWithoutClobberingIt)
+{
+    // plans/plan_cnb.md CNBF-123. The helper walks 64 candidate temporary names and takes the
+    // first free one, and the create is EXCLUSIVE so that "is this free?" and "claim it" are one
+    // operation. Two things follow that were asserted nowhere: a file already sitting on the first
+    // candidate name must survive untouched, and the write must still succeed by moving on.
+    //
+    // This also pins the naming scheme itself, which is what the debris check in every failing-run
+    // test greps for -- if the prefix ever changed, those tests would stop looking at anything.
+    ScratchDir dir("tempcollision");
+    const std::filesystem::path destination = dir.path() / "asset.cnb";
+    const std::string prefix = "asset.cnb.cnatmp-" + CNA::Tools::Detail::ProcessTag() + "-";
+
+    // Squat on the first three candidates with content that must not be disturbed.
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        WriteBytes(dir.path() / (prefix + std::to_string(attempt)),
+                   std::vector<std::uint8_t>(8u, static_cast<std::uint8_t>(0xC0 + attempt)));
+    }
+
+    const std::vector<std::uint8_t> payload{1u, 2u, 3u, 4u};
+    ASSERT_NO_THROW(CNA::Tools::WriteFileAtomically(destination, payload));
+    EXPECT_EQ(ReadBytes(destination), payload);
+
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        EXPECT_EQ(ReadBytes(dir.path() / (prefix + std::to_string(attempt))),
+                  std::vector<std::uint8_t>(8u, static_cast<std::uint8_t>(0xC0 + attempt)))
+            << "candidate " << attempt << " was overwritten instead of stepped over";
+    }
+    // The three squatters, the destination, and the one candidate the helper actually used -- which
+    // it must have consumed by renaming, so it is not here.
+    EXPECT_EQ(EntryNames(dir.path()),
+              (std::vector<std::string>{"asset.cnb", prefix + "0", prefix + "1", prefix + "2"}))
+        << "the successful write left its own temporary behind";
+}
+
+TEST(CnbSourceToolTest, WriteFileAtomicallyRefusesWhenEveryCandidateNameIsTaken)
+{
+    // The other end of that search: 64 candidates, and then a refusal rather than a silent
+    // fallback to a non-exclusive open. Nothing may be created and nothing may be destroyed.
+    ScratchDir dir("tempexhausted");
+    const std::filesystem::path destination = dir.path() / "asset.cnb";
+    const std::vector<std::uint8_t> previous(64u, 0xA5u);
+    WriteBytes(destination, previous);
+
+    const std::string prefix = "asset.cnb.cnatmp-" + CNA::Tools::Detail::ProcessTag() + "-";
+    for (int attempt = 0; attempt < 64; ++attempt)
+    {
+        WriteBytes(dir.path() / (prefix + std::to_string(attempt)), {0u});
+    }
+
+    EXPECT_THROW(CNA::Tools::WriteFileAtomically(destination, std::vector<std::uint8_t>(4u, 7u)),
+                 std::runtime_error);
+    EXPECT_EQ(ReadBytes(destination), previous)
+        << "a write that could not start still changed the destination";
+    EXPECT_EQ(EntryNames(dir.path()).size(), 65u) << "the refusal created or removed something";
+}
+
 TEST(CnbSourceToolTest, WriteFileAtomicallyReplacesWhatIsThereAndWritesAnEmptyFile)
 {
     ScratchDir dir("atomic_ok");

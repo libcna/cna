@@ -11,12 +11,12 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "CNA/Content/Cnb/CnjToCnb.hpp"
+#include "CnaToolAtomicWrite.hpp"
 
 namespace
 {
@@ -83,20 +83,14 @@ int main(int argc, char** argv)
         const CNA::Content::Cnb::CnjToCnbResult result =
             CNA::Content::Cnb::CompileCnjToCnb(input, contentRoot, logicalName);
 
-        std::ofstream file(output, std::ios::binary | std::ios::trunc);
-        if (!file.is_open())
-        {
-            std::cerr << "cnj_to_cnb: cannot open '" << output << "' for writing.\n";
-            return 1;
-        }
-        file.write(reinterpret_cast<const char*>(result.bytes.data()),
-                   static_cast<std::streamsize>(result.bytes.size()));
-        if (!file)
-        {
-            std::cerr << "cnj_to_cnb: failed while writing '" << output << "'.\n";
-            return 1;
-        }
-        file.close();
+        // plans/plan_cnb.md CNBF-123: published all-or-nothing, through the same helper
+        // cna_tool_source_to_cnb and cna_tool_gltf_to_cnb already use. This was the last CNB
+        // producer opening its destination with `trunc`, which destroys the previous build's
+        // output at the moment the file is OPENED rather than when the new one is complete -- and
+        // it did not even notice a failing final flush, because it tested the stream before
+        // close() rather than after. A failure now leaves the previous .cnb byte-identical and no
+        // temporary behind. Any error arrives as an exception the catch below already reports.
+        CNA::Tools::WriteFileAtomically(output, result.bytes);
 
         if (!quiet)
         {

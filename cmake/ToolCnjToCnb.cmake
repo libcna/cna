@@ -6,6 +6,12 @@
 add_executable(cna_tool_cnj_to_cnb
     tools/cnj_to_cnb/cnj_to_cnb.cpp
 )
+target_include_directories(cna_tool_cnj_to_cnb PRIVATE
+    # plans/plan_cnb.md CNBF-123: the shared all-or-nothing output helper
+    # (tools/common/CnaToolAtomicWrite.hpp), reachable by its bare header name from every CNB
+    # producer, exactly as cna_tool_source_to_cnb and cna_tool_gltf_to_cnb already reach it.
+    ${CNA_SOURCE_DIR}/tools/common
+)
 target_link_libraries(cna_tool_cnj_to_cnb
     PRIVATE
     CNA

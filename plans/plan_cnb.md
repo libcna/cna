@@ -1310,18 +1310,19 @@ vector still matches, and the determinism assertions (in-process and cross-proce
 | CNBF-119 | **Media schema bounds and loader-registry ownership.** | `Song`'s and `Video`'s `durationMs` is a `u32` on the wire and both runtime constructors take an `intcs`, so a value above `INT32_MAX` arrived **negative** and every later `Duration`/`PlayPosition` comparison read backwards -- unchecked at both boundaries. The media `XREF` row's `flags` and `expectedAssetTypeId` were specified by `docs/cnb-format.md` §19.1, written by the encoder and **never read back**. `ContentManager::RegisterCnbLoaderEXT<T>` accepted **any** identifier, so a game could claim `Texture2D`'s or `Curve`'s; and because a repeat registration under a matching name retains the FIRST loader, whether the game's factory or CNA's ended up in the table depended purely on which call ran first, silently either way. `CnbLoaderRegistry::RegisterBuiltIns()`'s documentation claimed "every asset type CNA itself compiles to `.cnb`" while installing two of ten. | `durationMs` bounded at `0x7FFFFFFF` at encode **and** decode -- 24.8 days, so nothing real is refused -- and the ceiling documented in §19.2/§19.3. The media reference's `flags` and `expectedAssetTypeId` are read back and required to be `0`/`Invalid`. A `CnbLoaderOwnership` on `CnbLoaderRegistry::Register` makes the CNA/game boundary explicit: `GameExtension` (the default) accepts a custom identifier only, `CnaBuiltIn` is refused a custom one, and a repeat registration is tolerated only when the name **and** the ownership match -- so the rule holds whichever side registers first. The rule is enforced in exactly one place; `RegisterCnbLoaderEXT` carries no second copy of it. `RegisterBuiltIns()` now documents what it actually installs and why the other eight come from `ContentManager`. Five tests, including one asserting that a `Clear()`ed table needs a `ContentManager` and not merely `RegisterBuiltIns()` to come back. **Superseded by `CNBF-122`:** an ownership *argument* is something a caller can pass, so this was a convention rather than a boundary; the enum is gone and the built-in route is now private. | ✅ |
 | CNBF-120 | **Command-line tools, and the first test that ever ran one of them.** | `cna_tool_source_to_cnb` had **no CMake test wiring at all** -- the only CNB tool without it -- so nothing had ever executed the program: its arguments, its exit codes and the files it leaves behind were entirely unexercised. What that hid: every numeric option went through `std::stoul`/`std::stof`, so `"500abc"` was 500, `"-1"` became `0xFFFFFFFF` through the wraparound plus a narrowing cast, an over-range value was truncated rather than refused, and `--fps nan` and `--fps inf` were accepted outright. `--color-key 1,2,3,4` read three components and ignored the fourth. An option that did not apply to the chosen kind -- `--color-key` on a WAV, `--fps` on a PNG -- was silently dropped, leaving the caller believing something untrue about the output. `create_directories`'s error code was discarded. In `gltf_to_cnb`, `baseName` was unvalidated although it becomes part of every output file name **and** of the staging directory's name; `--unit-scale` used `std::stof`, which consumes a prefix (`"0.01m"` is 0.01) and accepts `nan`/`inf`; and `--keep-cnj` discarded every `create_directories` and `copy` error, so it **exited 0 having copied nothing**. | A shared header-only `tools/common/CnaToolNumericArgs.hpp` parses each numeric option strictly: whole token consumed, sign rejected for an unsigned, range checked before narrowing, non-finite refused. `--color-key` splits first and requires exactly three parts. Each option is checked against the chosen kind and refused by name. Directory-creation and copy errors are reported. `baseName` must be one non-empty filename component and not `.` or `..`; `--unit-scale` must be finite, positive and fully consumed. New `cmake/UnitTests.cmake` wiring plus `CnbSourceToolTests.cpp` -- 8 tests spawning the real executable for the image, WAV, DDS, Song and Video success paths, cross-process byte-identical determinism over all four output kinds, and every malformed invocation asserted to exit 1 **and leave no file behind** -- and 3 more in `CnbGltfDirectToolTests.cpp`. Six of the eleven verified to fail against the previous tools. | ✅ |
 | CNBF-121 | **Documentation and public API quality.** | Four documents disagreed with the tree. `plans/plan_cnb.md`'s §3 `D10` still said the texture, font, audio and media identifiers had "**reserved ids** and **no v1 schema**"; §4's invariant 10 required `compression == 0`; §6's out-of-scope table marked seven closed items ⛔; §7a's counts predated seven schemas. `docs/cnb-format.md` §4 said `uncompressedSize` was "equal to `storedSize` in CNB v1" and §6 said a non-zero `compression` is rejected -- both written before Zstandard landed. `CnjToCnb.hpp` listed **three** supported `.cnj` types when there are eight, and described every one of them as going through a runtime reader when five go through headless importers instead. `CnbWriter.hpp`'s `Build()` Doxygen block sat above `SetCompression()`, so Doxygen documented the wrong function and `Build()` had none. And three places claimed an inspector could read a compressed file's identity without the codec, which is **false**: `Parse()` refuses an unimplemented codec while reading the table of contents, before any chunk is decoded. | Every stale claim either corrected in place or, where the reasoning is worth keeping, left under an unmistakable historical banner naming what superseded it -- `D10`, `§7a` and `§10` gained one, joining `§9`, `§12`, `§13`, `§14` and `§15`; `§4`'s invariant list and `§6`'s table were corrected outright, the latter keeping an "as recorded then" column so a closed deferral still says why it was deferred. `docs/cnb-format.md` §4/§6/§8/§12 corrected for real compression, including the new aggregate limit. `CnjToCnb.hpp` lists all eight types and names the **three different routes** they take, with the reason a runtime reader cannot serve five of them. The `Build()` block moved to `Build()`. `cnb_info` now prints stored size, logical size and the codec per chunk, plus a compression summary -- with one "size" column a compressed chunk reported its packed length and the only tool that can describe a `.cnb` could not show compression was in use. Two tests: one asserting the new columns on both a compressed and an uncompressed file, one asserting that a file using an unimplemented codec is unopenable **and that none of its identity is readable**, `CMET` being uncompressed notwithstanding. | ✅ |
-| CNBF-122 | **Residual audit of `CNBF-114`–`CNBF-121`: six boundaries the previous pass left reachable.** | (1) **The built-in loader route was forgeable.** `CNBF-119` drew the CNA/game boundary as a *defaulted argument* -- `CnbLoaderOwnership::CnaBuiltIn` was a public enumerator and `Register()` took it -- so game code could register its own factory under a built-in identifier's canonical name, claiming CNA's own ownership, before any `ContentManager` existed. Because the first equivalent registration is retained, CNA's genuine loader would then never have been installed. (2) **`CnbWriter::Build()` enforced no reader limit at all**, so a highly compressible document could be built and then refused by a default `CnbDocument::Parse()` for exceeding the aggregate expansion budget `CNBF-114` had just added -- the very asymmetry `CNBF-115` set out to close, in the one dimension it did not look at. (3) **CNJ/CNB `SpriteFont` equivalence was still false.** `EncodeSpriteFontToCnb()` has always required a strictly ascending character map and a `defaultCharacter` drawn from it; the shared canonical reader `CNBF-118` introduced enforced neither, so the runtime `.cnj` route loaded documents the compiler rejected. The repository's own fixture listed `'A'` before `'?'`. (4) **The DDS dimension ceiling bounds one level of one face.** A cube map is six faces each holding a whole mip chain, so at 16384 texels the *decoded* result is ~8.6 GiB of retained `std::vector` -- every allocation individually representable, which is why the per-level ceiling cannot see it. (5) **Two WAV numbers were read and not checked**: `WAVE_FORMAT_EXTENSIBLE`'s `cbSize` was required to be at least 22 but never required to *fit* its `fmt ` chunk, and `smpl`'s declared loop count was believed while only the first entry was required to fit. (6) **`source_to_cnb` and `gltf_to_cnb` opened their destination with the implicit `trunc`**, so the previous build's output was destroyed when the file was opened rather than when the new one was complete. | (1) The enumerator is **gone**. `Register()` is the game-extension route and takes three arguments; `RegisterBuiltIn()` is **private**, with `ContentManager` as the only friend. The boundary is now compile-time, and a test asserts it as one -- an access-checked detection idiom, with a deliberately-public twin shape proving the detector is not vacuous. (2) `CnbWriter::SetLimits()`, defaulting to `DefaultCnbReadLimits()`, and `Build()` enforces every container-level entry: chunk count, per-chunk stored **and** logical size, aggregate logical size through `CheckedAdd`, alignment, and the finished image against `maxFileSize` -- each before the output buffer is allocated. All **seven** `CnbReadLimits` entries are in scope, including the two that look schema-only: the container itself reads `CMET`'s two names, `XREF`'s count and every `XREF` name through the same bounded `CnbByteReader`, so `maxStringBytes` and `maxArrayElementCount` bound container chunks too -- found while writing the test that claims the invariant, which is the point of writing it. The over-claiming test name `EveryFileBuildAcceptsIsStructurallyLoadable` is now `EveryShapeOfWriterCallsAnEncoderMakesProducesALoadableFile`, and the universal claim is made by a new test that actually walks every applicable limit. (3) Both rules moved into `ReadCnjSpriteFontDescription()`, which **both** routes call, so they now reach the same verdict on the same bytes; the runtime refusal changes from a `System::ArgumentException` out of `SpriteFont`'s constructor to a `ContentLoadException` from the reader, which is the one the compiler already gave. The `'A'`-then-`'?'` fixture is reordered. (4) The aggregate decoded byte count for all six faces and every mip is computed in `std::uint64_t` from the validated header **before any output vector is allocated and before any block is decompressed**, against a configurable `DefaultDdsCubeDecodedByteBudget` of 2 GiB -- the largest complete cube that fits is a fully mipped 8192-texel one at 2 147 483 640 bytes, so nothing a GPU CNA targets would accept is refused. (5) `18 + cbSize` must fit the `fmt ` chunk and `36 + loops * 24` must fit the `smpl` chunk, the latter in `std::uint64_t` because the product wraps 32 bits above 178 956 970 loops. (6) A shared header-only `tools/common/CnaToolAtomicWrite.hpp`: sibling temporary, explicit close **checked** (a destructor-closed stream reports nothing, and a full disk fails on the final flush), then `std::filesystem::rename` over the destination, with an RAII guard that removes the temporary on every failure path including the exception one. **17 new tests; 13 verified to fail with the fix backed out** (see §17.3). | ✅ |
+| CNBF-122 | **Residual audit of `CNBF-114`–`CNBF-121`: six boundaries the previous pass left reachable.** | (1) **The built-in loader route was forgeable.** `CNBF-119` drew the CNA/game boundary as a *defaulted argument* -- `CnbLoaderOwnership::CnaBuiltIn` was a public enumerator and `Register()` took it -- so game code could register its own factory under a built-in identifier's canonical name, claiming CNA's own ownership, before any `ContentManager` existed. Because the first equivalent registration is retained, CNA's genuine loader would then never have been installed. (2) **`CnbWriter::Build()` enforced no reader limit at all**, so a highly compressible document could be built and then refused by a default `CnbDocument::Parse()` for exceeding the aggregate expansion budget `CNBF-114` had just added -- the very asymmetry `CNBF-115` set out to close, in the one dimension it did not look at. (3) **CNJ/CNB `SpriteFont` equivalence was still false.** `EncodeSpriteFontToCnb()` has always required a strictly ascending character map and a `defaultCharacter` drawn from it; the shared canonical reader `CNBF-118` introduced enforced neither, so the runtime `.cnj` route loaded documents the compiler rejected. The repository's own fixture listed `'A'` before `'?'`. (4) **The DDS dimension ceiling bounds one level of one face.** A cube map is six faces each holding a whole mip chain, so at 16384 texels the *decoded* result is ~8.6 GiB of retained `std::vector` -- every allocation individually representable, which is why the per-level ceiling cannot see it. (5) **Two WAV numbers were read and not checked**: `WAVE_FORMAT_EXTENSIBLE`'s `cbSize` was required to be at least 22 but never required to *fit* its `fmt ` chunk, and `smpl`'s declared loop count was believed while only the first entry was required to fit. (6) **`source_to_cnb` and `gltf_to_cnb` opened their destination with the implicit `trunc`**, so the previous build's output was destroyed when the file was opened rather than when the new one was complete. | (1) The enumerator is **gone**. `Register()` is the game-extension route and takes three arguments; `RegisterBuiltIn()` is **private**, with `ContentManager` as the only friend. The boundary is now compile-time, and a test asserts it as one -- an access-checked detection idiom, with a deliberately-public twin shape proving the detector is not vacuous. (2) `CnbWriter::SetLimits()`, defaulting to `DefaultCnbReadLimits()`, and `Build()` enforces every container-level entry: chunk count, per-chunk stored **and** logical size, aggregate logical size through `CheckedAdd`, alignment, and the finished image against `maxFileSize` -- each before the output buffer is allocated. All **seven** `CnbReadLimits` entries are in scope, including the two that look schema-only: the container itself reads `CMET`'s two names, `XREF`'s count and every `XREF` name through the same bounded `CnbByteReader`, so `maxStringBytes` and `maxArrayElementCount` bound container chunks too -- found while writing the test that claims the invariant, which is the point of writing it. The over-claiming test name `EveryFileBuildAcceptsIsStructurallyLoadable` is now `EveryShapeOfWriterCallsAnEncoderMakesProducesALoadableFile`, and the universal claim is made by a new test that actually walks every applicable limit. (3) Both rules moved into `ReadCnjSpriteFontDescription()`, which **both** routes call, so they now reach the same verdict on the same bytes; the runtime refusal changes from a `System::ArgumentException` out of `SpriteFont`'s constructor to a `ContentLoadException` from the reader, which is the one the compiler already gave. The `'A'`-then-`'?'` fixture is reordered. (4) The aggregate decoded byte count for all six faces and every mip is computed in `std::uint64_t` from the validated header **before any output vector is allocated and before any block is decompressed**, against a configurable `DefaultDdsCubeDecodedByteBudget` of 2 GiB -- the largest complete cube that fits is a fully mipped 8192-texel one at 2 147 483 640 bytes, so nothing a GPU CNA targets would accept is refused. (5) `18 + cbSize` must fit the `fmt ` chunk and `36 + loops * 24` must fit the `smpl` chunk, the latter in `std::uint64_t` because the product wraps 32 bits above 178 956 970 loops. (6) A shared header-only `tools/common/CnaToolAtomicWrite.hpp`: sibling temporary, explicit close **checked** (a destructor-closed stream reports nothing, and a full disk fails on the final flush), then `std::filesystem::rename` over the destination, with an RAII guard that removes the temporary on every failure path including the exception one. **Superseded in two places by `CNBF-123`:** the temporary was claimed with `std::ios::noreplace`, which libstdc++ fails on Windows even for a free name, so this helper never worked there at all; and the publication was `std::filesystem::rename`, whose replace-existing behaviour on Windows is a property of the linked standard library rather than a guarantee. Both are now the platform's own primitives. **17 new tests; 13 verified to fail with the fix backed out** (see §17.3). | ✅ |
+| CNBF-123 | **The last CNB producer writing in place, and a portable-atomicity claim nobody had measured.** | Two findings, one expected and one not. (1) **`cna_tool_cnj_to_cnb` still opened its destination with `std::ios::trunc`** -- the defect `CNBF-122` closed for the other two producers -- so a failure after the open left a file that exists, is the wrong length and is newer than its inputs, which an incremental build then leaves alone. It also tested the stream **before** `close()` rather than after, so a failing final flush was never noticed at all. (2) **`CnaToolAtomicWrite.hpp` did not work on Windows, at all.** Its publication step was `std::filesystem::rename` under a comment asserting that this "on every platform CNA targets replaces the existing file in one step" -- an assertion, never a measurement, and no test could reach it because `CnbSourceToolTests.cpp` is POSIX-only (`posix_spawn`). Cross-compiling the header with MinGW and running it under Wine showed it throwing `cannot create a temporary file beside ...` on the very first call: it claimed the temporary's name with `std::ios::noreplace`, and **libstdc++'s Windows filebuf fails that open even when the name is FREE** (measured; the CRT's own `fopen("wbx")` succeeds on the same path, so it is a library gap rather than an OS limitation). Every one of the 64 attempts failed, so on a MinGW Windows build `cna_tool_source_to_cnb` and `cna_tool_gltf_to_cnb` could not write **any** output. | (1) `cnj_to_cnb` publishes through `CNA::Tools::WriteFileAtomically` -- the existing helper, not a second implementation. CLI syntax, exit codes, success output, `--quiet`, the compiled bytes, determinism, logical-name and content-root behaviour are all unchanged; only failure publication is. (2) The helper's two platform-sensitive steps are now the platform's own primitives, and only those two steps are branched. **Creation:** `O_EXCL` / `CREATE_NEW`, which are the platforms' answers to "create only if this name is free" and both behave, and the bytes go through that same handle so nothing can be substituted for the file that was claimed. **Publication:** a new `Detail::ReplaceFileAtomically()` -- `std::filesystem::rename` on POSIX, where `[fs.op.rename]` is defined as POSIX `rename()` and that is a *standardised* atomic replace; `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING` on Windows, called directly rather than through the standard library because there the replace behaviour is a property of *which library is linked* (libstdc++ happens to forward to this same API -- confirmed by disassembly -- and CNA also builds with MSVC, which could not be exercised here). `MOVEFILE_COPY_ALLOWED` is deliberately **not** passed: the temporary is always a sibling, so a cross-volume move cannot legitimately arise and permitting one would let publication degrade silently into a non-atomic copy-then-delete. Delete-then-rename is refused outright as a "Windows fix", because it has no valid destination between the two calls. **7 new tests**, plus a source-level invariant (`CnbProducerOutputTest`) that discovers the producer set from the tree and fails both if one of them regains a `std::ofstream` and if a fourth producer appears that never uses the helper -- both shapes verified by breaking them. | ✅ |
 
 ### 17.1 What this pass did and did not change
 
 | | |
 |---|---|
-| **Serialized bytes of a previously valid `.cnb`** | **None.** Every golden vector still matches, and both determinism assertions -- in-process and cross-process -- still hold. Nothing in `CNBF-114`–`CNBF-121` moved a byte a valid producer emits. |
+| **Serialized bytes of a previously valid `.cnb`** | **None.** Every golden vector still matches, and both determinism assertions -- in-process and cross-process -- still hold. Nothing in `CNBF-114`–`CNBF-123` moved a byte a valid producer emits; `CNBF-123` changed only how the bytes reach the disk, and touched no file under `modules/*/src/` or `modules/*/include/` at all. |
 | **What a reader accepts** | Stricter in eight places: an aggregate expansion budget, a DDS header's dimension/mip/face rules, a WAV's `smpl`/RIFF/`fmt ` consistency, a media duration above `INT32_MAX`, a media `XREF` row's `flags`/`expectedAssetTypeId`, and (`CNBF-122`) an aggregate DDS decoded-output budget, an EXTENSIBLE `cbSize` that must fit its `fmt ` chunk, and an `smpl` loop table that must fit its chunk. |
 | **What a writer can produce** | Narrower in three: an `XREF` name must satisfy the reader's own rule, `AddChunk()` refuses a container-defined identifier, and (`CNBF-122`) `Build()` refuses a document outside the reader limits it holds -- chunk count, per-chunk size, aggregate logical size, alignment, finished file size. All three close paths to a file the writer accepted and the reader rejected. |
 | **What a `.cnj` compiles** | Stricter, and now **identical to the runtime route**: per-type version ceilings, and one shared canonical reading of every fragment both routes consume. |
 | **Public C++ API** | `CnbReadLimits` gained a field; `CnbWriter` gained `SetLimits()`/`Limits()`; `DecodeDdsCube()` gained a trailing defaulted `maxDecodedBytes`; `CnbLoaderRegistry::Register`/`RegisterCnbLoaderEXT` refuse identifier ranges they previously accepted. **One removal** (`CNBF-122`): the public `CnbLoaderOwnership` enum and `Register()`'s ownership parameter are gone, replaced by a private `RegisterBuiltIn()` befriended to `ContentManager` -- a source break only for code that named `CnbLoaderOwnership`, which is exactly the code the rule exists to stop. Nothing else a caller passes positionally changed. |
-| **Command-line tools** | `cna_tool_source_to_cnb` and `cna_tool_gltf_to_cnb` refuse arguments they previously misread, and (`CNBF-122`) write their output by renaming a sibling temporary over it. No accepted invocation produces different output. The one behaviour given up is named where it is asserted: writing into a directory that is not itself writable no longer works, because a temporary cannot be created there. That is inherent to replacing by rename. |
+| **Command-line tools** | `cna_tool_source_to_cnb` and `cna_tool_gltf_to_cnb` refuse arguments they previously misread, and (`CNBF-122`, `CNBF-123`) **all three** CNB producers write their output by renaming a sibling temporary over it. No accepted invocation produces different output. The one behaviour given up is named where it is asserted: writing into a directory that is not itself writable no longer works, because a temporary cannot be created there. That is inherent to replacing by rename. |
 
 ### 17.2 Verification at the end of `CNBF-114`-`CNBF-121`
 
@@ -1446,10 +1447,9 @@ exactly that reason.
 
 **Remaining limitations, named rather than left to be discovered.**
 
-* **`cna_tool_cnj_to_cnb` still writes its destination in place.** It has the same defect the other
-  two had, and the shared helper is one `#include` and one call away — but the task that authorised
-  this work named `source_to_cnb` and `gltf_to_cnb`, and widening a tool's failure behaviour is the
-  owner's call, not a "while I'm here". It is the obvious next task.
+* ~~**`cna_tool_cnj_to_cnb` still writes its destination in place.**~~ **Closed by `CNBF-123`**,
+  which was that next task. All three CNB producers now publish through the one shared helper, and
+  `CnbProducerOutputTest` fails if a fourth appears that does not.
 * **The checked aggregate arithmetic is not reachable from any input.** `CnbWriter`'s
   `CheckedAdd` over chunk logical sizes cannot overflow, because every term is a real allocation;
   `DecodeDdsCube`'s per-level overflow tests cannot fire, because the dimension ceiling bounds every
@@ -1465,4 +1465,153 @@ exactly that reason.
   name is near that.
 * **A read-only output directory is no longer writable even when the existing file is.** Inherent to
   replacing by rename; asserted deliberately in
-  `CnbSourceToolTest.AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTemporary`.
+  `CnbSourceToolTest.AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTemporary`, and now in
+  `CnbCompilerToolTest.AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTemporary` as well
+  (`CNBF-123`).
+
+### 17.4 `CNBF-123` — the CNB producer output contract
+
+**The invariant, stated once:**
+
+> Every supported command-line tool whose final product is a `.cnb` publishes that file
+> all-or-nothing, through the same mechanism.
+
+Three tools are in scope, and the set is derived from the tree rather than listed from memory. A
+producer is a tool whose source both names a `.cnb` and writes a file; `cna_tool_cnb_info` names
+`.cnb` on nearly every line and writes nothing, which is exactly the distinction:
+
+| tool | writes a `.cnb`? | final output path | atomic? | run as a real subprocess by a test? | failure preserves the old output? |
+|---|---|---|---|---|---|
+| `cna_tool_cnj_to_cnb` | yes | `[output.cnb]`, or `<input>.cnb` | ✅ **since `CNBF-123`** | ✅ `CnbCompilerToolTest` | ✅ |
+| `cna_tool_gltf_to_cnb` | yes | `<outputDir>/<stem>.cnb`, one per staged `.cnj` | ✅ (`CNBF-122`) | ✅ `CnbGltfDirectToolTest` | ✅ |
+| `cna_tool_source_to_cnb` | yes | `<output.cnb>` | ✅ (`CNBF-122`) | ✅ `CnbSourceToolTest` | ✅ |
+| `cna_tool_cnb_info` | **no — read-only inspector** | — | n/a | ✅ `CnbInfoToolTest` | n/a |
+
+`cna_tool_gltf_to_cnj` writes `.cnj` documents and their sidecars, not `.cnb`. Its output semantics
+belong to CNJ and are deliberately **not** touched here.
+
+**One library path is deliberately out of scope and is named rather than left implicit:**
+`CnbWriter::WriteToFile()` still writes in place. It is a `modules/content` API with exactly one
+caller in the tree (a container test), and `modules/` cannot include `tools/common` -- tools depend
+on modules, not the other way round -- so making it atomic would mean either a second
+implementation of the rule, which this task forbids, or moving the helper into a module, which is a
+larger architectural decision than a hardening task should take. The invariant above is therefore
+about **command-line producers**, which is what it says.
+
+**Structurally difficult to regress.** `CnbProducerOutputTest.EveryCnbProducerPublishesThroughTheOneSharedHelper`
+reads the three producers' own sources and fails if any of them loses the `CnaToolAtomicWrite.hpp`
+include, loses the `WriteFileAtomically` call, or regains a `std::ofstream` or `std::ios::trunc` --
+**and** if the discovered producer set stops being those three, which is what catches a fourth tool
+added later that never uses the helper. Both shapes were verified by breaking them. It is a source
+check rather than a base class on purpose: three call sites do not justify an inheritance
+hierarchy, and a base class nobody is obliged to derive from would not catch the new-producer case.
+
+One honest caveat about where it lives: `CnbCompilerToolTests.cpp` is excluded from the corpus on
+Windows, Emscripten, Android and iOS, because the rest of that file spawns processes with
+`posix_spawn`. The invariant test itself only reads source text and would run anywhere, so it is
+checked on every Linux build and on no other -- which is where CNB is developed and where the
+regression it guards against would be introduced, but it is not a Windows CI gate.
+
+#### Platform semantics, measured rather than asserted
+
+`CNBF-122` published with `std::filesystem::rename` under the comment *"which on every platform CNA
+targets replaces the existing file in one step"*. Auditing that produced two results, one of which
+was a live Windows defect.
+
+| question | answer | how it was established |
+|---|---|---|
+| Does POSIX `rename` replace an existing destination atomically? | **Yes** | Specified. `[fs.op.rename]` defines `std::filesystem::rename` as "as if by POSIX `rename()`", and POSIX specifies the atomic replace. A standardised guarantee, so the standard library is used directly. |
+| Does the Windows **C runtime**'s `rename()` replace one? | **No** — `rc=-1`, destination untouched | Measured, `spikes/atomic-replace-spike/probe_rename.cpp` under Wine |
+| Does **libstdc++**'s `std::filesystem::rename` replace one on Windows? | **Yes**, because it does not use the CRT | Measured, and the disassembly shows `mov $0x3,%r8d; call __imp_MoveFileExW` — `MOVEFILE_REPLACE_EXISTING \| MOVEFILE_COPY_ALLOWED` |
+| Does **MSVC's STL**? | **Not established here** | No MSVC toolchain in this environment. This is precisely why the guarantee is no longer left to the standard library. |
+| Did the `CNBF-122` helper work on Windows at all? | **No** | Measured: it threw `cannot create a temporary file beside ...` on the first call |
+
+The Windows failure is worth recording in full, because no Linux test could have found it.
+`CnbSourceToolTests.cpp` is POSIX-only (`posix_spawn`), so the entire Windows path of a header two
+shipping tools depend on had been written and never executed. It claimed the temporary's name with
+`std::ofstream(..., std::ios::noreplace)`, and:
+
+| open | Linux | Windows (MinGW/libstdc++) |
+|---|---|---|
+| `noreplace` on a **free** name | succeeds | **fails** |
+| `noreplace` on a taken name | fails | fails |
+| plain `out` on a free name | succeeds | succeeds |
+| CRT `fopen("wbx")` on a free name | succeeds | succeeds |
+
+libstdc++'s Windows filebuf refuses a `noreplace` open even when the name is free, while the CRT's
+own exclusive mode works on the same path — a library gap, not an OS limitation. All 64 candidate
+names therefore failed, so on a MinGW Windows build `cna_tool_source_to_cnb` and
+`cna_tool_gltf_to_cnb` could not write **any** output.
+
+**What the helper does now.** Only two steps are platform-sensitive, and only those two are
+branched:
+
+```text
+WriteFileAtomically
+    ├─ Detail::ExclusiveNewFile   O_EXCL (POSIX) / CREATE_NEW (Windows), written through the
+    │                             same handle, closed and CHECKED
+    └─ Detail::ReplaceFileAtomically
+           POSIX  : std::filesystem::rename
+           Windows: MoveFileExW(temp, dest, MOVEFILE_REPLACE_EXISTING)
+```
+
+`MOVEFILE_COPY_ALLOWED` is deliberately **not** passed. The temporary is always a sibling of the
+destination, so a cross-volume move cannot legitimately arise; permitting one would let publication
+degrade silently into a copy-then-delete, which is the non-atomic window this whole mechanism
+exists to remove. Refusing it is the safer failure. `remove(destination)` followed by `rename` was
+considered and **rejected**: it "works" everywhere and destroys the invariant, because between the
+two calls there is no valid destination at all. `std::filesystem::path::c_str()` is already
+`const wchar_t*` on Windows, so the native wide path is passed through untranscoded.
+
+Power-loss durability remains out of scope: nothing is `fsync`ed. The contract is that no *process*
+failure can leave a partial file where a complete one was.
+
+#### What was runtime-tested, and on what
+
+| platform | how | what ran |
+|---|---|---|
+| **Linux x86-64** (native, GCC 14.2) | `CnaTests` | Everything: the three tools as real subprocesses, the helper's own contract, the producer invariant |
+| **Windows x86-64** (MinGW-w64 GCC 14.2 / libstdc++, **under Wine**) | `spikes/atomic-replace-spike` | The real `CnaToolAtomicWrite.hpp`, compiled for Windows and run: all 12 contract clauses pass, including replace-existing, the failure-preserves-destination arm and temporary cleanup |
+| **Windows, MSVC STL** | — | **Not run.** No MSVC toolchain here. The Windows branch calls `MoveFileExW` directly, so it does not depend on the STL, but that is an implementation-contract argument and not a measurement. |
+| **Windows, real Microsoft Windows** | — | **Not run.** Wine is the Win32 API reimplemented, so the results above are strong evidence about the API contract and the libstdc++ mapping onto it, not a certification on Windows. |
+
+Stated plainly: **runtime Windows replacement was verified under Wine, not on Windows, and never
+against MSVC.** The `.exe` artifacts are gitignored; `spikes/atomic-replace-spike/README.md` keeps
+the sources, the measurements and the exact commands to repeat them.
+
+#### Verification
+
+| what | result |
+|---|---|
+| Golden vectors | **11 / 11 pass**, and `CnbGoldenVectorTests.cpp` is not in this diff |
+| CNB + DDS + `CnjSpriteFontTest` | **393 / 393 pass** (387 before; +6 in this filter) |
+| `CnbCompilerTest` + `CnbCompilerToolTest` | **14 / 14 pass** (11 before) |
+| All four real-executable suites | **42 / 42 pass** (30 before) |
+| Content, CNJ, SpriteFont, Texture3D, Model, XNB | **743 pass, 3 pre-existing skips** |
+| ASan + UBSan (`build-asan`) | **393 / 393 pass, zero UBSan runtime errors, zero AddressSanitizer memory errors.** Every LeakSanitizer frame is inside `libGLX_mesa.so.0`, as it is for every run of this binary |
+| **No Zstandard** (`build-probe/cnbf-nozstd`) | **383 pass, 10 skipped, 0 failures** — the same ten codec-gated skips; all seven new tests and the producer invariant ran there |
+| Windows contract (MinGW + Wine) | **12 / 12 clauses pass**, and identical natively on Linux from the same source |
+| Full `ctest -j8` | **8573 tests, 34 failed** (8567 before; the 6 new tests are this task's). Re-running exactly that set **serially** leaves **25** — the 9 that recovered are 5 audio-timing cases and 4 `ENetDiscoveryServiceTest` cases, all of which need the machine to themselves |
+
+**No serialized byte changed, and the diff cannot have changed one:** nothing under
+`modules/*/src/` or `modules/*/include/` is touched at all. `CompileCnjToCnb` is untouched, and
+`CnbCompilerToolTest.PublishingByRenameDoesNotDisturbCrossProcessDeterminism` asserts the tool's
+bytes equal that library call's bytes, across repeated runs, over an existing destination, and
+through both the explicit and implicit output paths.
+
+**The 25 durable full-suite failures, and why none of them is this task's.** By category:
+`VertexDeclarationLayoutTest` (6) and `DeclarationGuardTest` (4), `EasyGL_*` (9), glTF conformance
+— `GltfLimitationsDoc`, `GltfRendererPbrFallbackPolicy`, `CnaGltfConformanceL0`/`L1`/`L6` (5) — and
+`CApiCoverageMatrix` (1). That is the composition §17.2 and §17.3 already recorded for this branch:
+OpenGL under Xvfb, glTF conformance, and the C-ABI inventory. **Not one is in CNB, in DDS, in the
+content module's `.cnb` or `.cnj` paths, or in any of the four tools.** `CApiCoverageMatrix` cannot
+be this task's either: its generator scans `modules/*/include/` only, and the sole header this task
+adds to is `tools/common/CnaToolAtomicWrite.hpp`, which that scan never sees.
+
+**Which of the new tests discriminate.** The four malformed-document arms of
+`AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTemporary` do **not**: the compiler refuses each
+of them before it reaches the write, so they held under the old `trunc` open too. They are the
+contract, not the regression. The arm that does discriminate — verified by restoring the in-place
+write and watching it fail — is the read-only-output-directory case, where an in-place `trunc` open
+succeeds on POSIX and a sibling temporary cannot be created. `CnbProducerOutputTest` was verified
+against both of its regression shapes the same way.

@@ -10,6 +10,7 @@
 // is a much stronger claim. Same reasoning, and the same POSIX-only spawn machinery, as
 // GltfToCnjToolTests.cpp.
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -93,6 +94,19 @@ namespace
         ss << f.rdbuf();
         const std::string s = ss.str();
         return std::vector<std::uint8_t>(s.begin(), s.end());
+    }
+
+    /// Every entry of `dir`, sorted, so a leftover `.cnatmp-*` shows up as itself rather than as
+    /// an absence (plans/plan_cnb.md `CNBF-123`).
+    std::vector<std::string> EntryNames(const std::filesystem::path& dir)
+    {
+        std::vector<std::string> names;
+        for (const auto& entry : std::filesystem::directory_iterator(dir))
+        {
+            names.push_back(entry.path().filename().string());
+        }
+        std::sort(names.begin(), names.end());
+        return names;
     }
 
     /// Appends f64/f32/i32 in the .clip.bin sidecar's own little-endian layout, so the compiler is
@@ -400,4 +414,253 @@ TEST(CnbCompilerToolTest, TheToolHonoursAnExplicitOutputPathAndLogicalName)
     EXPECT_EQ(doc.AssetTypeId(), CnbAssetTypeId::Curve);
     ASSERT_TRUE(doc.Metadata().present);
     EXPECT_EQ(doc.Metadata().contentName, "Curves/wobble");
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-123 -- the tool publishes its output all-or-nothing
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbCompilerToolTest, ASuccessfulRunReplacesAnExistingOutputWholly)
+{
+    // cna_tool_cnj_to_cnb was the last CNB producer still opening its destination with `trunc`.
+    // It now writes a sibling temporary and renames it, so replacing has to be proved as a
+    // replacement: nothing of the previous file may survive, and no temporary may remain.
+    ScratchDir dir;
+    WriteText(dir.path() / "wobble.cnj", kCurveCnj);
+    const std::filesystem::path out = dir.path() / "wobble.cnb";
+
+    // A sentinel far longer than the .cnb that will replace it, so a partial overwrite would leave
+    // a visible tail rather than a subtly wrong file.
+    WriteBytes(out, std::vector<std::uint8_t>(200000u, 0xEEu));
+
+    ASSERT_EQ(RunCompiler({(dir.path() / "wobble.cnj").string(), out.string(), "--quiet"}), 0);
+
+    const std::vector<std::uint8_t> produced = ReadBytes(out);
+    EXPECT_LT(produced.size(), 200000u) << "the sentinel's tail survived the replacement";
+    const CnbDocument doc = CnbDocument::Parse(produced, "wobble.cnb");
+    EXPECT_EQ(doc.AssetTypeId(), CnbAssetTypeId::Curve);
+    EXPECT_EQ(EntryNames(dir.path()),
+              (std::vector<std::string>{"wobble.cnb", "wobble.cnj"}))
+        << "a successful run left a temporary behind";
+}
+
+TEST(CnbCompilerToolTest, AFailingRunLeavesAnExistingOutputByteIdenticalAndNoTemporary)
+{
+    // The defect this closes: with `trunc`, the previous build's output was destroyed at the moment
+    // the destination was OPENED, so any later failure left a file that exists, is the wrong
+    // length, and is newer than its inputs -- which an incremental build then leaves alone.
+    //
+    // Every failure below is a REAL compiler refusal of a real malformed input, not a process
+    // killed at a contrived instant.
+    ScratchDir dir;
+    WriteText(dir.path() / "wobble.cnj", kCurveCnj);
+    const std::filesystem::path out = dir.path() / "asset.cnb";
+
+    // A genuine previous build at the destination.
+    ASSERT_EQ(RunCompiler({(dir.path() / "wobble.cnj").string(), out.string(), "--quiet"}), 0);
+    const std::vector<std::uint8_t> sentinel = ReadBytes(out);
+    ASSERT_FALSE(sentinel.empty());
+    ASSERT_NO_THROW((void)CnbDocument::Parse(sentinel, "asset.cnb"));
+
+    // Four different malformed inputs, each failing at a different stage of the compiler.
+    WriteText(dir.path() / "brokenjson.cnj", R"({"cnjVersion":1,"type":"Curve",)");
+    WriteText(dir.path() / "wrongtype.cnj", R"({"cnjVersion":1,"type":"NotAnAssetType"})");
+    WriteText(dir.path() / "badversion.cnj", std::string(R"({"cnjVersion":2,"type":"Curve",)") +
+                                                 R"("preLoop":"Constant","postLoop":"Constant",)"
+                                                 R"("keys":[]})");
+    // A document whose named binary sidecar does not exist: the compiler gets all the way to
+    // absorbing a file before it fails.
+    WriteText(dir.path() / "nosidecar.cnj",
+              R"({"cnjVersion":1,"type":"AnimationClip","duration":1.0,"clipFile":"absent.clip.bin"})");
+
+    struct Case { const char* what; const char* document; };
+    for (const Case& c : {Case{"malformed JSON", "brokenjson.cnj"},
+                          Case{"an unsupported type", "wrongtype.cnj"},
+                          Case{"a cnjVersion this type refuses", "badversion.cnj"},
+                          Case{"a named sidecar that is absent", "nosidecar.cnj"}})
+    {
+        EXPECT_NE(RunCompiler({(dir.path() / c.document).string(), out.string(), "--quiet"}), 0)
+            << c.what << " compiled successfully";
+        EXPECT_EQ(ReadBytes(out), sentinel)
+            << c.what << ": the failing run changed the existing output";
+        bool debris = false;
+        for (const std::string& name : EntryNames(dir.path()))
+        {
+            if (name.find(".cnatmp-") != std::string::npos) { debris = true; }
+        }
+        EXPECT_FALSE(debris) << c.what << ": the failing run left a temporary behind";
+    }
+
+    // The sentinel is still the exact asset the first run produced, not merely the same length.
+    const CnbDocument survivor = CnbDocument::Parse(ReadBytes(out), "asset.cnb");
+    EXPECT_EQ(survivor.AssetTypeId(), CnbAssetTypeId::Curve);
+
+    // The four cases above are the contract, but they are NOT the discriminator: the compiler
+    // refuses each of them before it reaches the write, so the old `trunc` open never happened and
+    // they held under it too. This last case is the one that separates the two implementations.
+    //
+    // A run that CANNOT produce its output, from a perfectly valid input, with a destination that
+    // already exists: the output directory is read-only while the file inside it stays writable.
+    // On POSIX that is exactly the state in which an in-place `trunc` open SUCCEEDS -- write
+    // permission on a file is the file's, not its directory's -- and a sibling temporary cannot be
+    // created. The old tool rewrote the file here and exited 0; the new one refuses and leaves the
+    // previous build alone.
+    //
+    // It is also the one thing this change gives up, asserted where it is given up: writing into a
+    // directory that is not itself writable no longer works. That is inherent to publishing by
+    // rename, and is the trade CNBF-122 and CNBF-123 accept for all three producers.
+    if (::geteuid() != 0)
+    {
+        ScratchDir locked;
+        WriteText(locked.path() / "wobble.cnj", kCurveCnj);
+        const std::filesystem::path sub = locked.path() / "out";
+        std::filesystem::create_directories(sub);
+        const std::filesystem::path target = sub / "asset.cnb";
+
+        ASSERT_EQ(RunCompiler({(locked.path() / "wobble.cnj").string(), target.string(),
+                               "--quiet"}),
+                  0);
+        const std::vector<std::uint8_t> before = ReadBytes(target);
+        ASSERT_FALSE(before.empty());
+
+        std::filesystem::permissions(sub,
+                                     std::filesystem::perms::owner_read |
+                                         std::filesystem::perms::owner_exec,
+                                     std::filesystem::perm_options::replace);
+        const int code = RunCompiler({(locked.path() / "wobble.cnj").string(), target.string(),
+                                      "--name", "Curves/different", "--quiet"});
+        std::filesystem::permissions(sub, std::filesystem::perms::owner_all,
+                                     std::filesystem::perm_options::replace);
+
+        EXPECT_NE(code, 0) << "a run that cannot write its output reported success";
+        EXPECT_EQ(ReadBytes(target), before)
+            << "the run rewrote an output it should not have been able to replace";
+        EXPECT_EQ(EntryNames(sub), (std::vector<std::string>{"asset.cnb"}))
+            << "the failed run left a temporary behind";
+    }
+}
+
+TEST(CnbCompilerToolTest, PublishingByRenameDoesNotDisturbCrossProcessDeterminism)
+{
+    // The publication mechanism must not reach the file's contents. Asserted over BOTH output
+    // shapes the tool has -- an explicit output path and the implicit `<input>.cnb` -- and against
+    // a destination that already exists, which is the case the rename actually changed.
+    ScratchDir dir;
+    WriteText(dir.path() / "walk.cnj", kInlineClipCnj);
+    const std::filesystem::path out = dir.path() / "walk.cnb";
+
+    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), out.string(), "--quiet"}), 0);
+    const std::vector<std::uint8_t> first = ReadBytes(out);
+    ASSERT_FALSE(first.empty());
+
+    // Over an existing destination, twice more, in fresh processes each time.
+    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), out.string(), "--quiet"}), 0);
+    EXPECT_EQ(ReadBytes(out), first);
+    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), out.string(), "--quiet"}), 0);
+    EXPECT_EQ(ReadBytes(out), first);
+
+    // And the implicit output path agrees with the explicit one, byte for byte.
+    ASSERT_EQ(RunCompiler({(dir.path() / "walk.cnj").string(), "--quiet"}), 0);
+    EXPECT_EQ(ReadBytes(dir.path() / "walk.cnb"), first);
+
+    // The library call the tool wraps produces those same bytes, so nothing about the tool's
+    // output path is contributing to them.
+    const CnjToCnbResult direct = CompileCnjToCnb((dir.path() / "walk.cnj").string(), "", "walk");
+    EXPECT_EQ(direct.bytes, first);
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-123 -- one publication mechanism for every CNB producer
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbProducerOutputTest, EveryCnbProducerPublishesThroughTheOneSharedHelper)
+{
+    // The invariant CNBF-122 and CNBF-123 together establish, stated where a regression would trip
+    // over it: **every command-line tool whose final product is a .cnb publishes it
+    // all-or-nothing, through the same helper.**
+    //
+    // The runtime half of that is already covered per executable -- CnbCompilerToolTest,
+    // CnbSourceToolTest and CnbGltfDirectToolTest each spawn their own tool and assert that a
+    // failing run preserves an existing output and leaves no temporary. What no runtime test can
+    // catch is a FOURTH producer being added later that never goes through the helper at all, or
+    // one of these three quietly regaining a `std::ofstream`. That is what this reads the sources
+    // for. It is deliberately a source check and not a framework: three call sites do not justify
+    // an inheritance hierarchy, and a base class nobody is obliged to derive from would not catch
+    // the new-producer case either.
+#ifndef CNA_TOOLS_SOURCE_DIR
+    FAIL() << "CNA_TOOLS_SOURCE_DIR was not defined; the producer invariant cannot be checked";
+#else
+    const std::filesystem::path tools = CNA_TOOLS_SOURCE_DIR;
+    ASSERT_TRUE(std::filesystem::is_directory(tools))
+        << "the tools tree is not where the build said it is: " << tools;
+
+    const auto readAll = [](const std::filesystem::path& file)
+    {
+        std::ifstream f(file, std::ios::binary);
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        return ss.str();
+    };
+
+    // Discovered from the tree rather than listed, so a producer added tomorrow is checked without
+    // anyone remembering to add it here. A "producer" is a tool whose source both names a .cnb and
+    // writes a file; cna_tool_cnb_info names .cnb everywhere and writes nothing, which is exactly
+    // the distinction being drawn.
+    std::vector<std::filesystem::path> producers;
+    std::vector<std::string> inspectorsOrNonProducers;
+    for (const auto& entry : std::filesystem::directory_iterator(tools))
+    {
+        if (!entry.is_directory()) { continue; }
+        for (const auto& file : std::filesystem::directory_iterator(entry.path()))
+        {
+            if (file.path().extension() != ".cpp") { continue; }
+            const std::string text = readAll(file.path());
+            const bool mentionsCnb = text.find(".cnb") != std::string::npos;
+            const bool writesAFile = text.find("WriteFileAtomically") != std::string::npos ||
+                                     text.find("std::ofstream") != std::string::npos;
+            if (!mentionsCnb) { continue; }
+            if (writesAFile) { producers.push_back(file.path()); }
+            else { inspectorsOrNonProducers.push_back(file.path().filename().string()); }
+        }
+    }
+
+    std::vector<std::string> producerNames;
+    for (const std::filesystem::path& p : producers)
+    {
+        producerNames.push_back(p.filename().string());
+    }
+    std::sort(producerNames.begin(), producerNames.end());
+
+    // The expected producer set, asserted rather than assumed -- if this list ever grows, the
+    // assertions below have to be looked at rather than silently skipped over.
+    EXPECT_EQ(producerNames, (std::vector<std::string>{"cnj_to_cnb.cpp", "gltf_to_cnb.cpp",
+                                                       "source_to_cnb.cpp"}))
+        << "the set of .cnb-producing tools changed; a new one must publish through "
+           "CnaToolAtomicWrite.hpp like the others";
+    EXPECT_NE(std::find(inspectorsOrNonProducers.begin(), inspectorsOrNonProducers.end(),
+                        "cnb_info.cpp"),
+              inspectorsOrNonProducers.end())
+        << "cna_tool_cnb_info is expected to be read-only; if it now writes files it is a producer";
+
+    for (const std::filesystem::path& producer : producers)
+    {
+        const std::string text = readAll(producer);
+        const std::string name = producer.filename().string();
+
+        EXPECT_NE(text.find("CnaToolAtomicWrite.hpp"), std::string::npos)
+            << name << " does not include the shared all-or-nothing output helper";
+        EXPECT_NE(text.find("CNA::Tools::WriteFileAtomically"), std::string::npos)
+            << name << " does not publish through WriteFileAtomically";
+
+        // The specific regression: reopening the destination in place. `trunc` is the flag that
+        // destroys the previous build at open time, and a bare `std::ofstream` over the output is
+        // how it would come back.
+        EXPECT_EQ(text.find("std::ios::trunc"), std::string::npos)
+            << name << " opens a file with std::ios::trunc again; the previous output is destroyed "
+                       "when the file is opened rather than when the new one is complete";
+        EXPECT_EQ(text.find("std::ofstream"), std::string::npos)
+            << name << " writes a file with std::ofstream directly instead of through the shared "
+                       "helper";
+    }
+#endif
 }

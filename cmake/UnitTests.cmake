@@ -505,6 +505,14 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    # plans/plan_cnb.md CNBF-123: the CNB producer-output invariant test reads the three producers'
+    # own sources, so it needs the tools tree by absolute path rather than by guessing at the
+    # working directory. Baked in so the check can never silently skip itself in a build-directory
+    # run -- a source-level invariant that skips is an invariant nobody is enforcing.
+    target_compile_definitions(CnaTests PRIVATE
+        CNA_TOOLS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools"
+    )
+
     if(TARGET cna_tool_gltf_to_cnj)
         # plans/plan_cnj.md CNB-52: GltfToCnjToolTests.cpp spawns the real converter tool as a
         # subprocess (same reasoning as cna_net_two_process_harness above -- a separate
