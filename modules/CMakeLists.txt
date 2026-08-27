@@ -81,6 +81,45 @@ else()
 endif()
 option(CNA_USE_SYSTEM_DRACO "Use a system Draco package instead of CNA's pinned submodule" OFF)
 
+# plans/plan_cnb.md CNBF-105: optional Zstandard for compressed .cnb chunks.
+#
+# AUTO (the default) enables it when the system library is present and stays silent when it is
+# not; ON demands it; OFF omits it. Absent, the reader refuses a compressed chunk with a message
+# naming the missing codec, exactly as it did before any codec existed, and the writer cannot
+# produce one -- so a build without zstd reads and writes every file it could read and write
+# before. Compression is opt-in per chunk and OFF by default even when the library IS present:
+# docs/cnb-compression-measurements.md shows it costs load time on fast storage.
+set(CNA_CNB_ZSTD "AUTO" CACHE STRING "Zstandard support for .cnb chunk compression (AUTO/ON/OFF)")
+set_property(CACHE CNA_CNB_ZSTD PROPERTY STRINGS AUTO ON OFF)
+
+if(CNA_CNB_ZSTD STREQUAL "OFF")
+    set(CNA_CNB_ZSTD_AVAILABLE OFF)
+    message(STATUS "CNA: .cnb Zstandard support disabled -- a compressed chunk will be refused")
+else()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(CNA_ZSTD QUIET libzstd)
+    endif()
+    if(NOT CNA_ZSTD_FOUND)
+        find_path(CNA_ZSTD_INCLUDE_DIR zstd.h)
+        find_library(CNA_ZSTD_LIBRARY NAMES zstd)
+        if(CNA_ZSTD_INCLUDE_DIR AND CNA_ZSTD_LIBRARY)
+            set(CNA_ZSTD_FOUND TRUE)
+            set(CNA_ZSTD_INCLUDE_DIRS "${CNA_ZSTD_INCLUDE_DIR}")
+            set(CNA_ZSTD_LIBRARIES "${CNA_ZSTD_LIBRARY}")
+        endif()
+    endif()
+    if(CNA_ZSTD_FOUND)
+        set(CNA_CNB_ZSTD_AVAILABLE ON)
+        message(STATUS "CNA: .cnb Zstandard support enabled (opt-in per chunk, off by default)")
+    elseif(CNA_CNB_ZSTD STREQUAL "ON")
+        message(FATAL_ERROR "CNA: CNA_CNB_ZSTD=ON but libzstd was not found.")
+    else()
+        set(CNA_CNB_ZSTD_AVAILABLE OFF)
+        message(STATUS "CNA: libzstd not found -- .cnb chunk compression unavailable")
+    endif()
+endif()
+
 if(NOT CNA_ENABLE_DRACO)
     set(CNA_DRACO_AVAILABLE OFF)
     if(EMSCRIPTEN)

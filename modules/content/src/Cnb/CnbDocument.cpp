@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/Content/Cnb/CnbChunkCompression.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 
 #include <algorithm>
@@ -222,21 +223,36 @@ namespace CNA::Content::Cnb
                     entryWhere + " (" + ChunkIdToString(entry.type) +
                     ") has a non-zero reserved field.");
             }
-            if (compression != static_cast<std::uint32_t>(CnbCompression::None))
+            // plans/plan_cnb.md CNBF-105. A codec this build does not implement is refused here,
+            // by name, exactly as every codec was before one landed -- so a build without the
+            // library behaves as it always did rather than failing somewhere further in.
+            entry.compression = static_cast<CnbCompression>(compression);
+            if (!IsCnbCompressionSupported(entry.compression))
             {
                 throw ContentLoadException(
                     entryWhere + " (" + ChunkIdToString(entry.type) +
-                    ") uses compression codec " + std::to_string(compression) +
-                    "; CNB v1 defines only codec 0 (none).");
+                    ") uses compression codec " + std::to_string(compression) + " (" +
+                    CnbCompressionToString(entry.compression) +
+                    "), which this build does not implement.");
             }
-            entry.compression = CnbCompression::None;
-            if (entry.uncompressedSize != entry.storedSize)
+            if (entry.compression == CnbCompression::None &&
+                entry.uncompressedSize != entry.storedSize)
             {
                 throw ContentLoadException(
                     entryWhere + " (" + ChunkIdToString(entry.type) +
                     ") is stored uncompressed but declares a different unpacked size (" +
                     std::to_string(entry.uncompressedSize) + " vs " +
                     std::to_string(entry.storedSize) + ").");
+            }
+            if (entry.compression != CnbCompression::None &&
+                entry.uncompressedSize > limits.maxChunkSize)
+            {
+                // Checked here as well as inside the codec, because this is the earliest point at
+                // which the number is known and nothing has been allocated for it yet.
+                throw ContentLoadException(
+                    entryWhere + " (" + ChunkIdToString(entry.type) + ") declares an unpacked size of " +
+                    std::to_string(entry.uncompressedSize) + " bytes, above the configured limit of " +
+                    std::to_string(limits.maxChunkSize) + ".");
             }
             if (!IsPowerOfTwo(entry.alignment) || entry.alignment > limits.maxChunkAlignment)
             {
@@ -362,6 +378,7 @@ namespace CNA::Content::Cnb
         // Decoded here rather than on first use, so a parsed document is immutable and every
         // accessor is a plain const read. It also means a malformed CMET or an unsafe XREF path is
         // a parse failure rather than a surprise from whichever call happened to touch it first.
+        doc.DecompressChunks();
         doc.DecodeMetadata();
         doc.DecodeExternalReferences();
 
@@ -427,8 +444,42 @@ namespace CNA::Content::Cnb
     std::span<const std::uint8_t> CnbDocument::ChunkData(std::size_t index) const
     {
         const CnbChunkEntry& entry = ChunkAt(index);
+        // CNBF-105: a compressed chunk was expanded once at parse time, so this returns the
+        // chunk's LOGICAL bytes either way and every caller is unaffected by the codec.
+        if (index < expanded_.size() && !expanded_[index].empty())
+        {
+            return std::span<const std::uint8_t>(expanded_[index]);
+        }
         return std::span<const std::uint8_t>(bytes_).subspan(
             static_cast<std::size_t>(entry.offset), static_cast<std::size_t>(entry.storedSize));
+    }
+
+    void CnbDocument::DecompressChunks()
+    {
+        bool any = false;
+        for (const CnbChunkEntry& entry : chunks_)
+        {
+            if (entry.compression != CnbCompression::None) { any = true; break; }
+        }
+        if (!any) { return; }
+
+        expanded_.resize(chunks_.size());
+        for (std::size_t i = 0; i < chunks_.size(); ++i)
+        {
+            const CnbChunkEntry& entry = chunks_[i];
+            if (entry.compression == CnbCompression::None) { continue; }
+            const std::span<const std::uint8_t> stored =
+                std::span<const std::uint8_t>(bytes_).subspan(
+                    static_cast<std::size_t>(entry.offset),
+                    static_cast<std::size_t>(entry.storedSize));
+            expanded_[i] = DecompressCnbChunk(
+                stored, entry.compression, entry.uncompressedSize, limits_.maxChunkSize,
+                "'" + origin_ + "' chunk " + ChunkIdToString(entry.type));
+            // A zero-length chunk that decompresses to zero length would be indistinguishable
+            // from "not compressed" in the empty-vector test ChunkData() uses. Such a chunk has
+            // no bytes either way, so serving it from `bytes_` is correct -- but say so, because
+            // the alternative is a reader that silently depends on an accident.
+        }
     }
 
     CnbByteReader CnbDocument::OpenChunk(std::size_t index) const

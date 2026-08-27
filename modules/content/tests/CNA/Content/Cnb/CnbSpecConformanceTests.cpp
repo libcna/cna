@@ -138,6 +138,10 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
     ExpectSpecContains(spec, "| 2 | `Texture3D` | **version 1**");
     ExpectSpecContains(spec, "| 3 | `TextureCube` | **version 1**");
     ExpectSpecContains(spec, "| 4 | `SpriteFont` | **version 1**");
+    // CNBF-105: the codec table is a wire contract -- codec 2 is Zstandard in every file ever
+    // written, whether or not a given build implements it.
+    ExpectSpecContains(spec, "| 2 | Zstandard | **implemented**");
+    ExpectSpecContains(spec, "checksum` covers the **stored** bytes");
     ExpectSpecContains(spec, "| 5 | `Model` | **version 1**");
     ExpectSpecContains(spec, "| 8 | `SoundEffect` | **version 1**");
     ExpectSpecContains(spec, "| 9 | `Song` | **version 1**");
@@ -560,7 +564,12 @@ TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)
     ExpectSpecContains(spec, "zero-length chunk is legal");
     ExpectSpecContains(spec, "ordinal within its\nown type");
     ExpectSpecContains(spec, "byte-identical output");
-    ExpectSpecContains(spec, "0 | none | the only codec CNB v1 defines");
+    // CNBF-105 changed this deliberately: codec 0 is now "always available; the default" rather
+    // than the only one defined, because Zstandard landed as an opt-in codec. The identifiers
+    // themselves did not move, and that is what must not change quietly.
+    ExpectSpecContains(spec, "| 0 | none | always available; the default |");
+    ExpectSpecContains(spec, "| 1 | LZ4 |");
+    ExpectSpecContains(spec, "| 3 | Deflate |");
     ExpectSpecContains(spec, "**accept** — minor bumps are additive-only");
     ExpectSpecContains(spec, "material variants");
     ExpectSpecContains(spec, "held\n**by value**");

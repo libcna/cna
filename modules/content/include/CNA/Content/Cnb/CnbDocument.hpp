@@ -333,7 +333,19 @@ namespace CNA::Content::Cnb
         void DecodeMetadata();
         void DecodeExternalReferences();
 
+        /// Expands every compressed chunk once, at parse time (plans/plan_cnb.md `CNBF-105`).
+        ///
+        /// Eagerly rather than on first access, for two reasons. A caller of ChunkData() gets a
+        /// span with the same meaning it always had -- the chunk's logical bytes -- so no existing
+        /// call site had to learn about compression. And a corrupt compressed stream is then a
+        /// parse failure like every other structural problem, instead of an exception thrown much
+        /// later from a const accessor.
+        void DecompressChunks();
+
         std::vector<std::uint8_t> bytes_;
+        /// Expanded bytes for compressed chunks, indexed as `chunks_`. An entry is empty for a
+        /// chunk stored uncompressed, which is the case ChunkData() serves straight from `bytes_`.
+        std::vector<std::vector<std::uint8_t>> expanded_;
         std::string origin_;
         std::uint16_t containerMajor_ = 0u;
         std::uint16_t containerMinor_ = 0u;

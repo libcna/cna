@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Cnb/CnbChunkCompression.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 
 namespace CNA::Content::Cnb
@@ -96,6 +97,31 @@ namespace CNA::Content::Cnb
          *         exceed what the format can express, or if the asset type is custom and no
          *         matching canonical type name was set (see SetMetadata()).
          */
+        /**
+         * @brief Compresses this document's schema chunks with @p codec
+         *        (plans/plan_cnb.md `CNBF-105`).
+         *
+         * **Off by default, and that is a measured default rather than a cautious one.**
+         * `docs/cnb-compression-measurements.md` records roughly half off a texture payload, three
+         * quarters off audio and six sevenths off vertex data — but decompression only *saves load
+         * time* on storage slower than 456–1469 MB/s, so on desktop NVMe it makes loading slower.
+         * Size always wins; time only sometimes does.
+         *
+         * A chunk is emitted compressed only when compression actually made it **smaller**;
+         * otherwise it is stored, because a chunk that grew would cost both bytes and
+         * decompression time. That decision is per chunk, so a document can hold a compressed
+         * 4 MB payload beside a stored 24-byte header.
+         *
+         * Container-level chunks (`CMET`, `XREF`) are always stored uncompressed: they are small
+         * enough that a codec is pure overhead, and an inspector should be able to read a file's
+         * identity without the codec being available.
+         *
+         * @param codec The codec to apply. `CnbCompression::None` restores the default.
+         * @param level Codec-specific effort; for Zstandard, 1-19. 3 is the measured sweet spot.
+         * @throws std::invalid_argument if this build does not implement @p codec.
+         */
+        void SetCompression(CnbCompression codec, int level = 3);
+
         [[nodiscard]] std::vector<std::uint8_t> Build() const;
 
         /**
@@ -115,6 +141,11 @@ namespace CNA::Content::Cnb
             std::uint32_t alignment = 4u;
             std::vector<std::uint8_t> data;
         };
+
+        /// Codec applied to every chunk this writer emits, and the effort level for it.
+        /// CnbCompression::None unless SetCompression() says otherwise.
+        CnbCompression compression_ = CnbCompression::None;
+        int compressionLevel_ = 3;
 
         [[nodiscard]] std::vector<PendingChunk> AssembleChunkList() const;
 

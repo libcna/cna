@@ -344,16 +344,49 @@ processes, let alone builds, so it is not a serialisation ABI.
 
 | value | codec | status |
 |---|---|---|
-| 0 | none | the only codec CNB v1 defines |
-| 1 | LZ4 | reserved, rejected |
-| 2 | Zstandard | reserved, rejected |
-| 3 | Deflate | reserved, rejected |
+| 0 | none | always available; the default |
+| 1 | LZ4 | reserved, no implementation |
+| 2 | Zstandard | **implemented**, opt-in, when CNA is built with libzstd |
+| 3 | Deflate | reserved, no implementation |
 
-CNB v1 stores every chunk uncompressed and requires `uncompressedSize == storedSize`. The field
-exists so a future codec is an additive change to one entry field rather than a container version
-bump. No compression library was added: most of what a game ships is already compressed (PNG, Ogg),
-and a compressed vertex buffer would trade the direct, aligned access §4 exists to preserve for a
-saving that has not been measured to matter.
+A reader refuses a codec it does not implement, **naming it**, so the answer is "build CNA with
+that codec" rather than "the file is broken". `IsCnbCompressionSupported()` is the public query;
+whether a given build has a codec is not something a consumer should learn from a macro.
+
+For a compressed chunk, `storedSize` is the compressed length, `uncompressedSize` is the expanded
+length, and `checksum` covers the **stored** bytes — so a corrupt file is caught before anything
+reaches a decompressor. `uncompressedSize` is checked against `maxChunkSize` (§12) **before any
+allocation**, which is what stops a few kilobytes of hostile input from asking for gigabytes, and
+the stream must expand to exactly `uncompressedSize`: a shorter expansion would leave the tail of
+the buffer as zeroes that later code reads as data.
+
+A writer compresses a chunk only when doing so actually made it **smaller**; one that grew is
+stored, because it would otherwise cost both bytes and decompression time. `CMET` and `XREF` are
+never compressed, so an inspector can read a file's identity without the codec.
+
+The field is per **chunk**, not per file. That was a guess when it was written and it has since
+been justified by measurement: a build can compress a 4 MB texture payload and leave a 200-byte
+header alone, and different platforms can make different choices about the same asset.
+
+**The original justification for having no codec was wrong, and is recorded here rather than
+quietly deleted.** It read: *"most of what a game ships is already compressed (PNG, Ogg)"*. True of
+the source files, false of what CNB stores — a PNG becomes raw `Rgba8` at compile time and an Ogg
+becomes raw `Pcm16`, so CNB is exactly where the data is *not* compressed. Measured on real
+content (`docs/cnb-compression-measurements.md`), zstd level 3 gives:
+
+| payload | ratio | break-even device read speed |
+|---|---|---|
+| `Rgba8` photograph | 51 % | 456 MB/s |
+| `Pcm16` audio | 27 % | 1469 MB/s |
+| `f32` vertex data | 15 % | 1073 MB/s |
+
+So the size saving is large and unconditional, while the *load-time* saving exists only below those
+read speeds — on desktop NVMe (2.5 GB/s measured) compression makes loading slower. Hence the
+design: the codec exists, defaults to off, and is chosen per chunk.
+
+**A compressed chunk cannot be read by a CNA older than the codec.** Every reader written before a
+codec landed rejects a non-zero `compression`, so enabling it raises the minimum runtime version
+for that file. That is a deliberate property of an opt-in feature, not an oversight.
 
 ---
 

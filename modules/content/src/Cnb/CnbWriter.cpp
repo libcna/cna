@@ -123,6 +123,18 @@ namespace CNA::Content::Cnb
         return all;
     }
 
+    void CnbWriter::SetCompression(CnbCompression codec, int level)
+    {
+        if (!IsCnbCompressionSupported(codec))
+        {
+            throw std::invalid_argument(
+                "CnbWriter::SetCompression(): this build does not implement codec " +
+                CnbCompressionToString(codec) + ".");
+        }
+        compression_ = codec;
+        compressionLevel_ = level;
+    }
+
     std::vector<std::uint8_t> CnbWriter::Build() const
     {
         // plans/plan_cnb.md CNBF-H002: a custom asset type is identified by a 31-bit hash, so the load
@@ -154,6 +166,35 @@ namespace CNA::Content::Cnb
         }
         const auto chunkCount = static_cast<std::uint32_t>(all.size());
 
+        // CNBF-105: compress before laying the file out, because a chunk's OFFSET depends on the
+        // size it ends up occupying. A chunk is emitted compressed only when that actually made it
+        // smaller; one that grew is stored, since it would otherwise cost both bytes and
+        // decompression time. Container-level chunks stay uncompressed so an inspector can read a
+        // file's identity without the codec.
+        std::vector<std::vector<std::uint8_t>> stored(all.size());
+        std::vector<CnbCompression> codecs(all.size(), CnbCompression::None);
+        for (std::size_t i = 0; i < all.size(); ++i)
+        {
+            const bool container = all[i].type == CnbContainerChunk::Metadata ||
+                                    all[i].type == CnbContainerChunk::ExternalReferences;
+            if (compression_ == CnbCompression::None || container || all[i].data.empty())
+            {
+                stored[i] = all[i].data;
+                continue;
+            }
+            std::vector<std::uint8_t> packed =
+                CompressCnbChunk(all[i].data, compression_, compressionLevel_);
+            if (packed.size() < all[i].data.size())
+            {
+                stored[i] = std::move(packed);
+                codecs[i] = compression_;
+            }
+            else
+            {
+                stored[i] = all[i].data;
+            }
+        }
+
         const std::uint64_t tocOffset = Format::DefaultTocOffset;
         const std::uint64_t tocSize =
             CheckedMultiply(chunkCount, Format::TocEntrySize, "CnbWriter table of contents");
@@ -164,7 +205,7 @@ namespace CNA::Content::Cnb
         {
             cursor = AlignUp(cursor, all[i].alignment);
             offsets[i] = cursor;
-            cursor = CheckedAdd(cursor, all[i].data.size(),
+            cursor = CheckedAdd(cursor, stored[i].size(),
                                 "CnbWriter chunk " + std::to_string(i));
         }
         const std::uint64_t fileSize = cursor;
@@ -194,10 +235,12 @@ namespace CNA::Content::Cnb
             toc.WriteU32(chunk.type.value);
             toc.WriteU32(chunk.flags);
             toc.WriteU64(offsets[i]);
+            toc.WriteU64(stored[i].size());
             toc.WriteU64(chunk.data.size());
-            toc.WriteU64(chunk.data.size());
-            toc.WriteU32(Crc32c(chunk.data));
-            toc.WriteU32(static_cast<std::uint32_t>(CnbCompression::None));
+            // CNBF-105: the checksum covers the STORED bytes, so a corrupt file is caught before
+            // anything is handed to a decompressor rather than after.
+            toc.WriteU32(Crc32c(stored[i]));
+            toc.WriteU32(static_cast<std::uint32_t>(codecs[i]));
             toc.WriteU32(chunk.alignment);
             toc.WriteU32(0u); // reserved
         }
@@ -208,7 +251,7 @@ namespace CNA::Content::Cnb
                   out.begin() + static_cast<std::ptrdiff_t>(tocOffset));
         for (std::size_t i = 0; i < all.size(); ++i)
         {
-            std::copy(all[i].data.begin(), all[i].data.end(),
+            std::copy(stored[i].begin(), stored[i].end(),
                       out.begin() + static_cast<std::ptrdiff_t>(offsets[i]));
         }
 
