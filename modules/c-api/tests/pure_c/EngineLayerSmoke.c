@@ -512,6 +512,26 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-088A. The settings are a value describable in either build, but every route that
+       answers with them runs each field through a canonical setter, so all four refuse here. */
+    {
+        CNA_RenderPipelineSettingsEXT pipeline_settings;
+        CNA_StringView empty_text;
+        int32_t applied = -1;
+        empty_text.data = 0;
+        empty_text.byte_length = UINT64_C(0);
+        if (cna_render_pipeline_settings_ext_init(&pipeline_settings) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_pipeline_settings_ext_normalize(&pipeline_settings) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_pipeline_settings_ext_apply_render_quality_preset(&pipeline_settings) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_pipeline_settings_ext_apply_from_string(
+                &pipeline_settings, empty_text, &applied) != CNA_RESULT_NOT_SUPPORTED ||
+            applied != INT32_C(-1)) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -3596,6 +3616,300 @@ static int validate_transparency_and_bridge(const CNA_Handle graphics_device)
     return ok;
 }
 
+
+/* CBIND-088A. RenderPipelineSettings throws nowhere and corrects thirty-one of its forty-seven
+   fields, in two shapes and six different bounds. A structure written by hand holds whatever the
+   caller put in it, so `_normalize` is what makes the corrections observable -- and the point of
+   this stage is that each bound is asserted SEPARATELY. A single shared zero-to-one expectation
+   would pass while four fields clamped to the wrong limit, and the sixteen fields that correct
+   nothing must survive an out-of-range write, which is what fails if a correction is ever added
+   where the canonical code has none. */
+static int validate_render_pipeline_settings(void)
+{
+    CNA_RenderPipelineSettingsEXT settings;
+    CNA_RenderPipelineSettingsEXT defaults;
+    CNA_StringView text;
+    int32_t applied = -1;
+    int ok = 1;
+
+    if (cna_render_pipeline_settings_ext_init(&settings) != CNA_RESULT_SUCCESS ||
+        cna_render_pipeline_settings_ext_init(&defaults) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The two named minima are the canonical constants, tied by a static_assert; read back here
+       so the C spelling is exercised rather than only compiled. */
+    ok = CNA_RENDER_PIPELINE_MINIMUM_GAMMA_EXT > 0.0F &&
+        CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT > 0.0F;
+    /* Defaults are the canonical constructor's, and normalizing them changes nothing -- a default
+       that needed correcting would mean the constructor and the setters disagree. */
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS;
+    ok = ok && settings.gamma == defaults.gamma && settings.exposure == defaults.exposure &&
+        settings.ssr_edge_fade == defaults.ssr_edge_fade;
+
+
+    /* The ten two-sided clamps, each to ITS OWN upper bound. */
+    settings.ssr_edge_fade = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_edge_fade == 0.5F;
+    settings.ssr_edge_fade = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_edge_fade == 0.0F;
+    settings.light_shaft_decay = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.light_shaft_decay == 1.0F;
+    settings.light_shaft_decay = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.light_shaft_decay == 0.0F;
+    settings.motion_blur_strength = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.motion_blur_strength == 1.0F;
+    settings.motion_blur_strength = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.motion_blur_strength == 0.0F;
+    settings.motion_blur_max_distance = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.motion_blur_max_distance == 0.25F;
+    settings.motion_blur_max_distance = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.motion_blur_max_distance == 0.0F;
+    settings.chromatic_aberration_strength = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.chromatic_aberration_strength == 0.1F;
+    settings.chromatic_aberration_strength = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.chromatic_aberration_strength == 0.0F;
+    settings.film_grain_intensity = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.film_grain_intensity == 1.0F;
+    settings.film_grain_intensity = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.film_grain_intensity == 0.0F;
+    settings.lens_flare_dispersal = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.lens_flare_dispersal == 1.0F;
+    settings.lens_flare_dispersal = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.lens_flare_dispersal == 0.0F;
+    settings.color_grade_strength = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.color_grade_strength == 1.0F;
+    settings.color_grade_strength = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.color_grade_strength == 0.0F;
+    settings.dof_max_radius = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.dof_max_radius == 0.25F;
+    settings.dof_max_radius = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.dof_max_radius == 0.0F;
+    settings.ssr_roughness_blur = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_roughness_blur == 0.25F;
+    settings.ssr_roughness_blur = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_roughness_blur == 0.0F;
+
+    /* The twenty-one floors: a negative value is corrected, a large one is NOT -- these have no
+       upper bound, and asserting that is what separates a floor from a clamp. */
+    settings.exposure = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.exposure == 0.0F;
+    settings.exposure = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.exposure == 900.0F;
+    settings.gamma = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.gamma == CNA_RENDER_PIPELINE_MINIMUM_GAMMA_EXT;
+    settings.gamma = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.gamma == 900.0F;
+    settings.bloom_intensity = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.bloom_intensity == 0.0F;
+    settings.bloom_intensity = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.bloom_intensity == 900.0F;
+    settings.bloom_threshold = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.bloom_threshold == 0.0F;
+    settings.bloom_threshold = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.bloom_threshold == 900.0F;
+    settings.ssao_radius = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssao_radius == 0.0F;
+    settings.ssao_radius = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssao_radius == 900.0F;
+    settings.ssao_intensity = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssao_intensity == 0.0F;
+    settings.ssao_intensity = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssao_intensity == 900.0F;
+    settings.ssr_max_distance = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_max_distance == 0.0F;
+    settings.ssr_max_distance = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_max_distance == 900.0F;
+    settings.ssr_thickness = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_thickness == 0.0F;
+    settings.ssr_thickness = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_thickness == 900.0F;
+    settings.ssr_depth_bias = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_depth_bias == 0.0F;
+    settings.ssr_depth_bias = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_depth_bias == 900.0F;
+    settings.volumetric_fog_density = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.volumetric_fog_density == 0.0F;
+    settings.volumetric_fog_density = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.volumetric_fog_density == 900.0F;
+    settings.light_shaft_threshold = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.light_shaft_threshold == 0.0F;
+    settings.light_shaft_threshold = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.light_shaft_threshold == 900.0F;
+    settings.light_shaft_intensity = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.light_shaft_intensity == 0.0F;
+    settings.light_shaft_intensity = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.light_shaft_intensity == 900.0F;
+    settings.height_fog_density = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.height_fog_density == 0.0F;
+    settings.height_fog_density = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.height_fog_density == 900.0F;
+    settings.height_fog_falloff = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.height_fog_falloff == 0.0F;
+    settings.height_fog_falloff = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.height_fog_falloff == 900.0F;
+    settings.lens_flare_threshold = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.lens_flare_threshold == 0.0F;
+    settings.lens_flare_threshold = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.lens_flare_threshold == 900.0F;
+    settings.lens_flare_intensity = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.lens_flare_intensity == 0.0F;
+    settings.lens_flare_intensity = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.lens_flare_intensity == 900.0F;
+    settings.dof_focus_distance = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.dof_focus_distance == 0.0F;
+    settings.dof_focus_distance = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.dof_focus_distance == 900.0F;
+    settings.dof_focal_length = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.dof_focal_length == 0.0F;
+    settings.dof_focal_length = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.dof_focal_length == 900.0F;
+    settings.doff_number = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.doff_number == 0.0F;
+    settings.doff_number = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.doff_number == 900.0F;
+    settings.ssr_intensity = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_intensity == 0.0F;
+    settings.ssr_intensity = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.ssr_intensity == 900.0F;
+    settings.fxaa_edge_threshold_ext = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.fxaa_edge_threshold_ext == CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT;
+    settings.fxaa_edge_threshold_ext = 900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.fxaa_edge_threshold_ext == 900.0F;
+
+    /* The float fields that correct nothing: an extreme value survives in both directions,
+       because the passes clamp what they apply and a settings bag that clamped to one pass's
+       limits would silently change the number a caller reads back. */
+    settings.height_fog_base_height = -900.0F;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) == CNA_RESULT_SUCCESS &&
+        settings.height_fog_base_height == -900.0F;
+
+    /* Undefined identities are refused rather than cast through into the engine. */
+    ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+    settings.tonemapping_mode = UINT32_C(99);
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+    settings.render_quality = UINT32_C(99);
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+    /* A bool carrying anything but zero or one is refused, the CBIND-067 contract. */
+    settings.hdr_enabled = UINT8_C(2);
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+    /* A malformed structure is refused rather than read past its own declared size. */
+    settings.struct_size = UINT32_C(8);
+    ok = ok && cna_render_pipeline_settings_ext_normalize(&settings) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_settings_ext_normalize(0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The quality preset writes the fields a quality dial has been decided for. Low and Ultra
+       must not produce the same bloom iteration count, or the preset is doing nothing. */
+    {
+        int32_t low_iterations = -1;
+        int32_t ultra_iterations = -2;
+        settings.render_quality = CNA_RENDER_QUALITY_LOW;
+        ok = ok && cna_render_pipeline_settings_ext_apply_render_quality_preset(&settings) ==
+            CNA_RESULT_SUCCESS;
+        low_iterations = settings.bloom_iterations;
+        settings.render_quality = CNA_RENDER_QUALITY_ULTRA;
+        ok = ok && cna_render_pipeline_settings_ext_apply_render_quality_preset(&settings) ==
+            CNA_RESULT_SUCCESS;
+        ultra_iterations = settings.bloom_iterations;
+        ok = ok && low_iterations != ultra_iterations;
+        ok = ok && cna_render_pipeline_settings_ext_apply_render_quality_preset(0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    /* Serialized text: unrecognised fields are skipped rather than refused, which is what makes
+       the applied count meaningful -- a caller compares it against what it meant to set. */
+    ok = ok && cna_render_pipeline_settings_ext_init(&settings) == CNA_RESULT_SUCCESS;
+    /* Fields are separated by ';', not by spaces -- read from the canonical parser rather than
+       assumed, after a first draft used a space and got nothing applied. */
+    text.data = "exposure=2.5;nosuchfield=1";
+    text.byte_length = (uint64_t)26;
+    ok = ok && cna_render_pipeline_settings_ext_apply_from_string(&settings, text, &applied) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && applied == INT32_C(1) && settings.exposure == 2.5F;
+    /* An embedded NUL would silently truncate what a caller believes it applied. */
+    text.data = "exposure=2.5\0hidden=1";
+    text.byte_length = (uint64_t)21;
+    ok = ok && cna_render_pipeline_settings_ext_apply_from_string(&settings, text, &applied) ==
+        CNA_RESULT_ENCODING;
+    text.data = 0;
+    text.byte_length = (uint64_t)0;
+    ok = ok && cna_render_pipeline_settings_ext_apply_from_string(&settings, text, &applied) ==
+        CNA_RESULT_SUCCESS && applied == INT32_C(0);
+    ok = ok && cna_render_pipeline_settings_ext_apply_from_string(0, text, &applied) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -3685,6 +3999,10 @@ static CNA_Result on_load(
         }
         if (!validate_transparency_and_bridge(graphics_device)) {
             state->failed_stage = 23;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_render_pipeline_settings()) {
+            state->failed_stage = 24;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

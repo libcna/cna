@@ -3377,6 +3377,10 @@
   "cna_rectangle_offset_xy",
   "cna_rectangle_set_location",
   "cna_rectangle_union",
+  "cna_render_pipeline_settings_ext_apply_from_string",
+  "cna_render_pipeline_settings_ext_apply_render_quality_preset",
+  "cna_render_pipeline_settings_ext_init",
+  "cna_render_pipeline_settings_ext_normalize",
   "cna_render_pipeline_settings_init",
   "cna_render_target2d_create",
   "cna_render_target_cube_create",
@@ -5231,6 +5235,8 @@
   "CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION": 0,
   "CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS": 9,
   "CNA_RENDERER_LIMIT_MAX_VERTEX_STREAMS": 1,
+  "CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT": 0,
+  "CNA_RENDER_PIPELINE_MINIMUM_GAMMA_EXT": 0,
   "CNA_RENDER_QUALITY_HIGH": 2,
   "CNA_RENDER_QUALITY_LOW": 0,
   "CNA_RENDER_QUALITY_MEDIUM": 1,
@@ -11044,6 +11050,212 @@
     ]
    },
    "size": 28
+  },
+  "CNA_RenderPipelineSettingsEXT": {
+   "align": 4,
+   "fields": {
+    "bloom_enabled": [
+     24,
+     1
+    ],
+    "bloom_intensity": [
+     28,
+     4
+    ],
+    "bloom_iterations": [
+     36,
+     4
+    ],
+    "bloom_threshold": [
+     32,
+     4
+    ],
+    "chromatic_aberration_strength": [
+     120,
+     4
+    ],
+    "color_grade_enabled": [
+     140,
+     1
+    ],
+    "color_grade_strength": [
+     144,
+     4
+    ],
+    "dof_enabled": [
+     148,
+     1
+    ],
+    "dof_focal_length": [
+     156,
+     4
+    ],
+    "dof_focus_distance": [
+     152,
+     4
+    ],
+    "dof_max_radius": [
+     164,
+     4
+    ],
+    "doff_number": [
+     160,
+     4
+    ],
+    "exposure": [
+     12,
+     4
+    ],
+    "film_grain_intensity": [
+     124,
+     4
+    ],
+    "fxaa_edge_threshold_ext": [
+     180,
+     4
+    ],
+    "fxaa_enabled": [
+     176,
+     1
+    ],
+    "gamma": [
+     16,
+     4
+    ],
+    "hdr_enabled": [
+     8,
+     1
+    ],
+    "height_fog_base_height": [
+     108,
+     4
+    ],
+    "height_fog_density": [
+     100,
+     4
+    ],
+    "height_fog_falloff": [
+     104,
+     4
+    ],
+    "lens_flare_dispersal": [
+     136,
+     4
+    ],
+    "lens_flare_intensity": [
+     132,
+     4
+    ],
+    "lens_flare_threshold": [
+     128,
+     4
+    ],
+    "light_shaft_decay": [
+     96,
+     4
+    ],
+    "light_shaft_intensity": [
+     92,
+     4
+    ],
+    "light_shaft_threshold": [
+     88,
+     4
+    ],
+    "motion_blur_max_distance": [
+     116,
+     4
+    ],
+    "motion_blur_strength": [
+     112,
+     4
+    ],
+    "render_quality": [
+     184,
+     4
+    ],
+    "reserved": [
+     193,
+     4
+    ],
+    "shadow_quality": [
+     188,
+     4
+    ],
+    "shadows_enabled": [
+     192,
+     1
+    ],
+    "ssao_enabled": [
+     40,
+     1
+    ],
+    "ssao_intensity": [
+     52,
+     4
+    ],
+    "ssao_radius": [
+     48,
+     4
+    ],
+    "ssao_sample_count": [
+     56,
+     4
+    ],
+    "ssr_depth_bias": [
+     76,
+     4
+    ],
+    "ssr_edge_fade": [
+     80,
+     4
+    ],
+    "ssr_enabled": [
+     60,
+     1
+    ],
+    "ssr_intensity": [
+     172,
+     4
+    ],
+    "ssr_max_distance": [
+     64,
+     4
+    ],
+    "ssr_roughness_blur": [
+     168,
+     4
+    ],
+    "ssr_step_count": [
+     68,
+     4
+    ],
+    "ssr_thickness": [
+     72,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "tonemapping_mode": [
+     20,
+     4
+    ],
+    "transparency_mode": [
+     44,
+     4
+    ],
+    "volumetric_fog_density": [
+     84,
+     4
+    ]
+   },
+   "size": 200
   },
   "CNA_RenderTarget2DCreateInfo": {
    "align": 4,

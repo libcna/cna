@@ -5744,6 +5744,192 @@ CNA_C_API CNA_Result cna_weighted_blended_transparency_copy_accumulation_glsl(
 CNA_C_API CNA_Result cna_weighted_blended_transparency_weight(
     float view_depth, float alpha, float far_plane, float* out_weight);
 
+/* ---------------------------------------------------------------------------------------------
+ * The render pipeline settings, in full
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief The smallest gamma the settings will store; below it the frame comes back as infinities. */
+#define CNA_RENDER_PIPELINE_MINIMUM_GAMMA_EXT 0.01F
+
+/** @brief The smallest local contrast FXAA will treat as an edge. */
+#define CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT 0.001F
+
+/**
+ * @brief The canonical `CNA::Graphics::RenderPipelineSettings` in full, as an extensible value.
+ *
+ * CNA extension. The frozen ten-field @ref CNA_RenderPipelineSettings cannot grow within an ABI
+ * major, so the complete shape arrives under a new name, exactly as @ref CNA_PbrMaterialEXT did.
+ *
+ * **Writing a field here is not the same as calling the canonical setter.** Thirty-one of the
+ * forty-seven correct their input -- ten clamp to a two-sided range and twenty-one floor at a
+ * minimum -- and a structure written by hand holds whatever the caller put in it. Every route that
+ * hands these settings to the engine runs each field through its canonical setter first, and
+ * @ref cna_render_pipeline_settings_ext_normalize does the same in place, so a caller can ask what
+ * the engine will actually store rather than assume the structure is what it gets.
+ *
+ * Initialize with @ref cna_render_pipeline_settings_ext_init; fields added in a later minor
+ * version are appended at the end.
+ */
+typedef struct CNA_RenderPipelineSettingsEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief HDREnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool hdr_enabled;
+    /** @brief Exposure. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float exposure;
+    /** @brief Gamma. **Floored** at `CNA_RENDER_PIPELINE_MINIMUM_GAMMA_EXT`; gamma is applied as a reciprocal power, so zero is a division by zero. */
+    float gamma;
+    /** @brief TonemappingMode. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_TonemappingMode tonemapping_mode;
+    /** @brief BloomEnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool bloom_enabled;
+    /** @brief BloomIntensity. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float bloom_intensity;
+    /** @brief BloomThreshold. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float bloom_threshold;
+    /** @brief BloomIterations. Stored as given -- the canonical setter corrects nothing here. */
+    int32_t bloom_iterations;
+    /** @brief SSAOEnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool ssao_enabled;
+    /** @brief TransparencyMode. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_TransparencyMode transparency_mode;
+    /** @brief SSAORadius. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float ssao_radius;
+    /** @brief SSAOIntensity. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float ssao_intensity;
+    /** @brief SSAOSampleCount. Stored as given -- the canonical setter corrects nothing here. */
+    int32_t ssao_sample_count;
+    /** @brief SSREnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool ssr_enabled;
+    /** @brief SSRMaxDistance. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float ssr_max_distance;
+    /** @brief SSRStepCount. Stored as given -- the canonical setter corrects nothing here. */
+    int32_t ssr_step_count;
+    /** @brief SSRThickness. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float ssr_thickness;
+    /** @brief SSRDepthBias. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float ssr_depth_bias;
+    /** @brief SSREdgeFade. **Clamped** to 0.0 through 0.5 when it reaches the engine. */
+    float ssr_edge_fade;
+    /** @brief VolumetricFogDensity. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float volumetric_fog_density;
+    /** @brief LightShaftThreshold. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float light_shaft_threshold;
+    /** @brief LightShaftIntensity. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float light_shaft_intensity;
+    /** @brief LightShaftDecay. **Clamped** to 0.0 through 1.0 when it reaches the engine. */
+    float light_shaft_decay;
+    /** @brief HeightFogDensity. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float height_fog_density;
+    /** @brief HeightFogFalloff. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float height_fog_falloff;
+    /** @brief HeightFogBaseHeight. Stored as given -- the canonical setter corrects nothing here. */
+    float height_fog_base_height;
+    /** @brief MotionBlurStrength. **Clamped** to 0.0 through 1.0 when it reaches the engine. */
+    float motion_blur_strength;
+    /** @brief MotionBlurMaxDistance. **Clamped** to 0.0 through 0.25 when it reaches the engine. */
+    float motion_blur_max_distance;
+    /** @brief ChromaticAberrationStrength. **Clamped** to 0.0 through 0.1 when it reaches the engine. */
+    float chromatic_aberration_strength;
+    /** @brief FilmGrainIntensity. **Clamped** to 0.0 through 1.0 when it reaches the engine. */
+    float film_grain_intensity;
+    /** @brief LensFlareThreshold. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float lens_flare_threshold;
+    /** @brief LensFlareIntensity. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float lens_flare_intensity;
+    /** @brief LensFlareDispersal. **Clamped** to 0.0 through 1.0 when it reaches the engine. */
+    float lens_flare_dispersal;
+    /** @brief ColorGradeEnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool color_grade_enabled;
+    /** @brief ColorGradeStrength. **Clamped** to 0.0 through 1.0 when it reaches the engine. */
+    float color_grade_strength;
+    /** @brief DOFEnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool dof_enabled;
+    /** @brief DOFFocusDistance. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float dof_focus_distance;
+    /** @brief DOFFocalLength. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float dof_focal_length;
+    /** @brief DOFFNumber. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float doff_number;
+    /** @brief DOFMaxRadius. **Clamped** to 0.0 through 0.25 when it reaches the engine. */
+    float dof_max_radius;
+    /** @brief SSRRoughnessBlur. **Clamped** to 0.0 through 0.25 when it reaches the engine. */
+    float ssr_roughness_blur;
+    /** @brief SSRIntensity. **Floored** at 0.0 when it reaches the engine; a negative value here is a sign error rather than a look. */
+    float ssr_intensity;
+    /** @brief FXAAEnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool fxaa_enabled;
+    /** @brief FXAAEdgeThresholdEXT. **Floored** at `CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT`. */
+    float fxaa_edge_threshold_ext;
+    /** @brief RenderQuality. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_RenderQuality render_quality;
+    /** @brief ShadowQuality. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_ShadowQuality shadow_quality;
+    /** @brief ShadowsEnabled. Stored as given -- the canonical setter corrects nothing here. */
+    CNA_Bool shadows_enabled;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[4];
+} CNA_RenderPipelineSettingsEXT;
+
+/**
+ * @brief Fills the settings with the canonical constructor's defaults.
+ *
+ * @param out_settings Receives the defaults along with `struct_size` and `struct_version`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_settings_ext_init(
+    CNA_RenderPipelineSettingsEXT* out_settings);
+
+/**
+ * @brief Rewrites the settings as the engine would store them.
+ *
+ * Runs every field through its canonical setter and reads it back, so the thirty-one corrections
+ * become visible without needing a pipeline. A caller that wants to know what a value will
+ * actually become calls this; one that just hands the settings to a pipeline gets the same
+ * corrections applied on the way in either way.
+ *
+ * @param settings The settings to normalize in place.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure or
+ * an undefined identity, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_settings_ext_normalize(
+    CNA_RenderPipelineSettingsEXT* settings);
+
+/**
+ * @brief Applies the quality preset named by the settings' own render quality.
+ *
+ * Derives the fields a quality dial has been decided for -- today bloom's pyramid level count and
+ * the FXAA edge threshold. Passes whose quality mapping has not been settled are deliberately left
+ * alone rather than given a guessed one.
+ *
+ * @param settings The settings to update in place.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure or
+ * an undefined identity, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_settings_ext_apply_render_quality_preset(
+    CNA_RenderPipelineSettingsEXT* settings);
+
+/**
+ * @brief Applies serialized settings text, reporting how many fields were recognised.
+ *
+ * Unrecognised fields are skipped rather than refused, which is what makes the count meaningful:
+ * a caller compares it against what it expected to set.
+ *
+ * @param settings The settings to update in place.
+ * @param text The serialized settings as UTF-8 bytes; need not be null-terminated.
+ * @param out_applied Receives how many fields were recognised and applied.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_ENCODING` when the text is not valid UTF-8, `CNA_RESULT_NOT_SUPPORTED` without the
+ * engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_settings_ext_apply_from_string(
+    CNA_RenderPipelineSettingsEXT* settings,
+    CNA_StringView text,
+    int32_t* out_applied);
+
 #ifdef __cplusplus
 }
 #endif

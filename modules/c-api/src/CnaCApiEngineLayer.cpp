@@ -27,6 +27,7 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
 #include "CNA/Graphics/TransparencyMode.hpp"
 #include "CNA/Graphics/TransparentDrawList.hpp"
@@ -3411,6 +3412,30 @@ CNA_Result cna_weighted_blended_transparency_copy_accumulation_glsl(char* p0, ui
 CNA_Result cna_weighted_blended_transparency_weight(float p0, float p1, float p2, float* p3)
 {
     (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_settings_ext_init(CNA_RenderPipelineSettingsEXT* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_settings_ext_normalize(CNA_RenderPipelineSettingsEXT* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_settings_ext_apply_render_quality_preset(CNA_RenderPipelineSettingsEXT* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_settings_ext_apply_from_string(CNA_RenderPipelineSettingsEXT* p0, CNA_StringView p1, int32_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
     return ExtensionUnavailable();
 }
 
@@ -11819,6 +11844,267 @@ CNA_Result cna_weighted_blended_transparency_weight(
         // overflows poisons the whole accumulation buffer rather than one fragment.
         return StoreValue(
             outWeight, Ext::WeightedBlendedTransparency::weight(viewDepth, alpha, farPlane));
+    });
+}
+
+namespace {
+
+// CBIND-088A. Every field goes through its canonical setter, which is what preserves the
+// thirty-one corrections a plain structure copy would lose.
+[[nodiscard]] CNA_Result ToNativeRenderPipelineSettings(
+    const CNA_RenderPipelineSettingsEXT& value, Ext::RenderPipelineSettings* const out)
+{
+    if (value.struct_size != sizeof(CNA_RenderPipelineSettingsEXT) ||
+        value.struct_version == UINT32_C(0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The render-pipeline settings structure is malformed.");
+    }
+    if (value.hdr_enabled != CNA_TRUE && value.hdr_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "hdr_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setHDREnabled(value.hdr_enabled == CNA_TRUE);
+    out->setExposure(value.exposure);
+    out->setGamma(value.gamma);
+    if (value.tonemapping_mode > UINT32_C(3)) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "tonemapping_mode is not a defined identity.");
+    }
+    out->setTonemappingMode(static_cast<Ext::TonemappingMode>(value.tonemapping_mode));
+    if (value.bloom_enabled != CNA_TRUE && value.bloom_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "bloom_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setBloomEnabled(value.bloom_enabled == CNA_TRUE);
+    out->setBloomIntensity(value.bloom_intensity);
+    out->setBloomThreshold(value.bloom_threshold);
+    out->setBloomIterations(static_cast<int>(value.bloom_iterations));
+    if (value.ssao_enabled != CNA_TRUE && value.ssao_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "ssao_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setSSAOEnabled(value.ssao_enabled == CNA_TRUE);
+    if (value.transparency_mode > UINT32_C(2)) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "transparency_mode is not a defined identity.");
+    }
+    out->setTransparencyMode(static_cast<Ext::TransparencyMode>(value.transparency_mode));
+    out->setSSAORadius(value.ssao_radius);
+    out->setSSAOIntensity(value.ssao_intensity);
+    out->setSSAOSampleCount(static_cast<int>(value.ssao_sample_count));
+    if (value.ssr_enabled != CNA_TRUE && value.ssr_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "ssr_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setSSREnabled(value.ssr_enabled == CNA_TRUE);
+    out->setSSRMaxDistance(value.ssr_max_distance);
+    out->setSSRStepCount(static_cast<int>(value.ssr_step_count));
+    out->setSSRThickness(value.ssr_thickness);
+    out->setSSRDepthBias(value.ssr_depth_bias);
+    out->setSSREdgeFade(value.ssr_edge_fade);
+    out->setVolumetricFogDensity(value.volumetric_fog_density);
+    out->setLightShaftThreshold(value.light_shaft_threshold);
+    out->setLightShaftIntensity(value.light_shaft_intensity);
+    out->setLightShaftDecay(value.light_shaft_decay);
+    out->setHeightFogDensity(value.height_fog_density);
+    out->setHeightFogFalloff(value.height_fog_falloff);
+    out->setHeightFogBaseHeight(value.height_fog_base_height);
+    out->setMotionBlurStrength(value.motion_blur_strength);
+    out->setMotionBlurMaxDistance(value.motion_blur_max_distance);
+    out->setChromaticAberrationStrength(value.chromatic_aberration_strength);
+    out->setFilmGrainIntensity(value.film_grain_intensity);
+    out->setLensFlareThreshold(value.lens_flare_threshold);
+    out->setLensFlareIntensity(value.lens_flare_intensity);
+    out->setLensFlareDispersal(value.lens_flare_dispersal);
+    if (value.color_grade_enabled != CNA_TRUE && value.color_grade_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "color_grade_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setColorGradeEnabled(value.color_grade_enabled == CNA_TRUE);
+    out->setColorGradeStrength(value.color_grade_strength);
+    if (value.dof_enabled != CNA_TRUE && value.dof_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "dof_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setDOFEnabled(value.dof_enabled == CNA_TRUE);
+    out->setDOFFocusDistance(value.dof_focus_distance);
+    out->setDOFFocalLength(value.dof_focal_length);
+    out->setDOFFNumber(value.doff_number);
+    out->setDOFMaxRadius(value.dof_max_radius);
+    out->setSSRRoughnessBlur(value.ssr_roughness_blur);
+    out->setSSRIntensity(value.ssr_intensity);
+    if (value.fxaa_enabled != CNA_TRUE && value.fxaa_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "fxaa_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setFXAAEnabled(value.fxaa_enabled == CNA_TRUE);
+    out->setFXAAEdgeThresholdEXT(value.fxaa_edge_threshold_ext);
+    if (value.render_quality > UINT32_C(3)) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "render_quality is not a defined identity.");
+    }
+    out->setRenderQuality(static_cast<Ext::RenderQuality>(value.render_quality));
+    if (value.shadow_quality > UINT32_C(3)) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "shadow_quality is not a defined identity.");
+    }
+    out->setShadowQuality(static_cast<Ext::ShadowQuality>(value.shadow_quality));
+    if (value.shadows_enabled != CNA_TRUE && value.shadows_enabled != CNA_FALSE) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "shadows_enabled must be CNA_TRUE or CNA_FALSE.");
+    }
+    out->setShadowsEnabled(value.shadows_enabled == CNA_TRUE);
+    return CNA_RESULT_SUCCESS;
+}
+
+void FromNativeRenderPipelineSettings(
+    const Ext::RenderPipelineSettings& value, CNA_RenderPipelineSettingsEXT* const out)
+{
+    out->hdr_enabled = static_cast<CNA_Bool>(value.isHDREnabled() ? CNA_TRUE : CNA_FALSE);
+    out->exposure = value.getExposure();
+    out->gamma = value.getGamma();
+    out->tonemapping_mode = static_cast<CNA_TonemappingMode>(value.getTonemappingMode());
+    out->bloom_enabled = static_cast<CNA_Bool>(value.isBloomEnabled() ? CNA_TRUE : CNA_FALSE);
+    out->bloom_intensity = value.getBloomIntensity();
+    out->bloom_threshold = value.getBloomThreshold();
+    out->bloom_iterations = static_cast<int32_t>(value.getBloomIterations());
+    out->ssao_enabled = static_cast<CNA_Bool>(value.isSSAOEnabled() ? CNA_TRUE : CNA_FALSE);
+    out->transparency_mode = static_cast<CNA_TransparencyMode>(value.getTransparencyMode());
+    out->ssao_radius = value.getSSAORadius();
+    out->ssao_intensity = value.getSSAOIntensity();
+    out->ssao_sample_count = static_cast<int32_t>(value.getSSAOSampleCount());
+    out->ssr_enabled = static_cast<CNA_Bool>(value.isSSREnabled() ? CNA_TRUE : CNA_FALSE);
+    out->ssr_max_distance = value.getSSRMaxDistance();
+    out->ssr_step_count = static_cast<int32_t>(value.getSSRStepCount());
+    out->ssr_thickness = value.getSSRThickness();
+    out->ssr_depth_bias = value.getSSRDepthBias();
+    out->ssr_edge_fade = value.getSSREdgeFade();
+    out->volumetric_fog_density = value.getVolumetricFogDensity();
+    out->light_shaft_threshold = value.getLightShaftThreshold();
+    out->light_shaft_intensity = value.getLightShaftIntensity();
+    out->light_shaft_decay = value.getLightShaftDecay();
+    out->height_fog_density = value.getHeightFogDensity();
+    out->height_fog_falloff = value.getHeightFogFalloff();
+    out->height_fog_base_height = value.getHeightFogBaseHeight();
+    out->motion_blur_strength = value.getMotionBlurStrength();
+    out->motion_blur_max_distance = value.getMotionBlurMaxDistance();
+    out->chromatic_aberration_strength = value.getChromaticAberrationStrength();
+    out->film_grain_intensity = value.getFilmGrainIntensity();
+    out->lens_flare_threshold = value.getLensFlareThreshold();
+    out->lens_flare_intensity = value.getLensFlareIntensity();
+    out->lens_flare_dispersal = value.getLensFlareDispersal();
+    out->color_grade_enabled = static_cast<CNA_Bool>(value.isColorGradeEnabled() ? CNA_TRUE : CNA_FALSE);
+    out->color_grade_strength = value.getColorGradeStrength();
+    out->dof_enabled = static_cast<CNA_Bool>(value.isDOFEnabled() ? CNA_TRUE : CNA_FALSE);
+    out->dof_focus_distance = value.getDOFFocusDistance();
+    out->dof_focal_length = value.getDOFFocalLength();
+    out->doff_number = value.getDOFFNumber();
+    out->dof_max_radius = value.getDOFMaxRadius();
+    out->ssr_roughness_blur = value.getSSRRoughnessBlur();
+    out->ssr_intensity = value.getSSRIntensity();
+    out->fxaa_enabled = static_cast<CNA_Bool>(value.isFXAAEnabled() ? CNA_TRUE : CNA_FALSE);
+    out->fxaa_edge_threshold_ext = value.getFXAAEdgeThresholdEXT();
+    out->render_quality = static_cast<CNA_RenderQuality>(value.getRenderQuality());
+    out->shadow_quality = static_cast<CNA_ShadowQuality>(value.getShadowQuality());
+    out->shadows_enabled = static_cast<CNA_Bool>(value.isShadowsEnabled() ? CNA_TRUE : CNA_FALSE);
+}
+
+// The C identities must name the canonical ordinals and the canonical minima.
+static_assert(
+    CNA_RENDER_PIPELINE_MINIMUM_GAMMA_EXT == Ext::RenderPipelineSettings::kMinimumGamma &&
+    CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT ==
+        Ext::RenderPipelineSettings::kMinimumFxaaEdgeThreshold);
+// CBIND-090 owns TonemappingMode::Uncharted2 and will add the fifth identity with it. Until then
+// ToNativeRenderPipelineSettings refuses an ordinal C cannot name, and this assertion is what
+// stops the bound from being widened without the macro that gives the value a name.
+static_assert(static_cast<uint32_t>(Ext::TonemappingMode::Aces) == CNA_TONEMAPPING_MODE_ACES);
+
+} // namespace
+
+CNA_Result cna_render_pipeline_settings_ext_init(
+    CNA_RenderPipelineSettingsEXT* const outSettings)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSettings == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The settings output is null.");
+        }
+        *outSettings = CNA_RenderPipelineSettingsEXT{};
+        outSettings->struct_size = static_cast<uint32_t>(sizeof(CNA_RenderPipelineSettingsEXT));
+        outSettings->struct_version = UINT32_C(1);
+        const Ext::RenderPipelineSettings defaults;
+        FromNativeRenderPipelineSettings(defaults, outSettings);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_pipeline_settings_ext_normalize(
+    CNA_RenderPipelineSettingsEXT* const settings)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (settings == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The settings are null.");
+        }
+        Ext::RenderPipelineSettings native;
+        if (const CNA_Result result = ToNativeRenderPipelineSettings(*settings, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        FromNativeRenderPipelineSettings(native, settings);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_pipeline_settings_ext_apply_render_quality_preset(
+    CNA_RenderPipelineSettingsEXT* const settings)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (settings == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The settings are null.");
+        }
+        Ext::RenderPipelineSettings native;
+        if (const CNA_Result result = ToNativeRenderPipelineSettings(*settings, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        native.applyRenderQualityPresetEXT();
+        FromNativeRenderPipelineSettings(native, settings);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_pipeline_settings_ext_apply_from_string(
+    CNA_RenderPipelineSettingsEXT* const settings,
+    const CNA_StringView text,
+    int32_t* const outApplied)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (settings == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The settings are null.");
+        }
+        // Embedded NULs are rejected: the canonical parser reads the whole text, so a NUL would
+        // silently truncate what a caller believes it applied.
+        if (const CNA_Result result = CNA::C::Detail::ValidateStringView(text, true);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Ext::RenderPipelineSettings native;
+        if (const CNA_Result result = ToNativeRenderPipelineSettings(*settings, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::string parsed(
+            text.data == nullptr ? "" : text.data, static_cast<std::size_t>(text.byte_length));
+        const int applied = native.applyFromStringEXT(parsed);
+        FromNativeRenderPipelineSettings(native, settings);
+        return StoreValue(outApplied, static_cast<int32_t>(applied));
     });
 }
 
