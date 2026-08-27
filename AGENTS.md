@@ -445,8 +445,9 @@ renderer implementation.
   CMake integration may otherwise download the matching official binary package.
 - It is well past the initial 2D slice: desktop 3D + every stock effect (with fog parity), instancing,
   render targets, MSAA, `Texture3D`, MRT, occlusion queries, custom WGSL effects, GPU-native
-  compressed textures, and an in-browser Emscripten path all work and are tested. The 10 genuinely
-  open items are enumerated in the plan's "Current limitations".
+  compressed textures, and an in-browser Emscripten path all work and are tested. The genuinely open
+  items are enumerated in the plan's "Status summary" / "Current limitations" (the authoritative,
+  script-counted list) — do not restate a hard-coded count here that would drift.
 - Preserve the established renderers: WebGPU changes should remain renderer-local or common only
   where a common-interface change is genuinely required and verified across existing renderers.
 

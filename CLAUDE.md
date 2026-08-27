@@ -392,7 +392,8 @@ Rules:
 
 After making changes:
 
-1. Build the affected target (`cmake --build cmake-build-debug --target CNA`).
+1. Build the affected target. There is **no** `CNA` CMake target — build the whole configuration
+   (`cmake --build <build-dir>`) or a specific test/example target by its own name (matching AGENTS.md).
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
 Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
@@ -643,7 +644,8 @@ while drawing nothing.
 The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
 its renderer implementation.
 
-- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
+- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-151`; its top-of-file
+  script-counted status summary is the source of truth). Keep task statuses and
   limitations current as implementation proceeds.
 - The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
   `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the

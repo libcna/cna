@@ -2,15 +2,18 @@
 
 ## Status summary (2026-08-27)
 
-**141 rows — ✅ 134 · 🟨 5 · ⬜ 2** (hand-counted from the row tables' status column). The **7 open
-rows** are the only WebGPU work not at ✅: `WEBGPU-12, 28, 29, 39, 59, 107, 114`. (Closed
-2026-08-27: `WEBGPU-1` — auto-download now SHA-256-verifies every pinned asset and fails closed;
-`WEBGPU-70` — the reachable vertexStart/baseVertex/startIndex routes are directly tested
-(`WebGPU_VertexStart`) and the only unapplied case is unreachable through any XNA API; and
-`WEBGPU-108` — the present-mode policy is now a unit-tested seam incl. the unsupported-mode fallback
-(`WebGPU_PresentModeMapping`).)
+**144 rows — ✅ 136 · 🟨 6 · ⬜ 2** (counted from the row tables by `tools/count_webgpu_plan_status.sh`,
+not by hand). The **8 open rows** are the only WebGPU work not at ✅:
+`WEBGPU-1, 12, 28, 29, 39, 59, 107, 114`. (Closed 2026-08-27: `WEBGPU-70` reachable
+vertexStart/baseVertex/startIndex directly tested; `WEBGPU-108` present-mode unit-tested seam;
+`WEBGPU-149` FNA fog `FogColor*alpha` fix + strengthened tests; `WEBGPU-150` headless test-skip
+launcher; `WEBGPU-151` versioned/hashed download-cache migration. `WEBGPU-1` is back to 🟨 — package
+integrity + Linux runtime are done, but the Windows/macOS/aarch64 packages have pinned hashes only, not
+build/link/runtime verification.)
 
 ### Current limitations (what is genuinely still open)
+- **`WEBGPU-1` 🟨** — package integrity (SHA-256) and Linux x86_64 runtime are verified; the
+  Windows/macOS/linux-aarch64 packages have pinned hashes but no build/link/runtime verification here.
 - **`WEBGPU-12` 🟨** — one fresh per-*draw* uniform `WGPUBuffer` (correct, GPU-validated), not the
   per-frame/ring-buffer design this row describes.
 - **`WEBGPU-28` ⬜** — no shared `webgpu_shaders.hpp` extraction and no startup WGSL pre-validation
@@ -31,20 +34,24 @@ rows** are the only WebGPU work not at ✅: `WEBGPU-12, 28, 29, 39, 59, 107, 114
 
 Everything else in the row tables is ✅. Stock-effect **fog reached full parity** on 2026-08-27
 (`WEBGPU-145`–`148`: BasicEffect/AlphaTest/DualTexture/Skinned, matching the pre-existing
-EnvironmentMapEffect fog). See Phase 64.1.
+EnvironmentMapEffect fog), and `WEBGPU-149` corrected the FNA blend to `FogColor * outputAlpha` with
+alpha<1 pixel tests -- so the parity claim holds for translucent draws too, not just opaque. See
+Phase 64.1.
 
 ---
 
 > WebGPU is an authorized, experimental workstream. Its first goal, a **verified native 2D backend
 > on Linux desktop**, was reached 2026-07-12 (`WEBGPU-124`–`WEBGPU-131`, all ✅ — see Phase 56.1).
-> Since then (through 2026-07-18) this backend has grown real 3D coverage close to the other
+> Since then (through 2026-08-27) this backend has grown real 3D coverage close to the other
 > established backends: `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/
 > `alpha_test3d`/`dual_texture3d` (strides 16/20/24/32), `PbrEffect`/`SkinnedPbrEffect`/
 > `SkinnedEffect` (unskinned + skinned + `VertexColorEnabled`, both `PreferPerPixelLighting`
-> variants), `EnvironmentMapEffect` (cube-map reflections, flat and Fresnel-weighted), and real
+> variants), `EnvironmentMapEffect` (cube-map reflections, flat and Fresnel-weighted), stock-effect
+> fog at FNA parity (`WEBGPU-145`–`149`), and real
 > instancing (`DrawInstancedPrimitivesEx`, per-instance vertex stream) all work end-to-end through
-> real `GpuDrawParams` dispatch. Render state (blend/rasterizer/cull/wireframe/scissor/viewport/
-> per-slot sampler/depth-stencil), `RenderTarget2D` and `RenderTargetCube` (real render-into,
+> real `GpuDrawParams` dispatch. Render state (blend/rasterizer/cull/scissor/viewport/per-slot
+> sampler/depth-stencil incl. full stencil ops; **`FillMode::WireFrame` is deliberately refused, not
+> implemented — `WEBGPU-115`**), `RenderTarget2D` and `RenderTargetCube` (real render-into,
 > eager-flush-on-target-switch), MSAA (backbuffer + `RenderTarget2D`, device-probed clamping — this
 > machine's adapter supports exactly 4x; **`RenderTargetCube` per-face MSAA is NOT done, `WEBGPU-114`**),
 > `Texture3D`, and real linear-filtered
@@ -54,8 +61,8 @@ EnvironmentMapEffect fog). See Phase 64.1.
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
 >
-> **Remaining work (as of 2026-08-26 — check this section first before re-deriving it from the
-> full row table below; update it whenever a row's status changes):**
+> **Remaining work (as of 2026-08-27 — but the authoritative live list is the "Status summary" +
+> "Current limitations" at the very top of this file; update those whenever a row's status changes):**
 >
 > **Note on IDs:** this file's `WEBGPU-*` numbering has gaps by design — IDs **62** and **100–105**
 > have never existed here (an artefact of the two renumberings recorded under History below). A
@@ -179,21 +186,26 @@ EnvironmentMapEffect fog). See Phase 64.1.
 
 ## Active execution order — do this one task at a time
 
-**Current open tasks (2026-08-27)** — only these 9 rows are not ✅; do one at a time, each its own
-commit, never mark ✅ from source inspection. (`WEBGPU-1` SHA-256 verification was completed
-2026-08-27.)
+**Current open tasks (2026-08-27)** — only these **8** rows are not ✅
+(`WEBGPU-1, 12, 28, 29, 39, 59, 107, 114`); do one at a time, each its own commit, never mark ✅ from
+source inspection.
 
 1. **`WEBGPU-39`** — decide the `DepthFormat` mapping (None/Depth16/Depth24/Depth24Stencil8): implement
    the exact supported attachment formats or document+test the always-`Depth24PlusStencil8` deviation.
-5. **`WEBGPU-28`** — extract WGSL to a shared source and add a startup/test-time validation pass for
+2. **`WEBGPU-1`** — build/link/run the Windows/macOS/aarch64 packages (whose hashes are now pinned) on
+   an appropriate CI/platform, so package integrity becomes a full non-Linux verification.
+3. **`WEBGPU-28`** — extract WGSL to a shared source and add a startup/test-time validation pass for
    every module (including shaders a normal scene never draws). (Cross-cutting refactor.)
-6. **`WEBGPU-29`** — a shared pipeline descriptor/key builder, behaviour-preserving; land it as its own
+4. **`WEBGPU-29`** — a shared pipeline descriptor/key builder, behaviour-preserving; land it as its own
    commit, never mixed with a functional fix. (Refactor.)
-7. **`WEBGPU-12` / `WEBGPU-59`** — bounded, aligned ring-buffer uniform/vertex allocation with safe
+5. **`WEBGPU-12` / `WEBGPU-59`** — bounded, aligned ring-buffer uniform/vertex allocation with safe
    lifetime across in-flight frames + a stress test. (Larger, separate task.)
-8. **`WEBGPU-114`** — RenderTargetCube `mipMap=true` mip regeneration and per-face MSAA resolve.
-9. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
+6. **`WEBGPU-114`** — RenderTargetCube `mipMap=true` mip regeneration and per-face MSAA resolve.
+7. **`WEBGPU-107`** — real device/context loss recovery + resource re-init, or keep it open with the
    exact lifetime contract (a no-op must not be marked as an implementation).
+
+(Eight open rows: `WEBGPU-1, 12, 28, 29, 39, 59, 107, 114`; `12` and `59` share item 5. Matches the
+"Status summary" and "Current limitations" at the top.)
 
 The dated chronology of completed 2D/3D work below is **archival** — read the "Status summary" and
 "Current limitations" at the top of this file for the live state, not this history.
@@ -569,7 +581,7 @@ mark it ✅ from source inspection alone.
 | WEBGPU-67 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ✅ | `RenderColoredDraws()` creates a transient `WGPUBuffer` (`Vertex\|CopyDst`) per draw, `wgpuQueueWriteBuffer`s the CPU shadow-copy into it, draws, and releases it after the frame's command buffer is submitted (not `mappedAtCreation` — uses the same queue-write pattern as every other buffer upload in this backend, an equally valid approach). |
 | WEBGPU-68 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ✅ | Verified 2026-07-18: real override (previously `IGraphicsBackend`'s own default, which throws). `params.instanceVb == nullptr` falls back to a real `DrawIndexedPrimitivesEx()` draw, matching `VulkanGraphicsBackend`'s own identical fallback. `WebGPU_Instanced3D` CTest (5/5): 3 instances in ONE draw call each paint their own small quad at their own independently-predicted screen location with the shared `DiffuseColor` (proves the per-instance buffer is genuinely read per-instance, not e.g. always instance 0), a region far from all 3 quads stays untouched, and the `instanceVb==nullptr` fallback renders correctly rather than throwing. See `WEBGPU-27`/`38`. |
 | WEBGPU-69 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ✅ | All 5 `PrimitiveType` values map via the existing `ToTopology()` (unchanged); now genuinely exercised by real 3D draw dispatch (`WEBGPU-64`/`65`), not just present in source. `WebGPU_Colored3D` only exercises `TriangleList` directly, but the pipeline cache is keyed by topology so the other 4 follow the same, now-proven code path. |
-| WEBGPU-70 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ✅ | **Done 2026-08-27: the reachable routes are now directly tested, and the one unapplied case is unreachable-by-design (option "remove the unreachable requirement").** New test `WebGPU_VertexStart` (`webgpu_vertexstart_test.cpp`), 5/5 on the real RADV GPU (`:131`): two identically-placed triangles (red at vertices 0..2, blue at 3..5) prove `DrawPrimitives(vertexStart=0/3)` selects red/blue (the `vertexStart*stride` byte offset), and `DrawIndexedPrimitives` with `baseVertex=0/3` and `startIndex=0/3` each shift to the correct triangle (`baseVertex` added to every decoded index, `startIndex` the first index element) — a wrong/ignored offset flips the sampled colour. The only route that ignores `vertexStart` is `DrawInstancedPrimitivesEx`, and that is **unreachable through any XNA API** (`DrawInstancedPrimitives` has no `vertexStart` parameter; `GpuDrawParams::vertexStart` is populated only by the ordinary paths), so there is nothing to fix or test there — the requirement is removed for the instanced route rather than force-fixed on untestable code. Historical note follows. `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` always draw from vertex/index 0 (`wgpuRenderPassEncoderDraw(pass, vertexCount, 1, 0, 0)` / `DrawIndexed(..., 0, 0, 0)`) — matches every real call site today (`GraphicsDevice.cpp`'s two `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` callers always build a dedicated, zero-based temporary buffer per call), but a genuine sub-range draw would silently ignore a non-zero start/base. Real gap, not yet needed by any current caller. **Re-audited 2026-08-26 -- the gap is UNREACHABLE through any XNA API, so it stays 🟨 and is not force-fixed (touching working instanced-replay code for an untestable path is the wrong trade):** XNA's only instanced entry point, `GraphicsDevice::DrawInstancedPrimitives(primitiveType, baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount, instanceCount)`, has no `vertexStart` parameter at all -- it controls the geometry stream with `baseVertex` (added to every decoded index) and `startIndex` (first index), both of which this renderer's `DrawInstancedPrimitivesEx` already applies (`command.baseVertex = params.baseVertex + perVertexOffset`, `command.firstIndex = params.startIndex`). `GpuDrawParams::vertexStart` is populated only by the ordinary `DrawPrimitives`/`DrawIndexedPrimitives` paths, never for an instanced draw. So the only way to reach the unapplied-`vertexStart` branch is a hand-built `GpuDrawParams` passed straight to the renderer interface -- no game and no XNA-layer path can, and there is therefore no API-level test that would exercise it. |
+| WEBGPU-70 | `vertexStart` / `startIndex` / `baseVertex` support in draw calls | ✅ | **Done 2026-08-27: the reachable routes are now directly tested, and the one unapplied case is unreachable-by-design (option "remove the unreachable requirement").** New test `WebGPU_VertexStart` (`webgpu_vertexstart_test.cpp`), 5/5 on the real RADV GPU (`:131`): two identically-placed triangles (red at vertices 0..2, blue at 3..5) prove `DrawPrimitives(vertexStart=0/3)` selects red/blue (the `vertexStart*stride` byte offset), and `DrawIndexedPrimitives` with `baseVertex=0/3` and `startIndex=0/3` each shift to the correct triangle (`baseVertex` added to every decoded index, `startIndex` the first index element) — a wrong/ignored offset flips the sampled colour. The only route that ignores `vertexStart` is `DrawInstancedPrimitivesEx`, and that is **unreachable through any XNA API** (`DrawInstancedPrimitives` has no `vertexStart` parameter; `GpuDrawParams::vertexStart` is populated only by the ordinary paths), so there is nothing to fix or test there — the requirement is removed for the instanced route rather than force-fixed on untestable code. Historical note follows. `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` always draw from vertex/index 0 (`wgpuRenderPassEncoderDraw(pass, vertexCount, 1, 0, 0)` / `DrawIndexed(..., 0, 0, 0)`) — matches every real call site today (`GraphicsDevice.cpp`'s two `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` callers always build a dedicated, zero-based temporary buffer per call), but a genuine sub-range draw would silently ignore a non-zero start/base. Real gap, not yet needed by any current caller. **Historical note (2026-08-26 audit, when this row was 🟨): the gap is UNREACHABLE through any XNA API, so it stayed 🟨 and was not force-fixed (touching working instanced-replay code for an untestable path is the wrong trade):** XNA's only instanced entry point, `GraphicsDevice::DrawInstancedPrimitives(primitiveType, baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount, instanceCount)`, has no `vertexStart` parameter at all -- it controls the geometry stream with `baseVertex` (added to every decoded index) and `startIndex` (first index), both of which this renderer's `DrawInstancedPrimitivesEx` already applies (`command.baseVertex = params.baseVertex + perVertexOffset`, `command.firstIndex = params.startIndex`). `GpuDrawParams::vertexStart` is populated only by the ordinary `DrawPrimitives`/`DrawIndexedPrimitives` paths, never for an instanced draw. So the only way to reach the unapplied-`vertexStart` branch is a hand-built `GpuDrawParams` passed straight to the renderer interface -- no game and no XNA-layer path can, and there is therefore no API-level test that would exercise it. |
 
 ---
 
