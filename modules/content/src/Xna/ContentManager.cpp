@@ -2321,6 +2321,128 @@ namespace Microsoft::Xna::Framework::Content
             return vb;
         }
 
+        // ---------------------------------------------------------------------------
+        // The shared model mesh builder (plans/plan_cnb.md CNBF-100)
+        //
+        // Three front-ends produce a Model: the runtime glTF reader, the .cnj reader and the .cnb
+        // decoder. They parse completely different things, but the moment each of them holds raw
+        // vertex bytes, raw index bytes and a topology, the rest is identical -- and it was
+        // written out three times. Three copies of "make a VertexBuffer, make an IndexBuffer,
+        // derive the primitive count, construct the ModelMeshPart, carry the topology to the
+        // draw" is three chances for one of them to drift, and a drift there does not fail a
+        // build: it makes .cnj and .cnb models behave slightly differently, which is exactly the
+        // class of bug CnbModelEquivalenceTest exists to catch AFTER the fact.
+        //
+        // The effect/material half of the same problem was solved earlier by BuildPartEffectEXT.
+        // This is the mesh half. Both directions now funnel through one implementation, so there
+        // is nothing left to disagree about.
+        // ---------------------------------------------------------------------------
+
+        /// One mesh part's geometry, as every front-end has it after its own parsing and before
+        /// any GPU object exists.
+        struct ModelPartGeometryEXT
+        {
+            /// Raw interleaved vertex bytes. Never null.
+            const std::vector<std::uint8_t>* vertexBytes = nullptr;
+            /// Bytes per vertex.
+            int stride = 0;
+            /// Raw index bytes, in `use32BitIndices`' width. Never null.
+            const std::vector<std::uint8_t>* indexBytes = nullptr;
+            /// True when indices are `u32` rather than `u16`.
+            bool use32BitIndices = false;
+            /// The part's own topology, which travels to the draw rather than being assumed there.
+            CNA::Internal::GltfImport::PrimitiveTopology topology =
+                CNA::Internal::GltfImport::PrimitiveTopology::Triangles;
+            /// Primitive count to use, or a negative value to derive it from the topology and the
+            /// index count. A `.cnb` supplies its own, because the file states it and the decoder
+            /// has already cross-checked it against the topology (CNBF-H012); the other two
+            /// front-ends derive it.
+            int primitiveCountOverride = -1;
+        };
+
+        /// What BuildModelMeshPartGeometryEXT() produced. The buffers are returned rather than
+        /// stored because every caller owns them through its own ModelResources.
+        struct BuiltModelPartEXT
+        {
+            std::unique_ptr<Graphics::ModelMeshPart> part;
+            std::unique_ptr<Graphics::VertexBuffer> vertexBuffer;
+            std::unique_ptr<Graphics::IndexBuffer> indexBuffer;
+            int vertexCount = 0;
+            int indexCount = 0;
+        };
+
+        BuiltModelPartEXT BuildModelMeshPartGeometryEXT(Graphics::GraphicsDevice& device,
+                                                        const ModelPartGeometryEXT& geometry)
+        {
+            BuiltModelPartEXT built;
+            built.vertexCount =
+                geometry.stride > 0
+                    ? static_cast<int>(geometry.vertexBytes->size()) / geometry.stride
+                    : 0;
+            const int indexSize = geometry.use32BitIndices
+                                      ? static_cast<int>(sizeof(std::uint32_t))
+                                      : static_cast<int>(sizeof(std::uint16_t));
+            built.indexCount = static_cast<int>(geometry.indexBytes->size()) / indexSize;
+
+            built.vertexBuffer = BuildVertexBufferFromRawBytes(device, geometry.stride,
+                                                                built.vertexCount,
+                                                                *geometry.vertexBytes);
+            built.indexBuffer = std::make_unique<Graphics::IndexBuffer>(
+                device,
+                geometry.use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
+                                         : Graphics::IndexElementSize::SixteenBits,
+                built.indexCount, Graphics::BufferUsage::None);
+            if (geometry.use32BitIndices)
+            {
+                const std::vector<std::uint32_t> indices =
+                    IndicesFromBytes<std::uint32_t>(*geometry.indexBytes, built.indexCount);
+                built.indexBuffer->SetData(indices.data(), built.indexCount);
+            }
+            else
+            {
+                const std::vector<std::uint16_t> indices =
+                    IndicesFromBytes<std::uint16_t>(*geometry.indexBytes, built.indexCount);
+                built.indexBuffer->SetData(indices.data(), built.indexCount);
+            }
+
+            const int primitiveCount =
+                geometry.primitiveCountOverride >= 0
+                    ? geometry.primitiveCountOverride
+                    : CNA::Internal::GltfImport::PrimitiveCountForTopology(
+                          geometry.topology, static_cast<std::size_t>(built.indexCount));
+
+            built.part = std::make_unique<Graphics::ModelMeshPart>(
+                built.vertexBuffer.get(), built.indexBuffer.get(), built.vertexCount,
+                primitiveCount, 0, 0);
+            built.part->setPrimitiveTypeEXTProperty(
+                CNA::Internal::GltfImport::PrimitiveTypeForTopology(geometry.topology));
+            return built;
+        }
+
+        /// Applies a material's per-slot sampler states to a part. Slots 0-4 are the ordinary
+        /// texture samplers and 5+ are the specular ones, which is a split every front-end
+        /// previously spelled out for itself.
+        void ApplyPartSamplerStatesEXT(Graphics::ModelMeshPart& part,
+                                       const CNA::Internal::GltfImport::MaterialOut& material)
+        {
+            for (std::size_t slot = 0; slot < material.samplers.size(); ++slot)
+            {
+                const auto& sampler = material.samplers[slot];
+                Graphics::SamplerState state;
+                state.setFilterProperty(sampler.filter);
+                state.setAddressUProperty(sampler.addressU);
+                state.setAddressVProperty(sampler.addressV);
+                if (slot < 5u)
+                {
+                    part.setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                }
+                else
+                {
+                    part.setSpecularSamplerStateEXTProperty(static_cast<int>(slot - 5u), state);
+                }
+            }
+        }
+
         // plans/plan_gltf.md GLTF-128: every imported layout starts with a tightly-packed float3
         // Position. Keep the extraction here, next to the one upload helper that owns that ABI,
         // so the runtime and .cnj paths cannot invent separate offset tables while constructing
@@ -3496,36 +3618,21 @@ namespace Microsoft::Xna::Framework::Content
                     AppendGltfMeshReportEXT(importReport, meshOut, partName);
                     std::vector<std::uint8_t> boundsVertexBytes = meshOut.vertexBytes;
 
-                    const int numVertices = meshOut.stride > 0
-                        ? static_cast<int>(meshOut.vertexBytes.size()) / meshOut.stride : 0;
-                    auto vb = BuildVertexBufferFromRawBytes(device, meshOut.stride, numVertices, meshOut.vertexBytes);
+                    // CNBF-100: the same builder the .cnj reader and the .cnb decoder use.
+                    // plans/plan_gltf.md GLTF-078: the primitive count follows the part's own
+                    // topology, which the builder derives.
+                    ModelPartGeometryEXT geometry;
+                    geometry.vertexBytes = &meshOut.vertexBytes;
+                    geometry.stride = meshOut.stride;
+                    geometry.indexBytes = &meshOut.indexBytes;
+                    geometry.use32BitIndices = meshOut.use32BitIndices;
+                    geometry.topology = meshOut.topology;
 
-                    const int indexSize = meshOut.use32BitIndices
-                        ? static_cast<int>(sizeof(std::uint32_t)) : static_cast<int>(sizeof(std::uint16_t));
-                    const int numIndices = static_cast<int>(meshOut.indexBytes.size()) / indexSize;
-                    // plans/plan_gltf.md GLTF-078: the count follows the part's own topology. It is
-                    // still numIndices/3 for a triangle list -- which every imported part is
-                    // today, since a strip or fan was already converted to one (GLTF-072).
-                    const int primCount = PrimitiveCountForTopology(meshOut.topology,
-                                                                    static_cast<std::size_t>(numIndices));
-
-                    auto ib = std::make_unique<Graphics::IndexBuffer>(
-                        device,
-                        meshOut.use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
-                                                : Graphics::IndexElementSize::SixteenBits,
-                        numIndices, Graphics::BufferUsage::None);
-                    if (meshOut.use32BitIndices) {
-                        const std::vector<std::uint32_t> indices =
-                            IndicesFromBytes<std::uint32_t>(meshOut.indexBytes, numIndices);
-                        ib->SetData(indices.data(), numIndices);
-                    } else {
-                        const std::vector<std::uint16_t> indices =
-                            IndicesFromBytes<std::uint16_t>(meshOut.indexBytes, numIndices);
-                        ib->SetData(indices.data(), numIndices);
-                    }
-
-                    auto part = std::make_unique<Graphics::ModelMeshPart>(
-                        vb.get(), ib.get(), numVertices, primCount, 0, 0);
+                    BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, geometry);
+                    std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
+                    std::unique_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
+                    std::unique_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
+                    const int numVertices = built.vertexCount;
                     // plans/plan_gltf.md GLTF-073: the topology travels to the draw rather than being
                     // assumed there.
                     // plans/plan_gltf.md GLTF-241: a vertex-coloured primitive whose material is
@@ -3826,24 +3933,12 @@ namespace Microsoft::Xna::Framework::Content
                             std::to_string(meshOut.stride) + ") has no normal slot, so the "
                             "normals are discarded and the primitive cannot be lit (GLTF-241).");
                     }
-                    part->setPrimitiveTypeEXTProperty(PrimitiveTypeForTopology(meshOut.topology));
                     // plans/plan_gltf.md GLTF-202/GLTF-203: the file's own sampler state, per texture
                     // slot. Without this every imported texture drew with whatever the device
                     // happened to have -- LinearWrap -- so a CLAMP_TO_EDGE asset with UVs outside
-                    // [0,1] tiled instead of clamping.
-                    for (std::size_t slot = 0; slot < meshOut.material.samplers.size(); ++slot)
-                    {
-                        const SamplerOut& sampler = meshOut.material.samplers[slot];
-                        Graphics::SamplerState state;
-                        state.setFilterProperty(sampler.filter);
-                        state.setAddressUProperty(sampler.addressU);
-                        state.setAddressVProperty(sampler.addressV);
-                        if (slot < 5)
-                            part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
-                        else
-                            part->setSpecularSamplerStateEXTProperty(
-                                static_cast<int>(slot - 5), state);
-                    }
+                    // [0,1] tiled instead of clamping. CNBF-100: applied by the shared helper, so
+                    // the slot-5 specular split is written once for all three front-ends.
+                    ApplyPartSamplerStatesEXT(*part, meshOut.material);
                     Graphics::ModelMeshPart* partPtr = part.get();
 
                     // CNB-64/65 (Phase 13B): morph targets, attached to this part's own real XNA
@@ -4657,54 +4752,32 @@ namespace Microsoft::Xna::Framework::Content
                             // 16-bit, which silently mis-decoded the index buffer (wrong element
                             // count, wrong byte offsets) for any larger mesh.
                             const bool use32BitIndices = numVertices > 65535;
-                            const int  indexSize  = use32BitIndices
-                                                        ? static_cast<int>(sizeof(std::uint32_t))
-                                                        : static_cast<int>(sizeof(std::uint16_t));
-                            const int numIndices  = static_cast<int>(idxBytes.size()) / indexSize;
                             // plans/plan_gltf.md GLTF-073/GLTF-078: the part's own topology, defaulting
                             // to TRIANGLES for a .cnj written before the field existed -- which
                             // could only ever have held a triangle list anyway.
                             const auto topology =
                                 CNA::Internal::GltfImport::PrimitiveTopologyFromName(
                                     ExtractJsonStringField(mg, "primitiveTopology"));
-                            const int primCount =
-                                CNA::Internal::GltfImport::PrimitiveCountForTopology(
-                                    topology, static_cast<std::size_t>(numIndices));
 
-                            auto vb = BuildVertexBufferFromRawBytes(device, stride, numVertices, vertBytes);
+                            // CNBF-100: the same builder the .cnb decoder and the runtime glTF
+                            // reader use. The primitive count is derived here rather than
+                            // supplied, because a .cnj does not state one.
+                            ModelPartGeometryEXT geometry;
+                            geometry.vertexBytes = &vertBytes;
+                            geometry.stride = stride;
+                            geometry.indexBytes = &idxBytes;
+                            geometry.use32BitIndices = use32BitIndices;
+                            geometry.topology = topology;
 
-                            auto ib = std::make_unique<Graphics::IndexBuffer>(
-                                device,
-                                use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
-                                                : Graphics::IndexElementSize::SixteenBits,
-                                numIndices, Graphics::BufferUsage::None);
-                            if (use32BitIndices) {
-                                const std::vector<std::uint32_t> indices =
-                                    IndicesFromBytes<std::uint32_t>(idxBytes, numIndices);
-                                ib->SetData(indices.data(), numIndices);
-                            } else {
-                                const std::vector<std::uint16_t> indices =
-                                    IndicesFromBytes<std::uint16_t>(idxBytes, numIndices);
-                                ib->SetData(indices.data(), numIndices);
-                            }
+                            BuiltModelPartEXT built =
+                                BuildModelMeshPartGeometryEXT(device, geometry);
+                            std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
+                            std::unique_ptr<Graphics::VertexBuffer> vb =
+                                std::move(built.vertexBuffer);
+                            std::unique_ptr<Graphics::IndexBuffer> ib =
+                                std::move(built.indexBuffer);
 
-                            auto part = std::make_unique<Graphics::ModelMeshPart>(
-                                vb.get(), ib.get(), numVertices, primCount, 0, 0);
-                            part->setPrimitiveTypeEXTProperty(
-                                CNA::Internal::GltfImport::PrimitiveTypeForTopology(topology));
-                            for (std::size_t slot = 0; slot < material.samplers.size(); ++slot)
-                            {
-                                const auto& sampler = material.samplers[slot];
-                                Graphics::SamplerState state;
-                                state.setFilterProperty(sampler.filter);
-                                state.setAddressUProperty(sampler.addressU);
-                                state.setAddressVProperty(sampler.addressV);
-                                if (slot < 5)
-                                    part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
-                                else
-                                    part->setSpecularSamplerStateEXTProperty(
-                                        static_cast<int>(slot - 5), state);
-                            }
+                            ApplyPartSamplerStatesEXT(*part, material);
                             Graphics::ModelMeshPart* partPtr = part.get();
 
                             // Morph target CLI/.cnj serialization: read BuildMorphBytes' own
@@ -5296,55 +5369,30 @@ namespace Microsoft::Xna::Framework::Content
             for (const Cnb::CnbModelPart& source : data.parts)
             {
                 const int stride = static_cast<int>(source.vertexStride);
-                const int vertexCount = static_cast<int>(source.vertexCount);
-                const int indexCount = static_cast<int>(source.indexCount);
-                const bool use32BitIndices = source.indexElementSize == 4u;
 
-                auto vb = BuildVertexBufferFromRawBytes(device, stride, vertexCount,
-                                                        source.vertexBytes);
-                auto ib = std::make_unique<Graphics::IndexBuffer>(
-                    device,
-                    use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
-                                    : Graphics::IndexElementSize::SixteenBits,
-                    indexCount, Graphics::BufferUsage::None);
-                if (use32BitIndices)
-                {
-                    const std::vector<std::uint32_t> indices =
-                        IndicesFromBytes<std::uint32_t>(source.indexBytes, indexCount);
-                    ib->SetData(indices.data(), indexCount);
-                }
-                else
-                {
-                    const std::vector<std::uint16_t> indices =
-                        IndicesFromBytes<std::uint16_t>(source.indexBytes, indexCount);
-                    ib->SetData(indices.data(), indexCount);
-                }
+                // CNBF-100: the same builder the .cnj and runtime-glTF readers use. The .cnb path
+                // supplies its own primitive count because the file states it and the decoder has
+                // already cross-checked it against the topology (CNBF-H012); the other two derive
+                // it from the index count.
+                ModelPartGeometryEXT geometry;
+                geometry.vertexBytes = &source.vertexBytes;
+                geometry.stride = stride;
+                geometry.indexBytes = &source.indexBytes;
+                geometry.use32BitIndices = source.indexElementSize == 4u;
+                geometry.topology =
+                    static_cast<CNA::Internal::GltfImport::PrimitiveTopology>(
+                        source.primitiveTopology);
+                geometry.primitiveCountOverride = static_cast<int>(source.primitiveCount);
 
-                auto part = std::make_unique<Graphics::ModelMeshPart>(
-                    vb.get(), ib.get(), vertexCount, static_cast<int>(source.primitiveCount), 0, 0);
-                part->setPrimitiveTypeEXTProperty(
-                    CNA::Internal::GltfImport::PrimitiveTypeForTopology(
-                        static_cast<CNA::Internal::GltfImport::PrimitiveTopology>(
-                            source.primitiveTopology)));
+                BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, geometry);
+                std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
+                std::unique_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
+                std::unique_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
+                const int vertexCount = built.vertexCount;
 
-                for (std::size_t slot = 0; slot < Cnb::CnbTextureSlotCount; ++slot)
-                {
-                    Graphics::SamplerState state;
-                    state.setFilterProperty(
-                        static_cast<Graphics::TextureFilter>(source.material.samplers[slot].filter));
-                    state.setAddressUProperty(static_cast<Graphics::TextureAddressMode>(
-                        source.material.samplers[slot].addressU));
-                    state.setAddressVProperty(static_cast<Graphics::TextureAddressMode>(
-                        source.material.samplers[slot].addressV));
-                    if (slot < 5u)
-                    {
-                        part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
-                    }
-                    else
-                    {
-                        part->setSpecularSamplerStateEXTProperty(static_cast<int>(slot - 5u), state);
-                    }
-                }
+                // Through the converted MaterialOut rather than the raw CNB sampler records, so
+                // the slot split lives in one place for every front-end.
+                ApplyPartSamplerStatesEXT(*part, MaterialFromCnbEXT(source.material));
 
                 Graphics::ModelMeshPart* partPtr = part.get();
                 std::vector<std::uint8_t> boundsVertexBytes = source.vertexBytes;
@@ -5359,7 +5407,7 @@ namespace Microsoft::Xna::Framework::Content
                     if (sourceMorph.recomputeFlatNormals)
                     {
                         morph->TriangleIndicesEXT =
-                            WidenedIndicesEXT(source.indexBytes, use32BitIndices);
+                            WidenedIndicesEXT(source.indexBytes, geometry.use32BitIndices);
                     }
                     morph->PositionDeltas.reserve(sourceMorph.targets.size());
                     morph->NormalDeltas.reserve(sourceMorph.targets.size());
