@@ -9109,6 +9109,845 @@ CNA_C_API CNA_Result cna_effect_get_image_based_light_ext(
 CNA_C_API CNA_Result cna_effect_set_image_based_light_ext(
     CNA_EffectHandle effect, const CNA_ImageBasedLightEXT* light);
 
+/**
+ * @brief The default cube-face resolution a probe baker captures at.
+ */
+#define CNA_LIGHT_PROBE_BAKER_DEFAULT_FACE_SIZE 32
+
+/**
+ * @brief The number of cube faces a probe capture renders.
+ */
+#define CNA_LIGHT_PROBE_BAKER_FACE_COUNT 6
+
+/**
+ * @brief Draws the scene for one cube face of a probe capture.
+ *
+ * Called once per face, six times per probe, with the view and projection the baker chose. Draw
+ * the scene and nothing else: the baker owns the render target, and binding another one inside
+ * this callback loses the face being captured.
+ *
+ * @param view The view matrix for this face.
+ * @param projection The projection matrix for this face.
+ * @param context The pointer given to the bake route.
+ */
+typedef void (*CNA_LightProbeSceneDrawCallback)(
+    const CNA_Matrix* view, const CNA_Matrix* projection, void* context);
+
+/**
+ * @brief Owned handle for a light-probe baker.
+ *
+ * **Whether a baker can bake is probed, not asked.** No renderer publishes "can bind an offscreen
+ * target and read it back" as a capability, and the two do not come together -- the headless
+ * renderer binds happily and refuses the readback -- so the canonical baker renders one probe
+ * capture at construction and remembers whether it worked. @ref cna_light_probe_baker_is_supported
+ * reports that measurement, and every bake route refuses when it is false.
+ */
+typedef CNA_Handle CNA_LightProbeBakerHandle;
+
+/**
+ * @brief Creates a probe baker at the default face size.
+ *
+ * @param graphics_device The device to capture with.
+ * @param out_baker Receives the baker; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_create(
+    CNA_Handle graphics_device, CNA_LightProbeBakerHandle* out_baker);
+
+/**
+ * @brief Creates a probe baker at a chosen face size.
+ *
+ * @param graphics_device The device to capture with.
+ * @param face_size The cube-face resolution; must be positive.
+ * @param out_baker Receives the baker; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a face size below one, an
+ * invalid device or a null output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_create_with_face_size(
+    CNA_Handle graphics_device, int32_t face_size, CNA_LightProbeBakerHandle* out_baker);
+
+/**
+ * @brief Releases a probe baker.
+ *
+ * @param baker The baker.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_destroy(CNA_LightProbeBakerHandle baker);
+
+/**
+ * @brief Reports whether this renderer can actually capture probes.
+ *
+ * @param baker The baker.
+ * @param out_supported Receives the answer measured at construction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_is_supported(
+    CNA_LightProbeBakerHandle baker, CNA_Bool* out_supported);
+
+/**
+ * @brief Returns the cube-face resolution this baker captures at.
+ *
+ * @param baker The baker.
+ * @param out_face_size Receives the size.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_get_face_size(
+    CNA_LightProbeBakerHandle baker, int32_t* out_face_size);
+
+/**
+ * @brief Returns how many faces one capture renders.
+ *
+ * Constant, and the same for every baker; @ref CNA_LIGHT_PROBE_BAKER_FACE_COUNT is the same number
+ * without a call.
+ *
+ * @param out_face_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_face_count(int32_t* out_face_count);
+
+/**
+ * @brief Returns the near capture distance.
+ *
+ * @param baker The baker.
+ * @param out_near Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_get_near_plane(
+    CNA_LightProbeBakerHandle baker, float* out_near);
+
+/**
+ * @brief Returns the far capture distance.
+ *
+ * @param baker The baker.
+ * @param out_far Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_get_far_plane(
+    CNA_LightProbeBakerHandle baker, float* out_far);
+
+/**
+ * @brief Sets both capture distances at once.
+ *
+ * **Validated as a pair and refused as a pair.** A near distance that is not positive, or a far
+ * distance that does not exceed it, leaves *both* unchanged -- there is no half-applied state, and
+ * no clamping: a silently corrected capture range would give probes that look plausible and are
+ * lit from the wrong depth.
+ *
+ * @param baker The baker.
+ * @param near_plane The near distance; must be positive.
+ * @param far_plane The far distance; must exceed the near one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pair is not ordered,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_set_planes(
+    CNA_LightProbeBakerHandle baker, float near_plane, float far_plane);
+
+/**
+ * @brief Returns the view matrix one cube face is captured with.
+ *
+ * @param baker The baker.
+ * @param face The face index, from zero to @ref CNA_LIGHT_PROBE_BAKER_FACE_COUNT minus one.
+ * @param position The capture position.
+ * @param out_view Receives the matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a face outside the six or a null
+ * argument, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_face_view(
+    CNA_LightProbeBakerHandle baker,
+    int32_t face,
+    const CNA_Vector3* position,
+    CNA_Matrix* out_view);
+
+/**
+ * @brief Captures one probe by drawing the scene six times.
+ *
+ * @param baker The baker.
+ * @param position Where to capture from.
+ * @param draw The per-face scene callback; must not be null.
+ * @param context Passed to the callback unchanged.
+ * @param out_probe Receives a new owned probe; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null callback, position or
+ * output, `CNA_RESULT_INVALID_STATE` when this renderer cannot capture at all,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_bake_probe(
+    CNA_LightProbeBakerHandle baker,
+    const CNA_Vector3* position,
+    CNA_LightProbeSceneDrawCallback draw,
+    void* context,
+    CNA_LightProbeHandle* out_probe);
+
+/**
+ * @brief Captures every probe of a volume.
+ *
+ * Whatever visibility each probe already carried is **kept**: light and visibility are two separate
+ * bakes and either may be run without the other.
+ *
+ * @param baker The baker.
+ * @param volume The volume to fill.
+ * @param draw The per-face scene callback; must not be null.
+ * @param context Passed to the callback unchanged.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a volume that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null callback, `CNA_RESULT_INVALID_STATE` when this renderer
+ * cannot capture at all, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_bake_light(
+    CNA_LightProbeBakerHandle baker,
+    CNA_LightProbeVolumeHandle volume,
+    CNA_LightProbeSceneDrawCallback draw,
+    void* context);
+
+/**
+ * @brief Captures the visibility distances of every probe of a volume.
+ *
+ * @param baker The baker.
+ * @param volume The volume to fill.
+ * @param draw The per-face scene callback; must not be null.
+ * @param context Passed to the callback unchanged.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a volume that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null callback, `CNA_RESULT_INVALID_STATE` when this renderer
+ * cannot capture at all, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_baker_bake_visibility(
+    CNA_LightProbeBakerHandle baker,
+    CNA_LightProbeVolumeHandle volume,
+    CNA_LightProbeSceneDrawCallback draw,
+    void* context);
+
+/**
+ * @brief Owned handle for the environment processor.
+ *
+ * A pure transformer: it has **no setters at all**, only operations that take an environment and
+ * hand back a new texture. Every one of its nine *argument* refusals is therefore about a single
+ * call rather than about accumulated state, which is why none of them is a state error.
+ *
+ * **Its generators are renderer-dependent, and unlike @ref CNA_LightProbeBakerHandle it publishes
+ * no support flag to ask first.** They build a real `TextureCube` and write its faces, which a
+ * renderer without cube storage refuses -- the headless renderer creates the cube and then refuses
+ * the upload. That refusal reaches a caller as `CNA_RESULT_NOT_SUPPORTED`, which is the canonical
+ * answer and is deliberately not rewritten here.
+ *
+ * That means `CNA_RESULT_NOT_SUPPORTED` from a generator has **two** possible causes: the library
+ * was built without the engine layer, or this renderer cannot store a cube map. Tell them apart
+ * with @ref cna_engine_layer_get_version -- a non-zero version means the layer is present and the
+ * renderer is the reason.
+ *
+ * The split is by **output type**, not by "generator": the three routes that build a `TextureCube`
+ * are the ones a cube-less renderer refuses, while @ref cna_environment_processor_generate_brdf_lut
+ * builds a 2D table and works anyway. The five static maths routes touch no device at all and have
+ * only the first cause.
+ *
+ * The three generators produce the three products of the split sum, and they must be generated
+ * **together** -- pairing a prefiltered cube with a mip count from a different one is the failure
+ * @ref CNA_ImageBasedLightEXT exists to prevent.
+ */
+typedef CNA_Handle CNA_EnvironmentProcessorHandle;
+
+/**
+ * @brief Creates an environment processor.
+ *
+ * @param graphics_device The device its outputs are created on.
+ * @param out_processor Receives the processor; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_create(
+    CNA_Handle graphics_device, CNA_EnvironmentProcessorHandle* out_processor);
+
+/**
+ * @brief Releases an environment processor.
+ *
+ * The textures it produced are **not** released with it: each is an owned handle of its own and
+ * outlives the processor that made it.
+ *
+ * @param processor The processor.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_destroy(CNA_EnvironmentProcessorHandle processor);
+
+/**
+ * @brief Converts an equirectangular panorama into a cube map.
+ *
+ * @param processor The processor.
+ * @param panorama The panorama; must be a valid texture with pixels.
+ * @param face_size The cube-face resolution; must be positive.
+ * @param out_environment Receives a new owned cube map; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a panorama that is not a texture,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a panorama with no pixels, a face size below one or a null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_convert_equirectangular(
+    CNA_EnvironmentProcessorHandle processor,
+    CNA_Handle panorama,
+    int32_t face_size,
+    CNA_Handle* out_environment);
+
+/**
+ * @brief Generates the cosine-convolved diffuse irradiance cube.
+ *
+ * @param processor The processor.
+ * @param environment The source environment.
+ * @param size The cube-face resolution; must be positive.
+ * @param sample_count Samples per texel; must be positive.
+ * @param out_irradiance Receives a new owned cube map; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an environment that is not a cube
+ * map, `CNA_RESULT_INVALID_ARGUMENT` for a size or sample count below one, or a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_generate_irradiance(
+    CNA_EnvironmentProcessorHandle processor,
+    CNA_Handle environment,
+    int32_t size,
+    int32_t sample_count,
+    CNA_Handle* out_irradiance);
+
+/**
+ * @brief Generates the GGX-prefiltered specular cube whose mips are a roughness ramp.
+ *
+ * @param processor The processor.
+ * @param environment The source environment.
+ * @param base_size The resolution of mip zero; must be positive.
+ * @param mip_count How many mips to generate; must be positive, and is the number
+ * @ref CNA_ImageBasedLightEXT must be given.
+ * @param sample_count Samples per texel; must be positive.
+ * @param out_specular Receives a new owned cube map; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an environment that is not a cube
+ * map, `CNA_RESULT_INVALID_ARGUMENT` for any of the three counts below one, or a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_generate_prefiltered_specular(
+    CNA_EnvironmentProcessorHandle processor,
+    CNA_Handle environment,
+    int32_t base_size,
+    int32_t mip_count,
+    int32_t sample_count,
+    CNA_Handle* out_specular);
+
+/**
+ * @brief Projects an environment into one light probe.
+ *
+ * @param processor The processor.
+ * @param environment The source environment.
+ * @param position The position to record on the probe.
+ * @param out_probe Receives a new owned probe; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an environment that is not a cube
+ * map, `CNA_RESULT_INVALID_ARGUMENT` for a null argument, `CNA_RESULT_NOT_SUPPORTED` without the
+ * engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_generate_probe(
+    CNA_EnvironmentProcessorHandle processor,
+    CNA_Handle environment,
+    const CNA_Vector3* position,
+    CNA_LightProbeHandle* out_probe);
+
+/**
+ * @brief Generates the BRDF table indexed by (N·V across, roughness down).
+ *
+ * Depends on neither an environment nor a scene, so it can be generated once and shared by every
+ * bundle.
+ *
+ * @param processor The processor.
+ * @param size The table resolution; must be positive.
+ * @param sample_count Samples per texel; must be positive.
+ * @param out_lut Receives a new owned 2D texture; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a size or sample count below
+ * one, or a null output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_generate_brdf_lut(
+    CNA_EnvironmentProcessorHandle processor,
+    int32_t size,
+    int32_t sample_count,
+    CNA_Handle* out_lut);
+
+/**
+ * @brief Maps a roughness to the mip that carries it.
+ *
+ * **Answers rather than refuses.** A mip count of one or less has no ramp to index, so the answer
+ * is mip zero; a roughness outside zero to one is clamped into it. This is the inverse of
+ * @ref cna_environment_processor_roughness_for_mip.
+ *
+ * @param roughness The roughness.
+ * @param mip_count The chain length the specular cube was generated with.
+ * @param out_mip Receives the mip, as a fractional level.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_mip_for_roughness(
+    float roughness, int32_t mip_count, float* out_mip);
+
+/**
+ * @brief Maps a mip back to the roughness it carries.
+ *
+ * Answers rather than refuses, on the same terms as its inverse.
+ *
+ * @param mip The mip level.
+ * @param mip_count The chain length the specular cube was generated with.
+ * @param out_roughness Receives the roughness, clamped to zero to one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_roughness_for_mip(
+    float mip, int32_t mip_count, float* out_roughness);
+
+/**
+ * @brief Returns one point of the Hammersley low-discrepancy sequence.
+ *
+ * @param index The point index.
+ * @param count The sequence length.
+ * @param out_x Receives the first coordinate.
+ * @param out_y Receives the second coordinate.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_hammersley(
+    int32_t index, int32_t count, float* out_x, float* out_y);
+
+/**
+ * @brief Turns one sequence point into a GGX half-vector around a normal.
+ *
+ * @param x The first sequence coordinate.
+ * @param y The second sequence coordinate.
+ * @param normal The surface normal to build the basis around.
+ * @param roughness The roughness the lobe is shaped by.
+ * @param out_direction Receives the sampled direction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_importance_sample_ggx(
+    float x, float y, const CNA_Vector3* normal, float roughness, CNA_Vector3* out_direction);
+
+/**
+ * @brief Returns the direction one texel of one cube face looks along.
+ *
+ * @param face The cube face index.
+ * @param u The horizontal texel coordinate.
+ * @param v The vertical texel coordinate.
+ * @param out_direction Receives the direction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_face_direction(
+    int32_t face, float u, float v, CNA_Vector3* out_direction);
+
+/**
+ * @brief Maps a direction to a panorama coordinate.
+ *
+ * @param direction The direction.
+ * @param out_u Receives the horizontal coordinate.
+ * @param out_v Receives the vertical coordinate.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_environment_processor_direction_to_equirectangular(
+    const CNA_Vector3* direction, float* out_u, float* out_v);
+
+/**
+ * @brief Owned handle for a skybox.
+ *
+ * Like the baker, **what it can do is probed rather than asked**: the canonical skybox tries to
+ * compile its shader at construction and remembers the result.
+ *
+ * A skybox that cannot draw -- because the renderer refused the shader, or because no environment
+ * is attached -- **skips silently** rather than failing. That is deliberate: a missing sky is a
+ * scene without a sky, not a broken frame, and @ref cna_skybox_draw therefore succeeds in both
+ * cases. Ask @ref cna_skybox_is_supported and @ref cna_skybox_get_environment to find out whether
+ * anything was actually drawn.
+ */
+typedef CNA_Handle CNA_SkyboxHandle;
+
+/**
+ * @brief Creates a skybox over a borrowed environment.
+ *
+ * @param graphics_device The device to draw with.
+ * @param environment The cube map to draw, or `CNA_INVALID_HANDLE` for none yet; **borrowed**.
+ * @param out_skybox Receives the skybox; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an environment handle that is
+ * neither a cube map nor `CNA_INVALID_HANDLE`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device
+ * or a null output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_create(
+    CNA_Handle graphics_device, CNA_Handle environment, CNA_SkyboxHandle* out_skybox);
+
+/**
+ * @brief Releases a skybox.
+ *
+ * A borrowed environment is untouched; an environment handed over with
+ * @ref cna_skybox_set_owned_environment is released with the skybox.
+ *
+ * @param skybox The skybox.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_destroy(CNA_SkyboxHandle skybox);
+
+/**
+ * @brief Reports whether this renderer could compile the sky shader.
+ *
+ * @param skybox The skybox.
+ * @param out_supported Receives the answer measured at construction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_is_supported(CNA_SkyboxHandle skybox, CNA_Bool* out_supported);
+
+/**
+ * @brief Draws the sky over whatever target is currently bound.
+ *
+ * Over the *current* target deliberately: the scene target inside a pipeline frame, the back buffer
+ * outside one. Binding a destination here would mean the caller had to know which of the two it
+ * currently was.
+ *
+ * @param skybox The skybox.
+ * @param view The view matrix; only its rotation is used.
+ * @param projection The projection matrix.
+ * @param width The target width in pixels; must be positive.
+ * @param height The target height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS` -- including when the sky was skipped for want of support or an
+ * environment -- `CNA_RESULT_INVALID_ARGUMENT` for a size below one or a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_draw(
+    CNA_SkyboxHandle skybox,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    int32_t width,
+    int32_t height);
+
+/**
+ * @brief Returns the attached environment.
+ *
+ * The handle **borrows**: it keeps the skybox alive while it exists, and releasing it releases only
+ * the handle, never the cube map.
+ *
+ * @param skybox The skybox.
+ * @param out_environment Receives the cube map, or `CNA_INVALID_HANDLE` when none is attached.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_get_environment(
+    CNA_SkyboxHandle skybox, CNA_Handle* out_environment);
+
+/**
+ * @brief Attaches a borrowed environment.
+ *
+ * **Releases an owned environment first**, if one was handed over earlier: attaching a borrowed
+ * cube over an owned one would otherwise keep the owned one alive with nothing referring to it.
+ *
+ * @param skybox The skybox.
+ * @param environment The cube map, or `CNA_INVALID_HANDLE` to detach.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a handle that is neither valid nor
+ * `CNA_INVALID_HANDLE`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_set_environment(CNA_SkyboxHandle skybox, CNA_Handle environment);
+
+/**
+ * @brief Attaches an environment and takes ownership of it.
+ *
+ * **The texture handle is consumed.** On success it is released from the runtime and must not be
+ * used again -- the skybox owns the cube map now, and a second release would be a double free.
+ * This follows @ref cna_post_process_chain_add_owned_pass, the campaign's settled shape for an
+ * operation whose canonical form takes a `unique_ptr`, and is named for the transfer rather than
+ * hiding it behind a flag on @ref cna_skybox_set_environment.
+ *
+ * @param skybox The skybox.
+ * @param environment The cube map to hand over; invalid on return whether or not the call
+ * succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a handle that is not a cube map --
+ * including `CNA_INVALID_HANDLE`, since there is nothing to hand over --
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_set_owned_environment(
+    CNA_SkyboxHandle skybox, CNA_Handle environment);
+
+/**
+ * @brief Returns the horizontal rotation applied to the sky.
+ *
+ * @param skybox The skybox.
+ * @param out_radians Receives the angle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_get_yaw(CNA_SkyboxHandle skybox, float* out_radians);
+
+/**
+ * @brief Rotates the sky horizontally.
+ *
+ * Assigned as given: any angle is meaningful, so there is nothing to clamp or refuse.
+ *
+ * @param skybox The skybox.
+ * @param radians The angle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_set_yaw(CNA_SkyboxHandle skybox, float radians);
+
+/**
+ * @brief Returns the brightness multiplier.
+ *
+ * @param skybox The skybox.
+ * @param out_intensity Receives the multiplier.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_get_intensity(CNA_SkyboxHandle skybox, float* out_intensity);
+
+/**
+ * @brief Sets the brightness multiplier.
+ *
+ * **Floored at zero**, so a negative value reads back as zero. Note that this is *not* what
+ * @ref cna_atmospheric_sky_set_intensity does with a negative value, despite the matching name:
+ * that one keeps the previous intensity instead. The two canonical setters differ, and this
+ * binding preserves the difference rather than making them agree.
+ *
+ * @param skybox The skybox.
+ * @param intensity The multiplier.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_set_intensity(CNA_SkyboxHandle skybox, float intensity);
+
+/**
+ * @brief Returns the colour the sky is tinted by.
+ *
+ * @param skybox The skybox.
+ * @param out_tint Receives the tint.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_get_tint(CNA_SkyboxHandle skybox, CNA_Vector3* out_tint);
+
+/**
+ * @brief Tints the sky.
+ *
+ * Assigned as given, with no clamp: a tint above one brightens, which is meaningful for an HDR sky.
+ *
+ * @param skybox The skybox.
+ * @param tint The tint.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null tint,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_set_tint(CNA_SkyboxHandle skybox, const CNA_Vector3* tint);
+
+/**
+ * @brief Returns the world direction one screen point looks along, through a rotated sky.
+ *
+ * A pure function needing no skybox: it is how a caller reproduces the sky's own lookup, for
+ * picking or for a CPU-side check of what the shader would have sampled. A degenerate ray answers
+ * straight ahead rather than refusing.
+ *
+ * @param view The view matrix; only its rotation is used.
+ * @param projection The projection matrix.
+ * @param ndc_x The horizontal device coordinate, from minus one to one.
+ * @param ndc_y The vertical device coordinate, from minus one to one.
+ * @param yaw The sky rotation to apply.
+ * @param out_direction Receives the unit direction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_skybox_compute_view_ray(
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    float ndc_x,
+    float ndc_y,
+    float yaw,
+    CNA_Vector3* out_direction);
+
+/**
+ * @brief Owned handle for the analytic atmospheric sky.
+ *
+ * The alternative to @ref CNA_SkyboxHandle when there is no captured environment: the sky is
+ * computed from a sun direction and a turbidity rather than sampled from a cube map. Support is
+ * probed at construction here too, and an unsupported sky skips silently for the same reason.
+ *
+ * **Its three setters behave three different ways**, and the binding preserves each rather than
+ * regularizing them: the turbidity is clamped, the intensity is a guarded assignment that keeps
+ * the previous value, and the sun direction is a guarded assignment that also normalizes.
+ */
+typedef CNA_Handle CNA_AtmosphericSkyHandle;
+
+/**
+ * @brief Creates an atmospheric sky.
+ *
+ * @param graphics_device The device to draw with.
+ * @param out_sky Receives the sky; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_create(
+    CNA_Handle graphics_device, CNA_AtmosphericSkyHandle* out_sky);
+
+/**
+ * @brief Releases an atmospheric sky.
+ *
+ * @param sky The sky.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_destroy(CNA_AtmosphericSkyHandle sky);
+
+/**
+ * @brief Reports whether this renderer could compile the sky shader.
+ *
+ * @param sky The sky.
+ * @param out_supported Receives the answer measured at construction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_is_supported(
+    CNA_AtmosphericSkyHandle sky, CNA_Bool* out_supported);
+
+/**
+ * @brief Draws the sky over whatever target is currently bound.
+ *
+ * @param sky The sky.
+ * @param view The view matrix; only its rotation is used.
+ * @param projection The projection matrix.
+ * @param width The target width in pixels; must be positive.
+ * @param height The target height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS` -- including when the sky was skipped for want of support --
+ * `CNA_RESULT_INVALID_ARGUMENT` for a size below one or a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_draw(
+    CNA_AtmosphericSkyHandle sky,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    int32_t width,
+    int32_t height);
+
+/**
+ * @brief Returns the direction the sun is in.
+ *
+ * Always a unit vector, whatever was set.
+ *
+ * @param sky The sky.
+ * @param out_direction Receives the direction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_get_sun_direction(
+    CNA_AtmosphericSkyHandle sky, CNA_Vector3* out_direction);
+
+/**
+ * @brief Points the sun.
+ *
+ * **Normalized on the way in**, so what reads back is a unit vector rather than what was written.
+ * A vector too short to have a direction is a **silent no-op**: the previous sun direction stays.
+ * That is not an error the canonical setter reports, and it is not one here either -- but it does
+ * mean a caller cannot assume a successful call changed anything, which is why the getter exists.
+ *
+ * @param sky The sky.
+ * @param direction The direction; need not be normalized.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null direction,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_set_sun_direction(
+    CNA_AtmosphericSkyHandle sky, const CNA_Vector3* direction);
+
+/**
+ * @brief Returns the atmospheric turbidity.
+ *
+ * @param sky The sky.
+ * @param out_turbidity Receives the turbidity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_get_turbidity(
+    CNA_AtmosphericSkyHandle sky, float* out_turbidity);
+
+/**
+ * @brief Sets the atmospheric turbidity.
+ *
+ * **Clamped to one through ten**, the range the model is defined over. Note that
+ * @ref cna_atmospheric_sky_radiance does *not* clamp its own turbidity argument: the setter guards
+ * a sky that will be drawn many times, the free function evaluates whatever it is handed.
+ *
+ * @param sky The sky.
+ * @param turbidity The turbidity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_set_turbidity(
+    CNA_AtmosphericSkyHandle sky, float turbidity);
+
+/**
+ * @brief Returns the brightness multiplier.
+ *
+ * @param sky The sky.
+ * @param out_intensity Receives the multiplier.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_get_intensity(
+    CNA_AtmosphericSkyHandle sky, float* out_intensity);
+
+/**
+ * @brief Sets the brightness multiplier.
+ *
+ * A negative value is a **silent no-op** that keeps the previous intensity -- it is not clamped to
+ * zero, which is what the identically named @ref cna_skybox_set_intensity does. The two canonical
+ * setters genuinely differ and the binding preserves the difference.
+ *
+ * @param sky The sky.
+ * @param intensity The multiplier.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_set_intensity(
+    CNA_AtmosphericSkyHandle sky, float intensity);
+
+/**
+ * @brief Copies the GLSL source of the sky model into a caller buffer.
+ *
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the byte count, including the terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in
+ * `out_bytes`, `CNA_RESULT_INVALID_ARGUMENT` for a null count,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_copy_model_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Evaluates the sky model for one view direction, on the CPU.
+ *
+ * The same model the shader runs, available without a device -- for a CPU-side ambient term, or to
+ * check what the sky will look like before drawing it. Degenerate directions fall back to straight
+ * up rather than refusing, and **the turbidity is used as given**: unlike
+ * @ref cna_atmospheric_sky_set_turbidity this does not clamp it into the model's range.
+ *
+ * @param view_direction The direction being looked along.
+ * @param sun_direction The direction the sun is in.
+ * @param turbidity The turbidity; not clamped.
+ * @param out_radiance Receives the radiance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_atmospheric_sky_radiance(
+    const CNA_Vector3* view_direction,
+    const CNA_Vector3* sun_direction,
+    float turbidity,
+    CNA_Vector3* out_radiance);
+
+/**
+ * @brief Returns the skybox the pipeline draws, if any.
+ *
+ * The handle **borrows**: it keeps the pipeline alive while it exists and releases only itself.
+ *
+ * @param pipeline The pipeline.
+ * @param out_skybox Receives the skybox, or `CNA_INVALID_HANDLE` when none is set.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_skybox(
+    CNA_RenderPipelineHandle pipeline, CNA_SkyboxHandle* out_skybox);
+
+/**
+ * @brief Gives the pipeline a skybox to draw.
+ *
+ * **Borrowed, not owned**: the caller keeps the skybox alive for as long as the pipeline draws it,
+ * exactly as the canonical pointer requires.
+ *
+ * @param pipeline The pipeline.
+ * @param skybox The skybox, or `CNA_INVALID_HANDLE` to draw none.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a handle that is neither valid nor
+ * `CNA_INVALID_HANDLE`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_skybox(
+    CNA_RenderPipelineHandle pipeline, CNA_SkyboxHandle skybox);
+
 #ifdef __cplusplus
 }
 #endif

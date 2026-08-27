@@ -206,7 +206,7 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 3,558 symbols. That is itself part of the contract:
+All four build configurations export the same 3,612 symbols. That is itself part of the contract:
 the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
 only the answers do. A route whose backend or layer is absent exists and refuses, rather than
 disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the

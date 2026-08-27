@@ -242,6 +242,12 @@ enum class ObjectKind : uint32_t {
     // plans/plan_binding.md CBIND-091A.
     LightProbe = 155,
     LightProbeVolume = 156,
+
+    // CBIND-091B.
+    LightProbeBaker = 157,
+    EnvironmentProcessor = 158,
+    Skybox = 159,
+    AtmosphericSky = 160,
     Test = UINT32_MAX
 };
 

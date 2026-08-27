@@ -11,7 +11,6 @@
 #include <CNA/C/cna.h>
 
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 
 typedef struct EngineLayerState {
@@ -743,6 +742,137 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
         if (zero != UINT8_C(9) || parts != -3.5F) {
+            return 0;
+        }
+    }
+    /* CBIND-091B. The baker, the processor, the skybox and the analytic sky. Unlike the
+       image-based-light value above, every one of these -- including the pure maths -- refuses
+       here, because their canonical types live under CNA_CNAEXT rather than in the
+       always-compiled XNA header. Nothing is written to any output. */
+    {
+        CNA_LightProbeBakerHandle baker = (CNA_LightProbeBakerHandle)UINT64_C(0x5A5A5A5A);
+        CNA_EnvironmentProcessorHandle processor =
+            (CNA_EnvironmentProcessorHandle)UINT64_C(0x5A5A5A5A);
+        CNA_SkyboxHandle skybox = (CNA_SkyboxHandle)UINT64_C(0x5A5A5A5A);
+        CNA_AtmosphericSkyHandle sky = (CNA_AtmosphericSkyHandle)UINT64_C(0x5A5A5A5A);
+        CNA_LightProbeHandle probe = (CNA_LightProbeHandle)UINT64_C(0x5A5A5A5A);
+        CNA_LightProbeVolumeHandle volume = (CNA_LightProbeVolumeHandle)UINT64_C(0x5A5A5A5A);
+        CNA_Handle cube = (CNA_Handle)UINT64_C(0x5A5A5A5A);
+        CNA_Matrix matrix;
+        CNA_Vector3 vector;
+        const float sentinel_scalar = -31.5F;
+        const int32_t sentinel_number = INT32_C(-77);
+        float scalar = sentinel_scalar;
+        float other = sentinel_scalar;
+        int32_t number = sentinel_number;
+        uint64_t bytes = UINT64_C(7);
+        vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+        if (cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_light_probe_baker_create(graphics_device, &baker) != CNA_RESULT_NOT_SUPPORTED ||
+            baker != CNA_INVALID_HANDLE ||
+            cna_light_probe_baker_create_with_face_size(graphics_device, INT32_C(8), &baker) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_face_count(&number) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_is_supported(baker, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_get_face_size(baker, &number) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_get_near_plane(baker, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_get_far_plane(baker, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_set_planes(baker, 1.0F, 2.0F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_face_view(baker, INT32_C(0), &vector, &matrix) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_bake_probe(baker, &vector, 0, 0, &probe) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_bake_light(baker, volume, 0, 0) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_bake_visibility(baker, volume, 0, 0) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_baker_destroy(baker) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (cna_environment_processor_create(graphics_device, &processor) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            processor != CNA_INVALID_HANDLE ||
+            cna_environment_processor_convert_equirectangular(
+                processor, cube, INT32_C(8), &cube) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_generate_irradiance(
+                processor, cube, INT32_C(4), INT32_C(4), &cube) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_generate_prefiltered_specular(
+                processor, cube, INT32_C(8), INT32_C(2), INT32_C(4), &cube) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_generate_probe(processor, cube, &vector, &probe) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_generate_brdf_lut(
+                processor, INT32_C(8), INT32_C(4), &cube) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_mip_for_roughness(0.5F, INT32_C(5), &scalar) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_roughness_for_mip(2.0F, INT32_C(5), &scalar) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_hammersley(INT32_C(0), INT32_C(16), &scalar, &other) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_importance_sample_ggx(
+                0.25F, 0.5F, &vector, 0.5F, &vector) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_face_direction(INT32_C(0), 0.5F, 0.5F, &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_direction_to_equirectangular(&vector, &scalar, &other) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_environment_processor_destroy(processor) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (cna_skybox_create(graphics_device, CNA_INVALID_HANDLE, &skybox) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            skybox != CNA_INVALID_HANDLE ||
+            cna_skybox_is_supported(skybox, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_draw(skybox, &matrix, &matrix, INT32_C(8), INT32_C(8)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_get_environment(skybox, &cube) != CNA_RESULT_NOT_SUPPORTED ||
+            cube != CNA_INVALID_HANDLE ||
+            cna_skybox_set_environment(skybox, CNA_INVALID_HANDLE) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_set_owned_environment(skybox, CNA_INVALID_HANDLE) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_get_yaw(skybox, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_set_yaw(skybox, 1.0F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_get_intensity(skybox, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_set_intensity(skybox, 1.0F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_get_tint(skybox, &vector) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_set_tint(skybox, &vector) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_compute_view_ray(&matrix, &matrix, 0.0F, 0.0F, 0.0F, &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_skybox_destroy(skybox) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (cna_atmospheric_sky_create(graphics_device, &sky) != CNA_RESULT_NOT_SUPPORTED ||
+            sky != CNA_INVALID_HANDLE ||
+            cna_atmospheric_sky_is_supported(sky, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_draw(sky, &matrix, &matrix, INT32_C(8), INT32_C(8)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_get_sun_direction(sky, &vector) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_set_sun_direction(sky, &vector) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_get_turbidity(sky, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_set_turbidity(sky, 4.0F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_get_intensity(sky, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_set_intensity(sky, 1.0F) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_copy_model_glsl(0, UINT64_C(0), &bytes) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            bytes != UINT64_C(0) ||
+            cna_atmospheric_sky_radiance(&vector, &vector, 2.0F, &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_atmospheric_sky_destroy(sky) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        {
+            CNA_RenderPipelineHandle pipeline = (CNA_RenderPipelineHandle)UINT64_C(0x5A5A5A5A);
+            CNA_SkyboxHandle read_back = (CNA_SkyboxHandle)UINT64_C(0x5A5A5A5A);
+            if (cna_render_pipeline_get_skybox(pipeline, &read_back) !=
+                    CNA_RESULT_NOT_SUPPORTED ||
+                read_back != CNA_INVALID_HANDLE ||
+                cna_render_pipeline_set_skybox(pipeline, skybox) != CNA_RESULT_NOT_SUPPORTED) {
+                return 0;
+            }
+        }
+        /* Nothing scalar was touched by any of the fifty-four refusals above. */
+        if (scalar != sentinel_scalar || other != sentinel_scalar || number != sentinel_number ||
+            vector.y != 1.0F) {
             return 0;
         }
     }
@@ -5751,6 +5881,525 @@ static int validate_light_probes(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-091B. Four objects, three of which probe at construction what the renderer can actually
+   do -- so on a renderer that cannot capture, the bake routes take their refusal arm and only
+   EasyGL runs the success arm. Both are asserted, keyed on the measured support rather than on an
+   assumption about which renderer is running.
+
+   The sharpest thing here is a pair of setters with the same name and different behaviour:
+   cna_skybox_set_intensity FLOORS a negative at zero, cna_atmospheric_sky_set_intensity KEEPS the
+   previous value. Asserting only one of them would let a binding that regularized them pass. */
+static int sky_draw_calls;
+
+static void count_scene_draw(const CNA_Matrix* const view, const CNA_Matrix* const projection,
+                             void* const context)
+{
+    (void)view;
+    (void)projection;
+    if (context != 0) {
+        *(int*)context += 1;
+    }
+    sky_draw_calls += 1;
+}
+
+static int validate_probe_baker(const CNA_Handle graphics_device)
+{
+    CNA_LightProbeBakerHandle baker = CNA_INVALID_HANDLE;
+    CNA_LightProbeVolumeHandle volume = CNA_INVALID_HANDLE;
+    CNA_LightProbeHandle probe = CNA_INVALID_HANDLE;
+    CNA_BoundingBox bounds;
+    CNA_Vector3 position;
+    CNA_Matrix matrix;
+    CNA_Bool supported = UINT8_C(9);
+    int32_t number = INT32_C(-1);
+    float scalar = -1.0F;
+    int calls = 0;
+    int ok = 1;
+
+    bounds.min.x = -1.0F; bounds.min.y = -1.0F; bounds.min.z = -1.0F;
+    bounds.max.x = 1.0F;  bounds.max.y = 1.0F;  bounds.max.z = 1.0F;
+    position.x = 0.0F; position.y = 0.0F; position.z = 0.0F;
+
+    /* The face count is a constant, and the macro must agree with the call. */
+    ok = cna_light_probe_baker_face_count(&number) == CNA_RESULT_SUCCESS &&
+        number == CNA_LIGHT_PROBE_BAKER_FACE_COUNT && number == INT32_C(6);
+    ok = ok && cna_light_probe_baker_face_count(0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* A face size below one is refused, and the output handle stays invalid. */
+    ok = ok && cna_light_probe_baker_create_with_face_size(
+            graphics_device, INT32_C(0), &baker) == CNA_RESULT_INVALID_ARGUMENT &&
+        baker == CNA_INVALID_HANDLE;
+    ok = ok && cna_light_probe_baker_create_with_face_size(
+            graphics_device, INT32_C(-8), &baker) == CNA_RESULT_INVALID_ARGUMENT;
+    if (!ok || cna_light_probe_baker_create(graphics_device, &baker) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_light_probe_baker_get_face_size(baker, &number) == CNA_RESULT_SUCCESS &&
+        number == CNA_LIGHT_PROBE_BAKER_DEFAULT_FACE_SIZE;
+    ok = ok && cna_light_probe_baker_is_supported(baker, &supported) == CNA_RESULT_SUCCESS &&
+        (supported == CNA_TRUE || supported == CNA_FALSE);
+
+    /* The planes are validated and refused as a PAIR: neither half moves when the pair is bad. */
+    ok = ok && cna_light_probe_baker_get_near_plane(baker, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar > 0.0F;
+    ok = ok && cna_light_probe_baker_set_planes(baker, 0.5F, 50.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_baker_get_near_plane(baker, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.5F;
+    ok = ok && cna_light_probe_baker_get_far_plane(baker, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 50.0F;
+    ok = ok && cna_light_probe_baker_set_planes(baker, 0.0F, 50.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_baker_set_planes(baker, -1.0F, 50.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_baker_set_planes(baker, 10.0F, 10.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_baker_set_planes(baker, 10.0F, 1.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    /* Both halves unchanged after four refusals -- that is what "refused as a pair" means. */
+    ok = ok && cna_light_probe_baker_get_near_plane(baker, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.5F;
+    ok = ok && cna_light_probe_baker_get_far_plane(baker, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 50.0F;
+
+    /* Six faces, refused at both ends rather than wrapped. */
+    ok = ok && cna_light_probe_baker_face_view(baker, INT32_C(0), &position, &matrix) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_baker_face_view(baker, INT32_C(5), &position, &matrix) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_baker_face_view(baker, INT32_C(6), &position, &matrix) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_baker_face_view(baker, INT32_C(-1), &position, &matrix) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_baker_face_view(baker, INT32_C(0), 0, &matrix) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    if (!ok || cna_light_probe_volume_ext_create(&bounds, INT32_C(2), INT32_C(1), INT32_C(1),
+                                                  &volume) != CNA_RESULT_SUCCESS) {
+        (void)cna_light_probe_baker_destroy(baker);
+        return 0;
+    }
+
+    /* A null callback is refused BEFORE the support check, on every renderer: a bake that draws
+       nothing produces a valid probe, and a caller could not tell it from a mistake. */
+    ok = ok && cna_light_probe_baker_bake_probe(baker, &position, 0, 0, &probe) ==
+        CNA_RESULT_INVALID_ARGUMENT && probe == CNA_INVALID_HANDLE;
+    ok = ok && cna_light_probe_baker_bake_light(baker, volume, 0, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_baker_bake_visibility(baker, volume, 0, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_baker_bake_probe(baker, 0, count_scene_draw, 0, &probe) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    sky_draw_calls = 0;
+    calls = 0;
+    if (supported == CNA_TRUE) {
+        /* The success arm: six faces per probe, and the volume's two probes make twelve. */
+        ok = ok && cna_light_probe_baker_bake_probe(
+                baker, &position, count_scene_draw, &calls, &probe) == CNA_RESULT_SUCCESS &&
+            probe != CNA_INVALID_HANDLE && calls == CNA_LIGHT_PROBE_BAKER_FACE_COUNT;
+        ok = ok && cna_light_probe_ext_destroy(probe) == CNA_RESULT_SUCCESS;
+        calls = 0;
+        ok = ok && cna_light_probe_baker_bake_light(baker, volume, count_scene_draw, &calls) ==
+            CNA_RESULT_SUCCESS && calls == INT32_C(2) * CNA_LIGHT_PROBE_BAKER_FACE_COUNT;
+        calls = 0;
+        ok = ok && cna_light_probe_baker_bake_visibility(baker, volume, count_scene_draw, &calls) ==
+            CNA_RESULT_SUCCESS && calls > 0;
+    } else {
+        /* The refusal arm: INVALID_STATE, not NOT_SUPPORTED -- the layer IS here, this renderer
+           just cannot read a target back. And nothing was drawn. */
+        ok = ok && cna_light_probe_baker_bake_probe(
+                baker, &position, count_scene_draw, &calls, &probe) == CNA_RESULT_INVALID_STATE &&
+            probe == CNA_INVALID_HANDLE;
+        ok = ok && cna_light_probe_baker_bake_light(baker, volume, count_scene_draw, &calls) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_light_probe_baker_bake_visibility(baker, volume, count_scene_draw, &calls) ==
+            CNA_RESULT_INVALID_STATE;
+        ok = ok && calls == 0 && sky_draw_calls == 0;
+    }
+
+    ok = ok && cna_light_probe_volume_ext_destroy(volume) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_baker_destroy(baker) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_baker_destroy(baker) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
+static int validate_environment_processor(const CNA_Handle graphics_device)
+{
+    CNA_EnvironmentProcessorHandle processor = CNA_INVALID_HANDLE;
+    CNA_LightProbeHandle probe = CNA_INVALID_HANDLE;
+    CNA_Handle panorama = CNA_INVALID_HANDLE;
+    CNA_Handle environment = CNA_INVALID_HANDLE;
+    CNA_Handle generated = CNA_INVALID_HANDLE;
+    CNA_Vector3 vector;
+    CNA_Vector3 direction;
+    float scalar = -1.0F;
+    float other = -1.0F;
+    CNA_Bool survivor = UINT8_C(9);
+    int ok = 1;
+
+    vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+
+    /* The static maths first: it needs no device and answers rather than refusing. A mip count of
+       one or less has no ramp to index, so the answer is mip zero rather than an error. */
+    ok = cna_environment_processor_mip_for_roughness(0.5F, INT32_C(1), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_environment_processor_mip_for_roughness(0.5F, INT32_C(0), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_environment_processor_mip_for_roughness(0.5F, INT32_C(-4), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_environment_processor_mip_for_roughness(0.0F, INT32_C(5), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_environment_processor_mip_for_roughness(1.0F, INT32_C(5), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 4.0F;
+    /* Clamped into zero-to-one, not refused, at both ends. */
+    ok = ok && cna_environment_processor_mip_for_roughness(4.0F, INT32_C(5), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 4.0F;
+    ok = ok && cna_environment_processor_mip_for_roughness(-4.0F, INT32_C(5), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_environment_processor_mip_for_roughness(0.5F, INT32_C(5), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    /* And it round-trips through its inverse. */
+    ok = ok && cna_environment_processor_roughness_for_mip(4.0F, INT32_C(5), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_environment_processor_roughness_for_mip(0.0F, INT32_C(5), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_environment_processor_roughness_for_mip(99.0F, INT32_C(5), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_environment_processor_roughness_for_mip(1.0F, INT32_C(1), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* The first coordinate is the texel CENTRE, (index + 0.5) / count -- not index / count, which
+       is what an eye reading "low-discrepancy sequence" assumes and would put the first sample on
+       the edge of the square rather than inside it. Asserted as the closed form, at two indices. */
+    ok = ok && cna_environment_processor_hammersley(INT32_C(0), INT32_C(16), &scalar, &other) ==
+        CNA_RESULT_SUCCESS && scalar == 0.5F / 16.0F && other >= 0.0F && other <= 1.0F;
+    ok = ok && cna_environment_processor_hammersley(INT32_C(8), INT32_C(16), &scalar, &other) ==
+        CNA_RESULT_SUCCESS && scalar == 8.5F / 16.0F;
+    /* A count of zero has no square to divide, so the first coordinate answers zero. */
+    ok = ok && cna_environment_processor_hammersley(INT32_C(0), INT32_C(0), &scalar, &other) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_environment_processor_hammersley(INT32_C(0), INT32_C(16), 0, &other) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_hammersley(INT32_C(0), INT32_C(16), &scalar, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_environment_processor_importance_sample_ggx(
+            0.25F, 0.5F, &vector, 0.5F, &direction) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_environment_processor_importance_sample_ggx(0.25F, 0.5F, 0, 0.5F, &direction) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_face_direction(INT32_C(0), 0.5F, 0.5F, &direction) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_environment_processor_face_direction(INT32_C(0), 0.5F, 0.5F, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_direction_to_equirectangular(&vector, &scalar, &other) ==
+        CNA_RESULT_SUCCESS && scalar >= 0.0F && scalar <= 1.0F && other >= 0.0F && other <= 1.0F;
+    ok = ok && cna_environment_processor_direction_to_equirectangular(0, &scalar, &other) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_direction_to_equirectangular(&vector, 0, &other) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    if (!ok || cna_environment_processor_create(graphics_device, &processor) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        const CNA_Texture2DCreateInfo info = {
+            sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 16U, 8U, CNA_FALSE, {0U, 0U, 0U},
+            CNA_SURFACE_FORMAT_COLOR};
+        if (cna_texture2d_create(graphics_device, &info, &panorama) != CNA_RESULT_SUCCESS) {
+            (void)cna_environment_processor_destroy(processor);
+            return 0;
+        }
+    }
+
+    /* Every argument refusal, on every renderer -- these are checked before any GPU work. */
+    ok = ok && cna_environment_processor_convert_equirectangular(
+            processor, CNA_INVALID_HANDLE, INT32_C(8), &environment) ==
+        CNA_RESULT_INVALID_HANDLE && environment == CNA_INVALID_HANDLE;
+    ok = ok && cna_environment_processor_convert_equirectangular(
+            processor, panorama, INT32_C(0), &environment) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_convert_equirectangular(
+            processor, panorama, INT32_C(8), 0) == CNA_RESULT_INVALID_ARGUMENT;
+    /* The generators need cube storage, and this processor publishes no flag to ask first -- so
+       the answer itself is the discriminator. A renderer without cube storage refuses the upload
+       and every generator says NOT_SUPPORTED; one with it runs the success arm below. Asserting
+       only the success arm would make this stage pass on EasyGL and fail on headless, which is
+       how a renderer-dependent route gets bound as though it were not one. */
+    {
+        const CNA_Result converted = cna_environment_processor_convert_equirectangular(
+            processor, panorama, INT32_C(8), &environment);
+        if (converted == CNA_RESULT_NOT_SUPPORTED) {
+            /* The layer IS here -- so NOT_SUPPORTED means the renderer, not the build. That is
+               exactly the distinction the header tells a caller to draw, and this asserts it. */
+            int32_t layer_version = INT32_C(0);
+            ok = ok && cna_engine_layer_get_version(&layer_version) == CNA_RESULT_SUCCESS &&
+                layer_version > INT32_C(0);
+            ok = ok && environment == CNA_INVALID_HANDLE;
+            /* And the split is by OUTPUT TYPE, not by "generator": the three that build a cube
+               refuse, and the one that builds a 2D table still works. Measured, not assumed --
+               asserting that all four refuse would have been wrong here. */
+            ok = ok && cna_environment_processor_generate_irradiance(
+                    processor, CNA_INVALID_HANDLE, INT32_C(4), INT32_C(4), &generated) ==
+                CNA_RESULT_INVALID_HANDLE;
+            ok = ok && cna_environment_processor_generate_brdf_lut(
+                    processor, INT32_C(8), INT32_C(4), &generated) == CNA_RESULT_SUCCESS &&
+                generated != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(generated) == CNA_RESULT_SUCCESS;
+            /* The static maths touches no device at all, so it answers on every renderer. */
+            ok = ok && cna_environment_processor_mip_for_roughness(1.0F, INT32_C(5), &scalar) ==
+                CNA_RESULT_SUCCESS && scalar == 4.0F;
+            ok = ok && cna_environment_processor_destroy(processor) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_texture2d_destroy(panorama) == CNA_RESULT_SUCCESS;
+            return ok;
+        }
+        if (!ok || converted != CNA_RESULT_SUCCESS) {
+            (void)cna_texture2d_destroy(panorama);
+            (void)cna_environment_processor_destroy(processor);
+            return 0;
+        }
+    }
+    ok = ok && cna_environment_processor_generate_irradiance(
+            processor, CNA_INVALID_HANDLE, INT32_C(4), INT32_C(4), &generated) ==
+        CNA_RESULT_INVALID_HANDLE;
+    ok = ok && cna_environment_processor_generate_irradiance(
+            processor, environment, INT32_C(0), INT32_C(4), &generated) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_generate_irradiance(
+            processor, environment, INT32_C(4), INT32_C(0), &generated) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_generate_prefiltered_specular(
+            processor, environment, INT32_C(0), INT32_C(2), INT32_C(4), &generated) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_generate_prefiltered_specular(
+            processor, environment, INT32_C(8), INT32_C(0), INT32_C(4), &generated) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_generate_prefiltered_specular(
+            processor, environment, INT32_C(8), INT32_C(2), INT32_C(0), &generated) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_generate_brdf_lut(
+            processor, INT32_C(0), INT32_C(4), &generated) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_generate_brdf_lut(
+            processor, INT32_C(4), INT32_C(0), &generated) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_environment_processor_generate_probe(
+            processor, CNA_INVALID_HANDLE, &vector, &probe) == CNA_RESULT_INVALID_HANDLE;
+    ok = ok && cna_environment_processor_generate_probe(processor, environment, 0, &probe) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_environment_processor_generate_irradiance(
+            processor, environment, INT32_C(4), INT32_C(4), &generated) == CNA_RESULT_SUCCESS &&
+        generated != CNA_INVALID_HANDLE;
+    ok = ok && cna_texturecube_destroy(generated) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_environment_processor_generate_prefiltered_specular(
+            processor, environment, INT32_C(8), INT32_C(2), INT32_C(4), &generated) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_texturecube_destroy(generated) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_environment_processor_generate_brdf_lut(
+            processor, INT32_C(8), INT32_C(4), &generated) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_texture2d_destroy(generated) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_environment_processor_generate_probe(processor, environment, &vector, &probe) ==
+        CNA_RESULT_SUCCESS && probe != CNA_INVALID_HANDLE;
+
+    /* The products outlive the processor that made them: destroying it does not take the probe. */
+    ok = ok && cna_environment_processor_destroy(processor) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_is_zero(probe, &survivor) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_destroy(probe) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_texturecube_destroy(environment) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_texture2d_destroy(panorama) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
+static int validate_sky(const CNA_Handle graphics_device)
+{
+    CNA_SkyboxHandle skybox = CNA_INVALID_HANDLE;
+    CNA_AtmosphericSkyHandle sky = CNA_INVALID_HANDLE;
+    CNA_RenderPipelineHandle pipeline = CNA_INVALID_HANDLE;
+    CNA_SkyboxHandle read_back = CNA_INVALID_HANDLE;
+    CNA_Handle environment = CNA_INVALID_HANDLE;
+    CNA_Handle owned = CNA_INVALID_HANDLE;
+    CNA_Handle attached = CNA_INVALID_HANDLE;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Vector3 vector;
+    CNA_Vector3 read_vector;
+    CNA_Bool supported = UINT8_C(9);
+    uint64_t bytes = UINT64_C(0);
+    float scalar = -1.0F;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        const CNA_TextureCubeCreateInfo info = {
+            sizeof(CNA_TextureCubeCreateInfo), UINT32_C(1), 8U, CNA_FALSE, {0U, 0U, 0U},
+            CNA_SURFACE_FORMAT_COLOR, UINT32_C(0)};
+        if (cna_texturecube_create(graphics_device, &info, &environment) != CNA_RESULT_SUCCESS ||
+            cna_texturecube_create(graphics_device, &info, &owned) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    /* The pure function needs no skybox and answers for a degenerate ray rather than refusing. */
+    ok = cna_skybox_compute_view_ray(&view, &projection, 0.0F, 0.0F, 0.0F, &read_vector) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_compute_view_ray(0, &projection, 0.0F, 0.0F, 0.0F, &read_vector) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_skybox_compute_view_ray(&view, &projection, 0.0F, 0.0F, 0.0F, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* A skybox may be created with no environment at all. */
+    ok = ok && cna_skybox_create(graphics_device, UINT64_C(0x5A5A5A5A), &skybox) ==
+        CNA_RESULT_INVALID_HANDLE && skybox == CNA_INVALID_HANDLE;
+    if (!ok || cna_skybox_create(graphics_device, CNA_INVALID_HANDLE, &skybox) !=
+            CNA_RESULT_SUCCESS) {
+        (void)cna_texturecube_destroy(owned);
+        (void)cna_texturecube_destroy(environment);
+        return 0;
+    }
+    ok = cna_skybox_is_supported(skybox, &supported) == CNA_RESULT_SUCCESS &&
+        (supported == CNA_TRUE || supported == CNA_FALSE);
+    ok = ok && cna_skybox_get_environment(skybox, &attached) == CNA_RESULT_SUCCESS &&
+        attached == CNA_INVALID_HANDLE;
+
+    /* Drawing with nothing attached SUCCEEDS and draws nothing: a missing sky is a scene without
+       one, not a broken frame. That is the assertion a binding that "helpfully" refused would
+       fail, and it holds whether or not the renderer supports the shader. */
+    ok = ok && cna_skybox_draw(skybox, &view, &projection, INT32_C(64), INT32_C(64)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_draw(skybox, &view, &projection, INT32_C(0), INT32_C(64)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_skybox_draw(skybox, &view, &projection, INT32_C(64), INT32_C(-1)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_skybox_draw(skybox, 0, &projection, INT32_C(64), INT32_C(64)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_skybox_set_environment(skybox, environment) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_get_environment(skybox, &attached) == CNA_RESULT_SUCCESS &&
+        attached != CNA_INVALID_HANDLE;
+    /* The returned handle BORROWS: releasing it releases the handle, never the cube -- the skybox
+       still has its environment afterwards. */
+    ok = ok && cna_texturecube_destroy(attached) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_get_environment(skybox, &attached) == CNA_RESULT_SUCCESS &&
+        attached != CNA_INVALID_HANDLE;
+    ok = ok && cna_texturecube_destroy(attached) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_draw(skybox, &view, &projection, INT32_C(64), INT32_C(64)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_set_environment(skybox, UINT64_C(0x5A5A5A5A)) ==
+        CNA_RESULT_INVALID_HANDLE;
+    ok = ok && cna_skybox_set_environment(skybox, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_get_environment(skybox, &attached) == CNA_RESULT_SUCCESS &&
+        attached == CNA_INVALID_HANDLE;
+
+    /* Handing one over CONSUMES the handle: a second release must fail. */
+    ok = ok && cna_skybox_set_owned_environment(skybox, owned) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_texturecube_destroy(owned) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_get_environment(skybox, &attached) == CNA_RESULT_SUCCESS &&
+        attached != CNA_INVALID_HANDLE;
+    ok = ok && cna_texturecube_destroy(attached) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_set_owned_environment(skybox, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_INVALID_HANDLE;
+
+    /* The free assignments, then the floor that is NOT the atmospheric sky's guard. */
+    ok = ok && cna_skybox_set_yaw(skybox, -3.5F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_get_yaw(skybox, &scalar) == CNA_RESULT_SUCCESS && scalar == -3.5F;
+    vector.x = 2.0F; vector.y = 0.5F; vector.z = -1.0F;
+    ok = ok && cna_skybox_set_tint(skybox, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_get_tint(skybox, &read_vector) == CNA_RESULT_SUCCESS &&
+        read_vector.x == 2.0F && read_vector.z == -1.0F;
+    ok = ok && cna_skybox_set_tint(skybox, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_skybox_set_intensity(skybox, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_get_intensity(skybox, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_skybox_set_intensity(skybox, -2.0F) == CNA_RESULT_SUCCESS;
+    /* FLOORED at zero -- it did NOT keep 3. */
+    ok = ok && cna_skybox_get_intensity(skybox, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* ---- the analytic sky ---- */
+    if (!ok || cna_atmospheric_sky_create(graphics_device, &sky) != CNA_RESULT_SUCCESS) {
+        (void)cna_skybox_destroy(skybox);
+        (void)cna_texturecube_destroy(environment);
+        return 0;
+    }
+    ok = cna_atmospheric_sky_is_supported(sky, &supported) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_draw(sky, &view, &projection, INT32_C(64), INT32_C(64)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_draw(sky, &view, &projection, INT32_C(64), INT32_C(0)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Normalized on the way in: what reads back is a unit vector, not what was written. */
+    vector.x = 0.0F; vector.y = 5.0F; vector.z = 0.0F;
+    ok = ok && cna_atmospheric_sky_set_sun_direction(sky, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_sun_direction(sky, &read_vector) == CNA_RESULT_SUCCESS &&
+        read_vector.y == 1.0F && read_vector.x == 0.0F;
+    /* Too short to have a direction: a SILENT no-op, so the previous sun stays. */
+    vector.x = 0.0F; vector.y = 0.0F; vector.z = 0.0F;
+    ok = ok && cna_atmospheric_sky_set_sun_direction(sky, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_sun_direction(sky, &read_vector) == CNA_RESULT_SUCCESS &&
+        read_vector.y == 1.0F;
+    ok = ok && cna_atmospheric_sky_set_sun_direction(sky, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Clamped to one through ten, at both ends. */
+    ok = ok && cna_atmospheric_sky_set_turbidity(sky, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_turbidity(sky, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 4.0F;
+    ok = ok && cna_atmospheric_sky_set_turbidity(sky, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_turbidity(sky, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.0F;
+    ok = ok && cna_atmospheric_sky_set_turbidity(sky, 99.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_turbidity(sky, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 10.0F;
+
+    /* The discriminator between the two setIntensity contracts: this one KEEPS its previous value
+       where cna_skybox_set_intensity floored to zero. Both assertions are in this stage on
+       purpose -- a binding that made them agree would fail exactly one of them. */
+    ok = ok && cna_atmospheric_sky_set_intensity(sky, 7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_intensity(sky, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 7.0F;
+    ok = ok && cna_atmospheric_sky_set_intensity(sky, -2.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_intensity(sky, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 7.0F;
+    ok = ok && cna_atmospheric_sky_set_intensity(sky, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_get_intensity(sky, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+
+    ok = ok && cna_atmospheric_sky_copy_model_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    ok = ok && cna_atmospheric_sky_copy_model_glsl(0, UINT64_C(0), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The free radiance function does NOT clamp turbidity, unlike the setter above. */
+    vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+    read_vector.x = 0.0F; read_vector.y = -1.0F; read_vector.z = 0.0F;
+    ok = ok && cna_atmospheric_sky_radiance(&vector, &read_vector, 2.0F, &read_vector) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_radiance(&vector, &vector, 999.0F, &read_vector) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_radiance(0, &vector, 2.0F, &read_vector) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_atmospheric_sky_radiance(&vector, 0, 2.0F, &read_vector) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* ---- the pipeline's borrowed skybox ---- */
+    if (ok && cna_render_pipeline_create(graphics_device, &pipeline) == CNA_RESULT_SUCCESS) {
+        ok = ok && cna_render_pipeline_get_skybox(pipeline, &read_back) == CNA_RESULT_SUCCESS &&
+            read_back == CNA_INVALID_HANDLE;
+        ok = ok && cna_render_pipeline_set_skybox(pipeline, skybox) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_render_pipeline_get_skybox(pipeline, &read_back) == CNA_RESULT_SUCCESS &&
+            read_back == skybox;
+        ok = ok && cna_render_pipeline_set_skybox(pipeline, UINT64_C(0x5A5A5A5A)) ==
+            CNA_RESULT_INVALID_HANDLE;
+        ok = ok && cna_render_pipeline_set_skybox(pipeline, CNA_INVALID_HANDLE) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_render_pipeline_get_skybox(pipeline, &read_back) == CNA_RESULT_SUCCESS &&
+            read_back == CNA_INVALID_HANDLE;
+        ok = ok && cna_render_pipeline_destroy(pipeline) == CNA_RESULT_SUCCESS;
+    } else {
+        ok = 0;
+    }
+
+    ok = ok && cna_atmospheric_sky_destroy(sky) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_atmospheric_sky_destroy(sky) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_destroy(skybox) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_skybox_destroy(skybox) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_texturecube_destroy(environment) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -5876,6 +6525,18 @@ static CNA_Result on_load(
         }
         if (!validate_light_probes(graphics_device)) {
             state->failed_stage = 32;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_probe_baker(graphics_device)) {
+            state->failed_stage = 33;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_environment_processor(graphics_device)) {
+            state->failed_stage = 34;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_sky(graphics_device)) {
+            state->failed_stage = 35;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

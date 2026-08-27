@@ -1016,6 +1016,18 @@
   "cna_ascii_post_process_effect_get_quantize_mode",
   "cna_ascii_post_process_effect_set_cell_size",
   "cna_ascii_post_process_effect_set_quantize_mode",
+  "cna_atmospheric_sky_copy_model_glsl",
+  "cna_atmospheric_sky_create",
+  "cna_atmospheric_sky_destroy",
+  "cna_atmospheric_sky_draw",
+  "cna_atmospheric_sky_get_intensity",
+  "cna_atmospheric_sky_get_sun_direction",
+  "cna_atmospheric_sky_get_turbidity",
+  "cna_atmospheric_sky_is_supported",
+  "cna_atmospheric_sky_radiance",
+  "cna_atmospheric_sky_set_intensity",
+  "cna_atmospheric_sky_set_sun_direction",
+  "cna_atmospheric_sky_set_turbidity",
   "cna_attitude_reading_copy_string",
   "cna_attitude_reading_copy_type_name",
   "cna_attitude_reading_equals",
@@ -1888,6 +1900,19 @@
   "cna_environment_map_effect_set_fresnel_factor",
   "cna_environment_map_effect_set_specular",
   "cna_environment_map_effect_set_texture",
+  "cna_environment_processor_convert_equirectangular",
+  "cna_environment_processor_create",
+  "cna_environment_processor_destroy",
+  "cna_environment_processor_direction_to_equirectangular",
+  "cna_environment_processor_face_direction",
+  "cna_environment_processor_generate_brdf_lut",
+  "cna_environment_processor_generate_irradiance",
+  "cna_environment_processor_generate_prefiltered_specular",
+  "cna_environment_processor_generate_probe",
+  "cna_environment_processor_hammersley",
+  "cna_environment_processor_importance_sample_ggx",
+  "cna_environment_processor_mip_for_roughness",
+  "cna_environment_processor_roughness_for_mip",
   "cna_error_copy_last_message",
   "cna_error_get_last_info",
   "cna_error_get_last_message_size",
@@ -2622,6 +2647,19 @@
   "cna_lens_flare_pass_set_dispersal",
   "cna_lens_flare_pass_set_intensity",
   "cna_lens_flare_pass_set_threshold",
+  "cna_light_probe_baker_bake_light",
+  "cna_light_probe_baker_bake_probe",
+  "cna_light_probe_baker_bake_visibility",
+  "cna_light_probe_baker_create",
+  "cna_light_probe_baker_create_with_face_size",
+  "cna_light_probe_baker_destroy",
+  "cna_light_probe_baker_face_count",
+  "cna_light_probe_baker_face_view",
+  "cna_light_probe_baker_get_face_size",
+  "cna_light_probe_baker_get_far_plane",
+  "cna_light_probe_baker_get_near_plane",
+  "cna_light_probe_baker_is_supported",
+  "cna_light_probe_baker_set_planes",
   "cna_light_probe_ext_copy_coefficients",
   "cna_light_probe_ext_copy_evaluation_glsl",
   "cna_light_probe_ext_copy_from",
@@ -3586,6 +3624,7 @@
   "cna_render_pipeline_get_scene_target_format",
   "cna_render_pipeline_get_settings",
   "cna_render_pipeline_get_shadow_map",
+  "cna_render_pipeline_get_skybox",
   "cna_render_pipeline_get_statistics",
   "cna_render_pipeline_is_gpu_timing_enabled_ext",
   "cna_render_pipeline_is_using_scene_target",
@@ -3596,6 +3635,7 @@
   "cna_render_pipeline_set_gpu_timing_enabled_ext",
   "cna_render_pipeline_set_settings",
   "cna_render_pipeline_set_shadow_scene",
+  "cna_render_pipeline_set_skybox",
   "cna_render_pipeline_set_skybox_camera",
   "cna_render_pipeline_set_transparent_scene",
   "cna_render_pipeline_set_velocity_input_ext",
@@ -3777,6 +3817,20 @@
   "cna_skinning_data_set_clip_target_space_ext",
   "cna_skinning_data_set_skeleton_root_name_ext",
   "cna_skinning_data_set_skeleton_root_node_index_ext",
+  "cna_skybox_compute_view_ray",
+  "cna_skybox_create",
+  "cna_skybox_destroy",
+  "cna_skybox_draw",
+  "cna_skybox_get_environment",
+  "cna_skybox_get_intensity",
+  "cna_skybox_get_tint",
+  "cna_skybox_get_yaw",
+  "cna_skybox_is_supported",
+  "cna_skybox_set_environment",
+  "cna_skybox_set_intensity",
+  "cna_skybox_set_owned_environment",
+  "cna_skybox_set_tint",
+  "cna_skybox_set_yaw",
   "cna_song_collection_copy_type_name",
   "cna_song_collection_create",
   "cna_song_collection_destroy",
@@ -5292,6 +5346,8 @@
   "CNA_LEADERBOARD_OUTCOME_TIE": 3,
   "CNA_LEADERBOARD_OUTCOME_WIN": 1,
   "CNA_LENS_FLARE_GHOST_COUNT_EXT": 4,
+  "CNA_LIGHT_PROBE_BAKER_DEFAULT_FACE_SIZE": 32,
+  "CNA_LIGHT_PROBE_BAKER_FACE_COUNT": 6,
   "CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT": 9,
   "CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT": 6,
   "CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT": 32768,
@@ -5806,6 +5862,10 @@
    4,
    4
   ],
+  "CNA_AtmosphericSkyHandle": [
+   8,
+   8
+  ],
   "CNA_AudioChannels": [
    4,
    4
@@ -6118,6 +6178,10 @@
    4,
    4
   ],
+  "CNA_EnvironmentProcessorHandle": [
+   8,
+   8
+  ],
   "CNA_ErrorCategory": [
    4,
    4
@@ -6395,6 +6459,10 @@
    4
   ],
   "CNA_LeaderboardReaderHandle": [
+   8,
+   8
+  ],
+  "CNA_LightProbeBakerHandle": [
    8,
    8
   ],
@@ -6855,6 +6923,10 @@
    8
   ],
   "CNA_SkinningDataHandle": [
+   8,
+   8
+  ],
+  "CNA_SkyboxHandle": [
    8,
    8
   ],

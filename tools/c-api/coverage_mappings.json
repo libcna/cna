@@ -16814,6 +16814,135 @@
         "CPP-C5BB3AD4F721",
         "CPP-F8BF74DDD8D1"
       ]
+    },
+    {
+      "id": "light-probe-baker",
+      "qualified_name_regex": "^CNA::Graphics::LightProbeBaker(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "alias",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_light_probe_baker_*` over its own owned handle, with the canonical `SceneDraw` becoming `CNA_LightProbeSceneDrawCallback` -- a function pointer plus a `void*` context, the shape every other callback in this ABI uses.\n\n**Whether a baker can bake is probed, not asked**, and the binding preserves that: no renderer publishes \"can bind an offscreen target and read it back\", and the two do not come together, so the canonical constructor renders one capture and remembers the result. The bake routes refuse an unsupported renderer with `CNA_RESULT_INVALID_STATE` rather than `CNA_RESULT_NOT_SUPPORTED`, because the layer *is* present and the arguments *are* fine -- NOT_SUPPORTED would collide with \"built without the layer\" and send a caller to look at its build flags.\n\nA null callback is refused **before** the support check and on every renderer: a bake that draws nothing produces a perfectly valid probe, and a caller could not tell it from a mistake. `setPlanes` is validated and refused as a **pair**, with no clamping -- a silently corrected capture range gives probes that look plausible and are lit from the wrong depth.",
+      "tests": "`EngineLayerSmoke.c` stage 33, which runs **both arms keyed on the measured support**: EasyGL takes the success path and counts six callback invocations per probe (twelve for a two-probe volume), headless takes the refusal path and asserts nothing was drawn. Four bad plane pairs are refused and both halves shown unchanged afterwards; the six faces are refused at both ends. Break-proved in both directions.",
+      "status": "implemented",
+      "task": "CBIND-091B",
+      "approved_symbols": [
+        "CPP-25D99D6FCB83",
+        "CPP-3E986676891F",
+        "CPP-45AD7A413C2F",
+        "CPP-5A24558E8928",
+        "CPP-5D8297628541",
+        "CPP-6366C375F755",
+        "CPP-644DD31EE8C3",
+        "CPP-7B25080E8476",
+        "CPP-7CF384C43246",
+        "CPP-91121B8C355F",
+        "CPP-974169243497",
+        "CPP-9B4741BD6B4C",
+        "CPP-AE6384CE6F9A",
+        "CPP-B4CDE25816A9",
+        "CPP-D94D4249BC88",
+        "CPP-EF01E2F5F59F"
+      ]
+    },
+    {
+      "id": "environment-processor",
+      "qualified_name_regex": "^CNA::Graphics::EnvironmentProcessor(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_environment_processor_*` over its own owned handle. A pure transformer with **no setters at all**, so its nine argument refusals are each about one call rather than about accumulated state. Each generator hands back a new **owned** texture handle that outlives the processor.\n\n**The generators are renderer-dependent and this type publishes no support flag to ask first** -- they build a real `TextureCube` and write its faces, which a renderer without cube storage refuses. That reaches a caller as `CNA_RESULT_NOT_SUPPORTED`, the canonical answer, deliberately not rewritten. The header therefore documents the resulting ambiguity and how to resolve it (`cna_engine_layer_get_version`), and records that **the split is by output type**: the three cube-producing routes refuse while `generate_brdf_lut`, which builds a 2D table, still works.",
+      "tests": "`EngineLayerSmoke.c` stage 34. The five static maths routes are asserted as closed forms -- including that `hammersley` returns the texel **centre** `(index + 0.5) / count` rather than `index / count`, and that a mip count of one or less answers mip zero rather than refusing. The object routes branch on the measured answer and assert both arms; on the refusing renderer the stage additionally asserts the layer version is non-zero, which is the very distinction the header tells a caller to draw. Break-proved: breaking the headless-only arm moves only that tree.",
+      "status": "implemented",
+      "task": "CBIND-091B",
+      "approved_symbols": [
+        "CPP-00A7C981D8A5",
+        "CPP-067B2C045DD1",
+        "CPP-07D0621BE065",
+        "CPP-22D97EB3970F",
+        "CPP-4767E7633A7A",
+        "CPP-577AE1684C41",
+        "CPP-581EDF0A8A7D",
+        "CPP-5CDC563B4C8F",
+        "CPP-8E93469DD0CD",
+        "CPP-8EA7D2B3A22D",
+        "CPP-B9CA480014F8",
+        "CPP-D8379C020B21",
+        "CPP-E1E3059FB643",
+        "CPP-EE373A237395",
+        "CPP-FBD06D3F2A06"
+      ]
+    },
+    {
+      "id": "skybox",
+      "qualified_name_regex": "^CNA::Graphics::Skybox(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_skybox_*` over its own owned handle. Support is probed at construction, and a skybox that cannot draw -- refused shader, or no environment -- **skips silently and still succeeds**: a missing sky is a scene without a sky, not a broken frame.\n\nTwo attach routes, because the canonical class has two. `set_environment` **borrows** (and releases an owned cube first, or attaching over one would keep it alive with nothing referring to it); `set_owned_environment` **consumes the handle**, following `cna_post_process_chain_add_owned_pass`, the campaign's settled shape for a canonical `unique_ptr` parameter. The transfer is done by releasing the handle -- the last step that can fail, so a refusal never leaves the caller holding nothing -- and retaining the cube on the resource.\n\n`setIntensity` **floors at zero**, which is deliberately *not* what the identically named `AtmosphericSky` setter does.",
+      "tests": "`EngineLayerSmoke.c` stage 35: drawing with nothing attached is asserted to **succeed**, the borrowed getter handle is released twice over to show the cube survives it, and the consumed handle is asserted to be unusable afterwards. The floor is asserted against the atmospheric sky's guard in the same stage, so a binding that regularized the two would fail exactly one of them.",
+      "status": "implemented",
+      "task": "CBIND-091B",
+      "approved_symbols": [
+        "CPP-0D1F091593D9",
+        "CPP-2D5591CCECCC",
+        "CPP-4938A0CDA765",
+        "CPP-52289B71749E",
+        "CPP-67E7385F1F37",
+        "CPP-6A282040BD96",
+        "CPP-6E69D2ED9A0C",
+        "CPP-7C323B75FAE3",
+        "CPP-80C84300B96A",
+        "CPP-98ABAB2E2744",
+        "CPP-AC7A942752E0",
+        "CPP-D0EED0995807",
+        "CPP-D6DA13C6DF01",
+        "CPP-D8582F625F45",
+        "CPP-F1A82F9EB8F7",
+        "CPP-FBB90334BEC3"
+      ]
+    },
+    {
+      "id": "atmospheric-sky",
+      "qualified_name_regex": "^(?:CNA::Graphics::AtmosphericSky(?:::[A-Za-z0-9_~]+)?|CNA::Graphics::RenderPipeline::(?:get|set)Skybox)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_atmospheric_sky_*` over its own owned handle, plus the pipeline's skybox pair that was waiting for `Skybox` to exist in C.\n\n**Its three setters behave three different ways and the binding preserves each rather than regularizing them**: turbidity is clamped to one through ten; intensity is a *guarded assignment* that keeps the previous value on a negative; the sun direction is a guarded assignment that also *normalizes*, so what reads back is never what was written, and a vector too short to have a direction is a silent no-op. The free `radiance` function deliberately does **not** clamp its turbidity, unlike the setter -- the setter guards a sky drawn many times, the function evaluates what it is handed.\n\nThe pipeline's skybox is borrowed as the canonical pointer is, but the pipeline resource retains it anyway, so releasing the skybox handle mid-frame cannot leave a dangling pointer inside a live pipeline.",
+      "tests": "`EngineLayerSmoke.c` stage 35: each of the three setter shapes is asserted with a value that discriminates it from the other two, the turbidity clamp at both ends, the normalize-and-keep behaviour of the sun direction, and the pipeline pair round-tripping the caller's own handle.",
+      "status": "implemented",
+      "task": "CBIND-091B",
+      "approved_symbols": [
+        "CPP-03B63A7C3836",
+        "CPP-195388D85690",
+        "CPP-1B5B701A5A1E",
+        "CPP-2F49E86DC034",
+        "CPP-32520C881530",
+        "CPP-53CC34A6E131",
+        "CPP-5A05EAC2A68C",
+        "CPP-5F2900C8FF78",
+        "CPP-93D8E873BD9D",
+        "CPP-9792C90B8EA2",
+        "CPP-9CD16DB78D6D",
+        "CPP-A20678C562E7",
+        "CPP-BA58062B68BD",
+        "CPP-C9D54141398F",
+        "CPP-E74522246C65",
+        "CPP-FBABD943151B"
+      ]
     }
   ]
 }

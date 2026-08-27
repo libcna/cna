@@ -679,11 +679,9 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     # CBIND-087A bound PbrMaterialExtensions, and the two light-probe entries expired when
     # CBIND-091A bound LightProbeEXT and LightProbeVolumeEXT.
     "CNA::Graphics::ClusteredForwardEffect::setAreaLight": "CBIND-091C",
-    # CBIND-088B: the pipeline's skybox pair takes a Skybox, which CBIND-091B owns. The four
-    # image-based-light entries that stood here for CBIND-087C expired when CBIND-091A bound
-    # ImageBasedLightEXT and the effect-side pair that carries it.
-    "CNA::Graphics::RenderPipeline::setSkybox": "CBIND-091B",
-    "CNA::Graphics::RenderPipeline::getSkybox": "CBIND-091B",
+    # The two CBIND-088B skybox entries that stood here expired when CBIND-091B bound Skybox and
+    # the pipeline pair that carries it, and the four CBIND-087C image-based-light entries expired
+    # when CBIND-091A bound ImageBasedLightEXT.
 }
 
 

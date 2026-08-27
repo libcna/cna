@@ -89,11 +89,16 @@
 #include "CNA/Graphics/GpuTimer.hpp"
 #include "CNA/Graphics/MaterialBinding.hpp"
 #include "CNA/Graphics/PbrMaterial.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "CNA/Graphics/AtmosphericSky.hpp"
+#include "CNA/Graphics/EnvironmentProcessor.hpp"
+#include "CNA/Graphics/LightProbeBaker.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/RenderTargetPool.hpp"
 #include "CNA/Graphics/ScopedRenderTarget.hpp"
 #include "CNA/Graphics/ShaderEffectFactory.hpp"
+#include "CNA/Graphics/Skybox.hpp"
 #include "CNA/Graphics/StorageBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
@@ -5127,6 +5132,344 @@ CNA_Result cna_effect_get_image_based_light_ext(CNA_EffectHandle p0, CNA_ImageBa
 
 CNA_Result cna_effect_set_image_based_light_ext(
     CNA_EffectHandle p0, const CNA_ImageBasedLightEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_create(CNA_Handle p0, CNA_LightProbeBakerHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_create_with_face_size(CNA_Handle p0, int32_t p1, CNA_LightProbeBakerHandle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_destroy(CNA_LightProbeBakerHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_is_supported(CNA_LightProbeBakerHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_get_face_size(CNA_LightProbeBakerHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_face_count(int32_t* p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_get_near_plane(CNA_LightProbeBakerHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_get_far_plane(CNA_LightProbeBakerHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_set_planes(CNA_LightProbeBakerHandle p0, float p1, float p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_face_view(CNA_LightProbeBakerHandle p0, int32_t p1, const CNA_Vector3* p2, CNA_Matrix* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_bake_probe(CNA_LightProbeBakerHandle p0, const CNA_Vector3* p1, CNA_LightProbeSceneDrawCallback p2, void* p3, CNA_LightProbeHandle* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    if (p4 != nullptr) { *p4 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_bake_light(CNA_LightProbeBakerHandle p0, CNA_LightProbeVolumeHandle p1, CNA_LightProbeSceneDrawCallback p2, void* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_baker_bake_visibility(CNA_LightProbeBakerHandle p0, CNA_LightProbeVolumeHandle p1, CNA_LightProbeSceneDrawCallback p2, void* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_create(CNA_Handle p0, CNA_EnvironmentProcessorHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_destroy(CNA_EnvironmentProcessorHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_convert_equirectangular(CNA_EnvironmentProcessorHandle p0, CNA_Handle p1, int32_t p2, CNA_Handle* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_generate_irradiance(CNA_EnvironmentProcessorHandle p0, CNA_Handle p1, int32_t p2, int32_t p3, CNA_Handle* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    if (p4 != nullptr) { *p4 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_generate_prefiltered_specular(CNA_EnvironmentProcessorHandle p0, CNA_Handle p1, int32_t p2, int32_t p3, int32_t p4, CNA_Handle* p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    if (p5 != nullptr) { *p5 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_generate_probe(CNA_EnvironmentProcessorHandle p0, CNA_Handle p1, const CNA_Vector3* p2, CNA_LightProbeHandle* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_generate_brdf_lut(CNA_EnvironmentProcessorHandle p0, int32_t p1, int32_t p2, CNA_Handle* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_mip_for_roughness(float p0, int32_t p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_roughness_for_mip(float p0, int32_t p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_hammersley(int32_t p0, int32_t p1, float* p2, float* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_importance_sample_ggx(float p0, float p1, const CNA_Vector3* p2, float p3, CNA_Vector3* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_face_direction(int32_t p0, float p1, float p2, CNA_Vector3* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_environment_processor_direction_to_equirectangular(const CNA_Vector3* p0, float* p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_create(CNA_Handle p0, CNA_Handle p1, CNA_SkyboxHandle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_destroy(CNA_SkyboxHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_is_supported(CNA_SkyboxHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_draw(CNA_SkyboxHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2, int32_t p3, int32_t p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_get_environment(CNA_SkyboxHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_set_environment(CNA_SkyboxHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_set_owned_environment(CNA_SkyboxHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_get_yaw(CNA_SkyboxHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_set_yaw(CNA_SkyboxHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_get_intensity(CNA_SkyboxHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_set_intensity(CNA_SkyboxHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_get_tint(CNA_SkyboxHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_set_tint(CNA_SkyboxHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_skybox_compute_view_ray(const CNA_Matrix* p0, const CNA_Matrix* p1, float p2, float p3, float p4, CNA_Vector3* p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_create(CNA_Handle p0, CNA_AtmosphericSkyHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_destroy(CNA_AtmosphericSkyHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_is_supported(CNA_AtmosphericSkyHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_draw(CNA_AtmosphericSkyHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2, int32_t p3, int32_t p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_get_sun_direction(CNA_AtmosphericSkyHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_set_sun_direction(CNA_AtmosphericSkyHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_get_turbidity(CNA_AtmosphericSkyHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_set_turbidity(CNA_AtmosphericSkyHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_get_intensity(CNA_AtmosphericSkyHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_set_intensity(CNA_AtmosphericSkyHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_copy_model_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_atmospheric_sky_radiance(const CNA_Vector3* p0, const CNA_Vector3* p1, float p2, CNA_Vector3* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_skybox(CNA_RenderPipelineHandle p0, CNA_SkyboxHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_skybox(CNA_RenderPipelineHandle p0, CNA_SkyboxHandle p1)
 {
     (void)p0; (void)p1;
     return ExtensionUnavailable();
@@ -13887,6 +14230,12 @@ struct RenderPipelineResource final {
     // cannot separate them. The pipeline exposes no width accessor, so the C layer remembers
     // whether resize() ever succeeded and answers the two with their own messages.
     bool hasBeenSized = false;
+    // CBIND-091B. The canonical setSkybox takes a borrowed pointer. The handle is remembered so
+    // the getter can answer with the one the caller passed rather than a fresh handle to the same
+    // object, and the resource is retained so releasing the skybox handle while the pipeline still
+    // draws it cannot leave a dangling pointer inside a live pipeline.
+    CNA_Handle skybox = CNA_INVALID_HANDLE;
+    std::shared_ptr<void> skyboxRetention;
 };
 
 // CBIND-088B. A draw callback that fails must stop the frame and reach the caller unchanged, the
@@ -18106,6 +18455,1090 @@ CNA_Result cna_effect_set_image_based_light_ext(
             native.BrdfLut = texture;
         }
         set(native);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+// CBIND-091B. Four objects that are constructed from a device but not *only* from a device, so the
+// standalone-effect helpers above do not fit: the baker takes a face size, the skybox an
+// environment it must keep alive, and both of them plus the two skies probe what the renderer can
+// actually do at construction rather than asking it.
+template <typename TObject>
+struct EngineObjectResource final {
+    std::shared_ptr<TObject> value;
+    CNA_Handle parentGame;
+    // Held only so a borrowed argument outlives the object that points at it. Empty when nothing
+    // is borrowed; replaced, never appended to, because the canonical setters replace.
+    std::shared_ptr<void> borrowed;
+};
+
+template <typename TObject, typename... TArgs>
+[[nodiscard]] CNA_Result CreateEngineObject(
+    const CNA_Handle graphicsDeviceHandle,
+    const ObjectKind kind,
+    CNA_Handle* const outHandle,
+    std::shared_ptr<void> borrowed,
+    TArgs&&... arguments)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHandle == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The output handle is null.");
+        }
+        *outHandle = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<TObject>(
+            *graphicsDevice->value, std::forward<TArgs>(arguments)...);
+        const auto resource = std::make_shared<EngineObjectResource<TObject>>(
+            EngineObjectResource<TObject>{
+                std::move(native), graphicsDevice->parentGame, std::move(borrowed)});
+        const CNA_Result result = GetRuntimeHandles().Create(kind, resource, outHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result), "The owned handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+template <typename TObject>
+[[nodiscard]] CNA_Result DestroyEngineObject(
+    const CNA_Handle handle, const ObjectKind kind, const char* const what)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EngineObjectResource<TObject>> resource;
+        if (const CNA_Result result = GetEngineResource(handle, kind, what, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(handle);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(resource->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+template <typename TObject, typename TBody>
+[[nodiscard]] CNA_Result WithEngineObject(
+    const CNA_Handle handle, const ObjectKind kind, const char* const what, TBody&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EngineObjectResource<TObject>> resource;
+        if (const CNA_Result result = GetEngineResource(handle, kind, what, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return body(resource);
+    });
+}
+
+#define CNA_WITH_BAKER(handle, body)                                                               \
+    WithEngineObject<Ext::LightProbeBaker>(                                                        \
+        (handle), ObjectKind::LightProbeBaker, "LightProbeBaker", body)
+#define CNA_WITH_PROCESSOR(handle, body)                                                           \
+    WithEngineObject<Ext::EnvironmentProcessor>(                                                   \
+        (handle), ObjectKind::EnvironmentProcessor, "EnvironmentProcessor", body)
+#define CNA_WITH_SKYBOX(handle, body)                                                              \
+    WithEngineObject<Ext::Skybox>((handle), ObjectKind::Skybox, "Skybox", body)
+#define CNA_WITH_SKY(handle, body)                                                                 \
+    WithEngineObject<Ext::AtmosphericSky>((handle), ObjectKind::AtmosphericSky, "AtmosphericSky", body)
+
+// The canonical bake takes a std::function; C gives a function pointer and a context. Wrapping it
+// here rather than at each call site keeps the null check in one place -- a null callback is a
+// refusal, never a bake that draws nothing, because a probe captured from an empty scene is a
+// *valid* probe and the caller would have no way to tell it apart from a mistake.
+[[nodiscard]] Ext::LightProbeBaker::SceneDraw WrapSceneDraw(
+    const CNA_LightProbeSceneDrawCallback draw, void* const context)
+{
+    return [draw, context](
+               const Microsoft::Xna::Framework::Matrix& view,
+               const Microsoft::Xna::Framework::Matrix& projection) {
+        const CNA_Matrix viewValue = ToCMatrix(view);
+        const CNA_Matrix projectionValue = ToCMatrix(projection);
+        draw(&viewValue, &projectionValue, context);
+    };
+}
+
+[[nodiscard]] CNA_Result RequireSceneDraw(const CNA_LightProbeSceneDrawCallback draw)
+{
+    if (draw == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The scene-draw callback is null.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// An unsupported baker is not an argument mistake and not a missing feature -- the engine layer is
+// present and the arguments are fine, this renderer simply cannot render to a target and read it
+// back. INVALID_STATE is the one that says so; NOT_SUPPORTED would collide with "built without the
+// layer" and send a caller looking at its build flags.
+[[nodiscard]] CNA_Result RequireBakerSupport(const Ext::LightProbeBaker& baker, const char* const what)
+{
+    if (!baker.isSupported()) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            what);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_light_probe_baker_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_LightProbeBakerHandle* const outBaker)
+{
+    return CreateEngineObject<Ext::LightProbeBaker>(
+        graphicsDeviceHandle, ObjectKind::LightProbeBaker, outBaker, nullptr,
+        Ext::LightProbeBaker::kDefaultFaceSize);
+}
+
+CNA_Result cna_light_probe_baker_create_with_face_size(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t faceSize,
+    CNA_LightProbeBakerHandle* const outBaker)
+{
+    if (faceSize <= INT32_C(0)) {
+        if (outBaker != nullptr) {
+            *outBaker = CNA_INVALID_HANDLE;
+        }
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The face size must be positive.");
+    }
+    return CreateEngineObject<Ext::LightProbeBaker>(
+        graphicsDeviceHandle, ObjectKind::LightProbeBaker, outBaker, nullptr,
+        static_cast<int>(faceSize));
+}
+
+CNA_Result cna_light_probe_baker_destroy(const CNA_LightProbeBakerHandle baker)
+{
+    return DestroyEngineObject<Ext::LightProbeBaker>(
+        baker, ObjectKind::LightProbeBaker, "LightProbeBaker");
+}
+
+CNA_Result cna_light_probe_baker_is_supported(
+    const CNA_LightProbeBakerHandle baker, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        return StoreValue(
+            outSupported, static_cast<CNA_Bool>(b->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_light_probe_baker_get_face_size(
+    const CNA_LightProbeBakerHandle baker, int32_t* const outFaceSize)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        return StoreValue(outFaceSize, static_cast<int32_t>(b->value->getFaceSize()));
+    });
+}
+
+CNA_Result cna_light_probe_baker_face_count(int32_t* const outFaceCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outFaceCount, static_cast<int32_t>(Ext::LightProbeBaker::getFaceCount()));
+    });
+}
+
+CNA_Result cna_light_probe_baker_get_near_plane(
+    const CNA_LightProbeBakerHandle baker, float* const outNear)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        return StoreValue(outNear, b->value->getNearPlane());
+    });
+}
+
+CNA_Result cna_light_probe_baker_get_far_plane(
+    const CNA_LightProbeBakerHandle baker, float* const outFar)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        return StoreValue(outFar, b->value->getFarPlane());
+    });
+}
+
+CNA_Result cna_light_probe_baker_set_planes(
+    const CNA_LightProbeBakerHandle baker, const float nearPlane, const float farPlane)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        // Checked here rather than relying on the throw, so the message names the pair rather than
+        // being whichever half the canonical condition happened to test first.
+        if (!(nearPlane > 0.0F) || !(farPlane > nearPlane)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The near distance must be positive and the far distance must exceed it.");
+        }
+        b->value->setPlanes(nearPlane, farPlane);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_baker_face_view(
+    const CNA_LightProbeBakerHandle baker,
+    const int32_t face,
+    const CNA_Vector3* const position,
+    CNA_Matrix* const outView)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        if (const CNA_Result result =
+                RequireVector3Argument(position, "The position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (face < INT32_C(0) || face >= CNA_LIGHT_PROBE_BAKER_FACE_COUNT) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "A capture has six faces.");
+        }
+        return StoreValue(
+            outView,
+            ToCMatrix(b->value->faceView(static_cast<int>(face), ToNativeVector3(*position))));
+    });
+}
+
+CNA_Result cna_light_probe_baker_bake_probe(
+    const CNA_LightProbeBakerHandle baker,
+    const CNA_Vector3* const position,
+    const CNA_LightProbeSceneDrawCallback draw,
+    void* const context,
+    CNA_LightProbeHandle* const outProbe)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        if (outProbe == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The probe output handle is null.");
+        }
+        *outProbe = CNA_INVALID_HANDLE;
+        if (const CNA_Result result =
+                RequireVector3Argument(position, "The position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireSceneDraw(draw); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireBakerSupport(
+                *b->value,
+                "This renderer cannot render to a target and read it back, so there is nothing to "
+                "capture with.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<LightProbeResource>(
+            LightProbeResource{
+                std::make_shared<Ext::LightProbeEXT>(
+                    b->value->bakeProbe(ToNativeVector3(*position), WrapSceneDraw(draw, context)))});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::LightProbe, resource, outProbe);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned probe handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+template <typename TBake>
+[[nodiscard]] CNA_Result BakeIntoVolume(
+    const CNA_LightProbeBakerHandle baker,
+    const CNA_LightProbeVolumeHandle volume,
+    const CNA_LightProbeSceneDrawCallback draw,
+    void* const context,
+    const char* const unsupported,
+    TBake&& bake)
+{
+    return CNA_WITH_BAKER(baker, [&](const auto& b) -> CNA_Result {
+        std::shared_ptr<LightProbeVolumeResource> target;
+        if (const CNA_Result result = GetEngineResource(
+                volume, ObjectKind::LightProbeVolume, "LightProbeVolumeEXT", &target);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireSceneDraw(draw); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireBakerSupport(*b->value, unsupported);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        bake(*b->value, *target->value, WrapSceneDraw(draw, context));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+} // namespace
+
+CNA_Result cna_light_probe_baker_bake_light(
+    const CNA_LightProbeBakerHandle baker,
+    const CNA_LightProbeVolumeHandle volume,
+    const CNA_LightProbeSceneDrawCallback draw,
+    void* const context)
+{
+    return BakeIntoVolume(
+        baker, volume, draw, context,
+        "This renderer cannot render to a target and read it back, so there is nothing to capture "
+        "with.",
+        [](Ext::LightProbeBaker& b, Ext::LightProbeVolumeEXT& v,
+           const Ext::LightProbeBaker::SceneDraw& d) { b.bakeLight(v, d); });
+}
+
+CNA_Result cna_light_probe_baker_bake_visibility(
+    const CNA_LightProbeBakerHandle baker,
+    const CNA_LightProbeVolumeHandle volume,
+    const CNA_LightProbeSceneDrawCallback draw,
+    void* const context)
+{
+    return BakeIntoVolume(
+        baker, volume, draw, context,
+        "This renderer cannot render to a target and read it back.",
+        [](Ext::LightProbeBaker& b, Ext::LightProbeVolumeEXT& v,
+           const Ext::LightProbeBaker::SceneDraw& d) { b.bakeVisibility(v, d); });
+}
+
+CNA_Result cna_environment_processor_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_EnvironmentProcessorHandle* const outProcessor)
+{
+    return CreateEngineObject<Ext::EnvironmentProcessor>(
+        graphicsDeviceHandle, ObjectKind::EnvironmentProcessor, outProcessor, nullptr);
+}
+
+CNA_Result cna_environment_processor_destroy(const CNA_EnvironmentProcessorHandle processor)
+{
+    return DestroyEngineObject<Ext::EnvironmentProcessor>(
+        processor, ObjectKind::EnvironmentProcessor, "EnvironmentProcessor");
+}
+
+namespace {
+
+// Every generator hands back a unique_ptr the caller now owns. Turning that into an owned handle is
+// the same three steps each time, and the parentGame must be the processor's own -- the texture
+// outlives the processor, but it belongs to the same game, and charging it to anything else would
+// make the game's resource count wrong.
+template <typename TTexture, typename TCreate>
+[[nodiscard]] CNA_Result StoreGeneratedTexture(
+    std::unique_ptr<TTexture> generated,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outTexture,
+    TCreate&& create)
+{
+    if (generated == nullptr) {
+        return Fail(
+            CNA_RESULT_INTERNAL,
+            CNA_ERROR_CATEGORY_STATE,
+            "The generator produced no texture.");
+    }
+    std::shared_ptr<TTexture> shared{std::move(generated)};
+    return create(std::move(shared), parentGame, outTexture);
+}
+
+[[nodiscard]] CNA_Result RequirePositive(const int32_t value, const char* const what)
+{
+    if (value <= INT32_C(0)) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, what);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_environment_processor_convert_equirectangular(
+    const CNA_EnvironmentProcessorHandle processor,
+    const CNA_Handle panorama,
+    const int32_t faceSize,
+    CNA_Handle* const outEnvironment)
+{
+    return CNA_WITH_PROCESSOR(processor, [&](const auto& p) -> CNA_Result {
+        if (outEnvironment == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The environment output handle is null.");
+        }
+        *outEnvironment = CNA_INVALID_HANDLE;
+        std::shared_ptr<Texture2DResource> source;
+        if (const CNA_Result result = GetOwnedTexture2D(panorama, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequirePositive(faceSize, "The face size must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreGeneratedTexture(
+            p->value->convertEquirectangular(source->value.get(), static_cast<int>(faceSize)),
+            p->parentGame, outEnvironment, CNA::C::Detail::CreateOwnedTextureCube);
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result WithEnvironmentCube(
+    const CNA_Handle environment,
+    CNA_Handle* const outHandle,
+    CNA::C::Detail::TextureCubeResourceView* const view)
+{
+    if (outHandle == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The output handle is null.");
+    }
+    *outHandle = CNA_INVALID_HANDLE;
+    return CNA::C::Detail::GetOwnedTextureCube(environment, view);
+}
+
+} // namespace
+
+CNA_Result cna_environment_processor_generate_irradiance(
+    const CNA_EnvironmentProcessorHandle processor,
+    const CNA_Handle environment,
+    const int32_t size,
+    const int32_t sampleCount,
+    CNA_Handle* const outIrradiance)
+{
+    return CNA_WITH_PROCESSOR(processor, [&](const auto& p) -> CNA_Result {
+        CNA::C::Detail::TextureCubeResourceView source;
+        if (const CNA_Result result = WithEnvironmentCube(environment, outIrradiance, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequirePositive(size, "The size must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequirePositive(sampleCount, "The sample count must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreGeneratedTexture(
+            p->value->generateIrradiance(
+                source.value.get(), static_cast<int>(size), static_cast<int>(sampleCount)),
+            p->parentGame, outIrradiance, CNA::C::Detail::CreateOwnedTextureCube);
+    });
+}
+
+CNA_Result cna_environment_processor_generate_prefiltered_specular(
+    const CNA_EnvironmentProcessorHandle processor,
+    const CNA_Handle environment,
+    const int32_t baseSize,
+    const int32_t mipCount,
+    const int32_t sampleCount,
+    CNA_Handle* const outSpecular)
+{
+    return CNA_WITH_PROCESSOR(processor, [&](const auto& p) -> CNA_Result {
+        CNA::C::Detail::TextureCubeResourceView source;
+        if (const CNA_Result result = WithEnvironmentCube(environment, outSpecular, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequirePositive(baseSize, "The base size must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequirePositive(mipCount, "The mip count must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequirePositive(sampleCount, "The sample count must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreGeneratedTexture(
+            p->value->generatePrefilteredSpecular(
+                source.value.get(), static_cast<int>(baseSize), static_cast<int>(mipCount),
+                static_cast<int>(sampleCount)),
+            p->parentGame, outSpecular, CNA::C::Detail::CreateOwnedTextureCube);
+    });
+}
+
+CNA_Result cna_environment_processor_generate_probe(
+    const CNA_EnvironmentProcessorHandle processor,
+    const CNA_Handle environment,
+    const CNA_Vector3* const position,
+    CNA_LightProbeHandle* const outProbe)
+{
+    return CNA_WITH_PROCESSOR(processor, [&](const auto& p) -> CNA_Result {
+        CNA::C::Detail::TextureCubeResourceView source;
+        if (const CNA_Result result = WithEnvironmentCube(environment, outProbe, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequireVector3Argument(position, "The position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<LightProbeResource>(
+            LightProbeResource{
+                std::make_shared<Ext::LightProbeEXT>(
+                    p->value->generateProbe(source.value.get(), ToNativeVector3(*position)))});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::LightProbe, resource, outProbe);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned probe handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_processor_generate_brdf_lut(
+    const CNA_EnvironmentProcessorHandle processor,
+    const int32_t size,
+    const int32_t sampleCount,
+    CNA_Handle* const outLut)
+{
+    return CNA_WITH_PROCESSOR(processor, [&](const auto& p) -> CNA_Result {
+        if (outLut == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The table output handle is null.");
+        }
+        *outLut = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = RequirePositive(size, "The size must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequirePositive(sampleCount, "The sample count must be positive.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreGeneratedTexture(
+            p->value->generateBrdfLut(static_cast<int>(size), static_cast<int>(sampleCount)),
+            p->parentGame, outLut, CNA::C::Detail::CreateOwnedTexture2D);
+    });
+}
+
+CNA_Result cna_environment_processor_mip_for_roughness(
+    const float roughness, const int32_t mipCount, float* const outMip)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outMip,
+            Ext::EnvironmentProcessor::mipForRoughness(roughness, static_cast<int>(mipCount)));
+    });
+}
+
+CNA_Result cna_environment_processor_roughness_for_mip(
+    const float mip, const int32_t mipCount, float* const outRoughness)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outRoughness,
+            Ext::EnvironmentProcessor::roughnessForMip(mip, static_cast<int>(mipCount)));
+    });
+}
+
+CNA_Result cna_environment_processor_hammersley(
+    const int32_t index, const int32_t count, float* const outX, float* const outY)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outX == nullptr || outY == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "A coordinate output is null.");
+        }
+        float x = 0.0F;
+        float y = 0.0F;
+        Ext::EnvironmentProcessor::hammersley(
+            static_cast<int>(index), static_cast<int>(count), x, y);
+        *outX = x;
+        *outY = y;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_processor_importance_sample_ggx(
+    const float x,
+    const float y,
+    const CNA_Vector3* const normal,
+    const float roughness,
+    CNA_Vector3* const outDirection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(normal, "The normal is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto direction = Ext::EnvironmentProcessor::importanceSampleGgx(
+            x, y, ToNativeVector3(*normal), roughness);
+        return StoreValue(outDirection, Vec3(direction.X, direction.Y, direction.Z));
+    });
+}
+
+CNA_Result cna_environment_processor_face_direction(
+    const int32_t face, const float u, const float v, CNA_Vector3* const outDirection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        const auto direction =
+            Ext::EnvironmentProcessor::faceDirection(static_cast<int>(face), u, v);
+        return StoreValue(outDirection, Vec3(direction.X, direction.Y, direction.Z));
+    });
+}
+
+CNA_Result cna_environment_processor_direction_to_equirectangular(
+    const CNA_Vector3* const direction, float* const outU, float* const outV)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(direction, "The direction is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outU == nullptr || outV == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "A coordinate output is null.");
+        }
+        float u = 0.0F;
+        float v = 0.0F;
+        Ext::EnvironmentProcessor::directionToEquirectangular(ToNativeVector3(*direction), u, v);
+        *outU = u;
+        *outV = v;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+// The skybox holds a raw TextureCube*, so whatever it points at must be kept alive by the resource
+// that owns the skybox. `borrowed` on EngineObjectResource is that retention, and it is REPLACED on
+// every attach rather than accumulated -- the canonical setters replace too, and a growing list
+// would keep a cube alive long after the skybox stopped drawing it.
+[[nodiscard]] CNA_Result ResolveOptionalCube(
+    const CNA_Handle environment,
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube>* const outCube,
+    std::shared_ptr<void>* const outRetention)
+{
+    outCube->reset();
+    outRetention->reset();
+    if (environment == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+    CNA::C::Detail::TextureCubeResourceView view;
+    if (const CNA_Result result = CNA::C::Detail::GetOwnedTextureCube(environment, &view);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outCube = view.value;
+    *outRetention = view.retentionOwner != nullptr
+        ? view.retentionOwner
+        : std::static_pointer_cast<void>(view.value);
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_skybox_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Handle environment,
+    CNA_SkyboxHandle* const outSkybox)
+{
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> cube;
+    std::shared_ptr<void> retention;
+    if (const CNA_Result result = ResolveOptionalCube(environment, &cube, &retention);
+        result != CNA_RESULT_SUCCESS) {
+        if (outSkybox != nullptr) {
+            *outSkybox = CNA_INVALID_HANDLE;
+        }
+        return result;
+    }
+    return CreateEngineObject<Ext::Skybox>(
+        graphicsDeviceHandle, ObjectKind::Skybox, outSkybox, std::move(retention), cube.get());
+}
+
+CNA_Result cna_skybox_destroy(const CNA_SkyboxHandle skybox)
+{
+    return DestroyEngineObject<Ext::Skybox>(skybox, ObjectKind::Skybox, "Skybox");
+}
+
+CNA_Result cna_skybox_is_supported(const CNA_SkyboxHandle skybox, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        return StoreValue(
+            outSupported, static_cast<CNA_Bool>(s->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_skybox_draw(
+    const CNA_SkyboxHandle skybox,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const int32_t width,
+    const int32_t height)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        if (view == nullptr || projection == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "A matrix is null.");
+        }
+        if (width <= INT32_C(0) || height <= INT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The target size must be positive.");
+        }
+        s->value->draw(
+            ToNativeMatrix(*view), ToNativeMatrix(*projection), static_cast<int>(width),
+            static_cast<int>(height));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skybox_get_environment(
+    const CNA_SkyboxHandle skybox, CNA_Handle* const outEnvironment)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        if (outEnvironment == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The environment output handle is null.");
+        }
+        *outEnvironment = CNA_INVALID_HANDLE;
+        auto* const cube = s->value->getEnvironment();
+        if (cube == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        // Aliasing the resource rather than the cube: the handle keeps the SKYBOX alive, which is
+        // what makes releasing the handle release nothing but the handle.
+        return CNA::C::Detail::CreateOwnedTextureCube(
+            std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube>(s, cube),
+            s->parentGame, outEnvironment);
+    });
+}
+
+CNA_Result cna_skybox_set_environment(const CNA_SkyboxHandle skybox, const CNA_Handle environment)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> cube;
+        std::shared_ptr<void> retention;
+        if (const CNA_Result result = ResolveOptionalCube(environment, &cube, &retention);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        s->value->setEnvironment(cube.get());
+        s->borrowed = std::move(retention);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skybox_set_owned_environment(
+    const CNA_SkyboxHandle skybox, const CNA_Handle environment)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        CNA::C::Detail::TextureCubeResourceView view;
+        if (const CNA_Result result = CNA::C::Detail::GetOwnedTextureCube(environment, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical setter takes a unique_ptr. C cannot move an object out from under a live
+        // handle, so the transfer is done the other way round: the handle is released -- which is
+        // the LAST thing here that can fail, so a refusal never leaves the caller holding nothing
+        // -- and the resource then retains the cube itself. That is the same observable contract as
+        // the canonical unique_ptr: the skybox keeps the cube alive, a later attach replaces and
+        // releases it, and destroying the skybox destroys it.
+        const CNA_Result released = GetRuntimeHandles().Release(environment);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The texture handle could not be released.");
+        }
+        // The cube stops being one of the game's owned graphics resources at the same moment its
+        // handle stops existing. Releasing the handle without this leaves the game counting a
+        // resource nobody can name, and cna_game_destroy then refuses to shut down.
+        RemoveOwnedGraphicsResourceFor(view.parentGame);
+        auto* const raw = view.value.get();
+        std::shared_ptr<void> retention = view.retentionOwner != nullptr
+            ? view.retentionOwner
+            : std::static_pointer_cast<void>(view.value);
+        s->value->setEnvironment(raw);
+        s->borrowed = std::move(retention);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skybox_get_yaw(const CNA_SkyboxHandle skybox, float* const outRadians)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        return StoreValue(outRadians, s->value->getYaw());
+    });
+}
+
+CNA_Result cna_skybox_set_yaw(const CNA_SkyboxHandle skybox, const float radians)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        s->value->setYaw(radians);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skybox_get_intensity(const CNA_SkyboxHandle skybox, float* const outIntensity)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        return StoreValue(outIntensity, s->value->getIntensity());
+    });
+}
+
+CNA_Result cna_skybox_set_intensity(const CNA_SkyboxHandle skybox, const float intensity)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        // Floored, not refused -- and deliberately NOT the same as the atmospheric sky's setter of
+        // the same name, which keeps its previous value instead.
+        s->value->setIntensity(intensity);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skybox_get_tint(const CNA_SkyboxHandle skybox, CNA_Vector3* const outTint)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        const auto tint = s->value->getTint();
+        return StoreValue(outTint, Vec3(tint.X, tint.Y, tint.Z));
+    });
+}
+
+CNA_Result cna_skybox_set_tint(const CNA_SkyboxHandle skybox, const CNA_Vector3* const tint)
+{
+    return CNA_WITH_SKYBOX(skybox, [&](const auto& s) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(tint, "The tint is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        s->value->setTint(ToNativeVector3(*tint));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skybox_compute_view_ray(
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const float ndcX,
+    const float ndcY,
+    const float yaw,
+    CNA_Vector3* const outDirection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (view == nullptr || projection == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "A matrix is null.");
+        }
+        const auto direction = Ext::Skybox::computeViewRay(
+            ToNativeMatrix(*view), ToNativeMatrix(*projection), ndcX, ndcY, yaw);
+        return StoreValue(outDirection, Vec3(direction.X, direction.Y, direction.Z));
+    });
+}
+
+CNA_Result cna_atmospheric_sky_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_AtmosphericSkyHandle* const outSky)
+{
+    return CreateEngineObject<Ext::AtmosphericSky>(
+        graphicsDeviceHandle, ObjectKind::AtmosphericSky, outSky, nullptr);
+}
+
+CNA_Result cna_atmospheric_sky_destroy(const CNA_AtmosphericSkyHandle sky)
+{
+    return DestroyEngineObject<Ext::AtmosphericSky>(
+        sky, ObjectKind::AtmosphericSky, "AtmosphericSky");
+}
+
+CNA_Result cna_atmospheric_sky_is_supported(
+    const CNA_AtmosphericSkyHandle sky, CNA_Bool* const outSupported)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        return StoreValue(
+            outSupported, static_cast<CNA_Bool>(s->value->isSupported() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_atmospheric_sky_draw(
+    const CNA_AtmosphericSkyHandle sky,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const int32_t width,
+    const int32_t height)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        if (view == nullptr || projection == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "A matrix is null.");
+        }
+        if (width <= INT32_C(0) || height <= INT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The target size must be positive.");
+        }
+        s->value->draw(
+            ToNativeMatrix(*view), ToNativeMatrix(*projection), static_cast<int>(width),
+            static_cast<int>(height));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_atmospheric_sky_get_sun_direction(
+    const CNA_AtmosphericSkyHandle sky, CNA_Vector3* const outDirection)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        const auto direction = s->value->getSunDirection();
+        return StoreValue(outDirection, Vec3(direction.X, direction.Y, direction.Z));
+    });
+}
+
+CNA_Result cna_atmospheric_sky_set_sun_direction(
+    const CNA_AtmosphericSkyHandle sky, const CNA_Vector3* const direction)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(direction, "The direction is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Passed straight through, guard and all: a vector too short to have a direction leaves the
+        // previous sun where it was, and the canonical setter does not report that. Refusing it
+        // here would be a divergence, not a kindness -- the getter is how a caller checks.
+        s->value->setSunDirection(ToNativeVector3(*direction));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_atmospheric_sky_get_turbidity(
+    const CNA_AtmosphericSkyHandle sky, float* const outTurbidity)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        return StoreValue(outTurbidity, s->value->getTurbidity());
+    });
+}
+
+CNA_Result cna_atmospheric_sky_set_turbidity(
+    const CNA_AtmosphericSkyHandle sky, const float turbidity)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        s->value->setTurbidity(turbidity);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_atmospheric_sky_get_intensity(
+    const CNA_AtmosphericSkyHandle sky, float* const outIntensity)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        return StoreValue(outIntensity, s->value->getIntensity());
+    });
+}
+
+CNA_Result cna_atmospheric_sky_set_intensity(
+    const CNA_AtmosphericSkyHandle sky, const float intensity)
+{
+    return CNA_WITH_SKY(sky, [&](const auto& s) -> CNA_Result {
+        // A guarded assignment, NOT a floor: a negative value keeps the previous intensity. The
+        // skybox's identically named setter clamps to zero instead, and the difference is real.
+        s->value->setIntensity(intensity);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_atmospheric_sky_copy_model_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes, [] { return Ext::AtmosphericSky::getModelGlsl(); });
+}
+
+CNA_Result cna_atmospheric_sky_radiance(
+    const CNA_Vector3* const viewDirection,
+    const CNA_Vector3* const sunDirection,
+    const float turbidity,
+    CNA_Vector3* const outRadiance)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result =
+                RequireVector3Argument(viewDirection, "The view direction is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                RequireVector3Argument(sunDirection, "The sun direction is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Turbidity is NOT clamped here, unlike the setter: the free function evaluates what it is
+        // handed, and clamping it would make this disagree with the shader it is meant to mirror.
+        const auto radiance = Ext::AtmosphericSky::radiance(
+            ToNativeVector3(*viewDirection), ToNativeVector3(*sunDirection), turbidity);
+        return StoreValue(outRadiance, Vec3(radiance.X, radiance.Y, radiance.Z));
+    });
+}
+
+CNA_Result cna_render_pipeline_get_skybox(
+    const CNA_RenderPipelineHandle pipeline, CNA_SkyboxHandle* const outSkybox)
+{
+    return CNA_WITH_PIPELINE(pipeline, [&](const auto& p) -> CNA_Result {
+        if (outSkybox == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The skybox output handle is null.");
+        }
+        *outSkybox = p->skybox;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_pipeline_set_skybox(
+    const CNA_RenderPipelineHandle pipeline, const CNA_SkyboxHandle skybox)
+{
+    return CNA_WITH_PIPELINE(pipeline, [&](const auto& p) -> CNA_Result {
+        if (skybox == CNA_INVALID_HANDLE) {
+            p->value->setSkybox(nullptr);
+            p->skybox = CNA_INVALID_HANDLE;
+            p->skyboxRetention.reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        std::shared_ptr<EngineObjectResource<Ext::Skybox>> resource;
+        if (const CNA_Result result =
+                GetEngineResource(skybox, ObjectKind::Skybox, "Skybox", &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Borrowed, as the canonical pointer is -- but the pipeline resource retains the skybox
+        // resource anyway, because a caller who releases the skybox handle while the pipeline still
+        // draws it would otherwise leave a dangling pointer inside a live pipeline. The retention
+        // does not change the contract, it makes the documented one survivable.
+        p->value->setSkybox(resource->value.get());
+        p->skybox = skybox;
+        p->skyboxRetention = resource;
         return CNA_RESULT_SUCCESS;
     });
 }
