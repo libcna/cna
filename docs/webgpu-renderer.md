@@ -141,6 +141,35 @@ seconds on the verified desktop. When neither `WAYLAND_DISPLAY` nor `DISPLAY` is
 wrapper reports a clear skipped result rather than treating the lack of a desktop GPU/display as a
 renderer failure.
 
+## Running the full WebGPU test suite
+
+The WebGPU CTests create a real GPU-backed surface (wgpu-native needs a real adapter), so the DISPLAY
+they use is fixed at configure time via `CNA_TEST_DISPLAY` (each test's CTest `ENVIRONMENT` sets
+`SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}`). The reproducible configuration is:
+
+```bash
+cmake -S . -B cmake-build-webgpu \
+  -DCNA_GRAPHICS_RENDERER=WEBGPU \
+  -DCNA_BUILD_TESTS=ON \
+  -DCNA_TEST_DISPLAY=:0 \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache
+cmake --build cmake-build-webgpu -j"$(nproc)"
+ctest --test-dir cmake-build-webgpu -L WebGPU --output-on-failure -j1
+```
+
+`:0` is a real desktop with a GPU. In a headless sandbox use a **GPU-backed virtual display** instead
+— an `Xvfb` started with the GLX extension on a host whose render node (`/dev/dri/renderD*`) exposes a
+real Vulkan adapter (e.g. `Xvfb :131 -screen 0 1280x1024x24 +extension GLX`), configured with
+`-DCNA_TEST_DISPLAY=:131`. A plain software `Xvfb` (no render node / no adapter) has **no** WebGPU
+adapter and the readback tests fail for that reason alone — that is an environment limitation, not a
+renderer defect. (`WebGPU_ChecksumVerification` and `WebGPU_PresentModeMapping` are pure CMake/unit
+tests and run with no display or GPU at all.)
+
+Known gap: outside these two configurations, a no-display / no-adapter host makes the GPU-backed tests
+FAIL rather than SKIP. A shared preflight that returns the CTest skip code (77) when no usable
+display/adapter is present is not yet wired for the whole suite (only the native smoke test skips
+cleanly today) — tracked as WebGPU test-infra follow-up.
+
 CNA enables compiler caching automatically when `ccache` is installed. The setting is applied
 before the sibling `sharp-runtime` project is added, so both CNA and `sharp-runtime` objects are
 reused across compatible build directories. Disable it with `-DCNA_USE_CCACHE=OFF`; existing custom
