@@ -87,6 +87,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_ShaderEffect3D COMMAND cna_test_webgpu_shadereffect_3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-85/86/87: multiple simultaneous render targets -- binds 2 then 4 targets and proves a
+    # custom-WGSL @location(0..N-1) fragment writes each slot's own content (not slot 0's in all).
+    cna_webgpu_test(cna_test_webgpu_mrt webgpu_mrt_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_MRT COMMAND cna_test_webgpu_mrt
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)

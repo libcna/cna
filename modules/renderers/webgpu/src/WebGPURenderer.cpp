@@ -652,7 +652,8 @@ namespace CNA::Internal::Renderers::WebGPU
             float slopeScaleDepthBias,
             std::uint64_t salt,
             int colorWriteMask,
-            std::uint32_t sampleMask)
+            std::uint32_t sampleMask,
+            int colorAttachmentCount = 1)
         {
             std::uint64_t key = static_cast<std::uint64_t>(topology);
             // REMED-GFX-105: RequiredStripIndexFormat() canonicalizes this to Undefined for
@@ -684,6 +685,12 @@ namespace CNA::Internal::Renderers::WebGPU
             // REMED-GFX-077: colour write mask + sample mask are static wgpu-native pipeline state.
             key = key * 31u + static_cast<std::uint64_t>(colorWriteMask & 0xF);
             key = key * 31u + static_cast<std::uint64_t>(sampleMask);
+            // WEBGPU-86 MRT: a pipeline built for an N-attachment pass is NOT compatible with a
+            // 1-attachment pass (WebGPU rejects the mismatch), so the count must separate them.
+            // Folded only when > 1, so every single-target pipeline's key is byte-identical to
+            // before -- the instanced/viewport/scissor CARDINALITY tests still see the same variants.
+            if (colorAttachmentCount > 1)
+                key = key * 31u + static_cast<std::uint64_t>(colorAttachmentCount);
             return key;
         }
 
@@ -1553,6 +1560,8 @@ namespace CNA::Internal::Renderers::WebGPU
         // is just as much a distinct "target identity" as a RenderTarget2D or the backbuffer.
         owner_->FlushCurrentRenderTarget();
         owner_->currentRenderTarget_ = nullptr;
+        // WEBGPU-87: binding a cube face drops any prior MRT set (flushed just above).
+        owner_->mrtExtraTargets_.clear();
         owner_->currentRenderTargetCubeFace_ = this;
         owner_->currentRenderTargetCubeFaceIndex_ = face;
     }
@@ -2883,6 +2892,7 @@ struct VertexOutput {
         key.multiSampleMask = snapshot.multiSampleMask;
         key.targetFormat = snapshot.targetFormat;
         key.sampleCount = snapshot.sampleCount;
+        key.colorAttachmentCount = replayColorAttachmentCount_;  // WEBGPU-86 MRT (see ExpandStockColorTargetsEXT)
 
         if (const auto found = spritePipelines_.find(key); found != spritePipelines_.end())
             return found->second;
@@ -2906,7 +2916,9 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = snapshot.targetFormat;
         target.writeMask = static_cast<WGPUColorWriteMask>(snapshot.colorWriteMask & 0xF);
         WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
@@ -2919,8 +2931,8 @@ struct VertexOutput {
         WGPUFragmentState fragment{};
         fragment.module = spriteShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU SpriteBatch Pipeline");
@@ -3062,7 +3074,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
 
@@ -3080,14 +3092,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = coloredShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU Colored3D Pipeline");
@@ -3296,7 +3310,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
 
@@ -3314,14 +3328,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = texturedShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU Textured3D Pipeline");
@@ -3381,7 +3397,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
 
@@ -3402,14 +3418,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = coloredTexturedShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU ColoredTextured3D Pipeline");
@@ -3731,7 +3749,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
 
@@ -3752,14 +3770,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = litTexturedShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU LitTextured3D Pipeline");
@@ -3818,7 +3838,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
 
@@ -3839,14 +3859,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = litTexturedVertexLitShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU LitTextured3D VertexLit Pipeline");
@@ -4046,7 +4068,7 @@ struct VertexOutput {
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_);
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         auto& cache = (stride == 24) ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -4106,14 +4128,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributeCount;
         vertexBufferLayout.attributes = attributes;
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = shaderModule;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU AlphaTest3D Pipeline");
@@ -4346,7 +4370,7 @@ struct VertexOutput {
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_);
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -4391,14 +4415,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributeCount;
         vertexBufferLayout.attributes = attributes;
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = shaderModule;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU DualTexture3D Pipeline");
@@ -4674,7 +4700,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
             return it->second;
 
@@ -4695,14 +4721,16 @@ struct VertexOutput {
         vertexBufferLayout.attributeCount = attributes.size();
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = envMapShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU EnvMap3D Pipeline");
@@ -5082,7 +5110,7 @@ struct VertexOutput {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
             return it->second;
 
@@ -5134,7 +5162,9 @@ struct VertexOutput {
         vertexBufferLayouts[1].attributeCount = instanceAttrs.size();
         vertexBufferLayouts[1].attributes = instanceAttrs.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
@@ -5145,8 +5175,8 @@ struct VertexOutput {
         WGPUShaderModule instancedModule = hasPackedColor ? instancedColoredShader_ : instancedShader_;
         fragment.module = instancedModule;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU Instanced3D Pipeline");
@@ -5324,7 +5354,9 @@ struct VSOut {
         pipelineLayoutDescriptor.bindGroupLayouts = &mipBlitBindGroupLayout_;
         mipBlitPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = WGPUTextureFormat_RGBA8Unorm;
         // REMED-GFX-077: internal mipmap-blit utility pipeline — not a game draw, so it is
         // intentionally unaffected by the game's BlendState.ColorWriteChannels/MultiSampleMask.
@@ -5332,8 +5364,8 @@ struct VSOut {
         WGPUFragmentState fragment{};
         fragment.module = mipBlitShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU MipBlit Pipeline");
@@ -5994,15 +6026,27 @@ struct VSOut {
             const bool clearStencil = segment.clear.stencil ||
                                       (isFirst && (clearStencilPending_ || destination.discardFirstSegment));
 
-            WGPURenderPassColorAttachment colorAttachment = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
-            colorAttachment.view = destination.colorView;
-            // Resolving once, at the end of the cycle, is enough: the multisampled attachment is
-            // stored and reloaded across the segment boundary, so the final resolve sees every
-            // segment's samples. An intermediate resolve would be pure extra bandwidth.
-            colorAttachment.resolveTarget = isLast ? destination.resolveView : nullptr;
-            colorAttachment.loadOp = clearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
-            colorAttachment.storeOp = WGPUStoreOp_Store;
-            colorAttachment.clearValue = segment.clear.color ? segment.clear.colorValue : clearColor_;
+            // WEBGPU-85 MRT: one attachment per bound render target (1 for the backbuffer, a single
+            // RenderTarget2D or a cube face; up to 4 for an MRT set). Slot 0 is always the single
+            // destination fields; slots 1..N-1 come from the destination's mrt* arrays. Every slot
+            // shares this segment's clear/load policy and clear value, matching XNA's device-wide
+            // Clear() semantics (there is no per-attachment clear granularity in XNA).
+            const int colorCount = std::max(1, destination.colorAttachmentCount);
+            std::array<WGPURenderPassColorAttachment, 4> colorAttachments{};
+            for (int c = 0; c < colorCount; ++c)
+            {
+                WGPURenderPassColorAttachment& ca = colorAttachments[static_cast<std::size_t>(c)];
+                ca = WGPU_RENDER_PASS_COLOR_ATTACHMENT_INIT;
+                ca.view = destination.ColorViewAt(c);
+                // Resolving once, at the end of the cycle, is enough: the multisampled attachment is
+                // stored and reloaded across the segment boundary, so the final resolve sees every
+                // segment's samples. An intermediate resolve would be pure extra bandwidth.
+                ca.resolveTarget = isLast ? destination.ResolveViewAt(c) : nullptr;
+                ca.loadOp = clearColor ? WGPULoadOp_Clear : WGPULoadOp_Load;
+                ca.storeOp = WGPUStoreOp_Store;
+                ca.clearValue = segment.clear.color ? segment.clear.colorValue : clearColor_;
+            }
+            WGPURenderPassColorAttachment& colorAttachment = colorAttachments[0];
 
             WGPURenderPassDepthStencilAttachment depthAttachment{};
             depthAttachment.view = destination.depthView;
@@ -6018,8 +6062,8 @@ struct VSOut {
 
             WGPURenderPassDescriptor passDescriptor{};
             passDescriptor.label = StringView(destination.passLabel);
-            passDescriptor.colorAttachmentCount = 1;
-            passDescriptor.colorAttachments = &colorAttachment;
+            passDescriptor.colorAttachmentCount = static_cast<std::size_t>(colorCount);
+            passDescriptor.colorAttachments = colorAttachments.data();
             passDescriptor.depthStencilAttachment =
                 destination.depthView != nullptr ? &depthAttachment : nullptr;
             // WEBGPU-84: BeginOcclusionQuery is only valid on a pass whose descriptor names the
@@ -6059,8 +6103,7 @@ struct VSOut {
             wgpuRenderPassEncoderSetStencilReference(pass,
                                                      static_cast<std::uint32_t>(referenceStencil_));
 
-            ReplayDrawsInOrder(pass, destination.colorFormat, destination.sampleCount,
-                               destination.traceName, segment.firstEntry, segment.entryCount);
+            ReplayDrawsInOrder(pass, destination, segment.firstEntry, segment.entryCount);
             wgpuRenderPassEncoderEnd(pass);
             wgpuRenderPassEncoderRelease(pass);
         }
@@ -6584,8 +6627,7 @@ struct VSOut {
 
     void WebGPURenderer::IssueCustomEffectDraw(WGPURenderPassEncoder pass,
                                                const CustomEffectDrawCommand& command,
-                                               WGPUTextureFormat targetFormat,
-                                               std::uint32_t targetSampleCount,
+                                               const PassDestination& destination,
                                                ReplayState& state)
     {
         Begin3DDrawState(pass, state);
@@ -6614,16 +6656,19 @@ struct VSOut {
         if (!command.uniforms.empty())
             wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), command.uniforms.size());
 
-        // Pipeline: cached on the effect, keyed by the concrete pass state. colorAttachmentCount is
-        // 1 here; MRT (WEBGPU-85/86/87) reuses this builder with N and an N-entry target array.
-        const int colorAttachmentCount = 1;
+        // Pipeline: cached on the effect, keyed by the concrete pass state. WEBGPU-86: the fragment
+        // target count and each slot's format come from the bound pass -- 1 for a single target,
+        // 2..4 for an MRT set -- so a pipeline built for a 1-target pass is a distinct cache entry
+        // from the same effect's 2-target pipeline (WebGPU validation rejects a mismatch).
+        const int colorAttachmentCount = std::max(1, destination.colorAttachmentCount);
         auto mix = [](std::uint64_t h, std::uint64_t v) {
             return (h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)));
         };
         std::uint64_t key = 0;
-        key = mix(key, static_cast<std::uint64_t>(targetFormat));
-        key = mix(key, targetSampleCount);
+        key = mix(key, destination.sampleCount);
         key = mix(key, static_cast<std::uint64_t>(colorAttachmentCount));
+        for (int c = 0; c < colorAttachmentCount; ++c)
+            key = mix(key, static_cast<std::uint64_t>(destination.ColorFormatAt(c)));
         key = mix(key, static_cast<std::uint64_t>(command.topology));
         key = mix(key, command.arrayStride);
         key = mix(key, (command.depthTest ? 1u : 0u) | (command.depthWrite ? 2u : 0u));
@@ -6663,18 +6708,26 @@ struct VSOut {
             vertexBufferLayout.attributeCount = attributes.size();
             vertexBufferLayout.attributes = attributes.data();
 
-            WGPUColorTargetState target{};
-            target.format = targetFormat;
-            target.writeMask = WGPUColorWriteMask_All;
-            WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
-            FillWGPUBlendState(blendState, command.blendParams);
-            target.blend = command.blend ? &blendState : nullptr;
+            // WEBGPU-86 MRT: one WGPUColorTargetState per bound attachment (1 or 2..4), each with
+            // this slot's format and the same blend/write state. The custom WGSL fragment must write
+            // `@location(0..N-1)`; a mismatch is a pipeline-creation validation error caught below.
+            std::array<WGPUColorTargetState, 4> targets{};
+            std::array<WGPUBlendState, 4> blendStates{};
+            for (int c = 0; c < colorAttachmentCount; ++c)
+            {
+                targets[static_cast<std::size_t>(c)].format = destination.ColorFormatAt(c);
+                targets[static_cast<std::size_t>(c)].writeMask = WGPUColorWriteMask_All;
+                blendStates[static_cast<std::size_t>(c)] = WGPU_BLEND_STATE_INIT;
+                FillWGPUBlendState(blendStates[static_cast<std::size_t>(c)], command.blendParams);
+                targets[static_cast<std::size_t>(c)].blend =
+                    command.blend ? &blendStates[static_cast<std::size_t>(c)] : nullptr;
+            }
 
             WGPUFragmentState fragment{};
             fragment.module = effect->fragmentModule_;
             fragment.entryPoint = StringView("fs_main");
-            fragment.targetCount = 1;
-            fragment.targets = &target;
+            fragment.targetCount = static_cast<std::size_t>(colorAttachmentCount);
+            fragment.targets = targets.data();
 
             WGPURenderPipelineDescriptor pipeline{};
             pipeline.label = StringView("CNA WebGPU ShaderEffect Pipeline");
@@ -6687,7 +6740,7 @@ struct VSOut {
             pipeline.primitive.stripIndexFormat = RequiredStripIndexFormat(command);
             pipeline.primitive.frontFace = WGPUFrontFace_CCW;
             pipeline.primitive.cullMode = ToWGPUCullMode(command.cullMode);
-            pipeline.multisample.count = targetSampleCount;
+            pipeline.multisample.count = destination.sampleCount;
             pipeline.multisample.mask = 0xFFFFFFFFu;
             pipeline.multisample.alphaToCoverageEnabled = false;
             pipeline.fragment = &fragment;
@@ -6758,12 +6811,28 @@ struct VSOut {
         pendingBufferReleases_.push_back(vertexBuffer);
     }
 
+    int WebGPURenderer::InitStockColorTargetsEXT(std::array<WGPUColorTargetState, 4>& out) const
+    {
+        const int count = std::max(1, replayColorAttachmentCount_);
+        // Slot 0 is left default here: the builder holds a reference to out[0] and fills its real
+        // format/write-mask/blend, so a `blend` set AFTER this call still lands in the array.
+        for (int c = 1; c < count; ++c)
+        {
+            out[static_cast<std::size_t>(c)] = WGPUColorTargetState{};
+            out[static_cast<std::size_t>(c)].format = surfaceFormat_;  // every RT here shares surfaceFormat_
+            out[static_cast<std::size_t>(c)].writeMask = WGPUColorWriteMask_None;  // stock draw writes slot 0 only
+            out[static_cast<std::size_t>(c)].blend = nullptr;
+        }
+        return count;
+    }
+
     void WebGPURenderer::ReplayDrawsInOrder(WGPURenderPassEncoder pass,
-                                                    WGPUTextureFormat targetFormat,
-                                                    std::uint32_t targetSampleCount,
-                                                    const char* destination,
+                                                    const PassDestination& destination,
                                                     std::size_t firstEntry, std::size_t entryCount)
     {
+        // WEBGPU-86 MRT: every pipeline built during this replay must match this pass's attachment
+        // count. Stock builders read it via ExpandStockColorTargetsEXT and fold it into their key.
+        replayColorAttachmentCount_ = std::max(1, destination.colorAttachmentCount);
         const bool trace = TraceDrawOrder();
 
         ReplayState state{};
@@ -6801,7 +6870,7 @@ struct VSOut {
             {
                 std::fprintf(stderr,
                              "[wgpu-order]   %s issue #%zu <- enqueue #%u family=%s slot=%u\n",
-                             destination, issued, entry.order, DrawFamilyName(entry.family),
+                             destination.traceName, issued, entry.order, DrawFamilyName(entry.family),
                              entry.index);
             }
             // REMED-GFX-172, trace only: both positions the multi-texture sampler trace reports.
@@ -6815,8 +6884,8 @@ struct VSOut {
             switch (entry.family)
             {
             case DrawFamily::Sprite:
-                IssueSprite(pass, spriteCommands_[i], entry.index, targetFormat,
-                            targetSampleCount, state);
+                IssueSprite(pass, spriteCommands_[i], entry.index, destination.colorFormat,
+                            destination.sampleCount, state);
                 break;
             case DrawFamily::Colored:     IssueColoredDraw(pass, coloredDrawCommands_[i], state); break;
             case DrawFamily::Textured:    IssueTexturedDraw(pass, texturedDrawCommands_[i], state); break;
@@ -6829,8 +6898,7 @@ struct VSOut {
             case DrawFamily::Skinned:     IssueSkinnedDraw(pass, skinnedDrawCommands_[i], state); break;
             case DrawFamily::SkinnedPbr:  IssueSkinnedPbrDraw(pass, skinnedPbrDrawCommands_[i], state); break;
             case DrawFamily::CustomEffect:
-                IssueCustomEffectDraw(pass, customEffectDrawCommands_[i], targetFormat,
-                                      targetSampleCount, state);
+                IssueCustomEffectDraw(pass, customEffectDrawCommands_[i], destination, state);
                 break;
             }
         }
@@ -6901,13 +6969,15 @@ struct VSOut {
         // shape a capability query exists to prevent.
         if (capability == CNA::GraphicsCapability::WireFrame)
             return false;
-        // WEBGPU-134: multiple simultaneous render targets. SetRenderTargets() below refuses any
-        // count > 1 (WEBGPU-85/86/87 -- MRT infrastructure -- are still open), so reporting the
-        // shared permissive default here would promise a frame the renderer then throws on. Same
-        // defect class WEBGPU-115 ruled on for WireFrame: a renderer must not claim a capability it
-        // silently refuses.
-        if (capability == CNA::GraphicsCapability::MultipleRenderTargets)
-            return false;
+        // WEBGPU-85/86/87: multiple simultaneous render targets are now real. SetRenderTargets()
+        // accepts 2..4 RenderTarget2D targets, ReplayOrderedSegments builds an N-attachment pass,
+        // and a custom ShaderEffect that writes @location(0..N-1) fans out to every slot
+        // (WebGPU_MRT proves slot N holds slot N's content). A built-in (stock) draw into an MRT set
+        // writes attachment 0 only (its single @location(0) output; slots 1..N-1 have writeMask 0 --
+        // see ExpandStockColorTargetsEXT), the same "the 2D/stock pipeline writes attachment 0"
+        // behaviour every other renderer has, so the shared cross-renderer MRT tests pass unchanged.
+        // The WEBGPU-134 false arm that stood here while MRT was refused is therefore gone; the
+        // capability falls through to the shared permissive default, which reports true.
         // WEBGPU-84: occlusion queries are now real -- CreateOcclusionQuery() returns a
         // WebGPUOcclusionQueryRenderer that records a genuine BeginOcclusionQuery/EndOcclusionQuery
         // pair around its draws and resolves an exact sample count (WebGPU_OcclusionQuery proves a
@@ -7451,6 +7521,23 @@ struct VSOut {
         destination.discardFirstSegment = !target->PreserveContents();
         destination.passLabel = "CNA WebGPU RenderTarget RenderPass";
         destination.traceName = "rendertarget2d";
+        // WEBGPU-85/87 MRT: when extra targets are bound alongside this slot-0 target, add one
+        // attachment per extra target (slots 1..N-1). The depth attachment stays shared (slot 0's).
+        // SetRenderTargets validated that every slot shares width/height/sample count.
+        if (!mrtExtraTargets_.empty())
+        {
+            destination.colorAttachmentCount = 1 + static_cast<int>(mrtExtraTargets_.size());
+            destination.passLabel = "CNA WebGPU MRT RenderPass";
+            destination.traceName = "mrt";
+            for (std::size_t i = 0; i < mrtExtraTargets_.size(); ++i)
+            {
+                WebGPURenderTargetRenderer* extra = mrtExtraTargets_[i];
+                const std::size_t slot = i + 1;
+                destination.mrtColorViews[slot] = extra->ColorAttachmentView();
+                destination.mrtResolveViews[slot] = extra->ResolveTargetView();
+                destination.mrtColorFormats[slot] = extra->ColorFormat();
+            }
+        }
         ReplayOrderedSegments(encoder, destination);
 
         WGPUCommandBufferDescriptor commandBufferDescriptor{};
@@ -7989,7 +8076,10 @@ struct VSOut {
         // mutually exclusive -- see currentRenderTargetCubeFace_'s own doc comment) -- this is the
         // path SetRenderTargetCubeFace(nullptr, face)'s IGraphicsRenderer default takes to restore
         // the backbuffer, and it must genuinely flush the cube face's own pending draws.
-        if (newTarget == currentRenderTarget_ && currentRenderTargetCubeFace_ == nullptr)
+        // WEBGPU-87: while an MRT set is bound (mrtExtraTargets_ non-empty) a re-bind of the same
+        // slot-0 target as a SINGLE target is a real change (drop from N to 1) and must not early-out.
+        if (newTarget == currentRenderTarget_ && currentRenderTargetCubeFace_ == nullptr &&
+            mrtExtraTargets_.empty())
             return;
 
         // WEBGPU-53/54: this renderer renders every Clear()/3D-draw/SpriteBatch command queued
@@ -8016,6 +8106,9 @@ struct VSOut {
         FlushCurrentRenderTarget();
         currentRenderTargetCubeFace_ = nullptr;
         currentRenderTargetCubeFaceIndex_ = -1;
+        // WEBGPU-87: any single-target / backbuffer bind drops a prior MRT set (already flushed
+        // just above by FlushCurrentRenderTarget()).
+        mrtExtraTargets_.clear();
 
         if (newTarget != nullptr)
             newTarget->BindAsRenderTarget();
@@ -8028,22 +8121,77 @@ struct VSOut {
     {
         if (!renderTargets || count <= 0)
         {
+            // Unbind every slot back to the backbuffer (SetRenderTarget2D clears mrtExtraTargets_
+            // after flushing the outgoing target/set).
             SetRenderTarget2D(nullptr);
             return;
         }
-        if (count > 1)
+        if (count == 1)
+        {
+            // Single-target and cube-face paths are byte-identical to before; SetRenderTarget2D /
+            // SetRenderTargetCubeFace clear any prior MRT set after flushing it.
+            if (renderTargets[0].IsRenderTargetCubeFace())
+                SetRenderTargetCubeFace(
+                    renderTargets[0].GetRenderTargetCube(),
+                    renderTargets[0].GetCubeFace());
+            else
+                SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+            return;
+        }
+
+        // WEBGPU-87 MRT: 2..4 simultaneous RenderTarget2D targets. XNA's own ceiling is 4
+        // (GraphicsDevice enforces MAX_RENDERTARGET_BINDINGS separately).
+        if (count > 4)
             throw System::NotSupportedException(
-                "WebGPU: multiple simultaneous render targets are not supported on this renderer, so "
-                "binding " + std::to_string(count) + " targets is refused rather than silently "
-                "drawing into only the first. MRT infrastructure (WEBGPU-85/86/87) is not built yet. "
-                "Query GraphicsDevice::SupportsCapability(GraphicsCapability::MultipleRenderTargets) "
-                "-- it reports false here -- and bind a single render target instead.");
-        if (renderTargets[0].IsRenderTargetCubeFace())
-            SetRenderTargetCubeFace(
-                renderTargets[0].GetRenderTargetCube(),
-                renderTargets[0].GetCubeFace());
-        else
-            SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+                "WebGPU: at most 4 simultaneous render targets are supported (XNA's own ceiling), so "
+                "binding " + std::to_string(count) + " is refused.");
+
+        std::vector<WebGPURenderTargetRenderer*> targets;
+        targets.reserve(static_cast<std::size_t>(count));
+        for (int i = 0; i < count; ++i)
+        {
+            if (renderTargets[i].IsRenderTargetCubeFace())
+                throw System::NotSupportedException(
+                    "WebGPU: a RenderTargetCube face cannot be bound in a multiple-render-target set "
+                    "(target " + std::to_string(i) + " is a cube face). Bind up to 4 RenderTarget2D "
+                    "targets instead.");
+            auto* target = static_cast<WebGPURenderTargetRenderer*>(renderTargets[i].GetRenderTarget2D());
+            if (target == nullptr)
+                throw System::NotSupportedException(
+                    "WebGPU: render target " + std::to_string(i) + " in the MRT set is null.");
+            targets.push_back(target);
+        }
+
+        // Every attachment in a WebGPU render pass must share width, height and sample count; XNA
+        // requires the same. Refuse a mismatch explicitly, naming the target that disagrees, rather
+        // than letting wgpu-native reject the pass with an opaque message.
+        const int width = targets[0]->GetWidth();
+        const int height = targets[0]->GetHeight();
+        const int samples = std::max(1, targets[0]->GetMultiSampleCount());
+        for (int i = 1; i < count; ++i)
+        {
+            if (targets[i]->GetWidth() != width || targets[i]->GetHeight() != height)
+                throw System::NotSupportedException(
+                    "WebGPU: render target " + std::to_string(i) + " is " +
+                    std::to_string(targets[i]->GetWidth()) + "x" + std::to_string(targets[i]->GetHeight()) +
+                    " but target 0 is " + std::to_string(width) + "x" + std::to_string(height) +
+                    "; every target in an MRT set must share dimensions.");
+            if (std::max(1, targets[i]->GetMultiSampleCount()) != samples)
+                throw System::NotSupportedException(
+                    "WebGPU: render target " + std::to_string(i) + " has sample count " +
+                    std::to_string(std::max(1, targets[i]->GetMultiSampleCount())) +
+                    " but target 0 has " + std::to_string(samples) +
+                    "; every target in an MRT set must share a sample count.");
+        }
+
+        // Flush the outgoing target/set, then bind slot 0 (which sets currentRenderTarget_) and
+        // record slots 1..N-1. BindAsRenderTarget() clears mrtExtraTargets_ via SetRenderTarget2D's
+        // path only when called through it -- here it is called directly, so set the extras after.
+        FlushCurrentRenderTarget();
+        currentRenderTargetCubeFace_ = nullptr;
+        currentRenderTargetCubeFaceIndex_ = -1;
+        targets[0]->BindAsRenderTarget();
+        mrtExtraTargets_.assign(targets.begin() + 1, targets.end());
     }
 
     std::unique_ptr<ITextureCubeRenderer> WebGPURenderer::CreateTextureCube(
@@ -9743,7 +9891,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         auto& cache = colored ? pbrColorPipelines_ : pbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -9780,14 +9928,16 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         vertexBufferLayout.attributeCount = colored ? 5u : 4u;
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = colored ? pbrColorShader_ : pbrShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU Pbr3D Pipeline");
@@ -10695,7 +10845,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         auto& cache = preferVertexLit
             ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
             : (hasVertexColor ? skinnedColorPipelines_ : skinnedPipelines_);
@@ -10744,14 +10894,16 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         vertexBufferLayout.attributeCount = attributeCount;
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = shaderModule;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU Skinned3D Pipeline");
@@ -11359,7 +11511,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
         auto& cache = colored ? skinnedPbrColorPipelines_ : skinnedPbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -11399,14 +11551,16 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         vertexBufferLayout.attributeCount = colored ? 7u : 6u;
         vertexBufferLayout.attributes = attributes.data();
 
-        WGPUColorTargetState target{};
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
         target.format = surfaceFormat_;
         target.writeMask = CurrentWriteMask(); // REMED-GFX-077: BlendState.ColorWriteChannels slot 0
         WGPUFragmentState fragment{};
         fragment.module = colored ? skinnedPbrColorShader_ : skinnedPbrShader_;
         fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = 1;
-        fragment.targets = &target;
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
 
         WGPURenderPipelineDescriptor pipeline{};
         pipeline.label = StringView("CNA WebGPU SkinnedPbr3D Pipeline");

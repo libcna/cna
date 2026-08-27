@@ -45,6 +45,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -113,18 +114,47 @@ namespace
                 ++nonBlack;
         return nonBlack;
     }
+
+    // WEBGPU-85/86/87: a minimal MRT custom effect -- position-only vertex, fragment writing a
+    // DISTINCT constant colour to each of two @location outputs. Proving slot 1 receives blue and
+    // not slot 0's red is the whole point of MRT (a mis-wired pass would put slot 0's colour in both).
+    const char* const kMrtVertWgsl = R"WGSL(
+@vertex fn vs_main(@location(0) position: vec3f) -> @builtin(position) vec4f {
+    return vec4f(position, 1.0);
+}
+)WGSL";
+    const char* const kMrtFragWgsl = R"WGSL(
+struct FragOut {
+    @location(0) t0: vec4f,
+    @location(1) t1: vec4f,
+};
+@fragment fn fs_main() -> FragOut {
+    var o: FragOut;
+    o.t0 = vec4f(1.0, 0.0, 0.0, 1.0);
+    o.t1 = vec4f(0.0, 0.0, 1.0, 1.0);
+    return o;
+}
+)WGSL";
+
+    Color CenterOf(RenderTarget2D& target)
+    {
+        std::vector<Color> pixels(static_cast<std::size_t>(kSize) * kSize, Color(0, 0, 0, 0));
+        const Rectangle region(0, 0, kSize, kSize);
+        target.GetData(0, &region, pixels.data(), 0, static_cast<int>(pixels.size()));
+        return pixels[(static_cast<std::size_t>(kSize) / 2) * kSize + kSize / 2];
+    }
 }   // namespace
 
 // ---------------------------------------------------------------------------
-// WEBGPU-134.1: the capability query answers false, asserted by the renderer, not inherited.
+// WEBGPU-85/86/87: MRT is implemented, so the capability query now answers TRUE (the WEBGPU-134
+// false arm that stood while MRT was refused is gone -- SetRenderTargets now accepts 2..4).
 // ---------------------------------------------------------------------------
-TEST(WebGpuMrtOcclusionContract, MultipleRenderTargetsCapabilityIsFalse)
+TEST(WebGpuMrtOcclusionContract, MultipleRenderTargetsCapabilityIsTrue)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets))
-        << "WebGPU claims MRT support while SetRenderTargets refuses count > 1 -- the WEBGPU-134 "
-           "override is gone and a game is told a frame it will then get an exception for";
+    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets))
+        << "WebGPU implements MRT (WEBGPU-85/86/87) but SupportsCapability reports false";
 }
 
 // ---------------------------------------------------------------------------
@@ -139,33 +169,59 @@ TEST(WebGpuMrtOcclusionContract, SingleTargetBindStillRenders)
 }
 
 // ---------------------------------------------------------------------------
-// WEBGPU-134.3: a two-target bind throws a catchable NotSupportedException that points at the
-// capability query -- and the device is still usable for a single target afterwards.
+// WEBGPU-85/86/87: a two-target bind now SUCCEEDS, and a custom ShaderEffect that writes
+// @location(0..1) fans out to both slots -- each receives its OWN content (red into slot 0, blue
+// into slot 1), not slot 0's colour in both. The device still renders a single target afterwards.
 // ---------------------------------------------------------------------------
-TEST(WebGpuMrtOcclusionContract, TwoTargetBindThrowsNotSupportedAndDeviceRecovers)
+TEST(WebGpuMrtOcclusionContract, TwoTargetBindSucceedsAndBothTargetsReceiveOwnContent)
 {
     CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     GraphicsDevice gd;
     RenderTarget2D t0 = MakeTarget(gd);
     RenderTarget2D t1 = MakeTarget(gd);
 
-    try
-    {
-        gd.SetRenderTargets({RenderTargetBinding(&t0), RenderTargetBinding(&t1)});
-        FAIL() << "a two-target bind was accepted -- WebGPU MRT is not implemented (WEBGPU-85/86/87)";
-    }
-    catch (const System::NotSupportedException& e)
-    {
-        const std::string msg = e.what();
-        EXPECT_NE(std::string::npos, msg.find("WebGPU"))
-            << "the refusal does not name the renderer: \"" << msg << '"';
-        EXPECT_NE(std::string::npos, msg.find("SupportsCapability"))
-            << "the refusal does not point at the capability query: \"" << msg << '"';
-    }
+    ShaderEffect fx(gd, kMrtVertWgsl, kMrtFragWgsl);
+    ASSERT_TRUE(fx.IsEffectValid())
+        << "the MRT ShaderEffect failed to compile: " << fx.GetCompileErrorEXT();
 
-    // The refusal held no state: a single-target bind on the same device still renders.
+    const VertexPositionColor quad[6] = {
+        {Vector3(-1.0f, 1.0f, 0.0f), Color(255, 255, 255, 255)},
+        {Vector3(-1.0f, -1.0f, 0.0f), Color(255, 255, 255, 255)},
+        {Vector3(1.0f, -1.0f, 0.0f), Color(255, 255, 255, 255)},
+        {Vector3(-1.0f, 1.0f, 0.0f), Color(255, 255, 255, 255)},
+        {Vector3(1.0f, -1.0f, 0.0f), Color(255, 255, 255, 255)},
+        {Vector3(1.0f, 1.0f, 0.0f), Color(255, 255, 255, 255)},
+    };
+    VertexBuffer vb(gd, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
+    vb.SetData(quad, 6);
+
+    RasterizerState rs;
+    rs.setCullModeProperty(CullMode::None);
+    gd.setRasterizerStateProperty(rs);
+    gd.setDepthStencilStateProperty(DepthStencilState::None);
+    gd.setBlendStateProperty(BlendState::Opaque);
+
+    // The two-target bind must NOT throw now.
+    ASSERT_NO_THROW(gd.SetRenderTargets({RenderTargetBinding(&t0), RenderTargetBinding(&t1)}));
+    gd.setScissorRectangleProperty(Rectangle(0, 0, kSize, kSize));
+    gd.Clear(Color(0, 0, 0, 255));
+    fx.Apply();
+    gd.SetVertexBuffer(&vb);
+    gd.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+    gd.SetVertexBuffer(nullptr);
+    gd.SetRenderTarget(nullptr);  // unbind the whole set + flush it into both targets
+
+    const Color c0 = CenterOf(t0);
+    const Color c1 = CenterOf(t1);
+    EXPECT_GT(c0.getRProperty(), 200) << "slot 0 did not receive its red @location(0) output";
+    EXPECT_LT(c0.getBProperty(), 64) << "slot 0 wrongly holds slot 1's blue";
+    EXPECT_GT(c1.getBProperty(), 200) << "slot 1 did not receive its blue @location(1) output";
+    EXPECT_LT(c1.getRProperty(), 64)
+        << "slot 1 wrongly holds slot 0's red -- the MRT pass fanned one output to every slot";
+
+    // The device is still usable for a single target afterwards.
     EXPECT_GT(RenderIntoSingleTargetAndCount(gd), 0)
-        << "the device did not recover to single-target rendering after a refused MRT bind";
+        << "the device did not recover to single-target rendering after an MRT bind";
 }
 
 // ---------------------------------------------------------------------------

@@ -907,6 +907,9 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t multiSampleMask = 0xFFFFFFFFu;
             WGPUTextureFormat targetFormat = WGPUTextureFormat_Undefined;
             std::uint32_t sampleCount = 1;
+            /// WEBGPU-86 MRT: a sprite drawn into an MRT set needs a matching N-target pipeline
+            /// (writing attachment 0 only); 1 for the backbuffer / single target / cube face.
+            int colorAttachmentCount = 1;
 
             [[nodiscard]] bool operator==(const SpritePipelineKey& other) const noexcept
             {
@@ -916,7 +919,8 @@ namespace CNA::Internal::Renderers::WebGPU
                     colorFunc == other.colorFunc && alphaFunc == other.alphaFunc &&
                     colorWriteMask == other.colorWriteMask &&
                     multiSampleMask == other.multiSampleMask &&
-                    targetFormat == other.targetFormat && sampleCount == other.sampleCount;
+                    targetFormat == other.targetFormat && sampleCount == other.sampleCount &&
+                    colorAttachmentCount == other.colorAttachmentCount;
             }
         };
 
@@ -941,6 +945,7 @@ namespace CNA::Internal::Renderers::WebGPU
                 mix(static_cast<std::size_t>(key.multiSampleMask));
                 mix(static_cast<std::size_t>(key.targetFormat));
                 mix(static_cast<std::size_t>(key.sampleCount));
+                mix(static_cast<std::size_t>(key.colorAttachmentCount));
                 return hash;
             }
         };
@@ -1400,10 +1405,10 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         struct PassDestination
         {
-            WGPUTextureView colorView = nullptr;    ///< The colour attachment (multisampled if any).
-            WGPUTextureView resolveView = nullptr;  ///< Its resolve target, or null when 1x.
-            WGPUTextureView depthView = nullptr;    ///< Depth/stencil attachment, or null.
-            WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined;
+            WGPUTextureView colorView = nullptr;    ///< Slot 0 colour attachment (multisampled if any).
+            WGPUTextureView resolveView = nullptr;  ///< Slot 0 resolve target, or null when 1x.
+            WGPUTextureView depthView = nullptr;    ///< Depth/stencil attachment, or null. Shared by MRT.
+            WGPUTextureFormat colorFormat = WGPUTextureFormat_Undefined;  ///< Slot 0 colour format.
             std::uint32_t sampleCount = 1;
             int width = 0;
             int height = 0;
@@ -1412,6 +1417,29 @@ namespace CNA::Internal::Renderers::WebGPU
             bool discardFirstSegment = false;
             const char* passLabel = "CNA WebGPU RenderPass";
             const char* traceName = "destination";
+            /// WEBGPU-85 MRT: 1 (the slot-0 fields above describe the whole pass) or 2..4. For N>1 the
+            /// EXTRA slots 1..N-1 live in the arrays below; slot 0 stays the single fields above, so
+            /// every single-target caller is byte-identical. The depth attachment stays shared.
+            int colorAttachmentCount = 1;
+            std::array<WGPUTextureView, 4> mrtColorViews{};    ///< Slots 1..3 (index 0 unused).
+            std::array<WGPUTextureView, 4> mrtResolveViews{};  ///< Slots 1..3 (index 0 unused).
+            std::array<WGPUTextureFormat, 4> mrtColorFormats{};///< Slots 1..3 (index 0 unused).
+
+            /** @brief The colour view for slot @p i (slot 0 is the single field). */
+            [[nodiscard]] WGPUTextureView ColorViewAt(int i) const
+            {
+                return i == 0 ? colorView : mrtColorViews[static_cast<std::size_t>(i)];
+            }
+            /** @brief The resolve view for slot @p i (slot 0 is the single field). */
+            [[nodiscard]] WGPUTextureView ResolveViewAt(int i) const
+            {
+                return i == 0 ? resolveView : mrtResolveViews[static_cast<std::size_t>(i)];
+            }
+            /** @brief The colour format for slot @p i (slot 0 is the single field). */
+            [[nodiscard]] WGPUTextureFormat ColorFormatAt(int i) const
+            {
+                return i == 0 ? colorFormat : mrtColorFormats[static_cast<std::size_t>(i)];
+            }
         };
 
         /**
@@ -1495,8 +1523,7 @@ namespace CNA::Internal::Renderers::WebGPU
          * @param firstEntry First @ref drawOrder_ index belonging to this segment.
          * @param entryCount How many entries from @p firstEntry belong to it.
          */
-        void ReplayDrawsInOrder(WGPURenderPassEncoder pass, WGPUTextureFormat targetFormat,
-                                std::uint32_t targetSampleCount, const char* destination,
+        void ReplayDrawsInOrder(WGPURenderPassEncoder pass, const PassDestination& destination,
                                 std::size_t firstEntry, std::size_t entryCount);
 
         /**
@@ -1968,6 +1995,13 @@ namespace CNA::Internal::Renderers::WebGPU
         // every other CNA renderer already assumes).
         WebGPURenderTargetRenderer* currentRenderTarget_ = nullptr;
 
+        // WEBGPU-85/87 MRT: the ADDITIONAL render targets bound alongside currentRenderTarget_
+        // (which is always slot 0). Empty for a single target / cube face / the backbuffer; holds
+        // slots 1..N-1 (N up to 4) while an MRT set is bound. All slots share width/height/sample
+        // count/depth, validated at SetRenderTargets() bind time. CurrentColorAttachmentCountEXT()
+        // is 1 + this size (or 1 when no RenderTarget2D is bound).
+        std::vector<WebGPURenderTargetRenderer*> mrtExtraTargets_;
+
         // WEBGPU-114: the cube-face sibling of currentRenderTarget_ above -- non-null exactly
         // when a RenderTargetCube face is the currently-bound render target (mutually exclusive
         // with currentRenderTarget_; only one of the two, or neither -- the backbuffer -- is ever
@@ -1975,6 +2009,20 @@ namespace CNA::Internal::Renderers::WebGPU
         // currentRenderTargetCubeFace_ is non-null.
         WebGPURenderTargetCubeRenderer* currentRenderTargetCubeFace_ = nullptr;
         int currentRenderTargetCubeFaceIndex_ = -1;
+
+        /// WEBGPU-86 MRT: how many colour attachments the pass currently being replayed has. Set at
+        /// the start of `ReplayDrawsInOrder` from the `PassDestination`, read by every stock pipeline
+        /// builder (via `ExpandStockColorTargetsEXT`) and folded into its cache key. 1 outside MRT,
+        /// so single-target pipelines are byte-identical to before.
+        int replayColorAttachmentCount_ = 1;
+
+        /// WEBGPU-86 MRT: fills a stock draw's EXTRA colour targets (slots 1..N-1) for the pass's
+        /// attachment count and returns that count. Slot 0 is left default -- the builder holds a
+        /// reference to `out[0]` and fills its real format/write-mask/blend itself (so a `blend`
+        /// assigned AFTER this call still lands in the array). Slots 1..N-1 keep `surfaceFormat_`
+        /// but write NOTHING (`writeMask` 0), so a stock draw into an MRT set writes attachment 0
+        /// only -- the "the 2D/stock pipeline writes attachment 0" behaviour every renderer has.
+        int InitStockColorTargetsEXT(std::array<WGPUColorTargetState, 4>& out) const;
 
         // Phase 57/63 vertical slice: DrawColoredPrimitives()/DrawIndexedColoredPrimitives() only
         // (VertexPositionColor, stride 16 -- see plans/plan_webgpu.md's Phase 57 entry-point note). The
@@ -2871,10 +2919,10 @@ namespace CNA::Internal::Renderers::WebGPU
         void QueueCustomEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        /// WEBGPU-76: replays one custom-effect command — builds/fetches its pipeline (keyed by the
-        /// concrete pass state, `colorAttachmentCount` currently always 1) and issues the draw.
+        /// WEBGPU-76/86: replays one custom-effect command — builds/fetches its pipeline (keyed by
+        /// the concrete pass state incl. `destination.colorAttachmentCount`, 1 for a single target
+        /// and 2..4 for an MRT set) and issues the draw. The fragment must write `@location(0..N-1)`.
         void IssueCustomEffectDraw(WGPURenderPassEncoder pass, const CustomEffectDrawCommand& command,
-                                   WGPUTextureFormat targetFormat, std::uint32_t targetSampleCount,
-                                   ReplayState& state);
+                                   const PassDestination& destination, ReplayState& state);
     };
 }

@@ -1399,8 +1399,12 @@ class RenderTargetInvalidMipLevelTest : public Game
         ReadWholeLevel(*a, 0, "H1 attachment 0 level 0");
 
         // Level 1 CONTENT belongs to REMED-GFX-190, not here: measure and print, assert only that
-        // the transfer itself is complete and inside its window.
-        ReadWholeLevel(*a, 1, "H1 attachment 0 level 1", /*contentAsserted=*/false);
+        // the transfer itself is complete and inside its window. Only a mip-mapped target HAS a
+        // level 1 to read: a renderer whose RenderTarget2D is single-level (WEBGPU-53/54 refuses
+        // mipMap=true, so kMipMappedTargetSupported is false) has no level 1, and its rejection is
+        // asserted by the ExpectLevelRejected(level == LevelCount) check below instead.
+        if (kMipMappedTargetSupported)
+            ReadWholeLevel(*a, 1, "H1 attachment 0 level 1", /*contentAsserted=*/false);
 
         const Rectangle one(0, 0, 1, 1);
         const int na = a->getLevelCountProperty();

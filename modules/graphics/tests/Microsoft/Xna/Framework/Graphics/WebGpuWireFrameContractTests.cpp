@@ -280,12 +280,13 @@ TEST(WebGpuWireFrameContract, CapabilityQueryAnswersForWireFrame)
            "draws below will silently render solid geometry instead of refusing";
 
     // The surrounding capability answers must not move with it. MultiStreamVertexInput (shared
-    // REMED-GFX-201 default) and MultipleRenderTargets (WEBGPU-134, its own override) are the entries
-    // this renderer reports false for, for the same reason as WireFrame. OcclusionQuery is now TRUE:
-    // WEBGPU-84 implemented real occlusion queries, superseding WEBGPU-135's temporary false arm.
+    // REMED-GFX-201 default) is the only entry left that this renderer reports false for, for the same
+    // reason as WireFrame. OcclusionQuery is TRUE (WEBGPU-84 implemented real occlusion queries,
+    // superseding WEBGPU-135's temporary false arm) and MultipleRenderTargets is now TRUE too
+    // (WEBGPU-85/86/87 implemented MRT, superseding WEBGPU-134's temporary false arm).
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
+    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::OcclusionQuery));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::CustomEffects));
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::Texture3D));

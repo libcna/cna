@@ -544,9 +544,6 @@ readback (`WEBGPU-51`), and -- since 2026-08-26 -- the browser path (`WEBGPU-119
 described in their own sections above and are no longer "limitations". What is **genuinely still
 open** in `plans/plan_webgpu.md`:
 
-- **Multiple simultaneous render targets (MRT)** -- infrastructure not built (`WEBGPU-85`/`86`/`87`).
-  The capability now truthfully reports false and a `count > 1` bind throws a
-  `System::NotSupportedException` (`WEBGPU-134`), rather than claiming MRT and then refusing it.
 - **Real GPU-native compressed texture formats** (`WEBGPU-111`) -- a cross-renderer/XNA-layer gap,
   not WebGPU-specific: no CNA renderer does real block-compressed GPU upload today (`Texture2D`
   CPU-decompresses DXT to RGBA8 first, and the common `ImageData` struct has no compressed-format
@@ -559,6 +556,14 @@ open** in `plans/plan_webgpu.md`:
   wired (the WebGPU sprite command carries no effect). Custom WGSL on the 3D `DrawUserPrimitives`/
   `DrawIndexedPrimitives` route **is** supported (`WEBGPU-76`, see below).
 - `TextureCube`/`RenderTargetCube` mip regeneration.
+
+**Multiple render targets are supported** (`WEBGPU-85`/`86`/`87`): `SupportsCapability(MultipleRenderTargets)`
+reports true, and `SetRenderTargets` binds 2..4 `RenderTarget2D` targets that share width/height/sample
+count (a mismatch, a cube face, a null target, or a count > 4 is refused with a
+`System::NotSupportedException`). A custom `ShaderEffect` whose WGSL fragment writes `@location(0..N-1)`
+fans out to every attachment; a built-in (stock/SpriteBatch) draw writes attachment 0 only (`writeMask`
+0 on the rest) -- the same "the stock pipeline writes attachment 0" behaviour every other renderer has.
+Depth/stencil is single and shared by the pass. See the MRT section below for the full boundary.
 
 **Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
 `CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`, and the sample count is
@@ -629,9 +634,29 @@ effect; a draw captures the uniform block **by value** at the call, so two draws
 with different `SetUniform*` values render correctly. Compilation failures are reported through
 `ShaderEffect.IsEffectValid()` / `GetCompileErrorEXT()`, never as a device error.
 
-**Still open:** custom **SpriteBatch** effects (the sprite path carries no effect yet) and a
-multi-`@location` fragment output for MRT (`WEBGPU-85`/`86`/`87`) — the custom-effect pipeline builder
-already takes a colour-attachment count for the latter. Proven by `WebGPU_ShaderEffect3D`.
+**Still open:** custom **SpriteBatch** effects (the sprite path carries no effect yet). Proven by
+`WebGPU_ShaderEffect3D`.
+
+### Multiple render targets (`WEBGPU-85`/`86`/`87`)
+
+`SetRenderTargets` binds 2..4 `RenderTarget2D` targets into one render pass. `PassDestination` carries
+up to four colour attachments (slot 0 in its single fields, slots 1..N-1 in its `mrt*` arrays), and
+the one shared `ReplayOrderedSegments` builds an N-entry `WGPURenderPassColorAttachment` array from it
+— there is no separate MRT replay path. Every pipeline that replays into the pass is built for that
+attachment count and keyed by it, so a 1-target and a 2-target pipeline are distinct cache entries.
+
+| Aspect | Behaviour |
+|---|---|
+| Binding | 2..4 `RenderTarget2D` sharing width/height/sample count. A mismatch (named target), a cube face, a null target, or count > 4 is refused with a `System::NotSupportedException`. |
+| Custom `ShaderEffect` draw | Writes every attachment: its WGSL fragment declares `@location(0..N-1)`. This is the real MRT path — `WebGPU_MRT` binds 2 then 4 targets and proves slot N holds slot N's own content (a distinct swizzle of `uBase`), not slot 0's. |
+| Stock / SpriteBatch draw | Writes attachment 0 only (its single `@location(0)` output); slots 1..N-1 have `writeMask` 0 — the "the stock/2D pipeline writes attachment 0" behaviour every other renderer has (`ExpandStock`/`InitStockColorTargetsEXT`). This is what makes the shared cross-renderer MRT tests pass. |
+| Clear | `Clear()` clears every bound attachment (XNA has no per-attachment clear granularity). |
+| Depth/stencil | Single, shared by the pass (slot 0's). |
+| Unbind | `SetRenderTarget(nullptr)` / `SetRenderTargets({})` / any single-target or cube-face bind flushes the set into all its targets and drops back to one attachment. |
+
+Every render target here uses the backbuffer's `surfaceFormat_`, so all attachments in an MRT set
+share a format. Per-slot `ColorWriteChannels1..3` and per-slot independent blend are not yet modelled
+(the whole set shares slot 0's blend/write state); MSAA + MRT resolves each attachment independently.
 
 **Implementing real wireframe** would mean index-expanding triangles into line topology, since
 wgpu-native offers no polygon mode. That is a genuine implementation task, tracked separately; it is
