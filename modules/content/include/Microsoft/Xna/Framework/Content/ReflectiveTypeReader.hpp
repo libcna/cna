@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "System/TimeSpan.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -34,8 +35,14 @@ namespace Microsoft::Xna::Framework::Content
      * being duplicated in a hand-written reader that can drift from the type.
      *
      * The payload format this reads is XNA's, verified byte for byte against pipeline output:
-     * value-type fields are written **inline, in declaration order**, and a reference-type field
-     * is preceded by the 1-based index of its own type reader.
+     * value-type members are written **inline** and a reference-type member is preceded by the
+     * 1-based index of its own type reader.
+     *
+     * **The order is not simply the type's field order.** `IntermediateSerializer` writes the
+     * serialized **properties first, then the public fields**, each group in declaration order --
+     * measured on `Particle3DSample.ParticleSettings`, whose private `[ContentSerializer]` string
+     * property comes out ahead of every field. Declare the chain below in *wire* order, and check
+     * it by decoding one real file rather than by reading the C# type.
      *
      * ```cpp
      * ReflectiveTypeReaderBuilder<ParticleSystemSettings>("ParticlesSettings.ParticleSystemSettings")
@@ -217,6 +224,24 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
+         * @brief Declares the next member, read by a caller-supplied action.
+         *
+         * For a member the wire format does not map onto directly -- XNA's own idiom is a private
+         * `[ContentSerializer]` string property that maps to an object, as `ParticleSettings`
+         * does for its `BlendState` -- read the value and apply it yourself. The position in the
+         * chain is what matters; the payload is positional.
+         *
+         * @param action Reads the next value and stores whatever it means into the object.
+         * @return This builder, for chaining.
+         */
+        ReflectiveTypeReaderBuilder& Custom(
+            std::function<void(T&, ContentReader&)> action)
+        {
+            fields_.push_back(std::move(action));
+            return *this;
+        }
+
+        /**
          * @brief Registers the reflective reader and every enum reader the type needs.
          *
          * Safe to call more than once: `AddTypeCreator` replaces an entry of the same name.
@@ -264,6 +289,9 @@ namespace Microsoft::Xna::Framework::Content
                 return input.ReadQuaternion();
             else if constexpr (std::is_same_v<TMember, Color>)
                 return input.ReadColor();
+            else if constexpr (std::is_same_v<TMember, System::TimeSpan>)
+                // A .NET TimeSpan is a value type written as its Int64 tick count.
+                return System::TimeSpan::FromTicks(input.ReadInt64());
             else
                 // Everything else is a .NET reference type -- a string, a nested object, a list --
                 // and XNA writes those with their own type-reader index in front.
