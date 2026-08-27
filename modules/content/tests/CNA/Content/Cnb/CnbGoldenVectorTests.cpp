@@ -1,0 +1,308 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plans/plan_cnb.md CNBF-H007: golden binary conformance vectors.
+//
+// CnbSpecConformanceTests.cpp pins the DOCUMENT to the implementation by reading
+// docs/cnb-format.md and comparing its numbers against the code. That catches a document that
+// drifts, but it cannot catch the implementation and the document drifting together, and it says
+// nothing about the actual bytes.
+//
+// These vectors close that hole. Every byte below was produced by a small Python generator written
+// straight from the specification text (tools/cnb/gen_golden_vectors.py), NOT by CnbWriter -- a
+// golden file produced by the implementation under test proves only that the implementation is
+// self-consistent with itself. The tests then require, in both directions:
+//
+//   * CnbWriter, given the same logical asset, emits exactly these bytes; and
+//   * the reader, given these bytes, produces exactly the documented decoded values.
+//
+// A change to any field offset, stride, checksum parameter, byte order or default therefore fails
+// here with a byte offset, whatever else was updated alongside it. These arrays are part of the
+// CNB v1 contract: changing one is changing the format.
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
+#include "CNA/Content/Cnb/CnbCurveCodec.hpp"
+#include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Cnb/CnbFormat.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Curve.hpp"
+#include "Microsoft/Xna/Framework/CurveKey.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+
+using CNA::Content::Cnb::CnbDocument;
+using CNA::Content::Cnb::DecodeAnimationClipFromCnb;
+using CNA::Content::Cnb::DecodeCurveFromCnb;
+using CNA::Content::Cnb::EncodeAnimationClipToCnb;
+using CNA::Content::Cnb::EncodeCurveToCnb;
+using Microsoft::Xna::Framework::Curve;
+using Microsoft::Xna::Framework::CurveContinuity;
+using Microsoft::Xna::Framework::CurveKey;
+using Microsoft::Xna::Framework::CurveLoopType;
+using Microsoft::Xna::Framework::Content::ContentLoadException;
+using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
+using Microsoft::Xna::Framework::Graphics::BoneTrackEXT;
+using Microsoft::Xna::Framework::Graphics::ClipTargetSpaceEXT;
+using Microsoft::Xna::Framework::Graphics::KeyframeEXT;
+
+namespace CnbAssetTypeId = CNA::Content::Cnb::CnbAssetTypeId;
+namespace Format = CNA::Content::Cnb::Format;
+
+namespace
+{
+    // Curve schema 1: Cycle/Oscillate loop, two keys (see the decoded expectations below).
+    const std::vector<std::uint8_t> kGoldenCurve = {
+        0x43, 0x4E, 0x42, 0x1A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x07, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+        0x3C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x09, 0x17, 0x21, 0xAA, 0x12, 0x7F, 0xAD, 0x10,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x43, 0x4D, 0x45, 0x54, 0x00, 0x00, 0x00, 0x00,
+        0xD0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x35, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x35, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xCD, 0x84, 0xDE, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x43, 0x52, 0x56, 0x48, 0x01, 0x00, 0x00, 0x00,
+        0x08, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x85, 0xC5, 0x32, 0x7E, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x43, 0x52, 0x56, 0x4B, 0x01, 0x00, 0x00, 0x00,
+        0x14, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x1D, 0x3B, 0x04, 0x9E, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1D, 0x00, 0x00, 0x00,
+        0x4D, 0x69, 0x63, 0x72, 0x6F, 0x73, 0x6F, 0x66, 0x74, 0x2E, 0x58, 0x6E,
+        0x61, 0x2E, 0x46, 0x72, 0x61, 0x6D, 0x65, 0x77, 0x6F, 0x72, 0x6B, 0x2E,
+        0x43, 0x75, 0x72, 0x76, 0x65, 0x0C, 0x00, 0x00, 0x00, 0x67, 0x6F, 0x6C,
+        0x64, 0x65, 0x6E, 0x2F, 0x63, 0x75, 0x72, 0x76, 0x65, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x80, 0x3E,
+        0x00, 0x00, 0x80, 0xBE, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40,
+        0x00, 0x00, 0x40, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x00, 0x00,
+    };  // 316 bytes
+
+    // AnimationClip schema 1: 1.5s SceneNode clip, one track on bone 4, two keys.
+    const std::vector<std::uint8_t> kGoldenAnimationClip = {
+        0x43, 0x4E, 0x42, 0x1A, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x06, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0xC8, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x7F, 0x3F, 0x9E, 0x07, 0x27, 0xD8, 0x4B, 0xAD,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x43, 0x4D, 0x45, 0x54, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xEC, 0x5B, 0x8F, 0x08, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x41, 0x43, 0x4C, 0x48, 0x01, 0x00, 0x00, 0x00,
+        0x48, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x4D, 0x1F, 0xDE, 0xE5, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x41, 0x43, 0x4C, 0x54, 0x01, 0x00, 0x00, 0x00,
+        0x5C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x1C, 0xC6, 0xC0, 0x51, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x41, 0x43, 0x4C, 0x4B, 0x01, 0x00, 0x00, 0x00,
+        0x68, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x87, 0xA7, 0x03, 0xEB, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x31, 0x00, 0x00, 0x00,
+        0x4D, 0x69, 0x63, 0x72, 0x6F, 0x73, 0x6F, 0x66, 0x74, 0x2E, 0x58, 0x6E,
+        0x61, 0x2E, 0x46, 0x72, 0x61, 0x6D, 0x65, 0x77, 0x6F, 0x72, 0x6B, 0x2E,
+        0x47, 0x72, 0x61, 0x70, 0x68, 0x69, 0x63, 0x73, 0x2E, 0x41, 0x6E, 0x69,
+        0x6D, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x43, 0x6C, 0x69, 0x70, 0x45, 0x58,
+        0x54, 0x0B, 0x00, 0x00, 0x00, 0x67, 0x6F, 0x6C, 0x64, 0x65, 0x6E, 0x2F,
+        0x63, 0x6C, 0x69, 0x70, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F,
+        0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
+        0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
+        0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x80, 0x3F,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F, 0x00, 0x00, 0x80, 0x40,
+        0x00, 0x00, 0xA0, 0x40, 0x00, 0x00, 0xC0, 0x40, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x3F,
+        0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40,
+    };  // 456 bytes
+
+
+    /// Reports the first differing byte rather than "the vectors differ", which is the difference
+    /// between a five-second diagnosis and a hex dump.
+    void ExpectBytesEqual(const std::vector<std::uint8_t>& expected,
+                          const std::vector<std::uint8_t>& actual, const char* what)
+    {
+        ASSERT_EQ(actual.size(), expected.size())
+            << what << ": size differs (this is a format change)";
+        for (std::size_t i = 0; i < expected.size(); ++i)
+        {
+            ASSERT_EQ(actual[i], expected[i])
+                << what << ": first difference at byte offset " << i;
+        }
+    }
+
+    /// The exact logical asset the Curve vector encodes.
+    Curve GoldenCurveValue()
+    {
+        Curve curve;
+        curve.setPreLoopProperty(CurveLoopType::Cycle);
+        curve.setPostLoopProperty(CurveLoopType::Oscillate);
+        curve.getKeysProperty().Add(CurveKey(0.0f, 1.0f, 0.25f, -0.25f, CurveContinuity::Smooth));
+        curve.getKeysProperty().Add(CurveKey(2.0f, -3.0f, 0.0f, 0.0f, CurveContinuity::Step));
+        return curve;
+    }
+
+    /// The exact logical asset the AnimationClip vector encodes.
+    AnimationClipEXT GoldenClipValue()
+    {
+        AnimationClipEXT clip;
+        clip.Duration = System::TimeSpan::FromSeconds(1.5);
+        clip.TargetSpace = ClipTargetSpaceEXT::SceneNode;
+
+        BoneTrackEXT track;
+        track.BoneIndex = 4;
+        KeyframeEXT first;
+        first.Time = System::TimeSpan::FromSeconds(0.0);
+        first.Translation = Microsoft::Xna::Framework::Vector3(1.0f, 2.0f, 3.0f);
+        KeyframeEXT second;
+        second.Time = System::TimeSpan::FromSeconds(1.5);
+        second.Translation = Microsoft::Xna::Framework::Vector3(4.0f, 5.0f, 6.0f);
+        second.Scale = Microsoft::Xna::Framework::Vector3(2.0f, 2.0f, 2.0f);
+        track.Keys = {first, second};
+        clip.Tracks = {track};
+        return clip;
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// Writer direction: the implementation must produce exactly the specified bytes
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbGoldenVectorTest, TheWriterReproducesTheCurveVectorByteForByte)
+{
+    ExpectBytesEqual(kGoldenCurve, EncodeCurveToCnb(GoldenCurveValue(), "golden/curve"),
+                     "golden Curve");
+}
+
+TEST(CnbGoldenVectorTest, TheWriterReproducesTheAnimationClipVectorByteForByte)
+{
+    ExpectBytesEqual(kGoldenAnimationClip,
+                     EncodeAnimationClipToCnb(GoldenClipValue(), "golden/clip"),
+                     "golden AnimationClip");
+}
+
+// --------------------------------------------------------------------------------------------
+// Reader direction: the specified bytes must decode to exactly the documented values
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbGoldenVectorTest, TheCurveVectorDecodesToItsDocumentedValues)
+{
+    const CnbDocument document = CnbDocument::Parse(kGoldenCurve, "golden-curve.cnb");
+    EXPECT_EQ(document.ContainerMajor(), 1u);
+    EXPECT_EQ(document.ContainerMinor(), 0u);
+    EXPECT_EQ(document.AssetTypeId(), CnbAssetTypeId::Curve);
+    EXPECT_EQ(document.AssetSchemaVersion(), 1u);
+    EXPECT_EQ(document.ChunkCount(), 3u);
+    ASSERT_TRUE(document.Metadata().present);
+    EXPECT_EQ(document.Metadata().assetTypeName, "Microsoft.Xna.Framework.Curve");
+    EXPECT_EQ(document.Metadata().contentName, "golden/curve");
+
+    const Curve curve = DecodeCurveFromCnb(document);
+    EXPECT_EQ(curve.getPreLoopProperty(), CurveLoopType::Cycle);
+    EXPECT_EQ(curve.getPostLoopProperty(), CurveLoopType::Oscillate);
+    ASSERT_EQ(curve.getKeysProperty().getCountProperty(), 2);
+    EXPECT_FLOAT_EQ(curve.getKeysProperty()[0].getPositionProperty(), 0.0f);
+    EXPECT_FLOAT_EQ(curve.getKeysProperty()[0].getValueProperty(), 1.0f);
+    EXPECT_FLOAT_EQ(curve.getKeysProperty()[0].getTangentInProperty(), 0.25f);
+    EXPECT_FLOAT_EQ(curve.getKeysProperty()[0].getTangentOutProperty(), -0.25f);
+    EXPECT_EQ(curve.getKeysProperty()[0].getContinuityProperty(), CurveContinuity::Smooth);
+    EXPECT_FLOAT_EQ(curve.getKeysProperty()[1].getPositionProperty(), 2.0f);
+    EXPECT_FLOAT_EQ(curve.getKeysProperty()[1].getValueProperty(), -3.0f);
+    EXPECT_EQ(curve.getKeysProperty()[1].getContinuityProperty(), CurveContinuity::Step);
+}
+
+TEST(CnbGoldenVectorTest, TheAnimationClipVectorDecodesToItsDocumentedValues)
+{
+    const CnbDocument document = CnbDocument::Parse(kGoldenAnimationClip, "golden-clip.cnb");
+    EXPECT_EQ(document.AssetTypeId(), CnbAssetTypeId::AnimationClip);
+    EXPECT_EQ(document.ChunkCount(), 4u);
+
+    const AnimationClipEXT clip = DecodeAnimationClipFromCnb(document);
+    EXPECT_DOUBLE_EQ(clip.Duration.getTotalSecondsProperty(), 1.5);
+    EXPECT_EQ(clip.TargetSpace, ClipTargetSpaceEXT::SceneNode);
+    ASSERT_EQ(clip.Tracks.size(), 1u);
+    EXPECT_EQ(clip.Tracks[0].BoneIndex, 4);
+    ASSERT_EQ(clip.Tracks[0].Keys.size(), 2u);
+    EXPECT_DOUBLE_EQ(clip.Tracks[0].Keys[0].Time.getTotalSecondsProperty(), 0.0);
+    EXPECT_FLOAT_EQ(clip.Tracks[0].Keys[0].Translation.X, 1.0f);
+    EXPECT_FLOAT_EQ(clip.Tracks[0].Keys[0].Translation.Z, 3.0f);
+    EXPECT_DOUBLE_EQ(clip.Tracks[0].Keys[1].Time.getTotalSecondsProperty(), 1.5);
+    EXPECT_FLOAT_EQ(clip.Tracks[0].Keys[1].Translation.Y, 5.0f);
+    EXPECT_FLOAT_EQ(clip.Tracks[0].Keys[1].Scale.Z, 2.0f);
+    EXPECT_FLOAT_EQ(clip.Tracks[0].Keys[1].Rotation.W, 1.0f);
+}
+
+// --------------------------------------------------------------------------------------------
+// The header and table-of-contents bytes themselves, read out of the vector by hand
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbGoldenVectorTest, TheGoldenHeaderHasTheDocumentedFieldsAtTheDocumentedOffsets)
+{
+    const std::vector<std::uint8_t>& b = kGoldenCurve;
+    ASSERT_GE(b.size(), Format::HeaderSize);
+
+    // magic
+    EXPECT_EQ(b[0], 0x43u); EXPECT_EQ(b[1], 0x4Eu);
+    EXPECT_EQ(b[2], 0x42u); EXPECT_EQ(b[3], 0x1Au);
+    // containerMajor = 1, containerMinor = 0, headerFlags = 0
+    EXPECT_EQ(b[4], 0x01u); EXPECT_EQ(b[5], 0x00u);
+    EXPECT_EQ(b[6], 0x00u); EXPECT_EQ(b[7], 0x00u);
+    for (std::size_t i = 8; i < 12; ++i) { EXPECT_EQ(b[i], 0x00u) << "headerFlags byte " << i; }
+    // assetTypeId = 7 (Curve), little-endian
+    EXPECT_EQ(b[12], 0x07u); EXPECT_EQ(b[13], 0x00u);
+    EXPECT_EQ(b[14], 0x00u); EXPECT_EQ(b[15], 0x00u);
+    // assetSchemaVersion = 1
+    EXPECT_EQ(b[16], 0x01u);
+    // chunkCount = 3
+    EXPECT_EQ(b[20], 0x03u);
+    // tocOffset = 64
+    EXPECT_EQ(b[32], 0x40u);
+    for (std::size_t i = 33; i < 40; ++i) { EXPECT_EQ(b[i], 0x00u) << "tocOffset byte " << i; }
+    // reserved[16] all zero
+    for (std::size_t i = 48; i < 64; ++i) { EXPECT_EQ(b[i], 0x00u) << "reserved byte " << i; }
+
+    // First table entry: 'CMET', at the documented 48-byte stride.
+    EXPECT_EQ(b[64], 'C'); EXPECT_EQ(b[65], 'M');
+    EXPECT_EQ(b[66], 'E'); EXPECT_EQ(b[67], 'T');
+    // Second entry begins exactly one stride later: 'CRVH'.
+    EXPECT_EQ(b[64 + Format::TocEntrySize + 0], 'C');
+    EXPECT_EQ(b[64 + Format::TocEntrySize + 1], 'R');
+    EXPECT_EQ(b[64 + Format::TocEntrySize + 2], 'V');
+    EXPECT_EQ(b[64 + Format::TocEntrySize + 3], 'H');
+    // Third: 'CRVK'.
+    EXPECT_EQ(b[64 + 2 * Format::TocEntrySize + 3], 'K');
+}
+
+TEST(CnbGoldenVectorTest, CorruptingAnyByteOfAGoldenVectorIsDetected)
+{
+    // The checksums are not decorative. Every single byte of the golden Curve vector is flipped in
+    // turn and the file must be refused -- which also proves the CRC coverage regions in the
+    // specification are the regions the implementation actually checks.
+    for (std::size_t i = 0; i < kGoldenCurve.size(); ++i)
+    {
+        std::vector<std::uint8_t> mutated = kGoldenCurve;
+        mutated[i] ^= 0x01u;
+        bool refused = false;
+        try
+        {
+            const CnbDocument document = CnbDocument::Parse(mutated, "mutated.cnb");
+            (void)DecodeCurveFromCnb(document);
+        }
+        catch (const ContentLoadException&)
+        {
+            refused = true;
+        }
+        EXPECT_TRUE(refused) << "flipping bit 0 of byte " << i << " went undetected";
+    }
+}
