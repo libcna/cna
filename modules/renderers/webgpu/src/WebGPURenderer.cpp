@@ -1648,15 +1648,16 @@ namespace CNA::Internal::Renderers::WebGPU
     {
         if (size_ <= 0)
             throw std::invalid_argument("CNA WebGPU: RenderTargetCube size must be positive");
-        // WEBGPU-114: mip-chain regeneration is not implemented -- same documented scope cut, for
-        // the same reason, as CreateRenderTarget2D()'s own mipMap=true throw (see that function's
-        // own comment: silently under-delivering a requested mip chain is worse than a clear
-        // exception when RenderTargetCube::RenderTargetCube() has already told the XNA layer to
-        // expect one).
+        // WEBGPU-114: mipMap=true allocates a full mip chain; each face's chain is regenerated from
+        // its resolved level 0 after that face's render pass (see RenderPendingDrawsToRenderTarget-
+        // CubeFace). The level count matches the XNA layer's CalculateMipLevels(size) =
+        // floor(log2(size)) + 1, so RenderTargetCube's own LevelCount stays consistent.
         if (mipMap)
-            throw std::runtime_error("CNA WebGPU: RenderTargetCube mip-chain regeneration "
-                                     "(mipMap=true) is not implemented on this renderer -- see "
-                                     "plans/plan_webgpu.md WEBGPU-114");
+        {
+            levelCount_ = 1;
+            for (int s = size_; s > 1; s = std::max(1, s / 2))
+                ++levelCount_;
+        }
         // WEBGPU-39: map the requested XNA DepthFormat to the exact WGPU depth attachment format (like
         // WebGPURenderTargetRenderer). DepthFormat::None -> no depth texture/attachment/pipeline state.
         const DepthAttachmentEXT depthMap = MapDepthFormatEXT(depthFormat);
@@ -1683,7 +1684,7 @@ namespace CNA::Internal::Renderers::WebGPU
         colorDescriptor.dimension = WGPUTextureDimension_2D;
         colorDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 6};
         colorDescriptor.format = colorFormat_;
-        colorDescriptor.mipLevelCount = 1;
+        colorDescriptor.mipLevelCount = static_cast<std::uint32_t>(levelCount_);  // WEBGPU-114
         colorDescriptor.sampleCount = 1;
         texture_ = wgpuDeviceCreateTexture(owner_->Device(), &colorDescriptor);
         if (texture_ == nullptr)
@@ -1694,7 +1695,7 @@ namespace CNA::Internal::Renderers::WebGPU
         cubeViewDescriptor.format = colorFormat_;
         cubeViewDescriptor.dimension = WGPUTextureViewDimension_Cube;
         cubeViewDescriptor.baseMipLevel = 0;
-        cubeViewDescriptor.mipLevelCount = 1;
+        cubeViewDescriptor.mipLevelCount = static_cast<std::uint32_t>(levelCount_);  // WEBGPU-114: sample the full chain
         cubeViewDescriptor.baseArrayLayer = 0;
         cubeViewDescriptor.arrayLayerCount = 6;
         cubeViewDescriptor.aspect = WGPUTextureAspect_All;
@@ -1885,15 +1886,15 @@ namespace CNA::Internal::Renderers::WebGPU
             return false;
         if (face < 0 || face >= 6)
             return false;
-        // REMED-GFX-134: this target has exactly one level (WEBGPU-114 refuses a mipMap=true
-        // RenderTargetCube at construction), so a higher level is a capability boundary, not an
-        // argument error. Reporting it as `false` is what turns it into the shared layer's own
-        // deterministic System::NotSupportedException with the caller's destination untouched --
-        // the raw std::invalid_argument this replaces escaped the public XNA surface unchanged,
-        // the same defect shape REMED-GFX-135 already removed from this renderer's SetData.
-        if (level != 0)
+        // WEBGPU-114: level must fall within this target's mip chain (0 unless mipMap=true). An
+        // out-of-range level is a capability boundary, not an argument error: reporting it as
+        // `false` is what turns it into the shared layer's own deterministic
+        // System::NotSupportedException with the caller's destination untouched (the same contract
+        // REMED-GFX-134/135 established, which previously refused every level > 0).
+        if (level < 0 || level >= levelCount_)
             return false;
-        if (x < 0 || y < 0 || x + w > size_ || y + h > size_)
+        const int levelSize = std::max(1, size_ >> level);
+        if (x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
             return false;
 
         // REMED-GFX-134: flush ONLY when there is something queued. This face's render pass always
@@ -1907,8 +1908,8 @@ namespace CNA::Internal::Renderers::WebGPU
             owner_->RenderPendingDrawsToRenderTargetCubeFace(
                 const_cast<WebGPURenderTargetCubeRenderer*>(this), owner_->currentRenderTargetCubeFaceIndex_);
 
-        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(size_) * 4u);
-        const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(size_);
+        const auto bytesPerRow = AlignBytesPerRow(static_cast<std::uint32_t>(levelSize) * 4u);
+        const std::uint64_t bufferSize = static_cast<std::uint64_t>(bytesPerRow) * static_cast<std::uint64_t>(levelSize);
 
         WGPUBufferDescriptor bufferDescriptor{};
         bufferDescriptor.label = StringView("CNA WebGPU RenderTargetCube Readback Buffer");
@@ -1924,7 +1925,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
         WGPUTexelCopyTextureInfo source{};
         source.texture = texture_;
-        source.mipLevel = 0;
+        source.mipLevel = static_cast<std::uint32_t>(level);  // WEBGPU-114
         source.origin = WGPUOrigin3D{0, 0, static_cast<std::uint32_t>(face)};
         source.aspect = WGPUTextureAspect_All;
 
@@ -1932,9 +1933,9 @@ namespace CNA::Internal::Renderers::WebGPU
         destination.buffer = readbackBuffer;
         destination.layout.offset = 0;
         destination.layout.bytesPerRow = bytesPerRow;
-        destination.layout.rowsPerImage = static_cast<std::uint32_t>(size_);
+        destination.layout.rowsPerImage = static_cast<std::uint32_t>(levelSize);
 
-        const WGPUExtent3D copySize{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
+        const WGPUExtent3D copySize{static_cast<std::uint32_t>(levelSize), static_cast<std::uint32_t>(levelSize), 1};
         wgpuCommandEncoderCopyTextureToBuffer(encoder, &source, &destination, &copySize);
 
         WGPUCommandBufferDescriptor commandBufferDescriptor{};
@@ -1967,7 +1968,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // REMED-GFX-130: this branch used to memset the caller's destination to zero and return as
         // if the readback had succeeded. Report the failure instead.
         if (mapped == nullptr || dataLength < 0 || static_cast<std::size_t>(dataLength) < requiredLength ||
-            x < 0 || y < 0 || x + w > size_ || y + h > size_)
+            x < 0 || y < 0 || x + w > levelSize || y + h > levelSize)
         {
             wgpuBufferUnmap(readbackBuffer);
             wgpuBufferRelease(readbackBuffer);
@@ -2730,7 +2731,8 @@ namespace CNA::Internal::Renderers::WebGPU
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         ReleaseSamplerCache();
         // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment.
-        if (mipBlitPipeline_ != nullptr) wgpuRenderPipelineRelease(mipBlitPipeline_);
+        for (const auto& [format, pipe] : mipBlitPipelines_)  // WEBGPU-114: one pipeline per format
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
         if (mipBlitPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(mipBlitPipelineLayout_);
         if (mipBlitBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(mipBlitBindGroupLayout_);
         if (mipBlitShader_ != nullptr) wgpuShaderModuleRelease(mipBlitShader_);
@@ -5739,11 +5741,57 @@ struct VertexOutput {
     // vertex's clip position/UV is derived purely from @builtin(vertex_index)) plus a fragment
     // shader that samples the previous mip level through a real linear sampler -- this is what
     // makes the result a genuine filtered downsample, not a nearest-neighbor copy.
-    void WebGPURenderer::EnsureMipBlitPipeline()
+    WGPURenderPipeline WebGPURenderer::EnsureMipBlitPipeline(WGPUTextureFormat format)
     {
-        if (mipBlitPipeline_ != nullptr)
-            return;
+        // The shader/bind-group-layout/pipeline-layout/sampler are format-independent -- create
+        // them exactly once. Only the pipeline's colour-target format varies (WEBGPU-114), so it
+        // is cached per format below.
+        if (mipBlitShader_ == nullptr)
+            EnsureMipBlitSharedResources();
 
+        if (const auto it = mipBlitPipelines_.find(format); it != mipBlitPipelines_.end())
+            return it->second;
+
+        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
+        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
+        WGPUColorTargetState& target = mrtColorTargets[0];
+        target.format = format;
+        // REMED-GFX-077: internal mipmap-blit utility pipeline — not a game draw, so it is
+        // intentionally unaffected by the game's BlendState.ColorWriteChannels/MultiSampleMask.
+        target.writeMask = WGPUColorWriteMask_All; // internal mip-blit
+        WGPUFragmentState fragment{};
+        fragment.module = mipBlitShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
+        fragment.targets = mrtColorTargets.data();
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU MipBlit Pipeline");
+        pipeline.layout = mipBlitPipelineLayout_;
+        pipeline.vertex.module = mipBlitShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 0;
+        pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        // Always single-sample -- the source/destination mip levels are never multisampled
+        // (a RenderTargetCube resolves its MSAA into level 0 first, then this downsamples that
+        // resolved single-sample level), regardless of the renderer's own global sampleCount_.
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max(); // REMED-GFX-077: internal mip-blit (see above)
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+        // No depthStencil: this is its own dedicated colour-only render pass, not sharing the
+        // swapchain/RenderTarget2D's depth attachment the way SpriteBatch's pipeline must.
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create MipBlit pipeline");
+        mipBlitPipelines_[format] = created;
+        return created;
+    }
+
+    void WebGPURenderer::EnsureMipBlitSharedResources()
+    {
         static constexpr char shaderSource[] = R"WGSL(
 struct VSOut {
     @builtin(position) position: vec4f,
@@ -5795,41 +5843,6 @@ struct VSOut {
         pipelineLayoutDescriptor.bindGroupLayouts = &mipBlitBindGroupLayout_;
         mipBlitPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
 
-        std::array<WGPUColorTargetState, 4> mrtColorTargets{};
-        const int mrtColorCount = InitStockColorTargetsEXT(mrtColorTargets);
-        WGPUColorTargetState& target = mrtColorTargets[0];
-        target.format = WGPUTextureFormat_RGBA8Unorm;
-        // REMED-GFX-077: internal mipmap-blit utility pipeline — not a game draw, so it is
-        // intentionally unaffected by the game's BlendState.ColorWriteChannels/MultiSampleMask.
-        target.writeMask = WGPUColorWriteMask_All; // internal mip-blit
-        WGPUFragmentState fragment{};
-        fragment.module = mipBlitShader_;
-        fragment.entryPoint = StringView("fs_main");
-        fragment.targetCount = static_cast<std::size_t>(mrtColorCount);
-        fragment.targets = mrtColorTargets.data();
-
-        WGPURenderPipelineDescriptor pipeline{};
-        pipeline.label = StringView("CNA WebGPU MipBlit Pipeline");
-        pipeline.layout = mipBlitPipelineLayout_;
-        pipeline.vertex.module = mipBlitShader_;
-        pipeline.vertex.entryPoint = StringView("vs_main");
-        pipeline.vertex.bufferCount = 0;
-        pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
-        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
-        // Always single-sample -- a plain Texture2D/TextureCube is never multisampled, regardless
-        // of this renderer's own global sampleCount_ (unlike the swapchain/RenderTarget2D
-        // pipelines, which must match sampleCount_ to stay render-pass compatible).
-        pipeline.multisample.count = 1;
-        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max(); // REMED-GFX-077: internal mip-blit (see above)
-        pipeline.multisample.alphaToCoverageEnabled = false;
-        pipeline.fragment = &fragment;
-        // No depthStencil: this is its own dedicated colour-only render pass, not sharing the
-        // swapchain/RenderTarget2D's depth attachment the way SpriteBatch's pipeline must.
-        mipBlitPipeline_ = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
-        if (mipBlitPipeline_ == nullptr)
-            throw std::runtime_error("CNA WebGPU: failed to create MipBlit pipeline");
-
         WGPUSamplerDescriptor samplerDescriptor{};
         samplerDescriptor.label = StringView("CNA WebGPU MipBlit Sampler");
         samplerDescriptor.addressModeU = WGPUAddressMode_ClampToEdge;
@@ -5854,11 +5867,12 @@ struct VSOut {
     // pendingBufferReleases_ precedent for resources a not-yet-submitted encoder still
     // references), not eagerly like RenderSprites()'s per-draw bind groups (whose referenced
     // views are long-lived texture members, unlike these transient single-mip-level views).
-    void WebGPURenderer::GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height, int mipLevels)
+    void WebGPURenderer::GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height,
+                                              int mipLevels, WGPUTextureFormat format)
     {
         if (texture == nullptr || mipLevels <= 1 || width <= 0 || height <= 0)
             return;
-        EnsureMipBlitPipeline();
+        const WGPURenderPipeline blitPipeline = EnsureMipBlitPipeline(format);
 
         WGPUCommandEncoderDescriptor encoderDescriptor{};
         encoderDescriptor.label = StringView("CNA WebGPU MipBlit Encoder");
@@ -5878,7 +5892,7 @@ struct VSOut {
 
             WGPUTextureViewDescriptor srcViewDescriptor{};
             srcViewDescriptor.label = StringView("CNA WebGPU MipBlit Source View");
-            srcViewDescriptor.format = WGPUTextureFormat_RGBA8Unorm;
+            srcViewDescriptor.format = format;
             srcViewDescriptor.dimension = WGPUTextureViewDimension_2D;
             srcViewDescriptor.baseMipLevel = static_cast<std::uint32_t>(level - 1);
             srcViewDescriptor.mipLevelCount = 1;
@@ -5934,7 +5948,7 @@ struct VSOut {
             wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(dstW), static_cast<float>(dstH), 0.0f, 1.0f);
             ++setViewportCallCount_;
             wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, static_cast<std::uint32_t>(dstW), static_cast<std::uint32_t>(dstH));
-            wgpuRenderPassEncoderSetPipeline(pass, mipBlitPipeline_);
+            wgpuRenderPassEncoderSetPipeline(pass, blitPipeline);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
             wgpuRenderPassEncoderDraw(pass, 3, 1, 0, 0);
             wgpuRenderPassEncoderEnd(pass);
@@ -5958,12 +5972,14 @@ struct VSOut {
 
     void WebGPURenderer::GenerateMips2D(WGPUTexture texture, int width, int height, int mipLevels)
     {
-        GenerateMipsForLayer(texture, 0, width, height, mipLevels);
+        // A plain Texture2D is always RGBA8Unorm (WebGPUTextureRenderer's fixed format).
+        GenerateMipsForLayer(texture, 0, width, height, mipLevels, WGPUTextureFormat_RGBA8Unorm);
     }
 
     void WebGPURenderer::GenerateMipsCubeFace(WGPUTexture texture, int face, int size, int mipLevels)
     {
-        GenerateMipsForLayer(texture, face, size, size, mipLevels);
+        // A plain upload TextureCube is always RGBA8Unorm (WebGPUTextureCubeRenderer's fixed format).
+        GenerateMipsForLayer(texture, face, size, size, mipLevels, WGPUTextureFormat_RGBA8Unorm);
     }
 
     WebGPURenderer::LogicalViewport WebGPURenderer::ComputeLogicalViewport() const
@@ -8293,6 +8309,14 @@ struct VSOut {
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         pendingBindGroupReleases_.clear();
         pendingBufferReleases_.clear();
+
+        // WEBGPU-114: regenerate this face's mip chain from its just-rendered (and, under MSAA,
+        // just-resolved) level 0 -- FNA3D's own ResolveTarget does exactly this on unbind
+        // (glGenerateMipmap when levelCount > 1). Ordered after the submit above, so the downsample
+        // cascade samples the finished level 0. In colorFormat_ (surfaceFormat_), not RGBA8Unorm.
+        if (target->LevelCount() > 1)
+            GenerateMipsForLayer(target->Texture(), face, target->GetSize(), target->GetSize(),
+                                 target->LevelCount(), target->ColorFormat());
 
         clearColorPending_ = false;
         clearDepthPending_ = false;

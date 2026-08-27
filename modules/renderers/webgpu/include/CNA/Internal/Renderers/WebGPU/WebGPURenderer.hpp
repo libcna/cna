@@ -368,9 +368,12 @@ namespace CNA::Internal::Renderers::WebGPU
     /// mirroring `WebGPURenderTargetRenderer`. The per-instance `multiSampleCount` argument is not
     /// read, exactly like the 2D sibling.
     ///
-    /// Deliberately, honestly NOT implemented yet (documented scope cut, matching
-    /// `CreateRenderTarget2D`'s own precedent): mip-chain regeneration (`mipMap=true` throws); see
-    /// `plans/plan_webgpu.md`'s `WEBGPU-114` row.
+    /// WEBGPU-114 mipMap: when `mipMap=true` the colour texture carries a full mip chain
+    /// (`levelCount_` = CalculateMipLevels(size)) and each face's chain is regenerated from its
+    /// resolved level 0 after that face's render pass (`GenerateMipsForLayer`, the WEBGPU-52
+    /// downsample cascade, in `colorFormat_`) -- the same on-unbind timing FNA3D's own
+    /// `ResolveTarget` uses. `GetData` accepts levels 0..`levelCount_`-1. MSAA and mipMap compose:
+    /// the resolve writes level 0, then the cascade downsamples it.
     class WebGPURenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public IWebGPUCubeSamplable
     {
     public:
@@ -434,10 +437,16 @@ namespace CNA::Internal::Renderers::WebGPU
         /// Immutable after construction, so the load op recorded for a pass can never come from a
         /// value some LATER target changed.
         [[nodiscard]] bool PreserveContents() const { return preserveContents_; }
+        /// WEBGPU-114: mip-chain length (1 unless mipMap=true), matching CalculateMipLevels(size).
+        /// The colour texture carries this many levels; each face's chain is regenerated from its
+        /// resolved level 0 after that face's render pass, and GetData accepts levels 0..this-1.
+        [[nodiscard]] int LevelCount() const { return levelCount_; }
 
     private:
         WebGPURenderer* owner_ = nullptr;
         int size_ = 0;
+        /// WEBGPU-114: number of mip levels in texture_ (1 unless mipMap=true).
+        int levelCount_ = 1;
         /// Mirrors owner_->surfaceFormat_ at construction time (see this class's own .cpp
         /// constructor comment) -- captured so GetData() can decide whether a BGRA->RGBA byte
         /// swap is needed, exactly like WebGPURenderTargetRenderer::colorFormat_'s identical role.
@@ -1861,11 +1870,21 @@ namespace CNA::Internal::Renderers::WebGPU
         // plans/plan_webgpu.md's WEBGPU-52 row and docs/webgpu-renderer.md for the full investigation
         // this finding is based on. Explicit per-level SetData(level>0, ...) calls made AFTER
         // construction are, as before, never auto-regenerated (matches every other renderer).
-        void EnsureMipBlitPipeline();
+        // WEBGPU-114: the blit pipeline's colour-target format must equal the texture being
+        // downsampled. A plain Texture2D/TextureCube is always RGBA8Unorm, but a RenderTargetCube
+        // is surfaceFormat_ (often BGRA), so the pipeline is cached per format (mipBlitPipelines_).
+        // The shader/bind-group-layout/pipeline-layout/sampler are format-independent, created once.
+        [[nodiscard]] WGPURenderPipeline EnsureMipBlitPipeline(WGPUTextureFormat format);
+        /// Creates the format-independent mip-blit shader/layouts/sampler exactly once (guarded on
+        /// mipBlitShader_ == nullptr by the caller). Split out of EnsureMipBlitPipeline so the
+        /// per-format pipeline cache does not re-run this.
+        void EnsureMipBlitSharedResources();
         // Shared implementation: generates levels 1..mipLevels-1 of ONE array layer of `texture`
-        // from that layer's own level 0. GenerateMips2D()/GenerateMipsCubeFace() are thin
-        // wrappers (layer=0 for a plain 2D texture, layer=face for one cube face).
-        void GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height, int mipLevels);
+        // from that layer's own level 0, sampling/rendering in `format`. GenerateMips2D()/
+        // GenerateMipsCubeFace() are thin wrappers (layer=0 for a plain 2D texture, layer=face for
+        // one cube face).
+        void GenerateMipsForLayer(WGPUTexture texture, int layer, int width, int height,
+                                  int mipLevels, WGPUTextureFormat format);
         // Generates levels 1..mipLevels-1 of a plain (non-array) 2D texture from level 0.
         void GenerateMips2D(WGPUTexture texture, int width, int height, int mipLevels);
         // Generates levels 1..mipLevels-1 of ONE array layer (cube face) of a 6-layer texture,
@@ -1940,13 +1959,13 @@ namespace CNA::Internal::Renderers::WebGPU
 
         // WEBGPU-52: mip-blit resources -- see EnsureMipBlitPipeline()'s own doc comment. Created
         // lazily on first use (a game that never requests mipMap=true with initial pixel data
-        // never pays for these). Always targets WGPUTextureFormat_RGBA8Unorm, matching
-        // WebGPUTextureRenderer/WebGPUTextureCubeRenderer's own fixed format -- no per-format cache
-        // needed, unlike the ~10 GetOrCreatePipeline*3D() families.
+        // never pays for these). The shader/layouts/sampler are format-independent; the pipeline is
+        // cached per colour-target format (mipBlitPipelines_): RGBA8Unorm for a plain Texture2D/
+        // TextureCube, surfaceFormat_ for a RenderTargetCube (WEBGPU-114).
         WGPUShaderModule mipBlitShader_ = nullptr;
         WGPUBindGroupLayout mipBlitBindGroupLayout_ = nullptr;
         WGPUPipelineLayout mipBlitPipelineLayout_ = nullptr;
-        WGPURenderPipeline mipBlitPipeline_ = nullptr;
+        std::unordered_map<WGPUTextureFormat, WGPURenderPipeline> mipBlitPipelines_;
         WGPUSampler mipBlitSampler_ = nullptr;
 
         std::vector<SpriteCommand> spriteCommands_;

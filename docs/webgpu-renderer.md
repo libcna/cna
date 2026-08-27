@@ -434,8 +434,10 @@ CPU-precomputed 3×3 normal matrix, since WGSL has no `inverse()`). Group 1 is a
 (sampler + `texture_2d` + `texture_cube`), mirroring `dualTextureBindGroupLayout_`'s own 3-binding
 shape with the second `texture_2d` swapped for a `texture_cube`. Getting a cube map to sample at all
 required a new, minimal `WebGPUTextureCubeRenderer` (`WEBGPU-56`/`113`) — this renderer previously had
-no `TextureCube` support whatsoever; it is deliberately NOT full parity (no `GetData()`, no
-`RenderTargetCube`, mip regeneration untested beyond pre-allocating empty levels). `WebGPU_EnvMap3D`
+no `TextureCube` support whatsoever; this cube-sampling slice was deliberately minimal at the time
+(no `GetData()`, no `RenderTargetCube`, mip regeneration untested), all of which have since been added
+(`GetData` in `WEBGPU-113`, `RenderTargetCube` render targets + mip regeneration in `WEBGPU-114`, plain
+mip generation in `WEBGPU-52`). `WebGPU_EnvMap3D`
 (4/4): hand-derived geometry (`View`=`World`=Identity, quad at z=0.5, `Normal`=(0,0,-1)) makes the
 reflection vector land exactly on `CubeMapFace::NegativeZ` — proven by painting each of the 6 faces
 a distinct solid colour and asserting the correct one appears (not just "some colour"); a
@@ -499,14 +501,23 @@ an env map would have silently failed that cast and rendered the 1x1 white-cube 
 its own real content — this is CNA's primary real-world `RenderTargetCube` use case (dynamic
 reflection/environment maps), so this wiring matters as much as the render-into support itself.
 
-Deliberately, honestly NOT implemented (documented scope cuts, not silently under-delivered): mip
-regeneration (`mipMap=true` throws, matching `CreateRenderTarget2D`'s own precedent) and MSAA
-(`multiSampleCount` is ignored; `GetMultiSampleCount()` always reports 0). `WebGPU_RenderTargetCube`
-(12/12) verifies: 6-face direct face-to-face switching, a real `BasicEffect` 3D draw into a face,
-the `EnvironmentMapEffect` sampling round trip above, the critical "an intervening cube-face-
-targeted `Clear()` must not leak into the backbuffer's own render pass" architecture check (mirrors
-the `RenderTarget2D` section's own Check E), `mipMap=true` throwing, and `MultiSampleCount`
-honesty.
+Per-face MSAA and `mipMap=true` mip regeneration are both implemented (`WEBGPU-114`, closed
+2026-08-27). MSAA: when the renderer's global `sampleCount_` > 1 each face renders into its own
+multisampled colour attachment and resolves into that face's single-sample layer — SIX separate
+single-layer MSAA textures, because WebGPU forbids a multisampled ARRAY texture (unlike Vulkan's
+6-layer image) — with the shared depth attachment allocated at the same sample count;
+`GetMultiSampleCount()` reports the applied count, mirroring `RenderTarget2D` (the per-instance
+`multiSampleCount` argument is not read — the cube multisamples only when the backbuffer was created
+multisampled). mipMap: the colour texture carries a full mip chain and each face is regenerated from
+its resolved level 0 after that face's render pass (`GenerateMipsForLayer`, the `WEBGPU-52`
+downsample cascade, parameterized by colour format so a `surfaceFormat_`/BGRA cube target works);
+MSAA and mipMap compose — the resolve writes level 0, then the cascade downsamples it — and `GetData`
+accepts levels 0..`LevelCount`-1. `WebGPU_RenderTargetCube` (18/18) verifies: 6-face direct
+face-to-face switching, a real `BasicEffect` 3D draw into a face, the `EnvironmentMapEffect` sampling
+round trip above, the critical "an intervening cube-face-targeted `Clear()` must not leak into the
+backbuffer's own render pass" architecture check (mirrors the `RenderTarget2D` section's own Check E),
+a mipMap=true chain with a genuine level-1 downsample (Check E), 4x per-face MSAA resolve with no
+cross-face leak and blended edge pixels (Check F), and MSAA+mipMap combined.
 
 A finding surfaced while writing this test — that `QueueSprite()` computed every sprite's clip-space
 geometry from the BACKBUFFER's logical dimensions unconditionally, never from the currently-bound
