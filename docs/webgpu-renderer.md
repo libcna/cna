@@ -552,9 +552,6 @@ open** in `plans/plan_webgpu.md`:
 - **Per-`RenderTarget2D` `multiSampleCount`** -- a target's own constructor sample count is ignored;
   it mirrors the renderer's global sample count instead. Backbuffer and render-target MSAA otherwise
   work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
-- **Custom SpriteBatch effects** -- a `ShaderEffect` passed to `SpriteBatch.Begin(...)` is not yet
-  wired (the WebGPU sprite command carries no effect). Custom WGSL on the 3D `DrawUserPrimitives`/
-  `DrawIndexedPrimitives` route **is** supported (`WEBGPU-76`, see below).
 - `TextureCube`/`RenderTargetCube` mip regeneration.
 
 **Multiple render targets are supported** (`WEBGPU-85`/`86`/`87`): `SupportsCapability(MultipleRenderTargets)`
@@ -634,8 +631,18 @@ effect; a draw captures the uniform block **by value** at the call, so two draws
 with different `SetUniform*` values render correctly. Compilation failures are reported through
 `ShaderEffect.IsEffectValid()` / `GetCompileErrorEXT()`, never as a device error.
 
-**Still open:** custom **SpriteBatch** effects (the sprite path carries no effect yet). Proven by
-`WebGPU_ShaderEffect3D`.
+The same `WebGPUEffectRenderer` also drives **SpriteBatch** custom effects (`WEBGPU-142`):
+`SpriteBatch.Begin(..., effect)` runs the effect's WGSL per sprite. The sprite vertex layout is fixed
+(`position`/`uv`/`color` at `@location(0/1/2)`) and needs no matrices — sprite vertices are already NDC
+— so a sprite effect's vertex shader passes position through; the fragment samples the sprite's texture
+at the reserved `@binding(1)`/`@binding(2)` and reads its uniform block at `@binding(0)`. A compiled
+Effect-Framework effect (no WGSL) is refused. Proven by `WebGPU_ShaderEffect3D` (3D) and
+`WebGPU_SpriteBatch_ShaderEffect` (2D).
+
+**Still open:** the `SpriteEffect`-style `MatrixTransform` uniform is not auto-injected for a
+SpriteBatch custom effect (an app that needs `Begin(..., transformMatrix)` to reach a custom shader
+would bake it into a uniform itself); the `SpriteBatch` transform matrix is applied to the sprite
+geometry as usual.
 
 ### Multiple render targets (`WEBGPU-85`/`86`/`87`)
 

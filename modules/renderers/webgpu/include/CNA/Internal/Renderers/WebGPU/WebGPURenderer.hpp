@@ -895,6 +895,12 @@ namespace CNA::Internal::Renderers::WebGPU
             /// rectangle components) active at this draw's own public call, captured by
             /// value. Never resolved from live state during replay.
             WebGPUScissorSnapshot scissor{};
+            /// WEBGPU-142: the custom-WGSL ShaderEffect bound by `SpriteBatch.Begin(..., effect)`,
+            /// or null for a stock SpriteBatch draw. Supplies the sprite's shader modules/layout;
+            /// its uniform block is captured by value in `customUniforms` (a second Begin with
+            /// different uniforms must not see this sprite's block at replay).
+            WebGPUEffectRenderer* customEffect = nullptr;
+            std::vector<std::uint8_t> customUniforms;  ///< the effect's uniform block, by value
         };
 
         struct SpritePipelineKey
@@ -1586,6 +1592,17 @@ namespace CNA::Internal::Renderers::WebGPU
         void IssueSprite(WGPURenderPassEncoder pass, const SpriteCommand& command,
                          std::uint32_t spriteIndex, WGPUTextureFormat targetFormat,
                          std::uint32_t targetSampleCount, ReplayState& state);
+        /// WEBGPU-142: replays one sprite whose `SpriteBatch.Begin` bound a custom WGSL ShaderEffect
+        /// -- builds/fetches a pipeline from the effect's modules with the fixed SpriteVertex layout
+        /// (position/uv/color, no matrices: sprite vertices are already NDC) and binds
+        /// {uniform block @0, the sprite's sampler @1, the sprite's texture @2}. Slot 0 carries the
+        /// sprite's blend; extra MRT slots write nothing (a sprite effect writes @location(0)).
+        void IssueSpriteWithCustomEffect(WGPURenderPassEncoder pass, const SpriteCommand& command,
+                                         std::uint32_t spriteIndex, WGPUTextureFormat targetFormat,
+                                         std::uint32_t targetSampleCount, ReplayState& state);
+        /// WEBGPU-142: the custom-WGSL ShaderEffect bound by the currently-open `SpriteBatch.Begin`
+        /// (set via `WebGPUSpriteBatchRenderer::SetCustomEffect`), captured into each queued sprite.
+        WebGPUEffectRenderer* activeSpriteCustomEffect_ = nullptr;
         /**
          * @brief REMED-GFX-116: the complete GraphicsDevice.Viewport as it stands right now.
          *

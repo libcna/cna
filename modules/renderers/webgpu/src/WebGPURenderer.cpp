@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"  // WEBGPU-142: Effect::GetEffectRendererPtr()
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -2314,8 +2315,22 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPUSpriteBatchRenderer::SetCustomEffect(Effect* effect)
     {
-        if (effect != nullptr)
-            throw std::runtime_error("CNA WebGPU: custom SpriteBatch effects are not implemented yet");
+        // WEBGPU-142: SpriteBatch.Begin(..., effect) routes every sprite of this batch through a
+        // custom WGSL ShaderEffect (the same WebGPUEffectRenderer the 3D route uses). Only a
+        // ShaderEffect is supported here -- a compiled Effect-Framework effect has no WGSL to run,
+        // so its GetEffectRendererPtr() is not a WebGPUEffectRenderer and the draw is refused.
+        if (effect == nullptr)
+        {
+            owner_->activeSpriteCustomEffect_ = nullptr;
+            return;
+        }
+        auto* effectRenderer = dynamic_cast<WebGPUEffectRenderer*>(effect->GetEffectRendererPtr());
+        if (effectRenderer == nullptr)
+            throw System::NotSupportedException(
+                "CNA WebGPU: SpriteBatch.Begin was given an effect this renderer cannot run. Only a "
+                "custom-WGSL ShaderEffect is supported for SpriteBatch; compiled Effect-Framework "
+                "effects are not.");
+        owner_->activeSpriteCustomEffect_ = effectRenderer;
     }
 
     void WebGPUSpriteBatchRenderer::Draw(const ITextureRenderer& texture, float x, float y)
@@ -5718,6 +5733,11 @@ struct VSOut {
             vertex.uv[1] = uv[corner].Y;
             std::copy(std::begin(rgba), std::end(rgba), vertex.color);
         }
+        // WEBGPU-142: capture the active SpriteBatch custom effect (if any) and its uniform block by
+        // value, so a later Begin with different uniforms does not change this sprite at replay.
+        command.customEffect = activeSpriteCustomEffect_;
+        if (activeSpriteCustomEffect_ != nullptr)
+            command.customUniforms = activeSpriteCustomEffect_->uniformStaging_;
         spriteCommands_.push_back(command);
         // REMED-GFX-159: the public position of this sprite, the only thing replay orders by.
         RecordDrawOrder(DrawFamily::Sprite, spriteCommands_.size() - 1);
@@ -5755,6 +5775,164 @@ struct VSOut {
         wgpuQueueWriteBuffer(queue_, spriteVertexBuffer_, 0, vertices.data(), spriteVertexBytes_);
     }
 
+    void WebGPURenderer::IssueSpriteWithCustomEffect(WGPURenderPassEncoder pass,
+                                                     const SpriteCommand& command,
+                                                     std::uint32_t spriteIndex,
+                                                     WGPUTextureFormat targetFormat,
+                                                     std::uint32_t targetSampleCount,
+                                                     ReplayState& state)
+    {
+        WebGPUEffectRenderer* effect = command.customEffect;
+        if (effect == nullptr || !effect->valid_)
+            return;
+
+        const int colorCount = std::max(1, replayColorAttachmentCount_);
+
+        // Uniform buffer: the effect's block captured at queue time; min 16 bytes so an effect with
+        // no declared block still binds.
+        const std::uint64_t uboSize =
+            std::max<std::uint64_t>(16u, (command.customUniforms.size() + 15u) & ~std::uint64_t{15u});
+        WGPUBufferDescriptor uboDescriptor{};
+        uboDescriptor.label = StringView("CNA WebGPU SpriteBatch ShaderEffect UBO");
+        uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+        uboDescriptor.size = uboSize;
+        WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+        if (!command.customUniforms.empty())
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0,
+                                 command.customUniforms.data(), command.customUniforms.size());
+
+        // Pipeline: cached on the effect, keyed by the sprite pass state (distinct from the effect's
+        // 3D-route keys by the topmost salt bit, so a 3D and a sprite pipeline never collide).
+        auto mix = [](std::uint64_t h, std::uint64_t v) {
+            return (h ^ (v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2)));
+        };
+        std::uint64_t key = mix(0x5350524954453031ull /*"SPRITE01"*/, static_cast<std::uint64_t>(targetFormat));
+        key = mix(key, targetSampleCount);
+        key = mix(key, static_cast<std::uint64_t>(colorCount));
+        key = mix(key, command.blend.blendEnabled ? 1u : 0u);
+        key = mix(key, static_cast<std::uint64_t>(command.blend.colorSrc) |
+                       (static_cast<std::uint64_t>(command.blend.colorDst) << 8) |
+                       (static_cast<std::uint64_t>(command.blend.alphaSrc) << 16) |
+                       (static_cast<std::uint64_t>(command.blend.alphaDst) << 24) |
+                       (static_cast<std::uint64_t>(command.blend.colorFunc) << 32) |
+                       (static_cast<std::uint64_t>(command.blend.alphaFunc) << 40));
+        key = mix(key, static_cast<std::uint64_t>(command.blend.colorWriteMask & 0xF));
+
+        WGPURenderPipeline pipe = nullptr;
+        if (auto it = effect->pipelineCache_.find(key); it != effect->pipelineCache_.end())
+        {
+            pipe = it->second;
+        }
+        else
+        {
+            std::array<WGPUVertexAttribute, 3> attributes{};
+            attributes[0].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector3);
+            attributes[0].offset = offsetof(SpriteVertex, position);
+            attributes[0].shaderLocation = 0;
+            attributes[1].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector2);
+            attributes[1].offset = offsetof(SpriteVertex, uv);
+            attributes[1].shaderLocation = 1;
+            attributes[2].format = WebGPUVertexFormatFromVEF(VertexElementFormat::Vector4);
+            attributes[2].offset = offsetof(SpriteVertex, color);
+            attributes[2].shaderLocation = 2;
+            WGPUVertexBufferLayout vertexBufferLayout{};
+            vertexBufferLayout.arrayStride = sizeof(SpriteVertex);
+            vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+            vertexBufferLayout.attributeCount = attributes.size();
+            vertexBufferLayout.attributes = attributes.data();
+
+            // Slot 0 carries the sprite's blend/write mask; extra MRT slots write nothing (a sprite
+            // effect writes @location(0)).
+            std::array<WGPUColorTargetState, 4> targets{};
+            const int builtCount = InitStockColorTargetsEXT(targets);
+            targets[0].format = targetFormat;
+            targets[0].writeMask = static_cast<WGPUColorWriteMask>(command.blend.colorWriteMask & 0xF);
+            WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+            const BlendKeyParams blendParams{
+                command.blend.colorSrc, command.blend.colorDst, command.blend.alphaSrc,
+                command.blend.alphaDst, command.blend.colorFunc, command.blend.alphaFunc};
+            FillWGPUBlendState(blendState, blendParams);
+            targets[0].blend = command.blend.blendEnabled ? &blendState : nullptr;
+
+            WGPUFragmentState fragment{};
+            fragment.module = effect->fragmentModule_;
+            fragment.entryPoint = StringView("fs_main");
+            fragment.targetCount = static_cast<std::size_t>(builtCount);
+            fragment.targets = targets.data();
+
+            WGPURenderPipelineDescriptor pipeline{};
+            pipeline.label = StringView("CNA WebGPU SpriteBatch ShaderEffect Pipeline");
+            pipeline.layout = effect->pipelineLayout_;
+            pipeline.vertex.module = effect->vertexModule_;
+            pipeline.vertex.entryPoint = StringView("vs_main");
+            pipeline.vertex.bufferCount = 1;
+            pipeline.vertex.buffers = &vertexBufferLayout;
+            pipeline.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+            pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+            pipeline.primitive.cullMode = WGPUCullMode_None;
+            pipeline.multisample.count = targetSampleCount;
+            pipeline.multisample.mask = command.blend.multiSampleMask;
+            pipeline.multisample.alphaToCoverageEnabled = false;
+            pipeline.fragment = &fragment;
+
+            // Sprites do not test/write depth, but the pass owns a Depth24PlusStencil8 attachment,
+            // so the pipeline must declare a matching (disabled) depth-stencil state -- exactly the
+            // stock sprite pipeline's own choice.
+            WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+            depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+            depthStencil.depthWriteEnabled = WGPUOptionalBool_False;
+            depthStencil.depthCompare = WGPUCompareFunction_Always;
+            pipeline.depthStencil = &depthStencil;
+
+            pipe = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+            if (pipe == nullptr)
+                throw std::runtime_error("CNA WebGPU: failed to create a SpriteBatch ShaderEffect pipeline");
+            effect->pipelineCache_[key] = pipe;
+        }
+
+        if (pipe != state.boundPipeline)
+        {
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            state.boundPipeline = pipe;
+        }
+        const WGPUColor blendConstant{
+            command.blend.blendFactorR, command.blend.blendFactorG,
+            command.blend.blendFactorB, command.blend.blendFactorA};
+        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+        state.blendConstantIsPassDefault = false;
+        ApplyDrawViewport(pass, command.viewport);
+        ApplyDrawScissor(pass, command.scissor);
+
+        // Bind group: UBO @0, and -- when the effect samples -- the sprite's own sampler @1 and the
+        // sprite's texture @2 (the effect's own reserved @binding(1)/@binding(2) convention).
+        std::array<WGPUBindGroupEntry, 3> bindEntries{};
+        bindEntries[0].binding = 0;
+        bindEntries[0].buffer = uniformBuffer;
+        bindEntries[0].size = uboSize;
+        std::size_t bindEntryCount = 1;
+        if (effect->samplesTexture_)
+        {
+            bindEntries[1].binding = 1;
+            bindEntries[1].sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU,
+                                                            command.addressV, kSpriteBatchMaxAnisotropy,
+                                                            "SpriteBatch ShaderEffect");
+            bindEntries[2].binding = 2;
+            bindEntries[2].textureView = command.texture.View();
+            bindEntryCount = 3;
+        }
+        WGPUBindGroupDescriptor bindDescriptor{};
+        bindDescriptor.label = StringView("CNA WebGPU SpriteBatch ShaderEffect BindGroup");
+        bindDescriptor.layout = effect->bindGroupLayout_;
+        bindDescriptor.entryCount = bindEntryCount;
+        bindDescriptor.entries = bindEntries.data();
+        WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
+        wgpuRenderPassEncoderDraw(pass, 6, 1, spriteIndex * 6u, 0);
+
+        pendingBindGroupReleases_.push_back(bindGroup);
+        pendingBufferReleases_.push_back(uniformBuffer);
+    }
+
     void WebGPURenderer::IssueSprite(WGPURenderPassEncoder pass,
                                             const SpriteCommand& command,
                                             std::uint32_t spriteIndex,
@@ -5776,6 +5954,14 @@ struct VSOut {
         {
             wgpuRenderPassEncoderSetVertexBuffer(pass, 0, spriteVertexBuffer_, 0, spriteVertexBytes_);
             state.spriteVerticesBound = true;
+        }
+
+        // WEBGPU-142: a sprite whose batch bound a custom WGSL ShaderEffect runs the effect's shader
+        // instead of the stock sprite pipeline (its own modules, layout and uniform block).
+        if (command.customEffect != nullptr)
+        {
+            IssueSpriteWithCustomEffect(pass, command, spriteIndex, targetFormat, targetSampleCount, state);
+            return;
         }
 
         // REMED-GFX-102: cache lookup happens per static-state transition; native pipeline

@@ -93,6 +93,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_MRT COMMAND cna_test_webgpu_mrt
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-142: custom-WGSL ShaderEffect on the SpriteBatch route -- SetCustomEffect /
+    # IssueSpriteWithCustomEffect (a tint effect proves the sprite path runs the custom shader).
+    cna_webgpu_test(cna_test_webgpu_spritebatch_shadereffect webgpu_spritebatch_shadereffect_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_SpriteBatch_ShaderEffect COMMAND cna_test_webgpu_spritebatch_shadereffect
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)
