@@ -223,6 +223,8 @@ enum class ObjectKind : uint32_t {
     // plans/plan_binding.md CBIND-086C.
     ClusteredForwardEffect = 143,
     ClusteredLightCompute = 144,
+    // plans/plan_binding.md CBIND-087A.
+    PbrMaterialExtensions = 145,
     Test = UINT32_MAX
 };
 

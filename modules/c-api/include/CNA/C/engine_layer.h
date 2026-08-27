@@ -4533,6 +4533,676 @@ CNA_C_API CNA_Result cna_clustered_shadow_policy_select(
     const CNA_Matrix* projection,
     const CNA_Vector3* camera_position);
 
+/* ---------------------------------------------------------------------------------------------
+ * The PBR material extensions and thin-film iridescence
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Owned handle for one set of PBR material extensions.
+ *
+ * The canonical type is a **value** -- it compares, hashes and prints by content -- but it holds
+ * nine borrowed `Texture2D` pointers, so it is bound as a handle rather than a C structure: a
+ * plain structure would put raw texture pointers in caller-writable memory. It never owns a
+ * texture given to it; the caller keeps that lifetime, exactly as an effect does.
+ *
+ * Release it with @ref cna_pbr_material_extensions_destroy.
+ */
+typedef CNA_Handle CNA_PbrMaterialExtensionsHandle;
+
+/**
+ * @brief Creates a neutral set of PBR material extensions.
+ *
+ * Every field starts at the canonical default, which is the state
+ * @ref cna_pbr_material_extensions_is_neutral reports.
+ *
+ * @param out_extensions Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_create(CNA_PbrMaterialExtensionsHandle* out_extensions);
+
+/**
+ * @brief Releases the extensions.
+ *
+ * The nine textures are borrowed, so none of them is released here.
+ *
+ * @param extensions The extensions; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_destroy(CNA_PbrMaterialExtensionsHandle extensions);
+
+/**
+ * @brief Copies every field of one set of extensions over another.
+ *
+ * The canonical type is copyable and this is how a C caller copies it, since a handle cannot be
+ * assigned. The texture pointers are copied as borrows, not duplicated.
+ *
+ * @param destination The extensions to overwrite.
+ * @param source The extensions to copy from.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_copy_from(CNA_PbrMaterialExtensionsHandle destination, CNA_PbrMaterialExtensionsHandle source);
+
+/**
+ * @brief Returns the canonical `ClearcoatFactor`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_clearcoat_factor(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `ClearcoatFactor`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **clamped** to zero-to-one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_clearcoat_factor(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `ClearcoatRoughness`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_clearcoat_roughness(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `ClearcoatRoughness`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **clamped** to zero-to-one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_clearcoat_roughness(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `ClearcoatNormalScale`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_clearcoat_normal_scale(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `ClearcoatNormalScale`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **ignored when negative** -- the canonical setter guards the assignment rather than clamping, so a negative write leaves the previous value in place instead of forcing it to zero.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_clearcoat_normal_scale(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `SheenRoughness`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_sheen_roughness(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `SheenRoughness`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **clamped** to zero-to-one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_sheen_roughness(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `TransmissionFactor`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_transmission_factor(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `TransmissionFactor`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **clamped** to zero-to-one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_transmission_factor(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `ThicknessFactor`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_thickness_factor(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `ThicknessFactor`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **ignored when negative** -- a guarded assignment, so a negative write leaves the previous thickness in place; the value is a distance and has no upper bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_thickness_factor(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `AttenuationDistance`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_attenuation_distance(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `AttenuationDistance`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **floored at zero** -- unlike the guarded setters beside it this one writes zero rather than keeping the previous value, which is a third correction shape in the same class.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_attenuation_distance(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `IridescenceFactor`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_iridescence_factor(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `IridescenceFactor`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **clamped** to zero-to-one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_iridescence_factor(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `IridescenceIor`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_iridescence_ior(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `IridescenceIor`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **ignored when below one**, not below zero -- an index of refraction under one describes a medium light speeds up in, which this film cannot be; a guarded assignment, so such a write leaves the previous value in place.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_iridescence_ior(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `IridescenceThicknessMinimum`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_minimum(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `IridescenceThicknessMinimum`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **ignored when negative** -- a guarded assignment; the value is a film thickness in nanometres and has no upper bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_minimum(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `IridescenceThicknessMaximum`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_maximum(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `IridescenceThicknessMaximum`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **ignored when negative** -- a guarded assignment; the value is a film thickness in nanometres and has no upper bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_maximum(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the canonical `SubsurfaceWrap`.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_subsurface_wrap(CNA_PbrMaterialExtensionsHandle extensions, float* out_value);
+
+/**
+ * @brief Sets the canonical `SubsurfaceWrap`.
+ *
+ * @param extensions The extensions.
+ * @param value The value, **clamped** to zero-to-one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_subsurface_wrap(CNA_PbrMaterialExtensionsHandle extensions, float value);
+
+/**
+ * @brief Returns the sheen tint.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_sheen_color_factor(CNA_PbrMaterialExtensionsHandle extensions, CNA_Vector3* out_value);
+
+/**
+ * @brief Sets the sheen tint, clamping each channel to zero-to-one.
+ *
+ * @param extensions The extensions.
+ * @param value The value; **each channel is clamped** rather than the value refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_sheen_color_factor(CNA_PbrMaterialExtensionsHandle extensions, const CNA_Vector3* value);
+
+/**
+ * @brief Returns the colour light takes on as it travels through the volume.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_attenuation_color(CNA_PbrMaterialExtensionsHandle extensions, CNA_Vector3* out_value);
+
+/**
+ * @brief Sets the colour light takes on as it travels through the volume, clamping each channel to zero-to-one.
+ *
+ * @param extensions The extensions.
+ * @param value The value; **each channel is clamped** rather than the value refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_attenuation_color(CNA_PbrMaterialExtensionsHandle extensions, const CNA_Vector3* value);
+
+/**
+ * @brief Returns the subsurface tint.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_subsurface_color(CNA_PbrMaterialExtensionsHandle extensions, CNA_Vector3* out_value);
+
+/**
+ * @brief Sets the subsurface tint, clamping each channel to zero-to-one.
+ *
+ * @param extensions The extensions.
+ * @param value The value; **each channel is clamped** rather than the value refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_subsurface_color(CNA_PbrMaterialExtensionsHandle extensions, const CNA_Vector3* value);
+
+/**
+ * @brief Returns the clearcoat strength map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_clearcoat_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the clearcoat strength map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_clearcoat_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the clearcoat roughness map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_clearcoat_roughness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the clearcoat roughness map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_clearcoat_roughness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the clearcoat normal map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_clearcoat_normal_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the clearcoat normal map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_clearcoat_normal_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the sheen colour map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_sheen_color_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the sheen colour map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_sheen_color_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the sheen roughness map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_sheen_roughness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the sheen roughness map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_sheen_roughness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the transmission map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_transmission_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the transmission map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_transmission_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the thickness map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_thickness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the thickness map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_thickness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the iridescence strength map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_iridescence_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the iridescence strength map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_iridescence_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Returns the iridescence film-thickness map, borrowed.
+ *
+ * The handle is a fresh name for the same texture and does **not** keep it alive.
+ *
+ * @param extensions The extensions.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* out_texture);
+
+/**
+ * @brief Binds the iridescence film-thickness map.
+ *
+ * @param extensions The extensions.
+ * @param texture The texture, or `CNA_INVALID_HANDLE` to unbind; borrowed, never owned.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_texture(CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle texture);
+
+/**
+ * @brief Reports whether any subsurface colour channel is above zero.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_is_subsurface_enabled(CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* out_value);
+
+/**
+ * @brief Reports whether the iridescence factor is above zero.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_is_iridescence_enabled(CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* out_value);
+
+/**
+ * @brief Reports whether the transmission factor is above zero.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_is_transmission_enabled(CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* out_value);
+
+/**
+ * @brief Reports whether any sheen colour channel is above zero.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_is_sheen_enabled(CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* out_value);
+
+/**
+ * @brief Reports whether no extension is active, so a renderer may take the plain PBR path.
+ *
+ * @param extensions The extensions.
+ * @param out_value Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_is_neutral(CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* out_value);
+
+/**
+ * @brief Compares two sets of extensions by value across every field.
+ *
+ * The single route behind both canonical equality operators. Texture members compare by identity
+ * -- two sets are equal when they point at the same textures, not at equal ones.
+ *
+ * @param first The first set.
+ * @param second The second set.
+ * @param out_equal Receives `CNA_TRUE` when every field matches.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_equals(
+    CNA_PbrMaterialExtensionsHandle first, CNA_PbrMaterialExtensionsHandle second, CNA_Bool* out_equal);
+
+/**
+ * @brief Returns the canonical hash code.
+ *
+ * Equal extensions hash equally; the width is the C ABI's `uint64_t` rather than the canonical
+ * `std::size_t`, which is the campaign's settled deviation for hash codes.
+ *
+ * @param extensions The extensions.
+ * @param out_hash Receives the hash.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_get_hash_code(CNA_PbrMaterialExtensionsHandle extensions, uint64_t* out_hash);
+
+/**
+ * @brief Copies the canonical `ToString` text as UTF-8 bytes without a terminator.
+ *
+ * The text names only the extensions that are active, so a neutral set prints as `{}`.
+ *
+ * @param extensions The extensions.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_pbr_material_extensions_copy_to_string(
+    CNA_PbrMaterialExtensionsHandle extensions, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Evaluates thin-film iridescence for one viewing angle and film thickness.
+ *
+ * A pure function of its arguments, so it needs no handle.
+ *
+ * @param outside_ior The index of refraction of the medium the light comes from.
+ * @param film_ior The index of refraction of the film.
+ * @param cos_theta The cosine of the viewing angle; **clamped** to zero-to-one.
+ * @param thickness_nm The film thickness in nanometres.
+ * @param base_f0 The base reflectance at normal incidence.
+ * @param out_value Receives the result, whose channels are floored at zero.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null vector,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_thin_film_iridescence_evaluate(
+    float outside_ior,
+    float film_ior,
+    float cos_theta,
+    float thickness_nm,
+    const CNA_Vector3* base_f0,
+    CNA_Vector3* out_value);
+
+/**
+ * @brief Copies the GLSL source of the thin-film term as UTF-8 bytes without a terminator.
+ *
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_thin_film_iridescence_copy_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Returns the material extensions the clustered forward effect shades with, borrowed.
+ *
+ * `CBIND-086C` deferred this route because the type did not exist in C yet.
+ *
+ * @param effect The effect.
+ * @param out_extensions Receives a borrowed handle onto the effect's own extensions.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_get_material_extensions(
+    CNA_ClusteredForwardEffectHandle effect, CNA_PbrMaterialExtensionsHandle* out_extensions);
+
+/**
+ * @brief Gives the clustered forward effect a copy of the material extensions.
+ *
+ * @param effect The effect.
+ * @param extensions The extensions to copy in.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_material_extensions(
+    CNA_ClusteredForwardEffectHandle effect, CNA_PbrMaterialExtensionsHandle extensions);
+
+/**
+ * @brief Computes one light's contribution using a set of material extensions.
+ *
+ * The canonical overload that takes a `PbrMaterialExtensions` instead of the eight loose
+ * extension scalars. This route closes `CBIND-086`'s last inventory row.
+ *
+ * @param light The light.
+ * @param surface The surface point.
+ * @param normal The surface normal.
+ * @param camera_position The camera's world-space position.
+ * @param base_color The material's base colour.
+ * @param metallic How metallic the material is.
+ * @param roughness The material's roughness.
+ * @param extensions The material extensions.
+ * @param out_contribution Receives the contribution.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument or an
+ * uninitialized light, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_contribution_with_extensions(
+    const CNA_ClusteredLightEXT* light,
+    const CNA_Vector3* surface,
+    const CNA_Vector3* normal,
+    const CNA_Vector3* camera_position,
+    const CNA_Vector3* base_color,
+    float metallic,
+    float roughness,
+    CNA_PbrMaterialExtensionsHandle extensions,
+    CNA_Vector3* out_contribution);
+
 #ifdef __cplusplus
 }
 #endif

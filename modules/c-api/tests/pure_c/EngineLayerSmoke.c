@@ -2726,6 +2726,321 @@ static int validate_clustered_forward(const CNA_Handle graphics_device)
     return ok;
 }
 
+
+/* CBIND-087A. PbrMaterialExtensions throws nowhere: every setter corrects. The thing worth
+   pinning is therefore not a refusal but WHICH fields correct -- six scalars and three colours
+   clamp to zero-to-one, and six scalars deliberately do not, because a normal scale, a thickness
+   in metres, an attenuation distance, an index of refraction and two film thicknesses in
+   nanometres have no zero-to-one meaning. A clamp quietly added to one of the free fields is
+   invisible to any test that only checks the clamped ones, so both halves are asserted. */
+static int validate_material_extensions(const CNA_Handle graphics_device)
+{
+    CNA_PbrMaterialExtensionsHandle extensions = CNA_INVALID_HANDLE;
+    CNA_PbrMaterialExtensionsHandle other = CNA_INVALID_HANDLE;
+    CNA_ClusteredForwardEffectHandle effect = CNA_INVALID_HANDLE;
+    CNA_PbrMaterialExtensionsHandle borrowed = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightEXT light;
+    CNA_Vector3 vector;
+    CNA_Vector3 read_back;
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_Handle read_texture = CNA_INVALID_HANDLE;
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool other_flag = UINT8_C(9);
+    uint64_t hash_a = UINT64_C(0);
+    uint64_t hash_b = UINT64_C(1);
+    uint64_t bytes = UINT64_C(0);
+    float scalar = -1.0F;
+    int ok = 1;
+
+    if (cna_clustered_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_pbr_material_extensions_create(&extensions) != CNA_RESULT_SUCCESS ||
+        extensions == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* A fresh set is neutral, and every predicate agrees with that. */
+    ok = cna_pbr_material_extensions_is_neutral(extensions, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_pbr_material_extensions_is_subsurface_enabled(extensions, &flag) == CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+    ok = ok && cna_pbr_material_extensions_is_iridescence_enabled(extensions, &flag) == CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+    ok = ok && cna_pbr_material_extensions_is_transmission_enabled(extensions, &flag) == CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+    ok = ok && cna_pbr_material_extensions_is_sheen_enabled(extensions, &flag) == CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+
+    /* The six scalars that CLAMP: out of range at both ends, corrected rather than refused. */
+    ok = ok && cna_pbr_material_extensions_set_clearcoat_factor(extensions, 7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_clearcoat_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_pbr_material_extensions_set_clearcoat_factor(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_clearcoat_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_pbr_material_extensions_set_clearcoat_roughness(extensions, 7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_clearcoat_roughness(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_pbr_material_extensions_set_clearcoat_roughness(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_clearcoat_roughness(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_pbr_material_extensions_set_sheen_roughness(extensions, 7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_sheen_roughness(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_pbr_material_extensions_set_sheen_roughness(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_sheen_roughness(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_pbr_material_extensions_set_transmission_factor(extensions, 7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_transmission_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_pbr_material_extensions_set_transmission_factor(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_transmission_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_factor(extensions, 7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_factor(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_pbr_material_extensions_set_subsurface_wrap(extensions, 7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_subsurface_wrap(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_pbr_material_extensions_set_subsurface_wrap(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_subsurface_wrap(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 0.0F;
+
+    /* The other six scalars correct in two shapes that are NOT clamps, and the difference is
+       observable: a guarded assignment leaves the previous value in place, so an out-of-range
+       write is a silent no-op rather than a value pinned to the bound. Each is therefore set to
+       something valid first, then written out of range, and asserted to still hold the valid one.
+       An `if (value >= bound)` reads nothing like `std::clamp`, which is why the grep that opened
+       this slice missed all six -- see the amendment recorded on CBIND-087A. */
+    ok = ok && cna_pbr_material_extensions_set_clearcoat_normal_scale(extensions, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_clearcoat_normal_scale(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_clearcoat_normal_scale(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_clearcoat_normal_scale(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_clearcoat_normal_scale(extensions, 9000.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_clearcoat_normal_scale(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 9000.0F;
+    ok = ok && cna_pbr_material_extensions_set_thickness_factor(extensions, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_thickness_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_thickness_factor(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_thickness_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_thickness_factor(extensions, 9000.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_thickness_factor(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 9000.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_minimum(extensions, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_minimum(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_minimum(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_minimum(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_minimum(extensions, 9000.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_minimum(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 9000.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_maximum(extensions, 3.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_maximum(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_maximum(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_maximum(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 3.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_maximum(extensions, 9000.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_maximum(extensions, &scalar) == CNA_RESULT_SUCCESS && scalar == 9000.0F;
+
+    /* The iridescence index of refraction guards at ONE, not zero: a value under one describes a
+       medium light speeds up in. 0.5 is therefore ignored where 0.5 would be accepted by every
+       other guarded setter in this class. */
+    ok = ok && cna_pbr_material_extensions_set_iridescence_ior(extensions, 2.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_ior(extensions, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 2.0F;
+    ok = ok && cna_pbr_material_extensions_set_iridescence_ior(extensions, 0.5F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_iridescence_ior(extensions, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 2.0F;
+
+    /* The attenuation distance is the third shape: it FLOORS at zero rather than keeping the
+       previous value, so the same negative write that is a no-op above writes zero here. */
+    ok = ok && cna_pbr_material_extensions_set_attenuation_distance(extensions, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_attenuation_distance(extensions, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 4.0F;
+    ok = ok && cna_pbr_material_extensions_set_attenuation_distance(extensions, -7.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_attenuation_distance(extensions, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+
+    /* The three colours clamp per channel, so one value out of range at each end and one inside
+       proves the clamp is applied element-wise rather than to the vector as a whole. */
+    vector.x = 5.0F;
+    vector.y = -5.0F;
+    vector.z = 0.25F;
+    ok = ok && cna_pbr_material_extensions_set_sheen_color_factor(extensions, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_sheen_color_factor(extensions, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == 1.0F && read_back.y == 0.0F && read_back.z == 0.25F;
+    ok = ok && cna_pbr_material_extensions_set_sheen_color_factor(extensions, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_pbr_material_extensions_set_attenuation_color(extensions, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_attenuation_color(extensions, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == 1.0F && read_back.y == 0.0F && read_back.z == 0.25F;
+    ok = ok && cna_pbr_material_extensions_set_attenuation_color(extensions, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_pbr_material_extensions_set_subsurface_color(extensions, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_subsurface_color(extensions, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == 1.0F && read_back.y == 0.0F && read_back.z == 0.25F;
+    ok = ok && cna_pbr_material_extensions_set_subsurface_color(extensions, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Enabling predicates follow the fields they read, so the set is no longer neutral. */
+    ok = ok && cna_pbr_material_extensions_is_neutral(extensions, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_pbr_material_extensions_is_subsurface_enabled(extensions, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+
+    /* Equality is by value across every field, so a second set built the same way compares equal
+       and hashes equally, and a single differing field breaks both. */
+    if (!ok || cna_pbr_material_extensions_create(&other) != CNA_RESULT_SUCCESS) {
+        (void)cna_pbr_material_extensions_destroy(extensions);
+        return 0;
+    }
+    ok = ok && cna_pbr_material_extensions_equals(extensions, other, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+    ok = ok && cna_pbr_material_extensions_copy_from(other, extensions) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_equals(extensions, other, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+    ok = ok && cna_pbr_material_extensions_get_hash_code(extensions, &hash_a) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_get_hash_code(other, &hash_b) == CNA_RESULT_SUCCESS;
+    ok = ok && hash_a == hash_b;
+    ok = ok && cna_pbr_material_extensions_set_sheen_roughness(other, 0.75F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_equals(extensions, other, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+
+    /* ToString names only the active extensions, so a neutral set is the shortest possible text
+       and this one is longer. */
+    ok = ok && cna_pbr_material_extensions_copy_to_string(extensions, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(2);
+
+    /* A texture is BORROWED: binding it does not keep it alive, reading it back gives a fresh
+       name for the same texture, and destroying the extensions releases nothing. All nine slots
+       are exercised, not one -- nine near-identical routes are exactly where a copy-paste error
+       binds the wrong member, and only calling each one can tell. */
+    {
+        const CNA_Texture2DCreateInfo info = {
+            sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 4U, 4U, CNA_FALSE, {0U, 0U, 0U},
+            CNA_SURFACE_FORMAT_COLOR};
+        if (ok && cna_texture2d_create(graphics_device, &info, &texture) == CNA_RESULT_SUCCESS) {
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_clearcoat_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            /* Binding one slot must not appear in another: the second slot is still empty here,
+               which is what catches a getter wired to the wrong member. */
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_roughness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_roughness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_clearcoat_roughness_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_roughness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_normal_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_clearcoat_normal_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_normal_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_sheen_color_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_sheen_color_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_sheen_color_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_sheen_roughness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_sheen_roughness_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_sheen_roughness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_transmission_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_transmission_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_transmission_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_thickness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_thickness_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_thickness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_iridescence_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_iridescence_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_iridescence_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_texture(extensions, texture) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture != CNA_INVALID_HANDLE;
+            ok = ok && cna_texture2d_destroy(read_texture) == CNA_RESULT_SUCCESS;
+            /* Unbinding is the same route with an invalid handle, and clears only its own slot. */
+            ok = ok && cna_pbr_material_extensions_set_clearcoat_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_clearcoat_roughness_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_roughness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_clearcoat_normal_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_clearcoat_normal_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_sheen_color_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_sheen_color_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_sheen_roughness_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_sheen_roughness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_transmission_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_transmission_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_thickness_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_thickness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_iridescence_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_iridescence_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            ok = ok && cna_pbr_material_extensions_set_iridescence_thickness_texture(extensions, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_pbr_material_extensions_get_iridescence_thickness_texture(extensions, &read_texture) ==
+                CNA_RESULT_SUCCESS && read_texture == CNA_INVALID_HANDLE;
+            /* The texture outlived every borrow, which is the borrow rule stated as a test. */
+            ok = ok && cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
+        }
+    }
+
+    /* Thin-film iridescence is two pure functions and needs no handle. cos_theta is clamped, so
+       a value past one gives the same answer as one; the result is floored at zero per channel. */
+    vector.x = 0.04F;
+    vector.y = 0.04F;
+    vector.z = 0.04F;
+    ok = ok && cna_thin_film_iridescence_evaluate(1.0F, 1.3F, 1.0F, 300.0F, &vector,
+                                                  &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x >= 0.0F && read_back.y >= 0.0F && read_back.z >= 0.0F;
+    ok = ok && cna_thin_film_iridescence_evaluate(1.0F, 1.3F, 9.0F, 300.0F, &vector,
+                                                  &vector) == CNA_RESULT_SUCCESS &&
+        vector.x == read_back.x && vector.y == read_back.y && vector.z == read_back.z;
+    ok = ok && cna_thin_film_iridescence_evaluate(1.0F, 1.3F, 1.0F, 300.0F, 0, &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_thin_film_iridescence_copy_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+
+    /* CBIND-086C deferred these three routes because this type did not exist in C yet; with it
+       bound, the effect can be given extensions and CBIND-086's last row closes. */
+    if (ok && cna_clustered_forward_effect_create(graphics_device, &effect) ==
+            CNA_RESULT_SUCCESS) {
+        ok = cna_clustered_forward_effect_set_material_extensions(effect, extensions) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_get_material_extensions(effect, &borrowed) ==
+            CNA_RESULT_SUCCESS && borrowed != CNA_INVALID_HANDLE;
+        /* The borrow is a view onto the effect's own copy, so it compares equal to what went in
+           and differs once the source is changed -- proving it is a copy, not an alias. */
+        ok = ok && cna_pbr_material_extensions_equals(borrowed, extensions, &flag) ==
+            CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+        ok = ok && cna_pbr_material_extensions_set_sheen_roughness(extensions, 0.125F) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_pbr_material_extensions_equals(borrowed, extensions, &other_flag) ==
+            CNA_RESULT_SUCCESS && other_flag == CNA_FALSE;
+        ok = ok && cna_pbr_material_extensions_destroy(borrowed) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_contribution_with_extensions(
+                &light, &read_back, &read_back, &read_back, &read_back, 0.0F, 0.5F, extensions,
+                &vector) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_contribution_with_extensions(
+                &light, &read_back, &read_back, &read_back, &read_back, 0.0F, 0.5F,
+                CNA_INVALID_HANDLE, &vector) != CNA_RESULT_SUCCESS;
+        ok = ok && cna_clustered_forward_effect_destroy(effect) == CNA_RESULT_SUCCESS;
+    }
+
+    ok = ok && cna_pbr_material_extensions_destroy(other) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_destroy(extensions) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_extensions_destroy(extensions) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -2799,6 +3114,10 @@ static CNA_Result on_load(
         }
         if (!validate_clustered_forward(graphics_device)) {
             state->failed_stage = 19;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_material_extensions(graphics_device)) {
+            state->failed_stage = 20;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

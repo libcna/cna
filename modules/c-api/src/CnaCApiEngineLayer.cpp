@@ -26,6 +26,8 @@
 #include "CNA/Graphics/ClusteredLightBuffer.hpp"
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
+#include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/ThinFilmIridescence.hpp"
 #include "CNA/Graphics/ClusteredLightCompute.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
 #include "CNA/Graphics/ClusteredLightSetEXT.hpp"
@@ -2831,6 +2833,392 @@ CNA_Result cna_clustered_light_compute_destroy(CNA_ClusteredLightComputeHandle p
 CNA_Result cna_clustered_shadow_policy_select(CNA_ClusteredShadowPolicyHandle p0, CNA_ClusteredLightSetHandle p1, const CNA_Matrix* p2, const CNA_Matrix* p3, const CNA_Vector3* p4)
 {
     (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_create(CNA_PbrMaterialExtensionsHandle* p0)
+{
+    (void)p0;
+    if (p0 != nullptr) { *p0 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_destroy(CNA_PbrMaterialExtensionsHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_copy_from(CNA_PbrMaterialExtensionsHandle p0, CNA_PbrMaterialExtensionsHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_factor(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_factor(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_roughness(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_roughness(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_normal_scale(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_normal_scale(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_roughness(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_roughness(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_transmission_factor(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_transmission_factor(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_thickness_factor(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_thickness_factor(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_attenuation_distance(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_attenuation_distance(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_factor(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_factor(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_ior(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_ior(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_minimum(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_minimum(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_maximum(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_maximum(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_subsurface_wrap(CNA_PbrMaterialExtensionsHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_subsurface_wrap(CNA_PbrMaterialExtensionsHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_color_factor(CNA_PbrMaterialExtensionsHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_color_factor(CNA_PbrMaterialExtensionsHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_attenuation_color(CNA_PbrMaterialExtensionsHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_attenuation_color(CNA_PbrMaterialExtensionsHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_subsurface_color(CNA_PbrMaterialExtensionsHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_subsurface_color(CNA_PbrMaterialExtensionsHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_roughness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_roughness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_normal_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_normal_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_color_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_color_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_roughness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_roughness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_transmission_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_transmission_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_thickness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_thickness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_texture(CNA_PbrMaterialExtensionsHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_is_subsurface_enabled(CNA_PbrMaterialExtensionsHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_is_iridescence_enabled(CNA_PbrMaterialExtensionsHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_is_transmission_enabled(CNA_PbrMaterialExtensionsHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_is_sheen_enabled(CNA_PbrMaterialExtensionsHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_is_neutral(CNA_PbrMaterialExtensionsHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_equals(CNA_PbrMaterialExtensionsHandle p0, CNA_PbrMaterialExtensionsHandle p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_get_hash_code(CNA_PbrMaterialExtensionsHandle p0, uint64_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_extensions_copy_to_string(CNA_PbrMaterialExtensionsHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_thin_film_iridescence_evaluate(float p0, float p1, float p2, float p3, const CNA_Vector3* p4, CNA_Vector3* p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_thin_film_iridescence_copy_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_get_material_extensions(CNA_ClusteredForwardEffectHandle p0, CNA_PbrMaterialExtensionsHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_material_extensions(CNA_ClusteredForwardEffectHandle p0, CNA_PbrMaterialExtensionsHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_contribution_with_extensions(const CNA_ClusteredLightEXT* p0, const CNA_Vector3* p1, const CNA_Vector3* p2, const CNA_Vector3* p3, const CNA_Vector3* p4, float p5, float p6, CNA_PbrMaterialExtensionsHandle p7, CNA_Vector3* p8)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5; (void)p6; (void)p7; (void)p8;
     return ExtensionUnavailable();
 }
 
@@ -9538,6 +9926,880 @@ CNA_Result cna_clustered_shadow_policy_select(
                 ToNativeVector3(*cameraPosition));
             return CNA_RESULT_SUCCESS;
         });
+}
+
+namespace {
+
+struct PbrMaterialExtensionsResource final {
+    std::shared_ptr<Ext::PbrMaterialExtensions> value;
+    // The game a bound texture belongs to, remembered so a read-back handle can be parented the
+    // way every other borrowed texture in this ABI is. It is a plain handle, not a retention: the
+    // extensions borrow their textures and must not keep one alive.
+    CNA_Handle textureParentGame = CNA_INVALID_HANDLE;
+};
+
+// A texture the extensions point at but do not own. The aliasing constructor keeps the extensions
+// alive for as long as the borrowed handle exists, so the pointer cannot outlive its holder; the
+// texture's own lifetime stays entirely the caller's, which is the borrow rule this type inherits
+// from effects.
+[[nodiscard]] CNA_Result BorrowTextureFrom(
+    const std::shared_ptr<PbrMaterialExtensionsResource>& owner,
+    Microsoft::Xna::Framework::Graphics::Texture2D* const texture,
+    CNA_Handle* const outTexture)
+{
+    if (outTexture == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The texture output handle is null.");
+    }
+    *outTexture = CNA_INVALID_HANDLE;
+    if (texture == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(owner, texture);
+    return CreateBorrowedRenderTarget2D(view, owner->textureParentGame, owner, outTexture);
+}
+
+[[nodiscard]] CNA_Result GetExtensions(
+    const CNA_Handle handle, std::shared_ptr<PbrMaterialExtensionsResource>* const out)
+{
+    return GetEngineResource(
+        handle, ObjectKind::PbrMaterialExtensions, "PbrMaterialExtensions", out);
+}
+
+} // namespace
+
+#define CNA_WITH_EXTENSIONS(handle, body)                                                          \
+    WithMap<PbrMaterialExtensionsResource>(                                                        \
+        (handle), ObjectKind::PbrMaterialExtensions, "PbrMaterialExtensions", body)
+
+CNA_Result cna_pbr_material_extensions_create(CNA_PbrMaterialExtensionsHandle* const outExtensions)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outExtensions == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The extensions output handle is null.");
+        }
+        *outExtensions = CNA_INVALID_HANDLE;
+        const auto resource = std::make_shared<PbrMaterialExtensionsResource>(
+            PbrMaterialExtensionsResource{std::make_shared<Ext::PbrMaterialExtensions>(),
+                                          CNA_INVALID_HANDLE});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::PbrMaterialExtensions, resource, outExtensions);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned material-extensions handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_material_extensions_destroy(
+    const CNA_PbrMaterialExtensionsHandle extensionsHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PbrMaterialExtensionsResource> extensions;
+        if (const CNA_Result result = GetExtensions(extensionsHandle, &extensions);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The nine textures are borrowed, so nothing here releases one.
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(extensionsHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned material-extensions handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_material_extensions_copy_from(
+    const CNA_PbrMaterialExtensionsHandle destination,
+    const CNA_PbrMaterialExtensionsHandle source)
+{
+    return CNA_WITH_EXTENSIONS(destination,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& d) -> CNA_Result {
+            std::shared_ptr<PbrMaterialExtensionsResource> s;
+            if (const CNA_Result result = GetExtensions(source, &s);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            *d->value = *s->value;
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getClearcoatFactor());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setClearcoatFactor(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_roughness(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getClearcoatRoughness());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_roughness(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setClearcoatRoughness(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_normal_scale(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getClearcoatNormalScale());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_normal_scale(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setClearcoatNormalScale(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_roughness(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getSheenRoughness());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_roughness(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setSheenRoughness(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_transmission_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getTransmissionFactor());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_transmission_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setTransmissionFactor(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_thickness_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getThicknessFactor());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_thickness_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setThicknessFactor(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_attenuation_distance(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getAttenuationDistance());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_attenuation_distance(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setAttenuationDistance(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getIridescenceFactor());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setIridescenceFactor(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_ior(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getIridescenceIor());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_ior(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setIridescenceIor(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_minimum(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getIridescenceThicknessMinimum());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_minimum(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setIridescenceThicknessMinimum(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_maximum(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getIridescenceThicknessMaximum());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_maximum(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setIridescenceThicknessMaximum(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_subsurface_wrap(
+    const CNA_PbrMaterialExtensionsHandle extensions, float* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outValue, e->value->getSubsurfaceWrap());
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_subsurface_wrap(
+    const CNA_PbrMaterialExtensionsHandle extensions, const float value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            e->value->setSubsurfaceWrap(value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_color_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Vector3* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            const auto v = e->value->getSheenColorFactor();
+            return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_color_factor(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Vector3* const value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            if (const CNA_Result result = RequireVector3Argument(value, "The value is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            e->value->setSheenColorFactor(ToNativeVector3(*value));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_attenuation_color(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Vector3* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            const auto v = e->value->getAttenuationColor();
+            return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_attenuation_color(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Vector3* const value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            if (const CNA_Result result = RequireVector3Argument(value, "The value is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            e->value->setAttenuationColor(ToNativeVector3(*value));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_subsurface_color(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Vector3* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            const auto v = e->value->getSubsurfaceColor();
+            return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_subsurface_color(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Vector3* const value)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            if (const CNA_Result result = RequireVector3Argument(value, "The value is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            e->value->setSubsurfaceColor(ToNativeVector3(*value));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getClearcoatTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "clearcoat_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setClearcoatTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_roughness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getClearcoatRoughnessTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_roughness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "clearcoat_roughness_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setClearcoatRoughnessTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_clearcoat_normal_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getClearcoatNormalTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_clearcoat_normal_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "clearcoat_normal_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setClearcoatNormalTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_color_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getSheenColorTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_color_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "sheen_color_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setSheenColorTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_sheen_roughness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getSheenRoughnessTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_sheen_roughness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "sheen_roughness_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setSheenRoughnessTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_transmission_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getTransmissionTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_transmission_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "transmission_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setTransmissionTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_thickness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getThicknessTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_thickness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "thickness_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setThicknessTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getIridescenceTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "iridescence_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setIridescenceTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_iridescence_thickness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return BorrowTextureFrom(e, e->value->getIridescenceThicknessTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_set_iridescence_thickness_texture(
+    const CNA_PbrMaterialExtensionsHandle extensions, const CNA_Handle texture)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* native = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(texture, "iridescence_thickness_texture", &native, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (retention != nullptr) {
+                e->textureParentGame = retention->parentGame;
+            }
+            e->value->setIridescenceThicknessTexture(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_is_subsurface_enabled(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(
+                outValue, static_cast<CNA_Bool>(e->value->isSubsurfaceEnabled() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_is_iridescence_enabled(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(
+                outValue, static_cast<CNA_Bool>(e->value->isIridescenceEnabled() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_is_transmission_enabled(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(
+                outValue, static_cast<CNA_Bool>(e->value->isTransmissionEnabled() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_is_sheen_enabled(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(
+                outValue, static_cast<CNA_Bool>(e->value->isSheenEnabled() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_is_neutral(
+    const CNA_PbrMaterialExtensionsHandle extensions, CNA_Bool* const outValue)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(
+                outValue, static_cast<CNA_Bool>(e->value->isNeutral() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_equals(
+    const CNA_PbrMaterialExtensionsHandle first,
+    const CNA_PbrMaterialExtensionsHandle second,
+    CNA_Bool* const outEqual)
+{
+    return CNA_WITH_EXTENSIONS(first,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& a) -> CNA_Result {
+            std::shared_ptr<PbrMaterialExtensionsResource> b;
+            if (const CNA_Result result = GetExtensions(second, &b);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            return StoreValue(
+                outEqual, static_cast<CNA_Bool>(*a->value == *b->value ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_get_hash_code(
+    const CNA_PbrMaterialExtensionsHandle extensions, uint64_t* const outHash)
+{
+    return CNA_WITH_EXTENSIONS(extensions,
+        [&](const std::shared_ptr<PbrMaterialExtensionsResource>& e) -> CNA_Result {
+            return StoreValue(outHash, static_cast<uint64_t>(e->value->GetHashCode()));
+        });
+}
+
+CNA_Result cna_pbr_material_extensions_copy_to_string(
+    const CNA_PbrMaterialExtensionsHandle extensions,
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    std::shared_ptr<PbrMaterialExtensionsResource> resource;
+    if (const CNA_Result result = GetExtensions(extensions, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(
+        destination, capacity, outBytes, [&resource] { return resource->value->ToString(); });
+}
+
+CNA_Result cna_thin_film_iridescence_evaluate(
+    const float outsideIor,
+    const float filmIor,
+    const float cosTheta,
+    const float thicknessNm,
+    const CNA_Vector3* const baseF0,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result =
+                RequireVector3Argument(baseF0, "The base reflectance is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto v = Ext::ThinFilmIridescence::evaluate(
+            outsideIor, filmIor, cosTheta, thicknessNm, ToNativeVector3(*baseF0));
+        return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_thin_film_iridescence_copy_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes, [] { return Ext::ThinFilmIridescence::getGlsl(); });
+}
+
+CNA_Result cna_clustered_forward_effect_get_material_extensions(
+    const CNA_ClusteredForwardEffectHandle effect,
+    CNA_PbrMaterialExtensionsHandle* const outExtensions)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            if (outExtensions == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The extensions output handle is null.");
+            }
+            *outExtensions = CNA_INVALID_HANDLE;
+            // A borrow onto the effect's own extensions: the aliasing constructor keeps the
+            // effect alive for as long as the borrowed handle exists, so the reference the
+            // canonical getter returns cannot outlive what it points into.
+            const std::shared_ptr<Ext::PbrMaterialExtensions> view(
+                e, const_cast<Ext::PbrMaterialExtensions*>(&e->value->getMaterialExtensions()));
+            const auto resource = std::make_shared<PbrMaterialExtensionsResource>(
+                PbrMaterialExtensionsResource{view, e->parentGame});
+            const CNA_Result result = GetRuntimeHandles().Create(
+                ObjectKind::PbrMaterialExtensions, resource, outExtensions);
+            if (result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result,
+                    ErrorCategoryForResult(result),
+                    "The borrowed material-extensions handle could not be created.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_set_material_extensions(
+    const CNA_ClusteredForwardEffectHandle effect,
+    const CNA_PbrMaterialExtensionsHandle extensions)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            std::shared_ptr<PbrMaterialExtensionsResource> source;
+            if (const CNA_Result result = GetExtensions(extensions, &source);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            e->value->setMaterialExtensions(*source->value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_contribution_with_extensions(
+    const CNA_ClusteredLightEXT* const light,
+    const CNA_Vector3* const surface,
+    const CNA_Vector3* const normal,
+    const CNA_Vector3* const cameraPosition,
+    const CNA_Vector3* const baseColor,
+    const float metallic,
+    const float roughness,
+    const CNA_PbrMaterialExtensionsHandle extensions,
+    CNA_Vector3* const outContribution)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::ClusteredLightEXT nativeLight;
+        if (const CNA_Result result = ToNativeClusteredLight(light, &nativeLight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Vector3* const required[] = {surface, normal, cameraPosition, baseColor};
+        for (const CNA_Vector3* const argument : required) {
+            if (const CNA_Result result =
+                    RequireVector3Argument(argument, "A contribution vector is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        std::shared_ptr<PbrMaterialExtensionsResource> source;
+        if (const CNA_Result result = GetExtensions(extensions, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto v = Ext::ClusteredForwardEffect::contribution(
+            nativeLight, ToNativeVector3(*surface), ToNativeVector3(*normal),
+            ToNativeVector3(*cameraPosition), ToNativeVector3(*baseColor), metallic, roughness,
+            *source->value);
+        return StoreValue(outContribution, Vec3(v.X, v.Y, v.Z));
+    });
 }
 
 #endif // CNA_CNAEXT

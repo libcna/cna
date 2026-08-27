@@ -15697,8 +15697,8 @@
     },
     {
       "id": "clustered-forward-effect",
-      "qualified_name_regex": "^CNA::Graphics::ClusteredForwardEffect(?:::(?!setMaterialExtensions$|getMaterialExtensions$|setAreaLight$|setLightProbe$|setLightProbeVolume$)[A-Za-z0-9_~]+)?$",
-      "signature_regex": "^(?!.*(?:PbrMaterialExtensions|=delete)).*$",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredForwardEffect(?:::(?!setAreaLight$|setLightProbe$|setLightProbeVolume$)[A-Za-z0-9_~]+)?$",
+      "signature_regex": "^(?!.*=delete).*$",
       "kinds": [
         "class",
         "constant",
@@ -15706,8 +15706,8 @@
         "destructor",
         "method"
       ],
-      "mapping": "`cna_clustered_forward_effect_*` over an owned handle, with `kMaxLightsPerFragment` as `CNA_CLUSTERED_FORWARD_MAX_LIGHTS_PER_FRAGMENT_EXT` and a `static_assert` tying them together. The shader effect is a **counted borrow** -- unlike the light buffer, the effect really does hand out a pointer to something it owns, so destruction is refused while one is outstanding. The opaque frame is the opposite case and is deliberately *not* counted: the effect borrows the texture rather than owning it, so `getOpaqueFrame` returns a fresh name for the same texture on the precedent `cna_effect_get_shadow_map_ext` set.\n\nEvery throw and every clamp in the canonical body was classified before a route was written. The two throws are **contracts** and are refused: `begin` against a buffer that holds nothing has no cluster table for the shader to walk, and a transmissive material with no opaque frame is an opaque object where a glass one was asked for -- the canonical code says 'refused rather than approximated' and the C form keeps that. The four setters are **corrections** and stay clamped, because a material parameter outside its range has a nearest meaningful value: base colour and metallic clamp to zero-to-one, ambient is floored at zero because a negative ambient would subtract light that was never added, and roughness clamps to **0.04**, not zero, because a perfectly smooth surface collapses the specular lobe to a point the shader cannot integrate. That floor is asserted at 0.04 rather than 0, which is the only way a clamp that stops clamping is visible.\n\n`volumeAttenuation` and the fifteen-scalar `contribution` are pure functions and become free routes with no handle. `contribution` defaults its last eight arguments; C has no defaults, so all sixteen are explicit and the header names the canonical neutral values.\n\nFive members are deferred with named owners rather than bound here, because each takes a type another slice owns and the effect cannot ask for what C cannot yet describe: `setMaterialExtensions`/`getMaterialExtensions` to `CBIND-087`, and `setAreaLight`/`setLightProbe`/`setLightProbeVolume` to `CBIND-091`. Their `clear*`/`has*` partners are bound here, since neither names the foreign type.",
-      "tests": "`EngineLayerSmoke.c` stage 19, in both builds and proved to execute",
+      "mapping": "`cna_clustered_forward_effect_*` over an owned handle, with `kMaxLightsPerFragment` as `CNA_CLUSTERED_FORWARD_MAX_LIGHTS_PER_FRAGMENT_EXT` and a `static_assert` tying them together. The shader effect is a **counted borrow** -- unlike the light buffer, the effect really does hand out a pointer to something it owns, so destruction is refused while one is outstanding. The opaque frame is the opposite case and is deliberately *not* counted: the effect borrows the texture rather than owning it, so `getOpaqueFrame` returns a fresh name for the same texture on the precedent `cna_effect_get_shadow_map_ext` set.\n\nEvery throw and every clamp in the canonical body was classified before a route was written. The two throws are **contracts** and are refused: `begin` against a buffer that holds nothing has no cluster table for the shader to walk, and a transmissive material with no opaque frame is an opaque object where a glass one was asked for -- the canonical code says 'refused rather than approximated' and the C form keeps that. The four setters are **corrections** and stay clamped, because a material parameter outside its range has a nearest meaningful value: base colour and metallic clamp to zero-to-one, ambient is floored at zero because a negative ambient would subtract light that was never added, and roughness clamps to **0.04**, not zero, because a perfectly smooth surface collapses the specular lobe to a point the shader cannot integrate. That floor is asserted at 0.04 rather than 0, which is the only way a clamp that stops clamping is visible.\n\n`volumeAttenuation` and the fifteen-scalar `contribution` are pure functions and become free routes with no handle. `contribution` defaults its last eight arguments; C has no defaults, so all sixteen are explicit and the header names the canonical neutral values.\n\nFive members are deferred with named owners rather than bound here, because each takes a type another slice owns and the effect cannot ask for what C cannot yet describe: `setMaterialExtensions`/`getMaterialExtensions` to `CBIND-087`, and `setAreaLight`/`setLightProbe`/`setLightProbeVolume` to `CBIND-091`. Their `clear*`/`has*` partners are bound here, since neither names the foreign type.\n\n**`CBIND-087A` closed three of the five deferrals and with them `CBIND-086`.** `setMaterialExtensions`/`getMaterialExtensions` and `contribution`'s extensions overload were waiting only for `PbrMaterialExtensions` to exist in C; they are now `cna_clustered_forward_effect_set_material_extensions`, `_get_material_extensions` -- a borrow onto the effect's own copy, so it compares equal to what went in and diverges once the source changes, which is how the test proves it is a copy rather than an alias -- and `_contribution_with_extensions`. The two area-light and light-probe setters still wait for `CBIND-091`.",
+      "tests": "`EngineLayerSmoke.c` stage 19, in both builds and proved to execute; the three extension routes in `EngineLayerSmoke.c` stage 20",
       "status": "implemented",
       "task": "CBIND-086C",
       "approved_symbols": [
@@ -15723,6 +15723,8 @@
         "CPP-384F0720BDEF",
         "CPP-3A64B16ECA9E",
         "CPP-45329ED0068A",
+        "CPP-4F848B31E1A7",
+        "CPP-5C42D9F23B73",
         "CPP-5EDB57634BFA",
         "CPP-7FEFAD155A6B",
         "CPP-869D100C9E95",
@@ -15733,6 +15735,7 @@
         "CPP-D8111E92C532",
         "CPP-D97FE107AA3D",
         "CPP-DFF31248E289",
+        "CPP-E80EA1F91A81",
         "CPP-ED0D9D9DC2D9",
         "CPP-F9548331088A",
         "CPP-FD4051699A98"
@@ -15765,6 +15768,97 @@
         "CPP-F40EE30A7258"
       ],
       "signature_regex": "^(?!.*=delete).*$"
+    },
+    {
+      "id": "pbr-material-extensions",
+      "qualified_name_regex": "^CNA::Graphics::PbrMaterialExtensions(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "`cna_pbr_material_extensions_*` over an owned handle. The canonical type is a **value** -- it compares, hashes and prints by content -- but it holds nine borrowed `Texture2D` pointers, so it is bound as a handle rather than a C structure: a plain structure would put raw texture pointers in caller-writable memory. It never owns a texture given to it, which is the borrow rule this ABI already settled for effects. `copy_from` exists because a handle cannot be assigned and the canonical type is copyable; the texture members are copied as borrows.\n\n`operator==` and `operator!=` map to the single `_equals` route, and texture members compare **by identity** -- two sets are equal when they point at the same textures, not at equal ones. `GetHashCode` widens to `uint64_t`, the campaign's settled deviation. `ToString` takes the count/copy form and names only the active extensions, so a neutral set prints as two bytes.\n\n**This type throws nowhere: all twenty-four setters correct, in three different shapes, and telling them apart is the whole contract.** Nine members clamp to zero-to-one (`std::clamp`, per channel for the three colours). Five use a **guarded assignment** -- `if (value >= bound) field = value;` -- which leaves the previous value in place, so an out-of-range write is a silent no-op rather than a value pinned to the bound; four guard at zero and `iridescenceIor` guards at **one**, because an index of refraction below one describes a medium light speeds up in. One, `attenuationDistance`, floors at zero with a ternary, writing the bound where its neighbours keep the old value. Nine texture members take no correction at all.",
+      "tests": "`EngineLayerSmoke.c` stage 20, which writes every scalar out of range at both ends and reads it back, so each of the three correction shapes is distinguished from the other two rather than assumed; asserts the colour clamps element-wise; round-trips a borrowed texture and proves binding one does not keep it alive; and checks equality, hash and `ToString` against a copy that is then made to differ by one field. Proved to execute by asserting the guarded setter clamps to zero and watching the exit code move to stage 20.",
+      "status": "implemented",
+      "task": "CBIND-087A",
+      "approved_symbols": [
+        "CPP-0524B2DA2CA9",
+        "CPP-0C4F5E3B3365",
+        "CPP-1120A9141F7C",
+        "CPP-113CA00A9E67",
+        "CPP-11DC78AC37FE",
+        "CPP-1BEB19C33A96",
+        "CPP-2008047B4B90",
+        "CPP-256810824D2F",
+        "CPP-256F90CA70F9",
+        "CPP-29863E0CC5D0",
+        "CPP-2A72BDFC9DA6",
+        "CPP-2B2C1E40D4B4",
+        "CPP-2B725B8F9470",
+        "CPP-2C0A5792B0AC",
+        "CPP-33BB6B8F3467",
+        "CPP-33BD594688D7",
+        "CPP-35DE504DAB48",
+        "CPP-3602EB126245",
+        "CPP-3959FED3FB9D",
+        "CPP-3A2455014EAD",
+        "CPP-3DDD16AC8159",
+        "CPP-43E1566A7962",
+        "CPP-448A6A5B57EE",
+        "CPP-44FEC2F40873",
+        "CPP-52FBE9B27071",
+        "CPP-5880BA93A274",
+        "CPP-601E026111F6",
+        "CPP-7288072A3D62",
+        "CPP-74C04968A3AA",
+        "CPP-84D2C7880708",
+        "CPP-8C9429C41102",
+        "CPP-8FFE5D32CE58",
+        "CPP-9197E03A4EEC",
+        "CPP-91ED57AF8215",
+        "CPP-95D02225F4D0",
+        "CPP-982D9D31CF4F",
+        "CPP-9ACA112DE41C",
+        "CPP-A6E13D7DAA87",
+        "CPP-A7E1687089A0",
+        "CPP-AB5E01D0754E",
+        "CPP-AC368CDC2D44",
+        "CPP-CA8E13BAFD5D",
+        "CPP-CAA1802227E9",
+        "CPP-D9DC4178E867",
+        "CPP-DA5EBA04771B",
+        "CPP-DCBE2A5F167F",
+        "CPP-E1E19D115513",
+        "CPP-E3F8C6474A06",
+        "CPP-E5594F42A270",
+        "CPP-E76CBC5E3309",
+        "CPP-E9F469FA9E89",
+        "CPP-EA95C383AAD8",
+        "CPP-F230C56A75E6",
+        "CPP-F55592681512",
+        "CPP-F5986DA2DE9C",
+        "CPP-F6951A9B1146",
+        "CPP-FF3163B47FE6"
+      ]
+    },
+    {
+      "id": "thin-film-iridescence",
+      "qualified_name_regex": "^CNA::Graphics::ThinFilmIridescence(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_thin_film_iridescence_evaluate` and `_copy_glsl`. Both canonical members are static and the class holds no state, so neither needs a handle and no object kind is added. `evaluate` clamps its cosine to zero-to-one and floors each result channel at zero, both **corrections** carried through unchanged; `getGlsl` takes the count/copy form.",
+      "tests": "`EngineLayerSmoke.c` stage 20, which asserts a cosine past one gives the same answer as one -- the only way the clamp is observable from C -- refuses a null reflectance, and reads the GLSL through the count/copy pair.",
+      "status": "implemented",
+      "task": "CBIND-087A",
+      "approved_symbols": [
+        "CPP-1CD6727FC620",
+        "CPP-91A515BFC539",
+        "CPP-CDC661EEE64E"
+      ]
     }
   ]
 }
