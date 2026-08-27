@@ -2177,16 +2177,50 @@ if (!ProfileIsEs2ApiGeneration())
         if (registry_) registry_->remove(this);
     }
 
+    namespace {
+        // GL_SAMPLES_PASSED. Not in metagl's QueryTarget, which is written to the ES 3.0 core set
+        // where the only occlusion target is the BOOLEAN GL_ANY_SAMPLES_PASSED. Desktop GL has
+        // had the real per-fragment tally since 1.5, and that is what XNA's PixelCount means, so
+        // ask for it and keep it when the driver agrees. Cast once, here -- the same shape the
+        // GL_TIME_ELAPSED timer query below already uses.
+        constexpr ::metagl::QueryTarget kSamplesPassed =
+            static_cast<::metagl::QueryTarget>(0x8914);
+
+        // Resolved once per process, on the first query that runs: begin the precise target and
+        // ask GL whether it took it. A driver that does not know the enum raises GL_INVALID_ENUM
+        // and has begun nothing, so there is nothing to end on that path.
+        bool ResolvePreciseTarget(const ::easygl::Query& query)
+        {
+            while (::metagl::glGetError() != ::metagl::ErrorCode::NoError) {}
+            query.begin(kSamplesPassed);
+            const bool accepted = ::metagl::glGetError() == ::metagl::ErrorCode::NoError;
+            if (accepted) query.end(kSamplesPassed);
+            return accepted;
+        }
+
+        // -1 until the first Begin() resolves it.
+        int g_preciseOcclusionTarget = -1;
+
+        ::metagl::QueryTarget OcclusionTarget()
+        {
+            return g_preciseOcclusionTarget == 1
+                       ? kSamplesPassed
+                       : ::easygl::QueryTarget::AnySamplesPassed;
+        }
+    }
+
     void EasyGLOcclusionQueryRenderer::Begin()
     {
         if (metagl::IsContextLost() || !query_.is_created()) return;
-        query_.begin(::easygl::QueryTarget::AnySamplesPassed);
+        if (g_preciseOcclusionTarget < 0)
+            g_preciseOcclusionTarget = ResolvePreciseTarget(query_) ? 1 : 0;
+        query_.begin(OcclusionTarget());
     }
 
     void EasyGLOcclusionQueryRenderer::End()
     {
         if (metagl::IsContextLost() || !query_.is_created()) return;
-        query_.end(::easygl::QueryTarget::AnySamplesPassed);
+        query_.end(OcclusionTarget());
     }
 
     bool EasyGLOcclusionQueryRenderer::IsComplete() const
@@ -2198,8 +2232,15 @@ if (!ProfileIsEs2ApiGeneration())
     int EasyGLOcclusionQueryRenderer::PixelCount() const
     {
         if (!IsComplete()) return 0;
-        // GLES3 uses GL_ANY_SAMPLES_PASSED — result is 0 (none) or 1 (any)
+        // With GL_SAMPLES_PASSED this is the real fragment tally, as XNA's own query is. With the
+        // ES/WebGL fallback, GL_ANY_SAMPLES_PASSED, it is 0 (none) or 1 (any) -- ask
+        // PixelCountIsPreciseEXT() rather than inferring a coverage ratio from it.
         return static_cast<int>(query_.result());
+    }
+
+    bool EasyGLOcclusionQueryRenderer::PixelCountIsPreciseEXT() const noexcept
+    {
+        return g_preciseOcclusionTarget == 1;
     }
 
     void EasyGLOcclusionQueryRenderer::release_gl_handle_only()

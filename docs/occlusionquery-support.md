@@ -44,13 +44,13 @@ matching `End()`) via a 50-iteration stress test — no crash, no resource-track
 
 | Renderer | Attaches to real GPU work? | Sequence validation | Pixel/query correctness | Status |
 |---|---|---|---|---|
-| **EasyGL** | ✅ Yes — thin `glBeginQuery`/`glEndQuery(GL_ANY_SAMPLES_PASSED)` wrapper | None (matches FNA) | ✅ Verified both directions (Tasks 445/446) | **Fully correct** |
+| **EasyGL** | ✅ Yes — `glBeginQuery`/`glEndQuery`, asking for `GL_SAMPLES_PASSED` and falling back to the boolean `GL_ANY_SAMPLES_PASSED` | None (matches FNA) | ✅ Verified both directions (Tasks 445/446) **and count-vs-flag** (SAMPLE-041) | **Correct; the count is precise only where the driver has `GL_SAMPLES_PASSED`** |
 | **Vulkan** | ✅ Yes (Task 447, 2026-07-10) — real per-draw-call tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording | None (matches FNA) | ✅ Verified both directions plus multi-draw-span (Task 854) — genuinely discriminating in this sandbox (Mesa Lavapipe) | **Fully correct** |
 | **Bgfx** | ✅ Yes (Task 448) — real `bgfx::submit(id, program, occlusionQuery)` attachment | None (matches FNA) | ⚠️ Not verifiable in this sandbox (see below); dedicated-view gap open (Task 917) | **Fixed, with caveats** |
 | **SDL_Renderer** | N/A — construction itself throws | N/A | N/A | **Correctly unsupported** (2D-only renderer, Task 727) |
 | **Skia raster** | N/A — no 3D submission/depth surface | N/A | Raster emulation disproved (SKIA-104) | **Correctly unsupported** (SKIA-105) |
 
-### EasyGL — fully correct
+### EasyGL — correct, with a precision boundary that depends on the profile
 
 `EasyGLOcclusionQueryRenderer` is a thin, unvalidated wrapper over `easygl::Query`'s own
 `glBeginQuery`/`glEndQuery(GL_ANY_SAMPLES_PASSED)` calls, with zero internal state tracking — all 3
@@ -62,6 +62,38 @@ crash": `EasyGL_OcclusionQuery_VisibleQuad` (Task 445, a fully visible quad repo
 occluder — rejected by `DepthStencilState::Default`'s `LessEqual` compare — reports `PixelCount()
 <= 0`). Both independently confirmed via sabotage-and-revert. This is the only renderer where
 occlusion queries are both wired up AND pixel-verified correct.
+
+#### The count is a count only where the driver has `GL_SAMPLES_PASSED` (SAMPLE-041, 2026-08-27)
+
+XNA's `PixelCount` is a **tally of the fragments that passed**, which is what Direct3D 9 returns.
+**OpenGL ES 3.0 and WebGL 2 have no query target that produces one**: their core occlusion target
+is the boolean `GL_ANY_SAMPLES_PASSED`, whose result is 0 or 1 whatever the geometry covered.
+
+Both tests above assert `PixelCount() > 0` and `PixelCount() <= 0`, and **a boolean passes both**.
+That is why this row said "fully correct" while a game dividing `PixelCount()` by an area — the
+lensflare idiom, and the whole subject of SAMPLE-041 — got `1/area` instead of a coverage fraction
+and faded its effect to nothing. Measured there: the query rectangle covered **9788** pixels of
+the frame and `PixelCount()` answered **1**.
+
+`EasyGLOcclusionQueryRenderer` now resolves its target from the driver on the first query: it
+begins `GL_SAMPLES_PASSED` and keeps it if GL accepts the enum, otherwise it falls back to the
+boolean for the life of the process. The distinction is askable rather than folklore —
+`OcclusionQuery::isPixelCountPreciseEXT()` (CNAEXT), forwarding
+`IOcclusionQueryRenderer::PixelCountIsPreciseEXT()`, which defaults to `true` so no other backend
+had to change.
+
+The asymmetry is real and driver-side, not a CNA choice — the **same Mesa 25.0.7** answers both
+ways depending on the context it was given:
+
+| Context | `GL_SAMPLES_PASSED` accepted | Fragments reported for a fully covered viewport |
+|---|---|---|
+| OpenGL 4.5 compatibility (`spikes/occlusion-count-spike/`) | yes | **4096** — the 64x64 viewport's own area |
+| OpenGL ES 3.2, which CNA's `OPENGLES3` profile creates | no | 1 |
+
+`modules/graphics/tests/.../OcclusionQueryPixelCountPrecisionTests.cpp` pins the pair: a
+full-viewport quad must report a real tally when the query claims precision and at most 1 when it
+does not, with back-buffer readbacks proving the quad genuinely covered the frame. Confirmed to
+fail when the precision claim is falsified.
 
 ### Vulkan — fixed, all 3 design questions resolved (Task 447/854, 2026-07-10)
 

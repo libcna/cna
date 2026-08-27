@@ -31,6 +31,12 @@ namespace Microsoft::Xna::Framework::Graphics
         return 0;
     }
 
+    bool OcclusionQuery::isPixelCountPreciseEXT() const
+    {
+        if (renderer_) return renderer_->PixelCountIsPreciseEXT();
+        return false;
+    }
+
     void OcclusionQuery::Begin()
     {
         if (renderer_) renderer_->Begin();

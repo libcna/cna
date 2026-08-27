@@ -222,6 +222,14 @@ namespace CNA::Internal::Renderers
         virtual void End()   = 0;
         [[nodiscard]] virtual bool IsComplete() const = 0;
         [[nodiscard]] virtual int  PixelCount() const = 0;
+
+        /// True when PixelCount() is a real tally of the fragments that passed, as XNA's own
+        /// Direct3D 9 query is. False when the backend can only answer "any" or "none" -- which
+        /// is all OpenGL ES 3.0 and WebGL 2 offer, their core query target being the boolean
+        /// GL_ANY_SAMPLES_PASSED. A game that divides PixelCount() by an area to get a coverage
+        /// ratio -- the lensflare idiom -- gets 1/area rather than a fraction there, so it needs
+        /// to be able to ask. Backends that genuinely count leave this alone.
+        [[nodiscard]] virtual bool PixelCountIsPreciseEXT() const noexcept { return true; }
     };
 
     class ITextureRenderer;

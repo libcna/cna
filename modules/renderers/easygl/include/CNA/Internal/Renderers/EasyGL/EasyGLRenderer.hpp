@@ -572,6 +572,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool IsComplete() const override;
         [[nodiscard]] int  PixelCount() const override;
 
+        /// See IOcclusionQueryRenderer::PixelCountIsPreciseEXT. True once a driver has accepted
+        /// GL_SAMPLES_PASSED; false on the OpenGL ES 3.0 / WebGL 2 boolean fallback.
+        [[nodiscard]] bool PixelCountIsPreciseEXT() const noexcept override;
+
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
 
