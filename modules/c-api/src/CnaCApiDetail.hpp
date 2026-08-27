@@ -262,6 +262,9 @@ enum class ObjectKind : uint32_t {
     // CBIND-092C.
     FrustumCuller = 165,
     GpuInstanceCuller = 166,
+
+    // CBIND-092D.
+    DebugDraw = 167,
     Test = UINT32_MAX
 };
 

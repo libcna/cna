@@ -1170,6 +1170,79 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-092D. Debug drawing and the six gizmos. */
+    {
+        CNA_DebugDrawHandle debug = (CNA_DebugDrawHandle)UINT64_C(0x5A5A5A5A);
+        CNA_PointLightEXT point_light;
+        CNA_SpotLightEXT spot_light;
+        CNA_DirectionalLightEXT directional_light;
+        CNA_BoundingFrustum debug_frustum;
+        CNA_BoundingSphere debug_sphere;
+        CNA_BoundingBox debug_box;
+        CNA_Vector3 point;
+        CNA_Matrix matrix;
+        CNA_Color debug_colour;
+        uint64_t debug_count = UINT64_C(17);
+        if (cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        debug_frustum.matrix = matrix;
+        point.x = 0.0F; point.y = 0.0F; point.z = 0.0F;
+        debug_box.min = point; debug_box.max = point;
+        debug_sphere.center = point; debug_sphere.radius = 1.0F;
+        debug_colour.r = UINT8_C(1); debug_colour.g = UINT8_C(2);
+        debug_colour.b = UINT8_C(3); debug_colour.a = UINT8_C(4);
+        /* The light initializers belong to earlier slices and still work here. */
+        /* The three light initializers were bound by earlier slices as value routes outside the
+           #ifdef, so they SUCCEED here -- measured, not assumed; this block first asserted they
+           refused and the layer-absent arm caught it. */
+        if (cna_point_light_ext_init(&point_light) != CNA_RESULT_SUCCESS ||
+            cna_spot_light_ext_init(&spot_light) != CNA_RESULT_SUCCESS ||
+            cna_directional_light_ext_init(&directional_light) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_debug_draw_create(graphics_device, &debug) != CNA_RESULT_NOT_SUPPORTED ||
+            debug != CNA_INVALID_HANDLE ||
+            cna_debug_draw_begin(debug, &matrix, &matrix) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_end(debug) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_clear(debug) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_line(debug, &point, &point, debug_colour) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_box(debug, &debug_box, debug_colour) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_sphere(debug, &point, 1.0F, debug_colour, INT32_C(8)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_bounding_sphere(debug, &debug_sphere, debug_colour, INT32_C(8)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_frustum(debug, debug_frustum, debug_colour) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_cross(debug, &point, 1.0F, debug_colour) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_is_depth_tested(debug, &flag) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_set_depth_tested(debug, CNA_TRUE) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_get_line_count(debug, &samples) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_copy_vertices(debug, CNA_TRUE, 0, UINT64_C(0), &debug_count) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            debug_count != UINT64_C(0) ||
+            cna_debug_draw_destroy(debug) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (cna_debug_draw_add_point_light_gizmo(debug, &point_light, debug_colour) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_spot_light_gizmo(debug, &spot_light, debug_colour, INT32_C(8)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_directional_light_gizmo(
+                debug, &directional_light, &point, 1.0F, debug_colour) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_probe_volume_gizmo(debug, CNA_INVALID_HANDLE, debug_colour, 0.1F) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_cluster_slice_gizmo(debug, CNA_INVALID_HANDLE, &matrix,
+                                                   debug_colour) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_debug_draw_add_cascade_gizmo(debug, CNA_INVALID_HANDLE, debug_colour) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -7737,6 +7810,231 @@ static int validate_culling(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-092D. Debug drawing has no throws at all, so the contracts worth testing are about WHEN
+   state is reset rather than about what is rejected:
+
+     - begin() clears both line lists AND restores depth testing, so a set_depth_tested before
+       begin is lost. A binding that only cleared the lists would pass every other assertion here.
+     - end() is idempotent: ending a frame that is not open succeeds and does nothing.
+     - clear() discards the lines but leaves the depth-test choice alone, unlike begin.
+
+   The six gizmos are the slice that proves the earlier bindings compose: each takes a type an
+   earlier slice bound, and each is asserted to ADD lines rather than merely to succeed. */
+static int validate_debug_draw(const CNA_Handle graphics_device)
+{
+    CNA_DebugDrawHandle debug = CNA_INVALID_HANDLE;
+    CNA_LightProbeVolumeHandle volume = CNA_INVALID_HANDLE;
+    CNA_VertexPositionColor vertices[512];
+    CNA_PointLightEXT point_light;
+    CNA_SpotLightEXT spot_light;
+    CNA_DirectionalLightEXT directional_light;
+    CNA_BoundingFrustum frustum;
+    CNA_BoundingSphere sphere;
+    CNA_BoundingBox box;
+    CNA_Vector3 from;
+    CNA_Vector3 to;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Color colour;
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t count = UINT64_C(0);
+    int32_t lines = INT32_C(-1);
+    int32_t before = INT32_C(-1);
+    int ok = 1;
+
+    colour.r = UINT8_C(255); colour.g = UINT8_C(64); colour.b = UINT8_C(0); colour.a = UINT8_C(255);
+    from.x = 0.0F; from.y = 0.0F; from.z = 0.0F;
+    to.x = 1.0F; to.y = 1.0F; to.z = 1.0F;
+    box.min = from; box.max = to;
+    sphere.center = from; sphere.radius = 2.0F;
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    frustum.matrix = view;
+
+    if (cna_debug_draw_create(graphics_device, &debug) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    ok = cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == INT32_C(0);
+    ok = ok && cna_debug_draw_is_depth_tested(debug, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+
+    /* THE reset contract: choose the overlay list, then open a frame -- the choice is gone. */
+    ok = ok && cna_debug_draw_set_depth_tested(debug, CNA_FALSE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_is_depth_tested(debug, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_debug_draw_begin(debug, &view, &projection) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_is_depth_tested(debug, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_debug_draw_set_depth_tested(debug, UINT8_C(2)) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_debug_draw_begin(debug, 0, &projection) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Every shape adds lines, and the count is lines rather than vertices. */
+    ok = ok && cna_debug_draw_add_line(debug, &from, &to, colour) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == INT32_C(1);
+    ok = ok && cna_debug_draw_copy_vertices(debug, CNA_TRUE, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(2);
+    ok = ok && cna_debug_draw_copy_vertices(debug, CNA_TRUE, vertices, UINT64_C(512), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(2) && vertices[0].color.r == UINT8_C(255) &&
+        vertices[1].position.x == 1.0F;
+    /* The overlay list is a DIFFERENT list: nothing has gone into it yet. */
+    ok = ok && cna_debug_draw_copy_vertices(debug, CNA_FALSE, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(0);
+    ok = ok && cna_debug_draw_copy_vertices(debug, UINT8_C(2), 0, UINT64_C(0), &count) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_debug_draw_add_line(debug, 0, &to, colour) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Switching lists mid-frame: the new lines go to the overlay, the old ones stay put. */
+    ok = ok && cna_debug_draw_set_depth_tested(debug, CNA_FALSE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_line(debug, &from, &to, colour) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_copy_vertices(debug, CNA_TRUE, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(2);
+    ok = ok && cna_debug_draw_copy_vertices(debug, CNA_FALSE, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && count == UINT64_C(2);
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == INT32_C(2);
+
+    /* clear() empties the lines but leaves the depth-test choice, unlike begin(). */
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == INT32_C(0);
+    ok = ok && cna_debug_draw_is_depth_tested(debug, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_debug_draw_set_depth_tested(debug, CNA_TRUE) == CNA_RESULT_SUCCESS;
+
+    /* A box is twelve edges; a sphere's segment count is clamped, not refused, at both ends. */
+    ok = ok && cna_debug_draw_add_box(debug, &box, colour) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == INT32_C(12);
+    ok = ok && cna_debug_draw_add_box(debug, 0, colour) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_sphere(debug, &from, 1.0F, colour, INT32_C(0)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS;
+    before = lines;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_sphere(debug, &from, 1.0F, colour,
+                                          CNA_DEBUG_DRAW_MIN_SEGMENTS) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == before;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_sphere(debug, &from, 1.0F, colour, INT32_C(99999)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS;
+    before = lines;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_sphere(debug, &from, 1.0F, colour,
+                                          CNA_DEBUG_DRAW_MAX_SEGMENTS) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == before;
+    ok = ok && cna_debug_draw_add_sphere(debug, 0, 1.0F, colour, INT32_C(8)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_bounding_sphere(debug, &sphere, colour, INT32_C(8)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_bounding_sphere(debug, 0, colour, INT32_C(8)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_debug_draw_add_frustum(debug, frustum, colour) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_cross(debug, &from, 0.5F, colour) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_cross(debug, 0, 0.5F, colour) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* ---- the six gizmos, each proving an earlier slice's binding composes ---- */
+    ok = ok && cna_point_light_ext_init(&point_light) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_spot_light_ext_init(&spot_light) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_directional_light_ext_init(&directional_light) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_point_light_gizmo(debug, &point_light, colour) ==
+        CNA_RESULT_SUCCESS;
+    /* Each gizmo must actually ADD lines; succeeding while drawing nothing is the failure a
+       result-code-only assertion would miss. */
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines > INT32_C(0);
+    ok = ok && cna_debug_draw_add_point_light_gizmo(debug, 0, colour) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_spot_light_gizmo(debug, &spot_light, colour, INT32_C(12)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines > INT32_C(0);
+    ok = ok && cna_debug_draw_add_spot_light_gizmo(debug, 0, colour, INT32_C(12)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_add_directional_light_gizmo(
+            debug, &directional_light, &from, 5.0F, colour) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines > INT32_C(0);
+    ok = ok && cna_debug_draw_add_directional_light_gizmo(
+            debug, &directional_light, 0, 5.0F, colour) == CNA_RESULT_INVALID_ARGUMENT;
+
+    {
+        CNA_BoundingBox bounds;
+        bounds.min.x = -2.0F; bounds.min.y = -2.0F; bounds.min.z = -2.0F;
+        bounds.max.x = 2.0F;  bounds.max.y = 2.0F;  bounds.max.z = 2.0F;
+        if (ok && cna_light_probe_volume_ext_create(&bounds, INT32_C(2), INT32_C(2), INT32_C(2),
+                                                     &volume) == CNA_RESULT_SUCCESS) {
+            ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_debug_draw_add_probe_volume_gizmo(debug, volume, colour, 0.1F) ==
+                CNA_RESULT_SUCCESS;
+            /* The box is twelve edges and each of eight probes is a three-segment cross, so a
+               gizmo that only drew the box would be caught by this. */
+            ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+                lines == INT32_C(12) + INT32_C(8) * INT32_C(3);
+            ok = ok && cna_debug_draw_add_probe_volume_gizmo(debug, CNA_INVALID_HANDLE, colour,
+                                                              0.1F) == CNA_RESULT_INVALID_HANDLE;
+            ok = ok && cna_light_probe_volume_ext_destroy(volume) == CNA_RESULT_SUCCESS;
+        } else {
+            ok = 0;
+        }
+    }
+    {
+        CNA_ClusteredLightGridHandle grid = CNA_INVALID_HANDLE;
+        CNA_CascadedShadowMapHandle cascades = CNA_INVALID_HANDLE;
+        if (ok && cna_clustered_light_grid_create(graphics_device, INT32_C(4), INT32_C(4),
+                                                   INT32_C(4), &grid) == CNA_RESULT_SUCCESS) {
+            ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+            /* A grid with no projection yet draws NOTHING and succeeds -- a debug overlay that
+               refused would be harder to use than one that stays empty until the grid is ready. */
+            ok = ok && cna_debug_draw_add_cluster_slice_gizmo(debug, grid, &view, colour) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+                lines == INT32_C(0);
+            ok = ok && cna_debug_draw_add_cluster_slice_gizmo(debug, grid, 0, colour) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_debug_draw_add_cluster_slice_gizmo(debug, CNA_INVALID_HANDLE, &view,
+                                                               colour) == CNA_RESULT_INVALID_HANDLE;
+            ok = ok && cna_clustered_light_grid_destroy(grid) == CNA_RESULT_SUCCESS;
+        } else {
+            ok = 0;
+        }
+        if (ok && cna_cascaded_shadow_map_create(graphics_device, CNA_SHADOW_QUALITY_MEDIUM,
+                                                  INT32_C(3), &cascades) == CNA_RESULT_SUCCESS) {
+            ok = ok && cna_debug_draw_clear(debug) == CNA_RESULT_SUCCESS;
+            ok = ok && cna_debug_draw_add_cascade_gizmo(debug, cascades, colour) ==
+                CNA_RESULT_SUCCESS;
+            /* Three cascades, twelve frustum edges each. */
+            ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+                lines == INT32_C(36);
+            ok = ok && cna_debug_draw_add_cascade_gizmo(debug, CNA_INVALID_HANDLE, colour) ==
+                CNA_RESULT_INVALID_HANDLE;
+            ok = ok && cna_cascaded_shadow_map_destroy(cascades) == CNA_RESULT_SUCCESS;
+        } else {
+            ok = 0;
+        }
+    }
+
+    /* end() draws and closes; ending again is a no-op that still succeeds. */
+    ok = ok && cna_debug_draw_end(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_end(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_get_line_count(debug, &lines) == CNA_RESULT_SUCCESS &&
+        lines == INT32_C(0);
+    ok = ok && cna_debug_draw_destroy(debug) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_debug_draw_destroy(debug) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -7890,6 +8188,10 @@ static CNA_Result on_load(
         }
         if (!validate_culling(graphics_device)) {
             state->failed_stage = 39;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_debug_draw(graphics_device)) {
+            state->failed_stage = 40;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

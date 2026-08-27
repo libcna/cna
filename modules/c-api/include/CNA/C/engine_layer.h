@@ -11591,6 +11591,325 @@ CNA_C_API CNA_Result cna_gpu_instance_culler_read_visible_count_ext(
 CNA_C_API CNA_Result cna_gpu_instance_culler_copy_instance_lookup_glsl(
     char* destination, uint64_t capacity, uint64_t* out_bytes);
 
+/** @brief The fewest segments a debug sphere or cone is drawn with. */
+#define CNA_DEBUG_DRAW_MIN_SEGMENTS 4
+
+/** @brief The most segments a debug sphere or cone is drawn with. */
+#define CNA_DEBUG_DRAW_MAX_SEGMENTS 128
+
+/**
+ * @brief Owned handle for the debug line renderer.
+ *
+ * Two line lists, drawn in two passes: the depth-tested one first, then the overlay, **so an
+ * overlay line crossing a depth-tested one wins** -- which is the point of asking for an overlay.
+ * @ref cna_debug_draw_set_depth_tested chooses which list the following lines go into.
+ *
+ * **@ref cna_debug_draw_begin resets that choice to depth-tested and clears both lists.** Setting
+ * it before `begin` is therefore lost; set it after. Nothing here refuses -- there are no throws in
+ * the canonical class at all -- so the contracts worth knowing are about *when* state is reset
+ * rather than about what is rejected.
+ */
+typedef CNA_Handle CNA_DebugDrawHandle;
+
+/**
+ * @brief Creates a debug line renderer.
+ *
+ * @param graphics_device The device to draw with.
+ * @param out_debug Receives the renderer; invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid device or null
+ * output, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_create(
+    CNA_Handle graphics_device, CNA_DebugDrawHandle* out_debug);
+
+/**
+ * @brief Releases a debug line renderer.
+ *
+ * @param debug The renderer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an invalid handle,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_destroy(CNA_DebugDrawHandle debug);
+
+/**
+ * @brief Opens a frame, clearing both line lists and restoring depth testing.
+ *
+ * @param debug The renderer.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_begin(
+    CNA_DebugDrawHandle debug, const CNA_Matrix* view, const CNA_Matrix* projection);
+
+/**
+ * @brief Draws both line lists and closes the frame.
+ *
+ * **Idempotent**: ending a frame that is not open does nothing and succeeds, so a caller does not
+ * have to track whether it opened one. The device's depth-stencil state is restored afterwards.
+ *
+ * @param debug The renderer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_end(CNA_DebugDrawHandle debug);
+
+/**
+ * @brief Discards both line lists without drawing them.
+ *
+ * Leaves the frame open and the depth-test choice alone, unlike @ref cna_debug_draw_begin.
+ *
+ * @param debug The renderer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_clear(CNA_DebugDrawHandle debug);
+
+/**
+ * @brief Adds one line.
+ *
+ * @param debug The renderer.
+ * @param from Where it starts.
+ * @param to Where it ends.
+ * @param colour Its colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_line(
+    CNA_DebugDrawHandle debug,
+    const CNA_Vector3* from,
+    const CNA_Vector3* to,
+    CNA_Color colour);
+
+/**
+ * @brief Adds the twelve edges of a box.
+ *
+ * @param debug The renderer.
+ * @param bounds The box.
+ * @param colour Its colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null box,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_box(
+    CNA_DebugDrawHandle debug, const CNA_BoundingBox* bounds, CNA_Color colour);
+
+/**
+ * @brief Adds three rings approximating a sphere at a centre and radius.
+ *
+ * The segment count is **clamped to @ref CNA_DEBUG_DRAW_MIN_SEGMENTS through
+ * @ref CNA_DEBUG_DRAW_MAX_SEGMENTS**, not refused: a debug shape drawn with too few or absurdly
+ * many segments is still a debug shape, and refusing would turn a cosmetic argument into an error.
+ *
+ * @param debug The renderer.
+ * @param centre The centre.
+ * @param radius The radius.
+ * @param colour Its colour.
+ * @param segments Segments per ring; clamped.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null centre,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_sphere(
+    CNA_DebugDrawHandle debug,
+    const CNA_Vector3* centre,
+    float radius,
+    CNA_Color colour,
+    int32_t segments);
+
+/**
+ * @brief Adds three rings approximating a bounding sphere.
+ *
+ * The same drawing as @ref cna_debug_draw_add_sphere, taking the shape as one value; bound
+ * separately because C has no overloading.
+ *
+ * @param debug The renderer.
+ * @param sphere The sphere.
+ * @param colour Its colour.
+ * @param segments Segments per ring; clamped.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null sphere,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_bounding_sphere(
+    CNA_DebugDrawHandle debug,
+    const CNA_BoundingSphere* sphere,
+    CNA_Color colour,
+    int32_t segments);
+
+/**
+ * @brief Adds the twelve edges of a frustum.
+ *
+ * @param debug The renderer.
+ * @param frustum The frustum.
+ * @param colour Its colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_frustum(
+    CNA_DebugDrawHandle debug, CNA_BoundingFrustum frustum, CNA_Color colour);
+
+/**
+ * @brief Adds three axis-aligned segments crossing at a point.
+ *
+ * @param debug The renderer.
+ * @param position Where they cross.
+ * @param size Half the length of each segment.
+ * @param colour Their colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null position,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_cross(
+    CNA_DebugDrawHandle debug, const CNA_Vector3* position, float size, CNA_Color colour);
+
+/**
+ * @brief Reports which list the following lines go into.
+ *
+ * @param debug The renderer.
+ * @param out_depth_tested Receives `CNA_TRUE` for the depth-tested list.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_is_depth_tested(
+    CNA_DebugDrawHandle debug, CNA_Bool* out_depth_tested);
+
+/**
+ * @brief Chooses which list the following lines go into.
+ *
+ * **Reset to `CNA_TRUE` by @ref cna_debug_draw_begin**, so setting it before opening a frame is
+ * lost. Lines already added stay in the list they were added to.
+ *
+ * @param debug The renderer.
+ * @param depth_tested `CNA_TRUE` for the depth-tested list; a non-canonical byte is refused.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_set_depth_tested(
+    CNA_DebugDrawHandle debug, CNA_Bool depth_tested);
+
+/**
+ * @brief Returns how many lines are queued, across both lists.
+ *
+ * Lines, not vertices: two vertices make one line.
+ *
+ * @param debug The renderer.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_get_line_count(
+    CNA_DebugDrawHandle debug, int32_t* out_count);
+
+/**
+ * @brief Copies one of the two vertex lists out, in submission order.
+ *
+ * @param debug The renderer.
+ * @param depth_tested Which list to copy; a non-canonical byte is refused.
+ * @param destination The array, or null to ask for the count.
+ * @param capacity How many vertices it holds.
+ * @param out_count Receives the number of vertices, which is twice the number of lines in that
+ * list.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed count in
+ * `out_count`, `CNA_RESULT_INVALID_ARGUMENT` for a null count or a non-canonical boolean,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_copy_vertices(
+    CNA_DebugDrawHandle debug,
+    CNA_Bool depth_tested,
+    CNA_VertexPositionColor* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Draws a point light as a sphere at its range.
+ *
+ * @param debug The renderer to add lines to.
+ * @param light The light.
+ * @param colour The colour to draw it in.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed light,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_point_light_gizmo(
+    CNA_DebugDrawHandle debug, const CNA_PointLightEXT* light, CNA_Color colour);
+
+/**
+ * @brief Draws a spot light as a cone.
+ *
+ * @param debug The renderer to add lines to.
+ * @param light The light.
+ * @param colour The colour to draw it in.
+ * @param segments Segments around the cone; clamped like a sphere's.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed light,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_spot_light_gizmo(
+    CNA_DebugDrawHandle debug,
+    const CNA_SpotLightEXT* light,
+    CNA_Color colour,
+    int32_t segments);
+
+/**
+ * @brief Draws a directional light as an arrow through a point.
+ *
+ * A directional light has no position, so the caller supplies the point to draw it through.
+ *
+ * @param debug The renderer to add lines to.
+ * @param light The light.
+ * @param at Where to draw the arrow.
+ * @param length How long to draw it.
+ * @param colour The colour to draw it in.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed argument,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_directional_light_gizmo(
+    CNA_DebugDrawHandle debug,
+    const CNA_DirectionalLightEXT* light,
+    const CNA_Vector3* at,
+    float length,
+    CNA_Color colour);
+
+/**
+ * @brief Draws a probe volume as its box plus a cross at every probe.
+ *
+ * @param debug The renderer to add lines to.
+ * @param volume The volume.
+ * @param colour The colour to draw it in.
+ * @param cross_size Half the length of each probe cross.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a volume that is not one,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_probe_volume_gizmo(
+    CNA_DebugDrawHandle debug,
+    CNA_LightProbeVolumeHandle volume,
+    CNA_Color colour,
+    float cross_size);
+
+/**
+ * @brief Draws a cluster grid's slices as boxes in world space.
+ *
+ * **Draws nothing and succeeds when the grid has no projection yet** -- there is nothing to place
+ * the slices with, and a debug overlay that refused would be harder to use than one that stays
+ * empty until the grid is ready.
+ *
+ * @param debug The renderer to add lines to.
+ * @param grid The grid.
+ * @param inverse_view The inverse of the view the grid was built with.
+ * @param colour The colour to draw it in.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a grid that is not one,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null matrix, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_cluster_slice_gizmo(
+    CNA_DebugDrawHandle debug,
+    CNA_ClusteredLightGridHandle grid,
+    const CNA_Matrix* inverse_view,
+    CNA_Color colour);
+
+/**
+ * @brief Draws each shadow cascade as its frustum.
+ *
+ * @param debug The renderer to add lines to.
+ * @param cascades The cascaded shadow map.
+ * @param colour The colour to draw it in.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a map that is not one,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_debug_draw_add_cascade_gizmo(
+    CNA_DebugDrawHandle debug, CNA_CascadedShadowMapHandle cascades, CNA_Color colour);
+
 #ifdef __cplusplus
 }
 #endif

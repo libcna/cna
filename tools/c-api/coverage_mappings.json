@@ -17259,6 +17259,45 @@
         "CPP-F7AEE0436950",
         "CPP-F8AAB386BC46"
       ]
+    },
+    {
+      "id": "debug-draw",
+      "qualified_name_regex": "^CNA::Graphics::(?:DebugDraw(?:::[A-Za-z0-9_~]+)?|add(?:PointLight|SpotLight|DirectionalLight|ProbeVolume|ClusterSlice|Cascade)Gizmo)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_debug_draw_*` over its own owned handle, with the six free gizmo functions bound as routes on the same handle -- they take a `DebugDraw&` as their first argument, so a method-shaped name is the honest one.\n\n**There are no throws in the canonical class at all**, so the contracts worth knowing are about *when* state is reset rather than about what is rejected. `begin` clears both line lists **and restores depth testing**, so a `set_depth_tested` before it is lost; `clear` discards the lines but leaves that choice alone; `end` is **idempotent**, so a caller need not track whether it opened a frame. The two lists are drawn in two passes, depth-tested first, so an overlay line crossing a depth-tested one wins.\n\nThe segment count of a sphere is **clamped**, not refused: a debug shape drawn with too few or absurdly many segments is still a debug shape, and refusing would turn a cosmetic argument into an error. `add_sphere` and `add_bounding_sphere` are separate names for the two canonical overloads, as is `copy_vertices`' boolean selector for the two lists.\n\n**This is the slice that proves the earlier bindings compose**: each gizmo takes a type an earlier slice bound -- the point light, the spot light, the directional light, the probe volume, the cluster grid, the cascades -- and is reached entirely through their C handles and PODs.",
+      "tests": "`EngineLayerSmoke.c` stage 40 and the layer-absent block. Each gizmo is asserted to **add lines**, not merely to succeed -- succeeding while drawing nothing is exactly what a result-code-only assertion would miss -- and two are asserted to an exact count: a probe volume is twelve box edges plus three per probe, three cascades are twelve frustum edges each. The reset contracts are asserted by choosing the overlay list and watching `begin` undo it, and the segment clamp by comparing an out-of-range count against the bound's own line count. A grid with no projection is asserted to draw **nothing and succeed**. Break-proved three ways.",
+      "status": "implemented",
+      "task": "CBIND-092D",
+      "approved_symbols": [
+        "CPP-1609B4254B51",
+        "CPP-25E6B78D4424",
+        "CPP-41D6F2C57BA0",
+        "CPP-50CA4AC70F8F",
+        "CPP-5FEDD87629F5",
+        "CPP-69E58A8A6A2A",
+        "CPP-6BDFDDE88227",
+        "CPP-75F4A3973873",
+        "CPP-7D57E8A748C6",
+        "CPP-896892F3D9F4",
+        "CPP-89A3B994557A",
+        "CPP-8A98122FC7DE",
+        "CPP-96043F2D8F44",
+        "CPP-A3389BAE7603",
+        "CPP-A5C9FE01E117",
+        "CPP-B00A07537F9F",
+        "CPP-BB9CE5E3843A",
+        "CPP-D42271327731",
+        "CPP-DC79E21F4FAC",
+        "CPP-EB736D025FE0",
+        "CPP-F19319EA3A1C",
+        "CPP-F77CC9E9D5FE",
+        "CPP-F8ADBD28E26B"
+      ]
     }
   ]
 }
