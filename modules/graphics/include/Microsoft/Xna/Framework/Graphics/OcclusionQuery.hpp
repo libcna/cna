@@ -38,11 +38,25 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Gets the number of visible pixels from the last completed query.
          *
-         * On OpenGL ES 3.0 this returns 0 (no visible samples) or 1 (any visible samples).
+         * On OpenGL ES 3.0 and WebGL 2 this returns 0 (no visible samples) or 1 (any visible
+         * samples): their only core occlusion target is the boolean `GL_ANY_SAMPLES_PASSED`.
+         * Ask @ref isPixelCountPreciseEXT before dividing this by an area.
          *
          * @return Visible pixel count from the most recently completed query.
          */
         [[nodiscard]] int getPixelCountProperty() const;
+
+        /**
+         * @brief Gets whether @ref getPixelCountProperty is a real tally rather than a flag.
+         *
+         * True where the backend counts fragments the way XNA's own Direct3D 9 query does. False
+         * where it can only answer "any" or "none" -- OpenGL ES 3.0 and WebGL 2, whose core query
+         * target is boolean. A coverage ratio computed from a boolean count is 1/area, not a
+         * fraction, so a game that needs one has to be able to ask which it is holding.
+         *
+         * @return true when the pixel count is a genuine per-fragment tally.
+         */
+        CNAEXT [[nodiscard]] bool isPixelCountPreciseEXT() const;
 
         /** @brief Begins the occlusion query; all draw calls until End() are counted. */
         void Begin();

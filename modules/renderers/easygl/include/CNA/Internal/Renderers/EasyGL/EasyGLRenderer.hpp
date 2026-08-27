@@ -165,6 +165,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void recreate_gl_resource() override;
         void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override;
 
+
+        /**
+         * @brief The raw SurfaceFormat ordinal this texture was created with.
+         * @return The ordinal; see ITextureRenderer::GetSurfaceFormatEXT for why a sampler needs it.
+         */
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
     private:
         void UploadLevel(int level, int levelWidth, int levelHeight, const void* pixels);
 
@@ -238,7 +244,7 @@ namespace CNA::Internal::Renderers::EasyGL
         /// plans/plan_modern.md MOD-115: the raw SurfaceFormat ordinal this target's colour storage was
         /// actually created with. Equal to what was requested -- an unsupported format is refused at
         /// creation rather than substituted, so this can never disagree with the caller's request.
-        [[nodiscard]] int GetSurfaceFormatEXT() const { return surfaceFormat_; }
+        [[nodiscard]] int GetSurfaceFormatEXT() const noexcept override { return surfaceFormat_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && depthFormat_ != 0;
@@ -566,6 +572,10 @@ namespace CNA::Internal::Renderers::EasyGL
         [[nodiscard]] bool IsComplete() const override;
         [[nodiscard]] int  PixelCount() const override;
 
+        /// See IOcclusionQueryRenderer::PixelCountIsPreciseEXT. True once a driver has accepted
+        /// GL_SAMPLES_PASSED; false on the OpenGL ES 3.0 / WebGL 2 boolean fallback.
+        [[nodiscard]] bool PixelCountIsPreciseEXT() const noexcept override;
+
         void release_gl_handle_only() override;
         void recreate_gl_resource()   override;
 
@@ -620,6 +630,20 @@ namespace CNA::Internal::Renderers::EasyGL
         // flushed in one draw call. A flush also occurs when the texture changes.
         std::vector<Vertex>   pending_vertices_;
         std::vector<uint16_t> pending_indices_;
+        /**
+         * Writes the Direct3D 9 channel expansion for a surface format into the bound program.
+         *
+         * The locations are looked up on @p prog every flush rather than cached: a SpriteBatch
+         * drawn with a custom ShaderEffect runs that effect's OWN program, and a uniform location
+         * belongs to the program it came from -- handing one program's location to another is
+         * GL_INVALID_OPERATION, not a silent no-op. A custom effect samples the texture itself
+         * and has no such uniform, so the lookup simply misses and nothing is written.
+         *
+         * @param prog The program currently in use for this flush.
+         * @param surfaceFormat Raw SurfaceFormat ordinal of the texture about to be sampled.
+         */
+        void ApplyChannelExpansion(::easygl::Program* prog, int surfaceFormat) const;
+
         const ITextureRenderer* current_texture_ = nullptr;
         /// REMED-GFX-147: cached SampledRowOrderIsBottomUp(current_texture_). A batch is one
         /// texture by construction, so the answer is resolved when the source is bound, not once

@@ -547,17 +547,28 @@ namespace Microsoft::Xna::Framework
 
         if (IsFixedTimeStep_)
         {
-            gameTime_.setElapsedGameTimeProperty(TargetElapsedTime_);
             int stepCount = 0;
 
             while (TimeSpanGreaterOrEqual(accumulatedElapsedTime_, TargetElapsedTime_))
             {
-                gameTime_.setTotalGameTimeProperty(gameTime_.getTotalGameTimeProperty() + TargetElapsedTime_);
+                // XNA 4.0's own clock, measured against the real runtime rather than inherited
+                // from FNA: the game's FIRST update runs with a zero ElapsedGameTime, and
+                // TotalGameTime is the time BEFORE the step rather than after it, so it advances
+                // once Update returns. FNA sets ElapsedGameTime = TargetElapsedTime for every
+                // update including the first and advances TotalGameTime before calling Update
+                // (FNA/src/Game.cs:475), which leaves a game two fixed steps ahead of XNA's by
+                // the same update index -- visible in any simulation whose state accumulates.
+                gameTime_.setElapsedGameTimeProperty(
+                    hasUpdatedOnce_ ? TargetElapsedTime_ : System::TimeSpan::Zero);
                 accumulatedElapsedTime_ = accumulatedElapsedTime_ - TargetElapsedTime_;
                 ++stepCount;
 
                 AssertNotDisposed();
                 Update(gameTime_);
+
+                gameTime_.setTotalGameTimeProperty(
+                    gameTime_.getTotalGameTimeProperty() + gameTime_.getElapsedGameTimeProperty());
+                hasUpdatedOnce_ = true;
             }
 
             updateFrameLag_ += std::max(0, stepCount - 1);
@@ -594,12 +605,18 @@ namespace Microsoft::Xna::Framework
             else
             {
                 gameTime_.setElapsedGameTimeProperty(accumulatedElapsedTime_);
-                gameTime_.setTotalGameTimeProperty(gameTime_.getTotalGameTimeProperty() + gameTime_.getElapsedGameTimeProperty());
             }
 
             accumulatedElapsedTime_ = System::TimeSpan::Zero;
             AssertNotDisposed();
             Update(gameTime_);
+
+            // Same rule as the fixed path: TotalGameTime is the time before this step. Measured
+            // on the real XNA runtime with IsFixedTimeStep = false, where update 3 reports
+            // elapsed=0.0211 with total still 0 and update 4 reports total=0.0211.
+            gameTime_.setTotalGameTimeProperty(
+                gameTime_.getTotalGameTimeProperty() + gameTime_.getElapsedGameTimeProperty());
+            hasUpdatedOnce_ = true;
         }
 
         if (suppressDraw_)

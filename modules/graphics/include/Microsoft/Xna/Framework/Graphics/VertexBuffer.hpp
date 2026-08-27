@@ -472,6 +472,45 @@ namespace Microsoft::Xna::Framework::Graphics
                                 int elementCount, SetDataOptions options);
 
         /**
+         * @brief Uploads raw vertex data with an explicit stride and a streaming hint.
+         *
+         * Called by DynamicVertexBuffer's generic `SetData<T>` overload, for the vertex types
+         * that have no dedicated packing path: an application-defined type is uploaded exactly
+         * as it sits in memory, so there is nothing to pack and the stride is the type's own.
+         *
+         * @param data         Source vertex array.
+         * @param startIndex   First element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param stride       Size of one vertex in bytes.
+         * @param options      Streaming hint passed to the renderer.
+         */
+        void SetDataRawWithOptions(const void* data, int startIndex, int elementCount,
+                                   int stride, SetDataOptions options);
+
+        /**
+         * @brief Writes raw vertex data into a window of this buffer, with a streaming hint.
+         *
+         * Called by DynamicVertexBuffer's generic windowed `SetData<T>` overload -- the shape a
+         * particle system uses to push only the newly created particles at the queue's write
+         * position instead of the whole buffer.
+         *
+         * **The hint is accepted for XNA conformance and deliberately not forwarded.** A windowed
+         * write is composed in this buffer's CPU shadow and then uploaded whole, because the
+         * renderer contract replaces whole-buffer contents; passing `NoOverwrite` on to the driver
+         * would promise that nothing the GPU may still be reading is touched, and a whole-buffer
+         * upload cannot keep that promise. The result is correct and merely slower than XNA's.
+         *
+         * @param offsetInBytes Byte offset into **this buffer**, a multiple of @p stride.
+         * @param data          Source vertex array.
+         * @param startIndex    First element to read from @p data.
+         * @param elementCount  Number of vertices to write.
+         * @param stride        Size of one vertex in bytes.
+         * @param options       Streaming hint; see above.
+         */
+        void SetDataRawAtWithOptions(int offsetInBytes, const void* data, int startIndex,
+                                     int elementCount, int stride, SetDataOptions options);
+
+        /**
          * @brief Protected constructor used by DynamicVertexBuffer to pass the dynamic flag.
          *
          * The @p dynamic hint is accepted for XNA API conformance but is currently

@@ -131,6 +131,49 @@ namespace Microsoft::Xna::Framework
         CNAEXT Vector3& operator-=(const Vector3& vector3);
 
         /**
+         * @brief Multiplies this vector by another vector component-wise, in place.
+         *
+         * C# synthesises `*=` from the declared `op_Multiply`, so XNA game code writes
+         * `velocity *= sensitivity` without the type declaring anything; C++ has to spell it out.
+         * Marked CNAEXT because the XNA reference declares no such operator of its own -- the
+         * same treatment Vector2 already gives its pair.
+         *
+         * @param vector3 The vector to multiply by.
+         * @return Reference to this vector after multiplication.
+         */
+        CNAEXT Vector3& operator*=(const Vector3& vector3);
+
+        /**
+         * @brief Multiplies this vector by a scalar, in place.
+         *
+         * The scalar `*=` counterpart of operator*=; see its note for why this is CNAEXT.
+         *
+         * @param scaleFactor The scalar to multiply by.
+         * @return Reference to this vector after multiplication.
+         */
+        CNAEXT Vector3& operator*=(float scaleFactor);
+
+        /**
+         * @brief Divides this vector by another vector component-wise, in place.
+         *
+         * The `/=` counterpart of operator*=; see its note for why this is CNAEXT.
+         *
+         * @param vector3 The vector to divide by.
+         * @return Reference to this vector after division.
+         */
+        CNAEXT Vector3& operator/=(const Vector3& vector3);
+
+        /**
+         * @brief Divides this vector by a scalar, in place.
+         *
+         * The scalar `/=` counterpart of operator*=; see its note for why this is CNAEXT.
+         *
+         * @param divider The scalar to divide by.
+         * @return Reference to this vector after division.
+         */
+        CNAEXT Vector3& operator/=(float divider);
+
+        /**
          * @brief Adds two vectors.
          *
          * @param value1 Source vector.
