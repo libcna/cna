@@ -74,25 +74,50 @@ namespace CNA::Content::Cnb
         std::string logicalName;
     };
 
-    /** @brief The optional `CMET` chunk's contents: debug-only provenance strings. */
+    /**
+     * @brief The `CMET` chunk's contents: the asset's canonical type name and its provenance.
+     *
+     * Whether this chunk is optional depends on the asset type, and for one of the two it is part
+     * of loader identity rather than a label -- see @ref assetTypeName.
+     */
     struct CnbMetadata
     {
-        /** @brief Whether a `CMET` chunk was present at all. */
+        /**
+         * @brief Whether a `CMET` chunk was present at all.
+         *
+         * False is a valid state for a built-in asset type and an invalid one for a custom asset
+         * type; `CnbLoaderRegistry::ResolveForDocument` refuses the latter.
+         */
         bool present = false;
 
         /** @brief Reserved for future use; must be zero in CNB v1. */
         std::uint32_t flags = 0u;
 
         /**
-         * @brief Human-readable name of the asset type, e.g. `"Microsoft.Xna.Framework.Curve"`.
+         * @brief The asset type's canonical name, e.g. `"Microsoft.Xna.Framework.Curve"`.
          *
-         * Diagnostic only. Dispatch is driven by the header's numeric asset type identifier; this
-         * string exists so a custom-type identifier collision can be reported rather than
-         * silently mis-loaded.
+         * **Load-bearing for a custom asset type, diagnostic for a built-in one.** The asymmetry
+         * is deliberate and is the whole of CNB's custom-type collision defence
+         * (`docs/cnb-format.md` §5.1/§7, plans/plan_cnb.md `CNBF-H002`):
+         *
+         * - A **built-in** identifier is assigned by CNA and frozen, so the header's number is
+         *   already a proof of identity. This string is then only ever used to make an error
+         *   message clearer, and a file may omit the chunk entirely.
+         * - A **custom** identifier is `FNV-1a-32(name) | 0x80000000` -- 31 usable bits, so two
+         *   unrelated game types can legitimately collide. A numeric match is therefore only a
+         *   *candidate*. `CnbLoaderRegistry::ResolveForDocument` additionally requires this string
+         *   to be present and to equal exactly the canonical name that identifier was registered
+         *   under, and refuses the file otherwise. `CnbWriter::Build` refuses to produce a
+         *   custom-typed file that lacks it, so such a file cannot be created by CNA at all.
          */
         std::string assetTypeName;
 
-        /** @brief The logical content name the compiler was given, or empty. Diagnostic only. */
+        /**
+         * @brief The logical content name the compiler was given, or empty.
+         *
+         * Provenance only -- nothing reads it to make a decision. Unlike @ref assetTypeName, this
+         * is diagnostic for every asset type.
+         */
         std::string contentName;
     };
 
@@ -243,14 +268,18 @@ namespace CNA::Content::Cnb
         void RequireMandatoryChunksUnderstood(std::span<const CnbChunkId> knownTypes) const;
 
         /**
-         * @brief The file's `CMET` metadata.
+         * @brief The file's `CMET` metadata -- its canonical type name and provenance.
          *
          * Decoded during Parse(), not on first use: a document is fully immutable once it exists,
          * which is what makes it safe to hand the same document to two threads and what lets the
          * loader registry consult the type name from a `const` context without a data race
          * (plans/plan_cnb.md `CNBF-H004`).
          *
-         * @return The metadata; `CnbMetadata::present` is false when the file has no `CMET` chunk.
+         * This is not merely provenance for a custom asset type: `CnbMetadata::assetTypeName` is
+         * checked against the registered canonical name before dispatch. See CnbMetadata.
+         *
+         * @return The metadata; `CnbMetadata::present` is false when the file has no `CMET` chunk,
+         *         which is valid for a built-in asset type and refused for a custom one.
          */
         [[nodiscard]] const CnbMetadata& Metadata() const noexcept;
 

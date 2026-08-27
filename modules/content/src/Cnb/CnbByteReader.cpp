@@ -90,13 +90,11 @@ namespace CNA::Content::Cnb
 
     float CnbByteReader::ReadF32()
     {
-        static_assert(sizeof(float) == 4, "CNB requires a 32-bit IEEE-754 float.");
         return std::bit_cast<float>(ReadU32());
     }
 
     double CnbByteReader::ReadF64()
     {
-        static_assert(sizeof(double) == 8, "CNB requires a 64-bit IEEE-754 double.");
         return std::bit_cast<double>(ReadU64());
     }
 

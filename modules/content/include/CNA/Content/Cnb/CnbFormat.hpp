@@ -2,11 +2,65 @@
 #pragma once
 
 #include <array>
+#include <bit>
 #include <cstdint>
+#include <limits>
 #include <string>
 
 namespace CNA::Content::Cnb
 {
+    // --- The floating-point representation contract (plans/plan_cnb.md `CNBF-H019`) -------------
+    //
+    // `docs/cnb-format.md` §2 defines `f32` and `f64` as IEEE-754 binary32 and binary64. That is a
+    // promise about the BYTES IN THE FILE, so a platform that cannot produce them must fail to
+    // build rather than silently emit a file no other CNA can read. Checked here, once, in the
+    // header every part of the CNB primitive layer includes -- previously it was four scattered
+    // `sizeof` assertions inside individual functions, which is neither the whole contract nor a
+    // single place to read it.
+    //
+    // The three checks are not redundant; each rules out something the others do not:
+    //
+    //  * `is_iec559` + `digits` + `radix` pin the format to IEEE-754 binary32/binary64 rather than
+    //    merely "some four-byte floating type".
+    //  * `sizeof` pins the storage width, which `is_iec559` alone does not.
+    //  * The `bit_cast` of a known constant is the one that catches the case the other two cannot:
+    //    a host whose floating-point and integer object representations disagree in BYTE ORDER.
+    //    `CnbByteWriter::WriteF32` bit-casts to `std::uint32_t` and then emits that integer
+    //    little-endian, so on a mixed-endian host the file would receive the mantissa and exponent
+    //    bytes reversed while every check above still passed. There is no standard trait for
+    //    floating-point endianness; a `constexpr` bit-cast of `1.0f` is the portable way to ask.
+    //
+    // Note what is deliberately NOT asserted, and why:
+    //
+    //  * The host's own endianness. The container is byte-order independent by construction --
+    //    integers are assembled from individual bytes -- so a big-endian host produces
+    //    byte-identical output, and asserting little-endian would contradict §2 rather than
+    //    enforce it.
+    //  * Anything about floating-point ARITHMETIC. `is_iec559` is a weaker guarantee than it
+    //    looks: GCC still reports it as true under `-ffast-math` (measured, not assumed; clang
+    //    reports false). That is not a gap here, because CNB never computes with a serialized
+    //    value -- it only bit-casts one -- and a build flag that relaxes arithmetic does not move
+    //    a byte in the file. If CNB ever gains a computed field, this comment stops being true.
+    static_assert(std::numeric_limits<float>::is_iec559,
+                  "CNB requires an IEEE-754 float; this platform's float is not IEC 559.");
+    static_assert(std::numeric_limits<float>::radix == 2 &&
+                      std::numeric_limits<float>::digits == 24,
+                  "CNB requires IEEE-754 binary32 for f32.");
+    static_assert(sizeof(float) == 4, "CNB requires a 4-byte float for f32.");
+    static_assert(std::bit_cast<std::uint32_t>(1.0f) == 0x3F800000u,
+                  "CNB requires float and integer object representations to agree in byte order; "
+                  "on this platform bit_cast<uint32_t>(1.0f) is not binary32's 0x3F800000.");
+
+    static_assert(std::numeric_limits<double>::is_iec559,
+                  "CNB requires an IEEE-754 double; this platform's double is not IEC 559.");
+    static_assert(std::numeric_limits<double>::radix == 2 &&
+                      std::numeric_limits<double>::digits == 53,
+                  "CNB requires IEEE-754 binary64 for f64.");
+    static_assert(sizeof(double) == 8, "CNB requires an 8-byte double for f64.");
+    static_assert(std::bit_cast<std::uint64_t>(1.0) == 0x3FF0000000000000ull,
+                  "CNB requires double and integer object representations to agree in byte order; "
+                  "on this platform bit_cast<uint64_t>(1.0) is not binary64's 0x3FF0000000000000.");
+
     /**
      * @brief Byte-level constants of the `.cnb` container (plans/plan_cnb.md `CNBF-005`).
      *
@@ -214,7 +268,12 @@ namespace CNA::Content::Cnb
     /** @brief Chunk identifiers the container itself defines, independent of any asset schema. */
     namespace CnbContainerChunk
     {
-        /** @brief `CMET` -- optional debug metadata: asset type name and source content name. */
+        /**
+         * @brief `CMET` -- the asset's canonical type name and its source content name.
+         *
+         * Optional for a built-in asset type, **required for a custom one**, whose canonical name
+         * is checked against the registered one before dispatch. See CnbMetadata.
+         */
         inline constexpr CnbChunkId Metadata = MakeChunkId('C', 'M', 'E', 'T');
 
         /** @brief `XREF` -- optional table of external assets this file refers to by logical name. */

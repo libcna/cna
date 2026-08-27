@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbFormat.hpp"
+
 namespace CNA::Content::Cnb
 {
     /**

@@ -74,6 +74,33 @@ Byte order is fixed rather than negotiable because every target CNA supports —
 wasm32 — is little-endian, and a byte-order flag no build could exercise would be untestable dead
 weight.
 
+### 2.1 What `f32` and `f64` guarantee
+
+The representation contract is enforced **at compile time**, in `CnbFormat.hpp`: a build whose
+`float`/`double` are not IEEE-754 binary32/binary64, or whose floating-point and integer object
+representations disagree in byte order, fails to compile rather than silently emitting a file no
+other CNA could read. The byte-order half is checked with a `constexpr` `std::bit_cast` of a known
+constant, because no standard trait reports floating-point endianness.
+
+**The container stores the bit pattern verbatim.** It does not canonicalise and it does not reject
+any pattern, so `+0.0`, `-0.0`, both infinities and every NaN encoding are representable and
+distinguishable — `-0.0` and `+0.0` produce different bytes. Verified bit-for-bit by
+`CnbHardeningTest.FloatingPointValuesRoundTripBitForBit`, which compares *bits* rather than values
+precisely because `NaN != NaN` and `-0.0 == 0.0` would hide a defect.
+
+One limit is stated rather than promised away. `CnbByteReader::ReadF32`/`ReadF64` return by value,
+so on an ABI that passes floating-point returns through an x87 register stack a **signalling** NaN
+could be quieted between the file and the caller. The bytes in the file are unaffected, and on
+x86-64 a signalling payload was measured to survive intact; a 32-bit x87 target was not measurable
+on the machine this was written on. CNB therefore guarantees the *file* holds exactly the bits
+given to it, and guarantees value-identical round-tripping for every non-signalling pattern —
+it does not promise signalling-NaN preservation on every ABI.
+
+An asset schema may be narrower than the primitive layer, and one is: `AnimationClip` refuses a
+non-finite duration or key time (§10), because `System::TimeSpan` cannot represent one. That is a
+schema rule. Nothing at the primitive level rejects a NaN, and nothing should — deciding what a
+value means is the schema's job.
+
 ---
 
 ## 3. File header
@@ -121,7 +148,7 @@ aligned within an entry.
 | 24 | 8 | `uncompressedSize` (`u64`) | equal to `storedSize` in CNB v1 |
 | 32 | 4 | `checksum` (`u32`) | CRC-32C of the chunk's stored bytes |
 | 36 | 4 | `compression` (`u32`) | 0 = none; see §8 |
-| 40 | 4 | `alignment` (`u32`) | power of two, 1…4096; `offset % alignment == 0` |
+| 40 | 4 | `alignment` (`u32`) | power of two, at most `maxChunkAlignment` (§12, default 4096); `offset % alignment == 0` |
 | 44 | 4 | `reserved` (`u32`) | must be 0 |
 
 Entries **must** be sorted by ascending `offset`. That makes overlap detection one linear pass and
@@ -154,6 +181,12 @@ a hex dump as `4D 44 4C 48` and reads left to right as `MDLH`. Every byte must b
 * An identifier whose **first byte is an uppercase ASCII letter is reserved for CNA**.
 * A game defining its own `.cnb` schema uses an identifier whose first byte is a **lowercase**
   letter.
+
+That split is a **convention, not an enforced invariant**: the reader and the writer check only
+that all four bytes are printable. It is written down so CNA can add a chunk to an existing schema
+without colliding with an identifier a game already shipped — a guarantee that costs nothing to
+honour and cannot be recovered later. Stated explicitly because the printable-byte rule beside it
+*is* enforced, and a reader would otherwise reasonably assume both are.
 
 **A chunk type may appear more than once.** One chunk refers to another by its **ordinal within its
 own type** — "the third `MVTX` chunk" — never by a table-of-contents index. A raw index would shift
@@ -233,7 +266,32 @@ and is refused by name.
 
 ## 7. Asset type identifiers
 
-The header's `assetTypeId` is what selects a loader. There is no type name in the dispatch path.
+The header's `assetTypeId` selects the **candidate** loader. Whether that candidate is accepted
+depends on which range the identifier is in, and the two answers are different:
+
+* For a **built-in** asset type the numeric identifier is sufficient. CNA assigns those identifiers
+  itself and freezes them, so a match is a proof of identity; the file's `CMET` type name is never
+  consulted for dispatch.
+* For a **custom** asset type the numeric identifier is *not* sufficient (§5.1). The file must
+  carry a `CMET` canonical type name, and that name must equal exactly the canonical name the
+  candidate loader was registered under. A missing name, an empty name, or a differing name is a
+  rejection.
+
+Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this order:
+
+```text
+1. Look the header's assetTypeId up in the loader registry.
+   No entry            -> reject: "no .cnb loader for <type>".
+                          (This comes FIRST, so an unregistered CUSTOM identifier is
+                          reported as an unknown type, not as a name mismatch. The
+                          file's CMET name, if any, is quoted in the message to help
+                          identify what it was.)
+2. If the identifier is built-in (< 0x80000000), accept the candidate.
+3. If the identifier is custom (>= 0x80000000):
+   a. no CMET chunk, or an empty assetTypeName -> reject.
+   b. assetTypeName != the registered canonical name -> reject as a collision.
+   c. otherwise accept the candidate.
+```
 
 ```text
 0x00000000              invalid; a file declaring it is rejected
@@ -657,7 +715,8 @@ Given identical inputs, `CnbWriter` produces byte-identical output. It reads no 
 source, no pointer value and no environment; chunks are emitted in the order the schema encoder
 adds them; the table of contents is written in that same order, which is also ascending-offset
 order; alignment gaps are zero-filled; string and material tables intern in first-seen order. The
-optional `CMET` chunk carries only input-derived strings.
+`CMET` chunk carries only input-derived strings (it is optional for a built-in asset type and
+required for a custom one, §5.1; either way its contents come from the compiler's inputs).
 
 This is asserted in-process (`CnbContainerTest.WritingTheSameInputTwiceProducesIdenticalBytes`,
 `CnbModelCodecTest.EncodingIsDeterministic`) and across two separate OS processes

@@ -1,3 +1,14 @@
+> **This is the original architectural proposal, kept for its rationale. It is NOT the format
+> specification.**
+>
+> The authoritative, byte-level description of CNB as implemented is **`docs/cnb-format.md`**;
+> the engineering record is `plans/plan_cnb.md`. The header and `ChunkEntry` sketches further down
+> this document were a starting point and **differ from what was built** — the implemented header
+> is 64 bytes and the table-of-contents entry 48, with different fields and widths, and chunks are
+> addressed by per-type ordinal rather than by numbered identifiers such as `VB00`. Where this
+> document and `docs/cnb-format.md` disagree, `docs/cnb-format.md` is right and this one is
+> history. `plans/plan_cnb.md` §2 records which proposals were adopted, changed or rejected.
+
 Yes — **it is realistic, and in the current CNA I think it is already starting to make sense**. But only if CNB is not “XNB reinvented,” but rather an **official CNA-native compiled content format**.
 
 After looking through `cna-next.zip`, I would even say that CNA’s current architecture is already surprisingly well prepared for a real `.cnb` format.

@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 
+#include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
 
 namespace CNA::Content::Cnb

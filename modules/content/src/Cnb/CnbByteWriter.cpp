@@ -43,13 +43,11 @@ namespace CNA::Content::Cnb
 
     void CnbByteWriter::WriteF32(float value)
     {
-        static_assert(sizeof(float) == 4, "CNB requires a 32-bit IEEE-754 float.");
         WriteU32(std::bit_cast<std::uint32_t>(value));
     }
 
     void CnbByteWriter::WriteF64(double value)
     {
-        static_assert(sizeof(double) == 8, "CNB requires a 64-bit IEEE-754 double.");
         WriteU64(std::bit_cast<std::uint64_t>(value));
     }
 

@@ -10,8 +10,10 @@
 //
 // It reads the document from disk, so a change to either side that is not made to both fails here.
 
+#include <bit>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <sstream>
@@ -20,7 +22,9 @@
 
 #include "CNA/Content/Cnb/CnbAnimationClipCodec.hpp"
 #include "CNA/Content/Cnb/CnbCurveCodec.hpp"
+#include "CNA/Content/Cnb/CnbByteWriter.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
+#include "CNA/Content/Cnb/CnbLoaderRegistry.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
@@ -358,6 +362,79 @@ TEST(CnbSpecConformanceTest, TheDocumentedParentBeforeChildRuleIsTheOneTheCodeEn
     EXPECT_THROW((void)CNA::Content::Cnb::EncodeModelToCnb(model), ContentLoadException);
 }
 
+TEST(CnbSpecConformanceTest, TheDocumentedDispatchOrderIsTheOneTheCodeFollows)
+{
+    // plans/plan_cnb.md CNBF-H018. §7 now spells out the dispatch sequence, including the part that
+    // is easy to get wrong when reading the code: the registry lookup happens BEFORE the
+    // custom-name checks, so an unregistered custom identifier is reported as an unknown type
+    // rather than as a name mismatch. Asserted behaviourally, because a sequence stated only in
+    // prose is a sequence nobody notices changing.
+    const std::string spec = ReadSpec();
+    if (spec.empty()) { GTEST_SKIP() << "docs/cnb-format.md was not found"; }
+
+    ExpectSpecContains(spec, "selects the **candidate** loader");
+    ExpectSpecContains(spec, "the numeric identifier is sufficient");
+    ExpectSpecContains(spec, "the numeric identifier is *not* sufficient");
+    ExpectSpecContains(spec, "reported as an unknown type, not as a name mismatch");
+
+    // Behaviour: an unregistered CUSTOM identifier, whose file DOES carry a canonical name, is
+    // refused for being unknown -- not for a name mismatch, which is what a reordered
+    // implementation would report.
+    const std::uint32_t unknownId =
+        CNA::Content::Cnb::CnbAssetTypeIdFromName("SpecConformance.NeverRegistered");
+    ASSERT_FALSE(CNA::Content::CnbLoaderRegistry::IsRegistered(unknownId));
+
+    CnbWriter writer(unknownId, 1u);
+    writer.SetMetadata("SpecConformance.NeverRegistered", "unused");
+    writer.AddChunk(CNA::Content::Cnb::MakeChunkId('n', 'o', 'p', 'e'), {1},
+                    CnbChunkFlags::Mandatory, 4u);
+    const CnbDocument document = CnbDocument::Parse(writer.Build(), "unknown.cnb");
+
+    try
+    {
+        (void)CNA::Content::CnbLoaderRegistry::ResolveForDocument(document);
+        FAIL() << "expected an unregistered custom type to be refused";
+    }
+    catch (const ContentLoadException& e)
+    {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("no .cnb loader for"), std::string::npos) << message;
+        EXPECT_EQ(message.find("collide"), std::string::npos)
+            << "an unregistered type must not be reported as a collision: " << message;
+    }
+}
+
+TEST(CnbSpecConformanceTest, TheDocumentedFloatContractIsTheOneTheCodeEnforces)
+{
+    // plans/plan_cnb.md CNBF-H019. §2.1 makes three claims that the code must actually honour: the
+    // representation is checked at COMPILE time, the container stores bit patterns verbatim
+    // without canonicalising, and -0.0 is distinguishable from +0.0 in the bytes.
+    const std::string spec = ReadSpec();
+    if (spec.empty()) { GTEST_SKIP() << "docs/cnb-format.md was not found"; }
+
+    ExpectSpecContains(spec, "enforced **at compile time**");
+    ExpectSpecContains(spec, "stores the bit pattern verbatim");
+    ExpectSpecContains(spec, "does not promise signalling-NaN preservation on every ABI");
+
+    // The compile-time half is proven by this translation unit existing: CnbFormat.hpp's
+    // static_asserts would have failed the build otherwise. Restated here so the dependency is
+    // visible to a reader of the test rather than implicit.
+    static_assert(std::numeric_limits<float>::is_iec559 && sizeof(float) == 4);
+    static_assert(std::numeric_limits<double>::is_iec559 && sizeof(double) == 8);
+    static_assert(std::bit_cast<std::uint32_t>(1.0f) == 0x3F800000u);
+    static_assert(std::bit_cast<std::uint64_t>(1.0) == 0x3FF0000000000000ull);
+
+    // The runtime half: no canonicalisation, and the two zeroes really are different bytes.
+    CNA::Content::Cnb::CnbByteWriter positive;
+    positive.WriteF32(0.0f);
+    CNA::Content::Cnb::CnbByteWriter negative;
+    negative.WriteF32(-0.0f);
+    EXPECT_NE(positive.View().size(), 0u);
+    EXPECT_NE(std::vector<std::uint8_t>(positive.View().begin(), positive.View().end()),
+              std::vector<std::uint8_t>(negative.View().begin(), negative.View().end()))
+        << "the specification says -0.0 and +0.0 produce different bytes";
+}
+
 TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)
 {
     const std::string spec = ReadSpec();
@@ -376,4 +453,8 @@ TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)
     ExpectSpecContains(spec, "material variants");
     ExpectSpecContains(spec, "held\n**by value**");
     ExpectSpecContains(spec, "decoded during parsing rather than on first use");
+    // The chunk-identifier case split is a CONVENTION, not an enforced rule; saying so is what
+    // stops a reader assuming the writer will reject a mis-cased identifier (CNBF-H020).
+    ExpectSpecContains(spec, "convention, not an enforced invariant");
+    ExpectSpecContains(spec, "at most `maxChunkAlignment`");
 }
