@@ -681,6 +681,13 @@ SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
     "CNA::Graphics::ClusteredForwardEffect::setAreaLight": "CBIND-091",
     "CNA::Graphics::ClusteredForwardEffect::setLightProbe": "CBIND-091",
     "CNA::Graphics::ClusteredForwardEffect::setLightProbeVolume": "CBIND-091",
+    # CBIND-087C: the two PBR effects implement the shadow-receiver contract, which is bound; their
+    # image-based-light pair takes an ImageBasedLightEXT, a type CBIND-091 owns, so those four rows
+    # wait for that slice rather than for the one that binds the receiver contract on these types.
+    "Microsoft::Xna::Framework::Graphics::PbrEffect::setImageBasedLightEXT": "CBIND-091",
+    "Microsoft::Xna::Framework::Graphics::PbrEffect::getImageBasedLightEXT": "CBIND-091",
+    "Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect::setImageBasedLightEXT": "CBIND-091",
+    "Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect::getImageBasedLightEXT": "CBIND-091",
 }
 
 

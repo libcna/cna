@@ -3208,6 +3208,85 @@ static int validate_pbr_material_value(void)
     return ok;
 }
 
+/* CBIND-087C. The shadow-receiver contract was bound by CBIND-085B1 as operations on the Effect
+   handle, refused by argument when the effect does not implement the interface. Stage 13 proves
+   that against BasicEffect and against a SpriteEffect that must be refused. What it does NOT
+   prove is that the two PBR effects resolve -- and they are a different case worth its own
+   assertions: both are in modules/graphics rather than the engine layer, so they exist in builds
+   where the routes that drive them do not, and their `override` of the interface is what these
+   thirty-two inventory rows are. A route that resolved for BasicEffect and silently refused a
+   PbrEffect would leave every PBR shadow inert with no error a caller could see. */
+static int validate_receiver_on(const CNA_EffectHandle effect)
+{
+    CNA_ShadowCascadeStateEXT cascades;
+    CNA_ShadowCascadeStateEXT read_back;
+    CNA_PunctualLightEXT light;
+    CNA_Matrix matrix;
+    CNA_Handle bound = CNA_INVALID_HANDLE;
+    CNA_Bool flag = UINT8_C(9);
+    float scalar = -1.0F;
+    int32_t radius = -1;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS ||
+        cna_shadow_cascade_state_ext_init(&cascades) != CNA_RESULT_SUCCESS ||
+        cna_punctual_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* Every member of the interface, round-tripped: resolving the object is the whole question,
+       so reading a value back is what distinguishes "the cast succeeded" from "the call was
+       accepted and dropped". */
+    ok = cna_effect_set_shadows_enabled_ext(effect, CNA_TRUE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_is_shadows_enabled_ext(effect, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_effect_set_shadows_enabled_ext(effect, CNA_FALSE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_is_shadows_enabled_ext(effect, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    /* The bool contract is validated before the handle is resolved, the CBIND-067 discipline. */
+    ok = ok && cna_effect_set_shadows_enabled_ext(effect, UINT8_C(2)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_effect_set_shadow_depth_bias_ext(effect, 0.25F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_depth_bias_ext(effect, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.25F;
+    ok = ok && cna_effect_set_shadow_filter_radius_ext(effect, INT32_C(2)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_filter_radius_ext(effect, &radius) == CNA_RESULT_SUCCESS &&
+        radius == INT32_C(2);
+    ok = ok && cna_effect_set_light_view_projection_ext(effect, &matrix) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_light_view_projection_ext(effect, &matrix) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_set_light_view_projection_ext(effect, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_effect_set_shadow_cascades_ext(effect, &cascades) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_cascades_ext(effect, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.count == cascades.count;
+    ok = ok && cna_effect_set_punctual_light_ext(effect, &light) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_punctual_light_ext(effect, &light) == CNA_RESULT_SUCCESS;
+    /* The shadow map is borrowed, never owned, so unbinding it is always accepted. */
+    ok = ok && cna_effect_set_shadow_map_ext(effect, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_map_ext(effect, &bound) == CNA_RESULT_SUCCESS &&
+        bound == CNA_INVALID_HANDLE;
+    return ok;
+}
+
+static int validate_pbr_effect_receiver(const CNA_Handle graphics_device)
+{
+    CNA_EffectHandle pbr = CNA_INVALID_HANDLE;
+    CNA_EffectHandle skinned = CNA_INVALID_HANDLE;
+    int ok = 1;
+
+    /* A renderer that cannot compile these effects is not this slice's subject; where they do not
+       create, there is nothing whose interface could be resolved, and the arm that matters runs
+       where they do. Both are attempted, and each that exists is held to the full contract. */
+    if (cna_pbr_effect_create(graphics_device, &pbr) == CNA_RESULT_SUCCESS) {
+        ok = validate_receiver_on(pbr);
+        ok = ok && cna_effect_destroy(pbr) == CNA_RESULT_SUCCESS;
+    }
+    if (ok && cna_skinned_pbr_effect_create(graphics_device, &skinned) == CNA_RESULT_SUCCESS) {
+        ok = validate_receiver_on(skinned);
+        ok = ok && cna_effect_destroy(skinned) == CNA_RESULT_SUCCESS;
+    }
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -3289,6 +3368,10 @@ static CNA_Result on_load(
         }
         if (!validate_pbr_material_value()) {
             state->failed_stage = 21;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_pbr_effect_receiver(graphics_device)) {
+            state->failed_stage = 22;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {
