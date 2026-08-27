@@ -57,6 +57,7 @@ namespace
             << "Input is chosen by extension:\n"
             << "  .png .jpg .jpeg .bmp .tga .gif .psd .hdr .pic .pnm  -> Texture2D\n"
             << "  .wav                                                -> SoundEffect\n"
+            << "  .dds  (DXT1/DXT3/DXT5 cube map)                     -> TextureCube\n"
             << "  anything else, with --as song|video                 -> Song/Video metadata\n\n"
             << "Options:\n"
             << "  --name <logical>       Logical asset name recorded in CMET.\n"
@@ -66,7 +67,7 @@ namespace
             << "                         asked for: silently rewriting pixels is worse than\n"
             << "                         making the author say so.\n"
             << "  --as <kind>            Force the output kind: texture2d, soundeffect, song,\n"
-            << "                         video.\n"
+            << "                         texturecube, video.\n"
             << "  --stream <name>        Song/Video only, REQUIRED. Logical name of the media\n"
             << "                         file to stream, relative to the content root.\n"
             << "  --duration-ms <n>      Song/Video metadata. Default 0 (\"unknown\").\n"
@@ -173,6 +174,7 @@ int main(int argc, char** argv)
         if (kind.empty())
         {
             if (ext == ".wav") { kind = "soundeffect"; }
+            else if (ext == ".dds") { kind = "texturecube"; }
             else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" ||
                       ext == ".tga" || ext == ".gif" || ext == ".psd" || ext == ".hdr" ||
                       ext == ".pic" || ext == ".pnm" || ext == ".ppm" || ext == ".pgm")
@@ -206,6 +208,14 @@ int main(int argc, char** argv)
             produced = "SoundEffect " + std::to_string(sound.frameCount) + " frames, " +
                         std::to_string(sound.channels) + "ch " +
                         std::to_string(sound.sampleRate) + " Hz Pcm16";
+        }
+        else if (kind == "texturecube")
+        {
+            const auto cube = CNA::Content::Cnb::ImportDdsAsCnbTextureCube(input.string());
+            bytes = CNA::Content::Cnb::EncodeTextureCubeToCnb(cube, name);
+            produced = "TextureCube " + std::to_string(cube.width) + "x" +
+                        std::to_string(cube.width) + " x6 faces, " +
+                        std::to_string(cube.mipCount) + " mip(s), Rgba8";
         }
         else if (kind == "song" || kind == "video")
         {

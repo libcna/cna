@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "CNA/Content/Cnb/CnbArithmetic.hpp"
+#include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 
@@ -108,6 +109,45 @@ namespace CNA::Content::Cnb
         return MakeRgba8Texture2DData(static_cast<std::uint32_t>(image.width),
                                        static_cast<std::uint32_t>(image.height),
                                        std::move(image.pixels));
+    }
+
+    CnbTextureData DecodeDdsAsCnbTextureCube(std::span<const std::uint8_t> ddsBytes,
+                                              const std::string& origin)
+    {
+        // The shared decoder, not a copy of it. Its diagnostics name the caller, so a compiler
+        // error says which file the user pointed at.
+        const CNA::Internal::Graphics::DecodedDdsCube decoded =
+            CNA::Internal::Graphics::DecodeDdsCube(ddsBytes.data(), ddsBytes.size(),
+                                                    "CNB TextureCube import of '" + origin + "'");
+
+        CnbTextureData cube;
+        cube.width = static_cast<std::uint32_t>(decoded.width);
+        cube.height = cube.width;              // a cube face is square; the decoder enforces it
+        cube.depth = 1u;
+        cube.faceCount = CnbTextureCubeFaceCount;
+        cube.mipCount = static_cast<std::uint32_t>(decoded.mipCount);
+
+        CnbTextureRepresentation representation;
+        representation.format = CnbTextureFormat::Rgba8;
+        representation.levels.reserve(static_cast<std::size_t>(6) * decoded.mipCount);
+        // Face-major then mip, which is both the DDS on-disk order and the order
+        // CnbTextureRepresentation::levels documents -- so this is a move, not a reshuffle.
+        for (int face = 0; face < 6; ++face)
+        {
+            for (int level = 0; level < decoded.mipCount; ++level)
+            {
+                representation.levels.push_back(
+                    decoded.faces[static_cast<std::size_t>(face)][static_cast<std::size_t>(level)]);
+            }
+        }
+        cube.representations.push_back(std::move(representation));
+        return cube;
+    }
+
+    CnbTextureData ImportDdsAsCnbTextureCube(const std::string& ddsPath)
+    {
+        const std::vector<std::uint8_t> bytes = ReadWholeFile(ddsPath, "TextureCube import");
+        return DecodeDdsAsCnbTextureCube(bytes, ddsPath);
     }
 
     CnbSoundEffectData DecodeWavAsCnbSoundEffect(std::span<const std::uint8_t> wavBytes,

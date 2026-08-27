@@ -201,6 +201,27 @@ namespace CNA::Content::Cnb
             return EncodeTexture3DToCnb(volume, name);
         }
 
+        std::vector<std::uint8_t> CompileTextureCubeCnj(const std::string& json,
+                                                         const std::string& cnjPath,
+                                                         const std::string& root,
+                                                         const std::string& name,
+                                                         std::vector<std::string>& absorbed)
+        {
+            const JsonValue document = CNA::Internal::ParseJson(json);
+            const JsonValue* sourceFile = document.FindMember("sourceFile");
+            if (sourceFile == nullptr || !sourceFile->IsString())
+            {
+                throw ContentLoadException(
+                    "cnj-to-cnb: TextureCube .cnj '" + cnjPath + "' has no 'sourceFile' naming a "
+                    "DDS cube map.");
+            }
+            const std::string ddsPath =
+                ResolveSidecar(cnjPath, root, sourceFile->stringValue, "sourceFile");
+            const CnbTextureData cube = ImportDdsAsCnbTextureCube(ddsPath);
+            RecordAbsorbed(absorbed, ddsPath);
+            return EncodeTextureCubeToCnb(cube, name);
+        }
+
         std::vector<std::uint8_t> CompileSoundEffectCnj(const std::string& json,
                                                          const std::string& cnjPath,
                                                          const std::string& root,
@@ -386,6 +407,14 @@ namespace CNA::Content::Cnb
             return result;
         }
 
+        if (envelope.type == "TextureCube")
+        {
+            result.bytes = CompileTextureCubeCnj(json, cnjPath, root, name, result.absorbedFiles);
+            result.assetTypeId = CnbAssetTypeId::TextureCube;
+            result.assetTypeName = "Microsoft.Xna.Framework.Graphics.TextureCube";
+            return result;
+        }
+
         if (envelope.type == "Texture3D")
         {
             result.bytes = CompileTexture3DCnj(json, cnjPath, root, name, result.absorbedFiles);
@@ -413,8 +442,7 @@ namespace CNA::Content::Cnb
         throw ContentLoadException(
             "cnj-to-cnb: '" + cnjPath + "' has .cnj type '" + envelope.type +
             "', which the CNB compiler does not support. Supported types are Curve, "
-            "AnimationClip, Model, Texture2D, Texture3D, SpriteFont and SoundEffect. "
-            "TextureCube is not supported because its source is DDS and CNA's only DDS decoder "
-            "needs a GraphicsDevice, which a headless compiler cannot have.");
+            "AnimationClip, Model, Texture2D, Texture3D, TextureCube, SpriteFont and "
+            "SoundEffect.");
     }
 }

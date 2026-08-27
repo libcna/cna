@@ -64,6 +64,40 @@ namespace CNA::Content::Cnb
         const std::string& imagePath, const CnbImageImportOptions& options = {});
 
     /**
+     * @brief Decodes a DDS cube map into a `TextureCube` description
+     *        (plans/plan_cnb.md `CNBF-113`).
+     *
+     * Goes through `CNA::Internal::Graphics::DecodeDdsCube`, which is the **same** decoder
+     * `TextureCube::DDSFromStreamEXT` uses — it was extracted out of that function precisely so a
+     * headless compiler could reach it. There is no second DDS parser, and a compiled cube map
+     * therefore holds the pixels the runtime would have produced from the same file.
+     *
+     * The result is `Rgba8`, not the original DXT blocks. That is not a shortcut: the runtime DDS
+     * path already decompresses to RGBA8 on the CPU because CNA implements no compressed GPU
+     * format end-to-end on any renderer, and texture schema 1's contract is the portable `Rgba8`
+     * baseline. Storing the blocks would produce a file this build could not upload.
+     *
+     * @param ddsPath Filesystem path to the `.dds`.
+     * @return The cube description, ready for EncodeTextureCubeToCnb().
+     * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the file cannot be read.
+     * @throws System::NotSupportedException, System::FormatException from the shared decoder, for
+     *         a malformed, non-cube or unsupported DDS — the same exceptions, with the same
+     *         meanings, the runtime raises.
+     */
+    [[nodiscard]] CnbTextureData ImportDdsAsCnbTextureCube(const std::string& ddsPath);
+
+    /**
+     * @brief Decodes DDS bytes already in memory into a `TextureCube` description.
+     *
+     * @param ddsBytes The complete file contents.
+     * @param origin   Text naming the source in diagnostics, e.g. its path.
+     * @return The cube description.
+     * @throws As ImportDdsAsCnbTextureCube().
+     */
+    [[nodiscard]] CnbTextureData DecodeDdsAsCnbTextureCube(std::span<const std::uint8_t> ddsBytes,
+                                                            const std::string& origin);
+
+    /**
      * @brief Decodes a WAV file's bytes into a `SoundEffect` description.
      *
      * A **pure-data** RIFF/WAVE parser. CNA's runtime WAV path decodes through the mixer engine,

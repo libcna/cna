@@ -562,23 +562,28 @@ TEST(CnbProducerTest, EveryProducerIsDeterministic)
     }
 }
 
-TEST(CnbProducerTest, TheCompilerNamesTheTypesItCannotDoAndWhy)
+TEST(CnbProducerTest, AnUnsupportedTypeIsRefusedWithTheListOfWhatIsSupported)
 {
-    // TextureCube is the one implemented schema with no producer, and the refusal has to say so
-    // rather than reading like the type is unknown.
-    Scratch root("cube");
-    WriteText(root.path() / "c.cnj",
-              R"({"cnjVersion":1,"type":"TextureCube","sourceFile":"c.dds"})");
+    // TextureCube used to be the subject of this test, as the one implemented schema with no
+    // producer. CNBF-113 closed that gap, so the assertion moved to a type that genuinely has no
+    // CNB schema -- Effect, which is waiting on the FX/shader architecture by design.
+    //
+    // A refusal has to name what the compiler CAN do, otherwise the user's next step is guesswork.
+    Scratch root("unsupported");
+    WriteText(root.path() / "fx.cnj",
+              R"({"cnjVersion":1,"type":"Effect","sourceFile":"fx.fx"})");
     try
     {
-        (void)CompileCnjToCnb((root.path() / "c.cnj").string());
-        FAIL() << "TextureCube compilation is not supported and must say so";
+        (void)CompileCnjToCnb((root.path() / "fx.cnj").string());
+        FAIL() << "Effect has no CNB schema and must be refused";
     }
     catch (const ContentLoadException& e)
     {
         const std::string message = e.what();
-        EXPECT_NE(message.find("TextureCube"), std::string::npos) << message;
-        EXPECT_NE(message.find("DDS"), std::string::npos)
-            << "the refusal should explain why, not just refuse: " << message;
+        EXPECT_NE(message.find("Effect"), std::string::npos) << message;
+        EXPECT_NE(message.find("Supported types are"), std::string::npos)
+            << "the refusal must say what IS supported: " << message;
+        EXPECT_NE(message.find("TextureCube"), std::string::npos)
+            << "TextureCube is supported now and must appear in that list: " << message;
     }
 }
