@@ -2,8 +2,8 @@
 
 ## Project Overview
 
-**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on SDL3 and a pluggable graphics backend
-layer. It is a framework/runtime and abstraction layer — not a game — designed to preserve XNA-style APIs
+**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on a CNA-owned platform
+abstraction (SDL3 is the default implementation) and a pluggable graphics renderer layer. It is a framework/runtime and abstraction layer — not a game — designed to preserve XNA-style APIs
 (`Microsoft::Xna::Framework`) while using modern C++23 internals.
 
 ### Source Reference
@@ -42,9 +42,9 @@ When implementing code in the `Microsoft::Xna` namespace:
 - **MUST** preserve original XNA 4.0 class names, method signatures, and behavior.
 - **MUST** use modern C++23 internally while maintaining XNA-style public APIs.
 - If implementing functionality that is **NOT** part of the XNA 4.0 API within the `Microsoft::Xna` namespace,
-  you **MUST** wrap it with the `NOXNA` macro.
+  you **MUST** wrap it with the `CNAEXT` macro.
 
-`NOXNA` is defined in `include/CNA/CNAHelper.hpp` as an empty marker macro used to visually tag non-XNA extensions.
+`CNAEXT` is defined in `modules/core/include/CNA/CNAHelper.hpp` as an empty marker macro used to visually tag non-XNA extensions.
 
 ---
 
@@ -59,7 +59,7 @@ Microsoft::Xna::Framework::Graphics::Texture2D
 Microsoft::Xna::Framework::Graphics::SpriteBatch
 ```
 
-The `CNA` namespace is for project-specific extensions, helpers, internal backends, and non-XNA additions only.
+The `CNA` namespace is for project-specific extensions, helpers, internal renderers, and non-XNA additions only.
 Do not move original XNA API types into the `CNA` namespace.
 
 ---
@@ -196,14 +196,17 @@ C# `internal DebugDisplayString` should **not** become a public C++ API method.
 
 ## File Structure
 
-- Declarations and public documentation: `.hpp` file under `include/`
-- Implementation: `.cpp` file under `src/`
+Module-oriented monorepo: every subsystem owns `modules/<name>/{include,src,tests,examples}`, and each
+module's `include/` root reproduces the public namespace path (so the include spelling is stable API,
+identical across modules). See `CLAUDE.md`'s "File Structure" and `docs/physical-modules.md`.
 
-Directory structure mirrors the namespace:
+- Declarations and public documentation: `.hpp` under the owning module's `include/`
+- Implementation: `.cpp` under the owning module's `src/`
 
 ```text
-include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp
-src/Microsoft/Xna/Framework/Graphics/Texture2D.cpp
+modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture2D.hpp   # still #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+modules/graphics/src/Xna/Texture2D.cpp
+modules/renderers/webgpu/src/WebGPURenderer.cpp
 ```
 
 Avoid putting non-template implementations in headers.
@@ -342,12 +345,12 @@ CHECKLIST.md
 Use it for every file. The minimum requirements are:
 
 - `// SPDX-License-Identifier: MS-PL` at the top of both `.hpp` **and** `.cpp`.
-- `#include "CNA/CNAHelper.hpp"` in `.hpp` if `NOXNA` is used anywhere in that file.
+- `#include "CNA/CNAHelper.hpp"` in `.hpp` if `CNAEXT` is used anywhere in that file.
 - Every method body verified **line-by-line** against the FNA equivalent.
 - Every intentional deviation from FNA logic documented with a `//` comment in the source.
-- Concrete classes that inherit `System::Object` **must** override `GetTypeName()` with `NOXNA`:
+- Concrete classes that inherit `System::Object` **must** override `GetTypeName()` with `CNAEXT`:
   ```cpp
-  NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
+  CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
   ```
   The return value is the fully-qualified .NET name, e.g. `"Microsoft.Xna.Framework.Game"`.
 - Tests: every public method, operator, and constant covered. Out-ref overloads tested separately.
@@ -361,7 +364,8 @@ The table of known acceptable C++ deviations from FNA/XNA (e.g. `GetHashCode()` 
 ## Tests
 
 Every public XNA 4.0 API method, constructor, operator, and constant **must** have at least one unit test.
-Tests live under `tests/` mirroring the namespace path, using Google Test.
+Tests live under the owning module's `modules/<name>/tests/` mirroring the namespace path (shared
+fixtures and cross-module probes stay under top-level `tests/`), using Google Test.
 
 Rules:
 - Every method overload must be covered by at least one test case.
@@ -379,7 +383,9 @@ Rules:
 
 After making changes:
 
-1. Build the affected target (`cmake --build cmake-build-debug --target CNA`).
+1. Build the affected target. There is **no** `CNA` CMake target — build the whole configuration
+   (`cmake --build <build-dir>`) or a specific test/example target by its own name. For WebGPU use the
+   in-repo `cmake-build-webgpu/` (see `docs/webgpu-renderer.md`); default debug is `cmake-build-debug/`.
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
 Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
@@ -405,36 +411,46 @@ individual task. Do not push unless the user explicitly asks to push.
 
 ## Internal (CNA) vs XNA Layer
 
-| Layer                     | Location                                      | Purpose                        |
-|---------------------------|-----------------------------------------------|--------------------------------|
-| XNA public API            | `include/Microsoft/Xna/Framework/…`           | Game-facing, must match XNA    |
-| Backend contracts         | `include/CNA/Internal/Backends/Common/…`      | `IGraphicsBackend` etc.        |
-| Backend implementations   | `src/CNA/Internal/Backends/{SDL,EasyGL,Vulkan}` | Hidden from XNA API           |
-| CNA utilities             | `include/CNA/`, `src/CNA/`                    | NOXNA helpers, logging, etc.   |
+> This is a Phase-3 module-oriented monorepo: every subsystem and renderer family owns
+> `modules/<name>/{include,src,tests,examples}`. Paths below are illustrative of the layering, not the
+> literal directory tree — see `CLAUDE.md` and `docs/physical-modules.md` for the authoritative layout.
 
-Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
-(`SDL_RENDERER` | `EASYGL` | `VULKAN` | `BGFX` | `WEBGPU`). `WEBGPU` is experimental and has a
-functional native 2D baseline, not yet the 3D/effect parity of the established GPU backends.
+| Layer                     | Location                                                        | Purpose                        |
+|---------------------------|-----------------------------------------------------------------|--------------------------------|
+| XNA public API            | `modules/<module>/include/Microsoft/Xna/Framework/…`            | Game-facing, must match XNA    |
+| Renderer contracts        | `modules/graphics/include/CNA/Internal/Renderers/Common/…`      | `IGraphicsRenderer` etc.       |
+| Renderer implementations  | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
+| CNA utilities             | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.  |
+
+Renderer selection is compile-time via the `CNA_GRAPHICS_RENDERER` CMake option (49 public identities
+including `SDL_RENDERER`, `OPENGL33`, `VULKAN`, `BGFX`, `WEBGPU`, `MAGNUM`, `SKIA`, `DIRECTX11/12`,
+`METAL`, `SOFTWARE`, `HEADLESS`, …; see `CLAUDE.md` for the full list). A second opt-in mode compiles
+several renderers into one binary and selects at runtime (`CNA_GRAPHICS_RENDERERS`). `WEBGPU` is
+experimental but well past a 2D baseline — desktop 3D with every stock effect (incl. fog parity across
+BasicEffect/AlphaTest/DualTexture/EnvironmentMap/Skinned), instancing, `RenderTarget2D`/`RenderTargetCube`,
+MSAA, `Texture3D`, MRT, occlusion queries, custom WGSL effects, GPU-native compressed textures, and a
+real browser (Emscripten) path.
 
 ---
 
 ## WebGPU Is Active (Experimental)
 
-The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
-implementation as CNA's fifth graphics backend.
+The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized its
+renderer implementation.
 
-- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
-  limitations current as implementation proceeds.
-- The native backend uses pinned **wgpu-native v29.0.1.1**, selected with
-  `-DCNA_GRAPHICS_BACKEND=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
+- WebGPU tasks live in **`plans/plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-148`). Its top-of-file status
+  summary + "Current limitations" is the source of truth; keep both current as work proceeds.
+- The native renderer uses pinned **wgpu-native v29.0.1.1**, selected with
+  `-DCNA_GRAPHICS_RENDERER=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
   CMake integration may otherwise download the matching official binary package.
-- The current baseline implements native surface/device setup, clear/present, Texture2D, buffer
-  uploads and WGSL SpriteBatch. Do not describe it as Vulkan-level or full XNA 3D parity until the
-  remaining shader, state, effect, render-target, readback and test tasks are actually complete.
-- Preserve the established backends: WebGPU changes should remain backend-local or common only
-  where a common-interface change is genuinely required and verified across existing backends.
+- It is well past the initial 2D slice: desktop 3D + every stock effect (with fog parity), instancing,
+  render targets, MSAA, `Texture3D`, MRT, occlusion queries, custom WGSL effects, GPU-native
+  compressed textures, and an in-browser Emscripten path all work and are tested. The 10 genuinely
+  open items are enumerated in the plan's "Current limitations".
+- Preserve the established renderers: WebGPU changes should remain renderer-local or common only
+  where a common-interface change is genuinely required and verified across existing renderers.
 
-See `docs/webgpu-backend.md` for the current capability boundary.
+See `docs/webgpu-renderer.md` for the current capability boundary.
 
 ---
 
