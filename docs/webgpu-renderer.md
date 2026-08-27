@@ -259,18 +259,20 @@ separate, real gap: `WebGPURenderer::ApplyDepthStencilState()` was entirely unim
 (silently inherited the interface's no-op default), so `GraphicsDevice.DepthStencilState` — the
 real XNA API surface almost every game/effect uses — had zero effect on this renderer; only the
 older `SetDepthTestEnabled()`/`SetDepthWriteEnabled()` convenience methods worked. Now implements
-the depth portion. Stencil ops (`WEBGPU-83`) are now implemented on the **colored3d** route:
-`GetOrCreatePipelineColored3D()` bakes the XNA `DepthStencilState` stencil parameters into
-`WGPUStencilFaceState` (via `ToWGPUStencilOperation` / `FillWGPUStencilState`), captures the
-state per draw in `ColoredDrawCommand`, folds the read/write masks into the pipeline cache key
-(WebGPU keeps the masks as *pipeline* state, unlike Vulkan's dynamic masks), and applies the
-reference dynamically per draw (`wgpuRenderPassEncoderSetStencilReference`). This makes a
-stamp-then-gate stencil sequence (e.g. `Always`/`Replace` then `Equal`/`Keep`) work within one
-render-target bind cycle; the shared `rendertarget_depthstencil_usage` acceptance test asserts it
-on the real GPU (its `stencilInRT`/`stencilPreserves` flags flipped true, discriminating check
-C2). Still open: extending the same bake to the other 3D families (textured3d/lit/skinned/PBR/
-env-map/dual-texture/alpha-test/instanced — they store the state but don't yet bake it) and a
-two-sided-winding differential test (the two-sided front/back mapping is implemented but not yet
+the depth portion. Stencil ops (`WEBGPU-83`) are now implemented across **every 3D family**. Each
+`GetOrCreatePipeline*3D()` bakes the XNA `DepthStencilState` stencil parameters into
+`WGPUStencilFaceState` (via `ToWGPUStencilOperation` / `FillWGPUStencilState`), captures the state
+per draw in its `*DrawCommand` (`CaptureStencilStateEXT`), folds the read/write masks into that
+family's pipeline cache key (WebGPU keeps the masks as *pipeline* state, unlike Vulkan's dynamic
+masks; a disabled stencil folds a constant, so non-stencil draws keep their existing keys), and
+applies the reference dynamically per draw (`wgpuRenderPassEncoderSetStencilReference`). This makes
+a stamp-then-gate stencil sequence (e.g. `Always`/`Replace` then `Equal`/`Keep`) work within one
+render-target bind cycle. Two tests prove it on the real GPU: the shared
+`rendertarget_depthstencil_usage` acceptance test (colored3d route, its `stencilInRT`/
+`stencilPreserves` flags flipped true, discriminating check C2) and the WebGPU-local
+`WebGPU_StencilFamily` test (Textured3D route — stamps then gates and asserts the gate is *rejected*
+outside the stamped region). Still open: only a **two-sided-winding** differential test (both proven
+routes use non-two-sided stencil; the two-sided front/back mapping is implemented but not yet
 pixel-validated).
 
 ## PbrEffect (unskinned metallic-roughness BRDF)

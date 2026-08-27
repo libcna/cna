@@ -2170,6 +2170,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // own WEBGPU-N task).
         struct TexturedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2227,14 +2230,16 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
                                                                                WGPUIndexFormat stripIndexFormat,
                                                                                bool depthTest, bool depthWrite,
                                                                                int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2267,6 +2272,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
         struct LitTexturedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2317,7 +2325,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                            int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         /// Task 1105: real per-vertex-lit sibling to GetOrCreatePipelineLitTextured3D above --
         /// identical Blinn-Phong math (FNA's Lighting.fxh ComputeLights()), moved into the vertex
         /// stage and passed to the fragment shader as litRGB/specularRGB varyings instead of being
@@ -2330,7 +2339,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                                     int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueLitTexturedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2361,6 +2371,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
         struct AlphaTestDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2407,7 +2420,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueAlphaTestDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2434,6 +2448,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // No fog (same deliberate deferral as the other 3D shaders).
         struct DualTextureDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2492,7 +2509,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                           int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueDualTextureDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2528,6 +2546,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // support already exists in the reference GLSL this was ported from, so it is wired in.
         struct EnvMapDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2600,7 +2621,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                       int depthFunc,
                                                    bool blend, const BlendKeyParams& blendParams,
                                                    int cullMode, bool wireframe,
-                                                   float depthBias, float slopeScaleDepthBias);
+                                                   float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueEnvMapDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2630,6 +2652,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // lighting/texture -- this shader family has neither).
         struct InstancedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             std::vector<std::uint8_t> instVbData;
@@ -2676,7 +2701,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                          bool depthTest, bool depthWrite, int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias);
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void IssueInstancedDraw(WGPURenderPassEncoder pass, const InstancedDrawCommand& command,
                               ReplayState& state);
 
@@ -2709,6 +2735,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // shaders; alpha coverage stays in this PBR shader for glTF MASK draws.
         struct PbrDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             /// plans/plan_gltf.md GLTF-465: true for stride 60, the record that carries COLOR_0.
@@ -2770,7 +2799,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                     int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueuePbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
                           PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2815,6 +2845,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // always-pass default).
         struct SkinnedDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             bool indexed = false;
@@ -2866,7 +2899,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                         int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueSkinnedDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -2895,6 +2929,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // colour (SkinnedPbrEffect has no VertexColorEnabled, matching the EasyGL reference).
         struct SkinnedPbrDrawCommand
         {
+            /// WEBGPU-83: stencil state baked into this draw's pipeline + its dynamic reference.
+            StencilKeyParams stencil{};
+            int stencilRef = 0;
             std::vector<std::uint8_t> vertexData;
             std::vector<std::uint8_t> indexData;
             /// plans/plan_gltf.md GLTF-463/GLTF-465: true for stride 80.
@@ -2953,7 +2990,8 @@ namespace CNA::Internal::Renderers::WebGPU
                                                                            int depthFunc,
                                                        bool blend, const BlendKeyParams& blendParams,
                                                        int cullMode, bool wireframe,
-                                                       float depthBias, float slopeScaleDepthBias);
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       const StencilKeyParams& stencil);
         void QueueSkinnedPbrDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);

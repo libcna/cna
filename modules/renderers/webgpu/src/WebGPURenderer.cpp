@@ -3512,12 +3512,14 @@ struct VertexOutput {
                                                                             int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
 
@@ -3584,6 +3586,7 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -3599,12 +3602,14 @@ struct VertexOutput {
                                                                                     int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
 
@@ -3674,6 +3679,7 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -3951,12 +3957,14 @@ struct VertexOutput {
                                                                                 int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
 
@@ -4026,6 +4034,7 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -4040,12 +4049,14 @@ struct VertexOutput {
         bool depthTest, bool depthWrite, int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
 
@@ -4115,6 +4126,7 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -4269,13 +4281,15 @@ struct VertexOutput {
                                                                               int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = (stride == 24) ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -4384,6 +4398,7 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -4571,13 +4586,15 @@ struct VertexOutput {
                                                                                 int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
                                                      depthBias, slopeScaleDepthBias,
-                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     static_cast<std::uint64_t>(stride), colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -4671,6 +4688,7 @@ struct VertexOutput {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -4902,12 +4920,14 @@ struct VertexOutput {
                                                                           int depthFunc,
                                                bool blend, const BlendKeyParams& blendParams,
                                                int cullMode, bool wireframe,
-                                               float depthBias, float slopeScaleDepthBias)
+                                               float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = envMapPipelines_.find(key); it != envMapPipelines_.end())
             return it->second;
 
@@ -4964,6 +4984,7 @@ struct VertexOutput {
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -5007,6 +5028,10 @@ struct VertexOutput {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // EnvironmentMapEffect::Texture/EnvironmentMap are both genuinely optional (unlike every
         // other stride-32+ effect family's dispatch gate) -- null falls back to the 1x1 white
         // texture/cube at render time, matching VulkanRenderer's own default-white fallback.
@@ -5146,11 +5171,15 @@ struct VertexOutput {
                                                               command.depthWrite, command.depthFunc,
                                                               command.blend, command.blendParams,
                                                               command.cullMode, command.wireframe,
-                                                              command.depthBias, command.slopeScaleDepthBias);
+                                                              command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -5310,14 +5339,16 @@ struct VertexOutput {
         WGPUIndexFormat stripIndexFormat,
         bool depthTest, bool depthWrite, int depthFunc,
         bool blend, const BlendKeyParams& blendParams,
-        int cullMode, bool wireframe, float depthBias, float slopeScaleDepthBias)
+        int cullMode, bool wireframe, float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t salt = static_cast<std::uint64_t>(pvStride) * 1000003u +
                                     static_cast<std::uint64_t>(instVbStride);
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, salt, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         if (auto it = instancedPipelines_.find(key); it != instancedPipelines_.end())
             return it->second;
 
@@ -5410,6 +5441,7 @@ struct VertexOutput {
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -5467,11 +5499,15 @@ struct VertexOutput {
                                                                  command.depthWrite, command.depthFunc,
                                                                  command.blend, command.blendParams,
                                                                  command.cullMode, command.wireframe,
-                                                                 command.depthBias, command.slopeScaleDepthBias);
+                                                                 command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
@@ -9055,6 +9091,10 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         command.instanceCount = static_cast<std::uint32_t>(instCountClamped);
 
         // Copies the FULL per-vertex buffer (matches VulkanRenderer::
@@ -9265,7 +9305,7 @@ struct VSOut {
                                                    command.depthWrite, command.depthFunc,
                                                    command.blend, command.blendParams,
                                                    command.cullMode, command.wireframe,
-                                                   command.depthBias, command.slopeScaleDepthBias)
+                                                   command.depthBias, command.slopeScaleDepthBias, command.stencil)
             : GetOrCreatePipelineTextured3D(
                                             command.topology,
                                             RequiredStripIndexFormat(command),
@@ -9273,11 +9313,15 @@ struct VSOut {
                                             command.depthWrite, command.depthFunc,
                                             command.blend, command.blendParams,
                                             command.cullMode, command.wireframe,
-                                            command.depthBias, command.slopeScaleDepthBias);
+                                            command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -9370,7 +9414,7 @@ struct VSOut {
                                                          command.depthWrite, command.depthFunc,
                                                          command.blend, command.blendParams,
                                                          command.cullMode, command.wireframe,
-                                                         command.depthBias, command.slopeScaleDepthBias)
+                                                         command.depthBias, command.slopeScaleDepthBias, command.stencil)
             : GetOrCreatePipelineLitTextured3D(
                                                 command.topology,
                                                 RequiredStripIndexFormat(command),
@@ -9378,11 +9422,15 @@ struct VSOut {
                                                 command.depthWrite, command.depthFunc,
                                                 command.blend, command.blendParams,
                                                 command.cullMode, command.wireframe,
-                                                command.depthBias, command.slopeScaleDepthBias);
+                                                command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -9448,6 +9496,10 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
@@ -9546,11 +9598,15 @@ struct VSOut {
                                                                  command.depthFunc,
                                                                  command.blend, command.blendParams,
                                                                  command.cullMode, command.wireframe,
-                                                                 command.depthBias, command.slopeScaleDepthBias);
+                                                                 command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -9618,6 +9674,10 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
@@ -9735,11 +9795,15 @@ struct VSOut {
                                                                    command.depthWrite, command.depthFunc,
                                                                    command.blend, command.blendParams,
                                                                    command.cullMode, command.wireframe,
-                                                                   command.depthBias, command.slopeScaleDepthBias);
+                                                                   command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -9807,6 +9871,10 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         command.texture0 = ResolveSamplable(params.texture0);
         // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
         // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
@@ -9888,6 +9956,10 @@ struct VSOut {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
@@ -10295,12 +10367,14 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                                                                          int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? pbrColorPipelines_ : pbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -10386,6 +10460,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -10467,6 +10542,10 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // plans/plan_gltf.md GLTF-474/GLTF-465: neutral white when the material carries no base-colour
         // map -- glTF's own default material (3.9.2) has none, and `tex * colour` then collapses
         // to the colour, which is what every other renderer's PBR base-colour bind already does.
@@ -10620,11 +10699,15 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                                                            command.depthWrite, command.depthFunc,
                                                            command.blend, command.blendParams,
                                                            command.cullMode, command.wireframe,
-                                                           command.depthBias, command.slopeScaleDepthBias);
+                                                           command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -11248,13 +11331,15 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                                                                              int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const bool hasVertexColor = (stride == 56);
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = preferVertexLit
             ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
             : (hasVertexColor ? skinnedColorPipelines_ : skinnedPipelines_);
@@ -11352,6 +11437,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -11402,6 +11488,10 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // plans/plan_gltf.md GLTF-474: neutral white when the effect binds no texture -- `tex * colour`
         // then collapses to the colour, which is what an untextured stock-effect draw should be.
         EnsurePbrDefaultTextures();
@@ -11520,11 +11610,15 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
                                                                 command.depthWrite, command.depthFunc,
                                                                 command.blend, command.blendParams,
                                                                 command.cullMode, command.wireframe,
-                                                                command.depthBias, command.slopeScaleDepthBias);
+                                                                command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -11915,12 +12009,14 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                                                                                 int depthFunc,
                                                     bool blend, const BlendKeyParams& blendParams,
                                                     int cullMode, bool wireframe,
-                                                    float depthBias, float slopeScaleDepthBias)
+                                                    float depthBias, float slopeScaleDepthBias,
+                                                    const StencilKeyParams& stencil)
     {
         const std::uint64_t key = Make3DPipelineKey(topology, stripIndexFormat,
                                                      depthTest, depthWrite, depthFunc,
                                                      blend, blendParams, cullMode, wireframe,
-                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_);
+                                                     depthBias, slopeScaleDepthBias, 0, colorWriteMask_, sampleMask_, replayColorAttachmentCount_)
+                                  ^ (HashStencilState(stencil) * 0x9e3779b97f4a7c15ull);
         auto& cache = colored ? skinnedPbrColorPipelines_ : skinnedPbrPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -12009,6 +12105,7 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // interpretation (this renderer's depth attachment is always Depth24PlusStencil8).
         depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
         depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
+        FillWGPUStencilState(depthStencil, stencil);  // WEBGPU-83
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -12061,6 +12158,10 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // queued draw, and SetRenderTarget resets the rectangle to the target's full size
         // on every bind, so the live value at flush time is never this draw's.
         command.scissor = CaptureScissor();
+        // WEBGPU-83: the stencil state + reference, captured per draw (a stamp and a gate
+        // in one frame differ, so it cannot be read as frame-global at replay).
+        command.stencil = CaptureStencilStateEXT();
+        command.stencilRef = referenceStencil_;
         // plans/plan_gltf.md GLTF-474/GLTF-465: neutral white when the material carries no base-colour
         // map -- glTF's own default material (3.9.2) has none, and `tex * colour` then collapses
         // to the colour, which is what every other renderer's PBR base-colour bind already does.
@@ -12225,11 +12326,15 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
                                                                   command.depthWrite, command.depthFunc,
                                                                   command.blend, command.blendParams,
                                                                   command.cullMode, command.wireframe,
-                                                                  command.depthBias, command.slopeScaleDepthBias);
+                                                                  command.depthBias, command.slopeScaleDepthBias, command.stencil);
         // REMED-GFX-116: this draw's OWN captured Viewport, never the live renderer value.
         ApplyDrawViewport(pass, command.viewport);
         // REMED-GFX-146: and this draw's OWN captured scissor state, for the same reason.
         ApplyDrawScissor(pass, command.scissor);
+        // WEBGPU-83: this draw's OWN stencil reference (dynamic; ops/masks are baked into
+        // the pipeline above). A gate and a stamp can carry different references in one pass.
+        if (command.stencil.enable)
+            wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(command.stencilRef));
         wgpuRenderPassEncoderSetPipeline(pass, pipe);
         wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
         wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);

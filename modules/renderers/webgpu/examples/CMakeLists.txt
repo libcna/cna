@@ -105,6 +105,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_CompressedTexture COMMAND cna_test_webgpu_compressed_texture
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-83 (Phase 2): stencil ops bake into a NON-colored3d family's pipeline -- a stamp then
+    # a gate on the Textured3D route, where the gate must be rejected outside the stamped region.
+    cna_webgpu_test(cna_test_webgpu_stencil_family webgpu_stencil_family_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_StencilFamily COMMAND cna_test_webgpu_stencil_family
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 1105 (plans/plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting webgpu_basiceffect_preferperpixellighting_test.cpp)
