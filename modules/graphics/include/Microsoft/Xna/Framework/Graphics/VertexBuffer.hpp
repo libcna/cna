@@ -472,6 +472,22 @@ namespace Microsoft::Xna::Framework::Graphics
                                 int elementCount, SetDataOptions options);
 
         /**
+         * @brief Uploads raw vertex data with an explicit stride and a streaming hint.
+         *
+         * Called by DynamicVertexBuffer's generic `SetData<T>` overload, for the vertex types
+         * that have no dedicated packing path: an application-defined type is uploaded exactly
+         * as it sits in memory, so there is nothing to pack and the stride is the type's own.
+         *
+         * @param data         Source vertex array.
+         * @param startIndex   First element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param stride       Size of one vertex in bytes.
+         * @param options      Streaming hint passed to the renderer.
+         */
+        void SetDataRawWithOptions(const void* data, int startIndex, int elementCount,
+                                   int stride, SetDataOptions options);
+
+        /**
          * @brief Protected constructor used by DynamicVertexBuffer to pass the dynamic flag.
          *
          * The @p dynamic hint is accepted for XNA API conformance but is currently

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <type_traits>
+
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
@@ -115,6 +117,36 @@ namespace Microsoft::Xna::Framework::Graphics
                      SetDataOptions options)
         {
             VertexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
+        }
+
+        /**
+         * @brief Uploads vertices of an application-defined XNA vertex type with streaming semantics.
+         *
+         * This is the C++ equivalent of XNA's generic
+         * `SetData<T>(T[] data, int startIndex, int elementCount, SetDataOptions options)`.
+         * A game supplies its own type here — a per-instance transform stream is the usual case,
+         * where the elements are plain `Matrix` values — so there is no packing step and the
+         * buffer's `VertexDeclaration` must describe exactly `sizeof(TVertex)` bytes.
+         *
+         * The built-in XNA vertex types keep their dedicated overloads above, which pack the C++
+         * object into the compact GPU stream first.
+         *
+         * @tparam TVertex Application-defined, trivially-copyable vertex type.
+         * @param data         Pointer to the source vertex array.
+         * @param startIndex   Index of the first element to read from @p data.
+         * @param elementCount Number of vertices to upload.
+         * @param options      Streaming hint (Discard / NoOverwrite / None).
+         */
+        template<typename TVertex>
+        void SetData(const TVertex* data,
+                     int startIndex,
+                     int elementCount,
+                     SetDataOptions options)
+        {
+            static_assert(std::is_trivially_copyable_v<TVertex>,
+                          "DynamicVertexBuffer::SetData<T> requires a trivially-copyable vertex type");
+            VertexBuffer::SetDataRawWithOptions(
+                data, startIndex, elementCount, static_cast<int>(sizeof(TVertex)), options);
         }
     };
 }

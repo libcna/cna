@@ -776,6 +776,21 @@ namespace Microsoft::Xna::Framework::Graphics
             data, count, uploadStride, SetDataOptions::None, false);
     }
 
+    void VertexBuffer::SetDataRawWithOptions(const void* data, int startIndex, int elementCount,
+                                            int stride, SetDataOptions options)
+    {
+        const std::size_t uploadStride =
+            stride > 0 ? static_cast<std::size_t>(stride) : 0;
+        if (!ValidateSetDataRange(
+                data, startIndex, elementCount, uploadStride, uploadStride, true))
+        {
+            return;
+        }
+        const auto* source = static_cast<const std::uint8_t*>(data) +
+                             static_cast<std::size_t>(startIndex) * uploadStride;
+        UploadValidatedData(source, elementCount, uploadStride, options, true);
+    }
+
     void VertexBuffer::SetDataRawAtEXT(const int offsetInBytes, const void* const data,
                                        const int count, const int stride)
     {
