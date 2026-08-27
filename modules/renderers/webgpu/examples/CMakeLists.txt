@@ -179,6 +179,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_AlphaTestEffect_Fog COMMAND cna_test_webgpu_alphatesteffect_fog
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-147: DualTextureEffect fog on both dual_texture3d WGSL modules (uncolored stride-20 and
+    # vertex-colour stride-24). Fog blends the composed sample0*2 x sample1 x tint result.
+    cna_webgpu_test(cna_test_webgpu_dualtextureeffect_fog webgpu_dualtextureeffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_DualTextureEffect_Fog COMMAND cna_test_webgpu_dualtextureeffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.

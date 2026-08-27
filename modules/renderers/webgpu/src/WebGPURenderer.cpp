@@ -4529,6 +4529,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var tex0Sampler: sampler;
@@ -4543,18 +4545,23 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
+    @location(1) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    // WEBGPU-147: FNA fog keep factor (see colored3d.wgsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     var sample0 = textureSample(tex0, tex0Sampler, input.uv);
     let sample1 = textureSample(tex1, tex1Sampler, input.uv);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
-    return sample0 * sample1 * u.diffuseColor;
+    let base = sample0 * sample1 * u.diffuseColor;
+    // WEBGPU-147: ApplyFog on the composed dual-texture RGB, alpha preserved.
+    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
@@ -4577,6 +4584,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var tex0Sampler: sampler;
@@ -4593,6 +4602,7 @@ struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
     @location(1) tint: vec4f,
+    @location(2) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -4600,13 +4610,17 @@ struct VertexOutput {
     output.uv = input.uv;
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     output.tint = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    // WEBGPU-147: FNA fog keep factor (see colored3d.wgsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     var sample0 = textureSample(tex0, tex0Sampler, input.uv);
     let sample1 = textureSample(tex1, tex1Sampler, input.uv);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
-    return sample0 * sample1 * input.tint;
+    let base = sample0 * sample1 * input.tint;
+    // WEBGPU-147: ApplyFog on the composed dual-texture RGB, alpha preserved.
+    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
