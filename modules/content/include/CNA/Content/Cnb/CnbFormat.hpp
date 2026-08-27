@@ -192,13 +192,13 @@ namespace CNA::Content::Cnb
         /** @brief Not a valid asset type; a file declaring it is rejected. */
         inline constexpr std::uint32_t Invalid = 0x00000000u;
 
-        /** @brief `Microsoft::Xna::Framework::Graphics::Texture2D`. Identifier reserved; no v1 schema. */
+        /** @brief `Microsoft::Xna::Framework::Graphics::Texture2D`. Implemented, schema version 1. */
         inline constexpr std::uint32_t Texture2D = 0x00000001u;
 
-        /** @brief `Microsoft::Xna::Framework::Graphics::Texture3D`. Identifier reserved; no v1 schema. */
+        /** @brief `Microsoft::Xna::Framework::Graphics::Texture3D`. Implemented, schema version 1. */
         inline constexpr std::uint32_t Texture3D = 0x00000002u;
 
-        /** @brief `Microsoft::Xna::Framework::Graphics::TextureCube`. Identifier reserved; no v1 schema. */
+        /** @brief `Microsoft::Xna::Framework::Graphics::TextureCube`. Implemented, schema version 1. */
         inline constexpr std::uint32_t TextureCube = 0x00000003u;
 
         /** @brief `Microsoft::Xna::Framework::Graphics::SpriteFont`. Identifier reserved; no v1 schema. */

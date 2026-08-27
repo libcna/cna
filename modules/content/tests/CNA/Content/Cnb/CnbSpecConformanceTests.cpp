@@ -29,6 +29,8 @@
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnbModelData.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Curve.hpp"
@@ -129,6 +131,9 @@ TEST(CnbSpecConformanceTest, TheDocumentedAssetTypeIdentifiersMatchTheImplementa
 
     ExpectSpecContains(spec, "0x00000001-0x3FFFFFFF   CNA built-in asset types");
     ExpectSpecContains(spec, "0x80000000-0xFFFFFFFF   game-defined custom types");
+    ExpectSpecContains(spec, "| 1 | `Texture2D` | **version 1**");
+    ExpectSpecContains(spec, "| 2 | `Texture3D` | **version 1**");
+    ExpectSpecContains(spec, "| 3 | `TextureCube` | **version 1**");
     ExpectSpecContains(spec, "| 5 | `Model` | **version 1**");
     ExpectSpecContains(spec, "| 6 | `AnimationClip` | **version 1**");
     ExpectSpecContains(spec, "| 7 | `Curve` | **version 1**");
@@ -147,6 +152,11 @@ TEST(CnbSpecConformanceTest, TheDocumentedSchemaStridesMatchTheImplementation)
     EXPECT_EQ(CNA::Content::Cnb::CnbModelMeshStride, 16u);
     EXPECT_EQ(CNA::Content::Cnb::CnbModelPartStride, 56u);
     EXPECT_EQ(CNA::Content::Cnb::CnbModelMaterialStride, 368u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbTextureHeaderStride, 24u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbTextureRepresentationStride, 24u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbTextureCubeFaceCount, 6u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbMaxTextureMipLevels, 16u);
+    EXPECT_EQ(CNA::Content::Cnb::CnbMaxTextureRepresentations, 8u);
     EXPECT_EQ(CNA::Content::Cnb::CnbNoIndex, 0xFFFFFFFFu);
     EXPECT_EQ(CNA::Content::Cnb::CnbTextureSlotCount, 7u);
     EXPECT_EQ(CNA::Content::Cnb::CnbMaxEffectKind, 5u);
@@ -158,6 +168,7 @@ TEST(CnbSpecConformanceTest, TheDocumentedSchemaStridesMatchTheImplementation)
     ExpectSpecContains(spec, "16 bytes each");
     ExpectSpecContains(spec, "56 bytes each");
     ExpectSpecContains(spec, "`count` × 368 bytes");
+    ExpectSpecContains(spec, "`representationCount` × 24-byte descriptors");
 }
 
 TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation)
@@ -173,6 +184,9 @@ TEST(CnbSpecConformanceTest, TheDocumentedChunkIdentifiersMatchTheImplementation
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Header), "ACLH");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Tracks), "ACLT");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbAnimationClipChunk::Keys), "ACLK");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbTextureChunk::Header), "TEXH");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbTextureChunk::Representations), "TEXR");
+    EXPECT_EQ(render(CNA::Content::Cnb::CnbTextureChunk::Payload), "TEXD");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Header), "MDLH");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Strings), "MSTR");
     EXPECT_EQ(render(CNA::Content::Cnb::CnbModelChunk::Bones), "MBON");
@@ -433,6 +447,73 @@ TEST(CnbSpecConformanceTest, TheDocumentedFloatContractIsTheOneTheCodeEnforces)
     EXPECT_NE(std::vector<std::uint8_t>(positive.View().begin(), positive.View().end()),
               std::vector<std::uint8_t>(negative.View().begin(), negative.View().end()))
         << "the specification says -0.0 and +0.0 produce different bytes";
+}
+
+TEST(CnbSpecConformanceTest, TheDocumentedTextureFormatTableMatchesTheImplementation)
+{
+    // plans/plan_cnb.md CNBF-101A-fmt. These numbers are in shipped files the moment a texture is
+    // compiled, and §16.4's whole point is that they cannot be derived from SurfaceFormat. So the
+    // table is checked row by row against the code rather than trusted to stay in step.
+    const std::string spec = ReadSpec();
+    if (spec.empty()) { GTEST_SKIP() << "docs/cnb-format.md was not found"; }
+
+    ExpectSpecContains(spec, "The `format` field is **not** a `SurfaceFormat` value");
+    ExpectSpecContains(spec, "| 1 | `Rgba8` | 4 | `Color` |");
+    ExpectSpecContains(spec, "| 22 | `Bc1` | 8 per 4×4 block | `Dxt1` |");
+    ExpectSpecContains(spec, "| 27 | `Bc7Srgb` | 16 per 4×4 block | `Bc7SrgbEXT` |");
+    ExpectSpecContains(spec, "The rounding is up, to whole blocks");
+    ExpectSpecContains(spec, "face-major, then mip");
+
+    // Every row of the documented table, parsed out of the document and checked against the code.
+    // A row silently deleted from the table fails the count; a row whose numbers were edited on
+    // one side only fails its own assertion.
+    std::size_t rowsChecked = 0;
+    for (std::uint32_t id = 1u; id <= CNA::Content::Cnb::CnbTextureFormatMax; ++id)
+    {
+        const auto format = static_cast<CNA::Content::Cnb::CnbTextureFormat>(id);
+        const std::string row = "| " + std::to_string(id) + " | `" +
+                                CNA::Content::Cnb::CnbTextureFormatToString(format) + "` |";
+        EXPECT_NE(spec.find(row), std::string::npos)
+            << "docs/cnb-format.md §16.4 has no row for identifier " << id;
+        ++rowsChecked;
+    }
+    EXPECT_EQ(rowsChecked, 27u);
+}
+
+TEST(CnbSpecConformanceTest, TheDocumentedTextureShapeRulesAreTheOnesTheCodeEnforces)
+{
+    // §16.1's three shape rules are what separate three asset types that share one chunk layout.
+    // Asserted behaviourally: a rule stated only in prose is a rule that stops being true quietly.
+    const std::string spec = ReadSpec();
+    if (spec.empty()) { GTEST_SKIP() << "docs/cnb-format.md was not found"; }
+
+    ExpectSpecContains(spec, "must be 1** unless the asset is a `Texture3D`");
+    ExpectSpecContains(spec, "a cube face is square");
+    ExpectSpecContains(spec, "descriptors must tile the `TEXD` list exactly");
+
+    CNA::Content::Cnb::CnbTextureData cube;
+    cube.width = 4u; cube.height = 2u; cube.depth = 1u;
+    cube.faceCount = CNA::Content::Cnb::CnbTextureCubeFaceCount; cube.mipCount = 1u;
+    CNA::Content::Cnb::CnbTextureRepresentation representation;
+    representation.format = CNA::Content::Cnb::CnbTextureFormat::Rgba8;
+    for (std::uint32_t face = 0u; face < cube.faceCount; ++face)
+    {
+        representation.levels.push_back(std::vector<std::uint8_t>(4u * 2u * 4u));
+    }
+    cube.representations.push_back(representation);
+    // Non-square: refused, exactly as §16.1 says.
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeTextureCubeToCnb(cube), ContentLoadException);
+
+    CNA::Content::Cnb::CnbTextureData deep;
+    deep.width = 2u; deep.height = 2u; deep.depth = 2u;
+    deep.faceCount = 1u; deep.mipCount = 1u;
+    CNA::Content::Cnb::CnbTextureRepresentation volume;
+    volume.format = CNA::Content::Cnb::CnbTextureFormat::Rgba8;
+    volume.levels.push_back(std::vector<std::uint8_t>(2u * 2u * 2u * 4u));
+    deep.representations.push_back(volume);
+    // Depth > 1 is a Texture3D and nothing else.
+    EXPECT_THROW((void)CNA::Content::Cnb::EncodeTexture2DToCnb(deep), ContentLoadException);
+    EXPECT_NO_THROW((void)CNA::Content::Cnb::EncodeTexture3DToCnb(deep));
 }
 
 TEST(CnbSpecConformanceTest, TheDocumentStatesTheThingsThatMustNotQuietlyChange)

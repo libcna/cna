@@ -302,9 +302,9 @@ Precisely, as implemented by `CnbLoaderRegistry::ResolveForDocument`, in this or
 
 | id | type | v1 schema |
 |---|---|---|
-| 1 | `Texture2D` | reserved, not implemented |
-| 2 | `Texture3D` | reserved, not implemented |
-| 3 | `TextureCube` | reserved, not implemented |
+| 1 | `Texture2D` | **version 1**, §16 |
+| 2 | `Texture3D` | **version 1**, §16 |
+| 3 | `TextureCube` | **version 1**, §16 |
 | 4 | `SpriteFont` | reserved, not implemented |
 | 5 | `Model` | **version 1**, §11 |
 | 6 | `AnimationClip` | **version 1**, §10 |
@@ -790,13 +790,124 @@ chunk occupies no bytes and takes no part in the layout partition.
 Recorded so the boundary is a decision rather than an omission. Each is tracked in
 `plans/plan_cnb.md`.
 
-* `Texture2D` / `Texture3D` / `TextureCube`, `SpriteFont`, `SoundEffect`, `Song`, `Video` and
-  `Effect` schemas. Their identifiers are frozen; their layouts are not designed.
-  For textures the intended shape is one `TEXn` chunk per representation, each declaring a
-  `SurfaceFormat` with RGBA8 as the mandatory portable baseline, so a runtime can pick the best
-  representation its renderer supports. Nothing in the container prevents that; nothing in v1
-  implements it.
+* `SpriteFont`, `SoundEffect`, `Song`, `Video` and `Effect` schemas. Their identifiers are
+  frozen; their layouts are not designed.
+* Block-compressed texture **payloads**. §16 defines the identifiers and the multi-representation
+  structure that carries them, and the reader accepts a file that uses them, but no writer in this
+  build produces one and this build cannot upload one.
 * Chunk compression (§8).
 * Direct glTF / PNG / WAV → `.cnb` importers. The only compiler is `.cnj` → `.cnb`.
 * Memory-mapped, zero-copy chunk access. The `alignment` field exists for it.
 * A package format bundling many assets. That would be a different format.
+
+---
+
+## 16. `Texture2D`, `TextureCube` and `Texture3D`, schema version 1
+
+Three asset types, one chunk layout. They differ only in what the header's `faceCount` and `depth`
+are allowed to be, so repeating the layout three times would be three chances to let it drift. The
+asset type identifier in the file header is what distinguishes them, which is what that field is
+for.
+
+| chunk | count | flags | contents |
+|---|---|---|---|
+| `TEXH` | exactly 1 | Mandatory | dimensions and counts |
+| `TEXR` | exactly 1 | Mandatory | `representationCount` × 24-byte descriptors |
+| `TEXD` | one per level per representation | Mandatory | one mip level's payload bytes |
+
+### 16.1 `TEXH`
+
+| offset | size | field | notes |
+|---|---|---|---|
+| 0 | 4 | `width` | level 0 width in texels; ≥ 1 |
+| 4 | 4 | `height` | level 0 height in texels; ≥ 1 |
+| 8 | 4 | `depth` | level 0 depth in texels; **must be 1** unless the asset is a `Texture3D` |
+| 12 | 4 | `faceCount` | **1** for `Texture2D`/`Texture3D`, **6** for `TextureCube` |
+| 16 | 4 | `mipCount` | 1…16 |
+| 20 | 4 | `representationCount` | 1…8 |
+
+A `TextureCube` additionally requires `width == height`, because a cube face is square.
+
+Mip level *n* has dimensions `max(1, width >> n)` × `max(1, height >> n)` × `max(1, depth >> n)`.
+Each dimension floors at 1 independently, so an 8×4 texture's chain is 8×4, 4×2, 2×1, 1×1 — the
+height reaches 1 two levels before the width does.
+
+### 16.2 `TEXR`, 24 bytes per descriptor
+
+| offset | size | field | notes |
+|---|---|---|---|
+| 0 | 4 | `format` | a `CnbTextureFormat` identifier, §16.4 |
+| 4 | 4 | `firstPayloadOrdinal` | index of this representation's first `TEXD`, in `TEXD` ordinal order |
+| 8 | 4 | `payloadCount` | must equal `faceCount * mipCount` |
+| 12 | 4 | `flags` | reserved; must be zero |
+| 16 | 8 | `totalPayloadBytes` | must equal the sum of this representation's level sizes |
+
+**The descriptors must tile the `TEXD` list exactly**: the first starts at ordinal 0, each
+subsequent one starts where the previous ended, and together they account for every `TEXD` chunk
+in the file. A payload owned by no representation would be data the reader silently ignores, which
+is precisely the property a container should not have, so it is refused.
+
+Within a representation the levels are ordered **face-major, then mip**: face 0 mip 0, face 0
+mip 1, …, then face 1 mip 0. For a cube map the faces are in the fixed order +X, −X, +Y, −Y, +Z,
+−Z, matching `CubeMapFace`.
+
+`TEXD` payloads are 16-byte aligned. Block-compressed formats have 8- and 16-byte units, and a
+future memory-mapped reader wants a payload start at least as aligned as the largest unit.
+
+### 16.3 Why several representations
+
+The same image may appear more than once in one file, in different formats, so a runtime can pick
+whichever encoding its GPU actually supports rather than shipping one asset per platform. The
+writer records them in preference order and a reader takes the first one it can upload.
+
+Schema 1 **writes exactly one representation, always `Rgba8`**. The structure is nevertheless part
+of the frozen layout from the start, because adding it later would be a schema break while adding a
+second *writer* is not. A file that offers `Bc7` first and `Rgba8` second already loads correctly on
+this build, by falling through to the second representation.
+
+### 16.4 `CnbTextureFormat`
+
+The `format` field is **not** a `SurfaceFormat` value. `SurfaceFormat`'s enumerators carry no
+explicit numbers, so inserting one — an ordinary thing to do to an XNA-shaped enum — would renumber
+everything after it and silently change the meaning of every file already written. A file format
+cannot be hostage to the declaration order of a runtime enum, so CNB has its own frozen numbering
+and an explicit mapping that has to be edited deliberately.
+
+| id | name | unit bytes | `SurfaceFormat` |
+|---|---|---|---|
+| 0 | invalid | — | — |
+| 1 | `Rgba8` | 4 | `Color` |
+| 2 | `Bgra8` | 4 | `ColorBgraEXT` |
+| 3 | `Rgba8Srgb` | 4 | `ColorSrgbEXT` |
+| 4 | `Bgr565` | 2 | `Bgr565` |
+| 5 | `Bgra5551` | 2 | `Bgra5551` |
+| 6 | `Bgra4444` | 2 | `Bgra4444` |
+| 7 | `Alpha8` | 1 | `Alpha8` |
+| 8 | `R8` | 1 | `ByteEXT` |
+| 9 | `R16` | 2 | `UShortEXT` |
+| 10 | `Rg16` | 4 | `Rg32` |
+| 11 | `Rgba16` | 8 | `Rgba64` |
+| 12 | `Rg8Snorm` | 2 | `NormalizedByte2` |
+| 13 | `Rgba8Snorm` | 4 | `NormalizedByte4` |
+| 14 | `Rgb10A2` | 4 | `Rgba1010102` |
+| 15 | `R32Float` | 4 | `Single` |
+| 16 | `Rg32Float` | 8 | `Vector2` |
+| 17 | `Rgba32Float` | 16 | `Vector4` |
+| 18 | `R16Float` | 2 | `HalfSingle` |
+| 19 | `Rg16Float` | 4 | `HalfVector2` |
+| 20 | `Rgba16Float` | 8 | `HalfVector4` |
+| 21 | `HdrBlendable` | 8 | `HdrBlendable` |
+| 22 | `Bc1` | 8 per 4×4 block | `Dxt1` |
+| 23 | `Bc2` | 16 per 4×4 block | `Dxt3` |
+| 24 | `Bc3` | 16 per 4×4 block | `Dxt5` |
+| 25 | `Bc3Srgb` | 16 per 4×4 block | `Dxt5SrgbEXT` |
+| 26 | `Bc7` | 16 per 4×4 block | `Bc7EXT` |
+| 27 | `Bc7Srgb` | 16 per 4×4 block | `Bc7SrgbEXT` |
+
+Every identifier CNA's `SurfaceFormat` can name is assigned here, so the numbering never has to be
+extended for a format that already exists. That is separate from what schema 1 encodes.
+
+A `TEXD` payload's length must equal the level's exact size: `unitBytes × width × height × depth`
+for an uncompressed format, and `unitBytes × ceil(width/4) × ceil(height/4) × depth` for a
+block-compressed one. **The rounding is up, to whole blocks** — a 1×1 `Bc7` level is one 16-byte
+block, not a fraction of one, which is what makes the tail of a compressed mip chain correct.

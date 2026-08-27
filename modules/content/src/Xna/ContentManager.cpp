@@ -4,6 +4,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
@@ -5745,6 +5746,126 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb texture loaders (plans/plan_cnb.md CNBF-101A/B/C)
+        //
+        // Same split as the Model loader above: the bytes-to-CnbTextureData half is in
+        // modules/content/src/Cnb/CnbTextureCodec.cpp and needs no GraphicsDevice, and only the
+        // step that creates a real GPU texture lives here.
+        //
+        // The representation SELECTION is what makes this more than a decoder. A texture .cnb may
+        // carry the same image several times over, so the runtime asks for the first encoding it
+        // can actually upload rather than assuming the file holds the one it wants. Schema 1
+        // writes Rgba8 alone, so today the predicate has exactly one true case -- but the
+        // selection is real, and a file carrying Bc7 first and Rgba8 second already loads
+        // correctly on this build by falling through to the second representation.
+        // ---------------------------------------------------------------------------
+
+        /// The formats this build can hand to Texture2D/TextureCube/Texture3D::SetData today.
+        bool CanUploadCnbTextureFormatEXT(CNA::Content::Cnb::CnbTextureFormat format)
+        {
+            return format == CNA::Content::Cnb::CnbTextureFormat::Rgba8;
+        }
+
+        const CNA::Content::Cnb::CnbTextureRepresentation& RequireUploadableRepresentationEXT(
+            const CNA::Content::Cnb::CnbTextureData& data, const std::string& assetName)
+        {
+            const std::size_t index = CNA::Content::Cnb::SelectCnbTextureRepresentation(
+                data, CanUploadCnbTextureFormatEXT);
+            if (index >= data.representations.size())
+            {
+                std::string offered;
+                for (const auto& representation : data.representations)
+                {
+                    if (!offered.empty()) { offered += ", "; }
+                    offered += CNA::Content::Cnb::CnbTextureFormatToString(representation.format);
+                }
+                throw ContentLoadException(
+                    "The .cnb texture '" + assetName + "' offers only " + offered +
+                    ", and this build can upload none of them. CNB texture schema 1 encodes Rgba8; "
+                    "see plans/plan_cnb.md CNBF-101A.");
+            }
+            return data.representations[index];
+        }
+
+        /// Widens one level's R,G,B,A bytes into the Color array SetData takes. Written out rather
+        /// than reinterpret_cast so it does not depend on Color's packed layout.
+        std::vector<Color> ColorsFromRgba8EXT(const std::vector<std::uint8_t>& rgba)
+        {
+            std::vector<Color> colors(rgba.size() / 4u);
+            for (std::size_t i = 0; i < colors.size(); ++i)
+            {
+                colors[i] = Color(rgba[i * 4u], rgba[i * 4u + 1u], rgba[i * 4u + 2u],
+                                  rgba[i * 4u + 3u]);
+            }
+            return colors;
+        }
+
+        Graphics::Texture2D BuildTexture2DFromCnbEXT(const CNA::Content::Cnb::CnbTextureData& data,
+                                                      ContentManager& cm,
+                                                      const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data, assetName);
+            Graphics::Texture2D texture(cm.getGraphicsDeviceInternal(),
+                                        static_cast<int>(data.width),
+                                        static_cast<int>(data.height), data.mipCount > 1u,
+                                        Graphics::SurfaceFormat::Color);
+            for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+            {
+                const std::vector<Color> colors = ColorsFromRgba8EXT(representation.levels[mip]);
+                texture.SetData(static_cast<int>(mip), nullptr, colors.data(), 0,
+                                static_cast<int>(colors.size()));
+            }
+            return texture;
+        }
+
+        Graphics::TextureCube BuildTextureCubeFromCnbEXT(
+            const CNA::Content::Cnb::CnbTextureData& data, ContentManager& cm,
+            const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data, assetName);
+            Graphics::TextureCube texture(cm.getGraphicsDeviceInternal(),
+                                          static_cast<int>(data.width), data.mipCount > 1u,
+                                          Graphics::SurfaceFormat::Color);
+            for (std::uint32_t face = 0u; face < data.faceCount; ++face)
+            {
+                for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+                {
+                    const std::size_t index =
+                        static_cast<std::size_t>(face) * data.mipCount + mip;
+                    const std::vector<Color> colors =
+                        ColorsFromRgba8EXT(representation.levels[index]);
+                    texture.SetData(static_cast<Graphics::CubeMapFace>(face),
+                                    static_cast<int>(mip), nullptr, colors.data(), 0,
+                                    static_cast<int>(colors.size()));
+                }
+            }
+            return texture;
+        }
+
+        std::shared_ptr<Graphics::Texture3D> BuildTexture3DFromCnbEXT(
+            const CNA::Content::Cnb::CnbTextureData& data, ContentManager& cm,
+            const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data, assetName);
+            auto texture = std::make_shared<Graphics::Texture3D>(
+                cm.getGraphicsDeviceInternal(), static_cast<int>(data.width),
+                static_cast<int>(data.height), static_cast<int>(data.depth), data.mipCount > 1u,
+                Graphics::SurfaceFormat::Color);
+            for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+            {
+                std::uint32_t w = 0u;
+                std::uint32_t h = 0u;
+                std::uint32_t d = 0u;
+                CNA::Content::Cnb::CnbTextureLevelDimensions(data, mip, w, h, d);
+                const std::vector<Color> colors = ColorsFromRgba8EXT(representation.levels[mip]);
+                texture->SetData(static_cast<int>(mip), 0, 0, static_cast<int>(w),
+                                 static_cast<int>(h), 0, static_cast<int>(d), colors.data(), 0,
+                                 static_cast<int>(colors.size()));
+            }
+            return texture;
+        }
+
     } // anonymous namespace
 
     // ---------------------------------------------------------------------------
@@ -5777,6 +5898,41 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return std::any(BuildModelFromCnbEXT(
                     CNA::Content::Cnb::DecodeModelFromCnb(document), contentManager, assetName));
+            });
+
+        // plans/plan_cnb.md CNBF-101A/B/C. Registered here rather than in RegisterBuiltIns() for
+        // the same reason Model is: creating a texture needs a GraphicsDevice, and the boxed type
+        // must be exactly what Load<T> asks for -- which for Texture3D is a shared_ptr, because
+        // Texture3D is non-copyable and the .xnb reader registers it the same way.
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Texture2D,
+            "Microsoft.Xna.Framework.Graphics.Texture2D",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildTexture2DFromCnbEXT(
+                    CNA::Content::Cnb::DecodeTexture2DFromCnb(document), contentManager,
+                    assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::TextureCube,
+            "Microsoft.Xna.Framework.Graphics.TextureCube",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildTextureCubeFromCnbEXT(
+                    CNA::Content::Cnb::DecodeTextureCubeFromCnb(document), contentManager,
+                    assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Texture3D,
+            "Microsoft.Xna.Framework.Graphics.Texture3D",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildTexture3DFromCnbEXT(
+                    CNA::Content::Cnb::DecodeTexture3DFromCnb(document), contentManager,
+                    assetName));
             });
     }
 

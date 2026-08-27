@@ -154,3 +154,23 @@ model = build(5, 1, [('CMET', 0, 4, cmet3), ('XREF', MANDATORY, 4, xref),
                      ('MMSH', MANDATORY, 4, mmsh), ('MMAT', MANDATORY, 4, mmat),
                      ('MVTX', MANDATORY, 16, mvtx), ('MIDX', MANDATORY, 16, midx)])
 emit('kGoldenModel', model, 'Model schema 1: one boneless BasicEffect part, one external texture.')
+
+# --- TextureCube: 2x2 faces, one mip, one Rgba8 representation --------------------------------
+# A cube rather than a flat 2D texture on purpose. It is the shape that exercises everything the
+# other two texture types do NOT: six payload chunks whose ORDER is load-bearing (face-major),
+# the descriptor's firstPayloadOrdinal/payloadCount tiling rule, and the 16-byte payload
+# alignment showing up six times rather than once. A Texture2D vector would pin a strictly
+# smaller set of rules.
+cmet4 = u32(0) + cstr('Microsoft.Xna.Framework.Graphics.TextureCube') + cstr('golden/cube')
+# TEXH: width 2, height 2, depth 1, faceCount 6, mipCount 1, representationCount 1
+texh = u32(2) + u32(2) + u32(1) + u32(6) + u32(1) + u32(1)
+# TEXR: format Rgba8(1), firstPayloadOrdinal 0, payloadCount 6, flags 0, totalPayloadBytes 6*16
+texr = u32(1) + u32(0) + u32(6) + u32(0) + u64(6 * 16)
+# Six 2x2 Rgba8 faces, each filled with its own face index so a reordering is visible in the
+# bytes themselves rather than only in a decoder's output.
+face_payloads = [bytes([f * 40 + 1] * 16) for f in range(6)]
+cube_chunks = [('CMET', 0, 4, cmet4), ('TEXH', MANDATORY, 4, texh), ('TEXR', MANDATORY, 4, texr)]
+cube_chunks += [('TEXD', MANDATORY, 16, p) for p in face_payloads]
+texturecube = build(3, 1, cube_chunks)
+emit('kGoldenTextureCube', texturecube,
+     'TextureCube schema 1: 2x2 faces, one mip, one Rgba8 representation, six face payloads.')
