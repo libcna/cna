@@ -21,10 +21,18 @@ namespace CNA::Internal::Graphics
      */
     struct DecodedDdsCube
     {
-        /** @brief Width of face level 0, in texels. Equal to the height: cube faces are square. */
+        /**
+         * @brief Width of face level 0, in texels. Equal to the height: cube faces are square.
+         *
+         * At most 16384, so that a level's RGBA length (`width * height * 4`) is representable.
+         */
         int width = 0;
 
-        /** @brief Number of mip levels present for every face; at least 1. */
+        /**
+         * @brief Number of mip levels present for every face; at least 1.
+         *
+         * Never more than the chain @ref width physically allows, so at most 15.
+         */
         int mipCount = 0;
 
         /** @brief `faces[face][mip]` holds that level's RGBA8 bytes, `w * h * 4` of them. */
@@ -45,15 +53,25 @@ namespace CNA::Internal::Graphics
      * cube maps with square faces, and nothing else. DX10 headers, uncompressed and HDR DDS
      * variants are refused exactly as before.
      *
+     * **Every header number is bounded before it is used** (plans/plan_cnb.md `CNBF-116`). The
+     * dimension ceiling is 16384 texels, which is what `DecodedDdsCube::width` and the RGBA output
+     * length can represent rather than a preference; the mip count may not exceed the chain the
+     * face's own size allows; and a cube map must declare all six `DDSCAPS2_CUBEMAP_*` face bits,
+     * because six faces are read whether or not they were declared. Each of those is a refusal,
+     * not a repair: a clamped header would produce a plausible wrong image.
+     *
      * @param data             The complete DDS file bytes.
      * @param size             Length of @p data.
      * @param diagnosticPrefix Text placed at the front of every message, so a caller's
      *                         diagnostics name the caller. Pass the API the user actually called.
      * @return The decoded cube.
      * @throws System::NotSupportedException if the bytes are not a DDS image, the header is
-     *         malformed, or the pixel format is outside the supported scope.
-     * @throws System::FormatException if the image is not a cube map, its faces are not square, or
-     *         the file is truncated part-way through a face or mip level.
+     *         malformed, the pixel format is outside the supported scope, or `caps2` carries a bit
+     *         outside the cube-map set.
+     * @throws System::FormatException if the image is not a cube map, does not declare all six
+     *         faces, its faces are not square, a dimension is zero or above what the decoded
+     *         result can represent, the mip count exceeds the face's physical chain, or the file
+     *         is truncated part-way through a face or mip level.
      */
     [[nodiscard]] DecodedDdsCube DecodeDdsCube(const std::uint8_t* data, std::size_t size,
                                                 const std::string& diagnosticPrefix);

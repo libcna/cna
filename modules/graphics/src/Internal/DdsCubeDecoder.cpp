@@ -3,6 +3,7 @@
 #include "CNA/Internal/Graphics/DdsCubeDecoder.hpp"
 
 #include <algorithm>
+#include <string>
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 #include "System/FormatException.hpp"
@@ -27,6 +28,24 @@ namespace CNA::Internal::Graphics
         constexpr std::uint32_t kFourCcDxt1      = 0x31545844;
         constexpr std::uint32_t kFourCcDxt3      = 0x33545844;
         constexpr std::uint32_t kFourCcDxt5      = 0x35545844;
+        // DDSCAPS2_CUBEMAP_POSITIVEX .. _NEGATIVEZ, contiguous from bit 10. This decoder reads six
+        // faces unconditionally, so a file that declares only some of them is describing a
+        // different image than the one that will be read out of it (plans/plan_cnb.md CNBF-116).
+        constexpr std::uint32_t kDdscaps2CubemapAllFaces = 0xFC00;
+        // Every caps2 bit this decoder can account for. Anything else -- DDSCAPS2_VOLUME above
+        // all -- changes what the payload after the header means.
+        constexpr std::uint32_t kDdscaps2Known = kDdscaps2Cubemap | kDdscaps2CubemapAllFaces;
+
+        /// Largest face dimension this decoder will accept, in texels.
+        ///
+        /// Not an arbitrary round number. `DecodedDdsCube::width` is an `int` and `DxtUtil`
+        /// computes a level's RGBA output length as `width * height * 4` in `int`, so the
+        /// representable ceiling for a square face is `sqrt(INT32_MAX / 4)` = 23170. 16384 is the
+        /// largest power of two under that, and is also the maximum 2D texture dimension every
+        /// GPU API CNA targets exposes -- so nothing real is refused, and every product below
+        /// provably fits. It also bounds the mip chain at 15 levels, which is inside CNB's own
+        /// `CnbMaxTextureMipLevels` of 16, so a decoded cube always has an expressible mip count.
+        constexpr std::uint32_t kMaxFaceDimension = 16384u;
 
         std::uint32_t ReadU32LE(const std::uint8_t* p)
         {
@@ -40,12 +59,29 @@ namespace CNA::Internal::Graphics
         // Texture.CalculateDDSLevelSize (Dxt1/3/5-only subset; CNA doesn't support the
         // uncompressed/HDR DDS variants FNA also handles, matching Texture2D::FromStream's own
         // established DXT1/3/5-only scope for this exact class of problem).
-        int CalculateDDSLevelSize(int width, int height, std::uint32_t fourCC)
+        //
+        // Computed in std::uint64_t rather than int (plans/plan_cnb.md CNBF-116). The block-count
+        // rounding `(w + 3) / 4` overflows a signed int for a width near INT32_MAX -- which is
+        // undefined behaviour, not a large answer -- and the product with the block size overflows
+        // long before that, producing a SMALL value that then passes the "is this many bytes still
+        // in the file?" check. Widening removes the whole class; the dimension ceiling above
+        // guarantees the result also fits a std::size_t.
+        std::uint64_t CalculateDDSLevelSize(std::uint64_t width, std::uint64_t height,
+                                            std::uint32_t fourCC)
         {
-            const int blockSize = (fourCC == kFourCcDxt1) ? 8 : 16;
-            width  = std::max(width, 1);
-            height = std::max(height, 1);
-            return ((width + 3) / 4) * ((height + 3) / 4) * blockSize;
+            const std::uint64_t blockSize = (fourCC == kFourCcDxt1) ? 8u : 16u;
+            width  = std::max<std::uint64_t>(width, 1u);
+            height = std::max<std::uint64_t>(height, 1u);
+            return ((width + 3u) / 4u) * ((height + 3u) / 4u) * blockSize;
+        }
+
+        /// Number of mip levels a square face of @p width texels can physically have: each level
+        /// halves and the chain ends at 1x1, so a 256-texel face has exactly nine.
+        std::uint32_t PhysicalMipChainLength(std::uint32_t width)
+        {
+            std::uint32_t levels = 1u;
+            while (width > 1u) { width /= 2u; ++levels; }
+            return levels;
         }
     }
 
@@ -69,9 +105,13 @@ namespace CNA::Internal::Graphics
             throw System::NotSupportedException(where + "invalid DDS flags");
         }
 
-        const int height = static_cast<int>(ReadU32LE(data + 12));
-        const int width  = static_cast<int>(ReadU32LE(data + 16));
-        int levels        = static_cast<int>(ReadU32LE(data + 28));
+        // Read as the unsigned fields the format defines, and narrowed only after every bound
+        // below has been applied (plans/plan_cnb.md CNBF-116). Casting straight to int made
+        // 0xFFFFFFFF read as -1 and 0x7FFFFFFF read as two billion, and the arithmetic that
+        // followed was signed.
+        const std::uint32_t height = ReadU32LE(data + 12);
+        const std::uint32_t width  = ReadU32LE(data + 16);
+        std::uint32_t levels       = ReadU32LE(data + 28);
 
         const std::uint32_t formatSize = ReadU32LE(data + 76);
         if (formatSize != kDdsPixfmtSize)
@@ -96,6 +136,21 @@ namespace CNA::Internal::Graphics
         {
             throw System::FormatException("This file does not contain cube data!");
         }
+        // A bit outside the cube set -- DDSCAPS2_VOLUME being the one that matters -- describes a
+        // payload this decoder would misread as six square faces (CNBF-116).
+        if ((caps2 & ~kDdscaps2Known) != 0)
+        {
+            throw System::NotSupportedException(where + "invalid DDS caps2");
+        }
+        // Six faces are read unconditionally, so all six must be declared present. A file marked
+        // as a cube map that only carries, say, +X and -X has four faces' worth of bytes this
+        // decoder would take from whatever follows.
+        if ((caps2 & kDdscaps2CubemapAllFaces) != kDdscaps2CubemapAllFaces)
+        {
+            throw System::FormatException(
+                where + "cube map does not declare all six faces; CNA decodes complete cube maps "
+                        "only");
+        }
 
         if ((caps & kDdscapsMipmap) != kDdscapsMipmap) { levels = 1; }
         if (levels < 1) { levels = 1; }
@@ -112,30 +167,52 @@ namespace CNA::Internal::Graphics
         {
             throw System::FormatException(where + "cube map faces must be square");
         }
-        // A zero or negative dimension would make every level size zero and silently produce six
-        // empty faces. The header check above only guarantees the fields are PRESENT.
-        if (width <= 0)
+        // A zero dimension would make every level size zero and silently produce six empty faces.
+        // The header check above only guarantees the fields are PRESENT.
+        if (width == 0u)
         {
             throw System::FormatException(where + "cube map faces must have a positive size");
         }
+        // The upper bound is the representation's, not a preference (CNBF-116): above it a level's
+        // RGBA length no longer fits the `int` DecodedDdsCube and DxtUtil compute it in, so the
+        // dimension has to be refused rather than decoded into a wrapped-around allocation.
+        if (width > kMaxFaceDimension)
+        {
+            throw System::FormatException(
+                where + "cube map face is " + std::to_string(width) +
+                " texels; the largest this decoder can represent is " +
+                std::to_string(kMaxFaceDimension));
+        }
+        // Validated BEFORE the reserve below, which is the whole point: a declared count of two
+        // billion levels was previously reserved for before a single byte of the file had been
+        // consulted. A chain longer than the dimensions physically allow is a malformed header,
+        // refused rather than quietly truncated -- repairing it would produce a plausible wrong
+        // answer, which is worse than a refusal.
+        const std::uint32_t maxLevels = PhysicalMipChainLength(width);
+        if (levels > maxLevels)
+        {
+            throw System::FormatException(
+                where + "declares " + std::to_string(levels) + " mip levels, but a " +
+                std::to_string(width) + "-texel face has at most " + std::to_string(maxLevels));
+        }
 
         DecodedDdsCube decoded;
-        decoded.width = width;
-        decoded.mipCount = levels;
+        decoded.width = static_cast<int>(width);
+        decoded.mipCount = static_cast<int>(levels);
 
         std::size_t offset = 128u;
         for (int face = 0; face < 6; ++face)
         {
             decoded.faces[static_cast<std::size_t>(face)].reserve(
                 static_cast<std::size_t>(levels));
-            int levelSize = width;
-            for (int level = 0; level < levels; ++level)
+            std::uint32_t levelSize = width;
+            for (std::uint32_t level = 0; level < levels; ++level)
             {
-                const int blockBytes = CalculateDDSLevelSize(levelSize, levelSize, formatFourCC);
+                const std::uint64_t blockBytes =
+                    CalculateDDSLevelSize(levelSize, levelSize, formatFourCC);
                 // Checked against the remaining bytes rather than by adding to `offset` first,
                 // so a hostile size cannot wrap the addition past the end and look in range.
-                if (blockBytes < 0 || offset > size ||
-                    static_cast<std::size_t>(blockBytes) > size - offset)
+                if (offset > size || blockBytes > static_cast<std::uint64_t>(size - offset))
                 {
                     throw System::FormatException(where + "truncated DDS stream");
                 }
@@ -143,22 +220,23 @@ namespace CNA::Internal::Graphics
                 std::vector<std::uint8_t> rgba;
                 const auto* block = data + offset;
                 const auto blockLength = static_cast<std::size_t>(blockBytes);
+                const int levelExtent = static_cast<int>(levelSize);
                 if (formatFourCC == kFourCcDxt1)
                 {
-                    rgba = DxtUtil::DecompressDxt1(block, blockLength, levelSize, levelSize);
+                    rgba = DxtUtil::DecompressDxt1(block, blockLength, levelExtent, levelExtent);
                 }
                 else if (formatFourCC == kFourCcDxt3)
                 {
-                    rgba = DxtUtil::DecompressDxt3(block, blockLength, levelSize, levelSize);
+                    rgba = DxtUtil::DecompressDxt3(block, blockLength, levelExtent, levelExtent);
                 }
                 else
                 {
-                    rgba = DxtUtil::DecompressDxt5(block, blockLength, levelSize, levelSize);
+                    rgba = DxtUtil::DecompressDxt5(block, blockLength, levelExtent, levelExtent);
                 }
 
                 decoded.faces[static_cast<std::size_t>(face)].push_back(std::move(rgba));
                 offset += blockLength;
-                levelSize = std::max(1, levelSize / 2);
+                levelSize = std::max<std::uint32_t>(1u, levelSize / 2u);
             }
         }
         return decoded;
