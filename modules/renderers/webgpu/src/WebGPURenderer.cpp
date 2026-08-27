@@ -1217,7 +1217,14 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUTexelCopyBufferLayout layout{};
             layout.bytesPerRow = static_cast<std::uint32_t>(blockCols * blockBytes_);
             layout.rowsPerImage = static_cast<std::uint32_t>(blockRows);
-            const WGPUExtent3D extent{static_cast<std::uint32_t>(levelW), static_cast<std::uint32_t>(levelH), 1};
+            // WEBGPU-144 Phase 2: the copy extent must be the BLOCK-ALIGNED physical size, not the
+            // logical texel size. wgpu-native validates a compressed copy's width/height against the
+            // mip's block-aligned physical extent (ceil(dim/4)*4), so a sub-4x4 mip (a 2x2 or 1x1
+            // tail level of a mip chain) passed as its logical 2 or 1 is rejected as "Copy width is
+            // not a multiple of block width". ceil(levelW/4)*4 equals the logical size for every
+            // block-multiple level and rounds a partial tail level up to its single padded block.
+            const WGPUExtent3D extent{static_cast<std::uint32_t>(blockCols * 4),
+                                      static_cast<std::uint32_t>(blockRows * 4), 1};
             wgpuQueueWriteTexture(owner_->Queue(), &destination, rgba, byteCount, &layout, &extent);
             return;
         }
@@ -7412,6 +7419,14 @@ struct VSOut {
         // WEBGPU-144: only when the device actually enabled the BC feature. Then the DXT/BC7 formats
         // transfer as blocks, and WebGPUTextureRenderer uploads them to a WGPUTextureFormat_BC*.
         return bcSupported_ && ClassifyWebGPUTextureFormat(surfaceFormat).compressed;
+    }
+
+    bool WebGPURenderer::LoadsCompressedContentNativelyEXT() const
+    {
+        // WEBGPU-144 Phase 2: the content loaders keep DXT/BC content compressed. The specific
+        // format (and the bcSupported_ device gate) is enforced separately by
+        // IsCompressedTransferFormatEXT, which the loaders AND with this policy flag.
+        return true;
     }
 
     RendererFormatVerdict WebGPURenderer::ClassifySurfaceFormatEXT(int surfaceFormat) const

@@ -560,10 +560,6 @@ readback (`WEBGPU-51`), and -- since 2026-08-26 -- the browser path (`WEBGPU-119
 described in their own sections above and are no longer "limitations". What is **genuinely still
 open** in `plans/plan_webgpu.md`:
 
-- **Compressed content loading** (`WEBGPU-144` Phase 2) -- GPU-native block-compressed upload itself
-  works (see below), but the XNB content reader and the DDS/`Texture2D::FromStream` path still
-  force-decode DXT to `Color`, so DXT/BC7 loaded from `.xnb`/`.dds` files does not yet reach the
-  native path. Reaching it needs a capability-gated change to the shared content loaders.
 - **Per-`RenderTarget2D` `multiSampleCount`** -- a target's own constructor sample count is ignored;
   it mirrors the renderer's global sample count instead. Backbuffer and render-target MSAA otherwise
   work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
@@ -584,8 +580,17 @@ decodes them at sample time -- no CPU decompression. This is the first CNA rende
 `Texture2D`'s existing compressed block-transfer contract (`IsCompressedTransferFormatEXT`) routes the
 bytes, and the renderer keeps the per-mip blocks as the authoritative `GetData` store.
 `WebGPU_CompressedTexture` proves a DXT1 and a DXT5 texture sample correctly and round-trip their exact
-block bytes. Reachable today via the direct `Texture2D(device, w, h, mipMap, SurfaceFormat::Dxt*)` +
-`SetData(blockBytes, count)` API; content-file loading is the remaining Phase-2 gap (see limitations).
+block bytes. Reachable via the direct `Texture2D(device, w, h, mipMap, SurfaceFormat::Dxt*)` +
+`SetData(blockBytes, count)` API **and now via the content loaders too** (Phase 2, XNB-24):
+`Texture2D::FromStream` (DDS) and the `.xnb` `Texture2DReader` keep DXT content compressed and upload
+the raw blocks instead of CPU-decoding to Color. Both loaders gate on a new renderer-opt-in capability
+`LoadsCompressedContentNativelyEXT()` (default false; WebGPU-only, so Skia and every other renderer
+keep their existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`, so a
+loaded DXT texture keeps its `Dxt*` format exactly when the device can transfer it and decodes to Color
+otherwise. `WebGPU_CompressedContent` proves both loaders take the native path (format preserved, full
+mip chain, renders correctly). Baking this Phase-2 path exposed and fixed a compressed-mip upload bug:
+a sub-4x4 tail mip (2x2/1x1) must be written with its **block-aligned** copy extent (`ceil(dim/4)*4`),
+which wgpu-native validates against, not its logical size -- Phase 1's single 4x4 level never hit it.
 
 **Occlusion queries are supported** (`WEBGPU-84`): `SupportsCapability(OcclusionQuery)` reports true,
 `CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet`, and the sample count is

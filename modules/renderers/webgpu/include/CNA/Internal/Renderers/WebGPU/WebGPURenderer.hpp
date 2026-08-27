@@ -1272,6 +1272,18 @@ namespace CNA::Internal::Renderers::WebGPU
          */
         [[nodiscard]] bool IsCompressedTransferFormatEXT(int surfaceFormat) const override;
 
+        /**
+         * @brief WEBGPU-144 Phase 2: WebGPU keeps loaded block-compressed content compressed.
+         *
+         * The `Texture2D::FromStream` (DDS) and `.xnb` content loaders keep the raw DXT/BC blocks
+         * and upload them to a `WGPUTextureFormat_BC*` instead of CPU-decompressing to `Color`. The
+         * actual per-format capability (and the `bcSupported_` device-feature gate) is still enforced
+         * by @ref IsCompressedTransferFormatEXT, which the loaders AND with this flag.
+         *
+         * @return true.
+         */
+        [[nodiscard]] bool LoadsCompressedContentNativelyEXT() const override;
+
         /** @brief WEBGPU-144: the BC formats this renderer stores natively are Supported; else Defer. */
         [[nodiscard]] RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const override;
 

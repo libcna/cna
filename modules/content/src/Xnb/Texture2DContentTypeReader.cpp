@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
+#include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Xnb/XnbArithmetic.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
@@ -110,10 +111,28 @@ namespace CNA::Internal::Xnb
         {
             throw ContentLoadException("Texture2DReader: invalid width/height.");
         }
-        // Always decompress DXT to Color -- see this reader's class docs for why (XNB-24's
-        // fuller per-renderer capability query is deferred, not required for correctness).
-        const SurfaceFormat uploadFormat = IsCompressed(surfaceFormat) ? SurfaceFormat::Color : surfaceFormat;
-        if (uploadFormat != SurfaceFormat::Color &&
+        GraphicsDevice* device = input.getContentManagerProperty()
+            ? &input.getContentManagerProperty()->getGraphicsDeviceInternal()
+            : nullptr;
+        if (!device)
+        {
+            throw ContentLoadException(
+                "Texture2DReader: no GraphicsDevice available (ContentManager was not set on "
+                "this ContentReader).");
+        }
+
+        // WEBGPU-144 Phase 2 (XNB-24's per-renderer capability query): keep DXT content compressed
+        // and upload the raw blocks when the active renderer opts in via
+        // LoadsCompressedContentNativelyEXT() AND transfers this format as blocks; otherwise
+        // CPU-decompress DXT to Color exactly as before (the historical default for every other
+        // renderer).
+        const bool keepCompressed = IsCompressed(surfaceFormat)
+            && device->GetRenderer().LoadsCompressedContentNativelyEXT()
+            && device->GetRenderer().IsCompressedTransferFormatEXT(static_cast<int>(surfaceFormat));
+        const SurfaceFormat uploadFormat =
+            (IsCompressed(surfaceFormat) && !keepCompressed) ? SurfaceFormat::Color : surfaceFormat;
+        if (!keepCompressed &&
+            uploadFormat != SurfaceFormat::Color &&
             uploadFormat != SurfaceFormat::NormalizedByte4 &&
             uploadFormat != SurfaceFormat::NormalizedByte2)
         {
@@ -131,16 +150,6 @@ namespace CNA::Internal::Xnb
         input.CheckDecodedByteSize(
             CheckedMultiplyOrThrow({width, height, bytesPerPixel}, "Texture2DReader"),
             "Texture2DReader");
-
-        GraphicsDevice* device = input.getContentManagerProperty()
-            ? &input.getContentManagerProperty()->getGraphicsDeviceInternal()
-            : nullptr;
-        if (!device)
-        {
-            throw ContentLoadException(
-                "Texture2DReader: no GraphicsDevice available (ContentManager was not set on "
-                "this ContentReader).");
-        }
 
         // REMED-CONTENT-001: reject dimensions/mip counts the active renderer cannot actually
         // create, before any renderer-specific texture creation is attempted. Neither the native
@@ -210,6 +219,13 @@ namespace CNA::Internal::Xnb
                         " byte count (" + std::to_string(bytes.size()) + ") does not match " +
                         std::to_string(levelWidth) + "x" + std::to_string(levelHeight) +
                         "'s required " + std::to_string(expectedCompressedBytes) + " bytes.");
+                }
+                if (keepCompressed)
+                {
+                    // WEBGPU-144 Phase 2: upload the validated raw blocks through the compressed
+                    // SetData path (no CPU decode); the RGBA-pixel validation below does not apply.
+                    texture.SetData(level, nullptr, bytes.data(), 0, static_cast<int>(bytes.size()));
+                    continue;
                 }
                 switch (surfaceFormat)
                 {

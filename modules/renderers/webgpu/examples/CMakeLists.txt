@@ -105,6 +105,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_CompressedTexture COMMAND cna_test_webgpu_compressed_texture
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-144 Phase 2 (XNB-24): the content loaders reach the GPU-native BC path -- FromStream
+    # (DDS) and the .xnb Texture2DReader keep DXT compressed (gated on LoadsCompressedContentNativelyEXT)
+    # instead of force-decoding to Color.
+    cna_webgpu_test(cna_test_webgpu_compressed_content webgpu_compressed_content_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_CompressedContent COMMAND cna_test_webgpu_compressed_content
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-83 (Phase 2): stencil ops bake into a NON-colored3d family's pipeline -- a stamp then
     # a gate on the Textured3D route, where the gate must be rejected outside the stamped region.
     cna_webgpu_test(cna_test_webgpu_stencil_family webgpu_stencil_family_test.cpp)

@@ -2014,6 +2014,26 @@ namespace CNA::Internal::Renderers
             return false;
         }
 
+        /**
+         * @brief Whether the content loaders should keep block-compressed content compressed.
+         *
+         * WEBGPU-144 Phase 2 / XNB-24: `Texture2D::FromStream` (DDS) and the `.xnb` Texture2D reader
+         * force-decode DXT/BC to `Color` by default. A renderer that both stores compressed textures
+         * natively and prefers to receive loaded content that way returns true here; the loaders
+         * then keep the raw blocks and upload them through the compressed `SetData` path (guarded, in
+         * addition, by @ref IsCompressedTransferFormatEXT for the specific format) instead of
+         * CPU-decompressing. This is a loader-policy flag distinct from
+         * @ref IsCompressedTransferFormatEXT: a renderer may transfer blocks via `SetData` yet still
+         * deliberately prefer decoded content (the default), so this stays false for every renderer
+         * that has not opted in.
+         *
+         * @return true to keep loaded block-compressed content compressed; default false.
+         */
+        [[nodiscard]] virtual bool LoadsCompressedContentNativelyEXT() const
+        {
+            return false;
+        }
+
         /// Converts a point from SDL window-coordinate space to logical (virtual) game
         /// coordinates. A renderer whose drawable pixel size differs from the window's logical size
         /// must account for that density internally. Returns true on success. Default: no-op.

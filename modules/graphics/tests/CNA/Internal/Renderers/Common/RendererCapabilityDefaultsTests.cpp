@@ -120,6 +120,14 @@ TEST(RendererCapabilityDefaultsTest, CompressedTransferDefaultsToFalseForEveryFo
     }
 }
 
+TEST(RendererCapabilityDefaultsTest, LoadsCompressedContentNativelyDefaultsToFalse)
+{
+    // WEBGPU-144 Phase 2: the content loaders keep the historical decode-to-Color behaviour for
+    // every renderer that has not explicitly opted in to native compressed content loading.
+    DefaultsOnlyRenderer renderer;
+    EXPECT_FALSE(renderer.LoadsCompressedContentNativelyEXT());
+}
+
 TEST(RendererCapabilityDefaultsTest, AdditionalLimitationsDefaultToNoRendererSpecificText)
 {
     DefaultsOnlyRenderer renderer;

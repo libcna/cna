@@ -548,9 +548,12 @@ textured/lit/skinned/PBR/env-map/dual-texture/alpha-test/instanced): a stamp-the
 works within one render-target bind cycle, proven on the real GPU by three tests: the shared
 `rendertarget_depthstencil_usage` acceptance test (colored3d), the WebGPU-local `WebGPU_StencilFamily`
 test (Textured3D) and `WebGPU_StencilTwoSided` (`TwoSidedStencilMode` front/back winding, matching
-the EasyGL parity contract) -- so `WEBGPU-83` is complete. The one remaining WebGPU gap is having the
-XNB/DDS content loaders reach the native compressed path instead of force-decoding DXT to Color
-(`WEBGPU-144` Phase 2, a capability-gated shared-content-loader change) -- see
+the EasyGL parity contract) -- so `WEBGPU-83` is complete. Since 2026-08-27 the XNB/DDS content
+loaders also reach the native compressed path (`WEBGPU-144` Phase 2 / XNB-24): `Texture2D::FromStream`
+(DDS) and the `.xnb` `Texture2DReader` keep DXT blocks compressed and upload them GPU-natively
+instead of CPU-decoding to Color, gated on a new renderer-opt-in capability
+`LoadsCompressedContentNativelyEXT()` (WebGPU-only; every other renderer, Skia included, keeps its
+existing decode-to-Color loaders) AND the per-format `IsCompressedTransferFormatEXT`. See
 `docs/webgpu-renderer.md` and `plans/plan_webgpu.md`.
 `MAGNUM` is a desktop-OpenGL renderer built on mosra/magnum -- see `docs/magnum-renderer.md` and
 `plans/plan_magnum.md` for its own capability boundary.
