@@ -213,6 +213,8 @@ enum class ObjectKind : uint32_t {
     // plans/plan_binding.md CBIND-085C2. ContactShadowPass needs no kind of its own: it is a
     // PostProcessPass, so it uses that one.
     DepthNormalPrepass = 138,
+    // plans/plan_binding.md CBIND-086A: a collection of values, so no borrow count.
+    ClusteredLightSet = 139,
     Test = UINT32_MAX
 };
 

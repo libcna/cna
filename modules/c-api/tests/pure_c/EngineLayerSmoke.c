@@ -2052,6 +2052,157 @@ static int validate_prepass_and_contact(const CNA_Handle graphics_device)
     return cna_post_process_pass_destroy(contact) == CNA_RESULT_SUCCESS;
 }
 
+
+/* CBIND-086A. The set is a collection of VALUES: reading a light copies it, so nothing here has to
+ * be released and destroying the set is never refused. Every precondition below was read out of
+ * ClusteredLightSetEXT.cpp before this test was written. */
+static int validate_clustered_light_set(const CNA_Handle graphics_device)
+{
+    CNA_ClusteredLightSetHandle set = CNA_INVALID_HANDLE;
+    CNA_ClusteredLightEXT light;
+    CNA_ClusteredLightEXT read_back;
+    CNA_PointLightEXT point;
+    CNA_SpotLightEXT spot;
+    CNA_BoundingSphere sphere;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t index = -1;
+    int32_t count = -1;
+    uint64_t total = UINT64_C(0);
+    int ok = 1;
+
+    if (cna_clustered_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
+        cna_point_light_ext_init(&point) != CNA_RESULT_SUCCESS ||
+        cna_spot_light_ext_init(&spot) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (light.type != CNA_CLUSTERED_LIGHT_TYPE_POINT || light.range != 20.0F ||
+        light.casts_shadows != CNA_FALSE) {
+        return 0;
+    }
+    /* isUsable is exposed so a caller can ask before being refused, and the two must agree. */
+    if (cna_clustered_light_set_is_usable(&light, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE) {
+        return 0;
+    }
+    {
+        CNA_ClusteredLightEXT bad = light;
+        bad.range = 0.0F;
+        if (cna_clustered_light_set_is_usable(&bad, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE) {
+            return 0;
+        }
+        bad = light;
+        bad.intensity = -1.0F;
+        if (cna_clustered_light_set_is_usable(&bad, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE) {
+            return 0;
+        }
+        /* An uninitialized light is refused rather than read. */
+        memset(&bad, 0, sizeof(bad));
+        if (cna_clustered_light_set_is_usable(&bad, &flag) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+
+    if (cna_clustered_light_set_create(graphics_device, &set) != CNA_RESULT_SUCCESS ||
+        set == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    ok = cna_clustered_light_set_is_empty(set, &flag) == CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+    ok = ok && cna_clustered_light_set_get_count(set, &count) == CNA_RESULT_SUCCESS &&
+        count == INT32_C(0);
+    ok = ok && cna_clustered_light_set_add(set, &light, &index) == CNA_RESULT_SUCCESS &&
+        index == INT32_C(0);
+    ok = ok && cna_clustered_light_set_add_point(set, &point, &index) == CNA_RESULT_SUCCESS &&
+        index == INT32_C(1);
+    ok = ok && cna_clustered_light_set_add_spot(set, &spot, &index) == CNA_RESULT_SUCCESS &&
+        index == INT32_C(2);
+    ok = ok && cna_clustered_light_set_get_count(set, &count) == CNA_RESULT_SUCCESS &&
+        count == INT32_C(3);
+    ok = ok && cna_clustered_light_set_is_empty(set, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    /* A converted point light keeps its kind, and a converted spot keeps its cone. */
+    ok = ok && cna_clustered_light_set_get_at(set, INT32_C(1), &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.type == CNA_CLUSTERED_LIGHT_TYPE_POINT;
+    ok = ok && cna_clustered_light_set_get_at(set, INT32_C(2), &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.type == CNA_CLUSTERED_LIGHT_TYPE_SPOT &&
+        read_back.outer_angle == spot.outer_angle;
+
+    /* An unusable light is refused by ARGUMENT; a full set is refused by STATE. The canonical code
+       throws two different exceptions for these, and a C caller acts on them differently: drop a
+       light, or fix the one just built. */
+    {
+        CNA_ClusteredLightEXT bad = light;
+        bad.range = -1.0F;
+        ok = ok && cna_clustered_light_set_add(set, &bad, &index) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_clustered_light_set_replace_at(set, INT32_C(0), &bad) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+    /* Every index-taking route refuses an index the set does not hold. */
+    ok = ok && cna_clustered_light_set_get_at(set, INT32_C(3), &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_set_get_at(set, INT32_C(-1), &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_set_remove_at(set, INT32_C(9)) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_set_get_bounds_at(set, INT32_C(9), &sphere) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_clustered_light_set_replace_at(set, INT32_C(9), &light) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* A bounding sphere is the light's reach, so its radius is the range. */
+    ok = ok && cna_clustered_light_set_get_bounds_at(set, INT32_C(0), &sphere) ==
+        CNA_RESULT_SUCCESS && sphere.radius == light.range;
+
+    /* Both copy-outs report the count with no room and write nothing. */
+    {
+        CNA_ClusteredLightEXT lights[4];
+        CNA_BoundingSphere spheres[4];
+        lights[0].struct_size = UINT32_C(0xDEAD);
+        ok = ok && cna_clustered_light_set_copy_lights(set, 0, UINT64_C(0), &total) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && total == UINT64_C(3) &&
+            lights[0].struct_size == UINT32_C(0xDEAD);
+        ok = ok && cna_clustered_light_set_copy_lights(set, lights, UINT64_C(4), &total) ==
+            CNA_RESULT_SUCCESS && total == UINT64_C(3) &&
+            lights[2].type == CNA_CLUSTERED_LIGHT_TYPE_SPOT;
+        ok = ok && cna_clustered_light_set_copy_bounds(set, 0, UINT64_C(0), &total) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && total == UINT64_C(3);
+        ok = ok && cna_clustered_light_set_copy_bounds(set, spheres, UINT64_C(4), &total) ==
+            CNA_RESULT_SUCCESS && total == UINT64_C(3);
+    }
+
+    /* A copied-out light is a value: it stays correct after the set changes. */
+    ok = ok && cna_clustered_light_set_get_at(set, INT32_C(0), &read_back) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_set_remove_at(set, INT32_C(0)) == CNA_RESULT_SUCCESS;
+    ok = ok && read_back.range == light.range;
+    ok = ok && cna_clustered_light_set_get_count(set, &count) == CNA_RESULT_SUCCESS &&
+        count == INT32_C(2);
+    ok = ok && cna_clustered_light_set_clear(set) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_light_set_is_empty(set, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+
+    /* The set refuses past its maximum rather than growing, because the uploaded buffer and the
+       shader's index width are sized from that bound. Filling it is the only way to assert it. */
+    {
+        int32_t filled = 0;
+        for (filled = 0; ok && filled < CNA_CLUSTERED_LIGHT_SET_MAX_EXT; ++filled) {
+            ok = cna_clustered_light_set_add(set, &light, &index) == CNA_RESULT_SUCCESS &&
+                index == filled;
+        }
+        ok = ok && cna_clustered_light_set_add(set, &light, &index) == CNA_RESULT_INVALID_STATE;
+        ok = ok && cna_clustered_light_set_get_count(set, &count) == CNA_RESULT_SUCCESS &&
+            count == CNA_CLUSTERED_LIGHT_SET_MAX_EXT;
+    }
+
+    if (!ok) {
+        (void)cna_clustered_light_set_destroy(set);
+        return 0;
+    }
+    /* Values, so destruction is never refused for an outstanding read. */
+    return cna_clustered_light_set_destroy(set) == CNA_RESULT_SUCCESS &&
+        cna_clustered_light_set_destroy(set) != CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -2109,6 +2260,10 @@ static CNA_Result on_load(
         }
         if (!validate_prepass_and_contact(graphics_device)) {
             state->failed_stage = 15;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_clustered_light_set(graphics_device)) {
+            state->failed_stage = 16;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

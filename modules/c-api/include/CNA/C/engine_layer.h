@@ -3259,6 +3259,268 @@ CNA_C_API CNA_Result cna_contact_shadow_pass_combine_visibility(
     float contact_visibility,
     float* out_visibility);
 
+/* ---------------------------------------------------------------------------------------------
+ * Clustered lights
+ *
+ * A clustered light is a **value**, and the set is a collection of values rather than of objects.
+ * Nothing here hands out a view onto something the set owns, so unlike the render-target pool or
+ * the shadow maps there is no borrow to count and no destroy-time refusal: reading a light copies
+ * it out.
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief Fixed-width identity of which kind of light a clustered light is. */
+typedef uint32_t CNA_ClusteredLightType;
+
+/** @brief A point light: radiates in every direction from its position. */
+#define CNA_CLUSTERED_LIGHT_TYPE_POINT UINT32_C(0)
+/** @brief A spot light: a point light restricted to a cone. */
+#define CNA_CLUSTERED_LIGHT_TYPE_SPOT UINT32_C(1)
+
+/** @brief One light in a clustered light set. */
+typedef struct CNA_ClusteredLightEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief Which kind of light this is. */
+    CNA_ClusteredLightType type;
+    /** @brief `CNA_TRUE` when this light should be given a shadow. */
+    CNA_Bool casts_shadows;
+    /** @brief Padding; write zero. */
+    uint8_t reserved[3];
+    /** @brief World-space position. */
+    CNA_Vector3 position;
+    /** @brief The direction a spot light points; the default points straight down. */
+    CNA_Vector3 direction;
+    /** @brief Linear RGB colour; the default is white. */
+    CNA_Vector3 color;
+    /** @brief Scalar multiplier on @ref color; must not be negative. */
+    float intensity;
+    /** @brief Distance at which the light stops contributing; must be positive. */
+    float range;
+    /** @brief Half-angle in radians inside which a spot light is at full strength. */
+    float inner_angle;
+    /** @brief Half-angle in radians at which a spot light has fallen to nothing. */
+    float outer_angle;
+} CNA_ClusteredLightEXT;
+
+/**
+ * @brief Fills a clustered light with the canonical defaults.
+ *
+ * @param out_light Receives a point light at the origin: white, intensity 1, range 20, inner angle
+ * 0.35, outer angle 0.5, direction (0, -1, 0) and no shadows.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_clustered_light_ext_init(CNA_ClusteredLightEXT* out_light);
+
+/**
+ * @brief Reports whether a light is usable in a set.
+ *
+ * A range must be positive, an intensity non-negative and finite, every vector finite, and a spot
+ * light's direction non-degenerate with its inner angle no wider than its outer. This is the same
+ * test @ref cna_clustered_light_set_add applies, exposed so a caller can ask before being refused.
+ *
+ * @param light The light to test.
+ * @param out_usable Receives `CNA_TRUE` when the light would be accepted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_is_usable(
+    const CNA_ClusteredLightEXT* light,
+    CNA_Bool* out_usable);
+
+/** @brief The greatest number of lights a clustered light set holds. */
+#define CNA_CLUSTERED_LIGHT_SET_MAX_EXT INT32_C(256)
+
+/**
+ * @brief Owned handle for one clustered light set.
+ *
+ * The set holds values, so nothing it returns keeps it alive and nothing it lends has to be
+ * released. Destroy it with @ref cna_clustered_light_set_destroy.
+ */
+typedef CNA_Handle CNA_ClusteredLightSetHandle;
+
+/**
+ * @brief Creates an empty clustered light set.
+ *
+ * The set needs no device, but it is parented to a game so its lifetime is accounted for like
+ * every other owned resource.
+ *
+ * @param game The owning game.
+ * @param out_set Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_create(
+    CNA_Handle game,
+    CNA_ClusteredLightSetHandle* out_set);
+
+/**
+ * @brief Adds a clustered light, returning its index.
+ *
+ * @param set The set.
+ * @param light The light to add; must be usable.
+ * @param out_index Receives the new light's index.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unusable light,
+ * `CNA_RESULT_INVALID_STATE` when the set already holds `CNA_CLUSTERED_LIGHT_SET_MAX_EXT` lights,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_add(
+    CNA_ClusteredLightSetHandle set,
+    const CNA_ClusteredLightEXT* light,
+    int32_t* out_index);
+
+/**
+ * @brief Adds a point light, converting it to a clustered light.
+ *
+ * @param set The set.
+ * @param light The point light to add.
+ * @param out_index Receives the new light's index.
+ * @return As @ref cna_clustered_light_set_add.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_add_point(
+    CNA_ClusteredLightSetHandle set,
+    const CNA_PointLightEXT* light,
+    int32_t* out_index);
+
+/**
+ * @brief Adds a spot light, converting it to a clustered light.
+ *
+ * @param set The set.
+ * @param light The spot light to add.
+ * @param out_index Receives the new light's index.
+ * @return As @ref cna_clustered_light_set_add.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_add_spot(
+    CNA_ClusteredLightSetHandle set,
+    const CNA_SpotLightEXT* light,
+    int32_t* out_index);
+
+/**
+ * @brief Replaces the light at an index.
+ *
+ * @param set The set.
+ * @param index The index to replace.
+ * @param light The replacement; must be usable.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unusable light or an index the
+ * set does not hold, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_replace_at(
+    CNA_ClusteredLightSetHandle set,
+    int32_t index,
+    const CNA_ClusteredLightEXT* light);
+
+/**
+ * @brief Removes the light at an index, shifting the ones after it down.
+ *
+ * @param set The set.
+ * @param index The index to remove.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index the set does not hold,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_remove_at(
+    CNA_ClusteredLightSetHandle set,
+    int32_t index);
+
+/**
+ * @brief Removes every light.
+ *
+ * @param set The set.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_clear(CNA_ClusteredLightSetHandle set);
+
+/**
+ * @brief Returns how many lights the set holds.
+ *
+ * @param set The set.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_get_count(
+    CNA_ClusteredLightSetHandle set,
+    int32_t* out_count);
+
+/**
+ * @brief Reports whether the set holds no lights.
+ *
+ * @param set The set.
+ * @param out_empty Receives `CNA_TRUE` when the set is empty.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_is_empty(
+    CNA_ClusteredLightSetHandle set,
+    CNA_Bool* out_empty);
+
+/**
+ * @brief Copies out the light at an index.
+ *
+ * The light is a value, so this is a copy rather than a view: it stays correct after the set
+ * changes, and nothing has to be released.
+ *
+ * @param set The set.
+ * @param index The index to read.
+ * @param out_light Receives the light.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index the set does not hold,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_get_at(
+    CNA_ClusteredLightSetHandle set,
+    int32_t index,
+    CNA_ClusteredLightEXT* out_light);
+
+/**
+ * @brief Copies out every light the set holds.
+ *
+ * @param set The set.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives how many lights the set holds.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_copy_lights(
+    CNA_ClusteredLightSetHandle set,
+    CNA_ClusteredLightEXT* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Returns the bounding sphere of the light at an index.
+ *
+ * @param set The set.
+ * @param index The index to read.
+ * @param out_bounds Receives the sphere.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index the set does not hold,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_get_bounds_at(
+    CNA_ClusteredLightSetHandle set,
+    int32_t index,
+    CNA_BoundingSphere* out_bounds);
+
+/**
+ * @brief Copies out the bounding sphere of every light.
+ *
+ * @param set The set.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives how many spheres the set produces.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_copy_bounds(
+    CNA_ClusteredLightSetHandle set,
+    CNA_BoundingSphere* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Releases the light set.
+ *
+ * @param set The set; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_light_set_destroy(CNA_ClusteredLightSetHandle set);
+
 #ifdef __cplusplus
 }
 #endif

@@ -22,6 +22,9 @@
 #ifdef CNA_CNAEXT
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/CascadedShadowMap.hpp"
+#include "CNA/Graphics/ClusteredLightEXT.hpp"
+#include "CNA/Graphics/ClusteredLightSetEXT.hpp"
+#include "CNA/Graphics/ClusteredLightType.hpp"
 #include "CNA/Graphics/ClusteredShadowPolicyEXT.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/ContactShadowPass.hpp"
@@ -32,6 +35,7 @@
 #include "CNA/Graphics/PointLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
 #include "Microsoft/Xna/Framework/BoundingBox.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "CNA/Graphics/ShadowQuality.hpp"
 #include "CNA/Graphics/SpotShadowMap.hpp"
 #include "CNA/Graphics/SpotLightEXT.hpp"
@@ -850,6 +854,40 @@ CNA_Result cna_graphics_device_supports_shadow_sampling_ext(
             graphicsDevice->value->SupportsShadowSamplingEXT() ? CNA_TRUE : CNA_FALSE;
         return CNA_RESULT_SUCCESS;
     });
+}
+
+CNA_Result cna_clustered_light_ext_init(CNA_ClusteredLightEXT* const outLight)
+{
+    CNA_ClusteredLightEXT defaults;
+    std::memset(&defaults, 0, sizeof(defaults));
+    defaults.struct_size = static_cast<uint32_t>(sizeof(CNA_ClusteredLightEXT));
+    defaults.struct_version = UINT32_C(1);
+    defaults.type = CNA_CLUSTERED_LIGHT_TYPE_POINT;
+    defaults.casts_shadows = CNA_FALSE;
+    defaults.position = Vec3(0.0F, 0.0F, 0.0F);
+    defaults.direction = Vec3(0.0F, -1.0F, 0.0F);
+    defaults.color = Vec3(1.0F, 1.0F, 1.0F);
+    defaults.intensity = 1.0F;
+    defaults.range = 20.0F;
+    defaults.inner_angle = 0.35F;
+    defaults.outer_angle = 0.5F;
+#ifdef CNA_CNAEXT
+    {
+        const CNA::Graphics::ClusteredLightEXT canonical;
+        if (static_cast<uint32_t>(canonical.Type) != defaults.type ||
+            canonical.Direction.Y != defaults.direction.y ||
+            canonical.Intensity != defaults.intensity || canonical.Range != defaults.range ||
+            canonical.InnerAngle != defaults.inner_angle ||
+            canonical.OuterAngle != defaults.outer_angle ||
+            canonical.CastsShadows != (defaults.casts_shadows == CNA_TRUE)) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The C clustered-light defaults disagree with the canonical structure.");
+        }
+    }
+#endif
+    return StoreValue(outLight, defaults);
 }
 
 #ifndef CNA_CNAEXT
@@ -2284,6 +2322,97 @@ CNA_Result cna_contact_shadow_pass_copy_occlusion_test_glsl(char* p0, uint64_t p
 CNA_Result cna_contact_shadow_pass_combine_visibility(float p0, float p1, float* p2)
 {
     (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_is_usable(const CNA_ClusteredLightEXT* p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_create(CNA_Handle p0, CNA_ClusteredLightSetHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_add(CNA_ClusteredLightSetHandle p0, const CNA_ClusteredLightEXT* p1, int32_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_add_point(CNA_ClusteredLightSetHandle p0, const CNA_PointLightEXT* p1, int32_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_add_spot(CNA_ClusteredLightSetHandle p0, const CNA_SpotLightEXT* p1, int32_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_replace_at(CNA_ClusteredLightSetHandle p0, int32_t p1, const CNA_ClusteredLightEXT* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_remove_at(CNA_ClusteredLightSetHandle p0, int32_t p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_clear(CNA_ClusteredLightSetHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_get_count(CNA_ClusteredLightSetHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_is_empty(CNA_ClusteredLightSetHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_get_at(CNA_ClusteredLightSetHandle p0, int32_t p1, CNA_ClusteredLightEXT* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_copy_lights(CNA_ClusteredLightSetHandle p0, CNA_ClusteredLightEXT* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_get_bounds_at(CNA_ClusteredLightSetHandle p0, int32_t p1, CNA_BoundingSphere* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_copy_bounds(CNA_ClusteredLightSetHandle p0, CNA_BoundingSphere* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_light_set_destroy(CNA_ClusteredLightSetHandle p0)
+{
+    (void)p0;
     return ExtensionUnavailable();
 }
 
@@ -7140,6 +7269,462 @@ CNA_Result cna_contact_shadow_pass_combine_visibility(
         return StoreValue(
             outVisibility,
             Ext::ContactShadowPass::combineVisibility(shadowMapVisibility, contactVisibility));
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::BoundingSphere;
+
+struct ClusteredLightSetResource final {
+    std::shared_ptr<Ext::ClusteredLightSetEXT> value;
+    CNA_Handle parentGame;
+};
+
+static_assert(
+    static_cast<uint32_t>(Ext::ClusteredLightType::Point) == CNA_CLUSTERED_LIGHT_TYPE_POINT &&
+    static_cast<uint32_t>(Ext::ClusteredLightType::Spot) == CNA_CLUSTERED_LIGHT_TYPE_SPOT);
+static_assert(
+    Ext::ClusteredLightSetEXT::kMaxLights == CNA_CLUSTERED_LIGHT_SET_MAX_EXT,
+    "the C maximum must equal the canonical bound the shader's index width is sized from");
+
+[[nodiscard]] CNA_Result ToNativeClusteredLight(
+    const CNA_ClusteredLightEXT* const value, Ext::ClusteredLightEXT* const out)
+{
+    if (value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+    }
+    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_ClusteredLightEXT)) ||
+        value->struct_version != UINT32_C(1)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The light was not initialized by cna_clustered_light_ext_init.");
+    }
+    if (value->type > CNA_CLUSTERED_LIGHT_TYPE_SPOT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The light type is not a defined CNA_CLUSTERED_LIGHT_TYPE_* value.");
+    }
+    if (const CNA_Result result = ValidateCanonicalBool(value->casts_shadows, "casts_shadows");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    out->Type = static_cast<Ext::ClusteredLightType>(value->type);
+    out->Position = {value->position.x, value->position.y, value->position.z};
+    out->Direction = {value->direction.x, value->direction.y, value->direction.z};
+    out->Color = {value->color.x, value->color.y, value->color.z};
+    out->Intensity = value->intensity;
+    out->Range = value->range;
+    out->InnerAngle = value->inner_angle;
+    out->OuterAngle = value->outer_angle;
+    out->CastsShadows = value->casts_shadows == CNA_TRUE;
+    return CNA_RESULT_SUCCESS;
+}
+
+void FromNativeClusteredLight(
+    const Ext::ClusteredLightEXT& value, CNA_ClusteredLightEXT* const out)
+{
+    std::memset(out, 0, sizeof(*out));
+    out->struct_size = static_cast<uint32_t>(sizeof(CNA_ClusteredLightEXT));
+    out->struct_version = UINT32_C(1);
+    out->type = static_cast<CNA_ClusteredLightType>(value.Type);
+    out->casts_shadows = value.CastsShadows ? CNA_TRUE : CNA_FALSE;
+    out->position = Vec3(value.Position.X, value.Position.Y, value.Position.Z);
+    out->direction = Vec3(value.Direction.X, value.Direction.Y, value.Direction.Z);
+    out->color = Vec3(value.Color.X, value.Color.Y, value.Color.Z);
+    out->intensity = value.Intensity;
+    out->range = value.Range;
+    out->inner_angle = value.InnerAngle;
+    out->outer_angle = value.OuterAngle;
+}
+
+[[nodiscard]] CNA_BoundingSphere ToCBoundingSphere(const BoundingSphere& value) noexcept
+{
+    CNA_BoundingSphere result;
+    result.center = Vec3(value.Center.X, value.Center.Y, value.Center.Z);
+    result.radius = value.Radius;
+    return result;
+}
+
+// The canonical set refuses two different ways -- a full set is std::length_error, an unusable
+// light std::invalid_argument -- and the firewall would flatten both to one result. They are
+// separated here because a caller can act on them differently: a full set means drop a light, an
+// unusable one means fix the light it just built.
+[[nodiscard]] CNA_Result RequireRoomAndUsable(
+    const Ext::ClusteredLightSetEXT& set, const Ext::ClusteredLightEXT& light)
+{
+    if (set.getCount() >= Ext::ClusteredLightSetEXT::kMaxLights) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "The clustered light set already holds its maximum of 256 lights; the uploaded buffer "
+            "and the shader's index width are sized from that bound, so it is refused rather than "
+            "grown.");
+    }
+    if (!Ext::ClusteredLightSetEXT::isUsable(light)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The light is not usable: a range must be positive, an intensity finite and "
+            "non-negative, every vector finite, and a spot's direction non-degenerate with its "
+            "inner angle no wider than its outer.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result RequireLightIndex(
+    const Ext::ClusteredLightSetEXT& set, const int32_t index)
+{
+    if (index < 0 || index >= static_cast<int32_t>(set.getCount())) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "No light in the set has that index.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_clustered_light_set_is_usable(
+    const CNA_ClusteredLightEXT* const light, CNA_Bool* const outUsable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::ClusteredLightEXT native;
+        if (const CNA_Result result = ToNativeClusteredLight(light, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outUsable,
+            static_cast<CNA_Bool>(
+                Ext::ClusteredLightSetEXT::isUsable(native) ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_clustered_light_set_create(
+    const CNA_Handle gameHandle, CNA_ClusteredLightSetHandle* const outSet)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSet == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The light-set output handle is null.");
+        }
+        *outSet = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ClusteredLightSetEXT>();
+        const auto resource = std::make_shared<ClusteredLightSetResource>(
+            ClusteredLightSetResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::ClusteredLightSet, resource, outSet);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned light-set handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#define CNA_WITH_LIGHT_SET(handle, body)                                                           \
+    WithMap<ClusteredLightSetResource>(                                                            \
+        (handle), ObjectKind::ClusteredLightSet, "ClusteredLightSetEXT", body)
+
+CNA_Result cna_clustered_light_set_add(
+    const CNA_ClusteredLightSetHandle set,
+    const CNA_ClusteredLightEXT* const light,
+    int32_t* const outIndex)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (outIndex == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The index output is null.");
+            }
+            Ext::ClusteredLightEXT native;
+            if (const CNA_Result result = ToNativeClusteredLight(light, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireRoomAndUsable(*s->value, native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            *outIndex = static_cast<int32_t>(s->value->add(native));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_add_point(
+    const CNA_ClusteredLightSetHandle set,
+    const CNA_PointLightEXT* const light,
+    int32_t* const outIndex)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (outIndex == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The index output is null.");
+            }
+            Ext::PointLightEXT native;
+            if (const CNA_Result result = ToNativePointLight(light, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // The canonical overload converts and then applies the same two refusals, so the C
+            // form checks the converted light rather than duplicating the conversion rules.
+            Ext::ClusteredLightEXT converted;
+            converted.Type = Ext::ClusteredLightType::Point;
+            converted.Position = native.Position;
+            converted.Color = native.Color;
+            converted.Intensity = native.Intensity;
+            converted.Range = native.Range;
+            converted.CastsShadows = native.CastsShadows;
+            if (const CNA_Result result = RequireRoomAndUsable(*s->value, converted);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            *outIndex = static_cast<int32_t>(s->value->add(native));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_add_spot(
+    const CNA_ClusteredLightSetHandle set,
+    const CNA_SpotLightEXT* const light,
+    int32_t* const outIndex)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (outIndex == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The index output is null.");
+            }
+            Ext::SpotLightEXT native;
+            if (const CNA_Result result = ToNativeSpotLight(light, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            Ext::ClusteredLightEXT converted;
+            converted.Type = Ext::ClusteredLightType::Spot;
+            converted.Position = native.Position;
+            converted.Direction = native.Direction;
+            converted.Color = native.Color;
+            converted.Intensity = native.Intensity;
+            converted.Range = native.Range;
+            converted.InnerAngle = native.InnerAngle;
+            converted.OuterAngle = native.OuterAngle;
+            converted.CastsShadows = native.CastsShadows;
+            if (const CNA_Result result = RequireRoomAndUsable(*s->value, converted);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            *outIndex = static_cast<int32_t>(s->value->add(native));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_replace_at(
+    const CNA_ClusteredLightSetHandle set,
+    const int32_t index,
+    const CNA_ClusteredLightEXT* const light)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            Ext::ClusteredLightEXT native;
+            if (const CNA_Result result = ToNativeClusteredLight(light, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireLightIndex(*s->value, index);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (!Ext::ClusteredLightSetEXT::isUsable(native)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The replacement light is not usable.");
+            }
+            s->value->replaceAt(static_cast<int>(index), native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_remove_at(
+    const CNA_ClusteredLightSetHandle set, const int32_t index)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (const CNA_Result result = RequireLightIndex(*s->value, index);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            s->value->removeAt(static_cast<int>(index));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_clear(const CNA_ClusteredLightSetHandle set)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            s->value->clear();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_get_count(
+    const CNA_ClusteredLightSetHandle set, int32_t* const outCount)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(s->value->getCount()));
+        });
+}
+
+CNA_Result cna_clustered_light_set_is_empty(
+    const CNA_ClusteredLightSetHandle set, CNA_Bool* const outEmpty)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            return StoreValue(
+                outEmpty, static_cast<CNA_Bool>(s->value->isEmpty() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_light_set_get_at(
+    const CNA_ClusteredLightSetHandle set,
+    const int32_t index,
+    CNA_ClusteredLightEXT* const outLight)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (outLight == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The light output is null.");
+            }
+            if (const CNA_Result result = RequireLightIndex(*s->value, index);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            FromNativeClusteredLight(s->value->getAt(static_cast<int>(index)), outLight);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_copy_lights(
+    const CNA_ClusteredLightSetHandle set,
+    CNA_ClusteredLightEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The light destination or required-count output is invalid.");
+            }
+            const std::vector<Ext::ClusteredLightEXT>& lights = s->value->getLights();
+            *outCount = static_cast<uint64_t>(lights.size());
+            if (capacity < lights.size()) {
+                return Fail(
+                    CNA_RESULT_BUFFER_TOO_SMALL,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The destination cannot hold every light.");
+            }
+            for (std::size_t light = 0; light < lights.size(); ++light) {
+                FromNativeClusteredLight(lights[light], &destination[light]);
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_get_bounds_at(
+    const CNA_ClusteredLightSetHandle set,
+    const int32_t index,
+    CNA_BoundingSphere* const outBounds)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (const CNA_Result result = RequireLightIndex(*s->value, index);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            return StoreValue(
+                outBounds, ToCBoundingSphere(s->value->getBoundsAt(static_cast<int>(index))));
+        });
+}
+
+CNA_Result cna_clustered_light_set_copy_bounds(
+    const CNA_ClusteredLightSetHandle set,
+    CNA_BoundingSphere* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_LIGHT_SET(set,
+        [&](const std::shared_ptr<ClusteredLightSetResource>& s) -> CNA_Result {
+            if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bounds destination or required-count output is invalid.");
+            }
+            const std::vector<BoundingSphere> bounds = s->value->collectBounds();
+            *outCount = static_cast<uint64_t>(bounds.size());
+            if (capacity < bounds.size()) {
+                return Fail(
+                    CNA_RESULT_BUFFER_TOO_SMALL,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The destination cannot hold every bounding sphere.");
+            }
+            for (std::size_t sphere = 0; sphere < bounds.size(); ++sphere) {
+                destination[sphere] = ToCBoundingSphere(bounds[sphere]);
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_light_set_destroy(const CNA_ClusteredLightSetHandle setHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ClusteredLightSetResource> set;
+        if (const CNA_Result result = GetEngineResource(
+                setHandle, ObjectKind::ClusteredLightSet, "ClusteredLightSetEXT", &set);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // No borrow count: the set holds values, so nothing it returned is still pointing at it.
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(setHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned light-set handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(set->parentGame);
+        return CNA_RESULT_SUCCESS;
     });
 }
 

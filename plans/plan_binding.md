@@ -662,6 +662,37 @@ tested in one with `CNA_CNAEXT=ON`.** A slice that cannot be built both ways is 
 The `ON` tree for this phase is `cmake-build-cnaext/` (`-DCNA_CNAEXT=ON -DCNA_BUILD_C_API=ON`); the
 `OFF` tree is the ordinary `cmake-build-debug/`. Both are required before a slice is committed.
 
+### Working practice for every remaining slice
+
+**Read the canonical bodies before writing a route, not after a test fails.** Grep every `throw`
+**and** every `clamp` in every `.cpp` the slice covers, and decide per site which of two things it
+is:
+
+- a **contract** — an argument the canonical code refuses. It becomes a `CNA_RESULT_*` refusal and
+  an assertion in the suite. Preserve it exactly: `ClusteredLightSetEXT::add` refuses past 256
+  because the uploaded buffer and the shader's index width are sized from that bound, and a C form
+  that grew the set instead would produce a buffer the shader cannot index.
+- a **correction** — a value the canonical code clamps. It stays a clamp, documented on the route.
+  `DepthNormalPrepass::setRoughness` clamps to zero-to-one and `ContactShadowPass::setStepCount`
+  stores whatever it is given; refusing either would be this ABI inventing a rule the layer does
+  not have.
+
+This is not a style note. `CBIND-085B1`, `085B2` and `085C1` each lost a build-and-bisect cycle to
+a precondition discovered by a test failing — one of them a `terminate`, because a throw inside an
+open pass left a target bound. `CBIND-085C2` did the grep first and passed on the first run. The
+cost of the grep is a minute; the cost of skipping it has been measured four times.
+
+Two more rules the phase has already paid for:
+
+- **Do not widen a slice to reach a type another slice owns.** Defer the row with a named entry in
+  `SYMBOL_OWNER_OVERRIDES`, say why in the row, and **delete the entry in the commit that finally
+  binds it** — an override that outlives its deferral points a planned row at a finished task,
+  which is `CBIND-079`'s defect in miniature.
+- **Check a claim in the prose before repeating it.** `CBIND-086`'s row inherited "needs
+  `SupportsComputeShadersEXT()`" from `CLAUDE.md`; that method is on an internal renderer
+  interface, not on `GraphicsDevice`, and has no inventory row at all. Two rows had already copied
+  the sentence forward before anyone looked.
+
 ### What this phase must not repeat
 
 `CBIND-035` carried 1,414 of these rows while the plan recorded it ✅, `RELEASE_GATE.md` read
@@ -780,7 +811,22 @@ The caster effects and the shadow texture are **borrows** that keep the map aliv
 **Where a canonical setter clamps, the C route clamps.** `setRoughness` corrects an out-of-range value rather than refusing it, and `ContactShadowPass`'s setters store what they are given — a step count of zero traces nothing, which is a way of switching the pass off rather than an error. Refusing either would be this ABI inventing a rule the layer does not have.
 
 `ContactShadowPass` is a `PostProcessPass`, so it adds **no handle kind**: it is created here and driven by the shared operations, with its own settings discriminating on the concrete type. `isOccluded` keeps its strict band — a sample exactly at the bias is not occluded, which is the arm a `>=` would get wrong — and `combineVisibility` clamps both inputs before multiplying, so a caller cannot brighten a pixel by passing a visibility above one. Exports 3,053 → 3,097; 96/96 in both trees, all nine gates green, arm proved to execute. |
-| CBIND-086 | Bind clustered forward lighting | 117 | ⬜ | `ClusteredForwardEffect`, `ClusteredLightGrid`, `ClusteredLightSetEXT`, `ClusteredLightAssignment`, `ClusteredLightBuffer`, `ClusteredLightCompute`, `ClusteredLightEXT` and `ClusteredLightType`. The light set is a collection, so it takes the campaign's count/copy shape rather than a bound container; `ClusteredLightCompute` needs `SupportsComputeShadersEXT()` on top of the capability. **`CBIND-085C1` added a row here**: `ClusteredShadowPolicyEXT::select` takes a `ClusteredLightSetEXT`, so it waits for the slice that binds the type. |
+| CBIND-086 | Bind clustered forward lighting | 117 | 🟨 | **Decomposed into `CBIND-086A`–`CBIND-086C` below; the parent closes only when all three rows and every `CBIND-086` inventory row are closed** — the same rule `CBIND-084` and `CBIND-085` use. The split follows the dependency: the value types and the set before the grid, assignment and buffer that consume them, and the effect and the compute path last.
+
+**A correction this row carried, and the reason to read a claim before repeating it.** This row used to say `ClusteredLightCompute` "needs `SupportsComputeShadersEXT()` on top of the capability", and `CBIND-085`'s rows said the same about their own subsystems. That sentence came from `CLAUDE.md`, which names four `GraphicsDevice` queries; **only three of them are `GraphicsDevice` methods.** `SupportsComputeShadersEXT` is declared on `CNA::Internal::Renderers::IGraphicsRenderer`, an internal interface the inventory excludes by path — it has **no row anywhere**, in `CBIND-093` or elsewhere, so there was nothing to bind and nothing to move. What a C caller asks instead already exists: `cna_graphics_device_supports_capability` with `CNA_GRAPHICS_CAPABILITY_COMPUTE_SHADERS`, and `GraphicsCapability.hpp` states outright that this capability **is** the one answered by `IGraphicsRenderer::SupportsComputeShadersEXT()` rather than by a renderer's own switch. The capability is not a weaker question here; it is the same question. |
+| CBIND-086A | Bind the clustered light values and the light set | 29 | ✅ | **Done 2026-08-27.** 16 routes; exports 3,097 → 3,113. Passed on the first run, the second slice in a row to do so since the grep-first practice above became the rule.
+
+**The set is a collection of values, and that settles the lifetime question rather than deferring it.** `getAt` returns a reference and `getLights` a vector reference, but the element is a POD: the C form copies out, hands out no view onto anything the set owns, needs no counted borrow, and is never refused destruction — the opposite of `CBIND-084B`'s pool, decided by reading the element type rather than by copying the nearest precedent.
+
+**The two refusals are kept apart because a caller acts on them differently.** The canonical code throws `length_error` for a full set and `invalid_argument` for an unusable light; the firewall would flatten both. A full set is `CNA_RESULT_INVALID_STATE` — drop a light — and the bound exists because the uploaded buffer and the shader's index width are sized from it, so it is refused rather than grown. An unusable light is `CNA_RESULT_INVALID_ARGUMENT` — fix the light just built. `isUsable` is bound so a caller can ask before being refused, and the test asserts the two agree.
+
+**Three arms measured, and the third found something that is not in this slice.** Arm 1 (`cmake-build-debug`, `CNA_CNAEXT=OFF`) and arm 2 (`cmake-build-cnaext`, OPENGLES3/EasyGL) both pass, with the arm proved to execute by breaking it. Arm 3 — the same tree reconfigured to HEADLESS with `CNA_CNAEXT=ON` — **fails, and fails identically with this slice's test removed**, so it is pre-existing. See `CBIND-097`. |
+
+Preconditions already read out of the body: `add` refuses past `kMaxLights` (256) rather than growing, **because the uploaded buffer and the shader's index width are sized from that bound**; `add` and `replaceAt` refuse a light `isUsable` rejects; and `replaceAt`, `removeAt`, `getAt` and `getBoundsAt` refuse an index the set does not hold. Each becomes an assertion. |
+| CBIND-086B | Bind the cluster grid, the light assignment and the upload buffer | 46 | ⬜ | `ClusteredLightGrid`, `ClusteredLightAssignment` and `ClusteredLightBuffer` — the three that consume a light set. Read every `throw` and every `clamp` in all three bodies first and decide per site (see *Working practice* below). Expect the buffer to be the one with a device: if it hands out its uploaded storage, settle retention under `CBIND-084B`'s counted-borrow rules **before** writing the route. |
+| CBIND-086C | Bind the clustered forward effect and the compute path | 42 | ⬜ | `ClusteredForwardEffect`, `ClusteredLightCompute`, and `ClusteredShadowPolicyEXT::select`, which `CBIND-085C1` deferred here because it takes a `ClusteredLightSetEXT`. **Delete that symbol's `SYMBOL_OWNER_OVERRIDES` entry in the same commit that binds it** — an override that outlives its deferral points a planned row at a finished task, which is `CBIND-079`'s defect in miniature.
+
+**Three arms, three measurements**, because the compute path's success arm runs on exactly one renderer: `cmake-build-cnaext` on OPENGLES3/EasyGL for the success path (proved by breaking it and watching the exit code move to its own stage), the same tree reconfigured to HEADLESS for the compute-absent refusal, and `cmake-build-debug` with `CNA_CNAEXT=OFF` for the outputs-untouched path. |
 | CBIND-087 | Bind PBR materials and transparency | 177 | ⬜ | `PbrMaterial`, `PbrMaterialExtensions`, `ThinFilmIridescence`, `GltfMaterialBridge`, `TransparencyMode`, `TransparentDrawList` and `WeightedBlendedTransparency`, plus `PbrEffect` and `SkinnedPbrEffect` from `modules/graphics`. Materials carry texture references, so the borrowed-lifetime rules the campaign already settled for effects apply unchanged — a material never owns the `Texture2D` a caller hands it. |
 | CBIND-088 | Bind the render pipeline and its settings | 118 | ⬜ | `RenderPipeline` and `RenderPipelineSettings`. Two headers and 117 rows: `RenderPipelineSettings` alone is 79, almost all of it POD fields, which makes this the phase's clearest candidate for a fixed-layout struct plus an ABI-layout test rather than 79 accessor pairs. Decide that shape here and the rest of the phase gets shorter. **`CBIND-084C` added a row to this slice**: `PostProcessContext::settings` points at this type, and binding it against a subset would have applied engine defaults for every omitted field, so the field waits for the full settings binding here. |
 | CBIND-089 | Bind the post-process chain and its passes | 232 | ⬜ | `PostProcessChain` and the seventeen passes it drives: bloom, SSAO, SSR, depth of field, motion blur, FXAA, chromatic aberration, film grain, lens flare, light shafts, height fog, volumetric fog, aerial perspective, spatial upscale, decals and the ASCII pass. The largest row count in the phase, but the most repetitive: the pass base from `CBIND-084` should make each pass a settings POD plus create/apply/destroy. If it does not, stop and fix `CBIND-084` rather than writing seventeen bespoke shapes. |
@@ -789,6 +835,11 @@ The caster effects and the shadow texture are **borrows** that keep the map aliv
 | CBIND-092 | Bind instancing, LOD, culling, particles and debug drawing | 138 | ⬜ | `InstancedRendererEXT`, `LodGroupEXT`, `FrustumCullerEXT`, `GpuInstanceCuller`, `ParticleSystem`, `DebugDraw`, `DebugGizmos`, and `IndirectDrawArguments`, `GraphicsMemoryBarrier` and `GraphicsImageAccess` from `modules/graphics`. **`GraphicsMemoryBarrier` and `GraphicsImageAccess` moved to `CBIND-084A`**, which needed them for `cna_compute_shader_barrier` and `_bind_image`; that is why this row reads 138 rather than the 157 it was sized at. |
 | CBIND-093 | Bind the engine-layer surface on existing XNA and core types | 47 | ⬜ | The `*EXT` methods the layer grafted onto types the C ABI already binds — `BasicEffect`, `SkinnedEffect`, `ShaderEffect` and `GraphicsDevice` — plus `CNA::SetAssemblyTitleEXT`/`GetAssemblyTitleEXT` and `AssemblyTitleAttributeEXT` in `modules/core`. These extend handles that already exist, so no new handle kind should appear here; the four `GraphicsDevice` capability queries (`ExecutesShaderEffectSourceEXT`, `SupportsShadowSamplingEXT`, `SupportsImageBasedLightingEXT`, `SupportsComputeShadersEXT`) are the rows the rest of the phase calls, so they land early even though this slice closes late. |
 | CBIND-094 | Make `CApi_MediaSmoke` and `CApi_GamersSmoke` hermetic | — | ✅ | **Done 2026-08-26.** Both tests read the ambient environment rather than one the registration controls: `CApi_MediaSmoke` writes under `$HOME` through the media library and fails outright where `$HOME` is not writable, and `CApi_GamersSmoke` opens an audio device and blocks where PulseAudio is unreachable. Both now get an isolated `XDG_DATA_HOME`/`HOME` under the build tree and `SDL_AUDIODRIVER=dummy`, unconditionally rather than only under `SDL_RENDERER`. A test whose result depends on the machine it runs on is not evidence, and these two were the reason a review of this branch had to hand-patch its environment before it could measure anything. |
+| CBIND-097 | The shadow suites assume a renderer that supports shadows | — | ⬜ | **Found by `CBIND-086A`'s third verification arm, and not fixed there.** `EngineLayerSmoke.c`'s `CBIND-085B1` and `085B2` arms pass on OPENGLES3/EasyGL and on the layer-absent build, and fail on **HEADLESS with `CNA_CNAEXT=ON`** — a configuration those slices never ran. The cause is read, not guessed: `ShadowMap::begin` sets `passOpen_` **only when the map is supported**, so on a renderer whose caster shader does not link it binds, clears and returns without opening a pass; `applyCaster` and `end` then refuse because there is no pass, and the suite asserts they succeed. `CascadedShadowMap::begin` and `CubeShadowMap::begin` additionally require `updated_`, which the same renderers may not reach.
+
+The fix is to branch those assertions on the map's own `_is_supported` — an unsupported map refusing `end` **is** the contract, not a failure. It is a task rather than a patch because it touches two landed slices' evidence, and a half-verified edit to a test that is correct on the trees it was signed off against is worse than a recorded defect. Whoever takes it should run all three arms, not two.
+
+**The general lesson, which outlives the fix:** two arms were never enough. A slice verified on the renderer that supports its subsystem and on the build where the layer is absent has not tested the third case — the layer present on a renderer that cannot do the work — and that is where a subsystem's degrade-rather-than-fail contract actually lives. |
 | CBIND-095 | Close the reopened matrix | — | ⬜ | Closes when `CBIND-080`–`CBIND-093` are ✅ and the inventory has no planned row. `RELEASE_GATE.md` reads **ready** again, `LIMITATIONS.md` covers every new partial with an owner-approved disposition, the ABI baseline is regenerated, and the export count in the docs matches. Do not close this row on the strength of a green `--check` alone: `--check` proves the matrix matches the headers, and the four previous closures each proved that is not the same thing as finished. |
 
 ## Mandatory test layers
@@ -849,8 +900,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-27, after `CBIND-085C2`):** 513 headers / 8,306 symbols —
-**6,779 implemented, 15 approved partial, 1,053 planned, 459 not applicable.** ABI `0.9.0`, 3,097
+**Snapshot (2026-08-27, after `CBIND-086A`):** 513 headers / 8,306 symbols —
+**6,808 implemented, 15 approved partial, 1,024 planned, 459 not applicable.** ABI `0.9.0`, 3,113
 exported symbols — the same 2,942 with `CNA_CNAEXT` on and off, which is the engine layer's ABI
 promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.

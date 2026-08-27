@@ -1231,6 +1231,22 @@
   "cna_clipboard_get_has_text",
   "cna_clipboard_get_text_size",
   "cna_clipboard_set_text",
+  "cna_clustered_light_ext_init",
+  "cna_clustered_light_set_add",
+  "cna_clustered_light_set_add_point",
+  "cna_clustered_light_set_add_spot",
+  "cna_clustered_light_set_clear",
+  "cna_clustered_light_set_copy_bounds",
+  "cna_clustered_light_set_copy_lights",
+  "cna_clustered_light_set_create",
+  "cna_clustered_light_set_destroy",
+  "cna_clustered_light_set_get_at",
+  "cna_clustered_light_set_get_bounds_at",
+  "cna_clustered_light_set_get_count",
+  "cna_clustered_light_set_is_empty",
+  "cna_clustered_light_set_is_usable",
+  "cna_clustered_light_set_remove_at",
+  "cna_clustered_light_set_replace_at",
   "cna_clustered_shadow_policy_copy_selected",
   "cna_clustered_shadow_policy_create",
   "cna_clustered_shadow_policy_destroy",
@@ -4147,6 +4163,9 @@
   "CNA_CLIP_TARGET_SPACE_JOINT_PALETTE_EXT": 0,
   "CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT": 1,
   "CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT": 1,
+  "CNA_CLUSTERED_LIGHT_SET_MAX_EXT": 256,
+  "CNA_CLUSTERED_LIGHT_TYPE_POINT": 0,
+  "CNA_CLUSTERED_LIGHT_TYPE_SPOT": 1,
   "CNA_CLUSTERED_SHADOW_DEFAULT_BUDGET_EXT": 4,
   "CNA_CLUSTERED_SHADOW_DEFAULT_HYSTERESIS_EXT": 1,
   "CNA_COLOR_WRITE_ALL": 15,
@@ -5413,6 +5432,14 @@
    4
   ],
   "CNA_ClipTargetSpaceEXT": [
+   4,
+   4
+  ],
+  "CNA_ClusteredLightSetHandle": [
+   8,
+   8
+  ],
+  "CNA_ClusteredLightType": [
    4,
    4
   ],
@@ -7108,6 +7135,60 @@
     ]
    },
    "size": 12
+  },
+  "CNA_ClusteredLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     12,
+     1
+    ],
+    "color": [
+     40,
+     12
+    ],
+    "direction": [
+     28,
+     12
+    ],
+    "inner_angle": [
+     60,
+     4
+    ],
+    "intensity": [
+     52,
+     4
+    ],
+    "outer_angle": [
+     64,
+     4
+    ],
+    "position": [
+     16,
+     12
+    ],
+    "range": [
+     56,
+     4
+    ],
+    "reserved": [
+     13,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "type": [
+     8,
+     4
+    ]
+   },
+   "size": 68
   },
   "CNA_Color": {
    "align": 1,

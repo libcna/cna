@@ -15537,6 +15537,67 @@
         "CPP-CB0FFC39444E",
         "CPP-FCF110952541"
       ]
+    },
+    {
+      "id": "clustered-light-value",
+      "qualified_name_regex": "^CNA::Graphics::(?:ClusteredLightEXT(?:::[A-Za-z0-9_]+)?|ClusteredLightType(?:::[A-Za-z0-9_]+)?)$",
+      "kinds": [
+        "struct",
+        "field",
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_ClusteredLightEXT` and `CNA_ClusteredLightType` with its two constants at the canonical ordinals, plus `cna_clustered_light_ext_init`, whose defaults are checked against the canonical aggregate wherever the layer is compiled in. A pure value, so the init route works in both builds.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-086A",
+      "approved_symbols": [
+        "CPP-37F6A8674F5C",
+        "CPP-44F718B67998",
+        "CPP-4A9D309A7FEB",
+        "CPP-755E66B86599",
+        "CPP-79FB6076419F",
+        "CPP-7EFA7CA2DCA3",
+        "CPP-A71EECE7EA2A",
+        "CPP-ABA8EB58D795",
+        "CPP-BCC7BC712E8A",
+        "CPP-C6C876756CE7",
+        "CPP-E032557E0716",
+        "CPP-F99A54B880B2",
+        "CPP-FA65B2EB5F18"
+      ]
+    },
+    {
+      "id": "clustered-light-set",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredLightSetEXT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`cna_clustered_light_set_*` over an owned handle, with `kMaxLights` as `CNA_CLUSTERED_LIGHT_SET_MAX_EXT` and a `static_assert` tying them together. **It is a collection of values, and that settles the lifetime question rather than deferring it:** `getAt` returns a reference and `getLights` a vector reference, but the element is a POD, so the C form copies out and hands out no view onto anything the set owns -- no counted borrow, and destruction is never refused, which is the opposite of the render-target pool and worth stating. `getLights` and `collectBounds` take the count/copy form. The three `add` overloads become three named routes.\n\nThe canonical code refuses two different ways and the C form keeps them apart, because a caller acts on them differently: a full set is `CNA_RESULT_INVALID_STATE` (drop a light -- the bound exists because the uploaded buffer and the shader's index width are sized from it, so it is refused rather than grown), an unusable light is `CNA_RESULT_INVALID_ARGUMENT` (fix the light just built). `isUsable` is bound so a caller can ask before being refused.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-086A",
+      "approved_symbols": [
+        "CPP-06B4EDCE7C61",
+        "CPP-2A7A58441286",
+        "CPP-388E39D99799",
+        "CPP-46F9A3AD4058",
+        "CPP-49F3224FD1E9",
+        "CPP-5B58EBC35FCF",
+        "CPP-7578F5D267C3",
+        "CPP-A05CCCDF728F",
+        "CPP-AC6132BCF652",
+        "CPP-B499F97C4808",
+        "CPP-BD8EDA12DD4B",
+        "CPP-C2976741F6E3",
+        "CPP-D4225A38DC37",
+        "CPP-D531B110FE27",
+        "CPP-E0D05C9AC6BD",
+        "CPP-F12C7C347EB7"
+      ]
     }
   ]
 }
