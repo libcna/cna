@@ -552,17 +552,19 @@ The initial renderer is deliberately useful rather than an empty scaffold. It cu
 
 ## Important limitations
 
-The desktop feature set now covers 3D (every stock effect), real instancing,
-`RenderTarget2D`/`RenderTargetCube`, MSAA, `Texture3D`, mip generation, the full render state
-(blend, rasterizer/cull, viewport, scissor, depth-stencil), `Texture2D`/`TextureCube`/backbuffer
-readback (`WEBGPU-51`), and -- since 2026-08-26 -- the browser path (`WEBGPU-119`–`122`). Those are
-described in their own sections above and are no longer "limitations". What is **genuinely still
+The desktop feature set now covers 3D (every stock effect, with FNA fog parity), real instancing,
+`RenderTarget2D`/`RenderTargetCube`, MSAA (backbuffer + `RenderTarget2D`), `Texture3D`, mip generation,
+the full render state (blend, rasterizer/cull, viewport, scissor, depth-stencil incl. full stencil ops),
+`Texture2D`/`TextureCube`/backbuffer readback (`WEBGPU-51`), MRT, occlusion queries, custom WGSL effects,
+GPU-native compressed textures, and -- since 2026-08-26 -- the browser path (`WEBGPU-119`–`122`). Those
+are described in their own sections above and are no longer "limitations". What is **genuinely still
 open** in `plans/plan_webgpu.md`:
 
 - **Per-`RenderTarget2D` `multiSampleCount`** -- a target's own constructor sample count is ignored;
-  it mirrors the renderer's global sample count instead. Backbuffer and render-target MSAA otherwise
+  it mirrors the renderer's global sample count instead. Backbuffer and `RenderTarget2D` MSAA otherwise
   work end to end (`WEBGPU-58`, `WebGPU_Msaa` 6/6).
-- `TextureCube`/`RenderTargetCube` mip regeneration.
+- **`RenderTargetCube` per-face MSAA** -- ignored; `GetMultiSampleCount()` reports 0 (`WEBGPU-114`).
+- `TextureCube`/`RenderTargetCube` mip regeneration (`mipMap=true` throws on a `RenderTargetCube`).
 
 **Multiple render targets are supported** (`WEBGPU-85`/`86`/`87`): `SupportsCapability(MultipleRenderTargets)`
 reports true, and `SetRenderTargets` binds 2..4 `RenderTarget2D` targets that share width/height/sample
