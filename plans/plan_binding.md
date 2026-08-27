@@ -974,7 +974,19 @@ Three arms, all passing. 96/96 in both trees, all nine gates green. |
 Three arms, all passing. 96/96 in both trees, all nine gates green.
 
 **A flake worth naming rather than shrugging at.** The first full ON-tree run failed four unrelated suites — `CApi_BasicEffectSmoke`, `CApi_ModelSmoke`, `CApi_LifecycleSmoke`, `CApi_InputSnapshotsSmoke` — which then passed in isolation and on two consecutive full reruns, with the virtual display verified alive throughout so the earlier "dead `:101`" explanation does not apply here. That is the **third** occurrence of this shape in the phase, in a third unrelated set of suites. Recorded as `CBIND-101`; not diagnosed from three unreproduced samples, and no test changed on the strength of them. |
-| CBIND-089C | Bind the atmospheric passes | 62 | ⬜ | `AerialPerspectivePass` (17), `VolumetricFogPass` (15), `HeightFogPass` (15), `LightShaftPass` (15) — 38 pass-specific rows. None throws. `AerialPerspectivePass` has eight floors and one clamp, the most correction-dense body of the seventeen; `HeightFogPass` has floors and guarded assignments and **no clamp at all**, which is exactly the combination a `clamp` grep reports as "corrects nothing". |
+| CBIND-089C | Bind the atmospheric passes | 62 | ✅ | `AerialPerspectivePass` (17), `VolumetricFogPass` (15), `HeightFogPass` (15), `LightShaftPass` (15) — 38 pass-specific rows. None throws. `AerialPerspectivePass` has eight floors and one clamp, the most correction-dense body of the seventeen; `HeightFogPass` has floors and guarded assignments and **no clamp at all**, which is exactly the combination a `clamp` grep reports as "corrects nothing".
+
+**Done 2026-08-27.** 39 routes; exports 3,363 → 3,402, identical in both trees with zero symbols differing. `CBIND-089B`'s two helpers were reused unchanged, which is what made four more passes a table rather than four more designs.
+
+**The guards are not interchangeable, and that is the whole slice.** Four setters guard with `if (value >= 0)` and **accept zero** — no fog, no shafts and no aerial perspective are all legitimate settings — while `VolumetricFogPass::setRange` and `HeightFogPass::setFalloff` guard with `if (value > 0)` and reject zero as well, because a zero range has no volume to march and a zero falloff is a division by zero. A shared "negatives are ignored" reading would have got two of the six wrong. Proved to matter by asserting the range guard admits zero the way the density beside it does: the exit code moves to stage 28 on both arms.
+
+**Two bounds worth naming.** `setTurbidity` floors at **one**, not zero — turbidity is a ratio against a perfectly clear atmosphere, so below one describes air clearer than vacuum. `setAnisotropy` clamps to **−0.95 through 0.95**, the only two-sided clamp in this phase with a negative lower bound, because scattering runs from fully backward to fully forward and both poles are singular. Neither is guessable from the field's name.
+
+**A generator bug of mine, caught by the run rather than by review.** The stage generator's `else` branch swallowed `free` fields alongside the `> 0` guarded ones, so `HeightFogPass::setBaseHeight` — which corrects nothing — was given "rejects zero" assertions and failed at once. The generator now has an explicit `free` branch. Worth noting because the table was right and the code that consumed it was not: **a correct classification does not survive a generator that cannot express one of its cases.**
+
+The three pure functions are checked by their **relationships** rather than by duplicating their maths: air mass grows with distance, transmittance falls as air mass grows, and optical depth is exactly zero at zero distance and grows with both distance and density.
+
+Three arms, all passing. 96/96 in both trees, all nine gates green. |
 | CBIND-089D | Bind the remaining passes | 96 | ⬜ | `BloomPass` (15), `DecalPass` (14), `LensFlarePass` (13), `MotionBlurPass` (11), `FxaaPass` (10), `SpatialUpscalePass` (10), `ChromaticAberrationPass` (8), `FilmGrainPass` (8), `AsciiPass` (7) — 46 pass-specific rows across nine passes: the largest row count and the smallest per-pass surface. `DecalPass`, `SpatialUpscalePass` and `AsciiPass` are the three here that throw. `FxaaPass` corrects nothing at all, which is worth asserting rather than assuming, on the `CBIND-087B` precedent. |
 | CBIND-090 | Bind HDR output, tonemapping and colour grading | 87 | ⬜ | `HdrDisplayOutput`, `TonemapPass`, `TonemappingMode`, `ColorGradePass`, `CubeLut`, `LutInterpolation`, `AutoExposureEXT` and `DisplayColorSpace`. `CubeLut` reads caller-supplied bytes, so it is a byte-facing surface and inherits the release gate's requirement for an independent oracle and a fuzz target — not just a smoke test. |
 | CBIND-091 | Bind image-based lighting, probes, sky and area-light shading | 140 | ⬜ | **`CBIND-086C` moved three rows here** — `ClusteredForwardEffect::setAreaLight`, `setLightProbe` and `setLightProbeVolume`, each naming a type this slice owns; their `clear*`/`has*` partners are already bound. `LightProbeEXT`, `LightProbeVolumeEXT`, `LightProbeBaker`, `EnvironmentProcessor`, `Skybox`, `AtmosphericSky`, `AreaLightBrdfTable`, `AreaLightShading`, and `AreaLightEXT`/`ImageBasedLightEXT` from `modules/graphics`. `SupportsImageBasedLightingEXT()` gates the whole slice; the baker is long-running and needs the campaign's settled answer for operations that are not instantaneous. |
@@ -1078,9 +1090,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-27, after `CBIND-089B`):** 513 headers / 8,306 symbols —
-**7,255 implemented, 15 approved partial, 577 planned, 459 not applicable.** ABI `0.9.0`, 3,363
-exported symbols — the same 3,363 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
+**Snapshot (2026-08-27, after `CBIND-089C`):** 513 headers / 8,306 symbols —
+**7,317 implemented, 15 approved partial, 515 planned, 459 not applicable.** ABI `0.9.0`, 3,402
+exported symbols — the same 3,402 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 The release gate reads **not ready**, on the one criterion the planned rows fail:

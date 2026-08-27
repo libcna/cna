@@ -6996,6 +6996,487 @@ CNA_C_API CNA_Result cna_depth_of_field_pass_circle_of_confusion_millimetres(
     float depth, float focus_distance, float focal_length, float f_number,
     float* out_millimetres);
 
+/* ---------------------------------------------------------------------------------------------
+ * The atmospheric passes
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief How many froxel slices the volumetric fog marches. */
+#define CNA_VOLUMETRIC_FOG_SLICE_COUNT_EXT INT32_C(32)
+
+/** @brief The lateral resolution of each froxel slice. */
+#define CNA_VOLUMETRIC_FOG_SLICE_RESOLUTION_EXT INT32_C(96)
+
+/** @brief How many samples the light-shaft radial blur takes. */
+#define CNA_LIGHT_SHAFT_STEP_COUNT_EXT INT32_C(24)
+
+/**
+ * @brief Creates a aerial-perspective pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's SunDirection.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_get_sun_direction(
+    CNA_PostProcessPassHandle pass, CNA_Vector3* out_value);
+
+/**
+ * @brief Sets the pass's SunDirection.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given -- the canonical setter corrects nothing here.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass or the value is null,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_set_sun_direction(
+    CNA_PostProcessPassHandle pass, const CNA_Vector3* value);
+
+/**
+ * @brief Returns the pass's Turbidity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_get_turbidity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Turbidity.
+ *
+ * @param pass The pass.
+ * @param value The value, **floored at one**, not at zero: turbidity is a ratio against a perfectly clear atmosphere, so a value below one describes air clearer than vacuum.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_set_turbidity(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_get_intensity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when negative**, but zero is accepted -- a guarded assignment whose bound admits zero, because no aerial perspective at all is a legitimate setting.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_set_intensity(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's ScaleHeight.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_get_scale_height(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's ScaleHeight.
+ *
+ * @param pass The pass.
+ * @param value The value, **floored at 0.001** -- the air-mass integral divides by it, so zero is a division by zero rather than a thin atmosphere.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a AerialPerspectivePass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_set_scale_height(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Creates a volumetric-fog pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Density.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a VolumetricFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_get_density(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Density.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when negative**, but zero is accepted -- no fog is a legitimate setting.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a VolumetricFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_set_density(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's Anisotropy.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a VolumetricFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_get_anisotropy(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Anisotropy.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped to -0.95 through 0.95** -- the only two-sided clamp in this phase with a negative lower bound, because scattering runs from fully backward to fully forward and the poles are singular.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a VolumetricFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_set_anisotropy(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's Range.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a VolumetricFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_get_range(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Range.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- a zero range has no volume to march through, so unlike the density beside it this guard rejects zero as well as negatives.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a VolumetricFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_set_range(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Creates a height-fog pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's Color.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_get_color(
+    CNA_PostProcessPassHandle pass, CNA_Vector3* out_value);
+
+/**
+ * @brief Sets the pass's Color.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass or the value is null,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_set_color(
+    CNA_PostProcessPassHandle pass, const CNA_Vector3* value);
+
+/**
+ * @brief Returns the pass's Density.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_get_density(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Density.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when negative**, but zero is accepted -- no fog is a legitimate setting.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_set_density(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's Falloff.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_get_falloff(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Falloff.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when not positive** -- the exponential divides by it, so zero is rejected as well as negatives.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_set_falloff(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's BaseHeight.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_get_base_height(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's BaseHeight.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given -- a fog base below the origin is legitimate, so this one is not floored.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a HeightFogPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_set_base_height(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Creates a light-shaft pass.
+ *
+ * Creation succeeds on a renderer that cannot run it; ask `cna_post_process_pass_is_supported`.
+ * Release it with `cna_post_process_pass_destroy`.
+ *
+ * @param graphics_device The device to compile on.
+ * @param out_pass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_create(
+    CNA_Handle graphics_device, CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the pass's LightScreenPosition.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_get_light_screen_position(
+    CNA_PostProcessPassHandle pass, CNA_Vector2* out_value);
+
+/**
+ * @brief Sets the pass's LightScreenPosition.
+ *
+ * @param pass The pass.
+ * @param value The value, stored as given -- a light off the edge of the screen still casts shafts across it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass or the value is null,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_set_light_screen_position(
+    CNA_PostProcessPassHandle pass, const CNA_Vector2* value);
+
+/**
+ * @brief Returns the pass's Threshold.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_get_threshold(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Threshold.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when negative**, but zero is accepted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_set_threshold(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_get_intensity(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Intensity.
+ *
+ * @param pass The pass.
+ * @param value The value, **ignored when negative**, but zero is accepted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_set_intensity(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Returns the pass's Decay.
+ *
+ * @param pass The pass.
+ * @param out_value Receives the value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_get_decay(
+    CNA_PostProcessPassHandle pass, float* out_value);
+
+/**
+ * @brief Sets the pass's Decay.
+ *
+ * @param pass The pass.
+ * @param value The value, **clamped** to zero through one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a LightShaftPass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_shaft_pass_set_decay(
+    CNA_PostProcessPassHandle pass, const float value);
+
+/**
+ * @brief Copies why the aerial-perspective pass fell back, as UTF-8 bytes without a terminator.
+ *
+ * Empty when nothing fell back.
+ *
+ * @param pass The pass.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` when
+ * the pass is not an AerialPerspectivePass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer,
+ * or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_copy_fallback_reason(
+    CNA_PostProcessPassHandle pass, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Returns the air mass along a view ray over a distance.
+ *
+ * A pure function of its arguments, so it needs no pass.
+ *
+ * @param view_direction The direction the ray travels.
+ * @param distance How far it travels.
+ * @param scale_height The atmosphere's scale height.
+ * @param out_air_mass Receives the air mass.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null direction,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_air_mass_for_distance(
+    const CNA_Vector3* view_direction, float distance, float scale_height, float* out_air_mass);
+
+/**
+ * @brief Returns the transmittance through a given air mass at a given turbidity.
+ *
+ * A pure function of its arguments.
+ *
+ * @param turbidity The atmosphere's turbidity.
+ * @param air_mass The air mass the light crosses.
+ * @param out_transmittance Receives the per-channel transmittance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_aerial_perspective_pass_transmittance(
+    float turbidity, float air_mass, CNA_Vector3* out_transmittance);
+
+/**
+ * @brief Returns the optical depth through height fog along a ray.
+ *
+ * A pure function of its arguments, so it needs no pass.
+ *
+ * @param camera_height The camera's height.
+ * @param ray_height_step How much height the ray gains per unit of distance.
+ * @param distance How far the ray travels.
+ * @param density The fog's density.
+ * @param falloff The fog's exponential falloff.
+ * @param base_height The height the fog is densest at.
+ * @param out_depth Receives the optical depth.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_height_fog_pass_optical_depth(
+    float camera_height,
+    float ray_height_step,
+    float distance,
+    float density,
+    float falloff,
+    float base_height,
+    float* out_depth);
+
+/**
+ * @brief Gives the volumetric fog the light it marches against.
+ *
+ * The shadow map is **borrowed**, never owned; pass `CNA_INVALID_HANDLE` to march unshadowed.
+ *
+ * @param pass The pass.
+ * @param shadow_map The shadow map, or `CNA_INVALID_HANDLE`.
+ * @param light_direction The light's direction.
+ * @param light_color The light's colour.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * VolumetricFogPass or a vector is null, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or
+ * an error.
+ */
+CNA_C_API CNA_Result cna_volumetric_fog_pass_set_light(
+    CNA_PostProcessPassHandle pass,
+    CNA_ShadowMapHandle shadow_map,
+    const CNA_Vector3* light_direction,
+    const CNA_Vector3* light_color);
+
 #ifdef __cplusplus
 }
 #endif

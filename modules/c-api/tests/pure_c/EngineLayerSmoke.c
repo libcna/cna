@@ -588,6 +588,31 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-089C. The four atmospheric passes and their three pure functions. */
+    {
+        CNA_PostProcessPassHandle pass = CNA_INVALID_HANDLE;
+        CNA_Vector3 vector;
+        uint64_t number = UINT64_C(0);
+        float scalar = -1.0F;
+        vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+        if (cna_aerial_perspective_pass_create(graphics_device, &pass) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            pass != CNA_INVALID_HANDLE ||
+            cna_volumetric_fog_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_height_fog_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_shaft_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_shaft_pass_get_decay(pass, &scalar) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_aerial_perspective_pass_copy_fallback_reason(pass, 0, UINT64_C(0), &number) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_aerial_perspective_pass_air_mass_for_distance(&vector, 1.0F, 1.0F, &scalar) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_aerial_perspective_pass_transmittance(2.0F, 1.0F, &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_height_fog_pass_optical_depth(0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 0.0F, &scalar) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -4471,6 +4496,222 @@ static int validate_screen_space_passes(const CNA_Handle graphics_device)
     return ok;
 }
 
+
+
+/* CBIND-089C. Four passes whose guards are NOT interchangeable: some admit zero and some reject
+   it, and one floors at a value that is neither zero nor obvious. Asserting them apart is the
+   whole point of the stage -- a shared "negative is ignored" expectation would pass while
+   setRange(0) and setDensity(0) behaved differently from what the header promises. */
+static int validate_atmospheric_passes(const CNA_Handle graphics_device)
+{
+    CNA_PostProcessPassHandle aerial = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle volfog = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle heightfog = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle shaft = CNA_INVALID_HANDLE;
+    CNA_Vector3 vector;
+    CNA_Vector3 read_back;
+    CNA_Vector2 point;
+    CNA_Vector2 point_back;
+    uint64_t bytes = UINT64_C(0);
+    float scalar = -1.0F;
+    int ok = 1;
+
+    if (cna_aerial_perspective_pass_create(graphics_device, &aerial) != CNA_RESULT_SUCCESS ||
+        cna_volumetric_fog_pass_create(graphics_device, &volfog) != CNA_RESULT_SUCCESS ||
+        cna_height_fog_pass_create(graphics_device, &heightfog) != CNA_RESULT_SUCCESS ||
+        cna_light_shaft_pass_create(graphics_device, &shaft) != CNA_RESULT_SUCCESS) {
+        (void)cna_post_process_pass_destroy(aerial);
+        (void)cna_post_process_pass_destroy(volfog);
+        (void)cna_post_process_pass_destroy(heightfog);
+        (void)cna_post_process_pass_destroy(shaft);
+        return 0;
+    }
+
+    /* Refused by argument, not by handle, when the handle names another pass. */
+    ok = cna_volumetric_fog_pass_get_range(aerial, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_aerial_perspective_pass_get_turbidity(shaft, &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+
+    /* ---- aerial_perspective_pass ---- */
+    vector.x = 0.25F; vector.y = -0.5F; vector.z = 2.0F;
+    ok = ok && cna_aerial_perspective_pass_set_sun_direction(aerial, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_get_sun_direction(aerial, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == 0.25F && read_back.y == -0.5F && read_back.z == 2.0F;
+    ok = ok && cna_aerial_perspective_pass_set_sun_direction(aerial, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_aerial_perspective_pass_set_turbidity(aerial, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_get_turbidity(aerial, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.0F;
+    ok = ok && cna_aerial_perspective_pass_set_turbidity(aerial, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_get_turbidity(aerial, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 900.0F;
+    /* Guard admits zero: a valid value, then zero which IS accepted, then a negative
+       which is ignored and must leave zero in place. */
+    ok = ok && cna_aerial_perspective_pass_set_intensity(aerial, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_set_intensity(aerial, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_get_intensity(aerial, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_aerial_perspective_pass_set_intensity(aerial, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_get_intensity(aerial, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_aerial_perspective_pass_set_scale_height(aerial, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_get_scale_height(aerial, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.001F;
+    ok = ok && cna_aerial_perspective_pass_set_scale_height(aerial, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_aerial_perspective_pass_get_scale_height(aerial, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 900.0F;
+
+    /* ---- volumetric_fog_pass ---- */
+    /* Guard admits zero: a valid value, then zero which IS accepted, then a negative
+       which is ignored and must leave zero in place. */
+    ok = ok && cna_volumetric_fog_pass_set_density(volfog, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_set_density(volfog, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_get_density(volfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_volumetric_fog_pass_set_density(volfog, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_get_density(volfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_volumetric_fog_pass_set_anisotropy(volfog, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_get_anisotropy(volfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.95F;
+    ok = ok && cna_volumetric_fog_pass_set_anisotropy(volfog, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_get_anisotropy(volfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -0.95F;
+    /* Guard rejects zero as well as negatives, unlike its >= 0 neighbours. */
+    ok = ok && cna_volumetric_fog_pass_set_range(volfog, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_set_range(volfog, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_get_range(volfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 4.0F;
+    ok = ok && cna_volumetric_fog_pass_set_range(volfog, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_get_range(volfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 4.0F;
+
+    /* ---- height_fog_pass ---- */
+    vector.x = 0.25F; vector.y = -0.5F; vector.z = 2.0F;
+    ok = ok && cna_height_fog_pass_set_color(heightfog, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_get_color(heightfog, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == 0.25F && read_back.y == -0.5F && read_back.z == 2.0F;
+    ok = ok && cna_height_fog_pass_set_color(heightfog, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    /* Guard admits zero: a valid value, then zero which IS accepted, then a negative
+       which is ignored and must leave zero in place. */
+    ok = ok && cna_height_fog_pass_set_density(heightfog, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_set_density(heightfog, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_get_density(heightfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_height_fog_pass_set_density(heightfog, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_get_density(heightfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    /* Guard rejects zero as well as negatives, unlike its >= 0 neighbours. */
+    ok = ok && cna_height_fog_pass_set_falloff(heightfog, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_set_falloff(heightfog, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_get_falloff(heightfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 4.0F;
+    ok = ok && cna_height_fog_pass_set_falloff(heightfog, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_get_falloff(heightfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 4.0F;
+    /* Corrects nothing: an out-of-range value survives in both directions. */
+    ok = ok && cna_height_fog_pass_set_base_height(heightfog, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_get_base_height(heightfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == -900.0F;
+    ok = ok && cna_height_fog_pass_set_base_height(heightfog, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_height_fog_pass_get_base_height(heightfog, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 900.0F;
+
+    /* ---- light_shaft_pass ---- */
+    point.x = -3.0F; point.y = 7.0F;
+    ok = ok && cna_light_shaft_pass_set_light_screen_position(shaft, &point) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_get_light_screen_position(shaft, &point_back) == CNA_RESULT_SUCCESS &&
+        point_back.x == -3.0F && point_back.y == 7.0F;
+    ok = ok && cna_light_shaft_pass_set_light_screen_position(shaft, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    /* Guard admits zero: a valid value, then zero which IS accepted, then a negative
+       which is ignored and must leave zero in place. */
+    ok = ok && cna_light_shaft_pass_set_threshold(shaft, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_set_threshold(shaft, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_get_threshold(shaft, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_light_shaft_pass_set_threshold(shaft, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_get_threshold(shaft, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    /* Guard admits zero: a valid value, then zero which IS accepted, then a negative
+       which is ignored and must leave zero in place. */
+    ok = ok && cna_light_shaft_pass_set_intensity(shaft, 4.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_set_intensity(shaft, 0.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_get_intensity(shaft, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_light_shaft_pass_set_intensity(shaft, -5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_get_intensity(shaft, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_light_shaft_pass_set_decay(shaft, 900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_get_decay(shaft, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.0F;
+    ok = ok && cna_light_shaft_pass_set_decay(shaft, -900.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_shaft_pass_get_decay(shaft, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+
+    /* The three constants name the canonical ones, tied by a static_assert. */
+    ok = ok && CNA_VOLUMETRIC_FOG_SLICE_COUNT_EXT > INT32_C(0) &&
+        CNA_VOLUMETRIC_FOG_SLICE_RESOLUTION_EXT > INT32_C(0) &&
+        CNA_LIGHT_SHAFT_STEP_COUNT_EXT > INT32_C(0);
+
+    /* The fog light is borrowed; an invalid map handle means "march unshadowed", not an error. */
+    vector.x = 0.0F; vector.y = -1.0F; vector.z = 0.0F;
+    read_back.x = 1.0F; read_back.y = 1.0F; read_back.z = 1.0F;
+    ok = ok && cna_volumetric_fog_pass_set_light(
+            volfog, CNA_INVALID_HANDLE, &vector, &read_back) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_volumetric_fog_pass_set_light(volfog, CNA_INVALID_HANDLE, 0, &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_volumetric_fog_pass_set_light(aerial, CNA_INVALID_HANDLE, &vector,
+                                                 &read_back) == CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_aerial_perspective_pass_copy_fallback_reason(aerial, 0, UINT64_C(0), &bytes) !=
+        CNA_RESULT_INVALID_HANDLE;
+    ok = ok && cna_aerial_perspective_pass_copy_fallback_reason(shaft, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Air mass grows with distance, and transmittance falls as it does -- the two are inverse,
+       which is the only relationship worth asserting without duplicating the maths. */
+    {
+        float near_mass = -1.0F;
+        float far_mass = -1.0F;
+        CNA_Vector3 near_t;
+        CNA_Vector3 far_t;
+        vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+        ok = ok && cna_aerial_perspective_pass_air_mass_for_distance(
+                &vector, 10.0F, 8000.0F, &near_mass) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_aerial_perspective_pass_air_mass_for_distance(
+                &vector, 1000.0F, 8000.0F, &far_mass) == CNA_RESULT_SUCCESS;
+        ok = ok && far_mass > near_mass;
+        ok = ok && cna_aerial_perspective_pass_air_mass_for_distance(0, 10.0F, 1.0F,
+                                                                    &near_mass) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_aerial_perspective_pass_transmittance(2.0F, near_mass, &near_t) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_aerial_perspective_pass_transmittance(2.0F, far_mass, &far_t) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && far_t.x <= near_t.x && far_t.y <= near_t.y && far_t.z <= near_t.z;
+    }
+
+    /* Optical depth grows with distance and with density, and is zero at zero distance. */
+    {
+        float thin = -1.0F;
+        float thick = -1.0F;
+        ok = ok && cna_height_fog_pass_optical_depth(0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 0.0F,
+                                                     &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 0.0F;
+        ok = ok && cna_height_fog_pass_optical_depth(0.0F, 0.0F, 100.0F, 0.1F, 1.0F, 0.0F,
+                                                     &thin) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_height_fog_pass_optical_depth(0.0F, 0.0F, 100.0F, 1.0F, 1.0F, 0.0F,
+                                                     &thick) == CNA_RESULT_SUCCESS;
+        ok = ok && thick > thin && thin > 0.0F;
+    }
+
+    ok = ok && cna_post_process_pass_destroy(shaft) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(heightfog) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(volfog) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_post_process_pass_destroy(aerial) == CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -4576,6 +4817,10 @@ static CNA_Result on_load(
         }
         if (!validate_screen_space_passes(graphics_device)) {
             state->failed_stage = 27;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_atmospheric_passes(graphics_device)) {
+            state->failed_stage = 28;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

@@ -27,7 +27,11 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/AerialPerspectivePass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
+#include "CNA/Graphics/HeightFogPass.hpp"
+#include "CNA/Graphics/LightShaftPass.hpp"
+#include "CNA/Graphics/VolumetricFogPass.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/SsaoPass.hpp"
 #include "CNA/Graphics/SsrPass.hpp"
@@ -3951,6 +3955,245 @@ CNA_Result cna_ssao_pass_sample_count_for_quality(CNA_RenderQuality p0, int32_t*
 CNA_Result cna_depth_of_field_pass_circle_of_confusion_millimetres(float p0, float p1, float p2, float p3, float* p4)
 {
     (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_get_sun_direction(CNA_PostProcessPassHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_set_sun_direction(CNA_PostProcessPassHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_get_turbidity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_set_turbidity(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_set_intensity(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_get_scale_height(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_set_scale_height(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_get_density(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_set_density(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_get_anisotropy(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_set_anisotropy(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_get_range(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_set_range(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_get_color(CNA_PostProcessPassHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_set_color(CNA_PostProcessPassHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_get_density(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_set_density(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_get_falloff(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_set_falloff(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_get_base_height(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_set_base_height(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_get_light_screen_position(CNA_PostProcessPassHandle p0, CNA_Vector2* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_set_light_screen_position(CNA_PostProcessPassHandle p0, const CNA_Vector2* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_get_threshold(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_set_threshold(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_set_intensity(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_get_decay(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_shaft_pass_set_decay(CNA_PostProcessPassHandle p0, const float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_copy_fallback_reason(CNA_PostProcessPassHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_air_mass_for_distance(const CNA_Vector3* p0, float p1, float p2, float* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_aerial_perspective_pass_transmittance(float p0, float p1, CNA_Vector3* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_height_fog_pass_optical_depth(float p0, float p1, float p2, float p3, float p4, float p5, float* p6)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5; (void)p6;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_volumetric_fog_pass_set_light(CNA_PostProcessPassHandle p0, CNA_ShadowMapHandle p1, const CNA_Vector3* p2, const CNA_Vector3* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
     return ExtensionUnavailable();
 }
 
@@ -14030,6 +14273,382 @@ static_assert(
     CNA_SSR_PASS_MAX_STEP_COUNT_EXT == Ext::SsrPass::kMaxStepCount &&
     CNA_DEPTH_OF_FIELD_SENSOR_HEIGHT_MILLIMETRES_EXT ==
         Ext::DepthOfFieldPass::kSensorHeightMillimetres);
+} // namespace
+CNA_Result cna_aerial_perspective_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::AerialPerspectivePass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_aerial_perspective_pass_get_sun_direction(
+    const CNA_PostProcessPassHandle pass, CNA_Vector3* const outValue)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        const auto v = p->getSunDirection();
+        return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_aerial_perspective_pass_set_sun_direction(
+    const CNA_PostProcessPassHandle pass, const CNA_Vector3* const value)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(value, "The value is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        p->setSunDirection(ToNativeVector3(*value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_aerial_perspective_pass_get_turbidity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getTurbidity());
+    });
+}
+
+CNA_Result cna_aerial_perspective_pass_set_turbidity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        p->setTurbidity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_aerial_perspective_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getIntensity());
+    });
+}
+
+CNA_Result cna_aerial_perspective_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        p->setIntensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_aerial_perspective_pass_get_scale_height(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getScaleHeight());
+    });
+}
+
+CNA_Result cna_aerial_perspective_pass_set_scale_height(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+        p->setScaleHeight(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_volumetric_fog_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::VolumetricFogPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_volumetric_fog_pass_get_density(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::VolumetricFogPass>(pass, "VolumetricFogPass", [&](Ext::VolumetricFogPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getDensity());
+    });
+}
+
+CNA_Result cna_volumetric_fog_pass_set_density(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::VolumetricFogPass>(pass, "VolumetricFogPass", [&](Ext::VolumetricFogPass* const p) -> CNA_Result {
+        p->setDensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_volumetric_fog_pass_get_anisotropy(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::VolumetricFogPass>(pass, "VolumetricFogPass", [&](Ext::VolumetricFogPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getAnisotropy());
+    });
+}
+
+CNA_Result cna_volumetric_fog_pass_set_anisotropy(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::VolumetricFogPass>(pass, "VolumetricFogPass", [&](Ext::VolumetricFogPass* const p) -> CNA_Result {
+        p->setAnisotropy(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_volumetric_fog_pass_get_range(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::VolumetricFogPass>(pass, "VolumetricFogPass", [&](Ext::VolumetricFogPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getRange());
+    });
+}
+
+CNA_Result cna_volumetric_fog_pass_set_range(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::VolumetricFogPass>(pass, "VolumetricFogPass", [&](Ext::VolumetricFogPass* const p) -> CNA_Result {
+        p->setRange(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_height_fog_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::HeightFogPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_height_fog_pass_get_color(
+    const CNA_PostProcessPassHandle pass, CNA_Vector3* const outValue)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        const auto v = p->getColor();
+        return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_height_fog_pass_set_color(
+    const CNA_PostProcessPassHandle pass, const CNA_Vector3* const value)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(value, "The value is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        p->setColor(ToNativeVector3(*value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_height_fog_pass_get_density(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getDensity());
+    });
+}
+
+CNA_Result cna_height_fog_pass_set_density(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        p->setDensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_height_fog_pass_get_falloff(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getFalloff());
+    });
+}
+
+CNA_Result cna_height_fog_pass_set_falloff(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        p->setFalloff(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_height_fog_pass_get_base_height(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getBaseHeight());
+    });
+}
+
+CNA_Result cna_height_fog_pass_set_base_height(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::HeightFogPass>(pass, "HeightFogPass", [&](Ext::HeightFogPass* const p) -> CNA_Result {
+        p->setBaseHeight(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_light_shaft_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CreateEnginePass<Ext::LightShaftPass>(graphicsDeviceHandle, outPass);
+}
+CNA_Result cna_light_shaft_pass_get_light_screen_position(
+    const CNA_PostProcessPassHandle pass, CNA_Vector2* const outValue)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        const auto v = p->getLightScreenPosition();
+        CNA_Vector2 out;
+        out.x = v.X;
+        out.y = v.Y;
+        return StoreValue(outValue, out);
+    });
+}
+
+CNA_Result cna_light_shaft_pass_set_light_screen_position(
+    const CNA_PostProcessPassHandle pass, const CNA_Vector2* const value)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        if (value == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The value is null.");
+        }
+        p->setLightScreenPosition(Microsoft::Xna::Framework::Vector2(value->x, value->y));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_light_shaft_pass_get_threshold(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getThreshold());
+    });
+}
+
+CNA_Result cna_light_shaft_pass_set_threshold(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        p->setThreshold(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_light_shaft_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getIntensity());
+    });
+}
+
+CNA_Result cna_light_shaft_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        p->setIntensity(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+CNA_Result cna_light_shaft_pass_get_decay(
+    const CNA_PostProcessPassHandle pass, float* const outValue)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        return StoreValue(outValue, p->getDecay());
+    });
+}
+
+CNA_Result cna_light_shaft_pass_set_decay(
+    const CNA_PostProcessPassHandle pass, const float value)
+{
+    return WithEnginePass<Ext::LightShaftPass>(pass, "LightShaftPass", [&](Ext::LightShaftPass* const p) -> CNA_Result {
+        p->setDecay(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_aerial_perspective_pass_copy_fallback_reason(
+    const CNA_PostProcessPassHandle pass, char* const destination, const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return WithEnginePass<Ext::AerialPerspectivePass>(
+        pass, "AerialPerspectivePass", [&](Ext::AerialPerspectivePass* const p) -> CNA_Result {
+            return CopyFormattedString(
+                destination, capacity, outBytes, [p] { return p->getFallbackReason(); });
+        });
+}
+
+CNA_Result cna_aerial_perspective_pass_air_mass_for_distance(
+    const CNA_Vector3* const viewDirection,
+    const float distance,
+    const float scaleHeight,
+    float* const outAirMass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result =
+                RequireVector3Argument(viewDirection, "The view direction is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outAirMass,
+            Ext::AerialPerspectivePass::airMassForDistance(
+                ToNativeVector3(*viewDirection), distance, scaleHeight));
+    });
+}
+
+CNA_Result cna_aerial_perspective_pass_transmittance(
+    const float turbidity, const float airMass, CNA_Vector3* const outTransmittance)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        const auto v = Ext::AerialPerspectivePass::transmittance(turbidity, airMass);
+        return StoreValue(outTransmittance, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_height_fog_pass_optical_depth(
+    const float cameraHeight,
+    const float rayHeightStep,
+    const float distance,
+    const float density,
+    const float falloff,
+    const float baseHeight,
+    float* const outDepth)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outDepth,
+            Ext::HeightFogPass::opticalDepth(
+                cameraHeight, rayHeightStep, distance, density, falloff, baseHeight));
+    });
+}
+
+CNA_Result cna_volumetric_fog_pass_set_light(
+    const CNA_PostProcessPassHandle pass,
+    const CNA_ShadowMapHandle shadowMap,
+    const CNA_Vector3* const lightDirection,
+    const CNA_Vector3* const lightColor)
+{
+    return WithEnginePass<Ext::VolumetricFogPass>(
+        pass, "VolumetricFogPass", [&](Ext::VolumetricFogPass* const p) -> CNA_Result {
+            if (const CNA_Result result =
+                    RequireVector3Argument(lightDirection, "The light direction is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireVector3Argument(lightColor, "The light colour is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            Ext::ShadowMap* nativeMap = nullptr;
+            if (shadowMap != CNA_INVALID_HANDLE) {
+                std::shared_ptr<ShadowMapResource> mapResource;
+                if (const CNA_Result result = GetEngineResource(
+                        shadowMap, ObjectKind::ShadowMap, "ShadowMap", &mapResource);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                nativeMap = mapResource->value.get();
+            }
+            // Borrowed: the pass records the map and never owns it.
+            p->setLight(
+                nativeMap, ToNativeVector3(*lightDirection), ToNativeVector3(*lightColor));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+namespace {
+static_assert(
+    CNA_VOLUMETRIC_FOG_SLICE_COUNT_EXT == Ext::VolumetricFogPass::kSliceCount &&
+    CNA_VOLUMETRIC_FOG_SLICE_RESOLUTION_EXT == Ext::VolumetricFogPass::kSliceResolution &&
+    CNA_LIGHT_SHAFT_STEP_COUNT_EXT == Ext::LightShaftPass::kStepCount);
 } // namespace
 
 #endif // CNA_CNAEXT
