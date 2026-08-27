@@ -201,6 +201,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_SkinnedEffect_Fog COMMAND cna_test_webgpu_skinnedeffect_fog
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-70: the reachable draw routes honour vertexStart (DrawPrimitives) / baseVertex+startIndex
+    # (DrawIndexedPrimitives) -- two identically-placed red/blue triangles, offset selects which.
+    cna_webgpu_test(cna_test_webgpu_vertexstart webgpu_vertexstart_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_VertexStart COMMAND cna_test_webgpu_vertexstart
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.
