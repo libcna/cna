@@ -5203,6 +5203,76 @@ CNA_C_API CNA_Result cna_clustered_forward_effect_contribution_with_extensions(
     CNA_PbrMaterialExtensionsHandle extensions,
     CNA_Vector3* out_contribution);
 
+/* ---------------------------------------------------------------------------------------------
+ * The PBR material's value semantics, its slot count and the transparency mode
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief How many `Texture2D` slots a PBR material carries.
+ *
+ * The bound of `CNA_PBR_TEXTURE_BASE_COLOR` through `CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT`, and the
+ * length of `CNA_PbrMaterialEXT::texture_coordinate_sets` and `::texture_transforms`.
+ */
+#define CNA_PBR_TEXTURE_SLOT_COUNT INT32_C(7)
+
+/** @brief Fixed-width identity for how a renderer resolves transparent geometry. */
+typedef uint32_t CNA_TransparencyMode;
+/** @brief Draw transparent geometry in submission order, resolving nothing. */
+#define CNA_TRANSPARENCY_MODE_NONE UINT32_C(0)
+/** @brief Sort transparent geometry back to front before drawing it. */
+#define CNA_TRANSPARENCY_MODE_SORTED UINT32_C(1)
+/** @brief Resolve transparent geometry with an order-independent weighted blend. */
+#define CNA_TRANSPARENCY_MODE_ORDER_INDEPENDENT UINT32_C(2)
+
+/**
+ * @brief Compares two PBR materials by value across every field.
+ *
+ * The single route behind both canonical equality operators. Texture members compare by handle
+ * identity -- two materials are equal when they name the same textures, not equal ones.
+ *
+ * The material itself is a value describable in either build, but this route needs the canonical
+ * type to answer with the canonical rule, so it refuses without the engine layer. The same is
+ * true of @ref cna_pbr_material_ext_get_hash_code and @ref cna_pbr_material_ext_copy_to_string:
+ * all three are gated together rather than one of them being reimplemented field by field in C,
+ * which would make equality answerable in a build where the hash consistent with it is not.
+ *
+ * @param first The first material.
+ * @param second The second material.
+ * @param out_equal Receives `CNA_TRUE` when every field matches.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_ext_equals(
+    const CNA_PbrMaterialEXT* first, const CNA_PbrMaterialEXT* second, CNA_Bool* out_equal);
+
+/**
+ * @brief Returns the canonical hash code of a PBR material.
+ *
+ * Equal materials hash equally; the width is the C ABI's `uint64_t` rather than the canonical
+ * `std::size_t`, the campaign's settled deviation.
+ *
+ * @param material The material.
+ * @param out_hash Receives the hash.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_pbr_material_ext_get_hash_code(
+    const CNA_PbrMaterialEXT* material, uint64_t* out_hash);
+
+/**
+ * @brief Copies the canonical `ToString` text as UTF-8 bytes without a terminator.
+ *
+ * @param material The material.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` for a
+ * null or malformed structure, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ * No partial string is written.
+ */
+CNA_C_API CNA_Result cna_pbr_material_ext_copy_to_string(
+    const CNA_PbrMaterialEXT* material, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

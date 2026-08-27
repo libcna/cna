@@ -3093,6 +3093,9 @@
   "cna_pbr_effect_set_texture_transform_ext",
   "cna_pbr_effect_set_vertex_color_enabled_ext",
   "cna_pbr_material_apply_state",
+  "cna_pbr_material_ext_copy_to_string",
+  "cna_pbr_material_ext_equals",
+  "cna_pbr_material_ext_get_hash_code",
   "cna_pbr_material_ext_init",
   "cna_pbr_material_extensions_copy_from",
   "cna_pbr_material_extensions_copy_to_string",
@@ -5095,6 +5098,7 @@
   "CNA_PBR_TEXTURE_METALLIC_ROUGHNESS": 2,
   "CNA_PBR_TEXTURE_NORMAL": 1,
   "CNA_PBR_TEXTURE_OCCLUSION": 4,
+  "CNA_PBR_TEXTURE_SLOT_COUNT": 7,
   "CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT": 6,
   "CNA_PBR_TEXTURE_SPECULAR_EXT": 5,
   "CNA_PLANE_INTERSECTION_BACK": 1,
@@ -5371,6 +5375,9 @@
   "CNA_TOUCH_LOCATION_RELEASED": 1,
   "CNA_TOUCH_MAX_TOUCHES": 8,
   "CNA_TOUCH_NO_FINGER": -1,
+  "CNA_TRANSPARENCY_MODE_NONE": 0,
+  "CNA_TRANSPARENCY_MODE_ORDER_INDEPENDENT": 2,
+  "CNA_TRANSPARENCY_MODE_SORTED": 1,
   "CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW": 0,
   "CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB": 1,
   "CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE": 0,
@@ -6556,6 +6563,10 @@
    4
   ],
   "CNA_TouchLocationState": [
+   4,
+   4
+  ],
+  "CNA_TransparencyMode": [
    4,
    4
   ],

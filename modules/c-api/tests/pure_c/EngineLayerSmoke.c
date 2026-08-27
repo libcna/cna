@@ -468,6 +468,25 @@ static int validate_unavailable(const CNA_Handle graphics_device)
     if (!validate_passes_unavailable(graphics_device)) {
         return 0;
     }
+    /* CBIND-087B. The material is a value describable in either build, but its canonical
+       equality, hash and text need the canonical type, so all three refuse here rather than one
+       of them being reimplemented field by field in C -- which would make equality answerable in
+       a build where the hash consistent with it is not. */
+    {
+        CNA_PbrMaterialEXT material;
+        CNA_Bool material_flag = UINT8_C(9);
+        uint64_t number = UINT64_C(0);
+        if (cna_pbr_material_ext_init(&material) != CNA_RESULT_SUCCESS ||
+            cna_pbr_material_ext_equals(&material, &material, &material_flag) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_pbr_material_ext_get_hash_code(&material, &number) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_pbr_material_ext_copy_to_string(&material, 0, UINT64_C(0), &number) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            material_flag != UINT8_C(9)) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -3075,6 +3094,120 @@ static int validate_material_extensions(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-087B. PbrMaterial is the mirror image of PbrMaterialExtensions: every canonical setter is
+   a BARE ASSIGNMENT with no correction at all, which the amended practice found only by reading
+   the bodies rather than by grepping for an idiom that is not there. The two exceptions never
+   reach C: getTextureCoordinateSet and getTextureTransform take a slot enum and fold an
+   out-of-range one onto base colour, but the C mapping is a POD carrying both as fixed arrays, so
+   there is no slot argument to validate and no fold to reproduce. What is left to pin is
+   therefore the value semantics and the identities. */
+static int validate_pbr_material_value(void)
+{
+    CNA_PbrMaterialEXT material;
+    CNA_PbrMaterialEXT other;
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t hash_a = UINT64_C(0);
+    uint64_t hash_b = UINT64_C(1);
+    uint64_t bytes = UINT64_C(0);
+    int index = 0;
+    int ok = 1;
+
+    if (cna_pbr_material_ext_init(&material) != CNA_RESULT_SUCCESS ||
+        cna_pbr_material_ext_init(&other) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The slot count is the length of both per-slot arrays and the bound of the slot identities;
+       a static_assert ties it to the canonical constant, and this reads it back from C. */
+    ok = (int)(sizeof material.texture_coordinate_sets /
+               sizeof material.texture_coordinate_sets[0]) == CNA_PBR_TEXTURE_SLOT_COUNT;
+    ok = ok && (int)(sizeof material.texture_transforms /
+                     sizeof material.texture_transforms[0]) == CNA_PBR_TEXTURE_SLOT_COUNT;
+    ok = ok && CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT ==
+        (uint32_t)(CNA_PBR_TEXTURE_SLOT_COUNT - INT32_C(1));
+    /* The three transparency modes are contiguous from zero, in canonical order. */
+    ok = ok && CNA_TRANSPARENCY_MODE_NONE == UINT32_C(0) &&
+        CNA_TRANSPARENCY_MODE_SORTED == UINT32_C(1) &&
+        CNA_TRANSPARENCY_MODE_ORDER_INDEPENDENT == UINT32_C(2);
+
+    /* Two freshly initialized materials are equal and hash equally. */
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_pbr_material_ext_get_hash_code(&material, &hash_a) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_pbr_material_ext_get_hash_code(&other, &hash_b) == CNA_RESULT_SUCCESS;
+    ok = ok && hash_a == hash_b;
+
+    /* Every field the canonical type gained after CNA_PbrMaterial was frozen is carried here and
+       participates in equality. Each is changed one at a time and the pair must stop matching --
+       a field present in the structure but dropped on the way to the canonical type would leave
+       equality reporting TRUE, and nothing else in this suite would notice. */
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    other.ior = material.ior + 0.5F;
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    other.ior = material.ior;
+    other.specular_factor = material.specular_factor + 0.25F;
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    other.specular_factor = material.specular_factor;
+    other.specular_color_factor.x = material.specular_color_factor.x + 0.25F;
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    other.specular_color_factor = material.specular_color_factor;
+    other.emissive_factor.y = material.emissive_factor.y + 0.25F;
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    other.emissive_factor = material.emissive_factor;
+    other.alpha_mode = material.alpha_mode == CNA_ALPHA_MODE_OPAQUE_EXT ? CNA_ALPHA_MODE_MASK_EXT
+                                                                    : CNA_ALPHA_MODE_OPAQUE_EXT;
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    other.alpha_mode = material.alpha_mode;
+    other.double_sided = material.double_sided == CNA_TRUE ? CNA_FALSE : CNA_TRUE;
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    other.double_sided = material.double_sided;
+    other.output_encoded_to_srgb =
+        material.output_encoded_to_srgb == CNA_TRUE ? CNA_FALSE : CNA_TRUE;
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    other.output_encoded_to_srgb = material.output_encoded_to_srgb;
+
+    /* Both per-slot arrays participate too, and every slot does -- a converter that copied only
+       the first would pass a test that changed only the first. */
+    for (index = 0; ok && index < CNA_PBR_TEXTURE_SLOT_COUNT; ++index) {
+        other.texture_coordinate_sets[index] = material.texture_coordinate_sets[index] + 1;
+        ok = cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+            flag == CNA_FALSE;
+        other.texture_coordinate_sets[index] = material.texture_coordinate_sets[index];
+        other.texture_transforms[index].rotation =
+            material.texture_transforms[index].rotation + 0.5F;
+        ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+            flag == CNA_FALSE;
+        other.texture_transforms[index] = material.texture_transforms[index];
+    }
+    ok = ok && cna_pbr_material_ext_equals(&material, &other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+
+    /* A changed field must change the hash too, or equal-hash-for-equal-values is vacuous. */
+    other.ior = material.ior + 4.0F;
+    ok = ok && cna_pbr_material_ext_get_hash_code(&other, &hash_b) == CNA_RESULT_SUCCESS &&
+        hash_b != hash_a;
+
+    ok = ok && cna_pbr_material_ext_copy_to_string(&material, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+
+    /* A malformed structure is refused rather than read past its own declared size. */
+    other.struct_size = UINT32_C(4);
+    ok = ok && cna_pbr_material_ext_get_hash_code(&other, &hash_b) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_pbr_material_ext_equals(&material, 0, &flag) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_pbr_material_ext_copy_to_string(0, 0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -3152,6 +3285,10 @@ static CNA_Result on_load(
         }
         if (!validate_material_extensions(graphics_device)) {
             state->failed_stage = 20;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_pbr_material_value()) {
+            state->failed_stage = 21;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

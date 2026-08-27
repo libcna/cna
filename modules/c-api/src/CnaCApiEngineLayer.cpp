@@ -27,6 +27,7 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/TransparencyMode.hpp"
 #include "CNA/Graphics/ThinFilmIridescence.hpp"
 #include "CNA/Graphics/ClusteredLightCompute.hpp"
 #include "CNA/Graphics/ClusteredLightGrid.hpp"
@@ -3219,6 +3220,24 @@ CNA_Result cna_clustered_forward_effect_set_material_extensions(CNA_ClusteredFor
 CNA_Result cna_clustered_forward_effect_contribution_with_extensions(const CNA_ClusteredLightEXT* p0, const CNA_Vector3* p1, const CNA_Vector3* p2, const CNA_Vector3* p3, const CNA_Vector3* p4, float p5, float p6, CNA_PbrMaterialExtensionsHandle p7, CNA_Vector3* p8)
 {
     (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5; (void)p6; (void)p7; (void)p8;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_ext_equals(const CNA_PbrMaterialEXT* p0, const CNA_PbrMaterialEXT* p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_ext_get_hash_code(const CNA_PbrMaterialEXT* p0, uint64_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_pbr_material_ext_copy_to_string(const CNA_PbrMaterialEXT* p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
     return ExtensionUnavailable();
 }
 
@@ -10801,5 +10820,89 @@ CNA_Result cna_clustered_forward_effect_contribution_with_extensions(
         return StoreValue(outContribution, Vec3(v.X, v.Y, v.Z));
     });
 }
+
+CNA_Result cna_pbr_material_ext_equals(
+    const CNA_PbrMaterialEXT* const first,
+    const CNA_PbrMaterialEXT* const second,
+    CNA_Bool* const outEqual)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::PbrMaterial a;
+        Ext::PbrMaterial b;
+        if (first == nullptr || second == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "A material structure is null.");
+        }
+        if (const CNA_Result result = ToNativePbrMaterial(*first, &a);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ToNativePbrMaterial(*second, &b);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(outEqual, static_cast<CNA_Bool>(a == b ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_pbr_material_ext_get_hash_code(
+    const CNA_PbrMaterialEXT* const material, uint64_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Ext::PbrMaterial native;
+        if (material == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The material structure is null.");
+        }
+        if (const CNA_Result result = ToNativePbrMaterial(*material, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(outHash, static_cast<uint64_t>(native.GetHashCode()));
+    });
+}
+
+CNA_Result cna_pbr_material_ext_copy_to_string(
+    const CNA_PbrMaterialEXT* const material,
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    Ext::PbrMaterial native;
+    if (material == nullptr) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The material structure is null.");
+    }
+    if (const CNA_Result result = ToNativePbrMaterial(*material, &native);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(
+        destination, capacity, outBytes, [&native] { return native.ToString(); });
+}
+
+namespace {
+// CBIND-087B. The C identities must name the canonical ordinals, not merely resemble them.
+static_assert(CNA_PBR_TEXTURE_SLOT_COUNT == Ext::kPbrTextureSlotCount);
+static_assert(
+    static_cast<uint32_t>(Ext::TransparencyMode::None) == CNA_TRANSPARENCY_MODE_NONE &&
+    static_cast<uint32_t>(Ext::TransparencyMode::Sorted) == CNA_TRANSPARENCY_MODE_SORTED &&
+    static_cast<uint32_t>(Ext::TransparencyMode::OrderIndependent) ==
+        CNA_TRANSPARENCY_MODE_ORDER_INDEPENDENT);
+static_assert(
+    static_cast<uint32_t>(Ext::PbrTextureSlot::BaseColor) == CNA_PBR_TEXTURE_BASE_COLOR &&
+    static_cast<uint32_t>(Ext::PbrTextureSlot::SpecularColor) ==
+        CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT);
+} // namespace
 
 #endif // CNA_CNAEXT

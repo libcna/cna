@@ -15771,7 +15771,7 @@
     },
     {
       "id": "pbr-material-extensions",
-      "qualified_name_regex": "^CNA::Graphics::PbrMaterialExtensions(?:::[A-Za-z0-9_~]+)?$",
+      "qualified_name_regex": "^CNA::Graphics::PbrMaterialExtensions(?:::(?:operator[=!]=|[A-Za-z0-9_~]+))?$",
       "kinds": [
         "class",
         "constructor",
@@ -15784,12 +15784,14 @@
       "status": "implemented",
       "task": "CBIND-087A",
       "approved_symbols": [
+        "CPP-004FA363FBFA",
         "CPP-0524B2DA2CA9",
         "CPP-0C4F5E3B3365",
         "CPP-1120A9141F7C",
         "CPP-113CA00A9E67",
         "CPP-11DC78AC37FE",
         "CPP-1BEB19C33A96",
+        "CPP-1D1A868D9B04",
         "CPP-2008047B4B90",
         "CPP-256810824D2F",
         "CPP-256F90CA70F9",
@@ -15858,6 +15860,83 @@
         "CPP-1CD6727FC620",
         "CPP-91A515BFC539",
         "CPP-CDC661EEE64E"
+      ]
+    },
+    {
+      "id": "pbr-material-value",
+      "qualified_name_regex": "^CNA::Graphics::(?:PbrMaterial(?:::(?:operator[=!]=|[A-Za-z0-9_~]+))?|PbrTextureSlot(?:::[A-Za-z0-9_]+)?|kPbrTextureSlotCount)$",
+      "kinds": [
+        "class",
+        "field",
+        "enum",
+        "enum-value",
+        "method",
+        "operator"
+      ],
+      "mapping": "The material itself was already bound by `CBIND-035F7` as two fixed-layout PODs: the frozen `CNA_PbrMaterial`, whose layout cannot change within an ABI major, and the versioned `CNA_PbrMaterialEXT`, which carries every canonical field. `CBIND-087B` binds what a POD alone cannot express -- the value semantics -- as `cna_pbr_material_ext_equals`, `_get_hash_code` and `_copy_to_string`, plus `kPbrTextureSlotCount` as `CNA_PBR_TEXTURE_SLOT_COUNT` and the `PbrTextureSlot` identities, each tied to its canonical ordinal by a `static_assert`.\n\n**Every canonical setter here is a bare assignment**, the exact opposite of `PbrMaterialExtensions` beside it, and reading the bodies is the only thing that establishes that -- there is no idiom to grep for when a setter corrects nothing.\n\n**The one correction in the canonical type never reaches C, and the POD mapping is why.** `getTextureCoordinateSet` and `getTextureTransform` take a `PbrTextureSlot` and route it through an `IndexOf` that folds an out-of-range slot onto base colour. The C form carries both as fixed arrays of `CNA_PBR_TEXTURE_SLOT_COUNT` inside the structure, so there is no slot argument to validate and no fold to reproduce: an out-of-range index is the caller's own array bounds error, not something this ABI can silently redirect. That is a deviation worth stating rather than a gap -- the POD mapping removes a surprise the enum mapping would have had to carry.\n\nThe three value routes are gated on the engine layer together, even though the structure is describable in either build, because they answer with the canonical rule. Splitting them -- reimplementing equality field by field in C while the hash stayed gated -- would make equality answerable in a build where the hash consistent with it is not.",
+      "tests": "`EngineLayerSmoke.c` stage 21, which changes each field the canonical type gained after `CNA_PbrMaterial` was frozen **one at a time** and requires the pair to stop matching, walks every one of the seven slots in both per-slot arrays rather than only the first, requires a changed field to change the hash (without which equal-hash-for-equal-values is vacuous), and refuses a malformed structure. The layer-absent build asserts all three routes report `CNA_RESULT_NOT_SUPPORTED` and write nothing. Proved to execute by inverting the hash assertion and watching the exit code move to stage 21.",
+      "status": "implemented",
+      "task": "CBIND-087B",
+      "approved_symbols": [
+        "CPP-03D85B62DCB3",
+        "CPP-0423042DDE08",
+        "CPP-0502C9BB5CDD",
+        "CPP-17D023837E29",
+        "CPP-1A5FDB7A4609",
+        "CPP-2237BDB2454C",
+        "CPP-23A7B1E0293E",
+        "CPP-2B371BDB73D1",
+        "CPP-3604819297B4",
+        "CPP-44D387EA02E9",
+        "CPP-4514D48CA4C8",
+        "CPP-477991662709",
+        "CPP-4A796D69358A",
+        "CPP-4DC9016F8517",
+        "CPP-593BE2546234",
+        "CPP-5E896AC44037",
+        "CPP-62AD9873605A",
+        "CPP-6512D73C5E44",
+        "CPP-67C232F174C2",
+        "CPP-6BBAEC0C8D1C",
+        "CPP-7730DE2BBFB2",
+        "CPP-7F57263F65A8",
+        "CPP-7FBF3C5FD1B4",
+        "CPP-8A637FF19A03",
+        "CPP-925FDD4D64FE",
+        "CPP-9CC35D031769",
+        "CPP-ABD9D0906EE7",
+        "CPP-AC2E2507C1AC",
+        "CPP-ADFB9D9785D1",
+        "CPP-AEC57C8EEA8A",
+        "CPP-AFAFC387D3C3",
+        "CPP-B6E77AE90BB7",
+        "CPP-C331CE63D563",
+        "CPP-C427EBF286F1",
+        "CPP-CC64C78578F2",
+        "CPP-D4F4FB93AC00",
+        "CPP-D8212C59EF0A",
+        "CPP-EF1951F1DEFD",
+        "CPP-F77E4015B4D1",
+        "CPP-FA02163A351C",
+        "CPP-FD0B16C66304"
+      ]
+    },
+    {
+      "id": "transparency-mode",
+      "qualified_name_regex": "^CNA::Graphics::TransparencyMode(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_TransparencyMode` with its three constants at the canonical ordinals, tied to the canonical enumerators by a `static_assert`. A pure identity, so it needs no object and the constants are readable in either build.",
+      "tests": "`EngineLayerSmoke.c` stage 21, which asserts the three are contiguous from zero in canonical order",
+      "status": "implemented",
+      "task": "CBIND-087B",
+      "approved_symbols": [
+        "CPP-3D1FC86B831C",
+        "CPP-66EA1BDA4244",
+        "CPP-6FC1162522A8",
+        "CPP-FA71835AB002"
       ]
     }
   ]
