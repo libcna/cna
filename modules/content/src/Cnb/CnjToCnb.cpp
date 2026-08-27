@@ -14,6 +14,7 @@
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Internal/CnjCanonicalRead.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -89,26 +90,17 @@ namespace CNA::Content::Cnb
                 .resolvedNativePath;
         }
 
-        void RecordAbsorbed(std::vector<std::string>& absorbed, const std::string& path)
+        /// Records a file whose contents are now inside the `.cnb`, under the name the `.cnj`
+        /// itself used (plans/plan_cnb.md `CNBF-118`).
+        ///
+        /// `CnjToCnbResult::absorbedFiles` documents "paths as they were written in the source
+        /// `.cnj`", and this used to record `filename()` instead -- so `art/hero.png` and
+        /// `ui/hero.png` both came back as `hero.png`, which a build script matching the list
+        /// against what it generated cannot tell apart, and which does not identify a file at all
+        /// once a document names one in a subdirectory.
+        void RecordAbsorbed(std::vector<std::string>& absorbed, const std::string& authoredName)
         {
-            absorbed.push_back(std::filesystem::path(path).filename().string());
-        }
-
-        std::optional<std::array<std::uint8_t, 3>> ReadColorKey(const JsonValue& root)
-        {
-            const JsonValue* field = root.FindMember("colorKey");
-            if (field == nullptr || field->type != CNA::Internal::JsonType::Array || field->arrayValue.size() != 3u)
-            {
-                return std::nullopt;
-            }
-            std::array<std::uint8_t, 3> key{};
-            for (std::size_t i = 0; i < 3u; ++i)
-            {
-                if (!field->arrayValue[i].IsNumber()) { return std::nullopt; }
-                const double v = field->arrayValue[i].numberValue;
-                key[i] = static_cast<std::uint8_t>(v < 0.0 ? 0.0 : (v > 255.0 ? 255.0 : v));
-            }
-            return key;
+            absorbed.push_back(std::filesystem::path(authoredName).generic_string());
         }
 
         std::vector<std::uint8_t> CompileTexture2DCnj(const std::string& json,
@@ -129,9 +121,14 @@ namespace CNA::Content::Cnb
                 ResolveSidecar(cnjPath, root, sourceFile->stringValue, "sourceFile");
 
             CnbImageImportOptions options;
-            options.colorKey = ReadColorKey(document);
+            // The same reader the runtime Texture2D .cnj path uses, so a document either keys out
+            // the same pixels in both routes or is refused by both (CNBF-118). It used to CLAMP an
+            // out-of-range component here and silently drop a malformed array, while the runtime
+            // pushed the same text through std::stoi.
+            options.colorKey = CNA::Internal::ReadCnjColorKey(
+                document, "Texture2D .cnj '" + cnjPath + "'");
             const CnbTextureData texture = ImportImageAsCnbTexture2D(imagePath, options);
-            RecordAbsorbed(absorbed, imagePath);
+            RecordAbsorbed(absorbed, sourceFile->stringValue);
             return EncodeTexture2DToCnb(texture, name);
         }
 
@@ -142,33 +139,16 @@ namespace CNA::Content::Cnb
                                                       std::vector<std::string>& absorbed)
         {
             const JsonValue document = CNA::Internal::ParseJson(json);
-            const JsonValue* w = document.FindMember("width");
-            const JsonValue* h = document.FindMember("height");
-            const JsonValue* d = document.FindMember("depth");
-            const JsonValue* dataField = document.FindMember("data");
-            if (w == nullptr || !w->IsNumber() || h == nullptr || !h->IsNumber() ||
-                d == nullptr || !d->IsNumber())
-            {
-                throw ContentLoadException("cnj-to-cnb: Texture3D .cnj '" + cnjPath +
-                                            "' is missing a numeric width/height/depth.");
-            }
-            if (dataField == nullptr || !dataField->IsString() || dataField->stringValue.empty())
-            {
-                throw ContentLoadException("cnj-to-cnb: Texture3D .cnj '" + cnjPath +
-                                            "' is missing a 'data' field naming a raw pixel "
-                                            "sidecar.");
-            }
-            const auto width = static_cast<std::int64_t>(w->numberValue);
-            const auto height = static_cast<std::int64_t>(h->numberValue);
-            const auto depth = static_cast<std::int64_t>(d->numberValue);
-            if (width <= 0 || height <= 0 || depth <= 0)
-            {
-                throw ContentLoadException("cnj-to-cnb: Texture3D .cnj '" + cnjPath +
-                                            "' has a non-positive dimension.");
-            }
+            // The same reader the runtime Texture3D .cnj path uses (CNBF-118). Both routes used to
+            // cast numberValue straight to an integer, so 3.7 became 3 and a non-finite value was
+            // undefined behaviour -- and the two casts had different widths, so they could accept
+            // different documents.
+            const CNA::Internal::CnjTexture3DDescription description =
+                CNA::Internal::ReadCnjTexture3DDescription(
+                    document, "Texture3D .cnj '" + cnjPath + "'");
 
             const std::string sidecarPath =
-                ResolveSidecar(cnjPath, root, dataField->stringValue, "data");
+                ResolveSidecar(cnjPath, root, description.dataFile, "data");
             std::ifstream sidecar(sidecarPath, std::ios::binary);
             if (!sidecar.is_open())
             {
@@ -176,28 +156,27 @@ namespace CNA::Content::Cnb
             }
             std::vector<std::uint8_t> pixels((std::istreambuf_iterator<char>(sidecar)),
                                               std::istreambuf_iterator<char>());
-            const std::uint64_t expected =
-                static_cast<std::uint64_t>(width) * height * depth * 4u;
-            if (pixels.size() != expected)
+            if (pixels.size() != description.expectedByteCount)
             {
                 throw ContentLoadException(
                     "cnj-to-cnb: Texture3D .cnj '" + cnjPath + "' declares " +
-                    std::to_string(width) + "x" + std::to_string(height) + "x" +
-                    std::to_string(depth) + ", which needs " + std::to_string(expected) +
+                    std::to_string(description.width) + "x" + std::to_string(description.height) +
+                    "x" + std::to_string(description.depth) + ", which needs " +
+                    std::to_string(description.expectedByteCount) +
                     " Rgba8 bytes, but its sidecar holds " + std::to_string(pixels.size()) + ".");
             }
 
             CnbTextureData volume;
-            volume.width = static_cast<std::uint32_t>(width);
-            volume.height = static_cast<std::uint32_t>(height);
-            volume.depth = static_cast<std::uint32_t>(depth);
+            volume.width = description.width;
+            volume.height = description.height;
+            volume.depth = description.depth;
             volume.faceCount = 1u;
             volume.mipCount = 1u;
             CnbTextureRepresentation representation;
             representation.format = CnbTextureFormat::Rgba8;
             representation.levels.push_back(std::move(pixels));
             volume.representations.push_back(std::move(representation));
-            RecordAbsorbed(absorbed, sidecarPath);
+            RecordAbsorbed(absorbed, description.dataFile);
             return EncodeTexture3DToCnb(volume, name);
         }
 
@@ -218,7 +197,7 @@ namespace CNA::Content::Cnb
             const std::string ddsPath =
                 ResolveSidecar(cnjPath, root, sourceFile->stringValue, "sourceFile");
             const CnbTextureData cube = ImportDdsAsCnbTextureCube(ddsPath);
-            RecordAbsorbed(absorbed, ddsPath);
+            RecordAbsorbed(absorbed, sourceFile->stringValue);
             return EncodeTextureCubeToCnb(cube, name);
         }
 
@@ -239,7 +218,7 @@ namespace CNA::Content::Cnb
             const std::string wavPath =
                 ResolveSidecar(cnjPath, root, sourceFile->stringValue, "sourceFile");
             const CnbSoundEffectData sound = ImportWavAsCnbSoundEffect(wavPath);
-            RecordAbsorbed(absorbed, wavPath);
+            RecordAbsorbed(absorbed, sourceFile->stringValue);
             return EncodeSoundEffectToCnb(sound, name);
         }
 
@@ -250,80 +229,37 @@ namespace CNA::Content::Cnb
                                                         std::vector<std::string>& absorbed)
         {
             const JsonValue document = CNA::Internal::ParseJson(json);
-            const JsonValue* textureField = document.FindMember("texture");
-            if (textureField == nullptr || !textureField->IsString() ||
-                textureField->stringValue.empty())
-            {
-                throw ContentLoadException("cnj-to-cnb: SpriteFont .cnj '" + cnjPath +
-                                            "' has no 'texture' field naming its atlas.");
-            }
+            // The same reader the runtime SpriteFont .cnj path uses (CNBF-118). Both routes had
+            // their own reading of this document and neither validated its numbers: a rectangle
+            // element that was a string read as 0, a fractional coordinate was truncated, and a
+            // 'char' outside the Basic Multilingual Plane was cast into a glyph nothing could
+            // match.
+            const CNA::Internal::CnjSpriteFontDescription description =
+                CNA::Internal::ReadCnjSpriteFontDescription(
+                    document, "SpriteFont .cnj '" + cnjPath + "'");
 
             CnbSpriteFontData font;
-            const JsonValue* lineSpacing = document.FindMember("lineSpacing");
-            font.lineSpacing = lineSpacing != nullptr && lineSpacing->IsNumber()
-                                    ? static_cast<std::int32_t>(lineSpacing->numberValue)
-                                    : 0;
-            const JsonValue* spacing = document.FindMember("spacing");
-            font.spacing = spacing != nullptr && spacing->IsNumber()
-                                ? static_cast<float>(spacing->numberValue)
-                                : 0.0f;
-            const JsonValue* defaultCharacter = document.FindMember("defaultCharacter");
-            if (defaultCharacter != nullptr && defaultCharacter->IsString() &&
-                !defaultCharacter->stringValue.empty())
+            font.lineSpacing = description.lineSpacing;
+            font.spacing = description.spacing;
+            font.defaultCharacter = description.defaultCharacter;
+            font.characters.reserve(description.glyphs.size());
+            font.glyphBounds.reserve(description.glyphs.size());
+            font.cropping.reserve(description.glyphs.size());
+            font.kerning.reserve(description.glyphs.size());
+            for (const CNA::Internal::CnjSpriteFontGlyph& glyph : description.glyphs)
             {
-                font.defaultCharacter = static_cast<SharpRuntime::charcs>(
-                    static_cast<unsigned char>(defaultCharacter->stringValue[0]));
-            }
-
-            const JsonValue* glyphs = document.FindMember("glyphs");
-            if (glyphs == nullptr || glyphs->type != CNA::Internal::JsonType::Array || glyphs->arrayValue.empty())
-            {
-                throw ContentLoadException("cnj-to-cnb: SpriteFont .cnj '" + cnjPath +
-                                            "' has no non-empty 'glyphs' array.");
-            }
-            const auto rect = [&](const JsonValue& g, const char* key)
-            {
-                const JsonValue* a = g.FindMember(key);
-                if (a == nullptr || a->type != CNA::Internal::JsonType::Array || a->arrayValue.size() != 4u)
-                {
-                    throw ContentLoadException("cnj-to-cnb: SpriteFont .cnj '" + cnjPath +
-                                                "' has a glyph with no 4-element '" +
-                                                std::string(key) + "'.");
-                }
-                return Microsoft::Xna::Framework::Rectangle(
-                    static_cast<int>(a->arrayValue[0].numberValue),
-                    static_cast<int>(a->arrayValue[1].numberValue),
-                    static_cast<int>(a->arrayValue[2].numberValue),
-                    static_cast<int>(a->arrayValue[3].numberValue));
-            };
-            for (const JsonValue& g : glyphs->arrayValue)
-            {
-                const JsonValue* ch = g.FindMember("char");
-                if (ch == nullptr || !ch->IsNumber())
-                {
-                    throw ContentLoadException("cnj-to-cnb: SpriteFont .cnj '" + cnjPath +
-                                                "' has a glyph with no numeric 'char'.");
-                }
-                font.characters.push_back(static_cast<SharpRuntime::charcs>(ch->numberValue));
-                font.glyphBounds.push_back(rect(g, "source"));
-                font.cropping.push_back(rect(g, "crop"));
-                const JsonValue* k = g.FindMember("kerning");
-                if (k == nullptr || k->type != CNA::Internal::JsonType::Array || k->arrayValue.size() != 3u)
-                {
-                    throw ContentLoadException("cnj-to-cnb: SpriteFont .cnj '" + cnjPath +
-                                                "' has a glyph with no 3-element 'kerning'.");
-                }
-                font.kerning.emplace_back(static_cast<float>(k->arrayValue[0].numberValue),
-                                           static_cast<float>(k->arrayValue[1].numberValue),
-                                           static_cast<float>(k->arrayValue[2].numberValue));
+                font.characters.push_back(glyph.character);
+                font.glyphBounds.push_back(glyph.source);
+                font.cropping.push_back(glyph.crop);
+                font.kerning.push_back(glyph.kerning);
             }
 
             // The atlas is decoded through the same pure image path Texture2D compilation uses and
             // EMBEDDED, so the compiled font needs nothing beside it at runtime.
             const std::string atlasPath =
-                ResolveSidecar(cnjPath, root, textureField->stringValue, "texture");
+                ResolveSidecar(cnjPath, root, description.textureName, "texture");
             font.atlas = ImportImageAsCnbTexture2D(atlasPath, {});
-            RecordAbsorbed(absorbed, atlasPath);
+            RecordAbsorbed(absorbed, description.textureName);
             return EncodeSpriteFontToCnb(font, name);
         }
     }
@@ -340,9 +276,22 @@ namespace CNA::Content::Cnb
 
         const std::string json = ReadWholeTextFile(cnjPath);
         const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
-        // Baseline only: the per-type ceiling belongs to the reader that owns the type, and the
-        // reader is what actually loads the document a line or two below.
-        CNA::Internal::ValidateCnjEnvelopeBaseline(envelope, cnjPath, /*maxVersion=*/2);
+        // plans/plan_cnb.md CNBF-118: the ceiling is PER TYPE, and it is the same ceiling that
+        // type's runtime `.cnj` reader applies.
+        //
+        // A flat ceiling of 2 was applied to every type, and it was only ever right for `Model` --
+        // the one type whose runtime reader accepts version 2. For the other seven, the compiler
+        // accepted a `"cnjVersion": 2` document that `ContentManager` refuses, so a build could
+        // succeed and the same document could then fail to load. Three of those types are
+        // compiled through their runtime reader, which would have caught it; five are compiled by
+        // headless importers that never consult one, and for those nothing checked at all.
+        //
+        // Deriving the ceiling from the type name rather than repeating a number keeps this in
+        // step with the readers by construction; `CnbCompilerStrictnessTests` asserts the two
+        // agree for every supported type.
+        const std::uint32_t maxVersion = envelope.type == "Model" ? 2u : 1u;
+        CNA::Internal::ValidateCnjEnvelopeBaseline(envelope, cnjPath,
+                                                    static_cast<int>(maxVersion));
 
         CnjToCnbResult result;
         result.absorbedFiles.push_back(source.filename().string());

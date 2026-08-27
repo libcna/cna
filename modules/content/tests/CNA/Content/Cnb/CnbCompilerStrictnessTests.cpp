@@ -18,6 +18,7 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -29,7 +30,11 @@
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbModelCodec.hpp"
 #include "CNA/Content/Cnb/CnjToCnb.hpp"
+#include "CNA/Internal/CnjCanonicalRead.hpp"
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 
 using CNA::Content::Cnb::CnbDocument;
 using CNA::Content::Cnb::CnjToCnbResult;
@@ -531,4 +536,355 @@ TEST(CnbCompilerStrictnessTest, RefusesAMeshDeclaringAStrideItsGeometryCannotHav
 })");
     std::string message;
     EXPECT_FALSE(TryCompile(dir.path(), message));
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-118 -- one reading of a .cnj document, and strict numbers on the way through it
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    /// A real 2x2 PNG, encoded through CNA's own image path so these tests carry no second PNG
+    /// implementation.
+    std::vector<std::uint8_t> TinyPng()
+    {
+        const std::vector<std::uint8_t> rgba = {
+            10u, 20u, 30u, 255u,   40u, 50u, 60u, 255u,
+            70u, 80u, 90u, 255u,   11u, 22u, 33u, 255u};
+        return CNA::Internal::Graphics::ImageLoader::EncodePng(rgba.data(), 2, 2, 2, 2);
+    }
+
+    /// Compiles `document` written into a fresh scratch root beside a 2x2 atlas, and returns what
+    /// the compiler said. Every SpriteFont/Texture2D case below is one edit away from a document
+    /// this also compiles.
+    void ExpectCompileRefused(const std::string& tag, const std::string& document,
+                              const char* fragment)
+    {
+        ScratchDir dir(tag);
+        WriteBytes(dir.path() / "atlas.png", TinyPng());
+        WriteText(dir.path() / "a.cnj", document);
+        try
+        {
+            (void)CompileCnjToCnb((dir.path() / "a.cnj").string());
+            ADD_FAILURE() << tag << ": expected a refusal mentioning '" << fragment << "'";
+        }
+        catch (const ContentLoadException& e)
+        {
+            EXPECT_NE(std::string(e.what()).find(fragment), std::string::npos)
+                << tag << ": " << e.what();
+        }
+    }
+
+    /// The eight `.cnj` types the compiler supports, each as a minimal document body (without its
+    /// envelope), so a version test can build one of every type from one table.
+    struct SupportedType
+    {
+        const char* type;
+        const char* body;
+    };
+
+    const std::vector<SupportedType>& SupportedTypes()
+    {
+        static const std::vector<SupportedType> types = {
+            {"Curve", R"("preLoop":"Constant","postLoop":"Constant","keys":[])"},
+            {"AnimationClip", R"("duration":1.0,"tracks":[])"},
+            {"Texture2D", R"("sourceFile":"atlas.png")"},
+            {"TextureCube", R"("sourceFile":"cube.dds")"},
+            {"Texture3D", R"("width":1,"height":1,"depth":1,"data":"vol.bin")"},
+            {"SpriteFont",
+             R"("texture":"atlas.png","lineSpacing":8,"spacing":0.0,)"
+             R"("glyphs":[{"char":65,"source":[0,0,1,1],"crop":[0,0,1,1],"kerning":[0,1,0]}])"},
+            {"SoundEffect", R"("sourceFile":"beep.wav")"},
+            {"Model", R"("meshes":[])"},
+        };
+        return types;
+    }
+}
+
+TEST(CnbCompilerStrictnessTest, EveryNonModelTypeRefusesCnjVersionTwoLikeItsRuntimeReader)
+{
+    // The defect: the compiler applied a flat ceiling of 2 to every type, while only Model's
+    // runtime reader accepts version 2. A "cnjVersion": 2 document of any other type therefore
+    // COMPILED and then failed to load -- a build that succeeds and produces content the engine
+    // refuses is the worst shape this class of bug can take.
+    for (const SupportedType& supported : SupportedTypes())
+    {
+        if (std::string(supported.type) == "Model") { continue; }
+        ScratchDir dir(std::string("v2_") + supported.type);
+        WriteText(dir.path() / "a.cnj",
+                  std::string(R"({"cnjVersion":2,"type":")") + supported.type + R"(",)" +
+                      supported.body + "}");
+        try
+        {
+            (void)CompileCnjToCnb((dir.path() / "a.cnj").string());
+            ADD_FAILURE() << supported.type << ": cnjVersion 2 must be refused";
+        }
+        catch (const ContentLoadException& e)
+        {
+            EXPECT_NE(std::string(e.what()).find("cnjVersion"), std::string::npos)
+                << supported.type << ": refused, but not for its version -- " << e.what();
+        }
+    }
+}
+
+TEST(CnbCompilerStrictnessTest, ModelStillAcceptsCnjVersionTwo)
+{
+    // The positive control for the test above. Model's runtime reader accepts version 2 (the
+    // "bones" hierarchy and per-mesh "parentBone"), so the compiler must too -- otherwise the
+    // per-type ceiling would be indistinguishable from a flat ceiling of 1.
+    ScratchDir dir("model_v2");
+    WriteText(dir.path() / "m.cnj",
+              R"({"cnjVersion":2,"type":"Model","meshes":[],"bones":[]})");
+    EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "m.cnj").string()));
+
+    // And version 1 is still accepted, so the ceiling is a ceiling rather than an equality.
+    WriteText(dir.path() / "m1.cnj", R"({"cnjVersion":1,"type":"Model","meshes":[]})");
+    EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "m1.cnj").string()));
+
+    // Version 3 is refused for every type including Model.
+    WriteText(dir.path() / "m3.cnj", R"({"cnjVersion":3,"type":"Model","meshes":[]})");
+    EXPECT_THROW((void)CompileCnjToCnb((dir.path() / "m3.cnj").string()), ContentLoadException);
+}
+
+TEST(CnbCompilerStrictnessTest, AColorKeyIsReadStrictlyRatherThanClampedOrDropped)
+{
+    const std::string prefix = R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"atlas.png",)";
+
+    // Clamping was the old behaviour: 300 became 255 and -5 became 0, so the compiler keyed out a
+    // colour the author never named. A fractional component was truncated, and a malformed array
+    // was DROPPED entirely -- the document asked for a colour key and got none.
+    ExpectCompileRefused("ck_high", prefix + R"("colorKey":[300,0,0]})", "outside the accepted range");
+    ExpectCompileRefused("ck_low", prefix + R"("colorKey":[-5,0,0]})", "outside the accepted range");
+    ExpectCompileRefused("ck_frac", prefix + R"("colorKey":[1.5,0,0]})", "not a whole number");
+    ExpectCompileRefused("ck_short", prefix + R"("colorKey":[1,2]})", "exactly 3 are required");
+    ExpectCompileRefused("ck_long", prefix + R"("colorKey":[1,2,3,4]})", "exactly 3 are required");
+    ExpectCompileRefused("ck_string", prefix + R"("colorKey":["1",2,3]})", "is not a number");
+    ExpectCompileRefused("ck_notarray", prefix + R"("colorKey":255})", "is not an array");
+    // 1e400 is valid JSON number GRAMMAR, and std::stod answered it by throwing std::out_of_range
+    // -- an exception type nothing in the content pipeline catches, so it escaped past every
+    // `catch (const ContentLoadException&)` a game has. The parser now refuses the token itself.
+    ExpectCompileRefused("ck_inf", prefix + R"("colorKey":[1e400,0,0]})",
+                         "outside the range a double can represent");
+
+    // Absent is not an error, and a well-formed key still applies: the strictness is about
+    // malformed documents, not about colour keys.
+    ScratchDir dir("ck_ok");
+    WriteBytes(dir.path() / "atlas.png", TinyPng());
+    WriteText(dir.path() / "keyed.cnj", prefix + R"("colorKey":[10,20,30]})");
+    const CnjToCnbResult keyed = CompileCnjToCnb((dir.path() / "keyed.cnj").string());
+    WriteText(dir.path() / "plain.cnj", R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"atlas.png"})");
+    const CnjToCnbResult plain = CompileCnjToCnb((dir.path() / "plain.cnj").string());
+    EXPECT_NE(keyed.bytes, plain.bytes) << "the colour key must actually change a pixel";
+}
+
+TEST(CnbCompilerStrictnessTest, ATexture3DDocumentsNumbersAreValidatedBeforeAnyCast)
+{
+    const std::string prefix = R"({"cnjVersion":1,"type":"Texture3D","data":"vol.bin",)";
+
+    ExpectCompileRefused("t3_frac", prefix + R"("width":2.5,"height":1,"depth":1})",
+                         "not a whole number");
+    ExpectCompileRefused("t3_zero", prefix + R"("width":0,"height":1,"depth":1})",
+                         "outside the accepted range");
+    ExpectCompileRefused("t3_neg", prefix + R"("width":-4,"height":1,"depth":1})",
+                         "outside the accepted range");
+    ExpectCompileRefused("t3_string", prefix + R"("width":"4","height":1,"depth":1})",
+                         "is not a number");
+    ExpectCompileRefused("t3_inf", prefix + R"("width":1e400,"height":1,"depth":1})",
+                         "outside the range a double can represent");
+    ExpectCompileRefused("t3_missing", R"({"cnjVersion":1,"type":"Texture3D","data":"vol.bin","height":1,"depth":1})",
+                         "is missing");
+
+    // The overflow case the old code could not survive: three dimensions each within uint32 whose
+    // product times four is not. Refused by the per-dimension ceiling before any multiplication,
+    // rather than by a wrapped byte count that would then have "matched" a small sidecar.
+    ExpectCompileRefused("t3_overflow",
+                         prefix + R"("width":4294967295,"height":4294967295,"depth":4294967295})",
+                         "outside the accepted range");
+    ExpectCompileRefused("t3_overflow2",
+                         prefix + R"("width":100000,"height":100000,"depth":100000})",
+                         "outside the accepted range");
+
+    // A well-formed volume still compiles, and its byte count is the one the reader computed.
+    ScratchDir dir("t3_ok");
+    WriteBytes(dir.path() / "vol.bin", std::vector<std::uint8_t>(2u * 3u * 4u * 4u, 7u));
+    WriteText(dir.path() / "v.cnj", prefix + R"("width":2,"height":3,"depth":4})");
+    EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "v.cnj").string()));
+}
+
+TEST(CnbCompilerStrictnessTest, ASpriteFontDocumentsGlyphNumbersAreValidated)
+{
+    const std::string prefix =
+        R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","lineSpacing":8,"spacing":0.0,"glyphs":[)";
+    const std::string suffix = R"(]})";
+
+    // A wrong element TYPE used to read as 0 through arrayValue[i].numberValue, so a rectangle
+    // whose width was a string silently became a zero-width glyph.
+    ExpectCompileRefused(
+        "sf_srcstring",
+        prefix + R"({"char":65,"source":[0,0,"16",24],"crop":[0,0,16,24],"kerning":[0,1,0]})" + suffix,
+        "is not a number");
+    ExpectCompileRefused(
+        "sf_srcshort",
+        prefix + R"({"char":65,"source":[0,0,16],"crop":[0,0,16,24],"kerning":[0,1,0]})" + suffix,
+        "exactly 4 are required");
+    ExpectCompileRefused(
+        "sf_srcfrac",
+        prefix + R"({"char":65,"source":[0,0,16.5,24],"crop":[0,0,16,24],"kerning":[0,1,0]})" + suffix,
+        "not a whole number");
+    ExpectCompileRefused(
+        "sf_kerninf",
+        prefix + R"({"char":65,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1e400,0]})" + suffix,
+        "outside the range a double can represent");
+    ExpectCompileRefused(
+        "sf_kernstring",
+        prefix + R"({"char":65,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,"1",0]})" + suffix,
+        "is not a number");
+
+    // A character value that is not a Unicode scalar in the plane a charcs can hold. Both used to
+    // be cast straight through, producing a glyph nothing could ever match.
+    ExpectCompileRefused(
+        "sf_surrogate",
+        prefix + R"({"char":55296,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]})" + suffix,
+        "surrogate half");
+    ExpectCompileRefused(
+        "sf_astral",
+        prefix + R"({"char":128512,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]})" + suffix,
+        "outside the accepted range");
+    ExpectCompileRefused(
+        "sf_negchar",
+        prefix + R"({"char":-1,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]})" + suffix,
+        "outside the accepted range");
+
+    // A non-finite spacing, which reaches a float cast rather than an integer one.
+    ExpectCompileRefused(
+        "sf_spacinginf",
+        R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","spacing":1e400,"glyphs":[)"
+        R"({"char":65,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]}]})",
+        "outside the range a double can represent");
+    ExpectCompileRefused(
+        "sf_linespacingfrac",
+        R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","lineSpacing":8.25,"glyphs":[)"
+        R"({"char":65,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]}]})",
+        "not a whole number");
+}
+
+TEST(CnbCompilerStrictnessTest, TheCompilerAndTheRuntimeAgreeOnEveryMalformedDocument)
+{
+    // The property the shared reader exists to guarantee, asserted directly rather than left to
+    // follow from the code sharing: for each document below, the compiler and ContentManager's own
+    // .cnj route must BOTH refuse it. A document one accepts and the other refuses is a build that
+    // succeeds and a game that will not start.
+    struct Case { const char* tag; const char* document; };
+    const Case cases[] = {
+        {"frac_width",
+         R"({"cnjVersion":1,"type":"Texture3D","width":2.5,"height":1,"depth":1,"data":"vol.bin"})"},
+        {"string_width",
+         R"({"cnjVersion":1,"type":"Texture3D","width":"2","height":1,"depth":1,"data":"vol.bin"})"},
+        {"zero_depth",
+         R"({"cnjVersion":1,"type":"Texture3D","width":2,"height":1,"depth":0,"data":"vol.bin"})"},
+        {"inf_height",
+         R"({"cnjVersion":1,"type":"Texture3D","width":2,"height":1e400,"depth":1,"data":"vol.bin"})"},
+        {"version_two",
+         R"({"cnjVersion":2,"type":"Texture3D","width":1,"height":1,"depth":1,"data":"vol.bin"})"},
+    };
+
+    for (const Case& c : cases)
+    {
+        ScratchDir dir(std::string("agree_") + c.tag);
+        WriteBytes(dir.path() / "vol.bin", std::vector<std::uint8_t>(4u, 0u));
+        WriteText(dir.path() / "v.cnj", c.document);
+
+        bool compilerRefused = false;
+        try { (void)CompileCnjToCnb((dir.path() / "v.cnj").string()); }
+        catch (const ContentLoadException&) { compilerRefused = true; }
+
+        bool runtimeRefused = false;
+        try
+        {
+            Microsoft::Xna::Framework::Content::ContentManager cm(nullptr, dir.path().string());
+            (void)cm.Load<std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture3D>>("v.cnj");
+        }
+        catch (const ContentLoadException&) { runtimeRefused = true; }
+        catch (const std::exception&) { runtimeRefused = true; }
+
+        EXPECT_TRUE(compilerRefused) << c.tag << ": the compiler accepted it";
+        EXPECT_TRUE(runtimeRefused) << c.tag << ": the runtime accepted it";
+    }
+}
+
+TEST(CnbCompilerStrictnessTest, AbsorbedFilesCarryTheAuthoredPathNotJustItsBasename)
+{
+    // CnjToCnbResult::absorbedFiles documents "paths as they were written in the source .cnj", so
+    // a build script can match the list against what it generated. Recording only filename() made
+    // two files in different directories indistinguishable, and named neither of them usefully.
+    ScratchDir dir("absorbed");
+    std::filesystem::create_directories(dir.path() / "art" / "ui");
+    std::filesystem::create_directories(dir.path() / "art" / "world");
+    WriteBytes(dir.path() / "art" / "ui" / "hero.png", TinyPng());
+    WriteBytes(dir.path() / "art" / "world" / "hero.png", TinyPng());
+
+    WriteText(dir.path() / "ui.cnj",
+              R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"art/ui/hero.png"})");
+    WriteText(dir.path() / "world.cnj",
+              R"({"cnjVersion":1,"type":"Texture2D","sourceFile":"art/world/hero.png"})");
+
+    const CnjToCnbResult ui = CompileCnjToCnb((dir.path() / "ui.cnj").string());
+    const CnjToCnbResult world = CompileCnjToCnb((dir.path() / "world.cnj").string());
+
+    ASSERT_EQ(ui.absorbedFiles.size(), 2u);
+    ASSERT_EQ(world.absorbedFiles.size(), 2u);
+    EXPECT_EQ(ui.absorbedFiles[0], "ui.cnj");
+    EXPECT_EQ(world.absorbedFiles[0], "world.cnj");
+    EXPECT_EQ(ui.absorbedFiles[1], "art/ui/hero.png");
+    EXPECT_EQ(world.absorbedFiles[1], "art/world/hero.png");
+    EXPECT_NE(ui.absorbedFiles[1], world.absorbedFiles[1])
+        << "two files in different directories must not collapse to one name";
+}
+
+TEST(CnbCompilerStrictnessTest, TheCanonicalNumericHelpersRefuseWhatTheyPromiseTo)
+{
+    // The document-level tests above reach these through a .cnj, which means the JSON parser gets
+    // first refusal on some inputs -- a non-finite number is now a parse error, so the finiteness
+    // branch is never reached from a document. It is still part of these functions' contract, and
+    // a caller could hand them a value from anywhere, so it is asserted directly.
+    using CNA::Internal::RequireCnjFiniteNumber;
+    using CNA::Internal::RequireCnjInteger;
+    using CNA::Internal::RequireCnjSingle;
+    using CNA::Internal::JsonValue;
+    using CNA::Internal::JsonType;
+
+    const auto number = [](double v)
+    {
+        JsonValue value;
+        value.type = JsonType::Number;
+        value.numberValue = v;
+        return value;
+    };
+
+    const JsonValue infinite = number(std::numeric_limits<double>::infinity());
+    const JsonValue notANumber = number(std::numeric_limits<double>::quiet_NaN());
+    EXPECT_THROW((void)RequireCnjFiniteNumber(&infinite, "x"), ContentLoadException);
+    EXPECT_THROW((void)RequireCnjFiniteNumber(&notANumber, "x"), ContentLoadException);
+    EXPECT_THROW((void)RequireCnjFiniteNumber(nullptr, "x"), ContentLoadException);
+
+    // A double well inside double's range but far outside float's would narrow to an infinity.
+    const JsonValue tooBigForFloat = number(1e300);
+    EXPECT_THROW((void)RequireCnjSingle(&tooBigForFloat, "x"), ContentLoadException);
+    const JsonValue finePrecision = number(1.5);
+    EXPECT_FLOAT_EQ(RequireCnjSingle(&finePrecision, "x"), 1.5f);
+
+    // The integer range test is performed in double space, because converting an out-of-range
+    // double to an int64 is undefined behaviour rather than a large answer.
+    const JsonValue huge = number(1e300);
+    EXPECT_THROW((void)RequireCnjInteger(&huge, "x", 0, 255), ContentLoadException);
+    const JsonValue fractional = number(2.5);
+    EXPECT_THROW((void)RequireCnjInteger(&fractional, "x", 0, 255), ContentLoadException);
+    const JsonValue negative = number(-1.0);
+    EXPECT_THROW((void)RequireCnjInteger(&negative, "x", 0, 255), ContentLoadException);
+    const JsonValue top = number(255.0);
+    const JsonValue bottom = number(0.0);
+    const JsonValue signedValue = number(-3.0);
+    EXPECT_EQ(RequireCnjInteger(&top, "x", 0, 255), 255);
+    EXPECT_EQ(RequireCnjInteger(&bottom, "x", 0, 255), 0);
+    EXPECT_EQ(RequireCnjInteger(&signedValue, "x", -10, 10), -3);
 }

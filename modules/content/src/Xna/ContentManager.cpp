@@ -8,6 +8,7 @@
 #include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
 #include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
 #include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Internal/CnjCanonicalRead.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
@@ -504,32 +505,10 @@ namespace Microsoft::Xna::Framework::Content
             }
         }
 
-        // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnj sidecar (CNB-8). Kept
-        // local/self-contained rather than reusing JsonIntArray4 (a 4-element parser) below, since
-        // colorKey is always exactly 3 components and duplicating this ~10-line scan is cheaper and
-        // safer than coaxing a 4-element parser into stopping after 3.
-        bool TryParseColorKeyRGB(const std::string& json, std::array<int, 3>& outRgb)
-        {
-            const std::string needle = "\"colorKey\"";
-            auto pos = json.find(needle);
-            if (pos == std::string::npos) return false;
-            pos = json.find('[', pos + needle.size());
-            if (pos == std::string::npos) return false;
-
-            ++pos;
-            for (int i = 0; i < 3; ++i)
-            {
-                while (pos < json.size() &&
-                       !std::isdigit(static_cast<unsigned char>(json[pos])) && json[pos] != '-') ++pos;
-                if (pos >= json.size()) return false;
-                outRgb[static_cast<std::size_t>(i)] = std::stoi(json.substr(pos));
-                while (pos < json.size() && json[pos] != ',' && json[pos] != ']') ++pos;
-                if (pos < json.size() && json[pos] == ',') ++pos;
-            }
-            return true;
-        }
-
-        void ApplyColorKey(Graphics::Texture2D& texture, const std::array<int, 3>& colorKey)
+        // Applies a colour key already read by CNA::Internal::ReadCnjColorKey (plans/plan_cnb.md
+        // CNBF-118). The reading of the member itself lives there, shared with the .cnj -> .cnb
+        // compiler, so the two routes cannot disagree about which pixels a document keys out.
+        void ApplyColorKey(Graphics::Texture2D& texture, const std::array<std::uint8_t, 3>& colorKey)
         {
             const int width = texture.getWidthProperty();
             const int height = texture.getHeightProperty();
@@ -542,6 +521,7 @@ namespace Microsoft::Xna::Framework::Content
             const auto keyR = static_cast<SharpRuntime::bytecs>(colorKey[0]);
             const auto keyG = static_cast<SharpRuntime::bytecs>(colorKey[1]);
             const auto keyB = static_cast<SharpRuntime::bytecs>(colorKey[2]);
+
 
             for (auto& pixel : pixels)
             {
@@ -594,10 +574,18 @@ namespace Microsoft::Xna::Framework::Content
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(resolved.logicalName);
 
-                std::array<int, 3> colorKey{};
-                if (TryParseColorKeyRGB(json, colorKey))
+                // plans/plan_cnb.md CNBF-118: through the shared canonical reader, not a substring
+                // scan with std::stoi. The scan found "colorKey" anywhere in the file including
+                // inside another string, read digits without checking they belonged to an array,
+                // and threw std::out_of_range rather than a ContentLoadException on a large
+                // number -- and the .cnj -> .cnb compiler read the same member a fourth,
+                // different way. One reader means the two routes agree by construction.
+                if (const std::optional<std::array<std::uint8_t, 3>> colorKey =
+                        CNA::Internal::ReadCnjColorKey(CNA::Internal::ParseJson(json),
+                                                        "Texture2D .cnj '" + path + "'");
+                    colorKey.has_value())
                 {
-                    ApplyColorKey(result, colorKey);
+                    ApplyColorKey(result, *colorKey);
                 }
 
                 return result;
@@ -676,40 +664,21 @@ namespace Microsoft::Xna::Framework::Content
                 CNA::Internal::ValidateCnjEnvelope(envelope, "Texture3D", path);
                 RejectSourceFileForSelfContainedCnj(envelope, "Texture3D", path);
 
-                const JsonValue root = CNA::Internal::ParseJson(json);
-                const JsonValue* widthField  = root.FindMember("width");
-                const JsonValue* heightField = root.FindMember("height");
-                const JsonValue* depthField  = root.FindMember("depth");
-                const JsonValue* dataField   = root.FindMember("data");
-
-                if (widthField == nullptr || !widthField->IsNumber() ||
-                    heightField == nullptr || !heightField->IsNumber() ||
-                    depthField == nullptr || !depthField->IsNumber())
-                {
-                    throw ContentLoadException(
-                        "Texture3D .cnj '" + path + "' is missing a numeric 'width'/'height'/'depth' field.");
-                }
-                if (dataField == nullptr || !dataField->IsString() || dataField->stringValue.empty())
-                {
-                    throw ContentLoadException(
-                        "Texture3D .cnj '" + path + "' is missing a non-empty 'data' field naming a raw pixel sidecar.");
-                }
-
-                const int width  = static_cast<int>(widthField->numberValue);
-                const int height = static_cast<int>(heightField->numberValue);
-                const int depth  = static_cast<int>(depthField->numberValue);
-                if (width <= 0 || height <= 0 || depth <= 0)
-                {
-                    throw ContentLoadException(
-                        "Texture3D .cnj '" + path + "' has a non-positive 'width'/'height'/'depth'.");
-                }
+                // plans/plan_cnb.md CNBF-118: one canonical reading of these four members, shared
+                // with the .cnj -> .cnb compiler. Previously each route cast numberValue straight
+                // to int -- so 3.7 became 3, 1e400 was undefined behaviour, and the two routes
+                // could accept different documents.
+                const CNA::Internal::CnjTexture3DDescription description =
+                    CNA::Internal::ReadCnjTexture3DDescription(CNA::Internal::ParseJson(json),
+                                                                "Texture3D .cnj '" + path + "'");
+                const auto width  = static_cast<int>(description.width);
+                const auto height = static_cast<int>(description.height);
+                const auto depth  = static_cast<int>(description.depth);
 
                 const std::string dataPath = ResolveRootRelativeSidecarPath(
-                    cm, path, "data", dataField->stringValue);
+                    cm, path, "data", description.dataFile);
                 const auto bytes = ReadBinaryFile(dataPath);
-                const std::size_t expectedBytes =
-                    static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
-                    static_cast<std::size_t>(depth) * 4;
+                const auto expectedBytes = static_cast<std::size_t>(description.expectedByteCount);
                 if (bytes.size() != expectedBytes)
                 {
                     throw ContentLoadException(
@@ -1102,23 +1071,6 @@ namespace Microsoft::Xna::Framework::Content
             return j.find('[', pos + needle.size());
         }
 
-        static std::array<int, 4> JsonIntArray4(const std::string& j, std::size_t from)
-        {
-            std::array<int, 4> r{};
-            if (from == std::string::npos) return r;
-            std::size_t pos = from + 1;
-            for (int i = 0; i < 4; ++i)
-            {
-                while (pos < j.size() &&
-                       !std::isdigit(static_cast<unsigned char>(j[pos])) && j[pos] != '-') ++pos;
-                if (pos >= j.size()) break;
-                r[i] = std::stoi(j.substr(pos));
-                while (pos < j.size() && j[pos] != ',' && j[pos] != ']') ++pos;
-                if (pos < j.size() && j[pos] == ',') ++pos;
-            }
-            return r;
-        }
-
         static std::array<int, 5> ParseTextureCoordinateSetsEXT(
             const std::string& j, std::size_t from)
         {
@@ -1327,65 +1279,35 @@ namespace Microsoft::Xna::Framework::Content
                 CNA::Internal::ValidateCnjEnvelope(envelope, "SpriteFont", path);
                 RejectSourceFileForSelfContainedCnj(envelope, "SpriteFont", path);
 
-                const std::string textureName   = ExtractJsonStringField(json, "texture");
-                const int         lineSpacing    = JsonInt(json, "lineSpacing");
-                const float       spacing        = JsonFloat(json, "spacing");
-                const std::string defCharStr     = ExtractJsonStringField(json, "defaultCharacter");
-
-                if (textureName.empty())
-                    throw ContentLoadException("SpriteFont descriptor missing 'texture' field: " + path);
-
-                std::optional<charcs> defChar;
-                if (!defCharStr.empty())
-                    defChar = static_cast<charcs>(static_cast<unsigned char>(defCharStr[0]));
+                // plans/plan_cnb.md CNBF-118: read through the shared canonical reader rather than
+                // by scanning the document text. The scan found "glyphs" anywhere including inside
+                // a string, counted braces without knowing about string literals, read
+                // `JsonIntArray4` without checking the array's length or its elements' types, and
+                // threw std::invalid_argument out of std::stoi on a malformed number instead of a
+                // ContentLoadException -- while the .cnj -> .cnb compiler parsed the same document
+                // as real JSON. Two readings of one document is what CNBF-118 exists to remove.
+                const CNA::Internal::CnjSpriteFontDescription description =
+                    CNA::Internal::ReadCnjSpriteFontDescription(CNA::Internal::ParseJson(json),
+                                                                 "SpriteFont .cnj '" + path + "'");
 
                 // Atlas texture — loaded and cached via ContentManager so it stays alive.
                 Graphics::Texture2D atlas = cm.Load<Graphics::Texture2D>(
-                    ResolveRootRelativeAssetName(cm, path, "texture", textureName));
+                    ResolveRootRelativeAssetName(cm, path, "texture", description.textureName));
 
                 std::vector<Rectangle>          glyphBounds;
                 std::vector<Rectangle>          cropping;
                 std::vector<charcs>             characters;
                 std::vector<Vector3>            kerningData;
-
-                // Parse "glyphs": [ { "char": N, "source":[x,y,w,h],
-                //                     "crop":[x,y,w,h], "kerning":[l,a,r] }, ... ]
-                const std::size_t glyphsKey = json.find("\"glyphs\"");
-                if (glyphsKey != std::string::npos)
+                glyphBounds.reserve(description.glyphs.size());
+                cropping.reserve(description.glyphs.size());
+                characters.reserve(description.glyphs.size());
+                kerningData.reserve(description.glyphs.size());
+                for (const CNA::Internal::CnjSpriteFontGlyph& glyph : description.glyphs)
                 {
-                    const std::size_t arrStart = json.find('[', glyphsKey);
-                    if (arrStart != std::string::npos)
-                    {
-                        std::size_t pos = arrStart + 1;
-                        while (true)
-                        {
-                            const std::size_t objStart = json.find('{', pos);
-                            if (objStart == std::string::npos) break;
-
-                            int depth = 1;
-                            std::size_t objEnd = objStart + 1;
-                            while (objEnd < json.size() && depth > 0)
-                            {
-                                if      (json[objEnd] == '{') ++depth;
-                                else if (json[objEnd] == '}') --depth;
-                                ++objEnd;
-                            }
-
-                            const std::string g = json.substr(objStart, objEnd - objStart);
-
-                            const int charCode = JsonInt(g, "char");
-                            const auto src = JsonIntArray4(g,   FindKeyArray(g, "source"));
-                            const auto crp = JsonIntArray4(g,   FindKeyArray(g, "crop"));
-                            const auto krn = JsonFloatArray3(g, FindKeyArray(g, "kerning"));
-
-                            characters.push_back(static_cast<charcs>(charCode));
-                            glyphBounds.push_back({src[0], src[1], src[2], src[3]});
-                            cropping.push_back({crp[0], crp[1], crp[2], crp[3]});
-                            kerningData.push_back({krn[0], krn[1], krn[2]});
-
-                            pos = objEnd;
-                        }
-                    }
+                    characters.push_back(glyph.character);
+                    glyphBounds.push_back(glyph.source);
+                    cropping.push_back(glyph.crop);
+                    kerningData.push_back(glyph.kerning);
                 }
 
                 return SpriteFont(
@@ -1393,10 +1315,10 @@ namespace Microsoft::Xna::Framework::Content
                     std::move(glyphBounds),
                     std::move(cropping),
                     std::move(characters),
-                    lineSpacing,
-                    spacing,
+                    description.lineSpacing,
+                    description.spacing,
                     std::move(kerningData),
-                    defChar);
+                    description.defaultCharacter);
             }
         };
 

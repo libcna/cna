@@ -23,8 +23,10 @@ namespace CNA::Content::Cnb
          * @brief Files whose contents are now *inside* the `.cnb` and no longer need to ship.
          *
          * Paths as they were written in the source `.cnj`, not resolved filesystem paths, so a
-         * build script can match them against what it generated. The source `.cnj` itself is
-         * always the first entry.
+         * build script can match them against what it generated -- including a document's
+         * authored subdirectory, so `art/ui/hero.png` and `art/world/hero.png` remain two
+         * distinguishable entries (plans/plan_cnb.md `CNBF-118`). The source `.cnj` itself is
+         * always the first entry, under its own file name.
          */
         std::vector<std::string> absorbedFiles;
 
