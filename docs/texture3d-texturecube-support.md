@@ -139,14 +139,34 @@ they provide no alternate binding route.
 
 ## `DDSFromStreamEXT` (`TextureCube` only — no `Texture3D` equivalent in FNA)
 
-Confirmed non-functional stub on all renderers (it's implemented once, in the shared XNA-layer
-`TextureCube.cpp`, not per-renderer): ignores the `stream` argument entirely and always returns a
-blank 1×1 `Color` cube map. Task 272 finding, tracked as `plans/plan_graphics.md` Task 663. Applies to
-Metal too, same shared code, no per-renderer work possible until Task 663 lands.
+**Implemented.** This section described a non-functional 1×1 stub long after Task 663 replaced it;
+the stale text is corrected here rather than deleted, because a reader who remembers the stub needs
+to see that it went.
+
+It is implemented once, in the shared XNA-layer `TextureCube.cpp`, not per-renderer. It parses the
+DDS header mirroring FNA's `Texture.ParseDDS`, refuses a non-cube file with
+`System::FormatException("This file does not contain cube data!")` and malformed or out-of-scope
+input with `System::NotSupportedException`, and decodes every face and mip level of a DXT1/DXT3/DXT5
+cube map to RGBA8. Scope is deliberately DXT1/3/5 only — no DX10 extended header, uncompressed or
+HDR variants — matching `Texture2D::FromStream`'s own DDS scope.
+
+CNA decompresses to RGBA8 on the CPU and uploads `SurfaceFormat::Color`, where FNA uploads the
+compressed blocks to a real compressed GPU format. That is a deliberate deviation matching
+`Texture2D::FromStream`'s already-accepted choice, because CNA implements no compressed GPU texture
+format end-to-end on any renderer.
+
+Since `plans/plan_cnb.md` `CNBF-113`, the parsing and decompression live in
+`CNA::Internal::Graphics::DecodeDdsCube` — a pure-CPU component needing no `GraphicsDevice` — and
+`DDSFromStreamEXT` is a thin consumer that decodes and uploads. The same decoder is what lets the
+headless CNB content compiler produce a `TextureCube.cnb`. Behaviour is unchanged in both
+directions; only the location moved.
 
 ---
 
 ## Future work
+
+(`TextureCube::DDSFromStreamEXT` used to be listed here as Task 663. It is implemented; see
+the section above.)
 
 | Area | Task |
 |------|------|
@@ -154,6 +174,5 @@ Metal too, same shared code, no per-renderer work possible until Task 663 lands.
 | Wire `Texture3D`/`TextureCube` sampling into shaders (architecture change — inherit `Texture`, or a parallel binding path) | Task 863 |
 | Fix Vulkan's and Bgfx's mip-level allocation for both `Texture3D` and `TextureCube` (`mipLevels`/`hasMips` hardcoded to 1/false) | Task 864 (new) |
 | Implement real GPU readback for `Texture3D`/`TextureCube::GetData` on Vulkan (staging-buffer `vkCmdCopyImageToBuffer`); document Bgfx's as an accepted no-readback limitation | Task 865 (new) |
-| Implement `TextureCube::DDSFromStreamEXT` for real (DDS header parsing + per-face/per-level DXT decode) | Task 663 |
 
 Metal's own remaining `Texture3D`/`TextureCube` work (real `CTest`s for `SetData`/`GetData` round-trips and cube-face sampling) is tracked directly in `plans/plan_metal.md` Phase 11 (`METAL-126`–`129`), not duplicated here as a separate task list.

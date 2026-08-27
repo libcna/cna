@@ -3,6 +3,11 @@
 #include "System/IServiceProvider.hpp"
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Content/Cnb/CnbModelCodec.hpp"
+#include "CNA/Content/Cnb/CnbMediaCodec.hpp"
+#include "CNA/Content/Cnb/CnbSoundEffectCodec.hpp"
+#include "CNA/Content/Cnb/CnbSpriteFontCodec.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
@@ -2167,6 +2172,8 @@ namespace Microsoft::Xna::Framework::Content
         }
 
 
+
+
         // Task 927: `stride` is always one of XNA's own "clean" (tightly packed, no vtable) sizes
         // -- 16/20/24/32/52/56 -- since every offline conversion tool (and, since CNB-70, the
         // runtime glTF reader) writes/produces that exact layout. Every CNA vertex struct below
@@ -2314,6 +2321,128 @@ namespace Microsoft::Xna::Framework::Content
             return vb;
         }
 
+        // ---------------------------------------------------------------------------
+        // The shared model mesh builder (plans/plan_cnb.md CNBF-100)
+        //
+        // Three front-ends produce a Model: the runtime glTF reader, the .cnj reader and the .cnb
+        // decoder. They parse completely different things, but the moment each of them holds raw
+        // vertex bytes, raw index bytes and a topology, the rest is identical -- and it was
+        // written out three times. Three copies of "make a VertexBuffer, make an IndexBuffer,
+        // derive the primitive count, construct the ModelMeshPart, carry the topology to the
+        // draw" is three chances for one of them to drift, and a drift there does not fail a
+        // build: it makes .cnj and .cnb models behave slightly differently, which is exactly the
+        // class of bug CnbModelEquivalenceTest exists to catch AFTER the fact.
+        //
+        // The effect/material half of the same problem was solved earlier by BuildPartEffectEXT.
+        // This is the mesh half. Both directions now funnel through one implementation, so there
+        // is nothing left to disagree about.
+        // ---------------------------------------------------------------------------
+
+        /// One mesh part's geometry, as every front-end has it after its own parsing and before
+        /// any GPU object exists.
+        struct ModelPartGeometryEXT
+        {
+            /// Raw interleaved vertex bytes. Never null.
+            const std::vector<std::uint8_t>* vertexBytes = nullptr;
+            /// Bytes per vertex.
+            int stride = 0;
+            /// Raw index bytes, in `use32BitIndices`' width. Never null.
+            const std::vector<std::uint8_t>* indexBytes = nullptr;
+            /// True when indices are `u32` rather than `u16`.
+            bool use32BitIndices = false;
+            /// The part's own topology, which travels to the draw rather than being assumed there.
+            CNA::Internal::GltfImport::PrimitiveTopology topology =
+                CNA::Internal::GltfImport::PrimitiveTopology::Triangles;
+            /// Primitive count to use, or a negative value to derive it from the topology and the
+            /// index count. A `.cnb` supplies its own, because the file states it and the decoder
+            /// has already cross-checked it against the topology (CNBF-H012); the other two
+            /// front-ends derive it.
+            int primitiveCountOverride = -1;
+        };
+
+        /// What BuildModelMeshPartGeometryEXT() produced. The buffers are returned rather than
+        /// stored because every caller owns them through its own ModelResources.
+        struct BuiltModelPartEXT
+        {
+            std::unique_ptr<Graphics::ModelMeshPart> part;
+            std::unique_ptr<Graphics::VertexBuffer> vertexBuffer;
+            std::unique_ptr<Graphics::IndexBuffer> indexBuffer;
+            int vertexCount = 0;
+            int indexCount = 0;
+        };
+
+        BuiltModelPartEXT BuildModelMeshPartGeometryEXT(Graphics::GraphicsDevice& device,
+                                                        const ModelPartGeometryEXT& geometry)
+        {
+            BuiltModelPartEXT built;
+            built.vertexCount =
+                geometry.stride > 0
+                    ? static_cast<int>(geometry.vertexBytes->size()) / geometry.stride
+                    : 0;
+            const int indexSize = geometry.use32BitIndices
+                                      ? static_cast<int>(sizeof(std::uint32_t))
+                                      : static_cast<int>(sizeof(std::uint16_t));
+            built.indexCount = static_cast<int>(geometry.indexBytes->size()) / indexSize;
+
+            built.vertexBuffer = BuildVertexBufferFromRawBytes(device, geometry.stride,
+                                                                built.vertexCount,
+                                                                *geometry.vertexBytes);
+            built.indexBuffer = std::make_unique<Graphics::IndexBuffer>(
+                device,
+                geometry.use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
+                                         : Graphics::IndexElementSize::SixteenBits,
+                built.indexCount, Graphics::BufferUsage::None);
+            if (geometry.use32BitIndices)
+            {
+                const std::vector<std::uint32_t> indices =
+                    IndicesFromBytes<std::uint32_t>(*geometry.indexBytes, built.indexCount);
+                built.indexBuffer->SetData(indices.data(), built.indexCount);
+            }
+            else
+            {
+                const std::vector<std::uint16_t> indices =
+                    IndicesFromBytes<std::uint16_t>(*geometry.indexBytes, built.indexCount);
+                built.indexBuffer->SetData(indices.data(), built.indexCount);
+            }
+
+            const int primitiveCount =
+                geometry.primitiveCountOverride >= 0
+                    ? geometry.primitiveCountOverride
+                    : CNA::Internal::GltfImport::PrimitiveCountForTopology(
+                          geometry.topology, static_cast<std::size_t>(built.indexCount));
+
+            built.part = std::make_unique<Graphics::ModelMeshPart>(
+                built.vertexBuffer.get(), built.indexBuffer.get(), built.vertexCount,
+                primitiveCount, 0, 0);
+            built.part->setPrimitiveTypeEXTProperty(
+                CNA::Internal::GltfImport::PrimitiveTypeForTopology(geometry.topology));
+            return built;
+        }
+
+        /// Applies a material's per-slot sampler states to a part. Slots 0-4 are the ordinary
+        /// texture samplers and 5+ are the specular ones, which is a split every front-end
+        /// previously spelled out for itself.
+        void ApplyPartSamplerStatesEXT(Graphics::ModelMeshPart& part,
+                                       const CNA::Internal::GltfImport::MaterialOut& material)
+        {
+            for (std::size_t slot = 0; slot < material.samplers.size(); ++slot)
+            {
+                const auto& sampler = material.samplers[slot];
+                Graphics::SamplerState state;
+                state.setFilterProperty(sampler.filter);
+                state.setAddressUProperty(sampler.addressU);
+                state.setAddressVProperty(sampler.addressV);
+                if (slot < 5u)
+                {
+                    part.setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                }
+                else
+                {
+                    part.setSpecularSamplerStateEXTProperty(static_cast<int>(slot - 5u), state);
+                }
+            }
+        }
+
         // plans/plan_gltf.md GLTF-128: every imported layout starts with a tightly-packed float3
         // Position. Keep the extraction here, next to the one upload helper that owns that ABI,
         // so the runtime and .cnj paths cannot invent separate offset tables while constructing
@@ -2453,6 +2582,298 @@ namespace Microsoft::Xna::Framework::Content
                 dualFx->setAlphaProperty(meshOut.material.baseColorFactor.W);
             }
             return true;
+        }
+
+        /**
+         * @brief Resolves one of a mesh part's material texture fields to a logical asset name
+         *        ContentManager can load, returning empty when that slot is unused.
+         *
+         * @note CNAEXT -- plans/plan_cnb.md `CNBF-074`. Introduced when the compiled `.cnb` Model path
+         * needed the same effect construction the `.cnj` path already had: the two differ only in
+         * how they arrive at these eight names, so resolving through one callback and sharing
+         * everything after it is what keeps one effect/material policy instead of two.
+         *
+         * A callback rather than a pre-resolved struct on purpose. Each field is resolved at
+         * exactly the point the original code resolved it, so a field the constructed effect never
+         * reads is still never resolved and never diagnosed -- unifying the two paths must not
+         * quietly turn an ignored bad path into a load failure. The argument is the field's name
+         * in the source document (`"texture"`, `"normalMap"`, …), which the `.cnj` resolver also
+         * uses to name the offending field in an error message.
+         */
+        using MaterialAssetResolverEXT = std::function<std::string(const char* field)>;
+
+        /**
+         * @brief Builds one mesh part's Effect and applies its complete material state.
+         *
+         * Shared verbatim by ModelTypeReader (the `.cnj` path) and by the compiled `.cnb` Model
+         * loader, so the two produce identically configured effects by construction rather than by
+         * two implementations agreeing.
+         *
+         * @param device                 Device the effect is created on.
+         * @param cm                     Content manager used to load referenced textures/effects.
+         * @param stockEffectName        One of "", "BasicEffect", "SkinnedEffect",
+         *                               "DualTextureEffect", "PbrEffect", "SkinnedPbrEffect".
+         *                               Ignored when @p customEffectAssetName is non-empty.
+         * @param customEffectAssetName  Logical asset name of a game-supplied Effect, or empty.
+         * @param resolveAsset           Resolves one of the part's texture fields by name.
+         * @param material               The part's material state.
+         * @param vertexColorEnabled     Whether the effect should sample per-vertex colour.
+         * @param unlit                  Whether the material is KHR_materials_unlit.
+         * @param applyPunctualLights    Whether to apply @p lights (the glTF lighting policy,
+         *                               which belongs only to cnjVersion 2 / real glTF sources).
+         * @param lights                 Punctual lights to apply.
+         * @param res                    Owns the textures this call loads.
+         * @return The configured effect.
+         */
+        std::shared_ptr<Graphics::Effect> BuildPartEffectEXT(
+            Graphics::GraphicsDevice& device, ContentManager& cm,
+            const std::string& stockEffectName, const std::string& customEffectAssetName,
+            const MaterialAssetResolverEXT& resolveAsset,
+            const CNA::Internal::GltfImport::MaterialOut& material,
+            bool vertexColorEnabled, bool unlit, bool applyPunctualLights,
+            const std::vector<CNA::Internal::GltfImport::LightOut>& lights,
+            ModelResources& res)
+        {
+                std::shared_ptr<Graphics::Effect> fx;
+                if (!customEffectAssetName.empty()) {
+                    fx = cm.Load<std::shared_ptr<Graphics::Effect>>(customEffectAssetName);
+                } else if (stockEffectName.empty() || stockEffectName == "BasicEffect") {
+                    fx = std::make_shared<Graphics::BasicEffect>(device);
+                } else if (stockEffectName == "SkinnedEffect") {
+                    // Task 941 (Phase 77): the real Skinned Model Sample's own
+                    // effect for GPU-skinned meshes -- AnimationPlayer's own
+                    // GetSkinTransforms() feeds SkinnedEffect::SetBoneTransforms()
+                    // directly (see Task 942), not through this reader.
+                    fx = std::make_shared<Graphics::SkinnedEffect>(device);
+                } else if (stockEffectName == "DualTextureEffect") {
+                    // CNB-73: real XNA's two-layer multitexturing effect -- always
+                    // samples both texture slots (no TextureEnabled toggle), so its
+                    // vertex buffer must be the stride-20 VertexPositionTexture shape
+                    // (no Normal in between location0/location1, see ApplyLayout's
+                    // stride==20 case) rather than stride-32.
+                    fx = std::make_shared<Graphics::DualTextureEffect>(device);
+                } else if (stockEffectName == "PbrEffect") {
+                    // CNB-56/58 (Phase 13A): CNAEXT metallic-roughness PBR effect --
+                    // its vertex buffer must be the stride-48
+                    // VertexPositionNormalTangentTexture shape (Position+Normal+
+                    // Tangent+TextureCoordinate), never stride-32.
+                    fx = std::make_shared<Graphics::PbrEffect>(device);
+                } else if (stockEffectName == "SkinnedPbrEffect") {
+                    // PBR + skinning combo: PbrEffect's own BRDF applied to a
+                    // GPU-skinned mesh -- its vertex buffer must be the stride-68
+                    // VertexPositionNormalTangentTextureSkinned shape. Bone transforms
+                    // are fed by AnimationPlayer::GetSkinTransforms() at draw time,
+                    // same as SkinnedEffect above -- not through this reader.
+                    fx = std::make_shared<Graphics::SkinnedPbrEffect>(device);
+                } else {
+                    throw ContentLoadException(
+                        "Model: unknown stock effect name '" + stockEffectName + "'.");
+                }
+
+                // Task 932: bind a per-mesh diffuse texture, if the descriptor names
+                // one -- mirrors SkinnedModelTypeReader's own already-working
+                // per-part texture loading. BasicEffect needs TextureEnabled
+                // explicitly turned on; SkinnedEffect's real XNA shader is always
+                // textured (no such toggle exists on it). A custom effect loaded
+                // via "effect" has no standard texture slot to bind through here.
+                if (const std::string textureAsset = resolveAsset("texture");
+                    !textureAsset.empty()) {
+                    auto tex = std::make_unique<Graphics::Texture2D>(
+                        cm.Load<Graphics::Texture2D>(textureAsset));
+                    if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                        basicFx->setTextureProperty(tex.get());
+                        basicFx->setTextureEnabledProperty(true);
+                        res.textureOwners.push_back(std::move(tex));
+                    } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                        skinnedFx->setTextureProperty(tex.get());
+                        res.textureOwners.push_back(std::move(tex));
+                    } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                        dualFx->setTextureProperty(tex.get());
+                        res.textureOwners.push_back(std::move(tex));
+                    } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                        pbrFx->setTextureProperty(tex.get());
+                        res.textureOwners.push_back(std::move(tex));
+                    } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                        skinnedPbrFx->setTextureProperty(tex.get());
+                        res.textureOwners.push_back(std::move(tex));
+                    }
+                }
+
+                // CNB-73: the second (layer-1) texture slot -- only meaningful for
+                // DualTextureEffect, which is the only stock effect with a Texture2
+                // parameter.
+                if (const std::string texture2Asset = resolveAsset("texture2");
+                    !texture2Asset.empty()) {
+                    if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                        auto tex2 = std::make_unique<Graphics::Texture2D>(
+                            cm.Load<Graphics::Texture2D>(texture2Asset));
+                        dualFx->setTexture2Property(tex2.get());
+                        res.textureOwners.push_back(std::move(tex2));
+                    }
+                }
+
+                // GLTF-236/237: apply the complete material carrier reconstructed
+                // above, including the four PBR maps and every factor/scalar.
+                if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                    auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
+                        const std::string assetName = resolveAsset(field);
+                        if (assetName.empty()) { return nullptr; }
+                        auto tex = std::make_unique<Graphics::Texture2D>(
+                            cm.Load<Graphics::Texture2D>(assetName));
+                        Graphics::Texture2D* texPtr = tex.get();
+                        res.textureOwners.push_back(std::move(tex));
+                        return texPtr;
+                    };
+                    if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
+                        pbrFx->setNormalMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("metallicRoughnessMap"))
+                        pbrFx->setMetallicRoughnessMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("emissiveMap"))
+                        pbrFx->setEmissiveMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("occlusionMap"))
+                        pbrFx->setOcclusionMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("specularMap"))
+                        pbrFx->setSpecularMapEXTProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("specularColorMap"))
+                        pbrFx->setSpecularColorMapEXTProperty(t);
+                    pbrFx->setMetallicFactorProperty(material.metallicFactor);
+                    pbrFx->setRoughnessFactorProperty(material.roughnessFactor);
+                    pbrFx->setIorEXTProperty(material.iorEXT);
+                    pbrFx->setSpecularFactorEXTProperty(material.specularFactorEXT);
+                    pbrFx->setSpecularColorFactorEXTProperty(
+                        material.specularColorFactorEXT);
+                    pbrFx->setEmissiveFactorProperty(material.emissiveFactor);
+                    pbrFx->setNormalScaleEXTProperty(material.normalScale);
+                    pbrFx->setOcclusionStrengthEXTProperty(
+                        material.occlusionStrength);
+                    for (std::size_t slot = 0; slot < 5; ++slot)
+                    {
+                        pbrFx->setTextureCoordinateSetEXTProperty(
+                            static_cast<int>(slot), static_cast<int>(
+                                material.textureCoordinateSetsEXT[slot]));
+                        pbrFx->setTextureTransformEXTProperty(
+                            static_cast<int>(slot),
+                            material.textureTransformsEXT[slot]);
+                    }
+                    pbrFx->setSpecularTextureCoordinateSetEXTProperty(
+                        material.textureCoordinateSetsEXT[5]);
+                    pbrFx->setSpecularColorTextureCoordinateSetEXTProperty(
+                        material.textureCoordinateSetsEXT[6]);
+                    pbrFx->setSpecularTextureTransformEXTProperty(
+                        material.textureTransformsEXT[5]);
+                    pbrFx->setSpecularColorTextureTransformEXTProperty(
+                        material.textureTransformsEXT[6]);
+                    pbrFx->setDiffuseColorProperty(Vector3(
+                        material.baseColorFactor.X, material.baseColorFactor.Y,
+                        material.baseColorFactor.Z));
+                    pbrFx->setAlphaProperty(material.baseColorFactor.W);
+                    pbrFx->setAlphaModeEXTProperty(material.alphaMode);
+                    pbrFx->setAlphaCutoffEXTProperty(material.alphaCutoff);
+                    pbrFx->setDoubleSidedEXTProperty(material.doubleSided);
+                } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                    auto loadPbrMap = [&](const char* field) -> Graphics::Texture2D* {
+                        const std::string assetName = resolveAsset(field);
+                        if (assetName.empty()) { return nullptr; }
+                        auto tex = std::make_unique<Graphics::Texture2D>(
+                            cm.Load<Graphics::Texture2D>(assetName));
+                        Graphics::Texture2D* texPtr = tex.get();
+                        res.textureOwners.push_back(std::move(tex));
+                        return texPtr;
+                    };
+                    if (Graphics::Texture2D* t = loadPbrMap("normalMap"))
+                        skinnedPbrFx->setNormalMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("metallicRoughnessMap"))
+                        skinnedPbrFx->setMetallicRoughnessMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("emissiveMap"))
+                        skinnedPbrFx->setEmissiveMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("occlusionMap"))
+                        skinnedPbrFx->setOcclusionMapProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("specularMap"))
+                        skinnedPbrFx->setSpecularMapEXTProperty(t);
+                    if (Graphics::Texture2D* t = loadPbrMap("specularColorMap"))
+                        skinnedPbrFx->setSpecularColorMapEXTProperty(t);
+                    skinnedPbrFx->setMetallicFactorProperty(material.metallicFactor);
+                    skinnedPbrFx->setRoughnessFactorProperty(material.roughnessFactor);
+                    skinnedPbrFx->setIorEXTProperty(material.iorEXT);
+                    skinnedPbrFx->setSpecularFactorEXTProperty(
+                        material.specularFactorEXT);
+                    skinnedPbrFx->setSpecularColorFactorEXTProperty(
+                        material.specularColorFactorEXT);
+                    skinnedPbrFx->setEmissiveFactorProperty(material.emissiveFactor);
+                    skinnedPbrFx->setNormalScaleEXTProperty(material.normalScale);
+                    skinnedPbrFx->setOcclusionStrengthEXTProperty(
+                        material.occlusionStrength);
+                    for (std::size_t slot = 0; slot < 5; ++slot)
+                    {
+                        skinnedPbrFx->setTextureCoordinateSetEXTProperty(
+                            static_cast<int>(slot), static_cast<int>(
+                                material.textureCoordinateSetsEXT[slot]));
+                        skinnedPbrFx->setTextureTransformEXTProperty(
+                            static_cast<int>(slot),
+                            material.textureTransformsEXT[slot]);
+                    }
+                    skinnedPbrFx->setSpecularTextureCoordinateSetEXTProperty(
+                        material.textureCoordinateSetsEXT[5]);
+                    skinnedPbrFx->setSpecularColorTextureCoordinateSetEXTProperty(
+                        material.textureCoordinateSetsEXT[6]);
+                    skinnedPbrFx->setSpecularTextureTransformEXTProperty(
+                        material.textureTransformsEXT[5]);
+                    skinnedPbrFx->setSpecularColorTextureTransformEXTProperty(
+                        material.textureTransformsEXT[6]);
+                    skinnedPbrFx->setDiffuseColorProperty(Vector3(
+                        material.baseColorFactor.X, material.baseColorFactor.Y,
+                        material.baseColorFactor.Z));
+                    skinnedPbrFx->setAlphaProperty(material.baseColorFactor.W);
+                    skinnedPbrFx->setAlphaModeEXTProperty(material.alphaMode);
+                    skinnedPbrFx->setAlphaCutoffEXTProperty(material.alphaCutoff);
+                    skinnedPbrFx->setDoubleSidedEXTProperty(material.doubleSided);
+                }
+
+                // Task 1115 / CNB-67 (Phase 13C): a "vertexStride": 24
+                // (VertexPositionColorTexture) or 56 (skinned + Color) mesh may set
+                // "vertexColorEnabled" to actually light the per-vertex color data it
+                // already uploads -- both BasicEffect and SkinnedEffect default
+                // VertexColorEnabled to false, so without this the color bytes are
+                // present in the vertex buffer but the shader ignores them.
+                // SkinnedEffect's VertexColorEnabled is a CNAEXT addition (real XNA's
+                // SkinnedEffect has no such property at all).
+                // plans/plan_gltf.md GLTF-462 adds strides 60 and 80 to that list: a
+                // vertex-coloured metallic-roughness primitive keeps its PBR material
+                // and multiplies COLOR_0 into base colour, so the PBR effects need the
+                // same flag as BasicEffect and SkinnedEffect.
+                if (vertexColorEnabled) {
+                    if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                        basicFx->VertexColorEnabled = true;
+                    } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                        skinnedFx->VertexColorEnabled = true;
+                    } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                        pbrFx->VertexColorEnabledEXT = true;
+                    } else if (auto* skinnedPbrFx =
+                                   dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                        skinnedPbrFx->VertexColorEnabledEXT = true;
+                    }
+                }
+
+                // GLTF-337, the offline twin of the runtime path's own branch: an
+                // unlit material gets its lighting turned off and the lighting rig
+                // skipped, because every path through ApplyPunctualLightsEXT ends with
+                // lighting ON and would undo the flag. The glTF lighting policy belongs
+                // only to cnjVersion 2, emitted by gltf_to_cnj. Applying it to legacy
+                // version-1/hand-written models changes BasicEffect's XNA default from
+                // unlit to EnableDefaultLighting and visibly dims their colours.
+                if (unlit)
+                {
+                    CNA::Internal::GltfImport::MeshOut unlitOut;
+                    unlitOut.unlitEXT = true;
+                    unlitOut.material = material;
+                    ApplyUnlitMaterialEXT(*fx, unlitOut);
+                }
+                else if (applyPunctualLights)
+                {
+                    ApplyPunctualLightsEXT(*fx, lights);
+                }
+
+            return fx;
         }
 
         // plans/plan_cnj.md CNB-70/71 (Phase 13D): loads a .gltf/.glb file directly into a real Model,
@@ -3197,36 +3618,21 @@ namespace Microsoft::Xna::Framework::Content
                     AppendGltfMeshReportEXT(importReport, meshOut, partName);
                     std::vector<std::uint8_t> boundsVertexBytes = meshOut.vertexBytes;
 
-                    const int numVertices = meshOut.stride > 0
-                        ? static_cast<int>(meshOut.vertexBytes.size()) / meshOut.stride : 0;
-                    auto vb = BuildVertexBufferFromRawBytes(device, meshOut.stride, numVertices, meshOut.vertexBytes);
+                    // CNBF-100: the same builder the .cnj reader and the .cnb decoder use.
+                    // plans/plan_gltf.md GLTF-078: the primitive count follows the part's own
+                    // topology, which the builder derives.
+                    ModelPartGeometryEXT geometry;
+                    geometry.vertexBytes = &meshOut.vertexBytes;
+                    geometry.stride = meshOut.stride;
+                    geometry.indexBytes = &meshOut.indexBytes;
+                    geometry.use32BitIndices = meshOut.use32BitIndices;
+                    geometry.topology = meshOut.topology;
 
-                    const int indexSize = meshOut.use32BitIndices
-                        ? static_cast<int>(sizeof(std::uint32_t)) : static_cast<int>(sizeof(std::uint16_t));
-                    const int numIndices = static_cast<int>(meshOut.indexBytes.size()) / indexSize;
-                    // plans/plan_gltf.md GLTF-078: the count follows the part's own topology. It is
-                    // still numIndices/3 for a triangle list -- which every imported part is
-                    // today, since a strip or fan was already converted to one (GLTF-072).
-                    const int primCount = PrimitiveCountForTopology(meshOut.topology,
-                                                                    static_cast<std::size_t>(numIndices));
-
-                    auto ib = std::make_unique<Graphics::IndexBuffer>(
-                        device,
-                        meshOut.use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
-                                                : Graphics::IndexElementSize::SixteenBits,
-                        numIndices, Graphics::BufferUsage::None);
-                    if (meshOut.use32BitIndices) {
-                        const std::vector<std::uint32_t> indices =
-                            IndicesFromBytes<std::uint32_t>(meshOut.indexBytes, numIndices);
-                        ib->SetData(indices.data(), numIndices);
-                    } else {
-                        const std::vector<std::uint16_t> indices =
-                            IndicesFromBytes<std::uint16_t>(meshOut.indexBytes, numIndices);
-                        ib->SetData(indices.data(), numIndices);
-                    }
-
-                    auto part = std::make_unique<Graphics::ModelMeshPart>(
-                        vb.get(), ib.get(), numVertices, primCount, 0, 0);
+                    BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, geometry);
+                    std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
+                    std::unique_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
+                    std::unique_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
+                    const int numVertices = built.vertexCount;
                     // plans/plan_gltf.md GLTF-073: the topology travels to the draw rather than being
                     // assumed there.
                     // plans/plan_gltf.md GLTF-241: a vertex-coloured primitive whose material is
@@ -3527,24 +3933,12 @@ namespace Microsoft::Xna::Framework::Content
                             std::to_string(meshOut.stride) + ") has no normal slot, so the "
                             "normals are discarded and the primitive cannot be lit (GLTF-241).");
                     }
-                    part->setPrimitiveTypeEXTProperty(PrimitiveTypeForTopology(meshOut.topology));
                     // plans/plan_gltf.md GLTF-202/GLTF-203: the file's own sampler state, per texture
                     // slot. Without this every imported texture drew with whatever the device
                     // happened to have -- LinearWrap -- so a CLAMP_TO_EDGE asset with UVs outside
-                    // [0,1] tiled instead of clamping.
-                    for (std::size_t slot = 0; slot < meshOut.material.samplers.size(); ++slot)
-                    {
-                        const SamplerOut& sampler = meshOut.material.samplers[slot];
-                        Graphics::SamplerState state;
-                        state.setFilterProperty(sampler.filter);
-                        state.setAddressUProperty(sampler.addressU);
-                        state.setAddressVProperty(sampler.addressV);
-                        if (slot < 5)
-                            part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
-                        else
-                            part->setSpecularSamplerStateEXTProperty(
-                                static_cast<int>(slot - 5), state);
-                    }
+                    // [0,1] tiled instead of clamping. CNBF-100: applied by the shared helper, so
+                    // the slot-5 specular split is written once for all three front-ends.
+                    ApplyPartSamplerStatesEXT(*part, meshOut.material);
                     Graphics::ModelMeshPart* partPtr = part.get();
 
                     // CNB-64/65 (Phase 13B): morph targets, attached to this part's own real XNA
@@ -4358,54 +4752,32 @@ namespace Microsoft::Xna::Framework::Content
                             // 16-bit, which silently mis-decoded the index buffer (wrong element
                             // count, wrong byte offsets) for any larger mesh.
                             const bool use32BitIndices = numVertices > 65535;
-                            const int  indexSize  = use32BitIndices
-                                                        ? static_cast<int>(sizeof(std::uint32_t))
-                                                        : static_cast<int>(sizeof(std::uint16_t));
-                            const int numIndices  = static_cast<int>(idxBytes.size()) / indexSize;
                             // plans/plan_gltf.md GLTF-073/GLTF-078: the part's own topology, defaulting
                             // to TRIANGLES for a .cnj written before the field existed -- which
                             // could only ever have held a triangle list anyway.
                             const auto topology =
                                 CNA::Internal::GltfImport::PrimitiveTopologyFromName(
                                     ExtractJsonStringField(mg, "primitiveTopology"));
-                            const int primCount =
-                                CNA::Internal::GltfImport::PrimitiveCountForTopology(
-                                    topology, static_cast<std::size_t>(numIndices));
 
-                            auto vb = BuildVertexBufferFromRawBytes(device, stride, numVertices, vertBytes);
+                            // CNBF-100: the same builder the .cnb decoder and the runtime glTF
+                            // reader use. The primitive count is derived here rather than
+                            // supplied, because a .cnj does not state one.
+                            ModelPartGeometryEXT geometry;
+                            geometry.vertexBytes = &vertBytes;
+                            geometry.stride = stride;
+                            geometry.indexBytes = &idxBytes;
+                            geometry.use32BitIndices = use32BitIndices;
+                            geometry.topology = topology;
 
-                            auto ib = std::make_unique<Graphics::IndexBuffer>(
-                                device,
-                                use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
-                                                : Graphics::IndexElementSize::SixteenBits,
-                                numIndices, Graphics::BufferUsage::None);
-                            if (use32BitIndices) {
-                                const std::vector<std::uint32_t> indices =
-                                    IndicesFromBytes<std::uint32_t>(idxBytes, numIndices);
-                                ib->SetData(indices.data(), numIndices);
-                            } else {
-                                const std::vector<std::uint16_t> indices =
-                                    IndicesFromBytes<std::uint16_t>(idxBytes, numIndices);
-                                ib->SetData(indices.data(), numIndices);
-                            }
+                            BuiltModelPartEXT built =
+                                BuildModelMeshPartGeometryEXT(device, geometry);
+                            std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
+                            std::unique_ptr<Graphics::VertexBuffer> vb =
+                                std::move(built.vertexBuffer);
+                            std::unique_ptr<Graphics::IndexBuffer> ib =
+                                std::move(built.indexBuffer);
 
-                            auto part = std::make_unique<Graphics::ModelMeshPart>(
-                                vb.get(), ib.get(), numVertices, primCount, 0, 0);
-                            part->setPrimitiveTypeEXTProperty(
-                                CNA::Internal::GltfImport::PrimitiveTypeForTopology(topology));
-                            for (std::size_t slot = 0; slot < material.samplers.size(); ++slot)
-                            {
-                                const auto& sampler = material.samplers[slot];
-                                Graphics::SamplerState state;
-                                state.setFilterProperty(sampler.filter);
-                                state.setAddressUProperty(sampler.addressU);
-                                state.setAddressVProperty(sampler.addressV);
-                                if (slot < 5)
-                                    part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
-                                else
-                                    part->setSpecularSamplerStateEXTProperty(
-                                        static_cast<int>(slot - 5), state);
-                            }
+                            ApplyPartSamplerStatesEXT(*part, material);
                             Graphics::ModelMeshPart* partPtr = part.get();
 
                             // Morph target CLI/.cnj serialization: read BuildMorphBytes' own
@@ -4658,253 +5030,39 @@ namespace Microsoft::Xna::Framework::Content
                             // TankOnAHeightMap's wheel/turret/cannon/hatch lookups) via
                             // Model.Bones["PartName"].
                             // Load effect and register it in the mesh's effect collection.
-                            std::shared_ptr<Graphics::Effect> fx;
-                            if (effectStr.empty() || effectStr == "BasicEffect") {
-                                fx = std::make_shared<Graphics::BasicEffect>(device);
-                            } else if (effectStr == "SkinnedEffect") {
-                                // Task 941 (Phase 77): the real Skinned Model Sample's own
-                                // effect for GPU-skinned meshes -- AnimationPlayer's own
-                                // GetSkinTransforms() feeds SkinnedEffect::SetBoneTransforms()
-                                // directly (see Task 942), not through this reader.
-                                fx = std::make_shared<Graphics::SkinnedEffect>(device);
-                            } else if (effectStr == "DualTextureEffect") {
-                                // CNB-73: real XNA's two-layer multitexturing effect -- always
-                                // samples both texture slots (no TextureEnabled toggle), so its
-                                // vertex buffer must be the stride-20 VertexPositionTexture shape
-                                // (no Normal in between location0/location1, see ApplyLayout's
-                                // stride==20 case) rather than stride-32.
-                                fx = std::make_shared<Graphics::DualTextureEffect>(device);
-                            } else if (effectStr == "PbrEffect") {
-                                // CNB-56/58 (Phase 13A): CNAEXT metallic-roughness PBR effect --
-                                // its vertex buffer must be the stride-48
-                                // VertexPositionNormalTangentTexture shape (Position+Normal+
-                                // Tangent+TextureCoordinate), never stride-32.
-                                fx = std::make_shared<Graphics::PbrEffect>(device);
-                            } else if (effectStr == "SkinnedPbrEffect") {
-                                // PBR + skinning combo: PbrEffect's own BRDF applied to a
-                                // GPU-skinned mesh -- its vertex buffer must be the stride-68
-                                // VertexPositionNormalTangentTextureSkinned shape. Bone transforms
-                                // are fed by AnimationPlayer::GetSkinTransforms() at draw time,
-                                // same as SkinnedEffect above -- not through this reader.
-                                fx = std::make_shared<Graphics::SkinnedPbrEffect>(device);
-                            } else {
-                                fx = cm.Load<std::shared_ptr<Graphics::Effect>>(
-                                    ResolveRootRelativeAssetName(
-                                        cm, path, "effect", effectStr));
-                            }
-
-                            // Task 932: bind a per-mesh diffuse texture, if the descriptor names
-                            // one -- mirrors SkinnedModelTypeReader's own already-working
-                            // per-part texture loading. BasicEffect needs TextureEnabled
-                            // explicitly turned on; SkinnedEffect's real XNA shader is always
-                            // textured (no such toggle exists on it). A custom effect loaded
-                            // via "effect" has no standard texture slot to bind through here.
-                            if (!textureFile.empty()) {
-                                auto tex = std::make_unique<Graphics::Texture2D>(
-                                    cm.Load<Graphics::Texture2D>(
-                                        ResolveRootRelativeAssetName(
-                                            cm, path, "texture", textureFile)));
-                                if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
-                                    basicFx->setTextureProperty(tex.get());
-                                    basicFx->setTextureEnabledProperty(true);
-                                    res->textureOwners.push_back(std::move(tex));
-                                } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
-                                    skinnedFx->setTextureProperty(tex.get());
-                                    res->textureOwners.push_back(std::move(tex));
-                                } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                                    dualFx->setTextureProperty(tex.get());
-                                    res->textureOwners.push_back(std::move(tex));
-                                } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                                    pbrFx->setTextureProperty(tex.get());
-                                    res->textureOwners.push_back(std::move(tex));
-                                } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                                    skinnedPbrFx->setTextureProperty(tex.get());
-                                    res->textureOwners.push_back(std::move(tex));
-                                }
-                            }
-
-                            // CNB-73: the second (layer-1) texture slot -- only meaningful for
-                            // DualTextureEffect, which is the only stock effect with a Texture2
-                            // parameter.
-                            if (!texture2File.empty()) {
-                                if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
-                                    auto tex2 = std::make_unique<Graphics::Texture2D>(
-                                        cm.Load<Graphics::Texture2D>(
-                                            ResolveRootRelativeAssetName(
-                                                cm, path, "texture2", texture2File)));
-                                    dualFx->setTexture2Property(tex2.get());
-                                    res->textureOwners.push_back(std::move(tex2));
-                                }
-                            }
-
-                            // GLTF-236/237: apply the complete material carrier reconstructed
-                            // above, including the four PBR maps and every factor/scalar.
-                            if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                                auto loadPbrMap = [&](const std::string& file,
-                                                      const char* field) -> Graphics::Texture2D* {
-                                    if (file.empty()) { return nullptr; }
-                                    auto tex = std::make_unique<Graphics::Texture2D>(
-                                        cm.Load<Graphics::Texture2D>(
-                                            ResolveRootRelativeAssetName(
-                                                cm, path, field, file)));
-                                    Graphics::Texture2D* texPtr = tex.get();
-                                    res->textureOwners.push_back(std::move(tex));
-                                    return texPtr;
-                                };
-                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile, "normalMap"))
-                                    pbrFx->setNormalMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(
-                                        metallicRoughnessMapFile, "metallicRoughnessMap"))
-                                    pbrFx->setMetallicRoughnessMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile, "emissiveMap"))
-                                    pbrFx->setEmissiveMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
-                                    pbrFx->setOcclusionMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(specularMapFile, "specularMap"))
-                                    pbrFx->setSpecularMapEXTProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(
-                                        specularColorMapFile, "specularColorMap"))
-                                    pbrFx->setSpecularColorMapEXTProperty(t);
-                                pbrFx->setMetallicFactorProperty(material.metallicFactor);
-                                pbrFx->setRoughnessFactorProperty(material.roughnessFactor);
-                                pbrFx->setIorEXTProperty(material.iorEXT);
-                                pbrFx->setSpecularFactorEXTProperty(material.specularFactorEXT);
-                                pbrFx->setSpecularColorFactorEXTProperty(
-                                    material.specularColorFactorEXT);
-                                pbrFx->setEmissiveFactorProperty(material.emissiveFactor);
-                                pbrFx->setNormalScaleEXTProperty(material.normalScale);
-                                pbrFx->setOcclusionStrengthEXTProperty(
-                                    material.occlusionStrength);
-                                for (std::size_t slot = 0; slot < 5; ++slot)
-                                {
-                                    pbrFx->setTextureCoordinateSetEXTProperty(
-                                        static_cast<int>(slot), static_cast<int>(
-                                            material.textureCoordinateSetsEXT[slot]));
-                                    pbrFx->setTextureTransformEXTProperty(
-                                        static_cast<int>(slot),
-                                        material.textureTransformsEXT[slot]);
-                                }
-                                pbrFx->setSpecularTextureCoordinateSetEXTProperty(
-                                    material.textureCoordinateSetsEXT[5]);
-                                pbrFx->setSpecularColorTextureCoordinateSetEXTProperty(
-                                    material.textureCoordinateSetsEXT[6]);
-                                pbrFx->setSpecularTextureTransformEXTProperty(
-                                    material.textureTransformsEXT[5]);
-                                pbrFx->setSpecularColorTextureTransformEXTProperty(
-                                    material.textureTransformsEXT[6]);
-                                pbrFx->setDiffuseColorProperty(Vector3(
-                                    material.baseColorFactor.X, material.baseColorFactor.Y,
-                                    material.baseColorFactor.Z));
-                                pbrFx->setAlphaProperty(material.baseColorFactor.W);
-                                pbrFx->setAlphaModeEXTProperty(material.alphaMode);
-                                pbrFx->setAlphaCutoffEXTProperty(material.alphaCutoff);
-                                pbrFx->setDoubleSidedEXTProperty(material.doubleSided);
-                            } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                                auto loadPbrMap = [&](const std::string& file,
-                                                      const char* field) -> Graphics::Texture2D* {
-                                    if (file.empty()) { return nullptr; }
-                                    auto tex = std::make_unique<Graphics::Texture2D>(
-                                        cm.Load<Graphics::Texture2D>(
-                                            ResolveRootRelativeAssetName(
-                                                cm, path, field, file)));
-                                    Graphics::Texture2D* texPtr = tex.get();
-                                    res->textureOwners.push_back(std::move(tex));
-                                    return texPtr;
-                                };
-                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile, "normalMap"))
-                                    skinnedPbrFx->setNormalMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(
-                                        metallicRoughnessMapFile, "metallicRoughnessMap"))
-                                    skinnedPbrFx->setMetallicRoughnessMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile, "emissiveMap"))
-                                    skinnedPbrFx->setEmissiveMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
-                                    skinnedPbrFx->setOcclusionMapProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(specularMapFile, "specularMap"))
-                                    skinnedPbrFx->setSpecularMapEXTProperty(t);
-                                if (Graphics::Texture2D* t = loadPbrMap(
-                                        specularColorMapFile, "specularColorMap"))
-                                    skinnedPbrFx->setSpecularColorMapEXTProperty(t);
-                                skinnedPbrFx->setMetallicFactorProperty(material.metallicFactor);
-                                skinnedPbrFx->setRoughnessFactorProperty(material.roughnessFactor);
-                                skinnedPbrFx->setIorEXTProperty(material.iorEXT);
-                                skinnedPbrFx->setSpecularFactorEXTProperty(
-                                    material.specularFactorEXT);
-                                skinnedPbrFx->setSpecularColorFactorEXTProperty(
-                                    material.specularColorFactorEXT);
-                                skinnedPbrFx->setEmissiveFactorProperty(material.emissiveFactor);
-                                skinnedPbrFx->setNormalScaleEXTProperty(material.normalScale);
-                                skinnedPbrFx->setOcclusionStrengthEXTProperty(
-                                    material.occlusionStrength);
-                                for (std::size_t slot = 0; slot < 5; ++slot)
-                                {
-                                    skinnedPbrFx->setTextureCoordinateSetEXTProperty(
-                                        static_cast<int>(slot), static_cast<int>(
-                                            material.textureCoordinateSetsEXT[slot]));
-                                    skinnedPbrFx->setTextureTransformEXTProperty(
-                                        static_cast<int>(slot),
-                                        material.textureTransformsEXT[slot]);
-                                }
-                                skinnedPbrFx->setSpecularTextureCoordinateSetEXTProperty(
-                                    material.textureCoordinateSetsEXT[5]);
-                                skinnedPbrFx->setSpecularColorTextureCoordinateSetEXTProperty(
-                                    material.textureCoordinateSetsEXT[6]);
-                                skinnedPbrFx->setSpecularTextureTransformEXTProperty(
-                                    material.textureTransformsEXT[5]);
-                                skinnedPbrFx->setSpecularColorTextureTransformEXTProperty(
-                                    material.textureTransformsEXT[6]);
-                                skinnedPbrFx->setDiffuseColorProperty(Vector3(
-                                    material.baseColorFactor.X, material.baseColorFactor.Y,
-                                    material.baseColorFactor.Z));
-                                skinnedPbrFx->setAlphaProperty(material.baseColorFactor.W);
-                                skinnedPbrFx->setAlphaModeEXTProperty(material.alphaMode);
-                                skinnedPbrFx->setAlphaCutoffEXTProperty(material.alphaCutoff);
-                                skinnedPbrFx->setDoubleSidedEXTProperty(material.doubleSided);
-                            }
-
-                            // Task 1115 / CNB-67 (Phase 13C): a "vertexStride": 24
-                            // (VertexPositionColorTexture) or 56 (skinned + Color) mesh may set
-                            // "vertexColorEnabled" to actually light the per-vertex color data it
-                            // already uploads -- both BasicEffect and SkinnedEffect default
-                            // VertexColorEnabled to false, so without this the color bytes are
-                            // present in the vertex buffer but the shader ignores them.
-                            // SkinnedEffect's VertexColorEnabled is a CNAEXT addition (real XNA's
-                            // SkinnedEffect has no such property at all).
-                            // plans/plan_gltf.md GLTF-462 adds strides 60 and 80 to that list: a
-                            // vertex-coloured metallic-roughness primitive keeps its PBR material
-                            // and multiplies COLOR_0 into base colour, so the PBR effects need the
-                            // same flag as BasicEffect and SkinnedEffect.
-                            if (vertexColorEnabled) {
-                                if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
-                                    basicFx->VertexColorEnabled = true;
-                                } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
-                                    skinnedFx->VertexColorEnabled = true;
-                                } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
-                                    pbrFx->VertexColorEnabledEXT = true;
-                                } else if (auto* skinnedPbrFx =
-                                               dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
-                                    skinnedPbrFx->VertexColorEnabledEXT = true;
-                                }
-                            }
-
-                            // GLTF-337, the offline twin of the runtime path's own branch: an
-                            // unlit material gets its lighting turned off and the lighting rig
-                            // skipped, because every path through ApplyPunctualLightsEXT ends with
-                            // lighting ON and would undo the flag. The glTF lighting policy belongs
-                            // only to cnjVersion 2, emitted by gltf_to_cnj. Applying it to legacy
-                            // version-1/hand-written models changes BasicEffect's XNA default from
-                            // unlit to EnableDefaultLighting and visibly dims their colours.
-                            if (unlit)
+                            // Resolved on demand, so a field this part's effect never reads keeps
+                            // being ignored rather than becoming a containment error.
+                            const MaterialAssetResolverEXT resolveAsset =
+                                [&](const char* field) -> std::string
                             {
-                                CNA::Internal::GltfImport::MeshOut unlitOut;
-                                unlitOut.unlitEXT = true;
-                                unlitOut.material = material;
-                                ApplyUnlitMaterialEXT(*fx, unlitOut);
-                            }
-                            else if (envelope.cnjVersion >= 2)
-                            {
-                                ApplyPunctualLightsEXT(*fx, punctualLights);
-                            }
+                                const std::string file =
+                                    std::strcmp(field, "texture") == 0 ? textureFile
+                                    : std::strcmp(field, "texture2") == 0 ? texture2File
+                                    : std::strcmp(field, "normalMap") == 0 ? normalMapFile
+                                    : std::strcmp(field, "metallicRoughnessMap") == 0
+                                          ? metallicRoughnessMapFile
+                                    : std::strcmp(field, "emissiveMap") == 0 ? emissiveMapFile
+                                    : std::strcmp(field, "occlusionMap") == 0 ? occlusionMapFile
+                                    : std::strcmp(field, "specularMap") == 0 ? specularMapFile
+                                    : std::strcmp(field, "specularColorMap") == 0
+                                          ? specularColorMapFile
+                                                                              : std::string();
+                                if (file.empty()) { return {}; }
+                                return ResolveRootRelativeAssetName(cm, path, field, file);
+                            };
+
+                            const bool isStockEffect =
+                                effectStr.empty() || effectStr == "BasicEffect" ||
+                                effectStr == "SkinnedEffect" || effectStr == "DualTextureEffect" ||
+                                effectStr == "PbrEffect" || effectStr == "SkinnedPbrEffect";
+                            std::shared_ptr<Graphics::Effect> fx = BuildPartEffectEXT(
+                                device, cm, isStockEffect ? effectStr : std::string(),
+                                isStockEffect
+                                    ? std::string()
+                                    : ResolveRootRelativeAssetName(cm, path, "effect", effectStr),
+                                resolveAsset, material, vertexColorEnabled, unlit,
+                                /*applyPunctualLights=*/envelope.cnjVersion >= 2, punctualLights,
+                                *res);
 
                             Graphics::Effect* effectPtr = fx.get();
                             if (variantOf >= 0)
@@ -5066,6 +5224,369 @@ namespace Microsoft::Xna::Framework::Content
                 return model;
             }
         };
+
+
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb Model loader (plans/plan_cnb.md CNBF-074)
+        //
+        // The bytes-to-CnbModelData half lives in modules/content/src/Cnb/CnbModelCodec.cpp and
+        // needs no GraphicsDevice at all. What lives here is only the step that turns that plain
+        // description into real GPU objects, and it lives here specifically so it can reuse the
+        // helpers the .cnj reader above already has -- ModelResources, BuildVertexBufferFromRawBytes,
+        // IndicesFromBytes, WidenedIndicesEXT, AppendPositionsForMeshBoundsEXT and, most
+        // importantly, BuildPartEffectEXT, which is now the single effect/material policy both
+        // paths go through. See plans/plan_cnb.md decision D9 for why the split falls here.
+        // ---------------------------------------------------------------------------
+
+        Matrix MatrixFromCnbEXT(const std::array<float, 16>& m)
+        {
+            return Matrix(m[0],  m[1],  m[2],  m[3],
+                          m[4],  m[5],  m[6],  m[7],
+                          m[8],  m[9],  m[10], m[11],
+                          m[12], m[13], m[14], m[15]);
+        }
+
+        std::vector<Vector3> Vector3sFromCnbEXT(const std::vector<float>& xyz)
+        {
+            std::vector<Vector3> out;
+            out.reserve(xyz.size() / 3u);
+            for (std::size_t i = 0; i + 2u < xyz.size(); i += 3u)
+            {
+                out.emplace_back(xyz[i], xyz[i + 1u], xyz[i + 2u]);
+            }
+            return out;
+        }
+
+        CNA::Internal::GltfImport::MaterialOut MaterialFromCnbEXT(
+            const CNA::Content::Cnb::CnbMaterial& source)
+        {
+            CNA::Internal::GltfImport::MaterialOut material;
+            material.baseColorFactor = Vector4(source.baseColorFactor[0], source.baseColorFactor[1],
+                                                source.baseColorFactor[2], source.baseColorFactor[3]);
+            material.emissiveFactor = Vector3(source.emissiveFactor[0], source.emissiveFactor[1],
+                                               source.emissiveFactor[2]);
+            material.specularColorFactorEXT =
+                Vector3(source.specularColorFactor[0], source.specularColorFactor[1],
+                        source.specularColorFactor[2]);
+            material.metallicFactor = source.metallicFactor;
+            material.roughnessFactor = source.roughnessFactor;
+            material.iorEXT = source.ior;
+            material.specularFactorEXT = source.specularFactor;
+            material.normalScale = source.normalScale;
+            material.occlusionStrength = source.occlusionStrength;
+            material.alphaCutoff = source.alphaCutoff;
+            material.alphaMode = static_cast<Graphics::AlphaModeEXT>(source.alphaMode);
+            material.doubleSided = source.doubleSided;
+            for (std::size_t slot = 0; slot < CNA::Content::Cnb::CnbTextureSlotCount; ++slot)
+            {
+                material.textureCoordinateSetsEXT[slot] = source.textureCoordinateSets[slot];
+                Graphics::TextureTransformEXT& transform = material.textureTransformsEXT[slot];
+                transform.Offset = Vector2(source.textureTransforms[slot].offsetX,
+                                            source.textureTransforms[slot].offsetY);
+                transform.Scale = Vector2(source.textureTransforms[slot].scaleX,
+                                           source.textureTransforms[slot].scaleY);
+                transform.Rotation = source.textureTransforms[slot].rotation;
+
+                CNA::Internal::GltfImport::SamplerOut& sampler = material.samplers[slot];
+                sampler.filter = static_cast<Graphics::TextureFilter>(
+                    source.samplers[slot].filter);
+                sampler.addressU = static_cast<Graphics::TextureAddressMode>(
+                    source.samplers[slot].addressU);
+                sampler.addressV = static_cast<Graphics::TextureAddressMode>(
+                    source.samplers[slot].addressV);
+                sampler.declared = source.samplers[slot].declared;
+            }
+            return material;
+        }
+
+        Graphics::Model BuildModelFromCnbEXT(const CNA::Content::Cnb::CnbModelData& data,
+                                              ContentManager& cm, const std::string& assetName)
+        {
+            namespace Cnb = CNA::Content::Cnb;
+
+            Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
+            auto res = std::make_shared<ModelResources>();
+
+            // --- bones ---------------------------------------------------------------------
+            std::vector<Graphics::ModelBone*> boneRawPtrs;
+            boneRawPtrs.reserve(data.bones.size());
+            for (std::size_t b = 0; b < data.bones.size(); ++b)
+            {
+                const Cnb::CnbModelBone& source = data.bones[b];
+                auto bone = std::make_unique<Graphics::ModelBone>(
+                    static_cast<int>(b), source.name.empty() ? std::string("Root") : source.name);
+                // Bone 0's own transform is deliberately left at ModelBone's identity default,
+                // matching the .cnj reader exactly: a Model's root bone is the space the model is
+                // drawn in, and applying a stored transform there would move every mesh relative
+                // to the .cnj path for the same asset.
+                if (b != 0) { bone->setTransformProperty(MatrixFromCnbEXT(source.transform)); }
+                boneRawPtrs.push_back(bone.get());
+                res->boneOwners.push_back(std::move(bone));
+            }
+            if (boneRawPtrs.empty())
+            {
+                auto bone = std::make_unique<Graphics::ModelBone>(0, std::string("Root"));
+                boneRawPtrs.push_back(bone.get());
+                res->boneOwners.push_back(std::move(bone));
+            }
+            for (std::size_t b = 1; b < data.bones.size(); ++b)
+            {
+                const std::int32_t parent = data.bones[b].parent;
+                if (parent < 0 || static_cast<std::size_t>(parent) >= boneRawPtrs.size())
+                {
+                    throw ContentLoadException(
+                        "'" + assetName + "': bone " + std::to_string(b) +
+                        " has an out-of-range parent index (" + std::to_string(parent) + ").");
+                }
+                boneRawPtrs[static_cast<std::size_t>(parent)]->AddChild(boneRawPtrs[b]);
+            }
+
+            // --- lights --------------------------------------------------------------------
+            std::vector<CNA::Internal::GltfImport::LightOut> lights;
+            lights.reserve(data.lights.size());
+            for (const Cnb::CnbModelLight& source : data.lights)
+            {
+                CNA::Internal::GltfImport::LightOut light;
+                light.direction =
+                    Vector3(source.direction[0], source.direction[1], source.direction[2]);
+                light.diffuseColor =
+                    Vector3(source.diffuseColor[0], source.diffuseColor[1], source.diffuseColor[2]);
+                lights.push_back(light);
+            }
+
+            // --- parts ---------------------------------------------------------------------
+            static const char* const kStockEffectNames[] = {
+                "BasicEffect", "SkinnedEffect", "DualTextureEffect", "PbrEffect",
+                "SkinnedPbrEffect"};
+
+            std::vector<Graphics::ModelMeshPart*> partPtrs;
+            std::vector<Graphics::Effect*> partEffects;
+            std::vector<std::vector<Vector3>> partBounds;
+            partPtrs.reserve(data.parts.size());
+            partEffects.reserve(data.parts.size());
+            partBounds.reserve(data.parts.size());
+
+            for (const Cnb::CnbModelPart& source : data.parts)
+            {
+                const int stride = static_cast<int>(source.vertexStride);
+
+                // CNBF-100: the same builder the .cnj and runtime-glTF readers use. The .cnb path
+                // supplies its own primitive count because the file states it and the decoder has
+                // already cross-checked it against the topology (CNBF-H012); the other two derive
+                // it from the index count.
+                ModelPartGeometryEXT geometry;
+                geometry.vertexBytes = &source.vertexBytes;
+                geometry.stride = stride;
+                geometry.indexBytes = &source.indexBytes;
+                geometry.use32BitIndices = source.indexElementSize == 4u;
+                geometry.topology =
+                    static_cast<CNA::Internal::GltfImport::PrimitiveTopology>(
+                        source.primitiveTopology);
+                geometry.primitiveCountOverride = static_cast<int>(source.primitiveCount);
+
+                BuiltModelPartEXT built = BuildModelMeshPartGeometryEXT(device, geometry);
+                std::unique_ptr<Graphics::ModelMeshPart> part = std::move(built.part);
+                std::unique_ptr<Graphics::VertexBuffer> vb = std::move(built.vertexBuffer);
+                std::unique_ptr<Graphics::IndexBuffer> ib = std::move(built.indexBuffer);
+                const int vertexCount = built.vertexCount;
+
+                // Through the converted MaterialOut rather than the raw CNB sampler records, so
+                // the slot split lives in one place for every front-end.
+                ApplyPartSamplerStatesEXT(*part, MaterialFromCnbEXT(source.material));
+
+                Graphics::ModelMeshPart* partPtr = part.get();
+                std::vector<std::uint8_t> boundsVertexBytes = source.vertexBytes;
+
+                if (source.morph.has_value())
+                {
+                    const Cnb::CnbMorphData& sourceMorph = *source.morph;
+                    auto morph = std::make_unique<Graphics::MorphTargetDataEXT>();
+                    morph->BaseVertexBytes = source.vertexBytes;
+                    morph->Stride = stride;
+                    morph->RecomputeFlatNormalsEXT = sourceMorph.recomputeFlatNormals;
+                    if (sourceMorph.recomputeFlatNormals)
+                    {
+                        morph->TriangleIndicesEXT =
+                            WidenedIndicesEXT(source.indexBytes, geometry.use32BitIndices);
+                    }
+                    morph->PositionDeltas.reserve(sourceMorph.targets.size());
+                    morph->NormalDeltas.reserve(sourceMorph.targets.size());
+                    morph->TangentDeltas.reserve(sourceMorph.targets.size());
+                    for (const Cnb::CnbMorphTarget& target : sourceMorph.targets)
+                    {
+                        morph->PositionDeltas.push_back(Vector3sFromCnbEXT(target.positionDeltas));
+                        morph->NormalDeltas.push_back(Vector3sFromCnbEXT(target.normalDeltas));
+                        morph->TangentDeltas.push_back(Vector3sFromCnbEXT(target.tangentDeltas));
+                    }
+                    morph->Weights =
+                        !sourceMorph.weights.empty()
+                            ? sourceMorph.weights
+                            : std::vector<float>(sourceMorph.targets.size(), 0.0f);
+                    morph->WeightTrack.StepInterpolation = sourceMorph.weightTrackStepInterpolation;
+                    morph->WeightTrack.CubicSpline = sourceMorph.weightTrackCubicSpline;
+                    morph->WeightTrack.Keys.reserve(sourceMorph.weightTrackKeys.size());
+                    for (const Cnb::CnbMorphWeightKey& sourceKey : sourceMorph.weightTrackKeys)
+                    {
+                        Graphics::MorphWeightKeyframeEXT key;
+                        key.Time = System::TimeSpan::FromSeconds(sourceKey.timeSeconds);
+                        key.Weights = sourceKey.weights;
+                        key.InTangent = sourceKey.inTangent;
+                        key.OutTangent = sourceKey.outTangent;
+                        morph->WeightTrack.Keys.push_back(std::move(key));
+                    }
+
+                    partPtr->setTagProperty(morph.get());
+                    // glTF's default weights are the file author's intended rest pose, not
+                    // necessarily all-zero -- apply them now so the uploaded buffer matches what
+                    // the .cnj path uploads for the same asset.
+                    const bool hasNonZeroDefault = std::any_of(
+                        morph->Weights.begin(), morph->Weights.end(),
+                        [](float w) { return w != 0.0f; });
+                    if (hasNonZeroDefault)
+                    {
+                        Graphics::SetMorphWeightsEXT(*partPtr, morph->Weights);
+                        boundsVertexBytes = Graphics::BlendMorphTargetsEXT(*morph, morph->Weights);
+                    }
+                    res->morphOwners.push_back(std::move(morph));
+                }
+
+                // Already resolved: the compiled file's external-reference table holds the
+                // logical names, so this resolver is a lookup rather than a path computation.
+                const MaterialAssetResolverEXT resolveAsset =
+                    [&source](const char* field) -> std::string
+                {
+                    const Cnb::CnbMaterial& m = source.material;
+                    if (std::strcmp(field, "texture") == 0) { return m.baseColorTexture; }
+                    if (std::strcmp(field, "texture2") == 0) { return m.texture2; }
+                    if (std::strcmp(field, "normalMap") == 0) { return m.normalMap; }
+                    if (std::strcmp(field, "metallicRoughnessMap") == 0)
+                    {
+                        return m.metallicRoughnessMap;
+                    }
+                    if (std::strcmp(field, "emissiveMap") == 0) { return m.emissiveMap; }
+                    if (std::strcmp(field, "occlusionMap") == 0) { return m.occlusionMap; }
+                    if (std::strcmp(field, "specularMap") == 0) { return m.specularMap; }
+                    if (std::strcmp(field, "specularColorMap") == 0) { return m.specularColorMap; }
+                    return {};
+                };
+
+                const bool custom = source.effectKind == Cnb::CnbEffectKind::External;
+                std::shared_ptr<Graphics::Effect> fx = BuildPartEffectEXT(
+                    device, cm,
+                    custom ? std::string()
+                           : std::string(kStockEffectNames[
+                                 static_cast<std::size_t>(source.effectKind)]),
+                    custom ? source.externalEffect : std::string(), resolveAsset,
+                    MaterialFromCnbEXT(source.material), source.vertexColorEnabled, source.unlit,
+                    data.appliesGltfLightingPolicy, lights, *res);
+
+                std::vector<Vector3> bounds;
+                AppendPositionsForMeshBoundsEXT(boundsVertexBytes, stride, bounds);
+
+                partPtrs.push_back(partPtr);
+                partEffects.push_back(fx.get());
+                partBounds.push_back(std::move(bounds));
+                res->effectOwners.push_back(std::move(fx));
+                res->vbs.push_back(std::move(vb));
+                res->ibs.push_back(std::move(ib));
+                res->partOwners.push_back(std::move(part));
+            }
+
+            // --- meshes --------------------------------------------------------------------
+            std::vector<Graphics::ModelMesh*> meshRawPtrs;
+            meshRawPtrs.reserve(data.meshes.size());
+            for (const Cnb::CnbModelMesh& source : data.meshes)
+            {
+                std::vector<Graphics::ModelMeshPart*> parts;
+                std::vector<Vector3> bounds;
+                parts.reserve(source.partIndices.size());
+                for (const std::uint32_t partIndex : source.partIndices)
+                {
+                    if (static_cast<std::size_t>(partIndex) >= partPtrs.size())
+                    {
+                        throw ContentLoadException(
+                            "'" + assetName + "': mesh '" + source.name +
+                            "' names an out-of-range part index.");
+                    }
+                    parts.push_back(partPtrs[partIndex]);
+                    const std::vector<Vector3>& partPositions = partBounds[partIndex];
+                    bounds.insert(bounds.end(), partPositions.begin(), partPositions.end());
+                }
+
+                auto mesh = std::make_unique<Graphics::ModelMesh>(&device, source.name, parts);
+                if (!bounds.empty())
+                {
+                    mesh->setBoundingSphereProperty(BoundingSphere::CreateFromPoints(bounds));
+                }
+                for (std::size_t e = 0; e < source.partIndices.size(); ++e)
+                {
+                    parts[e]->setEffectProperty(partEffects[source.partIndices[e]]);
+                }
+                if (source.parentBone >= 0)
+                {
+                    if (static_cast<std::size_t>(source.parentBone) >= boneRawPtrs.size())
+                    {
+                        throw ContentLoadException(
+                            "'" + assetName + "': mesh '" + source.name +
+                            "' names an out-of-range parentBone index.");
+                    }
+                    mesh->setParentBoneProperty(
+                        boneRawPtrs[static_cast<std::size_t>(source.parentBone)]);
+                }
+
+                meshRawPtrs.push_back(mesh.get());
+                res->meshOwners.push_back(std::move(mesh));
+            }
+
+            // --- skeleton and animations ---------------------------------------------------
+            if (data.skeleton.has_value())
+            {
+                const Cnb::CnbModelSkeleton& source = *data.skeleton;
+                auto skinningData = std::make_unique<Graphics::SkinningData>();
+                skinningData->BoneCount = static_cast<int>(source.hierarchy.size());
+                skinningData->SkeletonHierarchy.assign(source.hierarchy.begin(),
+                                                        source.hierarchy.end());
+                skinningData->BindPose.reserve(source.bindPose.size());
+                for (const auto& matrix : source.bindPose)
+                {
+                    skinningData->BindPose.push_back(MatrixFromCnbEXT(matrix));
+                }
+                skinningData->InverseBindPose.reserve(source.inverseBindPose.size());
+                for (const auto& matrix : source.inverseBindPose)
+                {
+                    skinningData->InverseBindPose.push_back(MatrixFromCnbEXT(matrix));
+                }
+                skinningData->SkeletonRootPrefix.reserve(source.rootPrefix.size());
+                for (const auto& matrix : source.rootPrefix)
+                {
+                    skinningData->SkeletonRootPrefix.push_back(MatrixFromCnbEXT(matrix));
+                }
+                for (const Cnb::CnbModelAnimation& animation : data.animations)
+                {
+                    skinningData->AnimationClips[animation.name] = animation.clip;
+                }
+                res->skinningData = std::move(skinningData);
+            }
+            else if (!data.animations.empty())
+            {
+                auto animations = std::make_unique<Graphics::ModelAnimationsEXT>();
+                for (const Cnb::CnbModelAnimation& animation : data.animations)
+                {
+                    animations->Clips[animation.name] = animation.clip;
+                }
+                res->modelAnimations = std::move(animations);
+            }
+
+            Graphics::Model model(&device, std::move(boneRawPtrs), std::move(meshRawPtrs));
+            model.setOwnedResources(res);
+            if (res->skinningData) { model.setTagProperty(res->skinningData.get()); }
+            else if (res->modelAnimations) { model.setTagProperty(res->modelAnimations.get()); }
+            if (res->skinningData)
+            {
+                Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
+            }
+            return model;
+        }
 
         // ---------------------------------------------------------------------------
         // .skinnedmodel.json descriptor reader
@@ -5276,6 +5797,221 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb texture loaders (plans/plan_cnb.md CNBF-101A/B/C)
+        //
+        // Same split as the Model loader above: the bytes-to-CnbTextureData half is in
+        // modules/content/src/Cnb/CnbTextureCodec.cpp and needs no GraphicsDevice, and only the
+        // step that creates a real GPU texture lives here.
+        //
+        // The representation SELECTION is what makes this more than a decoder. A texture .cnb may
+        // carry the same image several times over, so the runtime asks for the first encoding it
+        // can actually upload rather than assuming the file holds the one it wants. Schema 1
+        // writes Rgba8 alone, so today the predicate has exactly one true case -- but the
+        // selection is real, and a file carrying Bc7 first and Rgba8 second already loads
+        // correctly on this build by falling through to the second representation.
+        // ---------------------------------------------------------------------------
+
+        /// The formats this build can hand to Texture2D/TextureCube/Texture3D::SetData today.
+        bool CanUploadCnbTextureFormatEXT(CNA::Content::Cnb::CnbTextureFormat format)
+        {
+            return format == CNA::Content::Cnb::CnbTextureFormat::Rgba8;
+        }
+
+        const CNA::Content::Cnb::CnbTextureRepresentation& RequireUploadableRepresentationEXT(
+            const CNA::Content::Cnb::CnbTextureData& data, const std::string& assetName)
+        {
+            const std::size_t index = CNA::Content::Cnb::SelectCnbTextureRepresentation(
+                data, CanUploadCnbTextureFormatEXT);
+            if (index >= data.representations.size())
+            {
+                std::string offered;
+                for (const auto& representation : data.representations)
+                {
+                    if (!offered.empty()) { offered += ", "; }
+                    offered += CNA::Content::Cnb::CnbTextureFormatToString(representation.format);
+                }
+                throw ContentLoadException(
+                    "The .cnb texture '" + assetName + "' offers only " + offered +
+                    ", and this build can upload none of them. CNB texture schema 1 encodes Rgba8; "
+                    "see plans/plan_cnb.md CNBF-101A.");
+            }
+            return data.representations[index];
+        }
+
+        /// Widens one level's R,G,B,A bytes into the Color array SetData takes. Written out rather
+        /// than reinterpret_cast so it does not depend on Color's packed layout.
+        std::vector<Color> ColorsFromRgba8EXT(const std::vector<std::uint8_t>& rgba)
+        {
+            std::vector<Color> colors(rgba.size() / 4u);
+            for (std::size_t i = 0; i < colors.size(); ++i)
+            {
+                colors[i] = Color(rgba[i * 4u], rgba[i * 4u + 1u], rgba[i * 4u + 2u],
+                                  rgba[i * 4u + 3u]);
+            }
+            return colors;
+        }
+
+        Graphics::Texture2D BuildTexture2DFromCnbEXT(const CNA::Content::Cnb::CnbTextureData& data,
+                                                      ContentManager& cm,
+                                                      const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data, assetName);
+            Graphics::Texture2D texture(cm.getGraphicsDeviceInternal(),
+                                        static_cast<int>(data.width),
+                                        static_cast<int>(data.height), data.mipCount > 1u,
+                                        Graphics::SurfaceFormat::Color);
+            for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+            {
+                const std::vector<Color> colors = ColorsFromRgba8EXT(representation.levels[mip]);
+                texture.SetData(static_cast<int>(mip), nullptr, colors.data(), 0,
+                                static_cast<int>(colors.size()));
+            }
+            return texture;
+        }
+
+        Graphics::TextureCube BuildTextureCubeFromCnbEXT(
+            const CNA::Content::Cnb::CnbTextureData& data, ContentManager& cm,
+            const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data, assetName);
+            Graphics::TextureCube texture(cm.getGraphicsDeviceInternal(),
+                                          static_cast<int>(data.width), data.mipCount > 1u,
+                                          Graphics::SurfaceFormat::Color);
+            for (std::uint32_t face = 0u; face < data.faceCount; ++face)
+            {
+                for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+                {
+                    const std::size_t index =
+                        static_cast<std::size_t>(face) * data.mipCount + mip;
+                    const std::vector<Color> colors =
+                        ColorsFromRgba8EXT(representation.levels[index]);
+                    texture.SetData(static_cast<Graphics::CubeMapFace>(face),
+                                    static_cast<int>(mip), nullptr, colors.data(), 0,
+                                    static_cast<int>(colors.size()));
+                }
+            }
+            return texture;
+        }
+
+        std::shared_ptr<Graphics::Texture3D> BuildTexture3DFromCnbEXT(
+            const CNA::Content::Cnb::CnbTextureData& data, ContentManager& cm,
+            const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data, assetName);
+            auto texture = std::make_shared<Graphics::Texture3D>(
+                cm.getGraphicsDeviceInternal(), static_cast<int>(data.width),
+                static_cast<int>(data.height), static_cast<int>(data.depth), data.mipCount > 1u,
+                Graphics::SurfaceFormat::Color);
+            for (std::uint32_t mip = 0u; mip < data.mipCount; ++mip)
+            {
+                std::uint32_t w = 0u;
+                std::uint32_t h = 0u;
+                std::uint32_t d = 0u;
+                CNA::Content::Cnb::CnbTextureLevelDimensions(data, mip, w, h, d);
+                const std::vector<Color> colors = ColorsFromRgba8EXT(representation.levels[mip]);
+                texture->SetData(static_cast<int>(mip), 0, 0, static_cast<int>(w),
+                                 static_cast<int>(h), 0, static_cast<int>(d), colors.data(), 0,
+                                 static_cast<int>(colors.size()));
+            }
+            return texture;
+        }
+
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb SpriteFont loader (plans/plan_cnb.md CNBF-102)
+        //
+        // The atlas is EMBEDDED rather than XREF'd, so this needs no second asset load: the font
+        // and its atlas arrive in one file, and the atlas is built with the same code path a
+        // standalone Texture2D .cnb uses.
+        // ---------------------------------------------------------------------------
+
+        Graphics::SpriteFont BuildSpriteFontFromCnbEXT(
+            const CNA::Content::Cnb::CnbSpriteFontData& data, ContentManager& cm,
+            const std::string& assetName)
+        {
+            const auto& representation = RequireUploadableRepresentationEXT(data.atlas, assetName);
+            Graphics::Texture2D atlas(cm.getGraphicsDeviceInternal(),
+                                      static_cast<int>(data.atlas.width),
+                                      static_cast<int>(data.atlas.height),
+                                      data.atlas.mipCount > 1u, Graphics::SurfaceFormat::Color);
+            for (std::uint32_t mip = 0u; mip < data.atlas.mipCount; ++mip)
+            {
+                const std::vector<Color> colors = ColorsFromRgba8EXT(representation.levels[mip]);
+                atlas.SetData(static_cast<int>(mip), nullptr, colors.data(), 0,
+                              static_cast<int>(colors.size()));
+            }
+            return Graphics::SpriteFont(std::move(atlas), data.glyphBounds, data.cropping,
+                                        data.characters, data.lineSpacing, data.spacing,
+                                        data.kerning, data.defaultCharacter);
+        }
+
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb SoundEffect loader (plans/plan_cnb.md CNBF-103A)
+        //
+        // Boxed as a shared_ptr rather than by value, and not for the reason Texture3D is:
+        // SoundEffect is MOVE-ONLY, and std::any requires its contained type to be copy
+        // constructible, so a bare SoundEffect cannot be put in one at all. The specialisation of
+        // Load<SoundEffect> below unwraps and moves out of it.
+        // ---------------------------------------------------------------------------
+
+        std::shared_ptr<Audio::SoundEffect> BuildSoundEffectFromCnbEXT(
+            const CNA::Content::Cnb::CnbSoundEffectData& data, const std::string&)
+        {
+            const auto channels = data.channels == 2u ? Audio::AudioChannels::Stereo
+                                                      : Audio::AudioChannels::Mono;
+            if (data.loopLength == 0u)
+            {
+                return std::make_shared<Audio::SoundEffect>(
+                    data.samples, static_cast<SharpRuntime::intcs>(data.sampleRate), channels);
+            }
+            return std::make_shared<Audio::SoundEffect>(
+                data.samples, 0, static_cast<SharpRuntime::intcs>(data.samples.size()),
+                static_cast<SharpRuntime::intcs>(data.sampleRate), channels,
+                static_cast<SharpRuntime::intcs>(data.loopStart),
+                static_cast<SharpRuntime::intcs>(data.loopLength));
+        }
+
+        // ---------------------------------------------------------------------------
+        // Compiled .cnb Song and Video loaders (plans/plan_cnb.md CNBF-103B)
+        //
+        // Both are metadata plus a streaming reference, so what these do is resolve the reference
+        // to a real path and hand it to the runtime type's trusted-metadata constructor. The
+        // media file is never read here: Video's own constructor deliberately does not touch the
+        // file at construction time either.
+        // ---------------------------------------------------------------------------
+
+        std::string ResolveMediaStreamPathEXT(ContentManager& cm, const std::string& reference,
+                                              const std::string& assetName)
+        {
+            const std::string resolved = cm.ResolveExistingAssetPath(cm.BuildAssetPath(reference));
+            if (!std::filesystem::exists(resolved))
+            {
+                throw ContentLoadException("'" + assetName + "' streams '" + reference +
+                                           "', which was not found beside it.");
+            }
+            return resolved;
+        }
+
+        Media::Song BuildSongFromCnbEXT(const CNA::Content::Cnb::CnbSongData& data,
+                                         ContentManager& cm, const std::string& assetName)
+        {
+            return Media::Song(ResolveMediaStreamPathEXT(cm, data.streamReference, assetName),
+                               data.name.empty() ? assetName : data.name,
+                               static_cast<SharpRuntime::intcs>(data.durationMs));
+        }
+
+        Media::Video BuildVideoFromCnbEXT(const CNA::Content::Cnb::CnbVideoData& data,
+                                           ContentManager& cm, const std::string& assetName)
+        {
+            return Media::Video(ResolveMediaStreamPathEXT(cm, data.streamReference, assetName),
+                                &cm.getGraphicsDeviceInternal(),
+                                static_cast<SharpRuntime::intcs>(data.durationMs),
+                                static_cast<SharpRuntime::intcs>(data.width),
+                                static_cast<SharpRuntime::intcs>(data.height),
+                                data.framesPerSecond,
+                                static_cast<Media::VideoSoundtrackType>(data.soundtrackType));
+        }
+
     } // anonymous namespace
 
     // ---------------------------------------------------------------------------
@@ -5295,6 +6031,90 @@ namespace Microsoft::Xna::Framework::Content
             std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
+
+        // plans/plan_cnb.md CNBF-080: the .cnb loader table is process-wide rather than per-manager
+        // (a .cnb dispatches on the file's own asset type identifier, not on a reader this
+        // instance holds), so registration is idempotent and every constructor may safely repeat
+        // it.
+        CNA::Content::CnbLoaderRegistry::RegisterBuiltIns();
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Model, "Microsoft.Xna.Framework.Graphics.Model",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildModelFromCnbEXT(
+                    CNA::Content::Cnb::DecodeModelFromCnb(document), contentManager, assetName));
+            });
+
+        // plans/plan_cnb.md CNBF-101A/B/C. Registered here rather than in RegisterBuiltIns() for
+        // the same reason Model is: creating a texture needs a GraphicsDevice, and the boxed type
+        // must be exactly what Load<T> asks for -- which for Texture3D is a shared_ptr, because
+        // Texture3D is non-copyable and the .xnb reader registers it the same way.
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Texture2D,
+            "Microsoft.Xna.Framework.Graphics.Texture2D",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildTexture2DFromCnbEXT(
+                    CNA::Content::Cnb::DecodeTexture2DFromCnb(document), contentManager,
+                    assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::TextureCube,
+            "Microsoft.Xna.Framework.Graphics.TextureCube",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildTextureCubeFromCnbEXT(
+                    CNA::Content::Cnb::DecodeTextureCubeFromCnb(document), contentManager,
+                    assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Texture3D,
+            "Microsoft.Xna.Framework.Graphics.Texture3D",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildTexture3DFromCnbEXT(
+                    CNA::Content::Cnb::DecodeTexture3DFromCnb(document), contentManager,
+                    assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::SpriteFont,
+            "Microsoft.Xna.Framework.Graphics.SpriteFont",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildSpriteFontFromCnbEXT(
+                    CNA::Content::Cnb::DecodeSpriteFontFromCnb(document), contentManager,
+                    assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::SoundEffect,
+            "Microsoft.Xna.Framework.Audio.SoundEffect",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager&,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildSoundEffectFromCnbEXT(
+                    CNA::Content::Cnb::DecodeSoundEffectFromCnb(document), assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Song, "Microsoft.Xna.Framework.Media.Song",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildSongFromCnbEXT(
+                    CNA::Content::Cnb::DecodeSongFromCnb(document), contentManager, assetName));
+            });
+        CNA::Content::CnbLoaderRegistry::Register(
+            CNA::Content::Cnb::CnbAssetTypeId::Video, "Microsoft.Xna.Framework.Media.Video",
+            [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
+               const std::string& assetName) -> std::any
+            {
+                return std::any(BuildVideoFromCnbEXT(
+                    CNA::Content::Cnb::DecodeVideoFromCnb(document), contentManager, assetName));
+            });
     }
 
 } // namespace Microsoft::Xna::Framework::Content
@@ -5321,6 +6141,31 @@ namespace Microsoft::Xna::Framework::Content
         if (std::filesystem::exists(xnbCandidate))
         {
             return LoadXnbAsset<Audio::SoundEffect>(xnbCandidate, assetName);
+        }
+
+        // plans/plan_cnb.md CNBF-103A. This tier was MISSING: because SoundEffect has its own
+        // Load<> specialisation, it never ran the generic template's .cnb step, so a
+        // SoundEffect.cnb would have fallen straight through to the loose-file reader and the
+        // documented precedence (xnb > cnb > literal > cnj > loose) would have held for every
+        // asset type except this one. Added with the same two shapes the generic tier has: the
+        // implicit "<name>.cnb", and a caller who spells the extension out.
+        //
+        // Through shared_ptr because SoundEffect is move-only and std::any cannot hold it.
+        const std::string cnbCandidate =
+            ResolveExistingAssetPath(BuildAssetPath(assetName) + ".cnb");
+        if (std::filesystem::exists(cnbCandidate))
+        {
+            return std::move(
+                *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(cnbCandidate, assetName));
+        }
+        if (assetName.size() > 4 && assetName.compare(assetName.size() - 4, 4, ".cnb") == 0)
+        {
+            const std::string literalCnb = ResolveExistingAssetPath(BuildAssetPath(assetName));
+            if (std::filesystem::exists(literalCnb))
+            {
+                return std::move(
+                    *LoadCnbAsset<std::shared_ptr<Audio::SoundEffect>>(literalCnb, assetName));
+            }
         }
 
         auto readerIt = typeReaders_.find(std::type_index(typeid(Audio::SoundEffect)));
