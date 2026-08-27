@@ -761,6 +761,30 @@ TEST(CnbCompilerStrictnessTest, ASpriteFontDocumentsGlyphNumbersAreValidated)
         R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","spacing":1e400,"glyphs":[)"
         R"({"char":65,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]}]})",
         "outside the range a double can represent");
+    // A defaultCharacter of the wrong type used to be ignored, leaving a font with no substitute
+    // character -- which only shows up much later, the first time MeasureString meets a character
+    // the font does not map. Absent and null both still mean "none".
+    ExpectCompileRefused(
+        "sf_defcharnumber",
+        R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","defaultCharacter":63,)"
+        R"("glyphs":[{"char":65,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]}]})",
+        "is not a string");
+    ExpectCompileRefused(
+        "sf_defcharempty",
+        R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","defaultCharacter":"",)"
+        R"("glyphs":[{"char":65,"source":[0,0,16,24],"crop":[0,0,16,24],"kerning":[0,1,0]}]})",
+        "empty string");
+    {
+        ScratchDir dir("sf_defcharnull");
+        WriteBytes(dir.path() / "atlas.png", TinyPng());
+        WriteText(dir.path() / "a.cnj",
+                  R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png",)"
+                  R"("defaultCharacter":null,)"
+                  R"("glyphs":[{"char":65,"source":[0,0,1,1],"crop":[0,0,1,1],"kerning":[0,1,0]}]})");
+        EXPECT_NO_THROW((void)CompileCnjToCnb((dir.path() / "a.cnj").string()))
+            << "null must mean 'no substitute character', not a malformed document";
+    }
+
     ExpectCompileRefused(
         "sf_linespacingfrac",
         R"({"cnjVersion":1,"type":"SpriteFont","texture":"atlas.png","lineSpacing":8.25,"glyphs":[)"

@@ -249,10 +249,23 @@ namespace CNA::Internal
             font.spacing = RequireCnjSingle(spacing, what + ", 'spacing'");
         }
 
+        // Present and of the wrong type is refused rather than ignored. `null` is the one value
+        // that means "no substitute character", because that is what a generator writes when it
+        // has none; a number or an empty string is a document that meant something the reader
+        // cannot honour, and silently producing a font with no fallback is how a later
+        // MeasureString on an unmapped character becomes the visible symptom.
         if (const JsonValue* defaultCharacter = root.FindMember("defaultCharacter");
-            defaultCharacter != nullptr && defaultCharacter->type == JsonType::String &&
-            !defaultCharacter->stringValue.empty())
+            defaultCharacter != nullptr && defaultCharacter->type != JsonType::Null)
         {
+            if (defaultCharacter->type != JsonType::String)
+            {
+                Fail(what, "'defaultCharacter' is not a string.");
+            }
+            if (defaultCharacter->stringValue.empty())
+            {
+                Fail(what, "'defaultCharacter' is an empty string; omit the field, or use null, to "
+                           "say the font has no substitute character.");
+            }
             const std::optional<std::uint32_t> code =
                 FirstCodePoint(defaultCharacter->stringValue);
             if (!code.has_value())

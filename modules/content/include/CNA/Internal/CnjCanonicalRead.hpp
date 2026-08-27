@@ -203,7 +203,8 @@ namespace CNA::Internal
      * `defaultCharacter` is the **first Unicode code point** of the member's string, not its first
      * byte, and must lie in the Basic Multilingual Plane because `SharpRuntime::charcs` is a
      * UTF-16 code unit. For an ASCII document -- which every authored font descriptor in this
-     * repository is -- that is the same character either way.
+     * repository is -- that is the same character either way. The member may be absent or `null`
+     * to say the font has no substitute character; present and any other type is refused.
      *
      * @param root The document's root object.
      * @param what Text naming the document.
@@ -212,8 +213,9 @@ namespace CNA::Internal
      *         empty, if `glyphs` is missing, is not an array or is empty, if any glyph lacks a
      *         `char`, a four-element `source`, a four-element `crop` or a three-element `kerning`,
      *         if any number is not finite, is not integral where an integer is required, or is
-     *         outside its destination's range, or if a character value is not a Unicode scalar in
-     *         the Basic Multilingual Plane.
+     *         outside its destination's range, if a character value is not a Unicode scalar in the
+     *         Basic Multilingual Plane, or if `defaultCharacter` is present as anything other than
+     *         `null` or a non-empty string.
      */
     [[nodiscard]] CnjSpriteFontDescription ReadCnjSpriteFontDescription(const JsonValue& root,
                                                                          const std::string& what);

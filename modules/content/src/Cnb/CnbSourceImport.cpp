@@ -325,16 +325,13 @@ namespace CNA::Content::Cnb
             // RIFF pads an odd-length chunk to an even boundary. The pad byte has to be there when
             // anything follows; its value is not constrained here, because real encoders differ
             // and refusing on it would reject files every other tool plays.
+            //
+            // The pad byte is required only when something FOLLOWS the chunk: an odd-length chunk
+            // ending exactly at the form's end needs none, and every real encoder omits it there.
+            // `chunkEnd` cannot exceed `riffEnd` -- the bound above already refused that -- so the
+            // two cases here are the whole space.
             std::size_t next = chunkEnd;
-            if ((chunkSize & 1u) != 0u)
-            {
-                if (chunkEnd < riffEnd) { next = chunkEnd + 1u; }
-                else if (chunkEnd > riffEnd)
-                {
-                    FailWav(origin, "has an odd-length '" + idText +
-                                        "' chunk with no room for its RIFF pad byte.");
-                }
-            }
+            if ((chunkSize & 1u) != 0u && chunkEnd < riffEnd) { next = chunkEnd + 1u; }
             pos = next;
         }
         if (pos != riffEnd)
