@@ -817,3 +817,51 @@ byte-for-byte, and every pre-existing round-trip and determinism test passes unc
 changed is what a reader *accepts* (stricter: forward bone parents, unnamed custom types) and what
 the writer *refuses to produce* (custom types without a matching canonical name). Files the previous
 state could legitimately produce all still load.
+
+---
+
+## 12. Stability reassessment after the hardening pass
+
+§9 declared "the implemented parts of CNB are v1-stable" as a single verdict. That was too coarse:
+the byte-level format and the C++ extension API are different things with different audiences and
+different costs to change, and this pass changed one of them. Reassessed per component.
+
+| component | verdict | why |
+|---|---|---|
+| **Container byte format** | **Frozen.** | Unchanged by this pass. Now pinned by golden vectors generated from the specification text by a *separate* implementation, in both directions, plus a sweep that flips one bit of every byte and requires each to be refused. Every invariant has a dedicated negative test; 17 000 fuzzed inputs escape as nothing but `ContentLoadException`; clean under ASan+UBSan and TSan. |
+| **`Curve` schema 1** | **Frozen.** | Bytes unchanged. Golden vector in both directions. Complete negative coverage. |
+| **`AnimationClip` schema 1** | **Frozen.** | Bytes unchanged. Golden vector in both directions. Complete negative coverage. |
+| **`Model` schema 1** | **Frozen, with the caveat stated.** | Bytes unchanged, and now has its own golden vector covering the 368-byte material record's every default — the likeliest thing to drift in silence, since a round-trip test encodes and decodes the same wrong value. Two *reader* rules were added (parent-before-child, `primitiveCount` cross-check, index range), which make the reader stricter without changing any byte a valid producer emits. The caveat: this is the schema most likely to need *extension* (material variants and the import report are both out of v1), and extension means a schema-version bump, not a container one. |
+| **Custom loader C++ API** | **NOT stable — changed by this pass.** | `Find()` now returns `std::optional<LoaderFn>` rather than a raw pointer; `ResolveForDocument()` is new and is the correct entry point for loading; `debugTypeName` became `canonicalTypeName` and is load-bearing for custom types. Anyone building on `CnbLoaderRegistry` should expect further movement. The *file-format* half of the custom-type contract — a `CMET` canonical name that must match — **is** settled and belongs to the frozen container. |
+| **Compiler CLI (`cna_tool_cnj_to_cnb`)** | **Not promised yet.** | Unchanged this pass and small (`<input> [output] --content-root --name --quiet`), but nothing depends on it in-tree except tests, and no compatibility promise is worth making until something does. |
+| **Inspector CLI (`cna_tool_cnb_info`)** | **New this pass; not promised.** | `--refs`' one-name-per-line output is the part a build script would depend on and the part worth keeping stable; the human-readable form is free to change. |
+
+**What this means in practice.** A `.cnb` written today will be readable by future CNA. A program
+compiled against `CnbLoaderRegistry` today may need a small edit. Those are different promises and
+the branch should keep saying so separately.
+
+**Format-breaking changes are still allowed on this branch** and this is still the right moment for
+them — CNB is unmerged and unreleased. Two contract changes were made here for exactly that reason
+(mandatory canonical names for custom types; parent-before-child bone graphs). Neither changed a
+byte any valid producer emits, which is why the golden vectors still match.
+
+---
+
+## 13. Remaining `CNBF-*` work
+
+Unchanged in substance from §6's out-of-scope table, restated with what the hardening pass learned.
+
+| ID | Work | Note |
+|---|---|---|
+| CNBF-100 | Shared `.cnj`/`.cnb` **mesh** builder | The *effect/material* half landed as `BuildPartEffectEXT` and was re-audited this pass: its parameters are all pre-existing CNA types, it contains zero CNB types, and both paths are covered. The mesh half remains. |
+| CNBF-101 | `Texture2D`/`Texture3D`/`TextureCube` schemas, incl. multi-representation selection | Ids reserved, layouts undesigned. |
+| CNBF-102 | `SpriteFont` schema | Id reserved. |
+| CNBF-103 | `SoundEffect`/`Song`/`Video` schemas, incl. external streaming payloads | Ids reserved. |
+| CNBF-104 | `Effect` schema | Id reserved. |
+| CNBF-105 | Chunk compression | Field reserved; reader rejects any codec but 0. |
+| CNBF-106 | Direct glTF/PNG/WAV → `.cnb` importers | Only `.cnj` → `.cnb` exists. |
+| CNBF-107 | `.cnapak` package format | A different format and a different project. |
+| CNBF-108 | Memory-mapped / zero-copy chunk access | The `alignment` field and the 16-byte geometry alignment exist for it; the golden Model vector pins that alignment. |
+
+**Recommended next step:** `CNBF-100`'s mesh half, or `CNBF-101`. Neither is urgent. The branch is
+in a coherent state and adding a fifth asset schema would broaden it without deepening it.

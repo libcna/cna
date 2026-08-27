@@ -99,3 +99,58 @@ aclk = key(0.0, 1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0) + \
 clip = build(6, 1, [('CMET', 0, 4, cmet2), ('ACLH', MANDATORY, 8, aclh),
                     ('ACLT', MANDATORY, 4, aclt), ('ACLK', MANDATORY, 8, aclk)])
 emit('kGoldenAnimationClip', clip, 'AnimationClip schema 1: 1.5s SceneNode clip, one track on bone 4, two keys.')
+
+# --- Model: one part, no bones/skeleton/animations/lights, one external texture ---------------
+# Deliberately minimal but NOT degenerate: it exercises the string table, the 368-byte material
+# record (whose defaults are the thing most likely to drift silently), the XREF table, and the
+# 16-byte-aligned geometry chunks.
+NO_INDEX = 0xFFFFFFFF
+
+cmet3 = u32(0) + cstr('Microsoft.Xna.Framework.Graphics.Model') + cstr('golden/model')
+
+# XREF: one Texture2D reference.
+xref = u32(1) + u32(0) + u32(1) + cstr('Textures/wall')
+
+# MDLH: flags(0), boneCount 0, partCount 1, meshCount 1, lightCount 0, animationCount 0
+mdlh = u32(0) + u32(0) + u32(1) + u32(1) + u32(0) + u32(0)
+
+# MSTR: interned in first-seen order, and DEDUPLICATED. The part and the mesh are both named
+# "Hull" -- which is what the compiler produces, since it names a mesh after its part -- so the
+# table holds ONE string and both rows index it. Getting this wrong is how the vector earned its
+# place: written from the specification it was two entries, and the writer disagreed.
+mstr = u32(1) + cstr('Hull')
+
+# MMSH: one mesh row, one part row, then the slot array.
+mesh_row = u32(0) + struct.pack('<i', -1) + u32(0) + u32(1)          # name 0 (shared), no parent bone
+part_row = (u32(0) +          # nameIndex
+            u32(0) + u32(0) + u32(NO_INDEX) +   # vertex/index/morph chunk ordinals
+            u32(16) + u32(3) +                  # vertexStride, vertexCount
+            u32(3) + u32(2) +                   # indexCount, indexElementSize
+            u32(4) + u32(1) +                   # topology TRIANGLES, primitiveCount
+            u32(0) + u32(NO_INDEX) +            # effectKind BasicEffect, no external effect
+            u32(0) + u32(0))                    # materialIndex, flags
+assert len(mesh_row) == 16 and len(part_row) == 56
+mmsh = mesh_row + part_row + u32(1) + u32(0)
+
+# MMAT: one material -- base colour texture is XREF 0, everything else at its documented default.
+mat = u32(0) + u32(NO_INDEX) * 7                       # 8 texture refs
+mat += f32(1.0) * 4                                    # baseColorFactor
+mat += f32(0.0) * 3                                    # emissiveFactor
+mat += f32(1.0) * 3                                    # specularColorFactor
+mat += f32(1.0) + f32(1.0) + f32(1.5) + f32(1.0)       # metallic, roughness, ior, specular
+mat += f32(1.0) + f32(1.0) + f32(0.5)                  # normalScale, occlusionStrength, alphaCutoff
+mat += u32(0) + u32(0)                                 # alphaMode Opaque, flags
+mat += bytes(7) + bytes(1)                             # texCoordSets[7] + reserved pad
+mat += (f32(0.0) + f32(0.0) + f32(1.0) + f32(1.0) + f32(0.0)) * 7   # UV transforms
+mat += (u32(0) + u32(0) + u32(0) + u32(0)) * 7         # sampler states
+assert len(mat) == 368, len(mat)
+mmat = u32(1) + mat
+
+mvtx = bytes(range(16 * 3))
+midx = struct.pack('<HHH', 0, 1, 2)
+
+model = build(5, 1, [('CMET', 0, 4, cmet3), ('XREF', MANDATORY, 4, xref),
+                     ('MDLH', MANDATORY, 4, mdlh), ('MSTR', MANDATORY, 4, mstr),
+                     ('MMSH', MANDATORY, 4, mmsh), ('MMAT', MANDATORY, 4, mmat),
+                     ('MVTX', MANDATORY, 16, mvtx), ('MIDX', MANDATORY, 16, midx)])
+emit('kGoldenModel', model, 'Model schema 1: one boneless BasicEffect part, one external texture.')
