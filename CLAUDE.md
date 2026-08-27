@@ -538,7 +538,10 @@ effect, real instancing, `RenderTarget2D`/`RenderTargetCube`, MSAA, `Texture3D`,
 queries, custom WGSL `ShaderEffect`s on the 3D route (`WEBGPU-76`,
 `ExecutesShaderEffectSourceEXT()`→true, dialect `Wgsl`) and multiple render targets (`WEBGPU-85/86/87`:
 2..4 targets, a custom `@location(0..N-1)` shader fans out to every slot, a stock draw writes
-attachment 0) and custom WGSL `ShaderEffect`s on the SpriteBatch route too (`WEBGPU-142`), and since
+attachment 0) and custom WGSL `ShaderEffect`s on the SpriteBatch route too (`WEBGPU-142`). Since
+2026-08-27 **every FNA stock effect's fog is at parity** (`WEBGPU-145`–`148`: BasicEffect, AlphaTest,
+DualTexture, Skinned join the pre-existing EnvironmentMapEffect fog) — the shared primary UBO carries
+the FNA view-space `fogVector`+`fogColor` and each WGSL family applies `ApplyFog`. Since
 2026-08-26 it also runs in the browser through Emscripten's emdawnwebgpu port (2D + 3D, its pixels
 byte-identical to the native Vulkan renderer's). It is also the first CNA renderer to upload
 GPU-native block-compressed textures (`WEBGPU-144`: DXT1/3/5 + BC7 to `WGPUTextureFormat_BC*`, no CPU

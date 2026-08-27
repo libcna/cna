@@ -64,15 +64,26 @@ the moment `GraphicsDevice.SetStringMarkerEXT()` is called, the WebGPU
 implementation inherits the interface's **no-op** default (`WEBGPU-106`). No game
 behaviour depends on it; it only affects external GPU-capture tooling.
 
-## Multiple render targets and occlusion queries: unimplemented, and honest about it
+## Multiple render targets and occlusion queries: now implemented (parity)
 
-Vulkan supports both. The WebGPU renderer does not implement MRT
-(`WEBGPU-85`/`86`/`87`) or occlusion queries (`WEBGPU-84`) yet. Rather than claim
-them, `SupportsCapability(MultipleRenderTargets)` and
-`SupportsCapability(OcclusionQuery)` both return `false`, a >1-target bind throws
-a `System::NotSupportedException` that names the capability query, and
-`CreateOcclusionQuery()` is left as the base `nullptr` (`WEBGPU-134`/`135`,
-enforced by `WebGpuMrtOcclusionContractTests`).
+Both are implemented and tested, matching Vulkan. **MRT** (`WEBGPU-85`/`86`/`87`,
+done 2026-08-27): `SetRenderTargets` accepts 2..4 `RenderTarget2D`s,
+`SupportsCapability(MultipleRenderTargets)` returns `true`, a custom WGSL
+`ShaderEffect` writing `@location(0..N-1)` fans out to every slot and a stock draw
+writes attachment 0 only (`WebGPU_MRT`). **Occlusion queries** (`WEBGPU-84`, done
+2026-08-26): `SupportsCapability(OcclusionQuery)` returns `true` and
+`CreateOcclusionQuery()` returns a real query backed by a `WGPUQuerySet` with exact
+sample counts (`WebGPU_OcclusionQuery`). (The `WEBGPU-134`/`135` "report `false`
+and refuse" arms this section originally described were the honest interim state
+before the features shipped; both were removed and their contract tests flipped to
+assert `true`.) The one capability still deliberately refused is
+`FillMode::WireFrame` (`WEBGPU-115`) — wgpu-native has no polygon-mode API, so the
+capability reports `false` and a polygon draw that would consume it throws.
+
+Stock-effect **fog** is also at parity now (`WEBGPU-145`–`148`): unlike Vulkan,
+which layers a dedicated fog UBO on top of its push-constant range, WebGPU widens
+the shared primary uniform block (128→160 bytes) to carry `fogColor` + the FNA
+view-space `fogVector`; the WGSL fog equation itself is identical to Vulkan's.
 
 ## Fullscreen, input, windowing: not a renderer concern
 
