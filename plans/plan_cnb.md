@@ -865,3 +865,67 @@ Unchanged in substance from §6's out-of-scope table, restated with what the har
 
 **Recommended next step:** `CNBF-100`'s mesh half, or `CNBF-101`. Neither is urgent. The branch is
 in a coherent state and adding a fifth asset schema would broaden it without deepening it.
+
+---
+
+## 14. Verification state at the end of the hardening pass
+
+**Branch `cnb`, working tree clean, no merge performed.** `git log --merges 1e70b234f..HEAD` is
+empty. Every file touched since the branch point is under `modules/content/`, `docs/cnb-format.md`,
+`misc/cnj.md`, `plans/plan_cnb.md`, `tools/{cnj_to_cnb,cnb,cnb_info}/`, two new `cmake/Tool*.cmake`
+files, `cmake/UnitTests.cmake` and `CMakeLists.txt` — nothing else.
+
+**CNB suites: 221 tests across 16 suites, all passing.** 164 before this pass, +57 added by it.
+
+| suite | tests |
+|---|---|
+| `CnbContainerTest` + `CnbCrc32cTest` | 65 |
+| `CnbCurveCodecTest` | 16 |
+| `CnbAnimationClipCodecTest` | 13 |
+| `CnbModelCodecTest` | 28 |
+| `CnbContentManagerTest` | 13 |
+| `CnbCompilerTest` + `CnbCompilerToolTest` | 11 |
+| `CnbModelEquivalenceTest` | 5 |
+| `CnbSpecConformanceTest` | 10 |
+| `CnbContainerFuzzTest` | 4 |
+| **`CnbHardeningTest` + `CustomTypeFixture`** *(new)* | **24** |
+| **`CnbCompilerStrictnessTest`** *(new)* | **16** |
+| **`CnbGoldenVectorTest`** *(new)* | **9** |
+| **`CnbInfoToolTest`** *(new)* | **4** |
+
+**Sanitizers.** All clean, on the final code:
+
+* **ASan + UBSan** — 221 CNB tests, 0 reports. Content module: 382 tests, 0 reports.
+* **TSan** — 189 device-independent CNB tests including the 8-thread registry test, 0 warnings.
+  Verified to have teeth: removing the registry's locks produces real `unordered_map` data races.
+
+**Full regression: `ctest -j3`, 8378 tests, 29 non-passing, and NONE of them is a CNB test.**
+The pre-existing baseline for this branch was 8321 tests / 37 non-passing. 27 of the 29 are on that
+list; the two that are not (`StockEffectContentTypeReaderTest.DualTextureEffectReaderParses…`,
+`AudioEngineTest.UpdateSweepsFinished…`) are a flake that passes in isolation and a timing-dependent
+audio test that was in the original pre-CNB baseline. Ten baseline failures were absent this run —
+the same audio/ENet flakiness from the other direction.
+
+**A note on parallelism, because it materially changed the numbers.** An earlier run of the same
+suite at `-j8` reported 57 non-passing and one at `-j4` reported 167 — almost entirely `Not Run`
+and unrelated graphics/input suites, all of which pass on re-run. The machine's
+`xdg-desktop-portal` process was holding **16.6 GB RSS** (20 hours uptime, a leak in the user's
+desktop session, unrelated to this work), leaving ~10 GB for a 346 MB test binary times N. The
+`-j3` figure above is the one taken with headroom and is the one to compare against the baseline.
+Recorded rather than quietly re-run, because a reader who runs `ctest -j8` on a loaded machine
+should know why their number differs.
+
+**Platform boundary gates: 4 of 5 pass.** `tools/platform/sdl_inventory.py --check` reports
+`plans/plan_platform.md` §2 out of date — **pre-existing and not CNB's**: that file is byte-identical
+to its state at this branch's fork point, no CNB file contains the string `SDL`, and the drift
+includes one *fewer* SDL-referencing file, which an addition cannot cause.
+
+**End-to-end, on a real asset.** `skin-four-weighted.gltf` → `cna_tool_gltf_to_cnj` → 4 files →
+`cna_tool_cnj_to_cnb` → one 2704-byte `.cnb` absorbing all four → `cna_tool_cnb_info` reports its
+ten chunks → `--quiet` validates it. `CnbModelEquivalenceTest` loads 15 corpus fixtures through both
+the `.cnj` and `.cnb` paths and compares them field by field.
+
+**CNJ and XNB have not regressed.** The whole content-module surface passes with exactly the two
+failures it had before any CNB work existed, and the `.cnj` model/material suites — including
+`GltfToCnjToolTest`'s offline-versus-runtime L6 material comparison and skinning-data sweep, the
+tests a `BuildPartEffectEXT` regression would break — are green.
