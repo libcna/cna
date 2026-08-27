@@ -12,6 +12,16 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
     enable_testing()
+
+    # WEBGPU-150: route every display/GPU-backed WebGPU test (those whose ENVIRONMENT sets a DISPLAY)
+    # through a preflight/retry launcher so a headless / no-adapter host SKIPs (CTest code 77) instead
+    # of producing dozens of abort failures, while real failures and expected aborts propagate. Set
+    # before any cna_register_renderer_test call so the shared macro (cmake/TestHelpers.cmake) sees it.
+    set(CNA_RENDERER_GPU_TEST_LAUNCHER "${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/webgpu_test_launcher.sh")
+    add_test(NAME WebGPU_LauncherSelfTest COMMAND sh
+        "${CMAKE_SOURCE_DIR}/modules/renderers/webgpu/webgpu_launcher_selftest.sh"
+        "${CNA_RENDERER_GPU_TEST_LAUNCHER}")
+    set_tests_properties(WebGPU_LauncherSelfTest PROPERTIES TIMEOUT 30 LABELS "WebGPU")
     if(TARGET cna_demo_2d)
         cna_register_renderer_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CMAKE_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
             TIMEOUT 70 LABELS "GraphicsSmoke;WebGPU" SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
