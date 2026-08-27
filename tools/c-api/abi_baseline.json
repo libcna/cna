@@ -3377,6 +3377,34 @@
   "cna_rectangle_offset_xy",
   "cna_rectangle_set_location",
   "cna_rectangle_union",
+  "cna_render_pipeline_add_user_pass",
+  "cna_render_pipeline_begin",
+  "cna_render_pipeline_clear_user_passes",
+  "cna_render_pipeline_copy_transparency_fallback_reason_ext",
+  "cna_render_pipeline_create",
+  "cna_render_pipeline_destroy",
+  "cna_render_pipeline_did_shadow_pass_run",
+  "cna_render_pipeline_did_skybox_draw",
+  "cna_render_pipeline_end",
+  "cna_render_pipeline_get_gpu_memory_estimate_bytes",
+  "cna_render_pipeline_get_last_frame_pass_count",
+  "cna_render_pipeline_get_scene_target",
+  "cna_render_pipeline_get_scene_target_format",
+  "cna_render_pipeline_get_settings",
+  "cna_render_pipeline_get_shadow_map",
+  "cna_render_pipeline_get_statistics",
+  "cna_render_pipeline_is_gpu_timing_enabled_ext",
+  "cna_render_pipeline_is_using_scene_target",
+  "cna_render_pipeline_release_device_resources_ext",
+  "cna_render_pipeline_resize",
+  "cna_render_pipeline_set_camera",
+  "cna_render_pipeline_set_depth_normal_inputs",
+  "cna_render_pipeline_set_gpu_timing_enabled_ext",
+  "cna_render_pipeline_set_settings",
+  "cna_render_pipeline_set_shadow_scene",
+  "cna_render_pipeline_set_skybox_camera",
+  "cna_render_pipeline_set_transparent_scene",
+  "cna_render_pipeline_set_velocity_input_ext",
   "cna_render_pipeline_settings_ext_apply_from_string",
   "cna_render_pipeline_settings_ext_apply_render_quality_preset",
   "cna_render_pipeline_settings_ext_init",
@@ -6411,6 +6439,10 @@
   "CNA_RasterizerStatePreset": [
    4,
    4
+  ],
+  "CNA_RenderPipelineHandle": [
+   8,
+   8
   ],
   "CNA_RenderQuality": [
    4,
@@ -11004,6 +11036,44 @@
     ]
    },
    "size": 16
+  },
+  "CNA_RenderPipelineFrameStatisticsEXT": {
+   "align": 8,
+   "fields": {
+    "drew_skybox": [
+     17,
+     1
+    ],
+    "gpu_memory_estimate_bytes": [
+     24,
+     8
+    ],
+    "passes_run": [
+     8,
+     4
+    ],
+    "reserved": [
+     18,
+     2
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "target_switches": [
+     12,
+     4
+    ],
+    "used_scene_target": [
+     16,
+     1
+    ]
+   },
+   "size": 32
   },
   "CNA_RenderPipelineSettings": {
    "align": 4,

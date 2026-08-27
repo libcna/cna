@@ -16161,6 +16161,60 @@
         "CPP-F8A20F5D9E6E",
         "CPP-FE439722A50B"
       ]
+    },
+    {
+      "id": "render-pipeline",
+      "qualified_name_regex": "^CNA::Graphics::RenderPipeline(?:::(?!setSkybox$|getSkybox$|getPassTimingsEXT$)(?:FrameStatistics(?:::[A-Za-z0-9_]+)?|[A-Za-z0-9_~]+))?$",
+      "kinds": [
+        "class",
+        "struct",
+        "field",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_render_pipeline_*` over an owned handle, with `FrameStatistics` as a versioned `CNA_RenderPipelineFrameStatisticsEXT`. Settings are copied in and out through `CNA_RenderPipelineSettingsEXT` -- the canonical getter returns a reference into the pipeline and the C form copies, so the result stays correct after the pipeline changes; writing them back runs every field through its canonical setter, so `CBIND-088A`'s thirty-one corrections apply here unchanged.\n\n**The frame bracket was read before the test was written, because two other classes in this phase are not what they look like.** `RenderPipeline::begin` marks the frame open *before* any support check and `end` clears it *before* any early return, so the pair is symmetric on every renderer -- unlike `WeightedBlendedTransparency` (`CBIND-098`) and the shadow maps (`CBIND-097`). Both halves can therefore assert success rather than branching on support. A negative finding, but only because it was checked.\n\n**Six throws, two kinds, and one pair the exception type cannot separate.** `invalid_argument` becomes `CNA_RESULT_INVALID_ARGUMENT` (a non-positive size, an inverted or non-positive camera plane pair) and `logic_error` becomes `CNA_RESULT_INVALID_STATE`. But `begin` throws `logic_error` for **two different states** -- a frame already open, and a pipeline that has never been sized -- and the pipeline exposes no width accessor to tell them apart after the fact. The C layer therefore remembers whether `resize` ever succeeded and answers the two with their own messages, which is work the binding does rather than something it inherits.\n\nBoth callback surfaces follow `CBIND-087D`'s rule: a failing draw stops the frame and its own result reaches the caller unchanged. The user pass and the shadow map are borrowed, never owned. Three rows are deferred with named owners: `setSkybox`/`getSkybox` to `CBIND-091`, which owns `Skybox`, and `getPassTimingsEXT` to `CBIND-089`, which owns `PostProcessChain::PassTiming`.",
+      "tests": "`EngineLayerSmoke.c` stage 25, which drives the whole frame lifecycle and asserts the two `begin` states separately -- never-sized before `resize`, already-open after a successful `begin` -- refuses releasing device resources mid-frame, proves an out-of-range setting written through the pipeline comes back corrected, and cross-checks every statistic against its individual accessor so a copy-paste error between the two readings shows up. The layer-absent build asserts every route refuses. Proved to execute on both arms by asserting that a never-sized pipeline accepts `begin`, which moves the exit code to stage 25.",
+      "status": "implemented",
+      "task": "CBIND-088B",
+      "approved_symbols": [
+        "CPP-03ED3B2C3A41",
+        "CPP-0AF213AB2F8B",
+        "CPP-0CFF55F8BB38",
+        "CPP-0E28D96B8058",
+        "CPP-13FEF482F878",
+        "CPP-1E4B248B0C01",
+        "CPP-237476C5B9DD",
+        "CPP-2B9FDA518726",
+        "CPP-338B3B02E852",
+        "CPP-36B0883C8D45",
+        "CPP-37071342B109",
+        "CPP-395C2FCC5020",
+        "CPP-401B67B5EB78",
+        "CPP-42F409F72570",
+        "CPP-509A1397DF5D",
+        "CPP-5CAB95E5A5DF",
+        "CPP-5DBB532D9E76",
+        "CPP-6089F89F2914",
+        "CPP-72E41AB7D843",
+        "CPP-80E76116FF38",
+        "CPP-84F2FF44FD9B",
+        "CPP-95B30C62E244",
+        "CPP-98AABD79C4B3",
+        "CPP-A9E16DD134CC",
+        "CPP-AE4B1D4D8155",
+        "CPP-B16EFEEF4330",
+        "CPP-BE176F20DC96",
+        "CPP-C21E2AD33DD7",
+        "CPP-C79EC6C73F5A",
+        "CPP-CA05A0F2A837",
+        "CPP-D3D2295E5105",
+        "CPP-E8BCF0BC41CD",
+        "CPP-EB5D4FA3D9C3",
+        "CPP-EDD6156359A7",
+        "CPP-F7045383D950",
+        "CPP-FCFDB7867DCD"
+      ]
     }
   ]
 }

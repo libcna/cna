@@ -5930,6 +5930,379 @@ CNA_C_API CNA_Result cna_render_pipeline_settings_ext_apply_from_string(
     CNA_StringView text,
     int32_t* out_applied);
 
+/* ---------------------------------------------------------------------------------------------
+ * The render pipeline
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief What one frame of the pipeline actually did. */
+typedef struct CNA_RenderPipelineFrameStatisticsEXT {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+    /** @brief How many post-process passes ran. */
+    int32_t passes_run;
+    /** @brief How many times the render target changed. */
+    int32_t target_switches;
+    /** @brief `CNA_TRUE` when the frame rendered through an offscreen scene target. */
+    CNA_Bool used_scene_target;
+    /** @brief `CNA_TRUE` when the skybox drew. */
+    CNA_Bool drew_skybox;
+    /** @brief Padding; always zero. */
+    uint8_t reserved[2];
+    /** @brief Estimated bytes of GPU memory the pipeline's targets hold. */
+    uint64_t gpu_memory_estimate_bytes;
+} CNA_RenderPipelineFrameStatisticsEXT;
+
+/** @brief Owned handle for one render pipeline. */
+typedef CNA_Handle CNA_RenderPipelineHandle;
+
+/**
+ * @brief Called once per frame to draw the transparent or shadow-casting geometry.
+ *
+ * @param context The pointer given alongside the callback.
+ * @return `CNA_RESULT_SUCCESS`, or any documented result code to fail the frame that asked for it.
+ */
+typedef CNA_Result (*CNA_RenderPipelineDrawCallback)(void* context);
+
+/**
+ * @brief Creates a render pipeline on a device.
+ *
+ * The pipeline has no size until @ref cna_render_pipeline_resize is called; beginning a frame
+ * before that is refused, which is a different state from a frame already being open and carries
+ * its own message.
+ *
+ * @param graphics_device The device to allocate targets on.
+ * @param out_pipeline Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_create(
+    CNA_Handle graphics_device, CNA_RenderPipelineHandle* out_pipeline);
+
+/**
+ * @brief Releases the pipeline.
+ *
+ * @param pipeline The pipeline; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_destroy(CNA_RenderPipelineHandle pipeline);
+
+/**
+ * @brief Copies the pipeline's settings out.
+ *
+ * The canonical getter returns a reference into the pipeline; the C form **copies**, so the result
+ * stays correct after the pipeline changes and there is no view to dangle.
+ *
+ * @param pipeline The pipeline.
+ * @param out_settings Receives the settings.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_settings(
+    CNA_RenderPipelineHandle pipeline, CNA_RenderPipelineSettingsEXT* out_settings);
+
+/**
+ * @brief Copies settings into the pipeline.
+ *
+ * Every field goes through its canonical setter, so the thirty-one corrections `CBIND-088A`
+ * documented apply here exactly as they do to @ref cna_render_pipeline_settings_ext_normalize.
+ *
+ * @param pipeline The pipeline.
+ * @param settings The settings to apply.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure or
+ * an undefined identity, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_settings(
+    CNA_RenderPipelineHandle pipeline, const CNA_RenderPipelineSettingsEXT* settings);
+
+/**
+ * @brief Sizes the pipeline's targets.
+ *
+ * @param pipeline The pipeline.
+ * @param width Width in pixels; must be positive.
+ * @param height Height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_resize(
+    CNA_RenderPipelineHandle pipeline, int32_t width, int32_t height);
+
+/**
+ * @brief Opens a frame, clearing to a colour.
+ *
+ * Unlike the transparency resolve of `CBIND-098`, this bracket opens on **every** renderer: the
+ * canonical `begin` marks the frame open before any support check and `end` closes it before any
+ * early return, so the pair is symmetric wherever the layer is compiled in. That was read from the
+ * bodies rather than assumed, because two other classes in this phase are not.
+ *
+ * @param pipeline The pipeline.
+ * @param clear_color The colour to clear to.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a frame is already open **or** the
+ * pipeline has never been sized -- two distinct states with distinct messages -- 
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null colour, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_begin(
+    CNA_RenderPipelineHandle pipeline, const CNA_Color* clear_color);
+
+/**
+ * @brief Closes the frame, running the post-process chain.
+ *
+ * @param pipeline The pipeline.
+ * @return `CNA_RESULT_SUCCESS`, the failing draw callback's result, `CNA_RESULT_INVALID_STATE`
+ * when no frame is open, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_end(CNA_RenderPipelineHandle pipeline);
+
+/**
+ * @brief Appends a caller-owned post-process pass to run after the built-in ones.
+ *
+ * The pass is **borrowed**: the pipeline records it and never owns it, so the caller keeps it
+ * alive for as long as it is registered.
+ *
+ * @param pipeline The pipeline.
+ * @param pass The pass to append.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an invalid pass,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_add_user_pass(
+    CNA_RenderPipelineHandle pipeline, CNA_PostProcessPassHandle pass);
+
+/**
+ * @brief Removes every caller-owned pass.
+ *
+ * @param pipeline The pipeline.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_clear_user_passes(CNA_RenderPipelineHandle pipeline);
+
+/**
+ * @brief Gives the pipeline the depth and normal buffers its passes read.
+ *
+ * Both are borrowed, never owned.
+ *
+ * @param pipeline The pipeline.
+ * @param depth The depth texture, or `CNA_INVALID_HANDLE`.
+ * @param normals The normal texture, or `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_depth_normal_inputs(
+    CNA_RenderPipelineHandle pipeline, CNA_Handle depth, CNA_Handle normals);
+
+/**
+ * @brief Gives the pipeline the velocity buffer motion blur reads.
+ *
+ * @param pipeline The pipeline.
+ * @param velocity The velocity texture, or `CNA_INVALID_HANDLE`; borrowed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_velocity_input_ext(
+    CNA_RenderPipelineHandle pipeline, CNA_Handle velocity);
+
+/**
+ * @brief Registers the callback that draws transparent geometry inside the frame.
+ *
+ * @param pipeline The pipeline.
+ * @param draw The callback, or null to clear it.
+ * @param context Passed to @p draw unchanged; may be null.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_transparent_scene(
+    CNA_RenderPipelineHandle pipeline, CNA_RenderPipelineDrawCallback draw, void* context);
+
+/**
+ * @brief Registers the shadow map, light and caster callback for the frame's shadow pass.
+ *
+ * The shadow map is borrowed, never owned.
+ *
+ * @param pipeline The pipeline.
+ * @param shadow_map The shadow map, or `CNA_INVALID_HANDLE` to clear the shadow scene.
+ * @param light The directional light to render from.
+ * @param scene_bounds The bounds the light's projection must cover.
+ * @param draw_casters The callback that draws the casters, or null.
+ * @param context Passed to @p draw_casters unchanged; may be null.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null light or bounds,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_shadow_scene(
+    CNA_RenderPipelineHandle pipeline,
+    CNA_ShadowMapHandle shadow_map,
+    const CNA_DirectionalLightEXT* light,
+    const CNA_BoundingBox* scene_bounds,
+    CNA_RenderPipelineDrawCallback draw_casters,
+    void* context);
+
+/**
+ * @brief Sets the camera the frame renders from.
+ *
+ * @param pipeline The pipeline.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @param near_plane The near plane; must be positive.
+ * @param far_plane The far plane; must be greater than @p near_plane.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix or an inverted or
+ * non-positive plane pair, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_camera(
+    CNA_RenderPipelineHandle pipeline,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    float near_plane,
+    float far_plane);
+
+/**
+ * @brief Sets the camera the skybox draws with, when it differs from the scene camera.
+ *
+ * @param pipeline The pipeline.
+ * @param view The view matrix.
+ * @param projection The projection matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null matrix,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_skybox_camera(
+    CNA_RenderPipelineHandle pipeline, const CNA_Matrix* view, const CNA_Matrix* projection);
+
+/**
+ * @brief Copies why the transparency mode fell back, as UTF-8 bytes without a terminator.
+ *
+ * Empty when nothing fell back.
+ *
+ * @param pipeline The pipeline.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_copy_transparency_fallback_reason_ext(
+    CNA_RenderPipelineHandle pipeline, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Turns GPU timing on or off.
+ *
+ * A renderer without GPU timers accepts the request and reports `CNA_FALSE` afterwards rather than
+ * refusing, so a caller asks @ref cna_render_pipeline_is_gpu_timing_enabled_ext what it got.
+ *
+ * @param pipeline The pipeline.
+ * @param value `CNA_TRUE` to enable.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a byte that is neither
+ * `CNA_TRUE` nor `CNA_FALSE`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_set_gpu_timing_enabled_ext(
+    CNA_RenderPipelineHandle pipeline, CNA_Bool value);
+
+/**
+ * @brief Reports whether GPU timing is on.
+ *
+ * @param pipeline The pipeline.
+ * @param out_enabled Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_is_gpu_timing_enabled_ext(
+    CNA_RenderPipelineHandle pipeline, CNA_Bool* out_enabled);
+
+/**
+ * @brief Reports whether the skybox drew during the last frame.
+ *
+ * @param pipeline The pipeline.
+ * @param out_drew Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_did_skybox_draw(
+    CNA_RenderPipelineHandle pipeline, CNA_Bool* out_drew);
+
+/**
+ * @brief Reports whether the shadow pass ran during the last frame.
+ *
+ * @param pipeline The pipeline.
+ * @param out_ran Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_did_shadow_pass_run(
+    CNA_RenderPipelineHandle pipeline, CNA_Bool* out_ran);
+
+/**
+ * @brief Returns the shadow map the pipeline was given, borrowed.
+ *
+ * @param pipeline The pipeline.
+ * @param out_shadow_map Receives the borrowed map, or `CNA_INVALID_HANDLE` when none is set.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_shadow_map(
+    CNA_RenderPipelineHandle pipeline, CNA_ShadowMapHandle* out_shadow_map);
+
+/**
+ * @brief Returns the offscreen scene target, borrowed.
+ *
+ * @param pipeline The pipeline.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when the pipeline
+ *        renders straight to the back buffer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_scene_target(
+    CNA_RenderPipelineHandle pipeline, CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the scene target's surface format.
+ *
+ * @param pipeline The pipeline.
+ * @param out_format Receives the format.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_scene_target_format(
+    CNA_RenderPipelineHandle pipeline, CNA_SurfaceFormat* out_format);
+
+/**
+ * @brief Reports whether the pipeline renders through an offscreen target.
+ *
+ * @param pipeline The pipeline.
+ * @param out_using Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_is_using_scene_target(
+    CNA_RenderPipelineHandle pipeline, CNA_Bool* out_using);
+
+/**
+ * @brief Returns how many passes ran in the last frame.
+ *
+ * @param pipeline The pipeline.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_last_frame_pass_count(
+    CNA_RenderPipelineHandle pipeline, int32_t* out_count);
+
+/**
+ * @brief Returns the estimated GPU memory the pipeline's targets hold.
+ *
+ * @param pipeline The pipeline.
+ * @param out_bytes Receives the estimate in bytes.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_gpu_memory_estimate_bytes(
+    CNA_RenderPipelineHandle pipeline, uint64_t* out_bytes);
+
+/**
+ * @brief Returns what the last frame did.
+ *
+ * @param pipeline The pipeline.
+ * @param out_statistics Receives the statistics; its versioning fields are filled here.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_get_statistics(
+    CNA_RenderPipelineHandle pipeline, CNA_RenderPipelineFrameStatisticsEXT* out_statistics);
+
+/**
+ * @brief Releases the pipeline's device resources without destroying it.
+ *
+ * @param pipeline The pipeline.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` while a frame is open -- releasing the
+ * targets mid-frame would leave the frame drawing into freed memory -- `CNA_RESULT_NOT_SUPPORTED`
+ * without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_render_pipeline_release_device_resources_ext(
+    CNA_RenderPipelineHandle pipeline);
+
 #ifdef __cplusplus
 }
 #endif

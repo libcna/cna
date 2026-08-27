@@ -228,6 +228,8 @@ enum class ObjectKind : uint32_t {
     // plans/plan_binding.md CBIND-087D.
     TransparentDrawList = 146,
     WeightedBlendedTransparency = 147,
+    // plans/plan_binding.md CBIND-088B.
+    RenderPipeline = 148,
     Test = UINT32_MAX
 };
 

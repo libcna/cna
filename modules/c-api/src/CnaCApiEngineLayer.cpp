@@ -27,6 +27,7 @@
 #include "CNA/Graphics/ClusteredLightEXT.hpp"
 #include "CNA/Graphics/ClusteredForwardEffect.hpp"
 #include "CNA/Graphics/PbrMaterialExtensions.hpp"
+#include "CNA/Graphics/RenderPipeline.hpp"
 #include "CNA/Graphics/RenderPipelineSettings.hpp"
 #include "CNA/Graphics/GltfMaterialBridge.hpp"
 #include "CNA/Graphics/TransparencyMode.hpp"
@@ -3438,6 +3439,177 @@ CNA_Result cna_render_pipeline_settings_ext_apply_from_string(CNA_RenderPipeline
     (void)p0; (void)p1; (void)p2;
     return ExtensionUnavailable();
 }
+
+CNA_Result cna_render_pipeline_create(CNA_Handle p0, CNA_RenderPipelineHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_destroy(CNA_RenderPipelineHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_settings(CNA_RenderPipelineHandle p0, CNA_RenderPipelineSettingsEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_settings(CNA_RenderPipelineHandle p0, const CNA_RenderPipelineSettingsEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_resize(CNA_RenderPipelineHandle p0, int32_t p1, int32_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_begin(CNA_RenderPipelineHandle p0, const CNA_Color* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_end(CNA_RenderPipelineHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_add_user_pass(CNA_RenderPipelineHandle p0, CNA_PostProcessPassHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_clear_user_passes(CNA_RenderPipelineHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_depth_normal_inputs(CNA_RenderPipelineHandle p0, CNA_Handle p1, CNA_Handle p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_velocity_input_ext(CNA_RenderPipelineHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_transparent_scene(CNA_RenderPipelineHandle p0, CNA_RenderPipelineDrawCallback p1, void* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_shadow_scene(CNA_RenderPipelineHandle p0, CNA_ShadowMapHandle p1, const CNA_DirectionalLightEXT* p2, const CNA_BoundingBox* p3, CNA_RenderPipelineDrawCallback p4, void* p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_camera(CNA_RenderPipelineHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2, float p3, float p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_skybox_camera(CNA_RenderPipelineHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_copy_transparency_fallback_reason_ext(CNA_RenderPipelineHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_set_gpu_timing_enabled_ext(CNA_RenderPipelineHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_is_gpu_timing_enabled_ext(CNA_RenderPipelineHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_did_skybox_draw(CNA_RenderPipelineHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_did_shadow_pass_run(CNA_RenderPipelineHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_shadow_map(CNA_RenderPipelineHandle p0, CNA_ShadowMapHandle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_scene_target(CNA_RenderPipelineHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_scene_target_format(CNA_RenderPipelineHandle p0, CNA_SurfaceFormat* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_is_using_scene_target(CNA_RenderPipelineHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_last_frame_pass_count(CNA_RenderPipelineHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_gpu_memory_estimate_bytes(CNA_RenderPipelineHandle p0, uint64_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_get_statistics(CNA_RenderPipelineHandle p0, CNA_RenderPipelineFrameStatisticsEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_render_pipeline_release_device_resources_ext(CNA_RenderPipelineHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+
 
 #else // CNA_CNAEXT
 
@@ -12106,6 +12278,575 @@ CNA_Result cna_render_pipeline_settings_ext_apply_from_string(
         FromNativeRenderPipelineSettings(native, settings);
         return StoreValue(outApplied, static_cast<int32_t>(applied));
     });
+}
+
+namespace {
+
+struct RenderPipelineResource final {
+    std::shared_ptr<Ext::RenderPipeline> value;
+    CNA_Handle parentGame;
+    // CBIND-088B. The canonical begin() throws logic_error for two different states -- a frame
+    // already open, and a pipeline that has never been sized -- and the exception type alone
+    // cannot separate them. The pipeline exposes no width accessor, so the C layer remembers
+    // whether resize() ever succeeded and answers the two with their own messages.
+    bool hasBeenSized = false;
+};
+
+// CBIND-088B. A draw callback that fails must stop the frame and reach the caller unchanged, the
+// same shape CBIND-087D's draw list uses.
+struct RenderPipelineDrawFailure final {
+    CNA_Result result;
+};
+
+} // namespace
+
+#define CNA_WITH_PIPELINE(handle, body)                                                            \
+    WithMap<RenderPipelineResource>(                                                               \
+        (handle), ObjectKind::RenderPipeline, "RenderPipeline", body)
+
+CNA_Result cna_render_pipeline_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_RenderPipelineHandle* const outPipeline)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPipeline == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The pipeline output handle is null.");
+        }
+        *outPipeline = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::RenderPipeline>(*graphicsDevice->value);
+        const auto resource = std::make_shared<RenderPipelineResource>(
+            RenderPipelineResource{std::move(native), graphicsDevice->parentGame, false});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::RenderPipeline, resource, outPipeline);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned pipeline handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_pipeline_destroy(const CNA_RenderPipelineHandle pipelineHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<RenderPipelineResource> pipeline;
+        if (const CNA_Result result = GetEngineResource(
+                pipelineHandle, ObjectKind::RenderPipeline, "RenderPipeline", &pipeline);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(pipelineHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned pipeline handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(pipeline->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_render_pipeline_get_settings(
+    const CNA_RenderPipelineHandle pipeline, CNA_RenderPipelineSettingsEXT* const outSettings)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (outSettings == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The settings output is null.");
+            }
+            // The canonical getter returns a reference into the pipeline; this copies, so the
+            // result stays correct after the pipeline changes and there is no view to dangle.
+            *outSettings = CNA_RenderPipelineSettingsEXT{};
+            outSettings->struct_size =
+                static_cast<uint32_t>(sizeof(CNA_RenderPipelineSettingsEXT));
+            outSettings->struct_version = UINT32_C(1);
+            FromNativeRenderPipelineSettings(p->value->getSettings(), outSettings);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_set_settings(
+    const CNA_RenderPipelineHandle pipeline,
+    const CNA_RenderPipelineSettingsEXT* const settings)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (settings == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The settings are null.");
+            }
+            // Through the canonical setters, so CBIND-088A's thirty-one corrections apply here
+            // exactly as they do to _normalize.
+            return ToNativeRenderPipelineSettings(*settings, &p->value->getSettings());
+        });
+}
+
+CNA_Result cna_render_pipeline_resize(
+    const CNA_RenderPipelineHandle pipeline, const int32_t width, const int32_t height)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (width <= 0 || height <= 0) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The size must be positive.");
+            }
+            p->value->resize(static_cast<int>(width), static_cast<int>(height));
+            p->hasBeenSized = true;
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_begin(
+    const CNA_RenderPipelineHandle pipeline, const CNA_Color* const clearColor)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (clearColor == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The clear colour is null.");
+            }
+            if (!p->hasBeenSized) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "The pipeline has never been sized; call resize first.");
+            }
+            try {
+                p->value->begin(
+                    Color(clearColor->r, clearColor->g, clearColor->b, clearColor->a));
+            } catch (const std::logic_error&) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "A frame is already open.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_end(const CNA_RenderPipelineHandle pipeline)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            try {
+                p->value->end();
+            } catch (const RenderPipelineDrawFailure& failure) {
+                return failure.result;
+            } catch (const std::logic_error&) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "No frame is open.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_add_user_pass(
+    const CNA_RenderPipelineHandle pipeline, const CNA_PostProcessPassHandle pass)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            std::shared_ptr<PostProcessPassResource> passResource;
+            if (const CNA_Result result = GetEngineResource(
+                    pass, ObjectKind::PostProcessPass, "PostProcessPass", &passResource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Borrowed: the pipeline records the pass and never owns it.
+            p->value->addUserPass(passResource->value.get());
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_clear_user_passes(const CNA_RenderPipelineHandle pipeline)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            p->value->clearUserPasses();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_set_depth_normal_inputs(
+    const CNA_RenderPipelineHandle pipeline, const CNA_Handle depth, const CNA_Handle normals)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* depthTexture = nullptr;
+            Microsoft::Xna::Framework::Graphics::Texture2D* normalTexture = nullptr;
+            std::shared_ptr<Texture2DResource> depthRetention;
+            std::shared_ptr<Texture2DResource> normalRetention;
+            if (const CNA_Result result = ResolveTexture2DArgument(
+                    depth, "depth", &depthTexture, &depthRetention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = ResolveTexture2DArgument(
+                    normals, "normals", &normalTexture, &normalRetention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->value->setDepthNormalInputs(depthTexture, normalTexture);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_set_velocity_input_ext(
+    const CNA_RenderPipelineHandle pipeline, const CNA_Handle velocity)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(velocity, "velocity", &texture, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->value->setVelocityInputEXT(texture);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_set_transparent_scene(
+    const CNA_RenderPipelineHandle pipeline,
+    const CNA_RenderPipelineDrawCallback draw,
+    void* const context)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (draw == nullptr) {
+                p->value->setTransparentScene(nullptr);
+                return CNA_RESULT_SUCCESS;
+            }
+            p->value->setTransparentScene([draw, context]() {
+                const CNA_Result result = draw(context);
+                if (result != CNA_RESULT_SUCCESS) {
+                    throw RenderPipelineDrawFailure{result};
+                }
+            });
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_set_shadow_scene(
+    const CNA_RenderPipelineHandle pipeline,
+    const CNA_ShadowMapHandle shadowMap,
+    const CNA_DirectionalLightEXT* const light,
+    const CNA_BoundingBox* const sceneBounds,
+    const CNA_RenderPipelineDrawCallback drawCasters,
+    void* const context)
+{
+    return WithMap<RenderPipelineResource>(
+        pipeline, ObjectKind::RenderPipeline, "RenderPipeline",
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            Ext::DirectionalLightEXT nativeLight;
+            BoundingBox nativeBounds;
+            if (const CNA_Result result = ToNativeDirectionalLight(light, &nativeLight);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = ToNativeBounds(sceneBounds, &nativeBounds);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            Ext::ShadowMap* nativeMap = nullptr;
+            if (shadowMap != CNA_INVALID_HANDLE) {
+                std::shared_ptr<ShadowMapResource> mapResource;
+                if (const CNA_Result result = GetEngineResource(
+                        shadowMap, ObjectKind::ShadowMap, "ShadowMap", &mapResource);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+                nativeMap = mapResource->value.get();
+            }
+            std::function<void()> casters;
+            if (drawCasters != nullptr) {
+                casters = [drawCasters, context]() {
+                    const CNA_Result result = drawCasters(context);
+                    if (result != CNA_RESULT_SUCCESS) {
+                        throw RenderPipelineDrawFailure{result};
+                    }
+                };
+            }
+            p->value->setShadowScene(nativeMap, nativeLight, nativeBounds, std::move(casters));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_set_camera(
+    const CNA_RenderPipelineHandle pipeline,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const float nearPlane,
+    const float farPlane)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireMatrixArgument(projection, "The projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (!(nearPlane > 0.0F) || !(farPlane > nearPlane)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The near plane must be positive and the far plane beyond it.");
+            }
+            p->value->setCamera(
+                ToNativeMatrix(*view), ToNativeMatrix(*projection), nearPlane, farPlane);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_set_skybox_camera(
+    const CNA_RenderPipelineHandle pipeline,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireMatrixArgument(projection, "The projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->value->setSkyboxCamera(ToNativeMatrix(*view), ToNativeMatrix(*projection));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_copy_transparency_fallback_reason_ext(
+    const CNA_RenderPipelineHandle pipeline,
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    std::shared_ptr<RenderPipelineResource> resource;
+    if (const CNA_Result result = GetEngineResource(
+            pipeline, ObjectKind::RenderPipeline, "RenderPipeline", &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(destination, capacity, outBytes, [&resource] {
+        return resource->value->getTransparencyFallbackReasonEXT();
+    });
+}
+
+CNA_Result cna_render_pipeline_set_gpu_timing_enabled_ext(
+    const CNA_RenderPipelineHandle pipeline, const CNA_Bool value)
+{
+    // The bool contract is validated ahead of the handle, the CBIND-067 discipline.
+    if (value != CNA_TRUE && value != CNA_FALSE) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "value must be CNA_TRUE or CNA_FALSE.");
+    }
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            p->value->setGpuTimingEnabledEXT(value == CNA_TRUE);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_is_gpu_timing_enabled_ext(
+    const CNA_RenderPipelineHandle pipeline, CNA_Bool* const outEnabled)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(
+                outEnabled,
+                static_cast<CNA_Bool>(p->value->isGpuTimingEnabledEXT() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_render_pipeline_did_skybox_draw(
+    const CNA_RenderPipelineHandle pipeline, CNA_Bool* const outDrew)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(
+                outDrew, static_cast<CNA_Bool>(p->value->didSkyboxDraw() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_render_pipeline_did_shadow_pass_run(
+    const CNA_RenderPipelineHandle pipeline, CNA_Bool* const outRan)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(
+                outRan, static_cast<CNA_Bool>(p->value->didShadowPassRun() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_render_pipeline_get_shadow_map(
+    const CNA_RenderPipelineHandle pipeline, CNA_ShadowMapHandle* const outShadowMap)
+{
+    return WithMap<RenderPipelineResource>(
+        pipeline, ObjectKind::RenderPipeline, "RenderPipeline",
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (outShadowMap == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The shadow-map output handle is null.");
+            }
+            *outShadowMap = CNA_INVALID_HANDLE;
+            auto* const map = p->value->getShadowMap();
+            if (map == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            // Borrowed: the pipeline never owned the map a caller gave it.
+            const auto resource = std::make_shared<ShadowMapResource>(
+                ShadowMapResource{std::shared_ptr<Ext::ShadowMap>(p, map), p->parentGame, 0U});
+            const CNA_Result result =
+                GetRuntimeHandles().Create(ObjectKind::ShadowMap, resource, outShadowMap);
+            if (result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result,
+                    ErrorCategoryForResult(result),
+                    "The borrowed shadow-map handle could not be created.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_get_scene_target(
+    const CNA_RenderPipelineHandle pipeline, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            auto* const target = p->value->getSceneTarget();
+            if (target == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(p, target);
+            return CreateBorrowedRenderTarget2D(view, p->parentGame, p, outTexture);
+        });
+}
+
+CNA_Result cna_render_pipeline_get_scene_target_format(
+    const CNA_RenderPipelineHandle pipeline, CNA_SurfaceFormat* const outFormat)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(
+                outFormat, static_cast<CNA_SurfaceFormat>(p->value->getSceneTargetFormat()));
+        });
+}
+
+CNA_Result cna_render_pipeline_is_using_scene_target(
+    const CNA_RenderPipelineHandle pipeline, CNA_Bool* const outUsing)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(
+                outUsing,
+                static_cast<CNA_Bool>(p->value->isUsingSceneTarget() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_render_pipeline_get_last_frame_pass_count(
+    const CNA_RenderPipelineHandle pipeline, int32_t* const outCount)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(p->value->getLastFramePassCount()));
+        });
+}
+
+CNA_Result cna_render_pipeline_get_gpu_memory_estimate_bytes(
+    const CNA_RenderPipelineHandle pipeline, uint64_t* const outBytes)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            return StoreValue(
+                outBytes, static_cast<uint64_t>(p->value->getGpuMemoryEstimateBytes()));
+        });
+}
+
+CNA_Result cna_render_pipeline_get_statistics(
+    const CNA_RenderPipelineHandle pipeline,
+    CNA_RenderPipelineFrameStatisticsEXT* const outStatistics)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            if (outStatistics == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The statistics output is null.");
+            }
+            const auto stats = p->value->getStatistics();
+            *outStatistics = CNA_RenderPipelineFrameStatisticsEXT{};
+            outStatistics->struct_size =
+                static_cast<uint32_t>(sizeof(CNA_RenderPipelineFrameStatisticsEXT));
+            outStatistics->struct_version = UINT32_C(1);
+            outStatistics->passes_run = static_cast<int32_t>(stats.passesRun);
+            outStatistics->target_switches = static_cast<int32_t>(stats.targetSwitches);
+            outStatistics->used_scene_target =
+                static_cast<CNA_Bool>(stats.usedSceneTarget ? CNA_TRUE : CNA_FALSE);
+            outStatistics->drew_skybox =
+                static_cast<CNA_Bool>(stats.drewSkybox ? CNA_TRUE : CNA_FALSE);
+            outStatistics->gpu_memory_estimate_bytes =
+                static_cast<uint64_t>(stats.gpuMemoryEstimateBytes);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_render_pipeline_release_device_resources_ext(
+    const CNA_RenderPipelineHandle pipeline)
+{
+    return CNA_WITH_PIPELINE(pipeline,
+        [&](const std::shared_ptr<RenderPipelineResource>& p) -> CNA_Result {
+            try {
+                p->value->releaseDeviceResourcesEXT();
+            } catch (const std::logic_error&) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE,
+                    CNA_ERROR_CATEGORY_STATE,
+                    "A frame is open; releasing the targets now would leave it drawing into "
+                    "freed memory.");
+            }
+            return CNA_RESULT_SUCCESS;
+        });
 }
 
 #endif // CNA_CNAEXT

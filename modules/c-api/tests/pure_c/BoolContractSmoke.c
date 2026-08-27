@@ -644,6 +644,13 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_render_pipeline_set_gpu_timing_enabled_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_render_pipeline_set_gpu_timing_enabled_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_signed_in_gamer_create_ext(empty_view, UINT8_C(9), UINT8_C(9), 0, 0);
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -771,6 +778,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 101 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 102 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

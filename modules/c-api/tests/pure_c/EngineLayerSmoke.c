@@ -532,6 +532,23 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             return 0;
         }
     }
+    /* CBIND-088B. The pipeline is an engine-layer object, so every route refuses. */
+    {
+        CNA_RenderPipelineHandle pipeline = CNA_INVALID_HANDLE;
+        CNA_RenderPipelineFrameStatisticsEXT statistics;
+        uint64_t number = UINT64_C(0);
+        if (cna_render_pipeline_create(graphics_device, &pipeline) != CNA_RESULT_NOT_SUPPORTED ||
+            pipeline != CNA_INVALID_HANDLE ||
+            cna_render_pipeline_resize(pipeline, INT32_C(8), INT32_C(8)) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_pipeline_end(pipeline) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_pipeline_get_statistics(pipeline, &statistics) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_render_pipeline_copy_transparency_fallback_reason_ext(
+                pipeline, 0, UINT64_C(0), &number) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
     return flag == UINT8_C(9) && value == UINT64_C(7) &&
         milliseconds == 17.0 && samples == INT32_C(19);
 }
@@ -3910,6 +3927,193 @@ static int validate_render_pipeline_settings(void)
     return ok;
 }
 
+/* CBIND-088B. Counts frames and can fail one on demand. */
+typedef struct FrameProbe {
+    int calls;
+    int fail_at;
+} FrameProbe;
+
+static CNA_Result frame_probe_draw(void* const context)
+{
+    FrameProbe* const probe = (FrameProbe*)context;
+    ++probe->calls;
+    if (probe->fail_at > 0 && probe->calls == probe->fail_at) {
+        return CNA_RESULT_IO;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+/* CBIND-088B. The pipeline's six throws are two kinds and must not arrive as one result, and its
+   two logic_errors on begin() are two DIFFERENT states that the exception type alone cannot tell
+   apart -- so the C layer remembers whether resize() ever ran and answers them separately. The
+   frame bracket itself was read before this test was written: begin marks the frame open before
+   any support check and end clears it before any early return, so unlike CBIND-098's resolve this
+   pair is symmetric on every renderer and both halves can assert success. */
+static int validate_render_pipeline(const CNA_Handle graphics_device)
+{
+    CNA_RenderPipelineHandle pipeline = CNA_INVALID_HANDLE;
+    CNA_RenderPipelineSettingsEXT settings;
+    CNA_RenderPipelineFrameStatisticsEXT statistics;
+    CNA_DirectionalLightEXT light;
+    CNA_BoundingBox bounds;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Color clear_color;
+    CNA_ShadowMapHandle borrowed_map = CNA_INVALID_HANDLE;
+    CNA_Handle scene_target = CNA_INVALID_HANDLE;
+    CNA_SurfaceFormat format = UINT32_C(999);
+    FrameProbe probe;
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t bytes = UINT64_C(0);
+    int32_t count = -1;
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS ||
+        cna_directional_light_ext_init(&light) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    bounds.min.x = -10.0F; bounds.min.y = -10.0F; bounds.min.z = -10.0F;
+    bounds.max.x = 10.0F;  bounds.max.y = 10.0F;  bounds.max.z = 10.0F;
+    clear_color.r = 0U; clear_color.g = 0U; clear_color.b = 0U; clear_color.a = 255U;
+    probe.calls = 0;
+    probe.fail_at = 0;
+
+    if (cna_render_pipeline_create(graphics_device, &pipeline) != CNA_RESULT_SUCCESS ||
+        pipeline == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* Never sized yet: begin refuses, and this is a DIFFERENT state from a frame already being
+       open. Both are CNA_RESULT_INVALID_STATE, but they carry their own messages -- the canonical
+       code throws the same exception type for both, so separating them is work the binding does
+       rather than something it inherits. */
+    ok = cna_render_pipeline_begin(pipeline, &clear_color) == CNA_RESULT_INVALID_STATE;
+    /* A non-positive size is an ARGUMENT mistake, not a state one. */
+    ok = ok && cna_render_pipeline_resize(pipeline, INT32_C(0), INT32_C(8)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_resize(pipeline, INT32_C(8), INT32_C(-8)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_resize(pipeline, INT32_C(32), INT32_C(32)) ==
+        CNA_RESULT_SUCCESS;
+
+    /* Settings round-trip through the canonical setters, so CBIND-088A's corrections apply here
+       too -- an out-of-range value written through the pipeline comes back corrected. */
+    ok = ok && cna_render_pipeline_get_settings(pipeline, &settings) == CNA_RESULT_SUCCESS;
+    settings.chromatic_aberration_strength = 900.0F;
+    ok = ok && cna_render_pipeline_set_settings(pipeline, &settings) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_get_settings(pipeline, &settings) == CNA_RESULT_SUCCESS &&
+        settings.chromatic_aberration_strength == 0.1F;
+    settings.tonemapping_mode = UINT32_C(99);
+    ok = ok && cna_render_pipeline_set_settings(pipeline, &settings) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_set_settings(pipeline, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_get_settings(pipeline, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The camera refuses an inverted or non-positive plane pair as an ARGUMENT mistake. */
+    ok = ok && cna_render_pipeline_set_camera(pipeline, &view, &projection, 0.0F, 100.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_set_camera(pipeline, &view, &projection, 10.0F, 1.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_set_camera(pipeline, &view, &projection, 10.0F, 10.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_set_camera(pipeline, 0, &projection, 1.0F, 100.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_set_camera(pipeline, &view, &projection, 1.0F, 100.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_set_skybox_camera(pipeline, &view, &projection) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_set_skybox_camera(pipeline, &view, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Inputs are borrowed and unbinding is always accepted. */
+    ok = ok && cna_render_pipeline_set_depth_normal_inputs(
+            pipeline, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_set_velocity_input_ext(pipeline, CNA_INVALID_HANDLE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_clear_user_passes(pipeline) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_add_user_pass(pipeline, CNA_INVALID_HANDLE) !=
+        CNA_RESULT_SUCCESS;
+
+    /* The shadow scene takes a borrowed map, a light and a caster callback; clearing it with an
+       invalid map handle is accepted rather than refused. */
+    ok = ok && cna_render_pipeline_set_shadow_scene(
+            pipeline, CNA_INVALID_HANDLE, &light, &bounds, frame_probe_draw, &probe) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_set_shadow_scene(
+            pipeline, CNA_INVALID_HANDLE, 0, &bounds, 0, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_get_shadow_map(pipeline, &borrowed_map) ==
+        CNA_RESULT_SUCCESS && borrowed_map == CNA_INVALID_HANDLE;
+
+    /* GPU timing is accepted on every renderer and reports back what it actually got, so the
+       assertion is that the two agree rather than that timing is on. */
+    ok = ok && cna_render_pipeline_set_gpu_timing_enabled_ext(pipeline, UINT8_C(2)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_set_gpu_timing_enabled_ext(pipeline, CNA_FALSE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_is_gpu_timing_enabled_ext(pipeline, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+
+    /* The frame bracket, symmetric on every renderer. */
+    ok = ok && cna_render_pipeline_end(pipeline) == CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_render_pipeline_begin(pipeline, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_begin(pipeline, &clear_color) == CNA_RESULT_SUCCESS;
+    /* A second begin is the OTHER state, and releasing device resources mid-frame is refused
+       because it would leave the frame drawing into freed memory. */
+    ok = ok && cna_render_pipeline_begin(pipeline, &clear_color) == CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_render_pipeline_release_device_resources_ext(pipeline) ==
+        CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_render_pipeline_end(pipeline) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_end(pipeline) == CNA_RESULT_INVALID_STATE;
+    ok = ok && cna_render_pipeline_release_device_resources_ext(pipeline) == CNA_RESULT_SUCCESS;
+
+    /* Everything the frame recorded is readable, and the statistics agree with the individual
+       accessors -- two readings of the same number that a copy-paste error would separate. */
+    ok = ok && cna_render_pipeline_get_statistics(pipeline, &statistics) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_get_last_frame_pass_count(pipeline, &count) ==
+        CNA_RESULT_SUCCESS && count == statistics.passes_run;
+    ok = ok && cna_render_pipeline_get_gpu_memory_estimate_bytes(pipeline, &bytes) ==
+        CNA_RESULT_SUCCESS && bytes == statistics.gpu_memory_estimate_bytes;
+    ok = ok && cna_render_pipeline_is_using_scene_target(pipeline, &flag) ==
+        CNA_RESULT_SUCCESS && flag == statistics.used_scene_target;
+    ok = ok && cna_render_pipeline_did_skybox_draw(pipeline, &flag) == CNA_RESULT_SUCCESS &&
+        flag == statistics.drew_skybox;
+    ok = ok && cna_render_pipeline_did_shadow_pass_run(pipeline, &flag) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_get_statistics(pipeline, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_render_pipeline_get_scene_target_format(pipeline, &format) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_get_scene_target(pipeline, &scene_target) ==
+        CNA_RESULT_SUCCESS;
+    if (ok && scene_target != CNA_INVALID_HANDLE) {
+        ok = cna_render_target_destroy(scene_target) == CNA_RESULT_SUCCESS;
+    }
+    ok = ok && cna_render_pipeline_copy_transparency_fallback_reason_ext(
+            pipeline, 0, UINT64_C(0), &bytes) != CNA_RESULT_INVALID_HANDLE;
+
+    /* A failing transparent-scene callback stops the frame and its own result reaches the caller
+       unchanged, the CBIND-087D rule applied to a second callback surface. */
+    probe.calls = 0;
+    probe.fail_at = 1;
+    ok = ok && cna_render_pipeline_set_transparent_scene(pipeline, frame_probe_draw, &probe) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_resize(pipeline, INT32_C(32), INT32_C(32)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_begin(pipeline, &clear_color) == CNA_RESULT_SUCCESS;
+    {
+        const CNA_Result ended = cna_render_pipeline_end(pipeline);
+        /* The callback runs only where the pipeline actually draws transparency; where it does
+           not, the frame simply closes. Either answer is correct, and asserting the pair keeps
+           this honest on both renderers. */
+        ok = ok && ((probe.calls == 0 && ended == CNA_RESULT_SUCCESS) ||
+                    (probe.calls == 1 && ended == CNA_RESULT_IO));
+    }
+    ok = ok && cna_render_pipeline_set_transparent_scene(pipeline, 0, 0) == CNA_RESULT_SUCCESS;
+
+    ok = ok && cna_render_pipeline_destroy(pipeline) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_render_pipeline_destroy(pipeline) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -4003,6 +4207,10 @@ static CNA_Result on_load(
         }
         if (!validate_render_pipeline_settings()) {
             state->failed_stage = 24;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_render_pipeline(graphics_device)) {
+            state->failed_stage = 25;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {
