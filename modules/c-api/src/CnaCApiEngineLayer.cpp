@@ -10,6 +10,7 @@
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/GraphicsImageAccess.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IShadowReceiverEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PunctualLightEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShadowCascadeStateEXT.hpp"
 #include "CNA/GraphicsMemoryBarrier.hpp"
@@ -21,6 +22,7 @@
 #ifdef CNA_CNAEXT
 #include "CNA/Graphics/BlitPass.hpp"
 #include "CNA/Graphics/CascadedShadowMap.hpp"
+#include "CNA/Graphics/ClusteredShadowPolicyEXT.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
 #include "CNA/Graphics/CubeShadowMap.hpp"
 #include "CNA/Graphics/DepthEncoding.hpp"
@@ -1848,6 +1850,170 @@ CNA_Result cna_cube_shadow_map_size_for_quality(CNA_ShadowQuality p0, int32_t* p
 }
 
 CNA_Result cna_cube_shadow_map_destroy(CNA_CubeShadowMapHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_shadow_map_ext(CNA_EffectHandle p0, CNA_Handle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_get_shadow_map_ext(CNA_EffectHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_light_view_projection_ext(CNA_EffectHandle p0, const CNA_Matrix* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_get_light_view_projection_ext(CNA_EffectHandle p0, CNA_Matrix* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_shadows_enabled_ext(CNA_EffectHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_is_shadows_enabled_ext(CNA_EffectHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_shadow_depth_bias_ext(CNA_EffectHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_get_shadow_depth_bias_ext(CNA_EffectHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_shadow_filter_radius_ext(CNA_EffectHandle p0, int32_t p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_get_shadow_filter_radius_ext(CNA_EffectHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_shadow_cascades_ext(CNA_EffectHandle p0, const CNA_ShadowCascadeStateEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_get_shadow_cascades_ext(CNA_EffectHandle p0, CNA_ShadowCascadeStateEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_punctual_light_ext(CNA_EffectHandle p0, const CNA_PunctualLightEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_get_punctual_light_ext(CNA_EffectHandle p0, CNA_PunctualLightEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_cascaded_shadow_map_apply_to_receiver(CNA_CascadedShadowMapHandle p0, CNA_EffectHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_create(CNA_Handle p0, int32_t p1, CNA_ClusteredShadowPolicyHandle* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_get_budget(CNA_ClusteredShadowPolicyHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_set_budget(CNA_ClusteredShadowPolicyHandle p0, int32_t p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_get_hysteresis(CNA_ClusteredShadowPolicyHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_set_hysteresis(CNA_ClusteredShadowPolicyHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_copy_selected(CNA_ClusteredShadowPolicyHandle p0, int32_t* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_is_selected(CNA_ClusteredShadowPolicyHandle p0, int32_t p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_get_score(CNA_ClusteredShadowPolicyHandle p0, int32_t p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_get_request_count(CNA_ClusteredShadowPolicyHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_get_refused_count(CNA_ClusteredShadowPolicyHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_reset(CNA_ClusteredShadowPolicyHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_shadow_policy_destroy(CNA_ClusteredShadowPolicyHandle p0)
 {
     (void)p0;
     return ExtensionUnavailable();
@@ -5467,6 +5633,565 @@ CNA_Result cna_cube_shadow_map_destroy(const CNA_CubeShadowMapHandle shadowMapHa
                 "The owned cube-shadow-map handle could not be released.");
         }
         RemoveOwnedGraphicsResourceFor(map->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::Graphics::IShadowReceiverEXT;
+using Microsoft::Xna::Framework::Graphics::PunctualLightEXT;
+using Microsoft::Xna::Framework::Graphics::ShadowCascadeStateEXT;
+
+struct ClusteredShadowPolicyResource final {
+    std::shared_ptr<Ext::ClusteredShadowPolicyEXT> value;
+    CNA_Handle parentGame;
+};
+
+// The interface is what an effect implements, so the C form resolves the effect and asks whether
+// this concrete one is a receiver. A dynamic_cast is the honest test: BasicEffect and SkinnedEffect
+// implement it, a SpriteEffect does not, and the answer belongs to the object rather than to a
+// flag this ABI could get out of step with.
+template<typename TCallable>
+[[nodiscard]] CNA_Result WithShadowReceiver(const CNA_EffectHandle handle, TCallable&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffectForPass(handle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const receiver = dynamic_cast<IShadowReceiverEXT*>(effect->value.get());
+        if (receiver == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "This effect does not receive shadows.");
+        }
+        return std::forward<TCallable>(body)(*receiver, effect);
+    });
+}
+
+[[nodiscard]] CNA_Result ToNativeCascadeState(
+    const CNA_ShadowCascadeStateEXT* const value, ShadowCascadeStateEXT* const out)
+{
+    if (value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The cascade state is null.");
+    }
+    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_ShadowCascadeStateEXT)) ||
+        value->struct_version != UINT32_C(1)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The cascade state was not initialized by cna_shadow_cascade_state_ext_init.");
+    }
+    if (const CNA_Result result = ValidateCanonicalBool(value->debug_tint, "debug_tint");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (value->count < 0 || value->count > CNA_SHADOW_CASCADE_MAX_EXT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The cascade count is outside the fixed array.");
+    }
+    out->Count = static_cast<int>(value->count);
+    out->BlendBand = value->blend_band;
+    out->DebugTint = value->debug_tint == CNA_TRUE;
+    out->CameraView = ToNativeMatrix(value->camera_view);
+    for (int cascade = 0; cascade < CNA_SHADOW_CASCADE_MAX_EXT; ++cascade) {
+        out->WorldToAtlas[cascade] = ToNativeMatrix(value->world_to_atlas[cascade]);
+        out->SplitDistance[cascade] = value->split_distance[cascade];
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+void FromNativeCascadeState(
+    const ShadowCascadeStateEXT& value, CNA_ShadowCascadeStateEXT* const out)
+{
+    out->struct_size = static_cast<uint32_t>(sizeof(CNA_ShadowCascadeStateEXT));
+    out->struct_version = UINT32_C(1);
+    out->count = static_cast<int32_t>(value.Count);
+    out->blend_band = value.BlendBand;
+    out->debug_tint = value.DebugTint ? CNA_TRUE : CNA_FALSE;
+    out->reserved[0] = 0U; out->reserved[1] = 0U; out->reserved[2] = 0U;
+    out->camera_view = ToCMatrix(value.CameraView);
+    for (int cascade = 0; cascade < CNA_SHADOW_CASCADE_MAX_EXT; ++cascade) {
+        out->world_to_atlas[cascade] = ToCMatrix(value.WorldToAtlas[cascade]);
+        out->split_distance[cascade] = value.SplitDistance[cascade];
+    }
+}
+
+[[nodiscard]] CNA_Result ToNativePunctualLight(
+    const CNA_PunctualLightEXT* const value, PunctualLightEXT* const out)
+{
+    if (value == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+    }
+    if (value->struct_size != static_cast<uint32_t>(sizeof(CNA_PunctualLightEXT)) ||
+        value->struct_version != UINT32_C(1)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The light was not initialized by cna_punctual_light_ext_init.");
+    }
+    if (value->kind > CNA_PUNCTUAL_LIGHT_KIND_EXT_SPOT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The light kind is not a defined CNA_PUNCTUAL_LIGHT_KIND_EXT_* value.");
+    }
+    out->Kind = static_cast<Microsoft::Xna::Framework::Graphics::PunctualLightKindEXT>(value->kind);
+    out->Position = {value->position.x, value->position.y, value->position.z};
+    out->Direction = {value->direction.x, value->direction.y, value->direction.z};
+    out->DiffuseColor = {value->diffuse_color.x, value->diffuse_color.y, value->diffuse_color.z};
+    out->Range = value->range;
+    out->InnerAngle = value->inner_angle;
+    out->OuterAngle = value->outer_angle;
+    out->ShadowDepthBias = value->shadow_depth_bias;
+    out->ShadowViewProjection = ToNativeMatrix(value->shadow_view_projection);
+    // The two shadow textures are resolved from their handles; an invalid handle means none, which
+    // is the canonical null.
+    out->ShadowCube = nullptr;
+    out->ShadowMap = nullptr;
+    if (value->shadow_map != CNA_INVALID_HANDLE) {
+        std::shared_ptr<Texture2DResource> texture;
+        if (const CNA_Result result = GetOwnedTexture2D(value->shadow_map, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        out->ShadowMap = texture->value.get();
+    }
+    if (value->shadow_cube != CNA_INVALID_HANDLE) {
+        std::shared_ptr<CNA::C::Detail::TextureCubeResource> cube;
+        if (const CNA_Result result = GetRuntimeHandles().Get(
+                value->shadow_cube, ObjectKind::TextureCube, &cube);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The shadow-cube handle is invalid for this call.");
+        }
+        out->ShadowCube = cube->value.get();
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_effect_set_shadow_map_ext(
+    const CNA_EffectHandle effect, const CNA_Handle shadowMap)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            std::shared_ptr<Texture2DResource> retention;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(shadowMap, "shadow map", &texture, &retention);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            receiver.setShadowMapEXT(texture);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_get_shadow_map_ext(
+    const CNA_EffectHandle effect, CNA_Handle* const outShadowMap)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver,
+            const std::shared_ptr<EffectResource>& resource) -> CNA_Result {
+            if (outShadowMap == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The shadow-map output handle is null.");
+            }
+            *outShadowMap = CNA_INVALID_HANDLE;
+            auto* const texture = receiver.getShadowMapEXT();
+            if (texture == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            // A fresh handle naming the same texture: the canonical interface stores a raw
+            // pointer and has no handle to give back, so identity with the handle originally set
+            // cannot be preserved.
+            //
+            // It is NOT a counted borrow, and deliberately so. What could dangle here is the
+            // texture, and the effect does not own it -- the canonical contract is that the caller
+            // owns the shadow map and merely lends it. Counting a borrow on the effect would
+            // suggest this ABI was keeping the texture alive when it is not, and would refuse to
+            // destroy the effect for a reason that protects nothing. The view aliases the effect
+            // resource so the handle cannot outlive the effect that answered for it; the texture's
+            // lifetime stays where the canonical API puts it, with the caller.
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(
+                resource, texture);
+            return CreateBorrowedRenderTarget2D(
+                view, resource->parentGame, resource, outShadowMap);
+        });
+}
+
+CNA_Result cna_effect_set_light_view_projection_ext(
+    const CNA_EffectHandle effect, const CNA_Matrix* const lightViewProjection)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(
+                    lightViewProjection, "The light view-projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            receiver.setLightViewProjectionEXT(ToNativeMatrix(*lightViewProjection));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_get_light_view_projection_ext(
+    const CNA_EffectHandle effect, CNA_Matrix* const outMatrix)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            return StoreValue(outMatrix, ToCMatrix(receiver.getLightViewProjectionEXT()));
+        });
+}
+
+CNA_Result cna_effect_set_shadows_enabled_ext(
+    const CNA_EffectHandle effect, const CNA_Bool enabled)
+{
+    // CBIND-067: the boolean is refused before the handle is resolved.
+    if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            receiver.setShadowsEnabledEXT(enabled == CNA_TRUE);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_is_shadows_enabled_ext(
+    const CNA_EffectHandle effect, CNA_Bool* const outEnabled)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            return StoreValue(
+                outEnabled,
+                static_cast<CNA_Bool>(receiver.isShadowsEnabledEXT() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_effect_set_shadow_depth_bias_ext(const CNA_EffectHandle effect, const float bias)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            receiver.setShadowDepthBiasEXT(bias);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_get_shadow_depth_bias_ext(
+    const CNA_EffectHandle effect, float* const outBias)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            return StoreValue(outBias, receiver.getShadowDepthBiasEXT());
+        });
+}
+
+CNA_Result cna_effect_set_shadow_filter_radius_ext(
+    const CNA_EffectHandle effect, const int32_t radius)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            receiver.setShadowFilterRadiusEXT(static_cast<int>(radius));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_get_shadow_filter_radius_ext(
+    const CNA_EffectHandle effect, int32_t* const outRadius)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            return StoreValue(
+                outRadius, static_cast<int32_t>(receiver.getShadowFilterRadiusEXT()));
+        });
+}
+
+CNA_Result cna_effect_set_shadow_cascades_ext(
+    const CNA_EffectHandle effect, const CNA_ShadowCascadeStateEXT* const state)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            ShadowCascadeStateEXT native;
+            if (const CNA_Result result = ToNativeCascadeState(state, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            receiver.setShadowCascadesEXT(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_get_shadow_cascades_ext(
+    const CNA_EffectHandle effect, CNA_ShadowCascadeStateEXT* const outState)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            if (outState == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The cascade-state output is null.");
+            }
+            FromNativeCascadeState(receiver.getShadowCascadesEXT(), outState);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_set_punctual_light_ext(
+    const CNA_EffectHandle effect, const CNA_PunctualLightEXT* const light)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            PunctualLightEXT native;
+            if (const CNA_Result result = ToNativePunctualLight(light, &native);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            receiver.setPunctualLightEXT(native);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_effect_get_punctual_light_ext(
+    const CNA_EffectHandle effect, CNA_PunctualLightEXT* const outLight)
+{
+    return WithShadowReceiver(effect,
+        [&](IShadowReceiverEXT& receiver, const std::shared_ptr<EffectResource>&) -> CNA_Result {
+            if (outLight == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The light output is null.");
+            }
+            const PunctualLightEXT& native = receiver.getPunctualLightEXT();
+            CNA_PunctualLightEXT value;
+            std::memset(&value, 0, sizeof(value));
+            value.struct_size = static_cast<uint32_t>(sizeof(CNA_PunctualLightEXT));
+            value.struct_version = UINT32_C(1);
+            value.kind = static_cast<CNA_PunctualLightKindEXT>(native.Kind);
+            value.position = Vec3(native.Position.X, native.Position.Y, native.Position.Z);
+            value.direction = Vec3(native.Direction.X, native.Direction.Y, native.Direction.Z);
+            value.diffuse_color =
+                Vec3(native.DiffuseColor.X, native.DiffuseColor.Y, native.DiffuseColor.Z);
+            value.range = native.Range;
+            value.inner_angle = native.InnerAngle;
+            value.outer_angle = native.OuterAngle;
+            value.shadow_depth_bias = native.ShadowDepthBias;
+            value.shadow_view_projection = ToCMatrix(native.ShadowViewProjection);
+            // The canonical structure holds raw texture pointers; this ABI does not invent a name
+            // for a texture it does not track, so the two slots come back invalid.
+            value.shadow_cube = CNA_INVALID_HANDLE;
+            value.shadow_map = CNA_INVALID_HANDLE;
+            *outLight = value;
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_cascaded_shadow_map_apply_to_receiver(
+    const CNA_CascadedShadowMapHandle shadowMap, const CNA_EffectHandle effect)
+{
+    return CNA_WITH_CASCADED(shadowMap,
+        [&](const std::shared_ptr<CascadedShadowMapResource>& map) -> CNA_Result {
+            return WithShadowReceiver(effect,
+                [&](IShadowReceiverEXT& receiver,
+                    const std::shared_ptr<EffectResource>&) -> CNA_Result {
+                    map->value->applyToReceiver(receiver);
+                    return CNA_RESULT_SUCCESS;
+                });
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_create(
+    const CNA_Handle gameHandle,
+    const int32_t budget,
+    CNA_ClusteredShadowPolicyHandle* const outPolicy)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPolicy == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The shadow-policy output handle is null.");
+        }
+        *outPolicy = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(gameHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native =
+            std::make_shared<Ext::ClusteredShadowPolicyEXT>(static_cast<int>(budget));
+        const auto resource = std::make_shared<ClusteredShadowPolicyResource>(
+            ClusteredShadowPolicyResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::ClusteredShadowPolicy, resource, outPolicy);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned shadow-policy handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#define CNA_WITH_POLICY(handle, body)                                                              \
+    WithMap<ClusteredShadowPolicyResource>(                                                        \
+        (handle), ObjectKind::ClusteredShadowPolicy, "ClusteredShadowPolicyEXT", body)
+
+CNA_Result cna_clustered_shadow_policy_get_budget(
+    const CNA_ClusteredShadowPolicyHandle policy, int32_t* const outBudget)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            return StoreValue(outBudget, static_cast<int32_t>(p->value->getBudget()));
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_set_budget(
+    const CNA_ClusteredShadowPolicyHandle policy, const int32_t budget)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            p->value->setBudget(static_cast<int>(budget));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_get_hysteresis(
+    const CNA_ClusteredShadowPolicyHandle policy, float* const outHysteresis)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            return StoreValue(outHysteresis, p->value->getHysteresis());
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_set_hysteresis(
+    const CNA_ClusteredShadowPolicyHandle policy, const float hysteresis)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            p->value->setHysteresis(hysteresis);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_copy_selected(
+    const CNA_ClusteredShadowPolicyHandle policy,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The selection destination or required-count output is invalid.");
+            }
+            const std::vector<int>& selected = p->value->getSelected();
+            *outCount = static_cast<uint64_t>(selected.size());
+            if (capacity < selected.size()) {
+                return Fail(
+                    CNA_RESULT_BUFFER_TOO_SMALL,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The destination cannot hold every selected light.");
+            }
+            for (std::size_t index = 0; index < selected.size(); ++index) {
+                destination[index] = static_cast<int32_t>(selected[index]);
+            }
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_is_selected(
+    const CNA_ClusteredShadowPolicyHandle policy,
+    const int32_t lightIndex,
+    CNA_Bool* const outSelected)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            return StoreValue(
+                outSelected,
+                static_cast<CNA_Bool>(
+                    p->value->isSelected(static_cast<int>(lightIndex)) ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_get_score(
+    const CNA_ClusteredShadowPolicyHandle policy,
+    const int32_t lightIndex,
+    float* const outScore)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            return StoreValue(outScore, p->value->getScore(static_cast<int>(lightIndex)));
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_get_request_count(
+    const CNA_ClusteredShadowPolicyHandle policy, int32_t* const outCount)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(p->value->getRequestCount()));
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_get_refused_count(
+    const CNA_ClusteredShadowPolicyHandle policy, int32_t* const outCount)
+{
+    return CNA_WITH_POLICY(policy,
+        [&](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(p->value->getRefusedCount()));
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_reset(const CNA_ClusteredShadowPolicyHandle policy)
+{
+    return CNA_WITH_POLICY(policy,
+        [](const std::shared_ptr<ClusteredShadowPolicyResource>& p) -> CNA_Result {
+            p->value->reset();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_shadow_policy_destroy(const CNA_ClusteredShadowPolicyHandle policyHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ClusteredShadowPolicyResource> policy;
+        if (const CNA_Result result = GetEngineResource(
+                policyHandle, ObjectKind::ClusteredShadowPolicy, "ClusteredShadowPolicyEXT",
+                &policy);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(policyHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned shadow-policy handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(policy->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

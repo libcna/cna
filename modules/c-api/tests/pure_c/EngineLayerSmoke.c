@@ -1585,6 +1585,193 @@ static int validate_cascaded_and_cube(const CNA_Handle graphics_device)
     return cna_cube_shadow_map_destroy(cube) == CNA_RESULT_SUCCESS;
 }
 
+
+/* CBIND-085C1. The receiver contract is an interface an effect implements, so the suite drives it
+ * through an effect that does (BasicEffect) and asserts the refusal through one that does not. */
+static int validate_shadow_receiver(const CNA_Handle graphics_device)
+{
+    CNA_EffectHandle basic = CNA_INVALID_HANDLE;
+    CNA_EffectHandle sprite = CNA_INVALID_HANDLE;
+    CNA_ShadowCascadeStateEXT cascades;
+    CNA_ShadowCascadeStateEXT read_back;
+    CNA_PunctualLightEXT light;
+    CNA_PunctualLightEXT light_back;
+    CNA_Matrix matrix;
+    CNA_Bool flag = UINT8_C(9);
+    float scalar = -1.0F;
+    int32_t radius = -1;
+    int ok = 1;
+
+    if (cna_basic_effect_create(graphics_device, &basic) != CNA_RESULT_SUCCESS ||
+        cna_shadow_cascade_state_ext_init(&cascades) != CNA_RESULT_SUCCESS ||
+        cna_punctual_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&matrix) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    ok = cna_effect_set_shadows_enabled_ext(basic, CNA_TRUE) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_is_shadows_enabled_ext(basic, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    /* The boolean is refused before the handle is resolved, so an invalid handle and a bad byte
+       still answer INVALID_ARGUMENT -- the CBIND-067 discipline CApiBoolContractSmoke enforces. */
+    ok = ok && cna_effect_set_shadows_enabled_ext(basic, UINT8_C(2)) == CNA_RESULT_INVALID_ARGUMENT;
+
+    ok = ok && cna_effect_set_shadow_depth_bias_ext(basic, 0.5F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_depth_bias_ext(basic, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.5F;
+    ok = ok && cna_effect_set_shadow_filter_radius_ext(basic, INT32_C(3)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_filter_radius_ext(basic, &radius) == CNA_RESULT_SUCCESS &&
+        radius == INT32_C(3);
+    ok = ok && cna_effect_set_light_view_projection_ext(basic, &matrix) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_light_view_projection_ext(basic, &matrix) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_set_light_view_projection_ext(basic, 0) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* The cascade state round-trips through the effect, including the count and the band. */
+    cascades.count = INT32_C(2);
+    cascades.blend_band = 3.0F;
+    ok = ok && cna_effect_set_shadow_cascades_ext(basic, &cascades) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_shadow_cascades_ext(basic, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.count == INT32_C(2) && read_back.blend_band == 3.0F;
+    /* A count outside the fixed array is refused rather than written past. */
+    cascades.count = CNA_SHADOW_CASCADE_MAX_EXT + 1;
+    ok = ok && cna_effect_set_shadow_cascades_ext(basic, &cascades) == CNA_RESULT_INVALID_ARGUMENT;
+    cascades.count = INT32_C(2);
+    /* An uninitialized state is refused rather than read. */
+    {
+        CNA_ShadowCascadeStateEXT raw;
+        memset(&raw, 0, sizeof(raw));
+        ok = ok && cna_effect_set_shadow_cascades_ext(basic, &raw) == CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    light.kind = CNA_PUNCTUAL_LIGHT_KIND_EXT_SPOT;
+    light.range = 7.5F;
+    ok = ok && cna_effect_set_punctual_light_ext(basic, &light) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_effect_get_punctual_light_ext(basic, &light_back) == CNA_RESULT_SUCCESS &&
+        light_back.kind == CNA_PUNCTUAL_LIGHT_KIND_EXT_SPOT && light_back.range == 7.5F;
+    /* The two shadow-texture slots come back invalid: this ABI does not name a texture it does
+       not track, and saying so is better than handing back a number that means nothing. */
+    ok = ok && light_back.shadow_map == CNA_INVALID_HANDLE &&
+        light_back.shadow_cube == CNA_INVALID_HANDLE;
+    /* An undefined light kind is refused rather than cast through. */
+    light.kind = UINT32_C(9);
+    ok = ok && cna_effect_set_punctual_light_ext(basic, &light) == CNA_RESULT_INVALID_ARGUMENT;
+
+    /* No shadow map is bound, so the getter reports none rather than inventing a handle. */
+    {
+        CNA_Handle bound = (CNA_Handle)UINT64_C(0x5A5A5A5A);
+        ok = ok && cna_effect_set_shadow_map_ext(basic, CNA_INVALID_HANDLE) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_effect_get_shadow_map_ext(basic, &bound) == CNA_RESULT_SUCCESS &&
+            bound == CNA_INVALID_HANDLE;
+    }
+
+    if (!ok) {
+        (void)cna_effect_destroy(basic);
+        return 0;
+    }
+
+    /* An effect that does not implement the contract is refused by argument, not by handle: the
+       handle is perfectly valid, it is the concrete type that cannot answer. */
+    if (cna_sprite_effect_create(graphics_device, &sprite) == CNA_RESULT_SUCCESS) {
+        ok = cna_effect_set_shadows_enabled_ext(sprite, CNA_TRUE) == CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_effect_get_shadow_depth_bias_ext(sprite, &scalar) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        if (cna_effect_destroy(sprite) != CNA_RESULT_SUCCESS) {
+            ok = 0;
+        }
+    }
+    if (!ok) {
+        (void)cna_effect_destroy(basic);
+        return 0;
+    }
+
+    /* applyToReceiver moves the whole cascade state across in one call, which is the reason the
+       receiver contract is bound at all. */
+    {
+        CNA_CascadedShadowMapHandle cascaded = CNA_INVALID_HANDLE;
+        CNA_DirectionalLightEXT sun;
+        CNA_Matrix view;
+        CNA_Matrix projection;
+        if (cna_directional_light_ext_init(&sun) != CNA_RESULT_SUCCESS ||
+            cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+            cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS) {
+            (void)cna_effect_destroy(basic);
+            return 0;
+        }
+        if (cna_cascaded_shadow_map_create(
+                graphics_device, CNA_SHADOW_QUALITY_LOW, INT32_C(2), &cascaded) ==
+            CNA_RESULT_SUCCESS) {
+            /* applyToReceiver refuses before update(): there are no cascade matrices to give, and
+               handing over a defaulted state would silently shadow nothing. */
+            ok = cna_cascaded_shadow_map_apply_to_receiver(cascaded, basic) != CNA_RESULT_SUCCESS;
+            ok = ok && cna_cascaded_shadow_map_update(cascaded, &sun, &view, &projection) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_cascaded_shadow_map_apply_to_receiver(cascaded, basic) ==
+                CNA_RESULT_SUCCESS;
+            ok = ok && cna_effect_get_shadow_cascades_ext(basic, &read_back) ==
+                CNA_RESULT_SUCCESS && read_back.count == INT32_C(2);
+            if (cna_cascaded_shadow_map_destroy(cascaded) != CNA_RESULT_SUCCESS) {
+                ok = 0;
+            }
+        }
+    }
+    if (cna_effect_destroy(basic) != CNA_RESULT_SUCCESS) {
+        ok = 0;
+    }
+    return ok;
+}
+
+/* The shadow budget is a pure CPU object: it needs no device, and every route works wherever the
+ * engine layer is present. `select` is not bound here -- it takes a ClusteredLightSetEXT, which
+ * CBIND-086 owns, so that row waits for the slice that binds the type. */
+static int validate_shadow_policy(const CNA_Handle graphics_device)
+{
+    CNA_ClusteredShadowPolicyHandle policy = CNA_INVALID_HANDLE;
+    int32_t value = -1;
+    float scalar = -1.0F;
+    uint64_t count = UINT64_C(7);
+    CNA_Bool flag = UINT8_C(9);
+    int ok = 1;
+
+    if (cna_clustered_shadow_policy_create(
+            graphics_device, CNA_CLUSTERED_SHADOW_DEFAULT_BUDGET_EXT, &policy) !=
+            CNA_RESULT_SUCCESS ||
+        policy == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    ok = cna_clustered_shadow_policy_get_budget(policy, &value) == CNA_RESULT_SUCCESS &&
+        value == CNA_CLUSTERED_SHADOW_DEFAULT_BUDGET_EXT;
+    ok = ok && cna_clustered_shadow_policy_set_budget(policy, INT32_C(2)) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_shadow_policy_get_budget(policy, &value) == CNA_RESULT_SUCCESS &&
+        value == INT32_C(2);
+    ok = ok && cna_clustered_shadow_policy_get_hysteresis(policy, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == CNA_CLUSTERED_SHADOW_DEFAULT_HYSTERESIS_EXT;
+    ok = ok && cna_clustered_shadow_policy_set_hysteresis(policy, 2.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_shadow_policy_get_hysteresis(policy, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 2.0F;
+    /* Nothing has been selected, so the selection is empty and asking with no room succeeds
+       rather than refusing -- a zero requirement fits any capacity. */
+    ok = ok && cna_clustered_shadow_policy_copy_selected(policy, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_SUCCESS && count == UINT64_C(0);
+    ok = ok && cna_clustered_shadow_policy_is_selected(policy, INT32_C(0), &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+    /* A score exists only for a light the last selection scored, so asking about one it did not
+       is refused rather than answered with zero -- which would read as "scored, and worthless". */
+    ok = ok && cna_clustered_shadow_policy_get_score(policy, INT32_C(0), &scalar) !=
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_shadow_policy_get_score(policy, INT32_C(-1), &scalar) !=
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_clustered_shadow_policy_get_request_count(policy, &value) ==
+        CNA_RESULT_SUCCESS && value == INT32_C(0);
+    ok = ok && cna_clustered_shadow_policy_get_refused_count(policy, &value) ==
+        CNA_RESULT_SUCCESS && value == INT32_C(0);
+    ok = ok && cna_clustered_shadow_policy_reset(policy) == CNA_RESULT_SUCCESS;
+
+    if (cna_clustered_shadow_policy_destroy(policy) != CNA_RESULT_SUCCESS) {
+        ok = 0;
+    }
+    return ok && cna_clustered_shadow_policy_destroy(policy) != CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -1630,6 +1817,14 @@ static CNA_Result on_load(
         }
         if (!validate_cascaded_and_cube(graphics_device)) {
             state->failed_stage = 12;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_shadow_receiver(graphics_device)) {
+            state->failed_stage = 13;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_shadow_policy(graphics_device)) {
+            state->failed_stage = 14;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

@@ -208,6 +208,8 @@ enum class ObjectKind : uint32_t {
     // plans/plan_binding.md CBIND-085B2: the cascaded atlas and the cube.
     CascadedShadowMap = 135,
     CubeShadowMap = 136,
+    // plans/plan_binding.md CBIND-085C1: the clustered shadow budget, a pure CPU object.
+    ClusteredShadowPolicy = 137,
     Test = UINT32_MAX
 };
 

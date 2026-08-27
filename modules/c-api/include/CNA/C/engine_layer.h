@@ -2287,6 +2287,372 @@ CNA_C_API CNA_Result cna_cube_shadow_map_size_for_quality(
  */
 CNA_C_API CNA_Result cna_cube_shadow_map_destroy(CNA_CubeShadowMapHandle shadow_map);
 
+/* ---------------------------------------------------------------------------------------------
+ * The shadow-receiver contract
+ *
+ * `IShadowReceiverEXT` is an interface an effect implements, not an object a caller holds. C
+ * cannot implement it and has nothing to hold, so what crosses this ABI is the set of operations
+ * it declares, applied to an effect handle: each route resolves the effect and refuses with
+ * `CNA_RESULT_INVALID_ARGUMENT` if that concrete effect is not a shadow receiver. This is the same
+ * answer `PostProcessPass` got -- the operations cross, the type does not.
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Binds a shadow map for an effect to sample.
+ *
+ * The texture is borrowed: it must outlive every draw through the effect, and the effect does not
+ * release it.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param shadow_map The Texture2D to sample, or `CNA_INVALID_HANDLE` to bind none.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_set_shadow_map_ext(
+    CNA_EffectHandle effect,
+    CNA_Handle shadow_map);
+
+/**
+ * @brief Returns the shadow map an effect samples.
+ *
+ * The handle is a fresh name for the same texture, released with @ref cna_render_target_destroy;
+ * it is not the handle originally passed to @ref cna_effect_set_shadow_map_ext, because the
+ * canonical interface stores a raw pointer and has no handle to give back. **It does not keep the
+ * texture alive**: the effect borrows the shadow map rather than owning it, so the texture's
+ * lifetime remains yours, exactly as it is when you set it.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param out_shadow_map Receives the borrowed texture, or `CNA_INVALID_HANDLE` when none is bound.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_get_shadow_map_ext(
+    CNA_EffectHandle effect,
+    CNA_Handle* out_shadow_map);
+
+/**
+ * @brief Sets the transform that takes world space into the bound shadow map.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param light_view_projection The transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_set_light_view_projection_ext(
+    CNA_EffectHandle effect,
+    const CNA_Matrix* light_view_projection);
+
+/**
+ * @brief Returns the transform that takes world space into the bound shadow map.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param out_matrix Receives the transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_get_light_view_projection_ext(
+    CNA_EffectHandle effect,
+    CNA_Matrix* out_matrix);
+
+/**
+ * @brief Turns shadow sampling on or off for an effect.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param enabled `CNA_TRUE` to sample the bound shadow map.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean or an
+ * effect that is not a shadow receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_set_shadows_enabled_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool enabled);
+
+/**
+ * @brief Reports whether an effect is sampling its shadow map.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param out_enabled Receives `CNA_TRUE` when shadow sampling is on.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_is_shadows_enabled_ext(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Sets the depth bias an effect applies when sampling its shadow map.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param bias The bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_set_shadow_depth_bias_ext(CNA_EffectHandle effect, float bias);
+
+/**
+ * @brief Returns the depth bias an effect applies when sampling its shadow map.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param out_bias Receives the bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_get_shadow_depth_bias_ext(
+    CNA_EffectHandle effect,
+    float* out_bias);
+
+/**
+ * @brief Sets how wide a filter an effect uses when sampling its shadow map.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param radius The filter radius in texels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_set_shadow_filter_radius_ext(
+    CNA_EffectHandle effect,
+    int32_t radius);
+
+/**
+ * @brief Returns how wide a filter an effect uses when sampling its shadow map.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param out_radius Receives the radius in texels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_get_shadow_filter_radius_ext(
+    CNA_EffectHandle effect,
+    int32_t* out_radius);
+
+/**
+ * @brief Gives an effect the cascaded-shadow state to sample with.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param state The cascade state, from @ref cna_shadow_cascade_state_ext_init.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver or the state was not initialized, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_set_shadow_cascades_ext(
+    CNA_EffectHandle effect,
+    const CNA_ShadowCascadeStateEXT* state);
+
+/**
+ * @brief Returns the cascaded-shadow state an effect samples with.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param out_state Receives the state.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_get_shadow_cascades_ext(
+    CNA_EffectHandle effect,
+    CNA_ShadowCascadeStateEXT* out_state);
+
+/**
+ * @brief Gives an effect the punctual light to shade and shadow with.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param light The light, from @ref cna_punctual_light_ext_init.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver or the light was not initialized, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_set_punctual_light_ext(
+    CNA_EffectHandle effect,
+    const CNA_PunctualLightEXT* light);
+
+/**
+ * @brief Returns the punctual light an effect shades with.
+ *
+ * The light's two shadow-texture handles come back as `CNA_INVALID_HANDLE`: the canonical
+ * structure holds raw pointers, and this ABI does not invent a name for a texture it does not
+ * track. Every other field round-trips.
+ *
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @param out_light Receives the light.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_effect_get_punctual_light_ext(
+    CNA_EffectHandle effect,
+    CNA_PunctualLightEXT* out_light);
+
+/**
+ * @brief Applies a cascaded shadow map's whole state to a receiving effect.
+ *
+ * The C form of the canonical `applyToReceiver`, and the reason the receiver contract is bound at
+ * all: it moves the atlas, the cascade transforms, the splits and the blend band across in one
+ * call, so a caller cannot set half of them.
+ *
+ * @param shadow_map The cascaded shadow map.
+ * @param effect An effect that implements the shadow-receiver contract.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect is not a shadow
+ * receiver, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_cascaded_shadow_map_apply_to_receiver(
+    CNA_CascadedShadowMapHandle shadow_map,
+    CNA_EffectHandle effect);
+
+/* ---------------------------------------------------------------------------------------------
+ * The clustered shadow budget
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief How many shadow-casting clustered lights a policy admits unless told otherwise. */
+#define CNA_CLUSTERED_SHADOW_DEFAULT_BUDGET_EXT INT32_C(4)
+
+/** @brief The score margin a light must beat to displace one already selected. */
+#define CNA_CLUSTERED_SHADOW_DEFAULT_HYSTERESIS_EXT 1.25F
+
+/**
+ * @brief Owned handle for one clustered shadow budget policy.
+ *
+ * The policy is a pure CPU object -- it needs no device -- but it is still parented to a game so
+ * its lifetime is accounted for like every other owned resource.
+ */
+typedef CNA_Handle CNA_ClusteredShadowPolicyHandle;
+
+/**
+ * @brief Creates a shadow budget policy.
+ *
+ * @param game The owning game.
+ * @param budget How many lights may cast shadows at once.
+ * @param out_policy Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_create(
+    CNA_Handle game,
+    int32_t budget,
+    CNA_ClusteredShadowPolicyHandle* out_policy);
+
+/**
+ * @brief Returns how many lights may cast shadows at once.
+ *
+ * @param policy The policy.
+ * @param out_budget Receives the budget.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_get_budget(
+    CNA_ClusteredShadowPolicyHandle policy,
+    int32_t* out_budget);
+
+/**
+ * @brief Sets how many lights may cast shadows at once.
+ *
+ * @param policy The policy.
+ * @param budget The new budget.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_set_budget(
+    CNA_ClusteredShadowPolicyHandle policy,
+    int32_t budget);
+
+/**
+ * @brief Returns the margin a light must beat to displace one already selected.
+ *
+ * @param policy The policy.
+ * @param out_hysteresis Receives the margin.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_get_hysteresis(
+    CNA_ClusteredShadowPolicyHandle policy,
+    float* out_hysteresis);
+
+/**
+ * @brief Sets the margin a light must beat to displace one already selected.
+ *
+ * A margin above one is what stops two similarly-scored lights swapping the same shadow slot
+ * every frame.
+ *
+ * @param policy The policy.
+ * @param hysteresis The margin.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_set_hysteresis(
+    CNA_ClusteredShadowPolicyHandle policy,
+    float hysteresis);
+
+/**
+ * @brief Copies the indices of the lights the policy currently admits.
+ *
+ * @param policy The policy.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives how many indices are selected.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_copy_selected(
+    CNA_ClusteredShadowPolicyHandle policy,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Reports whether one light index is currently admitted.
+ *
+ * @param policy The policy.
+ * @param light_index The light to ask about.
+ * @param out_selected Receives `CNA_TRUE` when the light may cast.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_is_selected(
+    CNA_ClusteredShadowPolicyHandle policy,
+    int32_t light_index,
+    CNA_Bool* out_selected);
+
+/**
+ * @brief Returns the score the policy last computed for one light.
+ *
+ * @param policy The policy.
+ * @param light_index The light to ask about.
+ * @param out_score Receives the score.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_get_score(
+    CNA_ClusteredShadowPolicyHandle policy,
+    int32_t light_index,
+    float* out_score);
+
+/**
+ * @brief Returns how many lights asked to cast a shadow.
+ *
+ * @param policy The policy.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_get_request_count(
+    CNA_ClusteredShadowPolicyHandle policy,
+    int32_t* out_count);
+
+/**
+ * @brief Returns how many lights asked and were refused.
+ *
+ * This is the number that says whether the budget is too small, so it is worth logging rather
+ * than only the selection.
+ *
+ * @param policy The policy.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_get_refused_count(
+    CNA_ClusteredShadowPolicyHandle policy,
+    int32_t* out_count);
+
+/**
+ * @brief Forgets every selection and score.
+ *
+ * @param policy The policy.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_reset(CNA_ClusteredShadowPolicyHandle policy);
+
+/**
+ * @brief Releases the policy.
+ *
+ * @param policy The policy; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_shadow_policy_destroy(CNA_ClusteredShadowPolicyHandle policy);
+
 #ifdef __cplusplus
 }
 #endif

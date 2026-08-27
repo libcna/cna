@@ -15379,6 +15379,81 @@
         "CPP-E8BED23AA010",
         "CPP-F3E9FC1B2587"
       ]
+    },
+    {
+      "id": "shadow-receiver-contract",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IShadowReceiverEXT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "destructor",
+        "method"
+      ],
+      "mapping": "the fourteen `cna_effect_*_ext` shadow routes, applied to an effect handle. `IShadowReceiverEXT` is an interface an effect implements, not an object a caller holds: C can neither implement it nor hold one, so what crosses is the set of operations it declares, and each route asks the concrete effect -- by `dynamic_cast` -- whether it is a receiver, refusing with `CNA_RESULT_INVALID_ARGUMENT` when it is not. That is the answer `PostProcessPass` got. `getShadowMapEXT` returns a fresh name for the same texture rather than the handle originally set, because the canonical interface stores a raw pointer; it deliberately does **not** count a borrow, since the effect lends the shadow map rather than owning it and a count would protect nothing while refusing to destroy the effect.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085C1",
+      "approved_symbols": [
+        "CPP-027271434AD0",
+        "CPP-04A3948FFE18",
+        "CPP-0AB86E5A1353",
+        "CPP-0C754AC1916D",
+        "CPP-13D7C7681073",
+        "CPP-238347B1BA49",
+        "CPP-2AA51525469D",
+        "CPP-2BE410A659F8",
+        "CPP-7A2430EC59BD",
+        "CPP-83E4A0D8FA49",
+        "CPP-9133239C9BB4",
+        "CPP-A3E75AA55B94",
+        "CPP-CDFB4C94AA46",
+        "CPP-DCCEF1051A69",
+        "CPP-DD5666BF5DF4",
+        "CPP-EAA19639B656"
+      ]
+    },
+    {
+      "id": "cascaded-shadow-map-apply-to-receiver",
+      "qualified_name_regex": "^CNA::Graphics::CascadedShadowMap::applyToReceiver$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_cascaded_shadow_map_apply_to_receiver`, which moves the atlas, the cascade transforms, the splits and the blend band across in one call so a caller cannot set half of them. It was left planned by `CBIND-085B2` because it needs the receiver contract this slice binds. The canonical precondition survives: applying before `update()` is refused, because there are no cascade matrices to give and a defaulted state would silently shadow nothing.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085C1",
+      "approved_symbols": [
+        "CPP-049BC750D5FB"
+      ]
+    },
+    {
+      "id": "clustered-shadow-policy",
+      "qualified_name_regex": "^CNA::Graphics::ClusteredShadowPolicyEXT(?:::(?!select$)[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`cna_clustered_shadow_policy_*` over an owned handle, with `kDefaultBudget` and `kDefaultHysteresis` as constants. The policy is a pure CPU object needing no device, but it is still parented to a game so its lifetime is accounted for like every other owned resource. `getSelected` returns a vector, so it takes the count/copy form. `getScore` keeps its canonical refusal for an index the last selection did not score, rather than answering zero -- which a caller would read as \"scored, and worthless\".",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085C1",
+      "approved_symbols": [
+        "CPP-06C5BF2443CA",
+        "CPP-113A3FA50CBB",
+        "CPP-1E21EB227700",
+        "CPP-6448F075E482",
+        "CPP-6500C668A308",
+        "CPP-719C154A9EFC",
+        "CPP-81F932709407",
+        "CPP-89318D8A7F28",
+        "CPP-8DB7191A7262",
+        "CPP-97B92CA2EB39",
+        "CPP-A7648A307806",
+        "CPP-AA1830DE1CE5",
+        "CPP-C2F9EAD9FAC0",
+        "CPP-ECB458AB8A43"
+      ]
     }
   ]
 }
