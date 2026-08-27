@@ -246,6 +246,7 @@ include(cmake/ToolGltfToCnj.cmake)
 include(cmake/ToolCnjToCnb.cmake)
 
 include(cmake/ToolCnbInfo.cmake)
+include(cmake/ToolGltfToCnb.cmake)
 
 include(cmake/UnitTests.cmake)
 

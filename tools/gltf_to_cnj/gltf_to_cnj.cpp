@@ -47,6 +47,8 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
+#include "GltfToCnjEntry.hpp"
 #include <unordered_map>
 #include <vector>
 
@@ -1471,6 +1473,26 @@ namespace
     }
 }
 
+namespace CNA::Tools::Gltf
+{
+    // plans/plan_cnb.md CNBF-106. The one named entry point into this file's orchestration, so
+    // cna_tool_gltf_to_cnb can run EXACTLY this code rather than a second interpretation of glTF.
+    // The two front-ends share the translation unit, not merely a library, which is what makes
+    // "both formats read glTF the same way" true by construction instead of by testing.
+    void ConvertGltfToCnj(const std::filesystem::path& inputPath,
+                          const std::filesystem::path& outputDir, const std::string& baseName,
+                          float unitScale)
+    {
+        ConvertOptions opts;
+        opts.inputPath = inputPath;
+        opts.outputDir = outputDir;
+        opts.baseName = baseName;
+        opts.unitScale = unitScale;
+        Convert(opts);
+    }
+}
+
+#ifndef CNA_GLTF_TO_CNJ_NO_MAIN
 int main(int argc, char** argv)
 {
     if (argc == 4 && std::string_view(argv[1]) == "--dump-oracle")
@@ -1531,3 +1553,4 @@ int main(int argc, char** argv)
 
     return 0;
 }
+#endif // CNA_GLTF_TO_CNJ_NO_MAIN

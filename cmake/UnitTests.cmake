@@ -520,6 +520,16 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    if(TARGET cna_tool_gltf_to_cnb)
+        # plans/plan_cnb.md CNBF-106: CnbGltfDirectToolTests.cpp spawns the direct compiler and
+        # compares its output against the two-step route byte for byte. Two separate processes,
+        # for the same reason the suites above use them.
+        add_dependencies(CnaTests cna_tool_gltf_to_cnb)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_GLTF_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnb>"
+        )
+    endif()
+
     if(TARGET cna_tool_cnb_info)
         # plans/plan_cnb.md CNBF-H013: CnbInfoToolTests.cpp spawns the inspector as a subprocess, for
         # the same reason the other tool suites do -- it has its own main() and its contract is its
@@ -722,7 +732,7 @@ if(CNA_BUILD_TESTS)
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*:GltfLightBudget.*:GltfPbrBrdf.*"
         "Perf|GltfPerformance.*"
         "Ledger|GltfKnownDefect.*"
-        "Tool|GltfToCnjToolTest.*:RuntimeGltfModelTest.*")
+        "Tool|GltfToCnjToolTest.*:RuntimeGltfModelTest.*:CnbGltfDirectToolTest.*")
     foreach(_gltf_rung IN LISTS CNA_GLTF_CONFORMANCE_RUNGS)
         string(FIND "${_gltf_rung}" "|" _gltf_sep)
         string(SUBSTRING "${_gltf_rung}" 0 ${_gltf_sep} _gltf_layer)
