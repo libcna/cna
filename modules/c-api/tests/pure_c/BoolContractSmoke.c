@@ -161,6 +161,20 @@ int main(void)
                (unsigned)result);
         ++accepted;
     }
+    result = cna_depth_normal_prepass_copy_depth_decode_glsl(UINT8_C(9), 0, 0, 0);
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_depth_normal_prepass_copy_depth_decode_glsl\n",
+               (unsigned)result);
+        ++accepted;
+    }
+    result = cna_depth_normal_prepass_set_velocity_enabled_ext(0, UINT8_C(9));
+    if (result != CNA_RESULT_INVALID_ARGUMENT &&
+        result != CNA_RESULT_NOT_SUPPORTED) {
+        printf("accepted a non-canonical CNA_Bool (%u): cna_depth_normal_prepass_set_velocity_enabled_ext\n",
+               (unsigned)result);
+        ++accepted;
+    }
     result = cna_directional_light_set_enabled(0, UINT8_C(9));
     if (result != CNA_RESULT_INVALID_ARGUMENT &&
         result != CNA_RESULT_NOT_SUPPORTED) {
@@ -757,6 +771,6 @@ int main(void)
         ++accepted;
     }
 
-    printf("%d of 99 routes accepted a CNA_Bool of 9\n", accepted);
+    printf("%d of 101 routes accepted a CNA_Bool of 9\n", accepted);
     return accepted == 0 ? 0 : 1;
 }

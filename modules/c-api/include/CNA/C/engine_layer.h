@@ -2653,6 +2653,612 @@ CNA_C_API CNA_Result cna_clustered_shadow_policy_reset(CNA_ClusteredShadowPolicy
  */
 CNA_C_API CNA_Result cna_clustered_shadow_policy_destroy(CNA_ClusteredShadowPolicyHandle policy);
 
+/* ---------------------------------------------------------------------------------------------
+ * The depth/normal prepass
+ *
+ * The prepass renders linear depth and view-space normals for the screen-space effects that need
+ * them. How many passes that takes depends on the renderer: one with multiple render targets,
+ * otherwise two, or three when velocity is on -- ask @ref cna_depth_normal_prepass_get_pass_count
+ * rather than assuming, and drive `begin`/`end` once per pass.
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Owned handle for one depth/normal prepass.
+ *
+ * Release it with @ref cna_depth_normal_prepass_destroy. Its effects and textures are borrows that
+ * keep it alive, and destroying it is refused while one is outstanding.
+ */
+typedef CNA_Handle CNA_DepthNormalPrepassHandle;
+
+/**
+ * @brief Creates a depth/normal prepass at a target size.
+ *
+ * @param graphics_device The device to render on.
+ * @param width Target width in pixels; must be positive.
+ * @param height Target height in pixels; must be positive.
+ * @param encoding How to store linear depth; `CNA_DEPTH_ENCODING_AUTOMATIC` lets the prepass
+ *        decide, which is what @ref cna_depth_normal_prepass_uses_packed_depth_ext reports.
+ * @param out_prepass Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size or an
+ * undefined encoding, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_create(
+    CNA_Handle graphics_device,
+    int32_t width,
+    int32_t height,
+    CNA_DepthEncoding encoding,
+    CNA_DepthNormalPrepassHandle* out_prepass);
+
+/**
+ * @brief Resizes the prepass targets.
+ *
+ * @param prepass The prepass.
+ * @param width New width in pixels; must be positive.
+ * @param height New height in pixels; must be positive.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-positive size,
+ * `CNA_RESULT_INVALID_STATE` while a pass is open, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_resize(
+    CNA_DepthNormalPrepassHandle prepass,
+    int32_t width,
+    int32_t height);
+
+/**
+ * @brief Returns how many passes this renderer needs to fill the prepass.
+ *
+ * One where multiple render targets are available, otherwise two -- or three with velocity on.
+ *
+ * @param prepass The prepass.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_get_pass_count(
+    CNA_DepthNormalPrepassHandle prepass,
+    int32_t* out_count);
+
+/**
+ * @brief Opens one prepass pass.
+ *
+ * @param prepass The prepass.
+ * @param pass_index Which pass, from zero to the count minus one.
+ * @param view The camera's view matrix.
+ * @param projection The camera's projection matrix.
+ * @param near_plane The near plane; must be positive.
+ * @param far_plane The far plane; must be beyond the near plane, because depth is normalised by it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for planes that cannot normalise,
+ * `CNA_RESULT_INVALID_STATE` when a pass is already open, `CNA_RESULT_NOT_SUPPORTED` without the
+ * engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_begin(
+    CNA_DepthNormalPrepassHandle prepass,
+    int32_t pass_index,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection,
+    float near_plane,
+    float far_plane);
+
+/**
+ * @brief Closes the pass opened by @ref cna_depth_normal_prepass_begin.
+ *
+ * @param prepass The prepass.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no pass is open,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_end(CNA_DepthNormalPrepassHandle prepass);
+
+/**
+ * @brief Returns the rigid prepass effect, borrowed from the prepass.
+ *
+ * @param prepass The prepass.
+ * @param out_effect Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_get_prepass_effect(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Returns the skinned prepass effect, borrowed from the prepass.
+ *
+ * @param prepass The prepass.
+ * @param out_effect Receives the borrowed effect, or `CNA_INVALID_HANDLE` when unsupported.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_get_skinned_prepass_effect(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Returns the linear-depth texture, borrowed from the prepass.
+ *
+ * Release the borrow with @ref cna_render_target_destroy, which does not dispose the prepass's own
+ * target.
+ *
+ * @param prepass The prepass.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when there is none.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_get_depth_texture(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the view-space normal texture, borrowed from the prepass.
+ *
+ * @param prepass The prepass.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when there is none.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_get_normal_texture(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Returns the velocity texture, borrowed from the prepass.
+ *
+ * @param prepass The prepass.
+ * @param out_texture Receives the borrowed texture, or `CNA_INVALID_HANDLE` when velocity is off.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_get_velocity_texture_ext(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Reports whether the prepass can run on a device.
+ *
+ * @param prepass The prepass.
+ * @param graphics_device The device to ask about.
+ * @param out_supported Receives `CNA_TRUE` when the prepass shaders exist and link.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_is_supported(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Handle graphics_device,
+    CNA_Bool* out_supported);
+
+/**
+ * @brief Reports whether the prepass fills its targets in one pass.
+ *
+ * @param prepass The prepass.
+ * @param out_using Receives `CNA_TRUE` when multiple render targets are in use.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_is_using_multiple_render_targets(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Bool* out_using);
+
+/**
+ * @brief Reports whether depth is stored packed across an 8-bit target.
+ *
+ * @param prepass The prepass.
+ * @param out_packed Receives `CNA_TRUE` when depth is packed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_is_depth_packed(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Bool* out_packed);
+
+/**
+ * @brief Reports which depth encoding a device gets by default.
+ *
+ * The answer is a **measurement**, not a preference: a half-float depth target was measured to
+ * make screen-space effects driven from the prepass occlude nothing, so the packed encoding is
+ * what `CNA_DEPTH_ENCODING_AUTOMATIC` selects. Ask this rather than assuming either one.
+ *
+ * @param graphics_device The device to ask about.
+ * @param out_packed Receives `CNA_TRUE` when the automatic encoding packs depth.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_uses_packed_depth_ext(
+    CNA_Handle graphics_device,
+    CNA_Bool* out_packed);
+
+/**
+ * @brief Returns the roughness the prepass writes alongside its normals.
+ *
+ * @param prepass The prepass.
+ * @param out_roughness Receives the roughness.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_get_roughness(
+    CNA_DepthNormalPrepassHandle prepass,
+    float* out_roughness);
+
+/**
+ * @brief Sets the roughness the prepass writes alongside its normals.
+ *
+ * The value is **clamped** to zero-to-one rather than refused, exactly as the canonical setter
+ * clamps it. It may be changed between draws inside one begin/end, which is how a scene with more
+ * than one material describes itself.
+ *
+ * @param prepass The prepass.
+ * @param roughness The roughness.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_set_roughness(
+    CNA_DepthNormalPrepassHandle prepass,
+    float roughness);
+
+/**
+ * @brief Reports whether the prepass also writes screen-space velocity.
+ *
+ * @param prepass The prepass.
+ * @param out_enabled Receives `CNA_TRUE` when velocity is on.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_is_velocity_enabled_ext(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Bool* out_enabled);
+
+/**
+ * @brief Turns velocity output on or off, reallocating targets.
+ *
+ * @param prepass The prepass.
+ * @param enabled `CNA_TRUE` to write velocity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-canonical boolean,
+ * `CNA_RESULT_INVALID_STATE` while a pass is open, `CNA_RESULT_NOT_SUPPORTED` without the engine
+ * layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_set_velocity_enabled_ext(
+    CNA_DepthNormalPrepassHandle prepass,
+    CNA_Bool enabled);
+
+/**
+ * @brief Gives the prepass the previous frame's world transform, for velocity.
+ *
+ * @param prepass The prepass.
+ * @param previous_world The transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_set_previous_world_ext(
+    CNA_DepthNormalPrepassHandle prepass,
+    const CNA_Matrix* previous_world);
+
+/**
+ * @brief Gives the prepass the previous frame's camera, for velocity.
+ *
+ * @param prepass The prepass.
+ * @param previous_view The previous view matrix.
+ * @param previous_projection The previous projection matrix.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_set_previous_camera_ext(
+    CNA_DepthNormalPrepassHandle prepass,
+    const CNA_Matrix* previous_view,
+    const CNA_Matrix* previous_projection);
+
+/**
+ * @brief Copies the GLSL a shader needs to decode this prepass's depth.
+ *
+ * @param packed `CNA_TRUE` for the packed encoding's decoder.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_copy_depth_decode_glsl(
+    CNA_Bool packed,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the GLSL a shader needs to decode this prepass's velocity.
+ *
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_copy_velocity_decode_glsl(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a velocity texel carries a velocity at all.
+ *
+ * @param texel The texel read from the velocity texture.
+ * @param out_has Receives `CNA_TRUE` when the texel encodes motion.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_has_velocity_ext(
+    CNA_Color texel,
+    CNA_Bool* out_has);
+
+/**
+ * @brief Decodes a velocity texel into screen-space motion.
+ *
+ * @param texel The texel read from the velocity texture.
+ * @param out_velocity Receives the motion; zero when the texel carries none.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_decode_velocity_ext(
+    CNA_Color texel,
+    CNA_Vector2* out_velocity);
+
+/**
+ * @brief Packs a linear depth into four channel values.
+ *
+ * The canonical function writes four floats through references; the C form takes four outputs.
+ *
+ * @param value The depth to pack.
+ * @param out_r Receives the red channel.
+ * @param out_g Receives the green channel.
+ * @param out_b Receives the blue channel.
+ * @param out_a Receives the alpha channel.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_pack_depth(
+    float value,
+    float* out_r,
+    float* out_g,
+    float* out_b,
+    float* out_a);
+
+/**
+ * @brief Unpacks four channel values back into a linear depth.
+ *
+ * @param r The red channel.
+ * @param g The green channel.
+ * @param b The blue channel.
+ * @param a The alpha channel.
+ * @param out_value Receives the depth.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_unpack_depth(
+    float r,
+    float g,
+    float b,
+    float a,
+    float* out_value);
+
+/**
+ * @brief Releases the prepass, its targets and its effects.
+ *
+ * @param prepass The prepass; an invalid handle is an error, not a silent no-op.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_depth_normal_prepass_destroy(CNA_DepthNormalPrepassHandle prepass);
+
+/* ---------------------------------------------------------------------------------------------
+ * Contact shadows
+ *
+ * A `PostProcessPass`, so it is created here and then driven through the shared
+ * `cna_post_process_pass_*` operations rather than through a handle kind of its own.
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * @brief Creates a screen-space contact-shadow pass.
+ *
+ * @param graphics_device The device to draw on.
+ * @param out_pass Receives the owned post-process pass handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_create(
+    CNA_Handle graphics_device,
+    CNA_PostProcessPassHandle* out_pass);
+
+/**
+ * @brief Returns the direction the pass traces rays toward.
+ *
+ * @param pass A contact-shadow pass.
+ * @param out_direction Receives the direction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_get_light_direction(
+    CNA_PostProcessPassHandle pass,
+    CNA_Vector3* out_direction);
+
+/**
+ * @brief Sets the direction the pass traces rays toward.
+ *
+ * @param pass A contact-shadow pass.
+ * @param direction The direction.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_set_light_direction(
+    CNA_PostProcessPassHandle pass,
+    const CNA_Vector3* direction);
+
+/**
+ * @brief Returns how far a ray travels before giving up.
+ *
+ * @param pass A contact-shadow pass.
+ * @param out_distance Receives the distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_get_max_distance(
+    CNA_PostProcessPassHandle pass,
+    float* out_distance);
+
+/**
+ * @brief Sets how far a ray travels before giving up.
+ *
+ * @param pass A contact-shadow pass.
+ * @param distance The distance.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_set_max_distance(
+    CNA_PostProcessPassHandle pass,
+    float distance);
+
+/**
+ * @brief Returns how many steps a ray takes.
+ *
+ * @param pass A contact-shadow pass.
+ * @param out_count Receives the step count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_get_step_count(
+    CNA_PostProcessPassHandle pass,
+    int32_t* out_count);
+
+/**
+ * @brief Sets how many steps a ray takes.
+ *
+ * The canonical setter stores the value as given, so this route does too: a step count of zero
+ * traces nothing, which is a way of switching the pass off rather than an error.
+ *
+ * @param pass A contact-shadow pass.
+ * @param count The step count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_set_step_count(
+    CNA_PostProcessPassHandle pass,
+    int32_t count);
+
+/**
+ * @brief Returns how thick an occluder is assumed to be.
+ *
+ * @param pass A contact-shadow pass.
+ * @param out_thickness Receives the thickness.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_get_thickness(
+    CNA_PostProcessPassHandle pass,
+    float* out_thickness);
+
+/**
+ * @brief Sets how thick an occluder is assumed to be.
+ *
+ * @param pass A contact-shadow pass.
+ * @param thickness The thickness.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_set_thickness(
+    CNA_PostProcessPassHandle pass,
+    float thickness);
+
+/**
+ * @brief Returns how strongly the contact shadow darkens.
+ *
+ * @param pass A contact-shadow pass.
+ * @param out_intensity Receives the intensity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_get_intensity(
+    CNA_PostProcessPassHandle pass,
+    float* out_intensity);
+
+/**
+ * @brief Sets how strongly the contact shadow darkens.
+ *
+ * @param pass A contact-shadow pass.
+ * @param intensity The intensity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_set_intensity(
+    CNA_PostProcessPassHandle pass,
+    float intensity);
+
+/**
+ * @brief Returns the depth bias a ray uses before counting an occluder.
+ *
+ * @param pass A contact-shadow pass.
+ * @param out_bias Receives the bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_get_bias(
+    CNA_PostProcessPassHandle pass,
+    float* out_bias);
+
+/**
+ * @brief Sets the depth bias a ray uses before counting an occluder.
+ *
+ * @param pass A contact-shadow pass.
+ * @param bias The bias.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the pass is not a
+ * contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_set_bias(
+    CNA_PostProcessPassHandle pass,
+    float bias);
+
+/**
+ * @brief Copies the reason the pass fell back, as UTF-8 bytes without a terminator.
+ *
+ * An empty result means it did not fall back. This is the line worth logging when contact shadows
+ * are missing from a frame that asked for them.
+ *
+ * @param pass A contact-shadow pass.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_INVALID_ARGUMENT` when
+ * the pass is not a contact-shadow pass, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or
+ * an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_copy_fallback_reason(
+    CNA_PostProcessPassHandle pass,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a ray sample counts as occluded.
+ *
+ * A pure function of its arguments, so it needs no pass.
+ *
+ * @param ray_view_depth The ray's view-space depth.
+ * @param scene_view_depth The scene's view-space depth at that pixel.
+ * @param bias The depth bias.
+ * @param thickness The assumed occluder thickness.
+ * @param out_occluded Receives `CNA_TRUE` when the sample is occluded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_is_occluded(
+    float ray_view_depth,
+    float scene_view_depth,
+    float bias,
+    float thickness,
+    CNA_Bool* out_occluded);
+
+/**
+ * @brief Copies the GLSL occlusion test the pass uses, as UTF-8 bytes without a terminator.
+ *
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial string is written.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_copy_occlusion_test_glsl(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Combines a shadow-map visibility with a contact-shadow visibility.
+ *
+ * Both inputs are clamped to zero-to-one before multiplying, exactly as the canonical function
+ * clamps them, so a caller cannot brighten a pixel by passing a visibility above one.
+ *
+ * @param shadow_map_visibility Visibility from the shadow map.
+ * @param contact_visibility Visibility from the contact-shadow pass.
+ * @param out_visibility Receives the combined visibility.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_contact_shadow_pass_combine_visibility(
+    float shadow_map_visibility,
+    float contact_visibility,
+    float* out_visibility);
+
 #ifdef __cplusplus
 }
 #endif

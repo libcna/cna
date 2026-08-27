@@ -210,6 +210,9 @@ enum class ObjectKind : uint32_t {
     CubeShadowMap = 136,
     // plans/plan_binding.md CBIND-085C1: the clustered shadow budget, a pure CPU object.
     ClusteredShadowPolicy = 137,
+    // plans/plan_binding.md CBIND-085C2. ContactShadowPass needs no kind of its own: it is a
+    // PostProcessPass, so it uses that one.
+    DepthNormalPrepass = 138,
     Test = UINT32_MAX
 };
 

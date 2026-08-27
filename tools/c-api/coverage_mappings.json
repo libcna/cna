@@ -15454,6 +15454,89 @@
         "CPP-C2F9EAD9FAC0",
         "CPP-ECB458AB8A43"
       ]
+    },
+    {
+      "id": "engine-depth-normal-prepass",
+      "qualified_name_regex": "^CNA::Graphics::DepthNormalPrepass(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_depth_normal_prepass_*` over an owned handle. The two constructors become one route taking a `CNA_DepthEncoding`, because the shorter overload is the longer one with `AUTOMATIC`. Every canonical precondition survives and is asserted: a non-positive size is refused rather than clamped, `begin` refuses a near plane that is not positive or a far plane not beyond it (depth is normalised by the far plane), and `resize` and the velocity switch are refused while a pass is open rather than reallocating the target the device is drawing into. `setRoughness` **clamps** rather than refuses, as the canonical setter does. `packDepth` writes four floats through references, which becomes four outputs; the GLSL-returning statics take the string copy-out form, and the packed and unpacked decoders are asserted to differ.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085C2",
+      "approved_symbols": [
+        "CPP-055782F19A19",
+        "CPP-0C3CBF105D79",
+        "CPP-1430ABAE67C3",
+        "CPP-162FACF98F57",
+        "CPP-1D11BCF420FB",
+        "CPP-1E865F1180BF",
+        "CPP-2106E2583552",
+        "CPP-2D5D87B553D7",
+        "CPP-2FA21F78FD64",
+        "CPP-448B47BC9049",
+        "CPP-5D00DAE7A512",
+        "CPP-5EBE4A763FC0",
+        "CPP-6AF9F4C11401",
+        "CPP-8137BC19BA8E",
+        "CPP-8B36967C7B17",
+        "CPP-8EEAC3B0B62F",
+        "CPP-92B218DC2990",
+        "CPP-961A2635653E",
+        "CPP-96B07F81E571",
+        "CPP-9C7FE3A2AEA0",
+        "CPP-A2C4227CEA11",
+        "CPP-A63EA3C5F153",
+        "CPP-C1C26C3F3BFD",
+        "CPP-CE444C480B48",
+        "CPP-D075EF885559",
+        "CPP-D2B135DADFF8",
+        "CPP-E19E4A069566",
+        "CPP-F1CF708B12AF",
+        "CPP-FDF89DD27D80"
+      ]
+    },
+    {
+      "id": "engine-contact-shadow-pass",
+      "qualified_name_regex": "^CNA::Graphics::ContactShadowPass(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_contact_shadow_pass_create` plus its own settings routes, with `apply`, `getName`, `isSupported` and destruction coming from the shared `cna_post_process_pass_*` operations -- it is a `PostProcessPass`, so it reuses that handle kind rather than adding one, and its settings routes discriminate on the concrete type by `dynamic_cast`. The setters store what they are given, as the canonical ones do: a step count of zero traces nothing, which is a way of switching the pass off rather than an error. `combineVisibility` clamps both inputs before multiplying, so a caller cannot brighten a pixel by passing a visibility above one, and `isOccluded` keeps its strict band -- a sample exactly at the bias is not occluded, which is the arm a `>=` would get wrong.",
+      "tests": "`EngineLayerSmoke.c`, in both builds and proved to execute",
+      "status": "implemented",
+      "task": "CBIND-085C2",
+      "approved_symbols": [
+        "CPP-44ADCAAD92D5",
+        "CPP-4C622AB64B8D",
+        "CPP-4DCD537379D7",
+        "CPP-5D82FCC2EA32",
+        "CPP-63CF50F3EF0E",
+        "CPP-6535FB2FFC17",
+        "CPP-6A5AA1E17290",
+        "CPP-7A3F31A83571",
+        "CPP-7AC0B59C946E",
+        "CPP-7DA377945E38",
+        "CPP-7FD397C7CFEF",
+        "CPP-83EAEB310B16",
+        "CPP-8AB29FF9AB6A",
+        "CPP-8AF0D4F8CD07",
+        "CPP-925DA98811B2",
+        "CPP-932B50E24303",
+        "CPP-97B0360CA5DB",
+        "CPP-9AAF714B57AB",
+        "CPP-A716E433F525",
+        "CPP-B0D002BA2475",
+        "CPP-CB0FFC39444E",
+        "CPP-FCF110952541"
+      ]
     }
   ]
 }

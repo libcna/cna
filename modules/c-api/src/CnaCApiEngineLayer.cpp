@@ -24,8 +24,10 @@
 #include "CNA/Graphics/CascadedShadowMap.hpp"
 #include "CNA/Graphics/ClusteredShadowPolicyEXT.hpp"
 #include "CNA/Graphics/ComputeShader.hpp"
+#include "CNA/Graphics/ContactShadowPass.hpp"
 #include "CNA/Graphics/CubeShadowMap.hpp"
 #include "CNA/Graphics/DepthEncoding.hpp"
+#include "CNA/Graphics/DepthNormalPrepass.hpp"
 #include "CNA/Graphics/DirectionalLightEXT.hpp"
 #include "CNA/Graphics/PointLightEXT.hpp"
 #include "CNA/Graphics/ShadowMap.hpp"
@@ -2016,6 +2018,272 @@ CNA_Result cna_clustered_shadow_policy_reset(CNA_ClusteredShadowPolicyHandle p0)
 CNA_Result cna_clustered_shadow_policy_destroy(CNA_ClusteredShadowPolicyHandle p0)
 {
     (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_create(CNA_Handle p0, int32_t p1, int32_t p2, CNA_DepthEncoding p3, CNA_DepthNormalPrepassHandle* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    if (p4 != nullptr) { *p4 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_resize(CNA_DepthNormalPrepassHandle p0, int32_t p1, int32_t p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_get_pass_count(CNA_DepthNormalPrepassHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_begin(CNA_DepthNormalPrepassHandle p0, int32_t p1, const CNA_Matrix* p2, const CNA_Matrix* p3, float p4, float p5)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4; (void)p5;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_end(CNA_DepthNormalPrepassHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_get_prepass_effect(CNA_DepthNormalPrepassHandle p0, CNA_EffectHandle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_get_skinned_prepass_effect(CNA_DepthNormalPrepassHandle p0, CNA_EffectHandle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_get_depth_texture(CNA_DepthNormalPrepassHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_get_normal_texture(CNA_DepthNormalPrepassHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_get_velocity_texture_ext(CNA_DepthNormalPrepassHandle p0, CNA_Handle* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_is_supported(CNA_DepthNormalPrepassHandle p0, CNA_Handle p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_is_using_multiple_render_targets(CNA_DepthNormalPrepassHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_is_depth_packed(CNA_DepthNormalPrepassHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_uses_packed_depth_ext(CNA_Handle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_get_roughness(CNA_DepthNormalPrepassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_set_roughness(CNA_DepthNormalPrepassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_is_velocity_enabled_ext(CNA_DepthNormalPrepassHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_set_velocity_enabled_ext(CNA_DepthNormalPrepassHandle p0, CNA_Bool p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_set_previous_world_ext(CNA_DepthNormalPrepassHandle p0, const CNA_Matrix* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_set_previous_camera_ext(CNA_DepthNormalPrepassHandle p0, const CNA_Matrix* p1, const CNA_Matrix* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_copy_depth_decode_glsl(CNA_Bool p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_copy_velocity_decode_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_has_velocity_ext(CNA_Color p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_decode_velocity_ext(CNA_Color p0, CNA_Vector2* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_pack_depth(float p0, float* p1, float* p2, float* p3, float* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_unpack_depth(float p0, float p1, float p2, float p3, float* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_depth_normal_prepass_destroy(CNA_DepthNormalPrepassHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_create(CNA_Handle p0, CNA_PostProcessPassHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_get_light_direction(CNA_PostProcessPassHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_set_light_direction(CNA_PostProcessPassHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_get_max_distance(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_set_max_distance(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_get_step_count(CNA_PostProcessPassHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_set_step_count(CNA_PostProcessPassHandle p0, int32_t p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_get_thickness(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_set_thickness(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_get_intensity(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_set_intensity(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_get_bias(CNA_PostProcessPassHandle p0, float* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_set_bias(CNA_PostProcessPassHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_copy_fallback_reason(CNA_PostProcessPassHandle p0, char* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_is_occluded(float p0, float p1, float p2, float p3, CNA_Bool* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_copy_occlusion_test_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_contact_shadow_pass_combine_visibility(float p0, float p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
     return ExtensionUnavailable();
 }
 
@@ -6193,6 +6461,685 @@ CNA_Result cna_clustered_shadow_policy_destroy(const CNA_ClusteredShadowPolicyHa
         }
         RemoveOwnedGraphicsResourceFor(policy->parentGame);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+struct DepthNormalPrepassResource final {
+    std::shared_ptr<Ext::DepthNormalPrepass> value;
+    CNA_Handle parentGame;
+    uint64_t activeBorrowCount = 0U;
+};
+
+[[nodiscard]] CNA_Result ToNativeDepthEncoding(
+    const CNA_DepthEncoding value, Ext::DepthEncoding* const out)
+{
+    if (value > CNA_DEPTH_ENCODING_HALF_FLOAT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The depth encoding is not a defined CNA_DEPTH_ENCODING_* value.");
+    }
+    *out = static_cast<Ext::DepthEncoding>(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+// A contact-shadow pass shares PostProcessPass's handle kind, so the discriminator is the concrete
+// type rather than the kind -- the same test the effect-pass routes use, for the same reason.
+template<typename TCallable>
+[[nodiscard]] CNA_Result WithContactShadowPass(const CNA_Handle handle, TCallable&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PostProcessPassResource> pass;
+        if (const CNA_Result result = GetPostProcessPass(handle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const contact = dynamic_cast<Ext::ContactShadowPass*>(pass->value.get());
+        if (contact == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "This post-process pass is not a contact-shadow pass.");
+        }
+        return std::forward<TCallable>(body)(*contact);
+    });
+}
+
+} // namespace
+
+CNA_Result cna_depth_normal_prepass_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t width,
+    const int32_t height,
+    const CNA_DepthEncoding encoding,
+    CNA_DepthNormalPrepassHandle* const outPrepass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPrepass == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The prepass output handle is null.");
+        }
+        *outPrepass = CNA_INVALID_HANDLE;
+        Ext::DepthEncoding nativeEncoding{};
+        if (const CNA_Result result = ToNativeDepthEncoding(encoding, &nativeEncoding);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (width <= 0 || height <= 0) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The prepass target size must be positive.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::DepthNormalPrepass>(
+            *graphicsDevice->value, static_cast<int>(width), static_cast<int>(height),
+            nativeEncoding);
+        const auto resource = std::make_shared<DepthNormalPrepassResource>(
+            DepthNormalPrepassResource{std::move(native), graphicsDevice->parentGame, 0U});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::DepthNormalPrepass, resource, outPrepass);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned prepass handle could not be created.");
+        }
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#define CNA_WITH_PREPASS(handle, body)                                                             \
+    WithMap<DepthNormalPrepassResource>(                                                           \
+        (handle), ObjectKind::DepthNormalPrepass, "DepthNormalPrepass", body)
+
+CNA_Result cna_depth_normal_prepass_resize(
+    const CNA_DepthNormalPrepassHandle prepass, const int32_t width, const int32_t height)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            p->value->resize(static_cast<int>(width), static_cast<int>(height));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_get_pass_count(
+    const CNA_DepthNormalPrepassHandle prepass, int32_t* const outCount)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(p->value->getPassCount()));
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_begin(
+    const CNA_DepthNormalPrepassHandle prepass,
+    const int32_t passIndex,
+    const CNA_Matrix* const view,
+    const CNA_Matrix* const projection,
+    const float nearPlane,
+    const float farPlane)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (const CNA_Result result = RequireMatrixArgument(view, "The view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireMatrixArgument(projection, "The projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->value->begin(
+                static_cast<int>(passIndex), ToNativeMatrix(*view), ToNativeMatrix(*projection),
+                nearPlane, farPlane);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_end(const CNA_DepthNormalPrepassHandle prepass)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            p->value->end();
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_get_prepass_effect(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_EffectHandle* const outEffect)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (outEffect == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The effect output handle is null.");
+            }
+            *outEffect = CNA_INVALID_HANDLE;
+            return BorrowEffectFrom(p, p->value->getPrepassEffect(), outEffect);
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_get_skinned_prepass_effect(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_EffectHandle* const outEffect)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (outEffect == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The effect output handle is null.");
+            }
+            *outEffect = CNA_INVALID_HANDLE;
+            return BorrowEffectFrom(p, p->value->getSkinnedPrepassEffect(), outEffect);
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_get_depth_texture(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            return BorrowShadowTextureFrom(p, p->value->getDepthTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_get_normal_texture(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            return BorrowShadowTextureFrom(p, p->value->getNormalTexture(), outTexture);
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_get_velocity_texture_ext(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_Handle* const outTexture)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (outTexture == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The texture output handle is null.");
+            }
+            *outTexture = CNA_INVALID_HANDLE;
+            return BorrowShadowTextureFrom(p, p->value->getVelocityTextureEXT(), outTexture);
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_is_supported(
+    const CNA_DepthNormalPrepassHandle prepass,
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Bool* const outSupported)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+            if (const CNA_Result result =
+                    GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            return StoreValue(
+                outSupported,
+                static_cast<CNA_Bool>(
+                    p->value->isSupported(*graphicsDevice->value) ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_is_using_multiple_render_targets(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_Bool* const outUsing)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            return StoreValue(
+                outUsing,
+                static_cast<CNA_Bool>(
+                    p->value->isUsingMultipleRenderTargets() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_is_depth_packed(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_Bool* const outPacked)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            return StoreValue(
+                outPacked,
+                static_cast<CNA_Bool>(p->value->isDepthPacked() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_uses_packed_depth_ext(
+    const CNA_Handle graphicsDeviceHandle, CNA_Bool* const outPacked)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPacked == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The packed-depth output is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outPacked =
+            Ext::DepthNormalPrepass::usesPackedDepthEXT(*graphicsDevice->value)
+                ? CNA_TRUE
+                : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_depth_normal_prepass_get_roughness(
+    const CNA_DepthNormalPrepassHandle prepass, float* const outRoughness)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            return StoreValue(outRoughness, p->value->getRoughness());
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_set_roughness(
+    const CNA_DepthNormalPrepassHandle prepass, const float roughness)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            // The canonical setter clamps rather than refuses, and this route preserves that: a
+            // roughness outside zero-to-one is a value to correct, not a caller error.
+            p->value->setRoughness(roughness);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_is_velocity_enabled_ext(
+    const CNA_DepthNormalPrepassHandle prepass, CNA_Bool* const outEnabled)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            return StoreValue(
+                outEnabled,
+                static_cast<CNA_Bool>(p->value->isVelocityEnabledEXT() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_set_velocity_enabled_ext(
+    const CNA_DepthNormalPrepassHandle prepass, const CNA_Bool enabled)
+{
+    if (const CNA_Result result = ValidateCanonicalBool(enabled, "enabled");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            p->value->setVelocityEnabledEXT(enabled == CNA_TRUE);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_set_previous_world_ext(
+    const CNA_DepthNormalPrepassHandle prepass, const CNA_Matrix* const previousWorld)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (const CNA_Result result =
+                    RequireMatrixArgument(previousWorld, "The previous world is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->value->setPreviousWorldEXT(ToNativeMatrix(*previousWorld));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_set_previous_camera_ext(
+    const CNA_DepthNormalPrepassHandle prepass,
+    const CNA_Matrix* const previousView,
+    const CNA_Matrix* const previousProjection)
+{
+    return CNA_WITH_PREPASS(prepass,
+        [&](const std::shared_ptr<DepthNormalPrepassResource>& p) -> CNA_Result {
+            if (const CNA_Result result =
+                    RequireMatrixArgument(previousView, "The previous view is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireMatrixArgument(
+                    previousProjection, "The previous projection is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            p->value->setPreviousCameraEXT(
+                ToNativeMatrix(*previousView), ToNativeMatrix(*previousProjection));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_depth_normal_prepass_copy_depth_decode_glsl(
+    const CNA_Bool packed, char* const destination, const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (const CNA_Result result = ValidateCanonicalBool(packed, "packed");
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    return CopyFormattedString(destination, capacity, outBytes, [packed] {
+        return Ext::DepthNormalPrepass::getDepthDecodeGlsl(packed == CNA_TRUE);
+    });
+}
+
+CNA_Result cna_depth_normal_prepass_copy_velocity_decode_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(destination, capacity, outBytes, [] {
+        return Ext::DepthNormalPrepass::getVelocityDecodeGlsl();
+    });
+}
+
+CNA_Result cna_depth_normal_prepass_has_velocity_ext(
+    const CNA_Color texel, CNA_Bool* const outHas)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        const Microsoft::Xna::Framework::Color native(texel.r, texel.g, texel.b, texel.a);
+        return StoreValue(
+            outHas,
+            static_cast<CNA_Bool>(
+                Ext::DepthNormalPrepass::hasVelocityEXT(native) ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_depth_normal_prepass_decode_velocity_ext(
+    const CNA_Color texel, CNA_Vector2* const outVelocity)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outVelocity == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The velocity output is null.");
+        }
+        const Microsoft::Xna::Framework::Color native(texel.r, texel.g, texel.b, texel.a);
+        const auto velocity = Ext::DepthNormalPrepass::decodeVelocityEXT(native);
+        outVelocity->x = velocity.X;
+        outVelocity->y = velocity.Y;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_depth_normal_prepass_pack_depth(
+    const float value, float* const outR, float* const outG, float* const outB,
+    float* const outA)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outR == nullptr || outG == nullptr || outB == nullptr || outA == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "A packed-depth channel output is null.");
+        }
+        Ext::DepthNormalPrepass::packDepth(value, *outR, *outG, *outB, *outA);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_depth_normal_prepass_unpack_depth(
+    const float r, const float g, const float b, const float a, float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(outValue, Ext::DepthNormalPrepass::unpackDepth(r, g, b, a));
+    });
+}
+
+CNA_Result cna_depth_normal_prepass_destroy(const CNA_DepthNormalPrepassHandle prepassHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<DepthNormalPrepassResource> prepass;
+        if (const CNA_Result result = GetEngineResource(
+                prepassHandle, ObjectKind::DepthNormalPrepass, "DepthNormalPrepass", &prepass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (prepass->activeBorrowCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The prepass is still lending an effect or one of its textures.");
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(prepassHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned prepass handle could not be released.");
+        }
+        RemoveOwnedGraphicsResourceFor(prepass->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_create(
+    const CNA_Handle graphicsDeviceHandle, CNA_PostProcessPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The contact-shadow pass output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto native = std::make_shared<Ext::ContactShadowPass>(*graphicsDevice->value);
+        return CreatePassHandle(
+            std::move(native), nullptr, graphicsDevice->parentGame, nullptr, CNA_INVALID_HANDLE,
+            outPass);
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_get_light_direction(
+    const CNA_PostProcessPassHandle pass, CNA_Vector3* const outDirection)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        const auto direction = contact.getLightDirection();
+        return StoreValue(outDirection, Vec3(direction.X, direction.Y, direction.Z));
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_set_light_direction(
+    const CNA_PostProcessPassHandle pass, const CNA_Vector3* const direction)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        if (direction == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The direction is null.");
+        }
+        contact.setLightDirection({direction->x, direction->y, direction->z});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_get_max_distance(
+    const CNA_PostProcessPassHandle pass, float* const outDistance)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        return StoreValue(outDistance, contact.getMaxDistance());
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_set_max_distance(
+    const CNA_PostProcessPassHandle pass, const float distance)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        contact.setMaxDistance(distance);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_get_step_count(
+    const CNA_PostProcessPassHandle pass, int32_t* const outCount)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        return StoreValue(outCount, static_cast<int32_t>(contact.getStepCount()));
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_set_step_count(
+    const CNA_PostProcessPassHandle pass, const int32_t count)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        contact.setStepCount(static_cast<int>(count));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_get_thickness(
+    const CNA_PostProcessPassHandle pass, float* const outThickness)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        return StoreValue(outThickness, contact.getThickness());
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_set_thickness(
+    const CNA_PostProcessPassHandle pass, const float thickness)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        contact.setThickness(thickness);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_get_intensity(
+    const CNA_PostProcessPassHandle pass, float* const outIntensity)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        return StoreValue(outIntensity, contact.getIntensity());
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_set_intensity(
+    const CNA_PostProcessPassHandle pass, const float intensity)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        contact.setIntensity(intensity);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_get_bias(
+    const CNA_PostProcessPassHandle pass, float* const outBias)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        return StoreValue(outBias, contact.getBias());
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_set_bias(
+    const CNA_PostProcessPassHandle pass, const float bias)
+{
+    return WithContactShadowPass(pass, [&](Ext::ContactShadowPass& contact) -> CNA_Result {
+        contact.setBias(bias);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_copy_fallback_reason(
+    const CNA_PostProcessPassHandle pass, char* const destination, const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    std::shared_ptr<PostProcessPassResource> resource;
+    if (const CNA_Result result = GetPostProcessPass(pass, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return result;
+    }
+    auto* const contact = dynamic_cast<Ext::ContactShadowPass*>(resource->value.get());
+    if (contact == nullptr) {
+        if (outBytes != nullptr) {
+            *outBytes = UINT64_C(0);
+        }
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "This post-process pass is not a contact-shadow pass.");
+    }
+    return CopyFormattedString(destination, capacity, outBytes, [contact] {
+        return contact->getFallbackReason();
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_is_occluded(
+    const float rayViewDepth, const float sceneViewDepth, const float bias, const float thickness,
+    CNA_Bool* const outOccluded)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outOccluded,
+            static_cast<CNA_Bool>(
+                Ext::ContactShadowPass::isOccluded(rayViewDepth, sceneViewDepth, bias, thickness)
+                    ? CNA_TRUE
+                    : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_copy_occlusion_test_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(destination, capacity, outBytes, [] {
+        return Ext::ContactShadowPass::getOcclusionTestGlsl();
+    });
+}
+
+CNA_Result cna_contact_shadow_pass_combine_visibility(
+    const float shadowMapVisibility, const float contactVisibility, float* const outVisibility)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return StoreValue(
+            outVisibility,
+            Ext::ContactShadowPass::combineVisibility(shadowMapVisibility, contactVisibility));
     });
 }
 

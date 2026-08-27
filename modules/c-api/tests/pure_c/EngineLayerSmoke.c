@@ -1772,6 +1772,286 @@ static int validate_shadow_policy(const CNA_Handle graphics_device)
     return ok && cna_clustered_shadow_policy_destroy(policy) != CNA_RESULT_SUCCESS;
 }
 
+
+/* CBIND-085C2. Every precondition asserted here was read out of the canonical bodies before the
+ * test was written, rather than discovered by it failing. */
+static int validate_prepass_and_contact(const CNA_Handle graphics_device)
+{
+    CNA_DepthNormalPrepassHandle prepass = CNA_INVALID_HANDLE;
+    CNA_PostProcessPassHandle contact = CNA_INVALID_HANDLE;
+    CNA_Matrix view;
+    CNA_Matrix projection;
+    CNA_Bool flag = UINT8_C(9);
+    float channels[4];
+    float scalar = -1.0F;
+    int32_t count = -1;
+    uint64_t bytes = UINT64_C(0);
+    int ok = 1;
+
+    if (cna_matrix_get_identity(&view) != CNA_RESULT_SUCCESS ||
+        cna_matrix_get_identity(&projection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The pure functions answer without a prepass, and pack/unpack must round-trip. */
+    if (cna_depth_normal_prepass_pack_depth(0.25F, &channels[0], &channels[1], &channels[2],
+                                            &channels[3]) != CNA_RESULT_SUCCESS ||
+        cna_depth_normal_prepass_unpack_depth(channels[0], channels[1], channels[2], channels[3],
+                                              &scalar) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (scalar < 0.2499F || scalar > 0.2501F) {
+        return 0;
+    }
+    /* packDepth stops one texel short of 1.0 on purpose: fract(1.0) is 0, so an unclamped
+       far-plane depth would read back as the nearest possible surface. */
+    if (cna_depth_normal_prepass_pack_depth(1.0F, &channels[0], &channels[1], &channels[2],
+                                            &channels[3]) != CNA_RESULT_SUCCESS ||
+        cna_depth_normal_prepass_unpack_depth(channels[0], channels[1], channels[2], channels[3],
+                                              &scalar) != CNA_RESULT_SUCCESS ||
+        scalar >= 1.0F) {
+        return 0;
+    }
+    if (cna_depth_normal_prepass_pack_depth(0.5F, 0, &channels[1], &channels[2], &channels[3]) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* A texel with full alpha carries no velocity, and decoding one yields exactly zero rather
+       than a small wrong motion. */
+    {
+        CNA_Color opaque;
+        CNA_Vector2 velocity;
+        opaque.r = 128U; opaque.g = 128U; opaque.b = 0U; opaque.a = 255U;
+        if (cna_depth_normal_prepass_has_velocity_ext(opaque, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE ||
+            cna_depth_normal_prepass_decode_velocity_ext(opaque, &velocity) !=
+                CNA_RESULT_SUCCESS ||
+            velocity.x != 0.0F || velocity.y != 0.0F) {
+            return 0;
+        }
+        opaque.a = 0U;
+        if (cna_depth_normal_prepass_has_velocity_ext(opaque, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_TRUE) {
+            return 0;
+        }
+    }
+    /* Both GLSL helpers are string copy-outs, and the packed and unpacked decoders differ. */
+    {
+        uint64_t packed_bytes = UINT64_C(0);
+        uint64_t plain_bytes = UINT64_C(0);
+        if (cna_depth_normal_prepass_copy_depth_decode_glsl(CNA_TRUE, 0, UINT64_C(0),
+                                                            &packed_bytes) !=
+                CNA_RESULT_BUFFER_TOO_SMALL ||
+            packed_bytes == UINT64_C(0) ||
+            cna_depth_normal_prepass_copy_depth_decode_glsl(CNA_FALSE, 0, UINT64_C(0),
+                                                            &plain_bytes) !=
+                CNA_RESULT_BUFFER_TOO_SMALL ||
+            plain_bytes == UINT64_C(0) || packed_bytes == plain_bytes) {
+            return 0;
+        }
+        /* A non-canonical boolean is refused before anything is formatted. */
+        if (cna_depth_normal_prepass_copy_depth_decode_glsl(UINT8_C(2), 0, UINT64_C(0), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+        if (cna_depth_normal_prepass_copy_velocity_decode_glsl(0, UINT64_C(0), &bytes) !=
+                CNA_RESULT_BUFFER_TOO_SMALL || bytes == UINT64_C(0)) {
+            return 0;
+        }
+    }
+    if (cna_depth_normal_prepass_uses_packed_depth_ext(graphics_device, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        (flag != CNA_TRUE && flag != CNA_FALSE)) {
+        return 0;
+    }
+
+    /* A non-positive size is refused rather than clamped. */
+    if (cna_depth_normal_prepass_create(graphics_device, INT32_C(0), INT32_C(16),
+                                        CNA_DEPTH_ENCODING_AUTOMATIC, &prepass) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        prepass != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_depth_normal_prepass_create(graphics_device, INT32_C(32), INT32_C(16), UINT32_C(9),
+                                        &prepass) != CNA_RESULT_INVALID_ARGUMENT ||
+        prepass != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_depth_normal_prepass_create(graphics_device, INT32_C(32), INT32_C(16),
+                                        CNA_DEPTH_ENCODING_AUTOMATIC, &prepass) !=
+            CNA_RESULT_SUCCESS ||
+        prepass == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    ok = cna_depth_normal_prepass_get_pass_count(prepass, &count) == CNA_RESULT_SUCCESS &&
+        count >= INT32_C(1);
+    ok = ok && cna_depth_normal_prepass_is_supported(prepass, graphics_device, &flag) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_is_using_multiple_render_targets(prepass, &flag) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_is_depth_packed(prepass, &flag) == CNA_RESULT_SUCCESS;
+    /* Roughness is clamped rather than refused, exactly as the canonical setter clamps it. */
+    ok = ok && cna_depth_normal_prepass_set_roughness(prepass, 5.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_get_roughness(prepass, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 1.0F;
+    ok = ok && cna_depth_normal_prepass_set_roughness(prepass, -1.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_get_roughness(prepass, &scalar) == CNA_RESULT_SUCCESS &&
+        scalar == 0.0F;
+    ok = ok && cna_depth_normal_prepass_set_previous_world_ext(prepass, &view) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_set_previous_camera_ext(prepass, &view, &projection) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_set_previous_camera_ext(prepass, &view, 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    /* Turning velocity on adds a pass wherever the renderer needs separate targets. */
+    ok = ok && cna_depth_normal_prepass_set_velocity_enabled_ext(prepass, CNA_TRUE) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_is_velocity_enabled_ext(prepass, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+    ok = ok && cna_depth_normal_prepass_set_velocity_enabled_ext(prepass, UINT8_C(2)) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* begin/end: the near plane must be positive and the far plane beyond it, because depth is
+       normalised by the far plane. Both refusals happen before the pass opens, so end() still
+       reports no pass afterwards. */
+    ok = ok && cna_depth_normal_prepass_begin(prepass, INT32_C(0), &view, &projection, 0.0F,
+                                              100.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_depth_normal_prepass_begin(prepass, INT32_C(0), &view, &projection, 10.0F,
+                                              1.0F) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_depth_normal_prepass_begin(prepass, INT32_C(99), &view, &projection, 1.0F,
+                                              100.0F) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_end(prepass) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_begin(prepass, INT32_C(0), &view, &projection, 1.0F,
+                                              100.0F) == CNA_RESULT_SUCCESS;
+    /* While a pass is open, resize and the velocity switch are refused rather than reallocating
+       the target the device is drawing into. */
+    ok = ok && cna_depth_normal_prepass_resize(prepass, INT32_C(64), INT32_C(64)) !=
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_set_velocity_enabled_ext(prepass, CNA_FALSE) !=
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_end(prepass) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_resize(prepass, INT32_C(64), INT32_C(64)) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_depth_normal_prepass_resize(prepass, INT32_C(0), INT32_C(64)) !=
+        CNA_RESULT_SUCCESS;
+
+    if (ok) {
+        CNA_EffectHandle rigid = CNA_INVALID_HANDLE;
+        CNA_EffectHandle skinned = CNA_INVALID_HANDLE;
+        CNA_Handle depth = CNA_INVALID_HANDLE;
+        CNA_Handle normals = CNA_INVALID_HANDLE;
+        CNA_Handle velocity = CNA_INVALID_HANDLE;
+        ok = cna_depth_normal_prepass_get_prepass_effect(prepass, &rigid) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_depth_normal_prepass_get_skinned_prepass_effect(prepass, &skinned) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_depth_normal_prepass_get_depth_texture(prepass, &depth) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_depth_normal_prepass_get_normal_texture(prepass, &normals) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_depth_normal_prepass_get_velocity_texture_ext(prepass, &velocity) ==
+            CNA_RESULT_SUCCESS;
+        if (ok && depth != CNA_INVALID_HANDLE) {
+            /* A borrow keeps the prepass alive, so destroying it is refused until released. */
+            ok = cna_depth_normal_prepass_destroy(prepass) != CNA_RESULT_SUCCESS;
+        }
+        if (ok && rigid != CNA_INVALID_HANDLE) {
+            ok = cna_effect_destroy(rigid) == CNA_RESULT_SUCCESS;
+        }
+        if (ok && skinned != CNA_INVALID_HANDLE) {
+            ok = ok && cna_effect_destroy(skinned) == CNA_RESULT_SUCCESS;
+        }
+        if (ok && depth != CNA_INVALID_HANDLE) {
+            ok = ok && cna_render_target_destroy(depth) == CNA_RESULT_SUCCESS;
+        }
+        if (ok && normals != CNA_INVALID_HANDLE) {
+            ok = ok && cna_render_target_destroy(normals) == CNA_RESULT_SUCCESS;
+        }
+        if (ok && velocity != CNA_INVALID_HANDLE) {
+            ok = ok && cna_render_target_destroy(velocity) == CNA_RESULT_SUCCESS;
+        }
+    }
+    if (!ok) {
+        (void)cna_depth_normal_prepass_destroy(prepass);
+        return 0;
+    }
+    if (cna_depth_normal_prepass_destroy(prepass) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The contact-shadow pass is a PostProcessPass, so the shared operations drive it and its own
+       settings are reached by routes that check the concrete type. */
+    if (cna_contact_shadow_pass_create(graphics_device, &contact) != CNA_RESULT_SUCCESS ||
+        contact == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    {
+        CNA_Vector3 direction;
+        ok = cna_post_process_pass_copy_name(contact, 0, UINT64_C(0), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+        ok = ok && cna_post_process_pass_is_supported(contact, graphics_device, &flag) ==
+            CNA_RESULT_SUCCESS;
+        direction.x = 1.0F; direction.y = 0.0F; direction.z = 0.0F;
+        ok = ok && cna_contact_shadow_pass_set_light_direction(contact, &direction) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_contact_shadow_pass_get_light_direction(contact, &direction) ==
+            CNA_RESULT_SUCCESS && direction.x == 1.0F;
+        ok = ok && cna_contact_shadow_pass_set_light_direction(contact, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+        ok = ok && cna_contact_shadow_pass_set_max_distance(contact, 0.5F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_contact_shadow_pass_get_max_distance(contact, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == 0.5F;
+        ok = ok && cna_contact_shadow_pass_set_step_count(contact, INT32_C(20)) ==
+            CNA_RESULT_SUCCESS;
+        ok = ok && cna_contact_shadow_pass_get_step_count(contact, &count) ==
+            CNA_RESULT_SUCCESS && count == INT32_C(20);
+        ok = ok && cna_contact_shadow_pass_set_thickness(contact, 0.3F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_contact_shadow_pass_get_thickness(contact, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == 0.3F;
+        ok = ok && cna_contact_shadow_pass_set_intensity(contact, 0.75F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_contact_shadow_pass_get_intensity(contact, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == 0.75F;
+        ok = ok && cna_contact_shadow_pass_set_bias(contact, 0.05F) == CNA_RESULT_SUCCESS;
+        ok = ok && cna_contact_shadow_pass_get_bias(contact, &scalar) == CNA_RESULT_SUCCESS &&
+            scalar == 0.05F;
+        ok = ok && cna_contact_shadow_pass_copy_fallback_reason(contact, 0, UINT64_C(0), &bytes) !=
+            CNA_RESULT_INVALID_ARGUMENT;
+
+        /* The occlusion test is a strict band: deeper than the bias, shallower than the assumed
+           thickness. A sample exactly at the bias is NOT occluded, which is the arm a `>=` would
+           get wrong. */
+        ok = ok && cna_contact_shadow_pass_is_occluded(1.1F, 1.0F, 0.05F, 0.5F, &flag) ==
+            CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+        ok = ok && cna_contact_shadow_pass_is_occluded(1.05F, 1.0F, 0.05F, 0.5F, &flag) ==
+            CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+        ok = ok && cna_contact_shadow_pass_is_occluded(2.0F, 1.0F, 0.05F, 0.5F, &flag) ==
+            CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+        /* Both visibilities are clamped before multiplying, so a caller cannot brighten a pixel
+           by handing in a visibility above one. */
+        ok = ok && cna_contact_shadow_pass_combine_visibility(2.0F, 0.5F, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == 0.5F;
+        ok = ok && cna_contact_shadow_pass_combine_visibility(-1.0F, 0.5F, &scalar) ==
+            CNA_RESULT_SUCCESS && scalar == 0.0F;
+        ok = ok && cna_contact_shadow_pass_copy_occlusion_test_glsl(0, UINT64_C(0), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+    }
+    if (ok) {
+        /* A blit pass is not a contact-shadow pass, and the settings say so by argument. */
+        CNA_PostProcessPassHandle blit = CNA_INVALID_HANDLE;
+        if (cna_blit_pass_create(graphics_device, &blit) == CNA_RESULT_SUCCESS) {
+            ok = cna_contact_shadow_pass_get_bias(blit, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_contact_shadow_pass_copy_fallback_reason(blit, 0, UINT64_C(0), &bytes) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+            ok = ok && cna_post_process_pass_destroy(blit) == CNA_RESULT_SUCCESS;
+        }
+    }
+    if (!ok) {
+        (void)cna_post_process_pass_destroy(contact);
+        return 0;
+    }
+    return cna_post_process_pass_destroy(contact) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -1825,6 +2105,10 @@ static CNA_Result on_load(
         }
         if (!validate_shadow_policy(graphics_device)) {
             state->failed_stage = 14;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_prepass_and_contact(graphics_device)) {
+            state->failed_stage = 15;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {
