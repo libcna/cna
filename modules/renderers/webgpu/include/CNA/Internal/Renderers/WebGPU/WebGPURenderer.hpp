@@ -360,14 +360,17 @@ namespace CNA::Internal::Renderers::WebGPU
     /// `ITextureCubeRenderer` has no plain-2D sampling path, only the cube one, matching XNA's own
     /// RenderTargetCube/TextureCube API shape).
     ///
-    /// Deliberately, honestly NOT implemented (documented scope cuts, matching
-    /// WebGPURenderTargetRenderer's own precedent): mip-chain regeneration (`mipMap=true` throws,
-    /// same as `CreateRenderTarget2D`) and MSAA (the `multiSampleCount` constructor argument is
-    /// ignored; `GetMultiSampleCount()` always reports 0) -- unlike `WebGPURenderTargetRenderer`,
-    /// this class does not attempt to mirror the renderer's global `sampleCount_`, since a
-    /// multisampled array texture resolved per-layer is meaningfully more machinery (a per-face
-    /// MSAA colour view/resolve target, still only one live at a time) than this task's time
-    /// budget affords landing well-tested; see `plans/plan_webgpu.md`'s `WEBGPU-114` row.
+    /// WEBGPU-114 per-face MSAA: when the renderer's global `sampleCount_` > 1 this target renders
+    /// each face into its own multisampled colour attachment and resolves it into that face's
+    /// single-sample layer (`msaaColorTextures_`/`msaaColorViews_`, six separate single-layer
+    /// textures because WebGPU forbids a multisampled ARRAY texture); the shared depth attachment
+    /// is allocated at the same sample count. `GetMultiSampleCount()` reports the applied count,
+    /// mirroring `WebGPURenderTargetRenderer`. The per-instance `multiSampleCount` argument is not
+    /// read, exactly like the 2D sibling.
+    ///
+    /// Deliberately, honestly NOT implemented yet (documented scope cut, matching
+    /// `CreateRenderTarget2D`'s own precedent): mip-chain regeneration (`mipMap=true` throws); see
+    /// `plans/plan_webgpu.md`'s `WEBGPU-114` row.
     class WebGPURenderTargetCubeRenderer final : public IRenderTargetCubeRenderer, public IWebGPUCubeSamplable
     {
     public:
@@ -381,7 +384,11 @@ namespace CNA::Internal::Renderers::WebGPU
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
-        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+        /// WEBGPU-114: mirrors WebGPURenderTargetRenderer::GetMultiSampleCount() -- the count this
+        /// target actually renders at, captured from the owner's global sampleCount_ at
+        /// construction (0/1 when MSAA is not engaged). Per-face MSAA renders into one shared
+        /// multisampled colour texture that resolves into each face layer (see MsaaColorView()).
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
         /// WEBGPU-114: real per-face CPU readback, same staged-copy technique as
         /// REMED-GFX-134: refuses an out-of-range face/level/rectangle by returning false (the
         /// shared layer's deterministic System::NotSupportedException) instead of throwing a raw
@@ -401,8 +408,18 @@ namespace CNA::Internal::Renderers::WebGPU
         /// The whole-cube sampling view (all 6 layers) -- IWebGPUCubeSamplable's contract.
         [[nodiscard]] WGPUTextureView CubeView() const override { return cubeView_; }
         [[nodiscard]] WebGPUSampledTextureEXT SampledCube() const override { return {cubeView_, sampled_}; }
-        /// This face's own single-layer 2D view, used as a render-pass colour attachment.
+        /// This face's own single-layer 2D view (mip 0), used directly as a render-pass colour
+        /// attachment at 1x, or as the resolve target for this face's multisampled attachment
+        /// when MSAA is engaged. It is a view of texture_ layer @p face, so GetData()/sampling
+        /// always read what a 1x render wrote or an MSAA render resolved.
         [[nodiscard]] WGPUTextureView ColorAttachmentView(int face) const { return faceViews_[static_cast<std::size_t>(face)]; }
+        /// WEBGPU-114: this face's OWN multisampled colour view, non-null exactly when
+        /// GetMultiSampleCount() > 1. Six per-face views (not one shared attachment) so a
+        /// PreserveContents face rebound for a partial update loads its own samples, never
+        /// whichever face rendered last -- the same six-per-face choice Vulkan/EasyGL settled on
+        /// (REMED-GFX-141). The pass makes this the colour attachment and resolves it into
+        /// ColorAttachmentView(face).
+        [[nodiscard]] WGPUTextureView MsaaColorAttachmentView(int face) const { return msaaColorViews_[static_cast<std::size_t>(face)]; }
         /// The one depth+stencil view shared by all 6 faces (only one is ever bound at once).
         [[nodiscard]] WGPUTextureView DepthView() const { return depthView_; }
         /// WEBGPU-39: mapped depth attachment format (Undefined for DepthFormat::None) + stencil aspect.
@@ -432,6 +449,16 @@ namespace CNA::Internal::Renderers::WebGPU
         /// only, consumed synchronously while this target is bound (see the RenderTarget2D twin).
         std::shared_ptr<const WebGPUSampledResourceEXT> sampled_;
         std::array<WGPUTextureView, 6> faceViews_{};
+        /// WEBGPU-114: per-face multisampled colour, created only when MSAA is engaged. SIX
+        /// separate single-layer textures (one per face) rather than one 6-layer texture, because
+        /// WebGPU forbids a multisampled ARRAY texture ("depth or array layers must be 1"); this
+        /// still gives each face its own attachment (see MsaaColorAttachmentView()).
+        std::array<WGPUTexture, 6> msaaColorTextures_{};
+        std::array<WGPUTextureView, 6> msaaColorViews_{};
+        /// The MSAA sample count this target actually renders at, captured from the owner's global
+        /// sampleCount_ at construction (0 when MSAA is not engaged). Mirrors
+        /// WebGPURenderTargetRenderer::appliedMultiSampleCount_.
+        int appliedMultiSampleCount_ = 0;
         WGPUTexture depthTexture_ = nullptr;
         WGPUTextureView depthView_ = nullptr;
         /// WEBGPU-39: mapped depth attachment format (Undefined = None, no depth texture created).

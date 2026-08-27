@@ -320,13 +320,84 @@ protected:
                         "(mip regeneration not yet implemented, WEBGPU-114)");
         }
 
-        // Check F: MultiSampleCount property fidelity -- MSAA is not implemented for
-        // RenderTargetCube on this renderer; requesting 4 must still honestly report 0.
+        // Check F: per-face MSAA (WEBGPU-114). Engage the renderer's global 4x MSAA, then a
+        // RenderTargetCube must (F1) report the applied sample count, (F2) render each face into
+        // its OWN multisampled attachment and resolve it into that face's own layer -- distinct
+        // per-face colours must not cross-contaminate -- and (F3) actually multisample: a
+        // half-covering triangle leaves blended edge pixels a 1x render cannot produce.
         {
-            RenderTargetCube rtcMsaa(dev, kCubeSize, false, SurfaceFormat::Color, DepthFormat::None, 4);
-            check(rtcMsaa.getMultiSampleCountProperty() == 0,
-                  "Check F: RenderTargetCube MultiSampleCount request 4 -> honestly reports 0 "
-                  "(MSAA not implemented for RenderTargetCube on this renderer, see WEBGPU-114)");
+            gdm_->setPreferMultiSamplingProperty(true);
+            gdm_->ApplyChanges();
+            const int applied =
+                dev.getPresentationParametersProperty().getMultiSampleCountProperty();
+            check(applied == 0 || applied == 4,
+                  "Check F0: backbuffer MSAA request resolves to the 0-or-4 contract (applied="
+                  + std::to_string(applied) + ")");
+
+            if (applied == 4)
+            {
+                // Depth24Stencil8 so the shared depth attachment is also allocated at 4x samples.
+                RenderTargetCube rtcMsaa(dev, kCubeSize, false, SurfaceFormat::Color,
+                                         DepthFormat::Depth24Stencil8, 4);
+                check(rtcMsaa.getMultiSampleCountProperty() == 4,
+                      "Check F1: RenderTargetCube reports the applied 4x sample count");
+
+                // Distinct solid colours into two faces -- proves each face resolves into its own
+                // layer with no cross-face leak (the six-per-face MSAA attachment design).
+                dev.SetRenderTarget(&rtcMsaa, CubeMapFace::PositiveX);
+                dev.Clear(Color::Black);
+                DrawFullScreenQuad(dev, Color::Red);
+                dev.SetRenderTarget(&rtcMsaa, CubeMapFace::NegativeX);
+                dev.Clear(Color::Black);
+                DrawFullScreenQuad(dev, Color::Lime);
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+                const Color fpx = ReadFaceCentre(rtcMsaa, CubeMapFace::PositiveX);
+                const Color fnx = ReadFaceCentre(rtcMsaa, CubeMapFace::NegativeX);
+                check(Matches(fpx, Color::Red) && Matches(fnx, Color::Lime),
+                      "Check F2: each face resolves its OWN colour (+X red / -X green), no leak: "
+                      + ColorStr(fpx) + " / " + ColorStr(fnx));
+
+                // Genuine multisampling: a half-covering White triangle over a Black face must
+                // leave blended intermediate-grey pixels along its slanted hypotenuse -- a 1x
+                // render can only produce hard 0/255 edges there.
+                dev.SetRenderTarget(&rtcMsaa, CubeMapFace::PositiveY);
+                dev.Clear(Color::Black);
+                const VertexPositionColor tri[3] = {
+                    { Vector3(-1.0f,  1.0f, 0.0f), Color::White },
+                    { Vector3(-1.0f, -1.0f, 0.0f), Color::White },
+                    { Vector3( 1.0f, -1.0f, 0.0f), Color::White },
+                };
+                ApplyBasicEffect(dev);
+                dev.DrawUserPrimitives(PrimitiveType::TriangleList, tri, 0, 1);
+                dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+                std::vector<Color> facePix(static_cast<std::size_t>(kCubeSize) * kCubeSize,
+                                           Color(0, 0, 0, 0));
+                rtcMsaa.GetData(CubeMapFace::PositiveY, facePix.data(),
+                                static_cast<int>(facePix.size()));
+                int blended = 0;
+                for (const Color& c : facePix)
+                {
+                    const int r = c.getRProperty();
+                    if (r >= 16 && r <= 239 &&
+                        std::abs(r - c.getGProperty()) <= 16 &&
+                        std::abs(r - c.getBProperty()) <= 16)
+                        ++blended;
+                }
+                check(blended > 0,
+                      "Check F3: half-covering triangle leaves blended edge pixels (genuine "
+                      "multisample resolve): " + std::to_string(blended) + " intermediate pixels");
+            }
+            else
+            {
+                RenderTargetCube rtcMsaa(dev, kCubeSize, false, SurfaceFormat::Color,
+                                         DepthFormat::None, 4);
+                check(rtcMsaa.getMultiSampleCountProperty() == 0,
+                      "Check F1: 4x MSAA unsupported on this adapter -> RenderTargetCube honestly "
+                      "reports 0");
+                std::printf("[INFO] backbuffer MSAA applied=0; per-face MSAA render path not "
+                            "exercised on this adapter\n");
+            }
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

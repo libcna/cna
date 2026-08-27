@@ -1742,7 +1742,11 @@ namespace CNA::Internal::Renderers::WebGPU
             depthDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
             depthDescriptor.format = depthMap.format;
             depthDescriptor.mipLevelCount = 1;
-            depthDescriptor.sampleCount = 1;
+            // WEBGPU-114: one shared depth attachment, but its sample count must match the colour
+            // attachment the face pass uses (owner_->sampleCount_ when MSAA is engaged) -- every
+            // attachment in a wgpu-native render pass must agree on sample count. Still shared
+            // across all six faces: only one face renders at a time.
+            depthDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
             depthTexture_ = wgpuDeviceCreateTexture(owner_->Device(), &depthDescriptor);
             if (depthTexture_ == nullptr)
             {
@@ -1766,6 +1770,56 @@ namespace CNA::Internal::Renderers::WebGPU
                 throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube depth-stencil view");
             }
         }
+
+        // WEBGPU-114: per-face MSAA. Mirror WebGPURenderTargetRenderer's "unconditionally follow the
+        // owner's global sampleCount_" choice (the per-instance multiSampleCount argument is
+        // intentionally not read -- every GetOrCreatePipeline*3D() bakes ONE renderer-global sample
+        // count into every pipeline, so a face pass must match it). SIX separate single-layer
+        // multisampled textures (WebGPU forbids a multisampled ARRAY texture, unlike Vulkan's
+        // 6-layer image) so a PreserveContents face loads its OWN samples rather than whichever
+        // face rendered last -- the per-face choice Vulkan/EasyGL settled on (REMED-GFX-141).
+        // texture_/faceViews_ stay single-sample and become the resolve destinations.
+        if (owner_->sampleCount_ > 1)
+        {
+            for (int face = 0; face < 6; ++face)
+            {
+                WGPUTextureDescriptor msaaDescriptor{};
+                msaaDescriptor.label = StringView("CNA WebGPU RenderTargetCube MSAA Colour");
+                msaaDescriptor.usage = WGPUTextureUsage_RenderAttachment;
+                msaaDescriptor.dimension = WGPUTextureDimension_2D;
+                msaaDescriptor.size = WGPUExtent3D{static_cast<std::uint32_t>(size_), static_cast<std::uint32_t>(size_), 1};
+                msaaDescriptor.format = colorFormat_;
+                msaaDescriptor.mipLevelCount = 1;
+                msaaDescriptor.sampleCount = static_cast<std::uint32_t>(owner_->sampleCount_);
+                WGPUTexture msaaTex = wgpuDeviceCreateTexture(owner_->Device(), &msaaDescriptor);
+                WGPUTextureView msaaView = nullptr;
+                if (msaaTex != nullptr)
+                    msaaView = wgpuTextureCreateView(msaaTex, nullptr);
+                if (msaaTex == nullptr || msaaView == nullptr)
+                {
+                    if (msaaView != nullptr) wgpuTextureViewRelease(msaaView);
+                    if (msaaTex != nullptr) wgpuTextureRelease(msaaTex);
+                    for (int cleanupFace = 0; cleanupFace < face; ++cleanupFace)
+                    {
+                        wgpuTextureViewRelease(msaaColorViews_[static_cast<std::size_t>(cleanupFace)]);
+                        wgpuTextureRelease(msaaColorTextures_[static_cast<std::size_t>(cleanupFace)]);
+                    }
+                    if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
+                    if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
+                    for (WGPUTextureView view : faceViews_) wgpuTextureViewRelease(view);
+                    wgpuTextureViewRelease(cubeView_);
+                    wgpuTextureRelease(texture_);
+                    depthView_ = nullptr;
+                    depthTexture_ = nullptr;
+                    cubeView_ = nullptr;
+                    texture_ = nullptr;
+                    throw std::runtime_error("CNA WebGPU: failed to create RenderTargetCube MSAA face attachment");
+                }
+                msaaColorTextures_[static_cast<std::size_t>(face)] = msaaTex;
+                msaaColorViews_[static_cast<std::size_t>(face)] = msaaView;
+            }
+            appliedMultiSampleCount_ = owner_->sampleCount_;
+        }
         sampled_ = std::make_shared<const WebGPUSampledResourceEXT>(texture_, cubeView_);
     }
 
@@ -1781,6 +1835,10 @@ namespace CNA::Internal::Renderers::WebGPU
         }
         if (depthView_ != nullptr) wgpuTextureViewRelease(depthView_);
         if (depthTexture_ != nullptr) wgpuTextureRelease(depthTexture_);
+        for (WGPUTextureView view : msaaColorViews_)          // WEBGPU-114: per-face MSAA views
+            if (view != nullptr) wgpuTextureViewRelease(view);
+        for (WGPUTexture tex : msaaColorTextures_)            // WEBGPU-114: per-face MSAA textures
+            if (tex != nullptr) wgpuTextureRelease(tex);
         for (WGPUTextureView view : faceViews_)
             if (view != nullptr) wgpuTextureViewRelease(view);
         if (cubeView_ != nullptr) wgpuTextureViewRelease(cubeView_);
@@ -3130,7 +3188,10 @@ struct VertexOutput {
         else if (currentRenderTargetCubeFace_ != nullptr)
         {
             snapshot.targetFormat = currentRenderTargetCubeFace_->ColorFormat();
-            snapshot.sampleCount = 1;
+            // WEBGPU-114: a cube face with MSAA renders into a multisampled attachment, so its
+            // pipelines must be built at the same sample count (mirrors the 2D-target branch above).
+            snapshot.sampleCount = static_cast<std::uint32_t>(
+                std::max(1, currentRenderTargetCubeFace_->GetMultiSampleCount()));
         }
         else
         {
@@ -8199,16 +8260,20 @@ struct VSOut {
         // REMED-GFX-159/156: ONE ordered replay across all eleven deferred families and the
         // ordered Clear()s between them. `discard` is read from the target THIS cycle is being
         // recorded for, so an A -> B -> A sequence can never apply target B's policy to target A.
-        // This face's own single-layer 2D view is the colour attachment -- this class implements no
-        // MSAA at all, so there is never a resolve target.
+        // WEBGPU-114: at 1x this face's single-sample 2D view is the colour attachment with no
+        // resolve; with MSAA the face's own multisampled view is the colour attachment and it
+        // resolves into that single-sample view (ReplayOrderedSegments already honours resolveView).
+        const int cubeSamples = target->GetMultiSampleCount();
+        const bool cubeMsaa = cubeSamples > 1;
         PassDestination destination;
-        destination.colorView = target->ColorAttachmentView(face);
-        destination.resolveView = nullptr;
+        destination.colorView = cubeMsaa ? target->MsaaColorAttachmentView(face)
+                                         : target->ColorAttachmentView(face);
+        destination.resolveView = cubeMsaa ? target->ColorAttachmentView(face) : nullptr;
         destination.depthView = target->DepthView();
         destination.depthFormat = target->DepthFormat();       // WEBGPU-39
         destination.depthHasStencil = target->DepthHasStencil();
         destination.colorFormat = target->ColorFormat();
-        destination.sampleCount = 1;
+        destination.sampleCount = static_cast<std::uint32_t>(std::max(1, cubeSamples));
         destination.width = target->GetSize();
         destination.height = target->GetSize();
         destination.discardFirstSegment = !target->PreserveContents();
