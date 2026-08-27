@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
+#include "CNA/Internal/Renderers/WebGPU/WebGPUPresentMode.hpp"
 #include "CNA/Internal/Renderers/WebGPU/WebGPUMetalSurface.hpp"
 
 #if defined(_WIN32)
@@ -2852,17 +2853,21 @@ namespace CNA::Internal::Renderers::WebGPU
         const WGPUTextureFormat renderFormat = NonSrgbColorFormat(chosenFormat);
         const bool needsViewReinterpretation = renderFormat != chosenFormat;
 
+        // WEBGPU-108: the PresentInterval -> present-mode policy is a WGPU-free, unit-tested seam
+        // (SelectPresentModeChoiceEXT / WebGPU_PresentModeMapping); this only translates its choice
+        // onto a concrete WGPUPresentMode.
         WGPUPresentMode presentMode = WGPUPresentMode_Fifo;
-        if (swapInterval_ == 0)
+        switch (SelectPresentModeChoiceEXT(
+                    swapInterval_,
+                    HasPresentMode(capabilities, WGPUPresentMode_Immediate),
+                    HasPresentMode(capabilities, WGPUPresentMode_Mailbox),
+                    HasPresentMode(capabilities, WGPUPresentMode_Fifo),
+                    capabilities.presentModeCount > 0))
         {
-            if (HasPresentMode(capabilities, WGPUPresentMode_Immediate))
-                presentMode = WGPUPresentMode_Immediate;
-            else if (HasPresentMode(capabilities, WGPUPresentMode_Mailbox))
-                presentMode = WGPUPresentMode_Mailbox;
-        }
-        else if (!HasPresentMode(capabilities, presentMode) && capabilities.presentModeCount > 0)
-        {
-            presentMode = capabilities.presentModes[0];
+            case PresentModeChoiceEXT::Immediate:      presentMode = WGPUPresentMode_Immediate; break;
+            case PresentModeChoiceEXT::Mailbox:        presentMode = WGPUPresentMode_Mailbox; break;
+            case PresentModeChoiceEXT::FirstAvailable: presentMode = capabilities.presentModes[0]; break;
+            case PresentModeChoiceEXT::Fifo:           presentMode = WGPUPresentMode_Fifo; break;
         }
 
         const WGPUCompositeAlphaMode alphaMode = capabilities.alphaModeCount > 0

@@ -207,6 +207,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_VertexStart COMMAND cna_test_webgpu_vertexstart
         TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-108: PresentInterval -> present-mode policy (FIFO/Immediate/Mailbox + unsupported-mode
+    # fallback). A pure unit test of the WGPU-free SelectPresentModeChoiceEXT seam -- no GPU/display.
+    cna_webgpu_test(cna_test_webgpu_present_mode webgpu_present_mode_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_PresentModeMapping COMMAND cna_test_webgpu_present_mode
+        TIMEOUT 30 LABELS "WebGPU")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.
