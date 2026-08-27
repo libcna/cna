@@ -1139,13 +1139,15 @@ visible to `cna_tool_cnb_info --refs` — a build script can therefore discover 
 ship without knowing anything about the `Song` schema. Exactly one entry is required: the media
 file is the whole point of the asset, and a second reference would be a dependency nothing knows
 how to interpret. `expectedAssetTypeId` is `0`, because the target is a media file on disk rather
-than a CNA asset with an identifier of its own.
+than a CNA asset with an identifier of its own, and `flags` is `0` because none are defined. Both
+are **enforced on read**, not merely written: a row that names an expected CNA type is describing a
+dependency this schema cannot honour.
 
 ### 19.2 `SNGH`
 
 | offset | size | field | notes |
 |---|---|---|---|
-| 0 | 4 | `durationMs` | 0 when the compiler could not determine it |
+| 0 | 4 | `durationMs` | 0 when the compiler could not determine it; at most `0x7FFFFFFF` |
 | 4 | 4 | `flags` | reserved; must be zero |
 | 8 | … | `name` | length-prefixed UTF-8 display name; may be empty |
 
@@ -1153,7 +1155,7 @@ than a CNA asset with an identifier of its own.
 
 | offset | size | field | notes |
 |---|---|---|---|
-| 0 | 4 | `durationMs` | 0 when unknown |
+| 0 | 4 | `durationMs` | 0 when unknown; at most `0x7FFFFFFF` |
 | 4 | 4 | `width` | 1…65536 |
 | 8 | 4 | `height` | 1…65536 |
 | 12 | 4 | `framesPerSecond` | `f32`; must be finite and greater than zero |
@@ -1163,3 +1165,8 @@ than a CNA asset with an identifier of its own.
 The frame-rate rule is checked on **both** sides. A NaN or infinite `f32` is a perfectly
 well-formed bit pattern that §2.1 says the container stores verbatim, so the schema layer is the
 only one that can refuse it — and it would otherwise divide badly inside a player.
+
+`durationMs` is a `u32` on the wire but is bounded at `0x7FFFFFFF` on both sides, because `Song`'s
+and `Video`'s constructors take a signed 32-bit millisecond count: a larger value would arrive
+negative and every later `Duration`/`PlayPosition` comparison would read backwards. `INT32_MAX`
+milliseconds is about 24.8 days, so nothing real is refused.

@@ -314,11 +314,22 @@ namespace Microsoft::Xna::Framework::Content
          * against the name the file itself carries before dispatching. That is what stops two game
          * types whose 31-bit hashes collide from decoding each other's content.
          *
-         * @param assetTypeId       The identifier written into the `.cnb` header. Must not be 0.
+         * **The identifier must be in the custom range** (`>= 0x80000000`), which is what
+         * `CnbAssetTypeIdFromName()` mints (plans/plan_cnb.md `CNBF-119`). A game extension has no
+         * business claiming `Texture2D`'s identifier or one of the range CNA has reserved for its
+         * own future types: the built-in loaders are installed by `ContentManager` itself, and
+         * whether a game's factory or CNA's ended up in the table would have depended on which ran
+         * first. Registering a built-in or reserved identifier is refused here rather than
+         * silently ignored, because "accepted and had no effect" is the shape of this mistake that
+         * is hardest to find.
+         *
+         * @param assetTypeId       The identifier written into the `.cnb` header. Must be a custom
+         *                          identifier, `CnbAssetTypeId::CustomRangeFirst` or above.
          * @param canonicalTypeName The type's canonical name; must hash to @p assetTypeId.
          * @param factory           Decodes the container into a T. Must not be empty.
-         * @throws std::invalid_argument if @p assetTypeId, @p canonicalTypeName or @p factory is
-         *         invalid, or if @p canonicalTypeName does not hash to a custom @p assetTypeId.
+         * @throws std::invalid_argument if @p assetTypeId is not a custom identifier, if
+         *         @p canonicalTypeName or @p factory is invalid, or if @p canonicalTypeName does
+         *         not hash to @p assetTypeId.
          * @throws std::logic_error if @p assetTypeId is already registered under a different name.
          */
         template <typename T>
@@ -331,11 +342,15 @@ namespace Microsoft::Xna::Framework::Content
                 throw std::invalid_argument(
                     "ContentManager::RegisterCnbLoaderEXT<T>(): factory must not be empty.");
             }
+            // The custom-range rule itself is enforced once, by CnbLoaderRegistry::Register()'s
+            // default CnbLoaderOwnership::GameExtension -- there is deliberately no second copy of
+            // it here (plans/plan_cnb.md `CNBF-119`).
             CNA::Content::CnbLoaderRegistry::Register(
                 assetTypeId, canonicalTypeName,
                 [factory](const CNA::Content::Cnb::CnbDocument& document, ContentManager& cm,
                           const std::string&) -> std::any
-                { return std::any(factory(document, cm)); });
+                { return std::any(factory(document, cm)); },
+                CNA::Content::CnbLoaderOwnership::GameExtension);
         }
 
         /**

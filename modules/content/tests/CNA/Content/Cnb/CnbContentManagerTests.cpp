@@ -509,3 +509,120 @@ TEST_F(CnbContentManagerTest, TheBuiltInLoadersAreRegisteredByEveryContentManage
     EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve),
               "Microsoft.Xna.Framework.Curve");
 }
+
+// --------------------------------------------------------------------------------------------
+// CNBF-119 -- who may claim which asset type identifier
+// --------------------------------------------------------------------------------------------
+
+TEST_F(CnbContentManagerTest, AGameExtensionCannotClaimABuiltInOrReservedIdentifier)
+{
+    // The defect: RegisterCnbLoaderEXT accepted ANY identifier. A game registering Curve's under
+    // its canonical name was accepted, and whether its factory or CNA's ended up in the table
+    // depended purely on which call ran first -- because a repeat registration under a matching
+    // name retains the FIRST one. Neither outcome was reported.
+    const auto factory = [](const CnbDocument&, ContentManager&) { return GameLevel{}; };
+
+    for (const std::uint32_t builtIn :
+         {CnbAssetTypeId::Texture2D, CnbAssetTypeId::Curve, CnbAssetTypeId::Model,
+          CnbAssetTypeId::Song, CnbAssetTypeId::Effect})
+    {
+        EXPECT_THROW(ContentManager::RegisterCnbLoaderEXT<GameLevel>(
+                         builtIn, CnbLoaderRegistry::RegisteredTypeName(builtIn).empty()
+                                       ? "MyGame.Level"
+                                       : CnbLoaderRegistry::RegisteredTypeName(builtIn),
+                         factory),
+                     std::invalid_argument)
+            << "a game claimed built-in identifier "
+            << CNA::Content::Cnb::AssetTypeIdToString(builtIn);
+    }
+
+    // The reserved range CNA has set aside for its own future types is refused for the same
+    // reason: an identifier CNA has not assigned yet is still not a game's to take.
+    EXPECT_THROW(ContentManager::RegisterCnbLoaderEXT<GameLevel>(
+                     CnbAssetTypeId::ReservedRangeFirst, "MyGame.Level", factory),
+                 std::invalid_argument);
+    EXPECT_THROW(ContentManager::RegisterCnbLoaderEXT<GameLevel>(0x7FFFFFFFu, "MyGame.Level",
+                                                                 factory),
+                 std::invalid_argument);
+
+    // And a real custom identifier still works, so the rule is a boundary rather than a blanket
+    // refusal.
+    const std::uint32_t custom = CNA::Content::Cnb::CnbAssetTypeIdFromName("MyGame.Boundary");
+    CnbLoaderRegistry::Remove(custom);
+    EXPECT_NO_THROW(
+        ContentManager::RegisterCnbLoaderEXT<GameLevel>(custom, "MyGame.Boundary", factory));
+    EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(custom));
+    EXPECT_TRUE(CnbLoaderRegistry::Remove(custom));
+}
+
+TEST_F(CnbContentManagerTest, ABuiltInLoaderCannotBeSilentlyReplacedOrInheritedByAnExtension)
+{
+    // A built-in registration and a game one are never interchangeable, whichever runs first, so
+    // the repeat-registration tolerance does not span the boundary between them.
+    const auto loader = [](const CnbDocument&, ContentManager&, const std::string&) -> std::any
+    { return std::any(GameLevel{}); };
+
+    // Game first, CNA second: the game's registration is refused outright, so CNA's own built-in
+    // is still installed and still CNA's.
+    CnbLoaderRegistry::Clear();
+    EXPECT_THROW(CnbLoaderRegistry::Register(CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve",
+                                             loader),
+                 std::invalid_argument);
+    CnbLoaderRegistry::RegisterBuiltIns();
+    EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+
+    // CNA first, game second: same refusal, and the built-in is untouched.
+    EXPECT_THROW(CnbLoaderRegistry::Register(CnbAssetTypeId::Curve, "Microsoft.Xna.Framework.Curve",
+                                             loader),
+                 std::invalid_argument);
+    EXPECT_EQ(CnbLoaderRegistry::RegisteredTypeName(CnbAssetTypeId::Curve),
+              "Microsoft.Xna.Framework.Curve");
+
+    // CNA cannot mint a custom identifier either -- the rule reads in both directions.
+    const std::uint32_t custom = CNA::Content::Cnb::CnbAssetTypeIdFromName("MyGame.NotCnas");
+    EXPECT_THROW(CnbLoaderRegistry::Register(custom, "MyGame.NotCnas", loader,
+                                             CNA::Content::CnbLoaderOwnership::CnaBuiltIn),
+                 std::invalid_argument);
+
+    // Repeating CNA's own built-in registration is still tolerated: every ContentManager
+    // constructor does it.
+    EXPECT_NO_THROW(CnbLoaderRegistry::RegisterBuiltIns());
+    EXPECT_NO_THROW(CnbLoaderRegistry::RegisterBuiltIns());
+}
+
+TEST_F(CnbContentManagerTest, RegisterBuiltInsInstallsTwoLoadersAndAContentManagerInstallsTheRest)
+{
+    // RegisterBuiltIns()'s documentation used to claim "every asset type CNA itself compiles to
+    // .cnb". It installs two. The other eight each construct a runtime object needing a
+    // GraphicsDevice or the ContentManager itself, so they come from
+    // ContentManager::RegisterBuiltinLoaders() -- which matters to anyone who calls Clear() in a
+    // test and expects the table back.
+    CnbLoaderRegistry::Clear();
+    CnbLoaderRegistry::RegisterBuiltIns();
+    EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Curve));
+    EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::AnimationClip));
+    for (const std::uint32_t deviceBound :
+         {CnbAssetTypeId::Model, CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube,
+          CnbAssetTypeId::Texture3D, CnbAssetTypeId::SpriteFont, CnbAssetTypeId::SoundEffect,
+          CnbAssetTypeId::Song, CnbAssetTypeId::Video})
+    {
+        EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(deviceBound))
+            << CNA::Content::Cnb::AssetTypeIdToString(deviceBound)
+            << " came from RegisterBuiltIns(), which its documentation says it does not";
+    }
+
+    ScratchContentRoot root;
+    ContentManager cm(nullptr, root.path().string());
+    for (const std::uint32_t everyBuiltIn :
+         {CnbAssetTypeId::Curve, CnbAssetTypeId::AnimationClip, CnbAssetTypeId::Model,
+          CnbAssetTypeId::Texture2D, CnbAssetTypeId::TextureCube, CnbAssetTypeId::Texture3D,
+          CnbAssetTypeId::SpriteFont, CnbAssetTypeId::SoundEffect, CnbAssetTypeId::Song,
+          CnbAssetTypeId::Video})
+    {
+        EXPECT_TRUE(CnbLoaderRegistry::IsRegistered(everyBuiltIn))
+            << CNA::Content::Cnb::AssetTypeIdToString(everyBuiltIn)
+            << " was not installed by a ContentManager";
+    }
+    // Effect is the one built-in identifier with no schema, so it must have no loader either.
+    EXPECT_FALSE(CnbLoaderRegistry::IsRegistered(CnbAssetTypeId::Effect));
+}

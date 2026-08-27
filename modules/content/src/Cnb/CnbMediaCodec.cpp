@@ -20,9 +20,32 @@ namespace CNA::Content::Cnb
         constexpr const char* kVideoName = "Microsoft.Xna.Framework.Media.Video";
         constexpr std::uint32_t kMaxSoundtrackType = 2u; // Music, Dialog, MusicAndDialog
 
+        /// Largest duration either schema may carry, in milliseconds
+        /// (plans/plan_cnb.md `CNBF-119`).
+        ///
+        /// The wire field is a `u32` and `Song`'s and `Video`'s constructors both take an
+        /// `intcs`, so a duration above `INT32_MAX` is not a long song -- it is a negative one
+        /// once it reaches the runtime, and every `Duration`/`PlayPosition` comparison downstream
+        /// then reads backwards. Bounded at both boundaries, because a file arrives from
+        /// somewhere else as often as it is produced here. INT32_MAX ms is about 24.8 days, so
+        /// nothing real is refused.
+        constexpr std::uint32_t kMaxDurationMs = 0x7FFFFFFFu;
+
         [[noreturn]] void Fail(const char* label, const std::string& what)
         {
             throw ContentLoadException(std::string("CNB ") + label + ": " + what);
+        }
+
+        void RequireRepresentableDuration(const char* label, std::uint32_t durationMs)
+        {
+            if (durationMs > kMaxDurationMs)
+            {
+                Fail(label, "declares a duration of " + std::to_string(durationMs) +
+                                " ms, above the " + std::to_string(kMaxDurationMs) +
+                                " ms this schema can carry: the runtime constructor takes a signed "
+                                "32-bit millisecond count, so a larger value would arrive "
+                                "negative.");
+            }
         }
 
         /// Builds the single-entry XREF table both schemas use for their media file.
@@ -70,6 +93,24 @@ namespace CNA::Content::Cnb
             {
                 Fail(label, "names an empty media file reference.");
             }
+            // The schema specifies both of these (docs/cnb-format.md §19.1), and both were
+            // written and neither was read back (plans/plan_cnb.md `CNBF-119`). `flags` is
+            // reserved, so a set bit means the file was written to a schema this build does not
+            // know. `expectedAssetTypeId` must be Invalid because the target is a media file on
+            // disk -- an .ogg, an .mp4 -- not a CNA asset with a CNB type identifier; a file
+            // naming one is describing a dependency this schema cannot honour.
+            if (references[0].flags != 0u)
+            {
+                Fail(label, "sets reserved flag bits on its media reference; this schema version "
+                            "defines none.");
+            }
+            if (references[0].expectedAssetTypeId != CnbAssetTypeId::Invalid)
+            {
+                Fail(label, "expects its media reference to be a " +
+                                AssetTypeIdToString(references[0].expectedAssetTypeId) +
+                                " asset, but a media reference names a file to stream rather than "
+                                "a CNA asset, so its expected type must be 0.");
+            }
             return references[0].logicalName;
         }
     }
@@ -77,6 +118,8 @@ namespace CNA::Content::Cnb
     std::vector<std::uint8_t> EncodeSongToCnb(const CnbSongData& data,
                                               const std::string& contentName)
     {
+        RequireRepresentableDuration("Song", data.durationMs);
+
         CnbByteWriter header;
         header.WriteU32(data.durationMs);
         header.WriteU32(0u); // flags: reserved, must be zero
@@ -92,6 +135,7 @@ namespace CNA::Content::Cnb
     std::vector<std::uint8_t> EncodeVideoToCnb(const CnbVideoData& data,
                                                const std::string& contentName)
     {
+        RequireRepresentableDuration("Video", data.durationMs);
         if (data.width == 0u || data.width > CnbMaxVideoDimension || data.height == 0u ||
             data.height > CnbMaxVideoDimension)
         {
@@ -142,6 +186,12 @@ namespace CNA::Content::Cnb
         {
             header.Fail("sets reserved flag bits; this schema version defines none.");
         }
+        if (data.durationMs > kMaxDurationMs)
+        {
+            header.Fail("declares a duration of " + std::to_string(data.durationMs) +
+                        " ms, which does not fit the signed 32-bit millisecond count Song's "
+                        "constructor takes.");
+        }
         data.streamReference = RequireSingleStreamReference("Song", document);
         return data;
     }
@@ -185,6 +235,12 @@ namespace CNA::Content::Cnb
         {
             header.Fail("declares soundtrack type " + std::to_string(data.soundtrackType) +
                         ", which is not a VideoSoundtrackType value (0-2).");
+        }
+        if (data.durationMs > kMaxDurationMs)
+        {
+            header.Fail("declares a duration of " + std::to_string(data.durationMs) +
+                        " ms, which does not fit the signed 32-bit millisecond count Video's "
+                        "constructor takes.");
         }
         data.streamReference = RequireSingleStreamReference("Video", document);
         return data;

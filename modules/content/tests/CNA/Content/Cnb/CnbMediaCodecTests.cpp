@@ -13,11 +13,15 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <limits>
+#include <span>
 #include <string>
 #include <vector>
 
+#include "CNA/Content/Cnb/CnbByteWriter.hpp"
+#include "CNA/Content/Cnb/CnbCrc32c.hpp"
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbMediaCodec.hpp"
+#include "CNA/Content/Cnb/CnbWriter.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
@@ -218,4 +222,160 @@ TEST(CnbMediaCodecTest, AMissingMediaFileIsReportedAgainstTheReferenceThatNamedI
     {
         EXPECT_NE(std::string(e.what()).find("Music/theme.ogg"), std::string::npos) << e.what();
     }
+}
+
+// --------------------------------------------------------------------------------------------
+// CNBF-119 -- what the runtime constructors can actually hold, and what the XREF row must say
+// --------------------------------------------------------------------------------------------
+
+namespace
+{
+    /// Rebuilds a media `.cnb` with the header's first `u32` -- the duration -- overwritten, and
+    /// the two structural checksums repaired. That field is a `u32` on the wire, so a hostile or
+    /// old file can carry a value the encoder now refuses; this is how the DECODE-side bound gets
+    /// a file to refuse.
+    std::vector<std::uint8_t> WithPatchedDuration(std::vector<std::uint8_t> bytes,
+                                                  CNA::Content::Cnb::CnbChunkId headerChunk,
+                                                  std::uint32_t durationMs)
+    {
+        const CnbDocument document = CnbDocument::Parse(bytes, "patch.cnb");
+        const std::size_t index = document.RequireSingle(headerChunk);
+        const auto offset = static_cast<std::size_t>(document.ChunkAt(index).offset);
+        for (int i = 0; i < 4; ++i)
+        {
+            bytes[offset + static_cast<std::size_t>(i)] =
+                static_cast<std::uint8_t>((durationMs >> (8 * i)) & 0xFFu);
+        }
+
+        // Chunk checksum, then the table-of-contents checksum, then the header's -- each of the
+        // last two covers the one before it.
+        const auto tocOffset = static_cast<std::size_t>(32u);
+        std::uint64_t tocAt = 0u;
+        for (int i = 7; i >= 0; --i) { tocAt = (tocAt << 8) | bytes[tocOffset + static_cast<std::size_t>(i)]; }
+        const std::size_t entry =
+            static_cast<std::size_t>(tocAt) + index * CNA::Content::Cnb::Format::TocEntrySize;
+        const auto size = static_cast<std::size_t>(document.ChunkAt(index).storedSize);
+        const std::uint32_t chunkChecksum =
+            CNA::Content::Cnb::Crc32c(std::span<const std::uint8_t>(bytes).subspan(offset, size));
+        for (int i = 0; i < 4; ++i)
+        {
+            bytes[entry + 32u + static_cast<std::size_t>(i)] =
+                static_cast<std::uint8_t>((chunkChecksum >> (8 * i)) & 0xFFu);
+        }
+
+        std::uint32_t chunkCount = 0u;
+        for (int i = 3; i >= 0; --i) { chunkCount = (chunkCount << 8) | bytes[20u + static_cast<std::size_t>(i)]; }
+        const std::size_t tocSize = chunkCount * CNA::Content::Cnb::Format::TocEntrySize;
+        const std::uint32_t tocChecksum = CNA::Content::Cnb::Crc32c(
+            std::span<const std::uint8_t>(bytes).subspan(static_cast<std::size_t>(tocAt), tocSize));
+        for (int i = 0; i < 4; ++i)
+        {
+            bytes[40u + static_cast<std::size_t>(i)] =
+                static_cast<std::uint8_t>((tocChecksum >> (8 * i)) & 0xFFu);
+        }
+        const std::uint32_t headerChecksum = CNA::Content::Cnb::Crc32c(
+            std::span<const std::uint8_t>(bytes).first(
+                CNA::Content::Cnb::Format::HeaderChecksumCoverage));
+        for (int i = 0; i < 4; ++i)
+        {
+            bytes[44u + static_cast<std::size_t>(i)] =
+                static_cast<std::uint8_t>((headerChecksum >> (8 * i)) & 0xFFu);
+        }
+        return bytes;
+    }
+}
+
+TEST(CnbMediaCodecTest, ADurationAboveInt32MaxIsRefusedAtBothBoundaries)
+{
+    constexpr std::uint32_t kMax = 0x7FFFFFFFu;
+
+    // Encode side. Song's and Video's constructors both take an intcs, so a u32 above INT32_MAX
+    // arrives NEGATIVE -- and every Duration/PlayPosition comparison downstream then reads
+    // backwards. A 24.8-day ceiling refuses nothing real.
+    CnbSongData song = MakeSong();
+    song.durationMs = kMax + 1u;
+    EXPECT_THROW((void)EncodeSongToCnb(song, "long"), ContentLoadException);
+    song.durationMs = 0xFFFFFFFFu;
+    EXPECT_THROW((void)EncodeSongToCnb(song, "long"), ContentLoadException);
+    song.durationMs = kMax;
+    EXPECT_NO_THROW((void)EncodeSongToCnb(song, "long")) << "exactly INT32_MAX must be accepted";
+
+    CnbVideoData video = MakeVideo();
+    video.durationMs = kMax + 1u;
+    EXPECT_THROW((void)EncodeVideoToCnb(video, "long"), ContentLoadException);
+    video.durationMs = kMax;
+    EXPECT_NO_THROW((void)EncodeVideoToCnb(video, "long"));
+
+    // Decode side. The field is a u32 on the wire, so a file written elsewhere -- or by a CNA
+    // predating this bound -- can carry one, and the reader must refuse it rather than hand it to
+    // a constructor that cannot hold it.
+    const std::vector<std::uint8_t> hostileSong = WithPatchedDuration(
+        EncodeSongToCnb(MakeSong(), "theme"), CNA::Content::Cnb::CnbMediaChunk::SongHeader,
+        0xFFFFFFFFu);
+    EXPECT_THROW((void)DecodeSongFromCnb(CnbDocument::Parse(hostileSong, "song.cnb")),
+                 ContentLoadException);
+
+    const std::vector<std::uint8_t> hostileVideo = WithPatchedDuration(
+        EncodeVideoToCnb(MakeVideo(), "intro"), CNA::Content::Cnb::CnbMediaChunk::VideoHeader,
+        kMax + 1u);
+    EXPECT_THROW((void)DecodeVideoFromCnb(CnbDocument::Parse(hostileVideo, "video.cnb")),
+                 ContentLoadException);
+
+    // The patch helper itself must produce a loadable file, or the two refusals above would prove
+    // nothing about the duration.
+    const std::vector<std::uint8_t> fine = WithPatchedDuration(
+        EncodeSongToCnb(MakeSong(), "theme"), CNA::Content::Cnb::CnbMediaChunk::SongHeader, kMax);
+    const CnbSongData decoded = DecodeSongFromCnb(CnbDocument::Parse(fine, "song.cnb"));
+    EXPECT_EQ(decoded.durationMs, kMax);
+}
+
+TEST(CnbMediaCodecTest, TheMediaReferenceRowMustHaveTheShapeTheSchemaSpecifies)
+{
+    // docs/cnb-format.md §19.1 specifies flags == 0 and expectedAssetTypeId == 0 for the media
+    // reference, and both were written and neither was read back. flags is reserved, so a set bit
+    // means a schema this build does not know; and the target is a file to stream -- an .ogg, an
+    // .mp4 -- not a CNA asset, so naming an expected CNA type is a dependency this schema cannot
+    // honour.
+    using CNA::Content::Cnb::CnbExternalReference;
+    using CNA::Content::Cnb::CnbWriter;
+
+    const auto buildSong = [](std::uint32_t flags, std::uint32_t expectedAssetTypeId)
+    {
+        CnbWriter writer(CNA::Content::Cnb::CnbAssetTypeId::Song, 1u);
+        writer.SetMetadata("Microsoft.Xna.Framework.Media.Song", "theme");
+        CnbExternalReference reference;
+        reference.flags = flags;
+        reference.expectedAssetTypeId = expectedAssetTypeId;
+        reference.logicalName = "Music/theme.ogg";
+        writer.SetExternalReferences({reference});
+        CNA::Content::Cnb::CnbByteWriter header;
+        header.WriteU32(1000u);
+        header.WriteU32(0u);
+        header.WriteString("Main Theme");
+        writer.AddChunk(CNA::Content::Cnb::CnbMediaChunk::SongHeader, header.Take(),
+                        CNA::Content::Cnb::CnbChunkFlags::Mandatory, 4u);
+        return writer.Build();
+    };
+
+    // The well-formed shape still decodes, so the refusals below are about the edits.
+    EXPECT_NO_THROW((void)DecodeSongFromCnb(
+        CnbDocument::Parse(buildSong(0u, CNA::Content::Cnb::CnbAssetTypeId::Invalid), "ok.cnb")));
+
+    // A non-zero expectedAssetTypeId. (A non-zero `flags` cannot reach here: CnbWriter refuses to
+    // encode one, and the container reader refuses to decode one -- which is the right layering,
+    // and is asserted rather than assumed.)
+    try
+    {
+        (void)DecodeSongFromCnb(CnbDocument::Parse(
+            buildSong(0u, CNA::Content::Cnb::CnbAssetTypeId::SoundEffect), "typed.cnb"));
+        FAIL() << "a media reference expecting a CNA asset type must be refused";
+    }
+    catch (const ContentLoadException& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("expected type must be 0"), std::string::npos)
+            << e.what();
+    }
+    EXPECT_THROW((void)buildSong(1u, CNA::Content::Cnb::CnbAssetTypeId::Invalid),
+                 ContentLoadException)
+        << "reserved XREF flags must already be refused by the writer";
 }

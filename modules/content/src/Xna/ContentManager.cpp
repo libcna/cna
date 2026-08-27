@@ -5966,7 +5966,8 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return std::any(BuildModelFromCnbEXT(
                     CNA::Content::Cnb::DecodeModelFromCnb(document), contentManager, assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
 
         // plans/plan_cnb.md CNBF-101A/B/C. Registered here rather than in RegisterBuiltIns() for
         // the same reason Model is: creating a texture needs a GraphicsDevice, and the boxed type
@@ -5981,7 +5982,8 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildTexture2DFromCnbEXT(
                     CNA::Content::Cnb::DecodeTexture2DFromCnb(document), contentManager,
                     assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
         CNA::Content::CnbLoaderRegistry::Register(
             CNA::Content::Cnb::CnbAssetTypeId::TextureCube,
             "Microsoft.Xna.Framework.Graphics.TextureCube",
@@ -5991,7 +5993,8 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildTextureCubeFromCnbEXT(
                     CNA::Content::Cnb::DecodeTextureCubeFromCnb(document), contentManager,
                     assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
         CNA::Content::CnbLoaderRegistry::Register(
             CNA::Content::Cnb::CnbAssetTypeId::Texture3D,
             "Microsoft.Xna.Framework.Graphics.Texture3D",
@@ -6001,7 +6004,8 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildTexture3DFromCnbEXT(
                     CNA::Content::Cnb::DecodeTexture3DFromCnb(document), contentManager,
                     assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
         CNA::Content::CnbLoaderRegistry::Register(
             CNA::Content::Cnb::CnbAssetTypeId::SpriteFont,
             "Microsoft.Xna.Framework.Graphics.SpriteFont",
@@ -6011,7 +6015,8 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any(BuildSpriteFontFromCnbEXT(
                     CNA::Content::Cnb::DecodeSpriteFontFromCnb(document), contentManager,
                     assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
         CNA::Content::CnbLoaderRegistry::Register(
             CNA::Content::Cnb::CnbAssetTypeId::SoundEffect,
             "Microsoft.Xna.Framework.Audio.SoundEffect",
@@ -6020,7 +6025,8 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return std::any(BuildSoundEffectFromCnbEXT(
                     CNA::Content::Cnb::DecodeSoundEffectFromCnb(document), assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
         CNA::Content::CnbLoaderRegistry::Register(
             CNA::Content::Cnb::CnbAssetTypeId::Song, "Microsoft.Xna.Framework.Media.Song",
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
@@ -6028,7 +6034,8 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return std::any(BuildSongFromCnbEXT(
                     CNA::Content::Cnb::DecodeSongFromCnb(document), contentManager, assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
         CNA::Content::CnbLoaderRegistry::Register(
             CNA::Content::Cnb::CnbAssetTypeId::Video, "Microsoft.Xna.Framework.Media.Video",
             [](const CNA::Content::Cnb::CnbDocument& document, ContentManager& contentManager,
@@ -6036,7 +6043,8 @@ namespace Microsoft::Xna::Framework::Content
             {
                 return std::any(BuildVideoFromCnbEXT(
                     CNA::Content::Cnb::DecodeVideoFromCnb(document), contentManager, assetName));
-            });
+            },
+            CNA::Content::CnbLoaderOwnership::CnaBuiltIn);
     }
 
 } // namespace Microsoft::Xna::Framework::Content
