@@ -806,11 +806,23 @@ TEST(CnbModelCodecTest, DecoderRefusesAMorphTargetCountAboveTheSchemaCeiling)
     model.parts[0].morph = morph;
     const ModelFileEditor editor{model};
 
+    // No bytes are supplied for the declared targets on purpose. The ceiling is checked before
+    // the fit-in-remaining check, so an absurd count is refused ON SIGHT rather than after the
+    // file has made a validator allocate for it -- which is also why this test does not need a
+    // multi-megabyte fixture to exercise the ceiling it names.
     std::vector<std::uint8_t> chunk = editor.Chunk(CnbModelChunk::MorphData);
     PatchU32(chunk, 8u, 200000u);           // targetCount, above the 100000 ceiling
-    chunk.resize(12u + 200000u * 4u, 0u);   // ... and actually supply that many presence words
     const CnbDocument doc = Parse(editor.Rebuild(CnbModelChunk::MorphData, chunk));
-    EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
+    try
+    {
+        (void)DecodeModelFromCnb(doc);
+        FAIL() << "expected the target-count ceiling to be enforced";
+    }
+    catch (const ContentLoadException& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("ceiling"), std::string::npos)
+            << "must fail on the ceiling, not merely on running out of bytes: " << e.what();
+    }
 }
 
 TEST(CnbModelCodecTest, DecoderRefusesAMorphWeightKeyCountAboveTheSchemaCeiling)
@@ -825,10 +837,18 @@ TEST(CnbModelCodecTest, DecoderRefusesAMorphWeightKeyCountAboveTheSchemaCeiling)
     // trackFlags, keyCount -- six u32s, the last of which is the key count.
     std::vector<std::uint8_t> chunk = editor.Chunk(CnbModelChunk::MorphData);
     ASSERT_EQ(chunk.size(), 24u);
-    PatchU32(chunk, 20u, 2000000u);                     // keyCount, above the 1000000 ceiling
-    chunk.resize(24u + 2000000u * 20u, 0u);             // ... with room for that many minimal keys
+    PatchU32(chunk, 20u, 2000000u);   // keyCount, above the 1000000 ceiling, with no bytes for it
     const CnbDocument doc = Parse(editor.Rebuild(CnbModelChunk::MorphData, chunk));
-    EXPECT_THROW((void)DecodeModelFromCnb(doc), ContentLoadException);
+    try
+    {
+        (void)DecodeModelFromCnb(doc);
+        FAIL() << "expected the weight-key ceiling to be enforced";
+    }
+    catch (const ContentLoadException& e)
+    {
+        EXPECT_NE(std::string(e.what()).find("ceiling"), std::string::npos)
+            << "must fail on the ceiling, not merely on running out of bytes: " << e.what();
+    }
 }
 
 TEST(CnbModelCodecTest, DecoderRefusesAPartCountThatDisagreesWithTheGeometryChunkCount)

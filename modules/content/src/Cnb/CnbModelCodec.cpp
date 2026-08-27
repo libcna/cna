@@ -395,12 +395,24 @@ namespace CNA::Content::Cnb
             }
             morph.recomputeFlatNormals = (flags & kMorphFlagRecomputeFlatNormals) != 0u;
 
-            const std::uint32_t targetCount = reader.ReadCount(4u, "morph targets");
+            // The schema ceiling is applied BEFORE the fit-in-remaining check, not after. A count
+            // of two million is refusable on sight; making the refusal wait until the file has
+            // actually supplied two million elements' worth of bytes means a hostile count costs
+            // whoever is validating it real memory before being rejected, and it also forces any
+            // test of the ceiling to allocate that much. Reading with element size 0 asks for the
+            // limit check without the fit check; the fit check follows immediately below.
+            const std::uint32_t targetCount = reader.ReadCount(0u, "morph targets");
             if (targetCount > kMaxMorphTargets)
             {
                 reader.Fail("declares " + std::to_string(targetCount) +
                             " morph targets, above this schema's ceiling of " +
                             std::to_string(kMaxMorphTargets) + ".");
+            }
+            if (static_cast<std::uint64_t>(targetCount) * 4u >
+                static_cast<std::uint64_t>(reader.Remaining()))
+            {
+                reader.Fail("declares " + std::to_string(targetCount) +
+                            " morph targets, more than the chunk has room for.");
             }
             std::vector<std::uint32_t> presence;
             presence.reserve(targetCount);
@@ -450,13 +462,18 @@ namespace CNA::Content::Cnb
             morph.weightTrackStepInterpolation = (trackFlags & kMorphTrackStepInterpolation) != 0u;
             morph.weightTrackCubicSpline = (trackFlags & kMorphTrackCubicSpline) != 0u;
 
-            const std::uint32_t keyCount =
-                reader.ReadCount(kMinMorphWeightKeyBytes, "morph weight keys");
+            const std::uint32_t keyCount = reader.ReadCount(0u, "morph weight keys");
             if (keyCount > kMaxMorphWeightKeys)
             {
                 reader.Fail("declares " + std::to_string(keyCount) +
                             " morph weight keys, above this schema's ceiling of " +
                             std::to_string(kMaxMorphWeightKeys) + ".");
+            }
+            if (static_cast<std::uint64_t>(keyCount) * kMinMorphWeightKeyBytes >
+                static_cast<std::uint64_t>(reader.Remaining()))
+            {
+                reader.Fail("declares " + std::to_string(keyCount) +
+                            " morph weight keys, more than the chunk has room for.");
             }
             morph.weightTrackKeys.resize(keyCount);
             for (std::uint32_t k = 0; k < keyCount; ++k)
