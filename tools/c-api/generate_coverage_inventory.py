@@ -673,24 +673,17 @@ CNAEXT_SLICE_OWNERS: dict[str, str] = {
 # every field the subset omits. The field therefore waits for CBIND-088, which owns the settings
 # type, while the rest of the struct is bound by CBIND-084C.
 SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
-    # CBIND-086C: the forward effect's light-probe and area-light setters each take a type
-    # CBIND-091 owns, so they wait for that slice rather than for the one that binds the effect.
-    # The effect itself is bound; only the argument is missing. The two material-extension
-    # entries that stood here expired when CBIND-087A bound PbrMaterialExtensions.
-    "CNA::Graphics::ClusteredForwardEffect::setAreaLight": "CBIND-091",
-    "CNA::Graphics::ClusteredForwardEffect::setLightProbe": "CBIND-091",
-    "CNA::Graphics::ClusteredForwardEffect::setLightProbeVolume": "CBIND-091",
-    # CBIND-087C: the two PBR effects implement the shadow-receiver contract, which is bound; their
-    # image-based-light pair takes an ImageBasedLightEXT, a type CBIND-091 owns, so those four rows
-    # wait for that slice rather than for the one that binds the receiver contract on these types.
-    "Microsoft::Xna::Framework::Graphics::PbrEffect::setImageBasedLightEXT": "CBIND-091",
-    "Microsoft::Xna::Framework::Graphics::PbrEffect::getImageBasedLightEXT": "CBIND-091",
-    "Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect::setImageBasedLightEXT": "CBIND-091",
-    "Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect::getImageBasedLightEXT": "CBIND-091",
-    # CBIND-088B: the pipeline's skybox pair takes a Skybox, and its pass timings a
-    # PostProcessChain::PassTiming; both types belong to later slices.
-    "CNA::Graphics::RenderPipeline::setSkybox": "CBIND-091",
-    "CNA::Graphics::RenderPipeline::getSkybox": "CBIND-091",
+    # CBIND-086C: the forward effect's area-light setter takes a type CBIND-091C owns, so it waits
+    # for that slice rather than for the one that binds the effect. The effect itself is bound;
+    # only the argument is missing. The two material-extension entries that stood here expired when
+    # CBIND-087A bound PbrMaterialExtensions, and the two light-probe entries expired when
+    # CBIND-091A bound LightProbeEXT and LightProbeVolumeEXT.
+    "CNA::Graphics::ClusteredForwardEffect::setAreaLight": "CBIND-091C",
+    # CBIND-088B: the pipeline's skybox pair takes a Skybox, which CBIND-091B owns. The four
+    # image-based-light entries that stood here for CBIND-087C expired when CBIND-091A bound
+    # ImageBasedLightEXT and the effect-side pair that carries it.
+    "CNA::Graphics::RenderPipeline::setSkybox": "CBIND-091B",
+    "CNA::Graphics::RenderPipeline::getSkybox": "CBIND-091B",
 }
 
 

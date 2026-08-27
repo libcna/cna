@@ -31,6 +31,9 @@
 #include "CNA/DisplayColorSpace.hpp"
 #include "CNA/Graphics/AerialPerspectivePass.hpp"
 #include "CNA/Graphics/AutoExposureEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "CNA/Graphics/ColorGradePass.hpp"
 #include "CNA/Graphics/CubeLut.hpp"
@@ -48,6 +51,8 @@
 #include "CNA/Graphics/SpatialUpscalePass.hpp"
 #include "CNA/Graphics/DepthOfFieldPass.hpp"
 #include "CNA/Graphics/HeightFogPass.hpp"
+#include "CNA/Graphics/LightProbeEXT.hpp"
+#include "CNA/Graphics/LightProbeVolumeEXT.hpp"
 #include "CNA/Graphics/LightShaftPass.hpp"
 #include "CNA/Graphics/VolumetricFogPass.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
@@ -3996,7 +4001,6 @@ CNA_Result cna_ssao_pass_copy_occlusion_glsl(CNA_Bool p0, char* p1, uint64_t p2,
 CNA_Result cna_ssao_pass_sample_count_for_quality(CNA_RenderQuality p0, int32_t* p1)
 {
     (void)p0; (void)p1;
-    if (p1 != nullptr) { *p1 = UINT64_C(0); }
     return ExtensionUnavailable();
 }
 
@@ -4967,6 +4971,236 @@ CNA_Result cna_cube_lut_create_volume_texture(CNA_CubeLutHandle p0, CNA_Handle p
 {
     (void)p0; (void)p1; (void)p2;
     if (p2 != nullptr) { *p2 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_create(CNA_LightProbeHandle* p0)
+{
+    (void)p0;
+    if (p0 != nullptr) { *p0 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_create_at(const CNA_Vector3* p0, CNA_LightProbeHandle* p1)
+{
+    (void)p0; (void)p1;
+    if (p1 != nullptr) { *p1 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_destroy(CNA_LightProbeHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_copy_from(CNA_LightProbeHandle p0, CNA_LightProbeHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_get_position(CNA_LightProbeHandle p0, CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_set_position(CNA_LightProbeHandle p0, const CNA_Vector3* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_get_coefficient(CNA_LightProbeHandle p0, int32_t p1, CNA_Vector3* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_set_coefficient(CNA_LightProbeHandle p0, int32_t p1, const CNA_Vector3* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_copy_coefficients(CNA_LightProbeHandle p0, CNA_Vector3* p1, uint64_t p2, uint64_t* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    if (p3 != nullptr) { *p3 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_irradiance(CNA_LightProbeHandle p0, const CNA_Vector3* p1, CNA_Vector3* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_set_visibility(CNA_LightProbeHandle p0, int32_t p1, float p2, float p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_get_visibility_mean(CNA_LightProbeHandle p0, int32_t p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_get_visibility_mean_squared(CNA_LightProbeHandle p0, int32_t p1, float* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_has_visibility(CNA_LightProbeHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_visibility_weight(CNA_LightProbeHandle p0, const CNA_Vector3* p1, float p2, float* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_is_zero(CNA_LightProbeHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_scale(CNA_LightProbeHandle p0, float p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_equals(CNA_LightProbeHandle p0, CNA_LightProbeHandle p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_ext_copy_evaluation_glsl(char* p0, uint64_t p1, uint64_t* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    if (p2 != nullptr) { *p2 = UINT64_C(0); }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_create(const CNA_BoundingBox* p0, int32_t p1, int32_t p2, int32_t p3, CNA_LightProbeVolumeHandle* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    if (p4 != nullptr) { *p4 = CNA_INVALID_HANDLE; }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_destroy(CNA_LightProbeVolumeHandle p0)
+{
+    (void)p0;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_light_probe(
+    CNA_ClusteredForwardEffectHandle p0, CNA_LightProbeHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_clustered_forward_effect_set_light_probe_volume(
+    CNA_ClusteredForwardEffectHandle p0, CNA_LightProbeVolumeHandle p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_get_image_based_light_ext(CNA_EffectHandle p0, CNA_ImageBasedLightEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_effect_set_image_based_light_ext(
+    CNA_EffectHandle p0, const CNA_ImageBasedLightEXT* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_get_bounds(CNA_LightProbeVolumeHandle p0, CNA_BoundingBox* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_get_count_x(CNA_LightProbeVolumeHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_get_count_y(CNA_LightProbeVolumeHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_get_count_z(CNA_LightProbeVolumeHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_get_probe_count(CNA_LightProbeVolumeHandle p0, int32_t* p1)
+{
+    (void)p0; (void)p1;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_get_probe_position(CNA_LightProbeVolumeHandle p0, int32_t p1, int32_t p2, int32_t p3, CNA_Vector3* p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_get_probe(CNA_LightProbeVolumeHandle p0, int32_t p1, int32_t p2, int32_t p3, CNA_LightProbeHandle p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_set_probe(CNA_LightProbeVolumeHandle p0, int32_t p1, int32_t p2, int32_t p3, CNA_LightProbeHandle p4)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3; (void)p4;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_contains(CNA_LightProbeVolumeHandle p0, const CNA_Vector3* p1, CNA_Bool* p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_sample_probe(CNA_LightProbeVolumeHandle p0, const CNA_Vector3* p1, CNA_LightProbeHandle p2)
+{
+    (void)p0; (void)p1; (void)p2;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_irradiance(CNA_LightProbeVolumeHandle p0, const CNA_Vector3* p1, const CNA_Vector3* p2, CNA_Vector3* p3)
+{
+    (void)p0; (void)p1; (void)p2; (void)p3;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_light_probe_volume_ext_is_zero(CNA_LightProbeVolumeHandle p0, CNA_Bool* p1)
+{
+    (void)p0; (void)p1;
     return ExtensionUnavailable();
 }
 
@@ -17095,6 +17329,783 @@ CNA_Result cna_cube_lut_create_volume_texture(
                 "The owned volume-texture handle could not be created.");
         }
         AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+struct LightProbeResource final {
+    std::shared_ptr<Ext::LightProbeEXT> value;
+};
+
+struct LightProbeVolumeResource final {
+    std::shared_ptr<Ext::LightProbeVolumeEXT> value;
+};
+
+[[nodiscard]] CNA_Result GetLightProbe(
+    const CNA_Handle handle, std::shared_ptr<LightProbeResource>* const out)
+{
+    return GetEngineResource(handle, ObjectKind::LightProbe, "LightProbeEXT", out);
+}
+
+// CBIND-091A. Both probe types throw out_of_range for an index outside their table and
+// invalid_argument for a malformed construction. They are different mistakes to a caller -- one is
+// "you asked for a cell that is not there", the other "these dimensions describe no grid" -- but
+// both are argument errors, so they share a result and keep their own messages.
+[[nodiscard]] CNA_Result RefuseIndex(const char* const what)
+{
+    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE, what);
+}
+
+static_assert(
+    CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT == Ext::LightProbeEXT::kCoefficientCount &&
+    CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT == Ext::LightProbeEXT::kVisibilityDirections &&
+    CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT == Ext::LightProbeVolumeEXT::kMaxProbes);
+
+} // namespace
+
+#define CNA_WITH_PROBE(handle, body)                                                               \
+    WithMap<LightProbeResource>((handle), ObjectKind::LightProbe, "LightProbeEXT", body)
+#define CNA_WITH_VOLUME(handle, body)                                                              \
+    WithMap<LightProbeVolumeResource>(                                                             \
+        (handle), ObjectKind::LightProbeVolume, "LightProbeVolumeEXT", body)
+
+CNA_Result cna_light_probe_ext_create(CNA_LightProbeHandle* const outProbe)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outProbe == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The probe output handle is null.");
+        }
+        *outProbe = CNA_INVALID_HANDLE;
+        const auto resource = std::make_shared<LightProbeResource>(
+            LightProbeResource{std::make_shared<Ext::LightProbeEXT>()});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::LightProbe, resource, outProbe);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned probe handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_ext_create_at(
+    const CNA_Vector3* const position, CNA_LightProbeHandle* const outProbe)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outProbe == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The probe output handle is null.");
+        }
+        *outProbe = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = RequireVector3Argument(position, "The position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<LightProbeResource>(
+            LightProbeResource{
+                std::make_shared<Ext::LightProbeEXT>(ToNativeVector3(*position))});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::LightProbe, resource, outProbe);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned probe handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_ext_destroy(const CNA_LightProbeHandle probeHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<LightProbeResource> probe;
+        if (const CNA_Result result = GetLightProbe(probeHandle, &probe);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(probeHandle);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned probe handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_ext_copy_from(
+    const CNA_LightProbeHandle destination, const CNA_LightProbeHandle source)
+{
+    return CNA_WITH_PROBE(destination,
+        [&](const std::shared_ptr<LightProbeResource>& d) -> CNA_Result {
+            std::shared_ptr<LightProbeResource> s;
+            if (const CNA_Result result = GetLightProbe(source, &s);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            *d->value = *s->value;
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_light_probe_ext_get_position(
+    const CNA_LightProbeHandle probe, CNA_Vector3* const outPosition)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        const auto v = p->value->getPosition();
+        return StoreValue(outPosition, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_light_probe_ext_set_position(
+    const CNA_LightProbeHandle probe, const CNA_Vector3* const position)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(position, "The position is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        p->value->setPosition(ToNativeVector3(*position));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_ext_get_coefficient(
+    const CNA_LightProbeHandle probe, const int32_t index, CNA_Vector3* const outValue)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (index < 0 || index >= CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT) {
+            return RefuseIndex("There is no coefficient at that index.");
+        }
+        const auto v = p->value->getCoefficient(static_cast<int>(index));
+        return StoreValue(outValue, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_light_probe_ext_set_coefficient(
+    const CNA_LightProbeHandle probe, const int32_t index, const CNA_Vector3* const value)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(value, "The value is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (index < 0 || index >= CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT) {
+            return RefuseIndex("There is no coefficient at that index.");
+        }
+        p->value->setCoefficient(static_cast<int>(index), ToNativeVector3(*value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_ext_copy_coefficients(
+    const CNA_LightProbeHandle probe, CNA_Vector3* const destination, const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    std::shared_ptr<LightProbeResource> resource;
+    if (const CNA_Result result = GetLightProbe(probe, &resource);
+        result != CNA_RESULT_SUCCESS) {
+        if (outCount != nullptr) {
+            *outCount = UINT64_C(0);
+        }
+        return result;
+    }
+    const auto& source = resource->value->getCoefficients();
+    std::vector<CNA_Vector3> values;
+    values.reserve(source.size());
+    for (const auto& v : source) {
+        values.push_back(Vec3(v.X, v.Y, v.Z));
+    }
+    return CopyValueRange(values, destination, capacity, outCount);
+}
+
+CNA_Result cna_light_probe_ext_irradiance(
+    const CNA_LightProbeHandle probe, const CNA_Vector3* const normal,
+    CNA_Vector3* const outIrradiance)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(normal, "The normal is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto v = p->value->irradiance(ToNativeVector3(*normal));
+        return StoreValue(outIrradiance, Vec3(v.X, v.Y, v.Z));
+    });
+}
+
+CNA_Result cna_light_probe_ext_set_visibility(
+    const CNA_LightProbeHandle probe, const int32_t direction, const float meanDistance,
+    const float meanSquaredDistance)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (direction < 0 || direction >= CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT) {
+            return RefuseIndex("There is no visibility direction at that index.");
+        }
+        // Both distances are floored at zero by the canonical setter: a negative occluder
+        // distance is a sign error rather than a look.
+        p->value->setVisibility(
+            static_cast<int>(direction), meanDistance, meanSquaredDistance);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_ext_get_visibility_mean(
+    const CNA_LightProbeHandle probe, const int32_t direction, float* const outValue)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (direction < 0 || direction >= CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT) {
+            return RefuseIndex("There is no visibility direction at that index.");
+        }
+        return StoreValue(outValue, p->value->getVisibilityMean(static_cast<int>(direction)));
+    });
+}
+
+CNA_Result cna_light_probe_ext_get_visibility_mean_squared(
+    const CNA_LightProbeHandle probe, const int32_t direction, float* const outValue)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (direction < 0 || direction >= CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT) {
+            return RefuseIndex("There is no visibility direction at that index.");
+        }
+        return StoreValue(
+            outValue, p->value->getVisibilityMeanSquared(static_cast<int>(direction)));
+    });
+}
+
+CNA_Result cna_light_probe_ext_has_visibility(
+    const CNA_LightProbeHandle probe, CNA_Bool* const outHas)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        return StoreValue(
+            outHas, static_cast<CNA_Bool>(p->value->hasVisibility() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_light_probe_ext_visibility_weight(
+    const CNA_LightProbeHandle probe, const CNA_Vector3* const direction, const float distance,
+    float* const outWeight)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        if (const CNA_Result result = RequireVector3Argument(direction, "The direction is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Answers 1 for "nothing known to be in the way" when there is no visibility data or the
+        // distance is not positive. Both are ordinary, so neither is a refusal.
+        return StoreValue(
+            outWeight, p->value->visibilityWeight(ToNativeVector3(*direction), distance));
+    });
+}
+
+CNA_Result cna_light_probe_ext_is_zero(
+    const CNA_LightProbeHandle probe, CNA_Bool* const outZero)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        return StoreValue(
+            outZero, static_cast<CNA_Bool>(p->value->isZero() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_light_probe_ext_scale(const CNA_LightProbeHandle probe, const float factor)
+{
+    return CNA_WITH_PROBE(probe, [&](const std::shared_ptr<LightProbeResource>& p) -> CNA_Result {
+        p->value->scale(factor);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_ext_equals(
+    const CNA_LightProbeHandle first, const CNA_LightProbeHandle second, CNA_Bool* const outEqual)
+{
+    return CNA_WITH_PROBE(first, [&](const std::shared_ptr<LightProbeResource>& a) -> CNA_Result {
+        std::shared_ptr<LightProbeResource> b;
+        if (const CNA_Result result = GetLightProbe(second, &b);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outEqual, static_cast<CNA_Bool>(*a->value == *b->value ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+CNA_Result cna_light_probe_ext_copy_evaluation_glsl(
+    char* const destination, const uint64_t capacity, uint64_t* const outBytes)
+{
+    return CopyFormattedString(
+        destination, capacity, outBytes, [] { return Ext::LightProbeEXT::getEvaluationGlsl(); });
+}
+
+CNA_Result cna_light_probe_volume_ext_create(
+    const CNA_BoundingBox* const bounds,
+    const int32_t countX,
+    const int32_t countY,
+    const int32_t countZ,
+    CNA_LightProbeVolumeHandle* const outVolume)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outVolume == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The volume output handle is null.");
+        }
+        *outVolume = CNA_INVALID_HANDLE;
+        BoundingBox nativeBounds;
+        if (const CNA_Result result = ToNativeBounds(bounds, &nativeBounds);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical constructor throws three different invalid_argument messages; they are
+        // answered here so each keeps its own, because a caller fixes a zero count, an oversized
+        // grid and an inverted box in three different ways.
+        if (countX < 1 || countY < 1 || countZ < 1) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "Every probe count must be at least one.");
+        }
+        const long long total =
+            static_cast<long long>(countX) * static_cast<long long>(countY) *
+            static_cast<long long>(countZ);
+        if (total > static_cast<long long>(CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The grid holds more probes than a volume accepts.");
+        }
+        if (nativeBounds.Max.X < nativeBounds.Min.X || nativeBounds.Max.Y < nativeBounds.Min.Y ||
+            nativeBounds.Max.Z < nativeBounds.Min.Z) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The bounding box's maximum is below its minimum on some axis.");
+        }
+        auto native = std::make_shared<Ext::LightProbeVolumeEXT>(
+            nativeBounds, static_cast<int>(countX), static_cast<int>(countY),
+            static_cast<int>(countZ));
+        const auto resource = std::make_shared<LightProbeVolumeResource>(
+            LightProbeVolumeResource{std::move(native)});
+        const CNA_Result result =
+            GetRuntimeHandles().Create(ObjectKind::LightProbeVolume, resource, outVolume);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned volume handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_volume_ext_destroy(const CNA_LightProbeVolumeHandle volumeHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<LightProbeVolumeResource> volume;
+        if (const CNA_Result result = GetEngineResource(
+                volumeHandle, ObjectKind::LightProbeVolume, "LightProbeVolumeEXT", &volume);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result released = GetRuntimeHandles().Release(volumeHandle);
+        if (released != CNA_RESULT_SUCCESS) {
+            return Fail(
+                released, ErrorCategoryForResult(released),
+                "The owned volume handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_light_probe_volume_ext_get_bounds(
+    const CNA_LightProbeVolumeHandle volume, CNA_BoundingBox* const outBounds)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            if (outBounds == nullptr) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The bounds output is null.");
+            }
+            const auto b = v->value->getBounds();
+            outBounds->min = Vec3(b.Min.X, b.Min.Y, b.Min.Z);
+            outBounds->max = Vec3(b.Max.X, b.Max.Y, b.Max.Z);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_get_count_x(
+    const CNA_LightProbeVolumeHandle volume, int32_t* const outCount)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(v->value->getCountX()));
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_get_count_y(
+    const CNA_LightProbeVolumeHandle volume, int32_t* const outCount)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(v->value->getCountY()));
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_get_count_z(
+    const CNA_LightProbeVolumeHandle volume, int32_t* const outCount)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(v->value->getCountZ()));
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_get_probe_count(
+    const CNA_LightProbeVolumeHandle volume, int32_t* const outCount)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            return StoreValue(outCount, static_cast<int32_t>(v->value->getProbeCount()));
+        });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result RequireProbeIndex(
+    const std::shared_ptr<LightProbeVolumeResource>& v, const int32_t x, const int32_t y,
+    const int32_t z)
+{
+    if (x < 0 || x >= v->value->getCountX() || y < 0 || y >= v->value->getCountY() ||
+        z < 0 || z >= v->value->getCountZ()) {
+        return RefuseIndex("There is no probe at that grid index.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_light_probe_volume_ext_get_probe_position(
+    const CNA_LightProbeVolumeHandle volume, const int32_t x, const int32_t y, const int32_t z,
+    CNA_Vector3* const outPosition)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            if (const CNA_Result result = RequireProbeIndex(v, x, y, z);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            const auto p = v->value->getProbePosition(
+                static_cast<int>(x), static_cast<int>(y), static_cast<int>(z));
+            return StoreValue(outPosition, Vec3(p.X, p.Y, p.Z));
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_get_probe(
+    const CNA_LightProbeVolumeHandle volume, const int32_t x, const int32_t y, const int32_t z,
+    const CNA_LightProbeHandle outProbe)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            std::shared_ptr<LightProbeResource> probe;
+            if (const CNA_Result result = GetLightProbe(outProbe, &probe);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireProbeIndex(v, x, y, z);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // The volume stores probes by value, so this copies rather than lending.
+            *probe->value = v->value->getProbe(
+                static_cast<int>(x), static_cast<int>(y), static_cast<int>(z));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_set_probe(
+    const CNA_LightProbeVolumeHandle volume, const int32_t x, const int32_t y, const int32_t z,
+    const CNA_LightProbeHandle probeHandle)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            std::shared_ptr<LightProbeResource> probe;
+            if (const CNA_Result result = GetLightProbe(probeHandle, &probe);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireProbeIndex(v, x, y, z);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            v->value->setProbe(
+                static_cast<int>(x), static_cast<int>(y), static_cast<int>(z), *probe->value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_contains(
+    const CNA_LightProbeVolumeHandle volume, const CNA_Vector3* const position,
+    CNA_Bool* const outContains)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            if (const CNA_Result result =
+                    RequireVector3Argument(position, "The position is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            return StoreValue(
+                outContains,
+                static_cast<CNA_Bool>(
+                    v->value->contains(ToNativeVector3(*position)) ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_sample_probe(
+    const CNA_LightProbeVolumeHandle volume, const CNA_Vector3* const position,
+    const CNA_LightProbeHandle outProbe)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            std::shared_ptr<LightProbeResource> probe;
+            if (const CNA_Result result = GetLightProbe(outProbe, &probe);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result =
+                    RequireVector3Argument(position, "The position is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // The position is clamped into the box rather than refused: a point just outside a
+            // probe grid is ordinary during rendering, and the nearest interpolation is wanted.
+            *probe->value = v->value->sampleProbe(ToNativeVector3(*position));
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_irradiance(
+    const CNA_LightProbeVolumeHandle volume, const CNA_Vector3* const position,
+    const CNA_Vector3* const normal, CNA_Vector3* const outIrradiance)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            if (const CNA_Result result =
+                    RequireVector3Argument(position, "The position is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (const CNA_Result result = RequireVector3Argument(normal, "The normal is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            const auto r = v->value->irradiance(
+                ToNativeVector3(*position), ToNativeVector3(*normal));
+            return StoreValue(outIrradiance, Vec3(r.X, r.Y, r.Z));
+        });
+}
+
+CNA_Result cna_light_probe_volume_ext_is_zero(
+    const CNA_LightProbeVolumeHandle volume, CNA_Bool* const outZero)
+{
+    return CNA_WITH_VOLUME(volume,
+        [&](const std::shared_ptr<LightProbeVolumeResource>& v) -> CNA_Result {
+            return StoreValue(
+                outZero, static_cast<CNA_Bool>(v->value->isZero() ? CNA_TRUE : CNA_FALSE));
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_set_light_probe(
+    const CNA_ClusteredForwardEffectHandle effect, const CNA_LightProbeHandle probeHandle)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            std::shared_ptr<LightProbeResource> probe;
+            if (const CNA_Result result = GetLightProbe(probeHandle, &probe);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Copied, not borrowed: the canonical setter takes a const reference and keeps its
+            // own, so the caller's handle stays theirs to release.
+            e->value->setLightProbe(*probe->value);
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+CNA_Result cna_clustered_forward_effect_set_light_probe_volume(
+    const CNA_ClusteredForwardEffectHandle effect, const CNA_LightProbeVolumeHandle volumeHandle)
+{
+    return CNA_WITH_FORWARD(effect, [&](const std::shared_ptr<ClusteredForwardEffectResource>& e)
+        -> CNA_Result {
+            if (volumeHandle == CNA_INVALID_HANDLE) {
+                e->value->setLightProbeVolume(nullptr);
+                return CNA_RESULT_SUCCESS;
+            }
+            std::shared_ptr<LightProbeVolumeResource> volume;
+            if (const CNA_Result result = GetEngineResource(
+                    volumeHandle, ObjectKind::LightProbeVolume, "LightProbeVolumeEXT", &volume);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            // Borrowed, unlike the single probe: the canonical setter takes a pointer and keeps
+            // it, so the volume must outlive the effect's use of it.
+            e->value->setLightProbeVolume(volume->value.get());
+            return CNA_RESULT_SUCCESS;
+        });
+}
+
+namespace {
+
+// CBIND-091A. Both PBR effects carry an image-based light; the routes reach whichever the handle
+// names, refused by argument when it is neither -- the interface rule CBIND-085B1 settled.
+template <typename TBody>
+[[nodiscard]] CNA_Result WithImageBasedLightEffect(
+    const CNA_EffectHandle effect, TBody&& body)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetEffectForPass(effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (auto* const pbr = dynamic_cast<Microsoft::Xna::Framework::Graphics::PbrEffect*>(
+                resource->value.get())) {
+            return body(
+                resource,
+                [pbr]() -> const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT& {
+                    return pbr->getImageBasedLightEXT();
+                },
+                [pbr](const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT& light) {
+                    pbr->setImageBasedLightEXT(light);
+                });
+        }
+        if (auto* const skinned =
+                dynamic_cast<Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect*>(
+                    resource->value.get())) {
+            return body(
+                resource,
+                [skinned]() -> const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT& {
+                    return skinned->getImageBasedLightEXT();
+                },
+                [skinned](
+                    const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT& light) {
+                    skinned->setImageBasedLightEXT(light);
+                });
+        }
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "That effect does not carry an image-based light.");
+    });
+}
+
+} // namespace
+
+CNA_Result cna_effect_get_image_based_light_ext(
+    const CNA_EffectHandle effect, CNA_ImageBasedLightEXT* const outLight)
+{
+    return WithImageBasedLightEffect(effect, [&](const auto& owner, auto get, auto)
+        -> CNA_Result {
+        if (outLight == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT,
+                "The light output is null.");
+        }
+        const auto& light = get();
+        if (const CNA_Result result = cna_image_based_light_ext_init(outLight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        outLight->prefiltered_mip_count = static_cast<int32_t>(light.PrefilteredMipCount);
+        outLight->intensity = light.Intensity;
+        // The textures come back as borrowed names for the same objects; they do not keep them
+        // alive, which is the rule every texture read-back in this layer follows.
+        const auto borrowCube =
+            [&owner](Microsoft::Xna::Framework::Graphics::TextureCube* const cube,
+                     CNA_Handle* const out) -> CNA_Result {
+            *out = CNA_INVALID_HANDLE;
+            if (cube == nullptr) {
+                return CNA_RESULT_SUCCESS;
+            }
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> view(
+                owner, cube);
+            return CNA::C::Detail::CreateOwnedTextureCube(view, owner->parentGame, out);
+        };
+        if (const CNA_Result result = borrowCube(light.Irradiance, &outLight->irradiance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                borrowCube(light.PrefilteredSpecular, &outLight->prefiltered_specular);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        outLight->brdf_lut = CNA_INVALID_HANDLE;
+        if (light.BrdfLut != nullptr) {
+            const std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> view(
+                owner, light.BrdfLut);
+            return CreateBorrowedRenderTarget2D(
+                view, owner->parentGame, owner, &outLight->brdf_lut);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_set_image_based_light_ext(
+    const CNA_EffectHandle effect, const CNA_ImageBasedLightEXT* const light)
+{
+    return WithImageBasedLightEffect(effect, [&](const auto&, auto, auto set)
+        -> CNA_Result {
+        if (light == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+        }
+        if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT)) ||
+            light->struct_version == UINT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The image-based-light structure is malformed.");
+        }
+        Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT native;
+        native.PrefilteredMipCount = static_cast<int>(light->prefiltered_mip_count);
+        native.Intensity = light->intensity;
+        CNA::C::Detail::TextureCubeResourceView irradiance;
+        CNA::C::Detail::TextureCubeResourceView specular;
+        std::shared_ptr<Texture2DResource> brdf;
+        if (light->irradiance != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result =
+                    CNA::C::Detail::GetOwnedTextureCube(light->irradiance, &irradiance);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            native.Irradiance = irradiance.value.get();
+        }
+        if (light->prefiltered_specular != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = CNA::C::Detail::GetOwnedTextureCube(
+                    light->prefiltered_specular, &specular);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            native.PrefilteredSpecular = specular.value.get();
+        }
+        if (light->brdf_lut != CNA_INVALID_HANDLE) {
+            Microsoft::Xna::Framework::Graphics::Texture2D* texture = nullptr;
+            if (const CNA_Result result =
+                    ResolveTexture2DArgument(light->brdf_lut, "brdf_lut", &texture, &brdf);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            native.BrdfLut = texture;
+        }
+        set(native);
         return CNA_RESULT_SUCCESS;
     });
 }

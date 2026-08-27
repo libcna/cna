@@ -239,6 +239,9 @@ enum class ObjectKind : uint32_t {
     HdrDisplayOutput = 152,
     AutoExposure = 153,
     CubeLut = 154,
+    // plans/plan_binding.md CBIND-091A.
+    LightProbe = 155,
+    LightProbeVolume = 156,
     Test = UINT32_MAX
 };
 

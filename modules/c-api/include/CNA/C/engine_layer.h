@@ -8727,6 +8727,388 @@ CNA_C_API CNA_Result cna_cube_lut_create_strip_texture(
 CNA_C_API CNA_Result cna_cube_lut_create_volume_texture(
     CNA_CubeLutHandle lut, CNA_Handle graphics_device, CNA_Handle* out_texture);
 
+/* ---------------------------------------------------------------------------------------------
+ * Light probes and image-based lighting
+ * ------------------------------------------------------------------------------------------- */
+
+/** @brief How many spherical-harmonic coefficients one probe stores. */
+#define CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT INT32_C(9)
+
+/** @brief How many directions one probe stores visibility for. */
+#define CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT INT32_C(6)
+
+/** @brief The most probes one volume may hold. */
+#define CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT INT32_C(32768)
+
+/**
+ * @brief One image-based light: the three textures a PBR shader needs, and how bright they are.
+ *
+ * A caller fills this and hands it to an effect. The textures are **borrowed**; the structure
+ * records them and never owns them.
+ */
+typedef struct CNA_ImageBasedLightEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+    /** @brief The irradiance cube, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle irradiance;
+    /** @brief The prefiltered specular cube, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle prefiltered_specular;
+    /** @brief The BRDF lookup texture, or `CNA_INVALID_HANDLE`. */
+    CNA_Handle brdf_lut;
+    /** @brief How many mip levels the prefiltered cube has; at least one. */
+    int32_t prefiltered_mip_count;
+    /** @brief Scalar multiplier on the light. */
+    float intensity;
+} CNA_ImageBasedLightEXT;
+
+/**
+ * @brief Fills an image-based light with its canonical defaults.
+ *
+ * @param out_light Receives the defaults along with `struct_size` and `struct_version`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* out_light);
+
+/**
+ * @brief Reports whether the light is complete enough to shade with.
+ *
+ * All three textures must be present and the mip count at least one. A light that is *nearly*
+ * complete is the failure this answers: it does not look like a mismatch, it looks like a scene
+ * lit slightly wrong.
+ *
+ * @param light The light.
+ * @param out_valid Receives the answer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null or malformed structure,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_image_based_light_ext_is_valid(
+    const CNA_ImageBasedLightEXT* light, CNA_Bool* out_valid);
+
+/**
+ * @brief Owned handle for one light probe.
+ *
+ * A probe is a **value** -- it compares by content and is copied into a volume rather than
+ * referenced by it -- but it carries nine coefficient vectors and twelve visibility scalars, so it
+ * is bound as a handle rather than a structure a caller assembles by hand.
+ */
+typedef CNA_Handle CNA_LightProbeHandle;
+
+/**
+ * @brief Creates a light probe at the origin with no stored light.
+ *
+ * @param out_probe Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_create(CNA_LightProbeHandle* out_probe);
+
+/**
+ * @brief Creates a light probe at a position.
+ *
+ * @param position The probe's world-space position.
+ * @param out_probe Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null position,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_create_at(
+    const CNA_Vector3* position, CNA_LightProbeHandle* out_probe);
+
+/** @brief Releases the probe. */
+CNA_C_API CNA_Result cna_light_probe_ext_destroy(CNA_LightProbeHandle probe);
+
+/** @brief Copies every field of one probe over another, since a handle cannot be assigned. */
+CNA_C_API CNA_Result cna_light_probe_ext_copy_from(
+    CNA_LightProbeHandle destination, CNA_LightProbeHandle source);
+
+/** @brief Returns the probe's world-space position. */
+CNA_C_API CNA_Result cna_light_probe_ext_get_position(
+    CNA_LightProbeHandle probe, CNA_Vector3* out_position);
+
+/** @brief Sets the probe's world-space position. */
+CNA_C_API CNA_Result cna_light_probe_ext_set_position(
+    CNA_LightProbeHandle probe, const CNA_Vector3* position);
+
+/**
+ * @brief Returns one spherical-harmonic coefficient.
+ *
+ * @param probe The probe.
+ * @param index Which coefficient, from zero.
+ * @param out_value Receives the coefficient.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the table -- **refused rather than clamped**, because a clamped index
+ * returns a different coefficient and the surface would light almost right -- `CNA_RESULT_NOT_SUPPORTED`
+ * without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_get_coefficient(
+    CNA_LightProbeHandle probe, int32_t index, CNA_Vector3* out_value);
+
+/**
+ * @brief Sets one spherical-harmonic coefficient.
+ *
+ * @param probe The probe.
+ * @param index Which coefficient, from zero.
+ * @param value The coefficient.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the table, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_set_coefficient(
+    CNA_LightProbeHandle probe, int32_t index, const CNA_Vector3* value);
+
+/**
+ * @brief Copies every coefficient at once.
+ *
+ * @param probe The probe.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in elements.
+ * @param out_count Receives the required element count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` without
+ * the engine layer, or an error. No partial result is written.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_copy_coefficients(
+    CNA_LightProbeHandle probe, CNA_Vector3* destination, uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Returns the irradiance arriving on a surface with a given normal.
+ *
+ * This is irradiance, not outgoing radiance, and it is **never negative** -- the reconstruction
+ * can go below zero and the canonical code floors it, because negative light is not a look.
+ *
+ * @param probe The probe.
+ * @param normal The surface normal.
+ * @param out_irradiance Receives the irradiance per channel.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null normal,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_irradiance(
+    CNA_LightProbeHandle probe, const CNA_Vector3* normal, CNA_Vector3* out_irradiance);
+
+/**
+ * @brief Stores the mean and mean-squared occluder distance for one direction.
+ *
+ * @param probe The probe.
+ * @param direction Which direction, from zero.
+ * @param mean_distance The mean distance; **floored at zero**.
+ * @param mean_squared_distance The mean squared distance; **floored at zero**.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a direction outside the table,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_set_visibility(
+    CNA_LightProbeHandle probe, int32_t direction, float mean_distance,
+    float mean_squared_distance);
+
+/** @brief Returns the mean occluder distance for one direction. */
+CNA_C_API CNA_Result cna_light_probe_ext_get_visibility_mean(
+    CNA_LightProbeHandle probe, int32_t direction, float* out_value);
+
+/** @brief Returns the mean squared occluder distance for one direction. */
+CNA_C_API CNA_Result cna_light_probe_ext_get_visibility_mean_squared(
+    CNA_LightProbeHandle probe, int32_t direction, float* out_value);
+
+/** @brief Reports whether any visibility has been stored. */
+CNA_C_API CNA_Result cna_light_probe_ext_has_visibility(
+    CNA_LightProbeHandle probe, CNA_Bool* out_has);
+
+/**
+ * @brief Returns how much of the probe's light reaches a point in a direction.
+ *
+ * **Answers one when the probe has no visibility data, and one when the distance is not
+ * positive** -- both mean "nothing is known to be in the way", which is the safe answer rather
+ * than an error, and is why this route has no refusal for either case.
+ *
+ * @param probe The probe.
+ * @param direction The direction from the probe.
+ * @param distance How far away the shaded point is.
+ * @param out_weight Receives the weight, between zero and one.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null direction,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_ext_visibility_weight(
+    CNA_LightProbeHandle probe, const CNA_Vector3* direction, float distance,
+    float* out_weight);
+
+/** @brief Reports whether the probe stores no light at all. */
+CNA_C_API CNA_Result cna_light_probe_ext_is_zero(
+    CNA_LightProbeHandle probe, CNA_Bool* out_zero);
+
+/** @brief Multiplies every coefficient by a factor. */
+CNA_C_API CNA_Result cna_light_probe_ext_scale(CNA_LightProbeHandle probe, float factor);
+
+/** @brief Compares two probes by value across every coefficient and visibility entry. */
+CNA_C_API CNA_Result cna_light_probe_ext_equals(
+    CNA_LightProbeHandle first, CNA_LightProbeHandle second, CNA_Bool* out_equal);
+
+/** @brief Copies the GLSL that evaluates a probe, as UTF-8 bytes without a terminator. */
+CNA_C_API CNA_Result cna_light_probe_ext_copy_evaluation_glsl(
+    char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/** @brief Owned handle for one grid of light probes. */
+typedef CNA_Handle CNA_LightProbeVolumeHandle;
+
+/**
+ * @brief Creates a probe volume over a box.
+ *
+ * @param bounds The box the grid spans.
+ * @param count_x Probes along X; at least one.
+ * @param count_y Probes along Y; at least one.
+ * @param count_z Probes along Z; at least one.
+ * @param out_volume Receives the owned handle; set invalid on failure.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a count below one, a product
+ * above `CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT`, or a box whose maximum is below its minimum --
+ * three distinct refusals with their own messages, because a caller fixes each differently --
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_create(
+    const CNA_BoundingBox* bounds, int32_t count_x, int32_t count_y, int32_t count_z,
+    CNA_LightProbeVolumeHandle* out_volume);
+
+/** @brief Releases the volume. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_destroy(CNA_LightProbeVolumeHandle volume);
+
+/** @brief Returns the box the grid spans. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_get_bounds(
+    CNA_LightProbeVolumeHandle volume, CNA_BoundingBox* out_bounds);
+
+/** @brief Returns how many probes lie along X. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_get_count_x(
+    CNA_LightProbeVolumeHandle volume, int32_t* out_count);
+
+/** @brief Returns how many probes lie along Y. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_get_count_y(
+    CNA_LightProbeVolumeHandle volume, int32_t* out_count);
+
+/** @brief Returns how many probes lie along Z. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_get_count_z(
+    CNA_LightProbeVolumeHandle volume, int32_t* out_count);
+
+/** @brief Returns how many probes the volume holds in total. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_get_probe_count(
+    CNA_LightProbeVolumeHandle volume, int32_t* out_count);
+
+/**
+ * @brief Returns the world-space position of one probe in the grid.
+ *
+ * @param volume The volume.
+ * @param x The X index, from zero.
+ * @param y The Y index, from zero.
+ * @param z The Z index, from zero.
+ * @param out_position Receives the position.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the grid,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_get_probe_position(
+    CNA_LightProbeVolumeHandle volume, int32_t x, int32_t y, int32_t z,
+    CNA_Vector3* out_position);
+
+/**
+ * @brief Copies one probe out of the grid into a caller's probe.
+ *
+ * The volume stores probes **by value**, so this copies rather than lending: the result stays
+ * correct after the volume changes.
+ *
+ * @param volume The volume.
+ * @param x The X index, from zero.
+ * @param y The Y index, from zero.
+ * @param z The Z index, from zero.
+ * @param out_probe An existing probe handle to overwrite.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the grid,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_get_probe(
+    CNA_LightProbeVolumeHandle volume, int32_t x, int32_t y, int32_t z,
+    CNA_LightProbeHandle out_probe);
+
+/** @brief Copies a probe into one cell of the grid. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_set_probe(
+    CNA_LightProbeVolumeHandle volume, int32_t x, int32_t y, int32_t z,
+    CNA_LightProbeHandle probe);
+
+/** @brief Reports whether a position lies inside the volume's box. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_contains(
+    CNA_LightProbeVolumeHandle volume, const CNA_Vector3* position, CNA_Bool* out_contains);
+
+/**
+ * @brief Interpolates the eight surrounding probes into one.
+ *
+ * The position is **clamped into the volume's box** rather than refused: a point just outside a
+ * probe grid is an ordinary thing during rendering, and the nearest interpolation is what a
+ * caller wants there.
+ *
+ * @param volume The volume.
+ * @param position The world-space position.
+ * @param out_probe An existing probe handle to overwrite.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null position,
+ * `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_sample_probe(
+    CNA_LightProbeVolumeHandle volume, const CNA_Vector3* position,
+    CNA_LightProbeHandle out_probe);
+
+/** @brief Returns the irradiance at a point on a surface facing one way. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_irradiance(
+    CNA_LightProbeVolumeHandle volume, const CNA_Vector3* position, const CNA_Vector3* normal,
+    CNA_Vector3* out_irradiance);
+
+/** @brief Reports whether every probe in the volume stores no light. */
+CNA_C_API CNA_Result cna_light_probe_volume_ext_is_zero(
+    CNA_LightProbeVolumeHandle volume, CNA_Bool* out_zero);
+
+/**
+ * @brief Gives the clustered forward effect a light probe to shade ambient light with.
+ *
+ * `CBIND-086C` deferred this route because `LightProbeEXT` did not exist in C yet. The probe is
+ * **copied**, not borrowed: the effect keeps its own, so the caller's handle stays theirs.
+ *
+ * @param effect The effect.
+ * @param probe The probe to copy in.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_light_probe(
+    CNA_ClusteredForwardEffectHandle effect, CNA_LightProbeHandle probe);
+
+/**
+ * @brief Gives the clustered forward effect a probe volume to sample, or clears it.
+ *
+ * Unlike the single probe, the volume is **borrowed**: the canonical setter takes a pointer and
+ * keeps it, so the caller must outlive the effect's use of it. `CNA_INVALID_HANDLE` clears it.
+ *
+ * @param effect The effect.
+ * @param volume The volume, or `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_clustered_forward_effect_set_light_probe_volume(
+    CNA_ClusteredForwardEffectHandle effect, CNA_LightProbeVolumeHandle volume);
+
+/**
+ * @brief Returns the image-based light an effect shades with.
+ *
+ * `CBIND-087C` deferred this route because `ImageBasedLightEXT` had no C form. The three textures
+ * come back as **fresh handles onto the effect's own textures**: each keeps the effect alive while
+ * it exists, and releasing one releases only the handle, never the texture. A caller must release
+ * all three, exactly as it would for any other borrow in this layer.
+ *
+ * @param effect A PbrEffect or SkinnedPbrEffect handle.
+ * @param out_light Receives the light.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect does not carry one
+ * or the output is null, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an error.
+ */
+CNA_C_API CNA_Result cna_effect_get_image_based_light_ext(
+    CNA_EffectHandle effect, CNA_ImageBasedLightEXT* out_light);
+
+/**
+ * @brief Gives an effect an image-based light to shade with.
+ *
+ * The three textures are **borrowed**, never owned, exactly as the shadow map is.
+ *
+ * @param effect A PbrEffect or SkinnedPbrEffect handle.
+ * @param light The light to apply.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the effect cannot take one, or
+ * for a null or malformed structure, `CNA_RESULT_NOT_SUPPORTED` without the engine layer, or an
+ * error.
+ */
+CNA_C_API CNA_Result cna_effect_set_image_based_light_ext(
+    CNA_EffectHandle effect, const CNA_ImageBasedLightEXT* light);
+
 #ifdef __cplusplus
 }
 #endif

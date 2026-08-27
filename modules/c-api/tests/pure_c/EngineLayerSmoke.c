@@ -11,6 +11,7 @@
 #include <CNA/C/cna.h>
 
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 typedef struct EngineLayerState {
@@ -571,7 +572,8 @@ static int validate_unavailable(const CNA_Handle graphics_device)
     {
         CNA_PostProcessPassHandle pass = CNA_INVALID_HANDLE;
         uint64_t number = UINT64_C(0);
-        int32_t count = -1;
+        const int32_t sentinel_count = INT32_C(-31);
+        int32_t count = sentinel_count;
         float scalar = -1.0F;
         if (cna_ssr_pass_create(graphics_device, &pass) != CNA_RESULT_NOT_SUPPORTED ||
             pass != CNA_INVALID_HANDLE ||
@@ -585,6 +587,13 @@ static int validate_unavailable(const CNA_Handle graphics_device)
                 CNA_RESULT_NOT_SUPPORTED ||
             cna_depth_of_field_pass_circle_of_confusion_millimetres(
                 1.0F, 1.0F, 50.0F, 2.8F, &scalar) != CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        /* CBIND-091A. A refused scalar getter leaves its output alone. Only an out HANDLE is
+           defined on refusal (so a consumer cannot act on a garbage handle) and only a copy
+           route's byte count is zeroed. This assertion is here because the count above was
+           being overwritten with zero and nothing was reading it. */
+        if (count != sentinel_count) {
             return 0;
         }
     }
@@ -672,6 +681,68 @@ static int validate_unavailable(const CNA_Handle graphics_device)
             cna_cube_lut_load_from_file(text, &lut) != CNA_RESULT_NOT_SUPPORTED ||
             cna_color_grade_pass_lut_size_for_strip(INT32_C(64), INT32_C(8), &samples) !=
                 CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+    }
+    /* CBIND-091A. Light probes, probe volumes and the image-based light value. The two value
+       routes on CNA_ImageBasedLightEXT are pure struct arithmetic and work in every build, so
+       they must SUCCEED here -- refusing them would be as wrong as running the object routes. */
+    {
+        CNA_LightProbeHandle probe = (CNA_LightProbeHandle)UINT64_C(0x5A5A5A5A);
+        CNA_LightProbeVolumeHandle volume = (CNA_LightProbeVolumeHandle)UINT64_C(0x5A5A5A5A);
+        CNA_ImageBasedLightEXT light;
+        CNA_BoundingBox bounds;
+        CNA_Vector3 vector;
+        CNA_Bool zero = UINT8_C(9);
+        uint64_t written = UINT64_C(7);
+        float parts = -3.5F;
+        bounds.min.x = 0.0F; bounds.min.y = 0.0F; bounds.min.z = 0.0F;
+        bounds.max.x = 1.0F; bounds.max.y = 1.0F; bounds.max.z = 1.0F;
+        vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+        if (cna_image_based_light_ext_init(&light) != CNA_RESULT_SUCCESS ||
+            light.intensity != 1.0F || light.prefiltered_mip_count != INT32_C(1) ||
+            cna_image_based_light_ext_is_valid(&light, &zero) != CNA_RESULT_SUCCESS ||
+            zero != CNA_FALSE) {
+            return 0;
+        }
+        zero = UINT8_C(9);
+        if (cna_light_probe_ext_create(&probe) != CNA_RESULT_NOT_SUPPORTED ||
+            probe != CNA_INVALID_HANDLE ||
+            cna_light_probe_ext_create_at(&vector, &probe) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_ext_set_position(probe, &vector) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_ext_get_position(probe, &vector) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_ext_set_coefficient(probe, INT32_C(0), &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_ext_get_coefficient(probe, INT32_C(0), &vector) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_ext_is_zero(probe, &zero) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_ext_visibility_weight(probe, &vector, 1.0F, &parts) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_ext_copy_evaluation_glsl(0, UINT64_C(0), &written) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            /* A refused copy route defines its byte count as zero rather than leaving it
+               unwritten, the same as every other copy_* route in this build. */
+            written != UINT64_C(0) ||
+            cna_light_probe_ext_destroy(probe) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_volume_ext_create(&bounds, INT32_C(2), INT32_C(2), INT32_C(2),
+                                              &volume) != CNA_RESULT_NOT_SUPPORTED ||
+            volume != CNA_INVALID_HANDLE ||
+            cna_light_probe_volume_ext_get_probe_count(volume, &samples) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_volume_ext_sample_probe(volume, &vector, probe) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_light_probe_volume_ext_destroy(volume) != CNA_RESULT_NOT_SUPPORTED ||
+            cna_effect_get_image_based_light_ext(graphics_device, &light) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_effect_set_image_based_light_ext(graphics_device, &light) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_clustered_forward_effect_set_light_probe(graphics_device, probe) !=
+                CNA_RESULT_NOT_SUPPORTED ||
+            cna_clustered_forward_effect_set_light_probe_volume(graphics_device, volume) !=
+                CNA_RESULT_NOT_SUPPORTED) {
+            return 0;
+        }
+        if (zero != UINT8_C(9) || parts != -3.5F) {
             return 0;
         }
     }
@@ -5447,6 +5518,239 @@ static int validate_hdr_and_grading(const CNA_Handle graphics_device)
     return ok;
 }
 
+/* CBIND-091A. The probe types refuse an index outside their table rather than clamping -- a
+   clamped index returns a different coefficient and the surface lights almost right, which is
+   worse than an error. Two things here are NOT refusals and are asserted as such: visibilityWeight
+   answers 1 for "nothing known to be in the way" when there is no data or the distance is not
+   positive, and sampleProbe clamps a position into the box because a point just outside a probe
+   grid is ordinary during rendering. Both were read from the bodies, not matched. */
+static int validate_light_probes(const CNA_Handle graphics_device)
+{
+    CNA_LightProbeHandle probe = CNA_INVALID_HANDLE;
+    CNA_LightProbeHandle other = CNA_INVALID_HANDLE;
+    CNA_LightProbeVolumeHandle volume = CNA_INVALID_HANDLE;
+    CNA_LightProbeHandle scratch = UINT64_C(7);
+    CNA_ImageBasedLightEXT light;
+    CNA_BoundingBox bounds;
+    CNA_Vector3 vector;
+    CNA_Vector3 read_back;
+    CNA_Vector3 coefficients[16];
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t count = UINT64_C(0);
+    uint64_t bytes = UINT64_C(0);
+    float scalar = -1.0F;
+    int32_t number = -1;
+    int ok = 1;
+    (void)graphics_device;
+
+    bounds.min.x = -8.0F; bounds.min.y = -8.0F; bounds.min.z = -8.0F;
+    bounds.max.x = 8.0F;  bounds.max.y = 8.0F;  bounds.max.z = 8.0F;
+
+    /* ---- the image-based light value ---- */
+    ok = cna_image_based_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+    ok = ok && light.prefiltered_mip_count >= INT32_C(1) && light.intensity == 1.0F &&
+        light.irradiance == CNA_INVALID_HANDLE;
+    /* A default light is NOT complete: it has no textures, and "nearly complete" is exactly the
+       failure this predicate exists to catch -- it does not look like a mismatch, it looks like a
+       scene lit slightly wrong. */
+    ok = ok && cna_image_based_light_ext_is_valid(&light, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    /* The canonical predicate refuses a negative intensity as well as a missing texture: a
+       bundle that would subtract light is not a partial answer either. */
+    light.intensity = -0.5F;
+    ok = ok && cna_image_based_light_ext_is_valid(&light, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_image_based_light_ext_is_valid(0, &flag) == CNA_RESULT_INVALID_ARGUMENT;
+    light.struct_size = UINT32_C(4);
+    ok = ok && cna_image_based_light_ext_is_valid(&light, &flag) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_image_based_light_ext_init(&light) == CNA_RESULT_SUCCESS;
+
+    /* ---- the probe ---- */
+    if (!ok || cna_light_probe_ext_create(&probe) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    vector.x = 1.0F; vector.y = 2.0F; vector.z = 3.0F;
+    if (cna_light_probe_ext_create_at(&vector, &other) != CNA_RESULT_SUCCESS) {
+        (void)cna_light_probe_ext_destroy(probe);
+        return 0;
+    }
+    ok = cna_light_probe_ext_get_position(other, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == 1.0F && read_back.y == 2.0F && read_back.z == 3.0F;
+    /* Deliberately NOT &probe: create_at defines its out parameter before it validates, so
+       aiming a refusal at a live handle would erase it. */
+    ok = ok && cna_light_probe_ext_create_at(0, &scratch) == CNA_RESULT_INVALID_ARGUMENT &&
+        scratch == CNA_INVALID_HANDLE;
+    /* The position is a plain assignment on both sides -- no clamp, no refusal beyond the null. */
+    vector.x = -4.5F; vector.y = 0.0F; vector.z = 12.0F;
+    ok = ok && cna_light_probe_ext_set_position(other, &vector) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_get_position(other, &read_back) == CNA_RESULT_SUCCESS &&
+        read_back.x == -4.5F && read_back.y == 0.0F && read_back.z == 12.0F;
+    ok = ok && cna_light_probe_ext_set_position(other, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    /* A fresh probe stores no light, and every coefficient reads back as it was written. */
+    ok = ok && cna_light_probe_ext_is_zero(probe, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    vector.x = 0.5F; vector.y = 0.25F; vector.z = 0.125F;
+    ok = ok && cna_light_probe_ext_set_coefficient(probe, INT32_C(0), &vector) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_get_coefficient(probe, INT32_C(0), &read_back) ==
+        CNA_RESULT_SUCCESS && read_back.x == 0.5F && read_back.y == 0.25F &&
+        read_back.z == 0.125F;
+    ok = ok && cna_light_probe_ext_is_zero(probe, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    /* Refused at both ends, not clamped. */
+    ok = ok && cna_light_probe_ext_set_coefficient(probe, INT32_C(-1), &vector) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_ext_set_coefficient(
+            probe, CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT, &vector) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_ext_get_coefficient(probe, INT32_C(-1), &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_ext_get_coefficient(
+            probe, CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT, &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_ext_set_coefficient(probe, INT32_C(0), 0) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_ext_copy_coefficients(probe, 0, UINT64_C(0), &count) ==
+        CNA_RESULT_BUFFER_TOO_SMALL &&
+        count == (uint64_t)CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT;
+    ok = ok && cna_light_probe_ext_copy_coefficients(
+            probe, coefficients, (uint64_t)(sizeof coefficients / sizeof coefficients[0]),
+            &count) == CNA_RESULT_SUCCESS && coefficients[0].x == 0.5F;
+
+    /* Visibility: the same index contract, and both distances floored at zero. */
+    ok = ok && cna_light_probe_ext_has_visibility(probe, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_light_probe_ext_set_visibility(probe, INT32_C(0), 4.0F, 20.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_get_visibility_mean(probe, INT32_C(0), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 4.0F;
+    ok = ok && cna_light_probe_ext_get_visibility_mean_squared(probe, INT32_C(0), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 20.0F;
+    ok = ok && cna_light_probe_ext_set_visibility(probe, INT32_C(1), -5.0F, -9.0F) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_get_visibility_mean(probe, INT32_C(1), &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 0.0F;
+    ok = ok && cna_light_probe_ext_has_visibility(probe, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_light_probe_ext_set_visibility(
+            probe, CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT, 1.0F, 1.0F) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_ext_get_visibility_mean(probe, INT32_C(-1), &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* NOT refusals: 1.0 means "nothing known to be in the way". A probe with no data answers 1
+       for any direction, and so does any probe at a non-positive distance. */
+    vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+    {
+        CNA_LightProbeHandle blank = CNA_INVALID_HANDLE;
+        if (cna_light_probe_ext_create(&blank) == CNA_RESULT_SUCCESS) {
+            ok = ok && cna_light_probe_ext_visibility_weight(blank, &vector, 3.0F, &scalar) ==
+                CNA_RESULT_SUCCESS && scalar == 1.0F;
+            ok = ok && cna_light_probe_ext_destroy(blank) == CNA_RESULT_SUCCESS;
+        }
+    }
+    ok = ok && cna_light_probe_ext_visibility_weight(probe, &vector, 0.0F, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_light_probe_ext_visibility_weight(probe, &vector, -1.0F, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar == 1.0F;
+    ok = ok && cna_light_probe_ext_visibility_weight(probe, &vector, 3.0F, &scalar) ==
+        CNA_RESULT_SUCCESS && scalar >= 0.0F && scalar <= 1.0F;
+    ok = ok && cna_light_probe_ext_visibility_weight(probe, 0, 3.0F, &scalar) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Irradiance is never negative, however the coefficients reconstruct. */
+    vector.x = 0.0F; vector.y = 1.0F; vector.z = 0.0F;
+    ok = ok && cna_light_probe_ext_set_coefficient(probe, INT32_C(0), &vector) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_irradiance(probe, &vector, &read_back) ==
+        CNA_RESULT_SUCCESS && read_back.x >= 0.0F && read_back.y >= 0.0F && read_back.z >= 0.0F;
+    ok = ok && cna_light_probe_ext_irradiance(probe, 0, &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+
+    /* Value semantics: a copy compares equal, and one changed coefficient breaks it. */
+    ok = ok && cna_light_probe_ext_copy_from(other, probe) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_equals(probe, other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE;
+    ok = ok && cna_light_probe_ext_scale(other, 2.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_equals(probe, other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_light_probe_ext_copy_evaluation_glsl(0, UINT64_C(0), &bytes) ==
+        CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
+
+    /* ---- the volume: three distinct construction refusals ---- */
+    ok = ok && cna_light_probe_volume_ext_create(&bounds, INT32_C(0), INT32_C(2), INT32_C(2),
+                                                  &volume) == CNA_RESULT_INVALID_ARGUMENT &&
+        volume == CNA_INVALID_HANDLE;
+    ok = ok && cna_light_probe_volume_ext_create(&bounds, INT32_C(64), INT32_C(64), INT32_C(64),
+                                                  &volume) == CNA_RESULT_INVALID_ARGUMENT;
+    {
+        CNA_BoundingBox inverted;
+        inverted.min.x = 5.0F; inverted.min.y = 0.0F; inverted.min.z = 0.0F;
+        inverted.max.x = -5.0F; inverted.max.y = 1.0F; inverted.max.z = 1.0F;
+        ok = ok && cna_light_probe_volume_ext_create(&inverted, INT32_C(2), INT32_C(2),
+                                                      INT32_C(2), &volume) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+    }
+    if (!ok || cna_light_probe_volume_ext_create(&bounds, INT32_C(2), INT32_C(3), INT32_C(4),
+                                                  &volume) != CNA_RESULT_SUCCESS) {
+        (void)cna_light_probe_ext_destroy(other);
+        (void)cna_light_probe_ext_destroy(probe);
+        return 0;
+    }
+    ok = cna_light_probe_volume_ext_get_count_x(volume, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(2);
+    ok = ok && cna_light_probe_volume_ext_get_count_y(volume, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(3);
+    ok = ok && cna_light_probe_volume_ext_get_count_z(volume, &number) == CNA_RESULT_SUCCESS &&
+        number == INT32_C(4);
+    ok = ok && cna_light_probe_volume_ext_get_probe_count(volume, &number) ==
+        CNA_RESULT_SUCCESS && number == INT32_C(24);
+    ok = ok && cna_light_probe_volume_ext_get_bounds(volume, &bounds) == CNA_RESULT_SUCCESS &&
+        bounds.min.x == -8.0F && bounds.max.z == 8.0F;
+    ok = ok && cna_light_probe_volume_ext_get_probe_position(volume, INT32_C(0), INT32_C(0),
+                                                              INT32_C(0), &read_back) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_volume_ext_get_probe_position(volume, INT32_C(2), INT32_C(0),
+                                                              INT32_C(0), &read_back) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    /* The volume stores probes BY VALUE: writing one then changing the source must not change
+       what the volume holds. That is the assertion a borrow would fail. */
+    ok = ok && cna_light_probe_volume_ext_set_probe(volume, INT32_C(1), INT32_C(1), INT32_C(1),
+                                                     probe) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_scale(probe, 8.0F) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_volume_ext_get_probe(volume, INT32_C(1), INT32_C(1), INT32_C(1),
+                                                     other) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_equals(probe, other, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE;
+    ok = ok && cna_light_probe_volume_ext_set_probe(volume, INT32_C(0), INT32_C(0), INT32_C(4),
+                                                     probe) == CNA_RESULT_INVALID_ARGUMENT;
+    ok = ok && cna_light_probe_volume_ext_get_probe(volume, INT32_C(-1), INT32_C(0), INT32_C(0),
+                                                     other) == CNA_RESULT_INVALID_ARGUMENT;
+
+    vector.x = 0.0F; vector.y = 0.0F; vector.z = 0.0F;
+    ok = ok && cna_light_probe_volume_ext_contains(volume, &vector, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_TRUE;
+    vector.x = 999.0F;
+    ok = ok && cna_light_probe_volume_ext_contains(volume, &vector, &flag) ==
+        CNA_RESULT_SUCCESS && flag == CNA_FALSE;
+    /* NOT a refusal: a position outside the box is clamped in, so sampling still succeeds. */
+    ok = ok && cna_light_probe_volume_ext_sample_probe(volume, &vector, other) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_volume_ext_sample_probe(volume, 0, other) ==
+        CNA_RESULT_INVALID_ARGUMENT;
+    vector.x = 0.0F;
+    read_back.x = 0.0F; read_back.y = 1.0F; read_back.z = 0.0F;
+    ok = ok && cna_light_probe_volume_ext_irradiance(volume, &vector, &read_back, &read_back) ==
+        CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_volume_ext_is_zero(volume, &flag) == CNA_RESULT_SUCCESS;
+
+    ok = ok && cna_light_probe_volume_ext_destroy(volume) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_volume_ext_destroy(volume) != CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_destroy(other) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_destroy(probe) == CNA_RESULT_SUCCESS;
+    ok = ok && cna_light_probe_ext_destroy(probe) != CNA_RESULT_SUCCESS;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -5568,6 +5872,10 @@ static CNA_Result on_load(
         }
         if (!validate_hdr_and_grading(graphics_device)) {
             state->failed_stage = 31;
+            return CNA_RESULT_INVALID_STATE;
+        }
+        if (!validate_light_probes(graphics_device)) {
+            state->failed_stage = 32;
             return CNA_RESULT_INVALID_STATE;
         }
         if (compute != CNA_TRUE) {

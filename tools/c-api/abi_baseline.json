@@ -1292,6 +1292,8 @@
   "cna_clustered_forward_effect_set_ambient",
   "cna_clustered_forward_effect_set_base_color",
   "cna_clustered_forward_effect_set_ior",
+  "cna_clustered_forward_effect_set_light_probe",
+  "cna_clustered_forward_effect_set_light_probe_volume",
   "cna_clustered_forward_effect_set_material_extensions",
   "cna_clustered_forward_effect_set_metallic",
   "cna_clustered_forward_effect_set_opaque_frame",
@@ -1773,6 +1775,7 @@
   "cna_effect_get_current_technique",
   "cna_effect_get_fragment_source_byte_count",
   "cna_effect_get_graphics_device",
+  "cna_effect_get_image_based_light_ext",
   "cna_effect_get_is_compiled_ext",
   "cna_effect_get_light_view_projection_ext",
   "cna_effect_get_parameters",
@@ -1841,6 +1844,7 @@
   "cna_effect_pass_get_index_ext",
   "cna_effect_pass_get_name_byte_count",
   "cna_effect_set_current_technique",
+  "cna_effect_set_image_based_light_ext",
   "cna_effect_set_light_view_projection_ext",
   "cna_effect_set_punctual_light_ext",
   "cna_effect_set_shadow_cascades_ext",
@@ -2498,6 +2502,8 @@
   "cna_height_fog_pass_set_density",
   "cna_height_fog_pass_set_falloff",
   "cna_host_changed_event_info_init",
+  "cna_image_based_light_ext_init",
+  "cna_image_based_light_ext_is_valid",
   "cna_index_buffer_copy_type_name",
   "cna_index_buffer_create",
   "cna_index_buffer_destroy",
@@ -2616,6 +2622,39 @@
   "cna_lens_flare_pass_set_dispersal",
   "cna_lens_flare_pass_set_intensity",
   "cna_lens_flare_pass_set_threshold",
+  "cna_light_probe_ext_copy_coefficients",
+  "cna_light_probe_ext_copy_evaluation_glsl",
+  "cna_light_probe_ext_copy_from",
+  "cna_light_probe_ext_create",
+  "cna_light_probe_ext_create_at",
+  "cna_light_probe_ext_destroy",
+  "cna_light_probe_ext_equals",
+  "cna_light_probe_ext_get_coefficient",
+  "cna_light_probe_ext_get_position",
+  "cna_light_probe_ext_get_visibility_mean",
+  "cna_light_probe_ext_get_visibility_mean_squared",
+  "cna_light_probe_ext_has_visibility",
+  "cna_light_probe_ext_irradiance",
+  "cna_light_probe_ext_is_zero",
+  "cna_light_probe_ext_scale",
+  "cna_light_probe_ext_set_coefficient",
+  "cna_light_probe_ext_set_position",
+  "cna_light_probe_ext_set_visibility",
+  "cna_light_probe_ext_visibility_weight",
+  "cna_light_probe_volume_ext_contains",
+  "cna_light_probe_volume_ext_create",
+  "cna_light_probe_volume_ext_destroy",
+  "cna_light_probe_volume_ext_get_bounds",
+  "cna_light_probe_volume_ext_get_count_x",
+  "cna_light_probe_volume_ext_get_count_y",
+  "cna_light_probe_volume_ext_get_count_z",
+  "cna_light_probe_volume_ext_get_probe",
+  "cna_light_probe_volume_ext_get_probe_count",
+  "cna_light_probe_volume_ext_get_probe_position",
+  "cna_light_probe_volume_ext_irradiance",
+  "cna_light_probe_volume_ext_is_zero",
+  "cna_light_probe_volume_ext_sample_probe",
+  "cna_light_probe_volume_ext_set_probe",
   "cna_light_shaft_pass_create",
   "cna_light_shaft_pass_get_decay",
   "cna_light_shaft_pass_get_intensity",
@@ -5253,6 +5292,9 @@
   "CNA_LEADERBOARD_OUTCOME_TIE": 3,
   "CNA_LEADERBOARD_OUTCOME_WIN": 1,
   "CNA_LENS_FLARE_GHOST_COUNT_EXT": 4,
+  "CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT": 9,
+  "CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT": 6,
+  "CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT": 32768,
   "CNA_LIGHT_SHAFT_STEP_COUNT_EXT": 24,
   "CNA_LOG_CATEGORY_APPLICATION": 0,
   "CNA_LOG_CATEGORY_AUDIO": 3,
@@ -6353,6 +6395,14 @@
    4
   ],
   "CNA_LeaderboardReaderHandle": [
+   8,
+   8
+  ],
+  "CNA_LightProbeHandle": [
+   8,
+   8
+  ],
+  "CNA_LightProbeVolumeHandle": [
    8,
    8
   ],
@@ -9872,6 +9922,40 @@
     ]
    },
    "size": 24
+  },
+  "CNA_ImageBasedLightEXT": {
+   "align": 8,
+   "fields": {
+    "brdf_lut": [
+     24,
+     8
+    ],
+    "intensity": [
+     36,
+     4
+    ],
+    "irradiance": [
+     8,
+     8
+    ],
+    "prefiltered_mip_count": [
+     32,
+     4
+    ],
+    "prefiltered_specular": [
+     16,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
   },
   "CNA_IndexBufferCreateInfo": {
    "align": 4,

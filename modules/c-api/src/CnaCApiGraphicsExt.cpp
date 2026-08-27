@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/C/engine_layer.h"
 #include "CNA/C/graphics_ext.h"
+#include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiGraphicsExtDetail.hpp"
@@ -208,6 +210,66 @@ CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* const outMaterial)
         }
     }
     return StoreValue(outMaterial, defaults);
+}
+
+/* CBIND-091A. The image-based light is a value, and its canonical type lives in the
+ * always-compiled XNA header rather than under CNA_CNAEXT (plans/plan_modern.md MOD-1222),
+ * so these two routes work in every build and read their defaults from the canonical type
+ * instead of repeating them as literals. */
+CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* const outLight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLight == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+        }
+        const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT defaults;
+        *outLight = CNA_ImageBasedLightEXT{};
+        outLight->struct_size = static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT));
+        outLight->struct_version = UINT32_C(1);
+        outLight->irradiance = CNA_INVALID_HANDLE;
+        outLight->prefiltered_specular = CNA_INVALID_HANDLE;
+        outLight->brdf_lut = CNA_INVALID_HANDLE;
+        outLight->prefiltered_mip_count = static_cast<int32_t>(defaults.PrefilteredMipCount);
+        outLight->intensity = defaults.Intensity;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_image_based_light_ext_is_valid(
+    const CNA_ImageBasedLightEXT* const light, CNA_Bool* const outValid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (light == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+        }
+        if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT)) ||
+            light->struct_version == UINT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The image-based-light structure is malformed.");
+        }
+        // The canonical predicate asks whether all three textures are present and the mip count is
+        // at least one. Here the textures are handles, so "present" is "a live texture handle" --
+        // a stale one is not a texture and must not read as a complete light.
+        const CNA_Handle handles[] = {
+            light->irradiance, light->prefiltered_specular, light->brdf_lut};
+        // IsValidEXT() also refuses a negative intensity: a bundle that would subtract light
+        // is not two thirds of an answer either.
+        bool complete = light->prefiltered_mip_count >= INT32_C(1) && light->intensity >= 0.0F;
+        for (const CNA_Handle handle : handles) {
+            if (!complete) {
+                break;
+            }
+            CNA::C::Detail::ObjectKind kind = CNA::C::Detail::ObjectKind::Unknown;
+            complete = handle != CNA_INVALID_HANDLE &&
+                CNA::C::Detail::GetRuntimeHandles().GetKind(handle, &kind) ==
+                    CNA_RESULT_SUCCESS;
+        }
+        return StoreValue(outValid, static_cast<CNA_Bool>(complete ? CNA_TRUE : CNA_FALSE));
+    });
 }
 
 CNA_Result cna_render_pipeline_settings_init(CNA_RenderPipelineSettings* const outSettings)

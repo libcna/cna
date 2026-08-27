@@ -16705,6 +16705,115 @@
         "CPP-B74CBFFF0149",
         "CPP-E94D7E7376A3"
       ]
+    },
+    {
+      "id": "light-probe",
+      "qualified_name_regex": "^CNA::Graphics::LightProbeEXT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_light_probe_ext_*` over its own owned handle. The probe is a value in C++ and stays a value here: `cna_light_probe_ext_copy_from` and `cna_light_probe_ext_equals` exist so a caller can do through the handle what assignment and comparison do through the object, and `cna_light_probe_volume_ext_set_probe` **copies** rather than borrows -- a volume that aliased its source would change under a caller who later scaled that probe.\n\nThe nine-coefficient table is reached one entry at a time and in bulk (`cna_light_probe_ext_copy_coefficients`, which reports the count it needs when the buffer is too small). `kCoefficientCount` and the six visibility directions become `CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT` and `CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT`, and every index route refuses an index outside its table rather than clamping: a clamped index answers with a *different* coefficient, so the surface lights almost right, which is worse than an error.\n\nTwo behaviours read like refusals and are not, and are bound as answers because that is what the bodies do. `visibilityWeight` answers **1.0** -- \"nothing known to be in the way\" -- both when the probe carries no visibility data and when the distance is not positive; and the two visibility distances are floored at zero rather than refused. `irradiance` is likewise clamped non-negative however the coefficients reconstruct.",
+      "tests": "`EngineLayerSmoke.c` stage 32: every coefficient round-trips, both ends of both index ranges are refused, the two not-refusals above are asserted as successes returning 1.0, a copy compares equal until one `scale` breaks it, and a probe written into a volume is shown not to follow its source. The layer-absent build asserts each route refuses and leaves its output untouched.",
+      "status": "implemented",
+      "task": "CBIND-091A",
+      "approved_symbols": [
+        "CPP-15313B0B876C",
+        "CPP-3F6EB5939A01",
+        "CPP-51ABA87746F2",
+        "CPP-656D30137815",
+        "CPP-7093CC325E82",
+        "CPP-89D57293D542",
+        "CPP-981628FB8D05",
+        "CPP-ACD69FB2ED80",
+        "CPP-AE9D1B961E15",
+        "CPP-BE9D087B4CD7",
+        "CPP-C4D68F9B3D98",
+        "CPP-CED71F7A266A",
+        "CPP-D52031AAFF1C",
+        "CPP-D5DCBC5D68E9",
+        "CPP-D67A1C2DA18F",
+        "CPP-DE2CBE091C00",
+        "CPP-E52B8ECD1BEB",
+        "CPP-FAF68EE7DE4C",
+        "CPP-FF56FA07B697"
+      ]
+    },
+    {
+      "id": "light-probe-volume",
+      "qualified_name_regex": "^CNA::Graphics::LightProbeVolumeEXT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_light_probe_volume_ext_*` over its own owned handle. The canonical constructor throws three different `invalid_argument`s -- a count below one, a probe product over `CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT`, and an inverted bounding box -- and each is bound as its own refusal with its own message rather than folded into one, because a caller fixes them in three different ways.\n\n`sampleProbe` **clamps** a position into the box instead of refusing it: a point just outside a probe grid is ordinary during rendering, and the canonical body treats it that way. `contains` is the query that answers the question refusing would have answered.",
+      "tests": "`EngineLayerSmoke.c` stage 32: the three construction refusals are asserted separately, the probe grid is indexed at both ends of all three axes, `contains` is checked inside and outside, and sampling from outside the box is asserted to **succeed**. The layer-absent build asserts each route refuses and leaves its output untouched.",
+      "status": "implemented",
+      "task": "CBIND-091A",
+      "approved_symbols": [
+        "CPP-288440025415",
+        "CPP-3C32219EE1F5",
+        "CPP-4DDF590CFB4C",
+        "CPP-57468C98215D",
+        "CPP-65AA58326E1D",
+        "CPP-684E8C13D601",
+        "CPP-7DC5A4554885",
+        "CPP-82DD1C5F2384",
+        "CPP-8C9D9D0C069C",
+        "CPP-B9B3E318DD7F",
+        "CPP-BAF5C23DFFE2",
+        "CPP-CACB576811B2",
+        "CPP-D9D6B5DE9213",
+        "CPP-DA63569C3720",
+        "CPP-EA53A63EA24C"
+      ]
+    },
+    {
+      "id": "image-based-light",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT(?:::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "struct",
+        "field",
+        "method"
+      ],
+      "mapping": "`CNA_ImageBasedLightEXT`, a versioned POD carrying the three split-sum textures as handles plus the mip count and intensity, with `cna_image_based_light_ext_init` and `cna_image_based_light_ext_is_valid`.\n\nThose two routes are the only engine-layer surface in this slice that lives **outside** `#ifdef CNA_CNAEXT`, because the canonical type does too: it is deliberately in the always-compiled XNA header rather than under the flag (`plans/plan_modern.md` `MOD-1222`). They therefore read their defaults from the canonical type instead of repeating them as literals, and they succeed in both builds -- refusing them would be as wrong as running the object routes.\n\n`IsValidEXT()` maps arm for arm, including the one a handle rewrite invites you to drop: all three textures present **and** the mip count at least one **and the intensity not negative**. Here \"present\" is \"a live texture handle\", since a stale handle is not a texture and must not read as a complete bundle.",
+      "tests": "`EngineLayerSmoke.c` stage 32 and the layer-absent block: a default-initialized light reads **invalid** (a bundle with no textures is not two thirds of an answer), a negative intensity reads invalid, a short `struct_size` is refused, and both routes are asserted to succeed in the layer-absent build with the same answers.",
+      "status": "implemented",
+      "task": "CBIND-091A",
+      "approved_symbols": [
+        "CPP-34D7593CC09C",
+        "CPP-7032A6591C78",
+        "CPP-72F68992A328",
+        "CPP-887AE15F0ED3",
+        "CPP-B650FF5713B6",
+        "CPP-F9812BA3B2D4",
+        "CPP-FF2492045BCF"
+      ]
+    },
+    {
+      "id": "effect-image-based-light-pair",
+      "qualified_name_regex": "^(?:Microsoft::Xna::Framework::Graphics::(?:Pbr|SkinnedPbr)Effect::(?:get|set)ImageBasedLightEXT|CNA::Graphics::ClusteredForwardEffect::setLightProbe(?:Volume)?)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "The four effect-side operations that were waiting on the types above. `cna_effect_get_image_based_light_ext` / `cna_effect_set_image_based_light_ext` are one pair over `CNA_EffectHandle`, refusing **by argument** through a `dynamic_cast` rather than by handle kind, so the same pair serves both PBR effects; the two forward-effect routes take a probe handle and a volume handle.\n\nThe lifetime differs between them and is documented rather than smoothed over: the probe is **copied** into the effect, the volume is **borrowed**, and the textures the getter hands back alias the effect resource -- each keeps the effect alive while it exists, and releasing one releases only the handle, never the texture.",
+      "tests": "`EngineLayerSmoke.c` stage 32, which sets and reads back a bundle on both PBR effects and asserts the pair refuses an effect that implements neither; the layer-absent build asserts all four refuse.",
+      "status": "implemented",
+      "task": "CBIND-091A",
+      "approved_symbols": [
+        "CPP-1772760C1A34",
+        "CPP-19F7D444B9AB",
+        "CPP-3F44E3018336",
+        "CPP-8EC28B1A9690",
+        "CPP-C5BB3AD4F721",
+        "CPP-F8BF74DDD8D1"
+      ]
     }
   ]
 }
