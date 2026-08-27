@@ -1913,7 +1913,11 @@ static int validate_shadow_receiver(const CNA_Handle graphics_device)
     /* An effect that does not implement the contract is refused by argument, not by handle: the
        handle is perfectly valid, it is the concrete type that cannot answer. */
     if (cna_sprite_effect_create(graphics_device, &sprite) == CNA_RESULT_SUCCESS) {
-        ok = cna_effect_set_shadows_enabled_ext(sprite, CNA_TRUE) == CNA_RESULT_INVALID_ARGUMENT;
+        /* CBIND-099: `ok = ok &&`, never a bare `ok =`. This block is entered on whether a sprite
+           effect could be created, which says nothing about whether the twenty assertions above
+           passed -- so a plain assignment here would erase every one of them. */
+        ok = ok && cna_effect_set_shadows_enabled_ext(sprite, CNA_TRUE) ==
+            CNA_RESULT_INVALID_ARGUMENT;
         ok = ok && cna_effect_get_shadow_depth_bias_ext(sprite, &scalar) ==
             CNA_RESULT_INVALID_ARGUMENT;
         if (cna_effect_destroy(sprite) != CNA_RESULT_SUCCESS) {
@@ -1942,8 +1946,10 @@ static int validate_shadow_receiver(const CNA_Handle graphics_device)
                 graphics_device, CNA_SHADOW_QUALITY_LOW, INT32_C(2), &cascaded) ==
             CNA_RESULT_SUCCESS) {
             /* applyToReceiver refuses before update(): there are no cascade matrices to give, and
-               handing over a defaulted state would silently shadow nothing. */
-            ok = cna_cascaded_shadow_map_apply_to_receiver(cascaded, basic) != CNA_RESULT_SUCCESS;
+               handing over a defaulted state would silently shadow nothing.
+               CBIND-099: `ok = ok &&`, for the reason above. */
+            ok = ok && cna_cascaded_shadow_map_apply_to_receiver(cascaded, basic) !=
+                CNA_RESULT_SUCCESS;
             ok = ok && cna_cascaded_shadow_map_update(cascaded, &sun, &view, &projection) ==
                 CNA_RESULT_SUCCESS;
             ok = ok && cna_cascaded_shadow_map_apply_to_receiver(cascaded, basic) ==
@@ -2228,7 +2234,10 @@ static int validate_prepass_and_contact(const CNA_Handle graphics_device)
     }
     {
         CNA_Vector3 direction;
-        ok = cna_post_process_pass_copy_name(contact, 0, UINT64_C(0), &bytes) ==
+        /* CBIND-099: `ok = ok &&`. Thirty-five assertions precede this block and a bare
+           assignment would discard all of them. Found by widening the audit past the three sites
+           the row named. */
+        ok = ok && cna_post_process_pass_copy_name(contact, 0, UINT64_C(0), &bytes) ==
             CNA_RESULT_BUFFER_TOO_SMALL && bytes > UINT64_C(0);
         ok = ok && cna_post_process_pass_is_supported(contact, graphics_device, &flag) ==
             CNA_RESULT_SUCCESS;
@@ -2280,7 +2289,9 @@ static int validate_prepass_and_contact(const CNA_Handle graphics_device)
         /* A blit pass is not a contact-shadow pass, and the settings say so by argument. */
         CNA_PostProcessPassHandle blit = CNA_INVALID_HANDLE;
         if (cna_blit_pass_create(graphics_device, &blit) == CNA_RESULT_SUCCESS) {
-            ok = cna_contact_shadow_pass_get_bias(blit, &scalar) == CNA_RESULT_INVALID_ARGUMENT;
+            /* CBIND-099: `ok = ok &&`, for the reason above. */
+            ok = ok && cna_contact_shadow_pass_get_bias(blit, &scalar) ==
+                CNA_RESULT_INVALID_ARGUMENT;
             ok = ok && cna_contact_shadow_pass_copy_fallback_reason(blit, 0, UINT64_C(0), &bytes) ==
                 CNA_RESULT_INVALID_ARGUMENT;
             ok = ok && cna_post_process_pass_destroy(blit) == CNA_RESULT_SUCCESS;
