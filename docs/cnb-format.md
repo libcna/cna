@@ -901,7 +901,13 @@ values guessed from the file.
 
 Every one of them is **headless and deterministic**: no `GraphicsDevice`, no audio device, no
 clock, no randomness. Given identical source bytes, options and logical name, each produces
-identical output bytes.
+identical output bytes — asserted across two separate OS processes, not merely two calls in one.
+
+Every numeric option is parsed **strictly**: the whole token must be consumed, a sign is refused
+for an unsigned value, the range is checked before any narrowing, and a NaN or an infinity is
+refused by name. An option that does not apply to the asset kind being produced is an error rather
+than something ignored, and a failing invocation exits non-zero without leaving a partial file
+behind.
 
 ---
 

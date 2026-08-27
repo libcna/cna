@@ -13,6 +13,7 @@ add_executable(cna_tool_gltf_to_cnb
 target_compile_definitions(cna_tool_gltf_to_cnb PRIVATE CNA_GLTF_TO_CNJ_NO_MAIN=1)
 target_include_directories(cna_tool_gltf_to_cnb PRIVATE
     third_party/cgltf
+    tools/common
     tools/gltf_to_cnj
     modules/content/tests/CNA/Internal/GltfImport
 )

@@ -222,6 +222,9 @@ if(CNA_BUILD_TESTS)
         # reason: it needs a REAL converted asset, not a hand-built approximation of one.
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbModelEquivalenceTests\\.cpp$")
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbInfoToolTests\\.cpp$")
+        # plans/plan_cnb.md CNBF-120: CnbSourceToolTests.cpp spawns cna_tool_source_to_cnb the same
+        # way, so it is excluded on exactly the same platforms and for exactly the same reasons.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Content/Cnb/CnbSourceToolTests\\.cpp$")
     endif()
 
     # DevicesShutdownOrderingTests.cpp (Task SDLCORE-011) uses the same POSIX-only process APIs
@@ -527,6 +530,17 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_tool_gltf_to_cnb)
         target_compile_definitions(CnaTests PRIVATE
             CNA_GLTF_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnb>"
+        )
+    endif()
+
+    if(TARGET cna_tool_source_to_cnb)
+        # plans/plan_cnb.md CNBF-120: CnbSourceToolTests.cpp spawns the direct source compiler as a
+        # subprocess, for the same reason the suites above do -- its contract is its exit code, its
+        # stderr and the bytes it leaves on disk, none of which a library call exercises. It was the
+        # only CNB tool with no such wiring, so the executable had never been run by a test at all.
+        add_dependencies(CnaTests cna_tool_source_to_cnb)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_SOURCE_TO_CNB_TOOL_PATH="$<TARGET_FILE:cna_tool_source_to_cnb>"
         )
     endif()
 

@@ -7,6 +7,11 @@
 add_executable(cna_tool_source_to_cnb
     tools/source_to_cnb/source_to_cnb.cpp
 )
+target_include_directories(cna_tool_source_to_cnb PRIVATE
+    # plans/plan_cnb.md CNBF-120: the shared strict command-line numeric parsers, reachable by
+    # their bare header name from every content tool that takes a number.
+    ${CNA_SOURCE_DIR}/tools/common
+)
 target_link_libraries(cna_tool_source_to_cnb
     PRIVATE
     CNA

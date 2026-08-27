@@ -143,3 +143,93 @@ TEST(CnbGltfDirectToolTest, AMissingInputIsAnErrorRatherThanAnEmptyOutput)
                   " asset --quiet"), 0);
     EXPECT_FALSE(std::filesystem::exists(out.path() / "asset.cnb"));
 }
+
+// --------------------------------------------------------------------------------------------
+// CNBF-120 -- the tool's own arguments, and the failures it used to report as success
+// --------------------------------------------------------------------------------------------
+
+TEST(CnbGltfDirectToolTest, ABaseNameThatIsNotOneFileNameComponentIsRefused)
+{
+    // baseName becomes part of every output file name AND of the staging directory's name, and
+    // neither was checked. A separator would write outside outputDir; "." and ".." name a
+    // directory rather than an asset. Refused before the conversion runs, so nothing is produced.
+    if (!kToolsAvailable) { GTEST_SKIP() << "the content tools were not built"; }
+    const std::filesystem::path fixture = FindFixture("skin-four-weighted.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "fixture not found (run from the source root)"; }
+
+    for (const char* bad : {"sub/asset", "../asset", ".", "..", "a/b", "/abs"})
+    {
+        ScratchDir out(std::string("basename"));
+        EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                              out.path().string() + " '" + bad + "' --quiet"),
+                  0)
+            << "baseName '" << bad << "' was accepted";
+        EXPECT_TRUE(std::filesystem::is_empty(out.path()))
+            << "baseName '" << bad << "' produced output";
+    }
+
+    // An empty baseName is a positional argument that is present but says nothing.
+    ScratchDir empty("basename-empty");
+    EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                          empty.path().string() + " '' --quiet"),
+              0);
+
+    // An ordinary name still works, so this is a boundary rather than a blanket refusal.
+    ScratchDir good("basename-ok");
+    EXPECT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                          good.path().string() + " asset-1_v2 --quiet"),
+              0);
+    EXPECT_TRUE(std::filesystem::exists(good.path() / "asset-1_v2.cnb"));
+}
+
+TEST(CnbGltfDirectToolTest, UnitScaleMustBeAFiniteFullyConsumedPositiveNumber)
+{
+    // std::stof consumed a PREFIX, so "0.01m" was 0.01 and "1.0abc" was 1.0 -- a typo scaled a
+    // model silently. It also accepts "nan" and "inf" by their literal spellings, either of which
+    // multiplies every position and bone translation into a value nothing can render. Zero
+    // collapses the model to a point and a negative mirrors it.
+    if (!kToolsAvailable) { GTEST_SKIP() << "the content tools were not built"; }
+    const std::filesystem::path fixture = FindFixture("skin-four-weighted.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "fixture not found (run from the source root)"; }
+
+    for (const char* bad : {"1.0abc", "0.01m", "nan", "inf", "-inf", "0", "-1", "", "abc"})
+    {
+        ScratchDir out("unitscale");
+        EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                              out.path().string() + " asset --unit-scale '" + bad + "' --quiet"),
+                  0)
+            << "--unit-scale '" << bad << "' was accepted";
+        EXPECT_FALSE(std::filesystem::exists(out.path() / "asset.cnb"));
+    }
+
+    ScratchDir good("unitscale-ok");
+    EXPECT_EQ(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                          good.path().string() + " asset --unit-scale 0.01 --quiet"),
+              0);
+    EXPECT_TRUE(std::filesystem::exists(good.path() / "asset.cnb"));
+}
+
+TEST(CnbGltfDirectToolTest, KeepCnjReportsAFailedCopyInsteadOfSucceeding)
+{
+    // Every error from create_directories and copy was discarded, so --keep-cnj exited 0 having
+    // copied nothing at all. The .cnb files are correct at that point, which is exactly why a
+    // silent success is the wrong answer: a build script would move on believing the intermediate
+    // was there.
+    if (!kToolsAvailable) { GTEST_SKIP() << "the content tools were not built"; }
+    const std::filesystem::path fixture = FindFixture("skin-four-weighted.gltf");
+    if (fixture.empty()) { GTEST_SKIP() << "fixture not found (run from the source root)"; }
+
+    ScratchDir out("keepfail");
+    // A regular FILE where the directory should be: create_directories cannot make one there, and
+    // the copies that follow have nowhere to go.
+    const std::filesystem::path blocked = out.path() / "blocked";
+    { std::ofstream f(blocked, std::ios::binary); f << "not a directory"; }
+
+    EXPECT_NE(RunTool(std::string(kDirectTool) + " " + fixture.string() + " " +
+                          out.path().string() + " asset --quiet --keep-cnj " + blocked.string()),
+              0)
+        << "--keep-cnj reported success after copying nothing";
+    // The .cnb is still produced -- the failure is about the intermediate, and the tool says so
+    // rather than pretending either way.
+    EXPECT_TRUE(std::filesystem::exists(out.path() / "asset.cnb"));
+}

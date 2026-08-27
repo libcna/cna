@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "CNA/Content/Cnb/CnjToCnb.hpp"
+#include "CnaToolNumericArgs.hpp"
 #include "GltfToCnjEntry.hpp"
 
 namespace
@@ -115,10 +116,19 @@ int main(int argc, char** argv)
         if (arg == "--quiet") { quiet = true; continue; }
         if (arg == "--unit-scale" && i + 1 < argc)
         {
-            try { unitScale = std::stof(argv[++i]); }
-            catch (const std::exception&)
+            // plans/plan_cnb.md CNBF-120: std::stof consumed a PREFIX, so "1.0abc" was 1.0 and
+            // "0.01m" was 0.01; it also accepts "nan" and "inf", either of which would multiply
+            // every position and bone translation in the model into a value nothing can render.
+            // Zero and negatives are refused too: a zero scale collapses the model to a point and
+            // a negative one mirrors it, and neither is a plausible thing to have meant.
+            try
             {
-                std::cerr << "error: --unit-scale expects a number\n";
+                unitScale = CNA::Tools::ParseFiniteFloatArg("--unit-scale", argv[++i], 0.0f,
+                                                             1000000.0f);
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << "error: " << e.what() << "\n";
                 return 1;
             }
             continue;
@@ -141,6 +151,26 @@ int main(int argc, char** argv)
     outputDir = positional[1];
     baseName = positional[2];
 
+    // plans/plan_cnb.md CNBF-120: baseName becomes part of every output file name and of the
+    // staging directory's name, so it has to be ONE filename component. A separator would write
+    // outside outputDir, and "." or ".." would name a directory rather than an asset -- neither
+    // was checked, and the staging directory's name was built from it before anything else ran.
+    {
+        const std::filesystem::path candidate(baseName);
+        const bool oneComponent = !baseName.empty() &&
+                                   baseName.find('/') == std::string::npos &&
+                                   baseName.find('\\') == std::string::npos &&
+                                   candidate.filename() == candidate &&
+                                   !candidate.has_root_path();
+        if (!oneComponent || baseName == "." || baseName == "..")
+        {
+            std::cerr << "error: <baseName> must be a single file-name component with no path "
+                         "separators, and not '.' or '..'; got '"
+                      << baseName << "'.\n";
+            return 1;
+        }
+    }
+
     try
     {
         if (!std::filesystem::exists(inputPath))
@@ -150,6 +180,12 @@ int main(int argc, char** argv)
         }
         std::error_code ec;
         std::filesystem::create_directories(outputDir, ec);
+        if (ec && !std::filesystem::is_directory(outputDir))
+        {
+            std::cerr << "error: cannot create '" << outputDir.string() << "': " << ec.message()
+                      << ".\n";
+            return 1;
+        }
 
         StagingDirectory staging(baseName);
         {
@@ -207,11 +243,29 @@ int main(int argc, char** argv)
 
         if (!keepCnjDir.empty())
         {
+            // Every error here was discarded, so --keep-cnj reported success and exited 0 having
+            // copied nothing (CNBF-120). The .cnb files are already written and correct at this
+            // point, so this is reported as the failure it is rather than pretended away.
             std::filesystem::create_directories(keepCnjDir, ec);
+            if (ec && !std::filesystem::is_directory(keepCnjDir))
+            {
+                std::cerr << "error: --keep-cnj cannot create '" << keepCnjDir.string()
+                          << "': " << ec.message() << ".\n";
+                return 1;
+            }
             for (const auto& entry : std::filesystem::directory_iterator(staging.path()))
             {
+                std::error_code copyError;
                 std::filesystem::copy(entry.path(), keepCnjDir / entry.path().filename(),
-                                      std::filesystem::copy_options::overwrite_existing, ec);
+                                      std::filesystem::copy_options::overwrite_existing,
+                                      copyError);
+                if (copyError)
+                {
+                    std::cerr << "error: --keep-cnj could not copy '"
+                              << entry.path().filename().string() << "' into '"
+                              << keepCnjDir.string() << "': " << copyError.message() << ".\n";
+                    return 1;
+                }
             }
         }
     }
