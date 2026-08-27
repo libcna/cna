@@ -877,6 +877,7 @@ from what was built; the golden vector arrays pin the result. Where any two disa
 ## 13. Remaining `CNBF-*` work
 
 Unchanged in substance from §6's out-of-scope table, restated with what the hardening pass learned.
+**Superseded by §15**, which breaks these rows into implementable tasks and fixes their order.
 
 | ID | Work | Note |
 |---|---|---|
@@ -890,8 +891,8 @@ Unchanged in substance from §6's out-of-scope table, restated with what the har
 | CNBF-107 | `.cnapak` package format | A different format and a different project. |
 | CNBF-108 | Memory-mapped / zero-copy chunk access | The `alignment` field and the 16-byte geometry alignment exist for it; the golden Model vector pins that alignment. |
 
-**Recommended next step:** `CNBF-100`'s mesh half, or `CNBF-101`. Neither is urgent. The branch is
-in a coherent state and adding a fifth asset schema would broaden it without deepening it.
+**Recommended next step:** see §15. That assessment stands corrected: broadening *is* now the
+work, because the container is finished and the asset ecosystem is not.
 
 ---
 
@@ -956,3 +957,154 @@ the `.cnj` and `.cnb` paths and compares them field by field.
 failures it had before any CNB work existed, and the `.cnj` model/material suites — including
 `GltfToCnjToolTest`'s offline-versus-runtime L6 material comparison and skinning-data sweep, the
 tests a `BuildPartEffectEXT` regression would break — are green.
+
+---
+
+## 15. Gap analysis against `misc/cnb.md`, and the roadmap that follows from it
+
+Recorded 2026-08-27, after the owner compared the delivered branch against the original proposal.
+The finding is not that anything is broken — it is that **two different things were both being
+called "CNB is done"**, and only one of them is:
+
+> The CNB **container** is essentially finished. CNB as a **complete replacement for XNB across
+> every asset type** is not.
+
+Everything in this section is a *gap*, not a defect. No row here contradicts §12; they measure
+different axes.
+
+### 15.1 Where the original phases actually stand
+
+`misc/cnb.md` proposed Phase 0–8. Measured against the tree rather than against memory:
+
+| Area from `misc/cnb.md` | State | Where |
+|---|---|---|
+| CNB specification | ✅ done, authoritative | `docs/cnb-format.md` |
+| chunk container, TOC, alignment | ✅ done, **frozen** | `CnbWriter`/`CnbDocument` |
+| reader / writer | ✅ done | `CnbByteReader`/`CnbByteWriter` |
+| CRC-32C | ✅ done | `CnbCrc32c` |
+| bounds / overflow validation | ✅ extensive | `CnbArithmetic`, `CnbReadLimits` |
+| fuzz / adversarial tests | ✅ done | `CnbContainerFuzzTests` |
+| deterministic output | ✅ done | pinned by golden vectors |
+| `Curve` | ✅ schema 1 **frozen** | `CnbCurveCodec` |
+| `AnimationClip` | ✅ schema 1 **frozen** | `CnbAnimationClipCodec` |
+| `.cnj` → `.cnb` compiler | ✅ done | `cna_tool_cnj_to_cnb` |
+| `Model` | ✅ schema 1 **frozen** | `CnbModelCodec` |
+| custom asset registry | ✅ done; C++ API still experimental | `CnbLoaderRegistry` |
+| `SpriteFont` | ❌ **id reserved, no schema** | — |
+| `Texture2D` | ❌ **id reserved, no schema** | — |
+| `Texture3D` | ❌ **id reserved, no schema** | — |
+| `TextureCube` | ❌ **id reserved, no schema** | — |
+| `SoundEffect` | ❌ **id reserved, no schema** | — |
+| `Song` | ❌ **id reserved, no schema** | — |
+| `Video` | ❌ **id reserved, no schema** | — |
+| `Effect` | ❌ **id reserved, no schema** | — |
+| direct glTF → `.cnb` | ❌ **only via `.cnj`** | — |
+| chunk compression | ❌ reserved; reader rejects codec ≠ 0 | by design |
+| mmap / zero-copy | ❌ future; the `alignment` field exists for it | by design |
+| `.cnapak` | ❌ a different format, a different project | by design |
+
+So **Phase 0–4 are complete and Phase 7 largely is; Phase 5, 6 and 8 are not started.**
+
+### 15.2 The honest completeness number
+
+Two numbers, because one number hides the answer:
+
+- **Container / framework: ~95–100 % of what CNB 1.0 should be.** versioning, chunks, TOC,
+  alignment, CRC, limits, UTF-8 validation, overflow validation, determinism, unknown-chunk
+  semantics, custom types, `XREF`, `CMET`, golden vectors, fuzz, ASan/UBSan/TSan. Nothing here
+  should be creatively redesigned.
+- **Asset ecosystem: ~30–40 %.** Three of eleven reserved built-in types are implemented. The
+  fraction understates it — `Model` is by far the hardest of the eleven — but it does not
+  understate it *enough* to call the pipeline universal.
+
+### 15.3 What glTF can and cannot do today
+
+Today's route works and is not theoretical:
+
+```text
+model.gltf → cna_tool_gltf_to_cnj → model.cnj + sidecars
+           → cna_tool_cnj_to_cnb  → model.cnb
+           → ContentManager::Load<Model>()
+```
+
+`Model` schema 1 already carries vertex and index data, multiple mesh parts, topology, bone
+hierarchy, parent bone attachment, skeleton, skinning, embedded animation clips, morph targets,
+morph tangent deltas, morph weight tracks, `BasicEffect`/`SkinnedEffect`/`DualTextureEffect`/PBR/
+skinned-PBR selection, material parameters, sampler state, external texture and `Effect`
+references, and punctual lights. That is a serious 3D runtime model.
+
+Two things it does not do:
+
+1. **There is no direct `.gltf` → `.cnb`.** `.cnj` is always the intermediary.
+2. **A model's textures are not yet `.cnb`.** They are `XREF` logical names — good architecture,
+   because one texture is shared between models — but the thing on the other end of the reference
+   cannot itself be a `.cnb` until `Texture2D` schema 1 exists. So a shipped content tree is not
+   yet purely `.cnb`.
+
+Deliberately out of `Model` schema 1, and correctly so: material variants and the glTF import
+report. The report is authoring/debug information a runtime asset does not need. Variants belong
+in a future **`Model` schema 2**, never in a container change.
+
+### 15.4 The order to build in, and why it differs from `misc/cnb.md`
+
+`misc/cnb.md` put `SpriteFont` early. That was written before the architecture was real. With the
+architecture in hand the dependency is the other way round — a `SpriteFont` is a texture atlas plus
+tables — so `Texture2D` must come first and `SpriteFont` can then reuse its payload codec.
+
+```text
+CNBF-100  shared .cnj/.cnb model builder      ← removes "CNJ model differs from CNB model" entirely
+   ↓
+CNBF-101A Texture2D schema 1                  ← the single highest-value missing type
+   ↓
+CNBF-101B TextureCube    CNBF-101C Texture3D
+   ↓
+CNBF-102  SpriteFont schema 1                 ← reuses the texture payload codec
+   ↓
+CNBF-106  direct glTF → .cnb, via ONE shared importer
+   ↓
+CNBF-103A SoundEffect schema 1
+   ↓
+CNBF-103B Song / Video: metadata + streaming reference, NOT a 300 MB blob
+   ↓
+CNBF-104  Effect                              ← last; needs the shader pipeline to settle first
+   ↓
+CNBF-105  compression                         ← only if benchmarks justify it
+   ↓
+CNBF-108  mmap / zero-copy                    ← only after benchmarks
+```
+
+`CNBF-107` (`.cnapak`) is deliberately **outside** this sequence. CNB is one logical asset; a pak
+is many. Conflating them would damage both.
+
+### 15.5 The tasks
+
+| ID | Task | Design constraints that are part of the task | Status |
+|---|---|---|---|
+| CNBF-100 | **Shared `.cnj`/`.cnb` model builder.** The effect/material half already landed as `BuildPartEffectEXT`; the *mesh/runtime* half has not. Both front-ends must funnel through one neutral representation and one builder. | Target shape: `.cnj` parser → neutral model data → shared builder → `Model`; and `.cnb` decoder → **the same** neutral data → **the same** builder. This eliminates the whole class of "the `.cnj` model behaves slightly differently from the `.cnb` model" rather than testing for it afterwards. | ⬜ |
+| CNBF-101A | **`Texture2D` schema 1.** | Layout `TEXH` (width, height, mipCount, representationCount) + `TEXR` (representation descriptors) + `TEXD[n]` (payloads). **v1 baseline is `Rgba8` only** — do not try to land BC1/BC3/BC5/BC7/ETC2/ASTC/PVRTC simultaneously. The multi-representation structure exists so they can be added later without a schema break. | ⬜ |
+| CNBF-101A-fmt | **`CnbTextureFormat`, a serialization enum of its own.** | **Never** write `static_cast<uint32_t>(SurfaceFormat)`: `SurfaceFormat`'s enumerators are unnumbered, so inserting one silently changes the meaning of every already-written file. A frozen `CnbTextureFormat` with explicit values plus an explicit two-way mapping, held to the same discipline as the container's own enums. | ⬜ |
+| CNBF-101B | **`TextureCube` schema 1.** Six faces, shared descriptor machinery. | ⬜ |
+| CNBF-101C | **`Texture3D` schema 1.** Depth slices, shared descriptor machinery. | ⬜ |
+| CNBF-102 | **`SpriteFont` schema 1.** | `FONT` metadata, `GLYP` glyph rectangles, `CROP` cropping, `KERN` kerning, `CHAR` character map, plus the atlas. **Prefer the atlas embedded** rather than `XREF`'d: an atlas is normally owned by exactly one `SpriteFont`, unlike a model's textures. Reuse `CNBF-101A`'s payload codec rather than writing a second one. | ⬜ |
+| CNBF-103A | **`SoundEffect` schema 1.** | `AUDH` (sampleRate, channels, sampleFormat, frameCount, loop metadata) + `AUDD` (samples). Same enum discipline as textures: a `CnbAudioFormat` of CNB's own, never a raw backend enumerator. | ⬜ |
+| CNBF-103B | **`Song` / `Video`: metadata plus a streaming reference.** | Split from `CNBF-103A` on purpose — architecturally a different problem. A `SoundEffect` is small enough to own its payload; a `Song` or `Video` can be hundreds of megabytes and wants streaming, seeking and buffering. So `song.cnb` should carry metadata and an `XREF` to `music.ogg`, **not** a 300 MB embedded blob. CNB tells the runtime *what* and *how* to stream. | ⬜ |
+| CNBF-104 | **`Effect` schema.** | Deliberately late. CNA has many renderers, so a `.cnb` carrying only D3D bytecode is useless on Vulkan/GL/Metal/WebGPU. The eventual shape is metadata + parameters + *per-profile* shader payloads (GLSL / SPIR-V / DXIL / MSL …) or a CNA IR. **Do not start until the FX/shader pipeline and renderer abstraction have settled.** | ⬜ |
+| CNBF-105 | **Chunk compression.** | Stay at `compression = 0` until there is data to measure. `Texture2D`, `Model` and `SoundEffect` payloads must exist first; then measure size, load time and decompression cost before choosing Zstd/LZ4/anything. Note that PNG/JPEG/OGG/BC7/ASTC payloads are *already* compressed, so the honest answer may be "not worth it". | ⬜ |
+| CNBF-106 | **Direct glTF → `.cnb`.** | The task is explicitly **not** a second glTF parser. One shared importer producing canonical data, with a `.cnj` writer and a `.cnb` writer hanging off it, so both formats interpret glTF identically by construction. A second 5000-line parser is the failure mode to avoid. | ⬜ |
+| CNBF-107 | **`.cnapak`.** Many logical assets in one file. Outside this sequence; a separate project. | ⬜ |
+| CNBF-108 | **mmap / zero-copy chunk access.** | The `alignment` field and 16-byte geometry alignment already exist for it. But a `VertexBuffer` usually still has to be uploaded CPU→GPU, so mmap is **not** automatically zero-copy to the GPU. Benchmark before implementing. | ⬜ |
+
+### 15.6 The one-line answers
+
+- **3D glTF models:** yes, today, via `glTF → CNJ → CNB → Model`, with skeleton, animation, morphs, PBR and lights.
+- **Direct glTF → CNB:** no.
+- **`SpriteFont`:** no — reserved id only.
+- **`Texture2D`/`3D`/`Cube`:** no — reserved ids only; a `Model` can reference textures externally.
+- **`Curve`, `AnimationClip`, `Model`:** yes. `Model` is the most capable CNB asset by a distance.
+- **`SoundEffect`, `Song`, `Video`:** no.
+- **`Effect`:** not as a standalone `.cnb`, though `Model` schema 1 can select a stock effect and reference an external one.
+- **Custom game assets:** infrastructure yes (custom id + canonical name + registry); the C++ extension API is still deliberately unstable.
+
+**Summary.** CNB is a mature binary container with a strong `Model` implementation, but not yet a
+universal content pipeline. The next real jump in usefulness is not another container audit — it is
+`Texture2D`, `SpriteFont` and direct glTF→CNB.
