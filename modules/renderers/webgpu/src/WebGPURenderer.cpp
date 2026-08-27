@@ -844,7 +844,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // VertexColorEnabled (no GpuDrawParams at all), so it preserves the historical XNA
         // behaviour of outputting the raw vertex colours unmodified (diffuseColor=white,
         // vertexColorEnabled=true), everything else left zeroed.
-        void FillColoredUniforms(std::array<float, 32>& out, const Matrix& world, const Matrix& view,
+        void FillColoredUniforms(std::array<float, 40>& out, const Matrix& world, const Matrix& view,
                                  const Matrix& projection)
         {
             const Matrix wvp = world * view * projection;
@@ -852,13 +852,18 @@ namespace CNA::Internal::Renderers::WebGPU
             out[16] = 1.0f; out[17] = 1.0f; out[18] = 1.0f; out[19] = 1.0f;
             for (int i = 20; i < 31; ++i) out[i] = 0.0f;
             out[31] = 1.0f;
+            // WEBGPU-145: fog tail (fogColor.rgb [32..34] + pad [35]; fogVector [36..39]). This plain
+            // DrawColoredPrimitives path carries no GpuDrawParams, so fog is disabled -- an all-zero
+            // fogVector makes dot(pos, fogVector)=0 -> keep=1 -> no fog, matching FNA's own "reset the
+            // fog vector to zero when fog is disabled" behaviour (EffectHelpers.SetWorldViewProjAndFog).
+            for (int i = 32; i < 40; ++i) out[i] = 0.0f;
         }
 
         // Mirrors VulkanRenderer::FillExtPushConst() field-for-field (real GpuDrawParams
         // this time, not DrawColoredPrimitives()'s hardcoded white/vertex-color-always-true
         // values) -- used by DrawPrimitivesEx()'s stride-16 dispatch so a BasicEffect draw's real
         // DiffuseColor/VertexColorEnabled actually reach the shader.
-        void FillExtUniforms(std::array<float, 32>& out, const Matrix& wvp, const GpuDrawParams& p)
+        void FillExtUniforms(std::array<float, 40>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
             out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
@@ -869,6 +874,12 @@ namespace CNA::Internal::Renderers::WebGPU
             out[27] = p.textureEnabled ? 1.0f : 0.0f;
             out[28] = p.light0Diffuse[0]; out[29] = p.light0Diffuse[1]; out[30] = p.light0Diffuse[2];
             out[31] = p.vertexColorEnabled ? 1.0f : 0.0f;
+            // WEBGPU-145: FNA fog tail. fogColor.rgb ([32..34]) + pad ([35]); the CPU-prepared FNA
+            // view-space fog vector ([36..39], EffectHelpers.SetFogVector). Dotting fogVector with the
+            // object-space position in the vertex shader yields FNA's fogFactor; all-zero disables fog
+            // (dot->0->keep=1) and {0,0,0,1} is the degenerate fogStart==fogEnd (dot->1->keep=0) case.
+            out[32] = p.fogColor[0]; out[33] = p.fogColor[1]; out[34] = p.fogColor[2]; out[35] = 0.0f;
+            out[36] = p.fogVector[0]; out[37] = p.fogVector[1]; out[38] = p.fogVector[2]; out[39] = p.fogVector[3];
         }
 
         // Normal matrix = inverse(world3x3), via the cofactor/det shortcut, applied directly to
@@ -894,9 +905,9 @@ namespace CNA::Internal::Renderers::WebGPU
         // Secondary UBO for lit_textured3d.wgsl: DirectionalLight1/DirectionalLight2, EmissiveColor,
         // World (for world-space position), EyePosition, per-light SpecularColor, material
         // SpecularColor/Power, and the 3x3 normal matrix -- forwarded here since the primary
-        // 128-byte uniform block (FillExtUniforms) is already fully packed. Mirrors
-        // VulkanRenderer's LitLightParams UBO field-for-field (minus fog, deliberately
-        // deferred like the other WebGPU 3D shaders).
+        // 128-byte uniform block (FillExtUniforms) carries MVP/material/light0 plus the fog tail
+        // (WEBGPU-145). Mirrors VulkanRenderer's LitLightParams UBO field-for-field; fog itself rides
+        // in the primary Uniforms block (fogColor/fogVector), consumed by the lit_textured3d shaders.
         void FillLitLightUniforms(std::array<float, 68>& out, const GpuDrawParams& p)
         {
             out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.0f;
@@ -964,7 +975,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // vertexColorEnabled in FillExtUniforms) for {alphaRef, alphaTolerance, passWeight,
         // failWeight, vertexColorEnabled} instead -- same 128-byte total size, so it still fits
         // the existing coloredBindGroupLayout_ unchanged.
-        void FillAlphaTestUniforms(std::array<float, 32>& out, const Matrix& wvp, const GpuDrawParams& p)
+        void FillAlphaTestUniforms(std::array<float, 40>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
             wvp.ToColumnMajor(out.data());
             out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
@@ -973,6 +984,10 @@ namespace CNA::Internal::Renderers::WebGPU
             out[22] = p.alphaTest[2]; out[23] = p.alphaTest[3];
             out[24] = p.vertexColorEnabled ? 1.0f : 0.0f;
             for (int i = 25; i < 32; ++i) out[i] = 0.0f;
+            // WEBGPU-146: AlphaTestEffect fog tail (same layout as FillExtUniforms; the WGSL blend is
+            // added in the alpha_test3d shaders). AlphaTestEffect is a fog-capable FNA stock effect.
+            out[32] = p.fogColor[0]; out[33] = p.fogColor[1]; out[34] = p.fogColor[2]; out[35] = 0.0f;
+            out[36] = p.fogVector[0]; out[37] = p.fogVector[1]; out[38] = p.fogVector[2]; out[39] = p.fogVector[3];
         }
 
         // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
@@ -3220,6 +3235,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -3230,16 +3247,21 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) color: vec4f,
+    @location(1) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     output.color = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    // WEBGPU-145: FNA fog keep factor. fogVector (from World*View) dotted with the object-space
+    // position gives FNA's saturate(dot(pos, FogVector)); 1-that is the "keep" fraction.
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    return input.color;
+    // WEBGPU-145: ApplyFog -- lerp toward FogColor as keep -> 0 (matches env_map3d.wgsl / Vulkan).
+    return vec4f(mix(u.fogColor.xyz, input.color.rgb, input.fogFactor), input.color.a);
 }
 )WGSL";
 
@@ -3255,7 +3277,10 @@ struct VertexOutput {
         uniformEntry.binding = 0;
         uniformEntry.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         uniformEntry.buffer.type = WGPUBufferBindingType_Uniform;
-        uniformEntry.buffer.minBindingSize = 128;
+        // WEBGPU-145: the primary UBO grew from 128 to 160 bytes (fog tail). This layout is shared by
+        // colored/textured/colored_textured/alpha_test/dual/instanced, some of which still bind a
+        // 128-byte buffer; 0 means "validate the concrete binding size per draw" so both sizes fit.
+        uniformEntry.buffer.minBindingSize = 0;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU Colored3D BindGroupLayout");
         bindLayoutDescriptor.entryCount = 1;
@@ -3402,6 +3427,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -3414,17 +3441,22 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
+    @location(1) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = u.mvp * vec4f(input.position, 1.0);
     output.uv = input.uv;
+    // WEBGPU-145: FNA fog keep factor (see colored3d.wgsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let textureEnabled = u.light0DirTexture.w;
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
-    return sampled * u.diffuseColor;
+    let base = sampled * u.diffuseColor;
+    // WEBGPU-145: ApplyFog on the composed RGB, alpha preserved.
+    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
@@ -3472,6 +3504,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(1) @binding(0) var texSampler: sampler;
@@ -3486,6 +3520,7 @@ struct VertexOutput {
     @builtin(position) position: vec4f,
     @location(0) uv: vec2f,
     @location(1) tint: vec4f,
+    @location(2) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -3493,12 +3528,16 @@ struct VertexOutput {
     output.uv = input.uv;
     let vertexColorEnabled = u.light0DiffuseVertexColor.w;
     output.tint = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    // WEBGPU-145: FNA fog keep factor (see colored3d.wgsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let textureEnabled = u.light0DirTexture.w;
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
-    return sampled * input.tint;
+    let base = sampled * input.tint;
+    // WEBGPU-145: ApplyFog on the composed RGB, alpha preserved.
+    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
@@ -3741,6 +3780,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -3774,6 +3815,7 @@ struct VertexOutput {
     @location(0) uv: vec2f,
     @location(1) worldNormal: vec3f,
     @location(2) worldPos: vec3f,
+    @location(3) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -3782,6 +3824,8 @@ struct VertexOutput {
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
     output.worldNormal = normalMatrix * input.normal;
     output.worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
+    // WEBGPU-145: FNA fog keep factor (see colored3d.wgsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
@@ -3789,7 +3833,9 @@ struct VertexOutput {
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
     let lightingEnabled = u.ambientLighting.w;
     if (lightingEnabled <= 0.5) {
-        return u.diffuseColor * sampled;
+        // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
+        let unlit = u.diffuseColor * sampled;
+        return vec4f(mix(u.fogColor.xyz, unlit.rgb, input.fogFactor), unlit.a);
     }
     let n = normalize(input.worldNormal);
     let e = normalize(lp.eyePos.xyz - input.worldPos);
@@ -3817,7 +3863,8 @@ struct VertexOutput {
     let lit = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     var color = vec4f(lit, u.diffuseColor.a) * sampled;
     color = vec4f(color.rgb + specularRgb * color.a, color.a);
-    return color;
+    // WEBGPU-145: ApplyFog last, after lighting+specular (matches FNA's ApplyFog ordering).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -3845,6 +3892,8 @@ struct Uniforms {
     ambientLighting: vec4f,
     light0DirTexture: vec4f,
     light0DiffuseVertexColor: vec4f,
+    fogColor: vec4f,
+    fogVector: vec4f,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 
@@ -3878,6 +3927,7 @@ struct VertexOutput {
     @location(0) uv: vec2f,
     @location(1) litRGB: vec3f,
     @location(2) specularRGB: vec3f,
+    @location(3) fogFactor: f32,
 };
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
@@ -3908,6 +3958,8 @@ struct VertexOutput {
     output.specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
                           + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
     output.litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
+    // WEBGPU-145: FNA fog keep factor (see colored3d.wgsl).
+    output.fogFactor = 1.0 - clamp(dot(vec4f(input.position, 1.0), u.fogVector), 0.0, 1.0);
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
@@ -3915,11 +3967,14 @@ struct VertexOutput {
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
     let lightingEnabled = u.ambientLighting.w;
     if (lightingEnabled <= 0.5) {
-        return u.diffuseColor * sampled;
+        // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
+        let unlit = u.diffuseColor * sampled;
+        return vec4f(mix(u.fogColor.xyz, unlit.rgb, input.fogFactor), unlit.a);
     }
     var color = vec4f(input.litRGB, u.diffuseColor.a) * sampled;
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
-    return color;
+    // WEBGPU-145: ApplyFog last (matches FNA's ApplyFog ordering).
+    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -3935,7 +3990,8 @@ struct VertexOutput {
         layoutEntries[0].binding = 0;
         layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
-        layoutEntries[0].buffer.minBindingSize = 128;
+        // WEBGPU-145: primary UBO grew to 160 bytes (fog tail); 0 = validate per draw.
+        layoutEntries[0].buffer.minBindingSize = 0;
         layoutEntries[1].binding = 1;
         layoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
@@ -10796,9 +10852,10 @@ fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
         // AmbientLightColor uniform because SkinnedEffect::FillGpuDrawParams() already pre-folds
         // (EmissiveColor + AmbientLightColor*DiffuseColor)*Alpha into emissiveColor. FNA's shader
         // therefore adds that prepared term after `lightSum*diffuseColor`; it must not multiply
-        // emissiveColor by DiffuseColor or Alpha again. No fog/alpha-test
-        // (SkinnedEffect never sets GpuDrawParams::alphaTest away from
-        // its always-pass default; fog is deferred uniformly across every WebGPU 3D shader so far).
+        // emissiveColor by DiffuseColor or Alpha again. No alpha-test
+        // (SkinnedEffect never sets GpuDrawParams::alphaTest away from its always-pass default).
+        // Fog: the primary Uniforms block already carries the fog tail (WEBGPU-145), but these
+        // skinned shaders do not yet apply it -- SkinnedEffect fog is tracked as WEBGPU-148.
         static constexpr char shaderSource[] = R"WGSL(
 struct Uniforms {
     mvp: mat4x4f,

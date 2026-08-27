@@ -165,6 +165,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_EnvironmentMapEffect_Fog COMMAND cna_test_webgpu_environmentmapeffect_fog
         TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # WEBGPU-145: BasicEffect fog (FNA EffectHelpers.SetFogVector) on the colored3d / textured3d /
+    # colored_textured3d / lit_textured3d (per-pixel + per-vertex) WGSL families. Public BasicEffect
+    # API only: FogStart==FogEnd collapses every family to FogColor (the drop-the-fog discriminator),
+    # half fog lies between base and FogColor, boundaries, and FogColor genuinely drives the blend.
+    cna_webgpu_test(cna_test_webgpu_basiceffect_fog webgpu_basiceffect_fog_test.cpp)
+    cna_register_renderer_test(NAME WebGPU_BasicEffect_Fog COMMAND cna_test_webgpu_basiceffect_fog
+        TIMEOUT 90 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-27/38/68: instanced3d.wgsl / GetOrCreatePipelineInstanced3D / DrawInstancedPrimitivesEx
     # -- a genuine second (WGPUVertexStepMode_Instance) vertex buffer binding carrying a
     # per-instance mat4 world transform.

@@ -529,6 +529,27 @@ mark it ✅ from source inspection alone.
 
 ---
 
+## Phase 64.1 — WebGPU backend: stock-effect fog parity (FNA EffectHelpers.SetFogVector)
+
+> Fog was previously implemented only for `EnvironmentMapEffect`. Every other FNA stock 3D effect
+> (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `SkinnedEffect`) also exposes
+> `FogEnabled`/`FogStart`/`FogEnd`/`FogColor`. The `GpuDrawParams` fog fields (`fogColor`,
+> `fogVector`) are already filled by every effect's `FillGpuDrawParams()`; the work here is to carry
+> them into each family's WGSL and apply FNA's `ApplyFog`. The design widens the shared primary
+> `Uniforms` UBO from 128 to 160 bytes (appends `fogColor` + the FNA view-space `fogVector`); the WGSL
+> computes `fogFactor = 1 - clamp(dot(vec4(objectPos,1), fogVector), 0, 1)` in the vertex stage and
+> `rgb = mix(fogColor, rgb, fogFactor)` in the fragment stage — the exact `colored3d`/`env_map3d`
+> parity form the Vulkan renderer already uses.
+
+| #   | Task                                                                                                          | Status | Notes                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
+| WEBGPU-145 | `BasicEffect` fog on the `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d` (per-pixel + per-vertex) WGSL families. | ✅ | Done 2026-08-27, verified on the real RADV GPU (`:131`). Widened the shared primary `Uniforms` UBO to 160 bytes (`FillExtUniforms`/`FillColoredUniforms`/`FillAlphaTestUniforms` + all 9 primary-UBO command arrays now 40 floats); `coloredBindGroupLayout_`/`litBindGroupLayout_` binding-0 `minBindingSize`→0 so the families still binding 128 bytes (instanced/pbr/skinned-pbr, which do not read the fog tail) stay valid. Fog blend added to the 5 BasicEffect WGSL fragment shaders (both `lit_textured3d` variants apply it in the unlit branch too, since BasicEffect fog is independent of lighting). New test `WebGPU_BasicEffect_Fog` (`webgpu_basiceffect_fog_test.cpp`), 18/18: `FogStart==FogEnd` collapses every family to `FogColor` (the discriminator that fails if the WGSL blend is dropped — verified by temporarily neutering `colored3d`'s blend: Colored checks then fail), half-fog matches `lerp(FogColor,base,keep)` exactly for colored/textured (via calibration through the fog-off path) and lies between base and `FogColor` for the lit families, `FogStart`/`FogEnd` boundaries, fog-disabled preserves base, and a different `FogColor` genuinely changes the result. Full WebGPU suite 94/94, `EnvironmentMapEffect` fog unregressed. |
+| WEBGPU-146 | `AlphaTestEffect` fog on its WGSL families (strides 20/24/32). | ⬜ | Plumbing ready: `FillAlphaTestUniforms` already writes the fog tail (WEBGPU-145) and the alpha-test command UBO is 160 bytes; the two `alpha_test3d` WGSL modules do not yet declare/apply the fog fields. Needs the WGSL blend + a pixel test. |
+| WEBGPU-147 | `DualTextureEffect` fog on its WGSL families (strides 20/24). | ⬜ | Plumbing ready: dual-texture uses `FillExtUniforms` (fog tail already written, WEBGPU-145); the two `dual_texture3d` WGSL modules do not yet declare/apply the fog fields. Needs the WGSL blend + a pixel test. |
+| WEBGPU-148 | `SkinnedEffect` fog on its 4 WGSL variants (strides 52/56, all `WeightsPerVertex`, both `PreferPerPixelLighting`). | ⬜ | Plumbing ready: skinned uses `FillExtUniforms` (fog tail already written, WEBGPU-145) and `skinnedBindGroupLayout_` binding-0 still declares `minBindingSize=128`, so applying fog also needs that lowered to 0. Needs the WGSL blend in the 4 skinned modules + a pixel test. |
+
+---
+
 ## Phase 65 — WebGPU backend: state management
 
 | #   | Task                                                                                                          | Status | Notes                                                                 |

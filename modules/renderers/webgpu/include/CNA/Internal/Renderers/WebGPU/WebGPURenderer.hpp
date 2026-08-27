@@ -2143,7 +2143,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
@@ -2194,7 +2194,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2296,7 +2296,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             bool depthTest = false;
             bool depthWrite = false;
@@ -2395,7 +2395,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2472,7 +2472,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2687,7 +2687,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::size_t pvStride = 16;
             std::size_t instVbStride = 64;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2761,7 +2761,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
@@ -2869,7 +2869,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// SkinningParams UBO: [0] = WeightsPerVertex (Task 895's 1/2/4 convention, stored as a
             /// float in the x component of a padding vec4), [4 .. 4+72*16) = 72 column-major bone
@@ -2955,7 +2955,7 @@ namespace CNA::Internal::Renderers::WebGPU
             std::uint32_t firstIndex = 0;
             std::int32_t baseVertex = 0;
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
-            std::array<float, 32> uniforms{};
+            std::array<float, 40> uniforms{};
             std::array<float, 68> lightUniforms{};
             /// plans/plan_gltf.md GLTF-344: 76 floats (304 bytes) -- the base 56 plus specular F0/factor
             /// and the two specular map transforms.
