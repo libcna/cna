@@ -840,6 +840,15 @@ namespace CNA::Internal::Renderers::WebGPU
                 : 1;
         }
 
+        // WEBGPU-145/149: the shared primary uniform block is 160 bytes = the Vulkan-compatible
+        // 128-byte MVP/material/light0 layout plus the 32-byte FNA fog tail (fogColor + fogVector).
+        // EVERY consumer of the shared coloredBindGroupLayout_/litBindGroupLayout_/skinnedBindGroupLayout_
+        // binding-0 now binds exactly this many bytes (all *DrawCommand::uniforms are std::array<float,40>),
+        // so the bind-group layouts declare this as their binding-0 minBindingSize -- the strongest
+        // validation, not the weaker minBindingSize=0.
+        constexpr std::uint64_t kPrimaryUniformByteSize = 40u * sizeof(float);
+        static_assert(kPrimaryUniformByteSize == 160u, "primary WebGPU UBO must be 160 bytes (128 base + 32 fog tail)");
+
         // Mirrors VulkanRenderer::DrawColoredPrimitives()'s own use of
         // FillExtPushConst()'s byte layout: this path carries no BasicEffect diffuse/
         // VertexColorEnabled (no GpuDrawParams at all), so it preserves the historical XNA
@@ -906,7 +915,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // Secondary UBO for lit_textured3d.wgsl: DirectionalLight1/DirectionalLight2, EmissiveColor,
         // World (for world-space position), EyePosition, per-light SpecularColor, material
         // SpecularColor/Power, and the 3x3 normal matrix -- forwarded here since the primary
-        // 128-byte uniform block (FillExtUniforms) carries MVP/material/light0 plus the fog tail
+        // 160-byte uniform block (FillExtUniforms) carries MVP/material/light0 plus the fog tail
         // (WEBGPU-145). Mirrors VulkanRenderer's LitLightParams UBO field-for-field; fog itself rides
         // in the primary Uniforms block (fogColor/fogVector), consumed by the lit_textured3d shaders.
         void FillLitLightUniforms(std::array<float, 68>& out, const GpuDrawParams& p)
@@ -974,7 +983,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // Mirrors VulkanRenderer::FillAlphaTestPushConst() field-for-field. AlphaTestEffect
         // has no lighting, so this repurposes the [20..23]/[24] slots (ambient/light0/
         // vertexColorEnabled in FillExtUniforms) for {alphaRef, alphaTolerance, passWeight,
-        // failWeight, vertexColorEnabled} instead -- same 128-byte total size, so it still fits
+        // failWeight, vertexColorEnabled} instead, plus the 32-byte fog tail (160 total), so it still fits
         // the existing coloredBindGroupLayout_ unchanged.
         void FillAlphaTestUniforms(std::array<float, 40>& out, const Matrix& wvp, const GpuDrawParams& p)
         {
@@ -3265,8 +3274,10 @@ struct VertexOutput {
     return output;
 }
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    // WEBGPU-145: ApplyFog -- lerp toward FogColor as keep -> 0 (matches env_map3d.wgsl / Vulkan).
-    return vec4f(mix(u.fogColor.xyz, input.color.rgb, input.fogFactor), input.color.a);
+    // WEBGPU-149: FNA ApplyFog is lerp(rgb, FogColor*alpha, fog); keep = 1-fog, so this is
+    // mix(FogColor*alpha, rgb, keep). The FogColor is premultiplied by the OUTPUT alpha, exactly as
+    // FNA's Common.fxh does (a WebGPU-only earlier version omitted the alpha and was wrong for alpha<1).
+    return vec4f(mix(u.fogColor.xyz * input.color.a, input.color.rgb, input.fogFactor), input.color.a);
 }
 )WGSL";
 
@@ -3282,10 +3293,10 @@ struct VertexOutput {
         uniformEntry.binding = 0;
         uniformEntry.visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         uniformEntry.buffer.type = WGPUBufferBindingType_Uniform;
-        // WEBGPU-145: the primary UBO grew from 128 to 160 bytes (fog tail). This layout is shared by
-        // colored/textured/colored_textured/alpha_test/dual/instanced, some of which still bind a
-        // 128-byte buffer; 0 means "validate the concrete binding size per draw" so both sizes fit.
-        uniformEntry.buffer.minBindingSize = 0;
+        // WEBGPU-149: the primary UBO is 160 bytes (fog tail). This layout is shared by
+        // colored/textured/colored_textured/alpha_test/dual/instanced -- ALL of which bind a 160-byte
+        // buffer (every *DrawCommand::uniforms is std::array<float,40>), so declare the exact size.
+        uniformEntry.buffer.minBindingSize = kPrimaryUniformByteSize;
         WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
         bindLayoutDescriptor.label = StringView("CNA WebGPU Colored3D BindGroupLayout");
         bindLayoutDescriptor.entryCount = 1;
@@ -3460,8 +3471,8 @@ struct VertexOutput {
     let textureEnabled = u.light0DirTexture.w;
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
     let base = sampled * u.diffuseColor;
-    // WEBGPU-145: ApplyFog on the composed RGB, alpha preserved.
-    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
+    // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
+    return vec4f(mix(u.fogColor.xyz * base.a, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
@@ -3541,8 +3552,8 @@ struct VertexOutput {
     let textureEnabled = u.light0DirTexture.w;
     let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
     let base = sampled * input.tint;
-    // WEBGPU-145: ApplyFog on the composed RGB, alpha preserved.
-    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
+    // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
+    return vec4f(mix(u.fogColor.xyz * base.a, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
@@ -3840,7 +3851,7 @@ struct VertexOutput {
     if (lightingEnabled <= 0.5) {
         // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
         let unlit = u.diffuseColor * sampled;
-        return vec4f(mix(u.fogColor.xyz, unlit.rgb, input.fogFactor), unlit.a);
+        return vec4f(mix(u.fogColor.xyz * unlit.a, unlit.rgb, input.fogFactor), unlit.a);
     }
     let n = normalize(input.worldNormal);
     let e = normalize(lp.eyePos.xyz - input.worldPos);
@@ -3868,8 +3879,8 @@ struct VertexOutput {
     let lit = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
     var color = vec4f(lit, u.diffuseColor.a) * sampled;
     color = vec4f(color.rgb + specularRgb * color.a, color.a);
-    // WEBGPU-145: ApplyFog last, after lighting+specular (matches FNA's ApplyFog ordering).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    // WEBGPU-149: FNA ApplyFog last, after lighting+specular; mix(FogColor*color.a, rgb, keep).
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -3974,12 +3985,12 @@ struct VertexOutput {
     if (lightingEnabled <= 0.5) {
         // WEBGPU-145: fog applies in the unlit branch too (BasicEffect fog is independent of lighting).
         let unlit = u.diffuseColor * sampled;
-        return vec4f(mix(u.fogColor.xyz, unlit.rgb, input.fogFactor), unlit.a);
+        return vec4f(mix(u.fogColor.xyz * unlit.a, unlit.rgb, input.fogFactor), unlit.a);
     }
     var color = vec4f(input.litRGB, u.diffuseColor.a) * sampled;
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
-    // WEBGPU-145: ApplyFog last (matches FNA's ApplyFog ordering).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    // WEBGPU-149: FNA ApplyFog last; mix(FogColor*color.a, rgb, keep).
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -3995,8 +4006,8 @@ struct VertexOutput {
         layoutEntries[0].binding = 0;
         layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
-        // WEBGPU-145: primary UBO grew to 160 bytes (fog tail); 0 = validate per draw.
-        layoutEntries[0].buffer.minBindingSize = 0;
+        // WEBGPU-149: primary UBO is 160 bytes (fog tail); both lit_textured3d variants bind exactly that.
+        layoutEntries[0].buffer.minBindingSize = kPrimaryUniformByteSize;
         layoutEntries[1].binding = 1;
         layoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
@@ -4231,7 +4242,7 @@ struct VertexOutput {
         // Ported from VulkanRenderer's alpha_test3d.{vert,frag}.glsl. AlphaTestEffect has
         // no lighting, so the primary Uniforms block repurposes [20..23]/[24] for
         // {alphaRef, alphaTolerance, passWeight, failWeight, vertexColorEnabled} instead (see
-        // FillAlphaTestUniforms()) -- same 128-byte shape, so this reuses coloredBindGroupLayout_
+        // FillAlphaTestUniforms()) -- same 160-byte primary-UBO shape, so this reuses coloredBindGroupLayout_
         // (group 0) and texturedBindGroupLayout_ (group 1) unchanged; no new bind group layout or
         // pipeline layout needed.
         static constexpr char shaderSource[] = R"WGSL(
@@ -4277,8 +4288,9 @@ struct VertexOutput {
     if (w < 0.0) {
         discard;
     }
-    // WEBGPU-146: ApplyFog on the surviving pixel (FNA applies fog after the alpha-test discard).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    // WEBGPU-149: FNA ApplyFog on the surviving pixel (fog is applied after the alpha-test discard);
+    // mix(FogColor*color.a, rgb, keep) -- FogColor premultiplied by the output alpha.
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -4341,8 +4353,9 @@ struct VertexOutput {
     if (w < 0.0) {
         discard;
     }
-    // WEBGPU-146: ApplyFog on the surviving pixel (FNA applies fog after the alpha-test discard).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    // WEBGPU-149: FNA ApplyFog on the surviving pixel (fog is applied after the alpha-test discard);
+    // mix(FogColor*color.a, rgb, keep) -- FogColor premultiplied by the output alpha.
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -4565,8 +4578,8 @@ struct VertexOutput {
     let sample1 = textureSample(tex1, tex1Sampler, input.uv);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     let base = sample0 * sample1 * u.diffuseColor;
-    // WEBGPU-147: ApplyFog on the composed dual-texture RGB, alpha preserved.
-    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
+    // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
+    return vec4f(mix(u.fogColor.xyz * base.a, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
@@ -4624,8 +4637,8 @@ struct VertexOutput {
     let sample1 = textureSample(tex1, tex1Sampler, input.uv);
     sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
     let base = sample0 * sample1 * input.tint;
-    // WEBGPU-147: ApplyFog on the composed dual-texture RGB, alpha preserved.
-    return vec4f(mix(u.fogColor.xyz, base.rgb, input.fogFactor), base.a);
+    // WEBGPU-149: FNA ApplyFog -- mix(FogColor*base.a, rgb, keep); output alpha preserved.
+    return vec4f(mix(u.fogColor.xyz * base.a, base.rgb, input.fogFactor), base.a);
 }
 )WGSL";
 
@@ -4910,7 +4923,7 @@ struct VertexOutput {
                              fresnelEnabled > 0.5);
     var rgb = mix(baseColor, envSample.rgb * combinedAlpha, blendFactor)
             + ep.envMapSpecFresnelF.xyz * envSample.a * combinedAlpha;
-    rgb = mix(ep.fogColor.xyz, rgb, input.fogFactor);
+    rgb = mix(ep.fogColor.xyz * combinedAlpha, rgb, input.fogFactor);
     return vec4f(rgb, combinedAlpha);
 }
 )WGSL";
@@ -11015,7 +11028,7 @@ fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
     var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11155,7 +11168,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     color = vec4f(color.rgb + specularRGB * color.a, color.a);
     color = vec4f(color.rgb * vc.rgb, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11283,7 +11296,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11413,7 +11426,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
     color = vec4f(color.rgb * vc.rgb, color.a);
     // WEBGPU-148: ApplyFog last (matches FNA's ApplyFog ordering).
-    return vec4f(mix(u.fogColor.xyz, color.rgb, input.fogFactor), color.a);
+    return vec4f(mix(u.fogColor.xyz * color.a, color.rgb, input.fogFactor), color.a);
 }
 )WGSL";
 
@@ -11429,8 +11442,8 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         layoutEntries[0].binding = 0;
         layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
-        // WEBGPU-148: the primary UBO grew to 160 bytes (fog tail); 0 = validate per draw.
-        layoutEntries[0].buffer.minBindingSize = 0;
+        // WEBGPU-149: primary UBO is 160 bytes (fog tail); all four skinned modules bind exactly that.
+        layoutEntries[0].buffer.minBindingSize = kPrimaryUniformByteSize;
         layoutEntries[1].binding = 1;
         layoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
         layoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;

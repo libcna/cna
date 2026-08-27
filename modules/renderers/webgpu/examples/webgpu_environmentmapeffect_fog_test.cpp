@@ -211,7 +211,12 @@ class WebGpuEnvironmentMapEffectFogTest final : public Game
 
     Vector3 FoggedRgb(float keep) const
     {
-        return Add(Scale(fogColor_, 1.0f - keep), Scale(ComposedRgb(), keep));
+        // WEBGPU-149: FNA ApplyFog lerps toward FogColor * OUTPUT ALPHA, not plain FogColor
+        // (Common.fxh: color.rgb = lerp(color.rgb, FogColor * color.a, fogFactor)). The env-map
+        // output alpha here is combinedAlpha = kAlpha * textureAlpha_, so the fog target is scaled
+        // by it. keep = 1 - fogFactor.
+        const float outputAlpha = kAlpha * textureAlpha_;
+        return Add(Scale(fogColor_, outputAlpha * (1.0f - keep)), Scale(ComposedRgb(), keep));
     }
 
     void Configure(EnvironmentMapEffect& effect, const Matrix& world, const Matrix& view,

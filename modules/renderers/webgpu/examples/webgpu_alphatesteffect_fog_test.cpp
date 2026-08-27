@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-146: AlphaTestEffect fog on the WebGPU renderer. FNA's AlphaTestEffect applies fog to the
-// pixel that SURVIVES the alpha-test discard (fog does not affect the discard decision). This
-// exercises both alpha_test3d WGSL modules -- the uncolored stride-20 module (VertexPositionTexture)
-// and the vertex-colour stride-24 module (VertexPositionColorTexture). FogStart==FogEnd (keep=0)
-// collapses the surviving colour to exactly FogColor, the discriminator that fails if the WGSL fog
-// blend (or the fog uniforms) are removed.
+// WEBGPU-146/149: AlphaTestEffect fog on the WebGPU renderer. FNA applies fog to the pixel that
+// SURVIVES the alpha-test discard, lerping toward FogColor * OUTPUT ALPHA (Common.fxh). This drives
+// all three vertex layouts AlphaTestEffect can use: the uncolored stride-20 module
+// (VertexPositionTexture), the vertex-colour stride-24 module (VertexPositionColorTexture), and the
+// stride-32 module (VertexPositionNormalTexture -- the normal is unread, same uncolored shader).
+// Discriminators: FogStart==FogEnd -> FogColor at alpha 1, and -> FogColor*alpha at alpha<1.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -27,8 +27,9 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
-#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -64,6 +65,7 @@ namespace
         return Vector3(f.X * (1 - keep) + b.X * keep, f.Y * (1 - keep) + b.Y * keep,
                        f.Z * (1 - keep) + b.Z * keep);
     }
+    Vector3 Scale(const Vector3& v, float s) { return Vector3(v.X * s, v.Y * s, v.Z * s); }
     Matrix Ortho() { return Matrix::CreateOrthographic(2.0f, 2.0f, 0.1f, 100.0f); }
     Color FromLinear(const Vector3& v)
     {
@@ -81,6 +83,8 @@ class WebGpuAlphaTestEffectFogTest final : public Game
     bool done_ = false;
     int passed_ = 0, total_ = 0, result_ = 1;
 
+    enum class Layout { Tex20, ColorTex24, NormalTex32 };
+
     Color ReadCentre()
     {
         Color pixel(0, 0, 0, 0);
@@ -89,18 +93,9 @@ class WebGpuAlphaTestEffectFogTest final : public Game
         return pixel;
     }
 
-    void ConfigureFog(AlphaTestEffect& e, bool fogEnabled, const Vector3& fogColor,
-                      float fogStart, float fogEnd)
-    {
-        e.setFogEnabledProperty(fogEnabled);
-        e.setFogColorProperty(fogColor);
-        e.setFogStartProperty(fogStart);
-        e.setFogEndProperty(fogEnd);
-    }
-
-    // colored=false -> stride-20 uncolored module; colored=true -> stride-24 vertex-colour module.
-    // The alpha always passes (opaque texture, Greater than ReferenceAlpha 0), so a pixel survives.
-    Color Render(bool colored, const Matrix& view, const Vector3& diffuse, bool fogEnabled,
+    // The alpha always passes (opaque-enough texture, Greater than ReferenceAlpha 0), so a pixel
+    // survives to be fogged. `alpha` is the material alpha; the output alpha is that value (white tex).
+    Color Render(Layout layout, const Matrix& view, const Vector3& diffuse, float alpha, bool fogEnabled,
                  const Vector3& fogColor, float fogStart, float fogEnd)
     {
         auto& device = getGraphicsDeviceProperty();
@@ -112,14 +107,17 @@ class WebGpuAlphaTestEffectFogTest final : public Game
         effect.setProjectionProperty(Ortho());
         effect.setTextureProperty(white_.get());
         effect.setDiffuseColorProperty(diffuse);
-        effect.setAlphaProperty(1.0f);
+        effect.setAlphaProperty(alpha);
         effect.setAlphaFunctionProperty(CompareFunction::Greater);
         effect.setReferenceAlphaProperty(0);
-        effect.setVertexColorEnabledProperty(colored);
-        ConfigureFog(effect, fogEnabled, fogColor, fogStart, fogEnd);
+        effect.setVertexColorEnabledProperty(layout == Layout::ColorTex24);
+        effect.setFogEnabledProperty(fogEnabled);
+        effect.setFogColorProperty(fogColor);
+        effect.setFogStartProperty(fogStart);
+        effect.setFogEndProperty(fogEnd);
         effect.Apply();
 
-        if (!colored)
+        if (layout == Layout::Tex20)
         {
             const VertexPositionTexture v[] = {
                 {Vector3(-1, 1, 0), Vector2(0, 0)}, {Vector3(-1, -1, 0), Vector2(0, 1)},
@@ -132,15 +130,29 @@ class WebGpuAlphaTestEffectFogTest final : public Game
             device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
             device.SetVertexBuffer(nullptr);
         }
-        else
+        else if (layout == Layout::ColorTex24)
         {
-            const Color w(255, 255, 255, 255); // white vertex colour: tint = diffuse
+            const Color w(255, 255, 255, 255);
             const VertexPositionColorTexture v[] = {
                 {Vector3(-1, 1, 0), w, Vector2(0, 0)}, {Vector3(-1, -1, 0), w, Vector2(0, 1)},
                 {Vector3(1, -1, 0), w, Vector2(1, 1)}, {Vector3(-1, 1, 0), w, Vector2(0, 0)},
                 {Vector3(1, -1, 0), w, Vector2(1, 1)}, {Vector3(1, 1, 0), w, Vector2(1, 0)},
             };
             VertexBuffer vb(device, VertexPositionColorTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
+            vb.SetData(v, 0, 6);
+            device.SetVertexBuffer(&vb);
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            device.SetVertexBuffer(nullptr);
+        }
+        else // NormalTex32 -- the uncolored module serves strides 20 and 32 (the normal is unread).
+        {
+            const Vector3 n(0, 0, -1);
+            const VertexPositionNormalTexture v[] = {
+                {Vector3(-1, 1, 0), n, Vector2(0, 0)}, {Vector3(-1, -1, 0), n, Vector2(0, 1)},
+                {Vector3(1, -1, 0), n, Vector2(1, 1)}, {Vector3(-1, 1, 0), n, Vector2(0, 0)},
+                {Vector3(1, -1, 0), n, Vector2(1, 1)}, {Vector3(1, 1, 0), n, Vector2(1, 0)},
+            };
+            VertexBuffer vb(device, VertexPositionNormalTexture::getVertexDeclarationStatic(), 6, BufferUsage::None);
             vb.SetData(v, 0, 6);
             device.SetVertexBuffer(&vb);
             device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -153,7 +165,7 @@ class WebGpuAlphaTestEffectFogTest final : public Game
 
     Color Calibrate(const Vector3& linearRgb)
     {
-        return Render(false, Matrix::CreateTranslation(0, 0, -4.0f), linearRgb, false,
+        return Render(Layout::Tex20, Matrix::CreateTranslation(0, 0, -4.0f), linearRgb, 1.0f, false,
                       Vector3::Zero, kFogStart, kFogEnd);
     }
 
@@ -165,22 +177,25 @@ class WebGpuAlphaTestEffectFogTest final : public Game
                     Txt(got).c_str(), Txt(expected).c_str());
     }
 
-    void RunModule(const char* name, bool colored)
+    void RunLayout(const char* name, Layout layout)
     {
         const Matrix viewFar = Matrix::CreateTranslation(0, 0, -4.0f); // keep=0.5
-        const Color base = Render(colored, viewFar, kBase, false, kFogColor, kFogStart, kFogEnd);
-        const Color full = Render(colored, viewFar, kBase, true, kFogColor, 4.0f, 4.0f);
+        const Color base = Render(layout, viewFar, kBase, 1.0f, false, kFogColor, kFogStart, kFogEnd);
+        Check(RgbNear(base, FromLinear(kBase)), std::string(name) + " base = DiffuseColor", base, FromLinear(kBase));
+
+        const Color full = Render(layout, viewFar, kBase, 1.0f, true, kFogColor, 4.0f, 4.0f);
         Check(RgbNear(full, FromLinear(kFogColor)),
               std::string(name) + " FogStart==FogEnd collapses to FogColor", full, FromLinear(kFogColor));
 
-        const float keep = 0.5f;
-        const Color halfExpected = Calibrate(MixLin(kFogColor, kBase, keep));
-        const Color half = Render(colored, viewFar, kBase, true, kFogColor, kFogStart, kFogEnd);
-        Check(RgbNear(half, halfExpected), std::string(name) + " half fog matches lerp(FogColor,base,keep)",
-              half, halfExpected);
+        const Color half = Render(layout, viewFar, kBase, 1.0f, true, kFogColor, kFogStart, kFogEnd);
+        Check(RgbNear(half, Calibrate(MixLin(kFogColor, kBase, 0.5f))),
+              std::string(name) + " half fog matches lerp(FogColor,base,keep)", half, Calibrate(MixLin(kFogColor, kBase, 0.5f)));
 
-        const Color off = Render(colored, viewFar, kBase, false, kFogColor, kFogStart, kFogEnd);
-        Check(RgbNear(off, base), std::string(name) + " fog disabled preserves base", off, base);
+        // Alpha < 1: full fog -> FogColor * outputAlpha (0.5), NOT plain FogColor.
+        const Color fullA = Render(layout, viewFar, kBase, 0.5f, true, kFogColor, 4.0f, 4.0f);
+        const Color expScaled = FromLinear(Scale(kFogColor, 0.5f));
+        Check(RgbNear(fullA, expScaled) && !RgbNear(fullA, FromLinear(kFogColor)),
+              std::string(name) + " Alpha<1 full fog = FogColor*alpha (not plain FogColor)", fullA, expScaled);
     }
 
 protected:
@@ -205,10 +220,11 @@ protected:
         device.setBlendStateProperty(BlendState::Opaque);
         device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
 
-        RunModule("AlphaTest(uncolored)", false);
-        RunModule("AlphaTest(colored)", true);
+        RunLayout("AlphaTest(stride20)", Layout::Tex20);
+        RunLayout("AlphaTest(stride24,color)", Layout::ColorTex24);
+        RunLayout("AlphaTest(stride32,normal)", Layout::NormalTex32);
 
-        std::printf("=== WEBGPU-146 AlphaTestEffect fog: %d/%d PASS ===\n", passed_, total_);
+        std::printf("=== WEBGPU-149 AlphaTestEffect fog: %d/%d PASS ===\n", passed_, total_);
         result_ = (passed_ == total_) ? 0 : 1;
         Exit();
     }

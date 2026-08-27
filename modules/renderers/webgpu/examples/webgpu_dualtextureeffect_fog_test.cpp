@@ -91,7 +91,7 @@ class WebGpuDualTextureEffectFogTest final : public Game
 
     // colored=false -> stride-20 module; colored=true -> stride-24 (vertex colour) module.
     Color Render(bool colored, Texture2D* tex1, const Matrix& view, bool fogEnabled,
-                 const Vector3& fogColor, float fogStart, float fogEnd)
+                 const Vector3& fogColor, float fogStart, float fogEnd, float alpha = 1.0f)
     {
         auto& device = getGraphicsDeviceProperty();
         device.SetRenderTarget(target_.get());
@@ -103,7 +103,7 @@ class WebGpuDualTextureEffectFogTest final : public Game
         effect.setTextureProperty(grey_.get());
         effect.setTexture2Property(tex1);
         effect.setDiffuseColorProperty(Vector3(1, 1, 1));
-        effect.setAlphaProperty(1.0f);
+        effect.setAlphaProperty(alpha);
         effect.setVertexColorEnabledProperty(colored);
         effect.setFogEnabledProperty(fogEnabled);
         effect.setFogColorProperty(fogColor);
@@ -177,6 +177,13 @@ class WebGpuDualTextureEffectFogTest final : public Game
         const Color half = Render(colored, baseTex_.get(), viewFar, true, kFogColor, kFogStart, kFogEnd);
         Check(RgbNear(half, halfExpected), std::string(name) + " half fog matches lerp(FogColor,base,keep)",
               half, halfExpected);
+
+        // Alpha < 1: full fog -> FogColor * outputAlpha (0.5), NOT plain FogColor. (grey*2=white and
+        // tex1.a=1, so the output alpha is the material alpha.)
+        const Color fullA = Render(colored, baseTex_.get(), viewFar, true, kFogColor, 4.0f, 4.0f, /*alpha*/0.5f);
+        const Color expScaled = FromLinear(Vector3(kFogColor.X * 0.5f, kFogColor.Y * 0.5f, kFogColor.Z * 0.5f));
+        Check(RgbNear(fullA, expScaled) && !RgbNear(fullA, FromLinear(kFogColor)),
+              std::string(name) + " Alpha<1 full fog = FogColor*alpha (not plain FogColor)", fullA, expScaled);
     }
 
 protected:

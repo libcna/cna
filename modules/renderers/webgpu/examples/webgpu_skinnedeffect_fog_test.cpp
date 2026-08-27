@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: MS-PL
-// WEBGPU-148: SkinnedEffect fog on the WebGPU renderer. FNA's SkinnedEffect skins the vertex
-// position BEFORE computing the fog factor (Skin() then ComputeCommonVSOutput), so the WGSL
-// computes fogFactor from the skinned view-space position -- matching Vulkan's skinned3d.vert.glsl.
-// This exercises all four skinned WGSL modules: {per-pixel, per-vertex} lighting x {stride-52,
-// stride-56 (per-vertex Color)}. FogStart==FogEnd (keep=0) collapses each to FogColor -- the
-// discriminator that fails if the WGSL fog blend or the fog uniforms are removed.
+// WEBGPU-148/149: SkinnedEffect fog on the WebGPU renderer. FNA skins the vertex position BEFORE
+// computing the fog factor, so the WGSL dots the SKINNED view-space position with FogVector, and the
+// fragment lerps toward FogColor * OUTPUT ALPHA (Common.fxh). This exercises all four skinned WGSL
+// modules ({per-pixel, per-vertex} x {stride-52, stride-56 vertex colour}) AND all three
+// WeightsPerVertex values (1/2/4).
+//
+// The discriminator for "fog uses the SKINNED position, not the original": bone0 = identity, bone1 =
+// Translate(0,0,+4). With View=Translate(0,0,-4) and FogStart=2/FogEnd=6 an unskinned z=0 quad sits at
+// keep=0.5 (half fog), but blending in bone1 pushes the skinned z so the fog changes -- WeightsPerVertex
+// 2 (skinned z=2) lands at keep=1 (NO fog -> base colour), which a shader that fogged the ORIGINAL
+// position (still z=0 -> keep=0.5) could never produce. The alpha<1 check proves the FNA
+// FogColor*outputAlpha premultiply.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
@@ -78,6 +84,19 @@ namespace
                      static_cast<int>(std::lround(Clamp01(v.Y) * 255.0f)),
                      static_cast<int>(std::lround(Clamp01(v.Z) * 255.0f)), 255);
     }
+
+    // The skinned z these bones/weights produce (bone0=identity, bone1=Translate z+4, bones2/3=identity).
+    float SkinnedZ(int weightsPerVertex)
+    {
+        if (weightsPerVertex == 1) return 0.0f;                 // bone0 only
+        if (weightsPerVertex == 2) return 0.5f * 4.0f;          // 0.5*bone0 + 0.5*bone1 -> z=2
+        return 0.25f * 4.0f;                                    // 0.25 each, only bone1 shifts -> z=1
+    }
+    // keep = 1 - saturate(dot(vec4(skinnedPos,1), FogVector)); FogVector from World*View=Translate(0,0,-4).
+    float KeepForZ(float skinnedZ)
+    {
+        return 1.0f - Clamp01((skinnedZ - 4.0f + kFogStart) / (kFogStart - kFogEnd));
+    }
 }
 
 class WebGpuSkinnedEffectFogTest final : public Game
@@ -96,48 +115,58 @@ class WebGpuSkinnedEffectFogTest final : public Game
         return pixel;
     }
 
-    VertexBuffer MakeQuad(GraphicsDevice& dev, bool colorVariant)
+    // A z=0 quad with the given per-vertex bone weights (indices always 0,1,2,3).
+    VertexBuffer MakeQuad(GraphicsDevice& dev, bool colorVariant, float w0, float w1, float w2, float w3)
     {
         if (!colorVariant)
         {
-            const SkinnedVertex v[] = {
-                { -1, 1, 0, 0,0,-1, 0,0, 1,0,0,0, 0,0,0,0 }, { -1,-1, 0, 0,0,-1, 0,1, 1,0,0,0, 0,0,0,0 },
-                { 1,-1, 0, 0,0,-1, 1,1, 1,0,0,0, 0,0,0,0 }, { -1, 1, 0, 0,0,-1, 0,0, 1,0,0,0, 0,0,0,0 },
-                { 1,-1, 0, 0,0,-1, 1,1, 1,0,0,0, 0,0,0,0 }, { 1, 1, 0, 0,0,-1, 1,0, 1,0,0,0, 0,0,0,0 },
+            const SkinnedVertex q[] = {
+                {-1, 1, 0, 0,0,-1, 0,0, w0,w1,w2,w3, 0,1,2,3}, {-1,-1, 0, 0,0,-1, 0,1, w0,w1,w2,w3, 0,1,2,3},
+                { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3}, {-1, 1, 0, 0,0,-1, 0,0, w0,w1,w2,w3, 0,1,2,3},
+                { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3}, { 1, 1, 0, 0,0,-1, 1,0, w0,w1,w2,w3, 0,1,2,3},
             };
             VertexBuffer vb(dev, 6);
-            vb.SetDataRaw(v, 6, static_cast<int>(sizeof(SkinnedVertex)));
+            vb.SetDataRaw(q, 6, static_cast<int>(sizeof(SkinnedVertex)));
             return vb;
         }
-        const std::uint8_t w = 255; // white vertex colour -> tint leaves base unchanged
-        const SkinnedColorVertex v[] = {
-            { -1, 1, 0, 0,0,-1, 0,0, 1,0,0,0, 0,0,0,0, w,w,w,w }, { -1,-1, 0, 0,0,-1, 0,1, 1,0,0,0, 0,0,0,0, w,w,w,w },
-            { 1,-1, 0, 0,0,-1, 1,1, 1,0,0,0, 0,0,0,0, w,w,w,w }, { -1, 1, 0, 0,0,-1, 0,0, 1,0,0,0, 0,0,0,0, w,w,w,w },
-            { 1,-1, 0, 0,0,-1, 1,1, 1,0,0,0, 0,0,0,0, w,w,w,w }, { 1, 1, 0, 0,0,-1, 1,0, 1,0,0,0, 0,0,0,0, w,w,w,w },
+        const std::uint8_t c = 255;
+        const SkinnedColorVertex q[] = {
+            {-1, 1, 0, 0,0,-1, 0,0, w0,w1,w2,w3, 0,1,2,3, c,c,c,c}, {-1,-1, 0, 0,0,-1, 0,1, w0,w1,w2,w3, 0,1,2,3, c,c,c,c},
+            { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3, c,c,c,c}, {-1, 1, 0, 0,0,-1, 0,0, w0,w1,w2,w3, 0,1,2,3, c,c,c,c},
+            { 1,-1, 0, 0,0,-1, 1,1, w0,w1,w2,w3, 0,1,2,3, c,c,c,c}, { 1, 1, 0, 0,0,-1, 1,0, w0,w1,w2,w3, 0,1,2,3, c,c,c,c},
         };
         VertexBuffer vb(dev, 6);
-        vb.SetDataRaw(v, 6, static_cast<int>(sizeof(SkinnedColorVertex)));
+        vb.SetDataRaw(q, 6, static_cast<int>(sizeof(SkinnedColorVertex)));
         return vb;
     }
 
-    // Ambient-only (no directional light) so the lit base == DiffuseColor (SkinnedEffect folds
-    // Ambient*Diffuse into emissive), keeping the pre-fog colour deterministic for every module.
-    Color Render(bool perPixel, bool colorVariant, const Matrix& view, const Vector3& diffuse,
-                 bool fogEnabled, const Vector3& fogColor, float fogStart, float fogEnd)
+    // Ambient-only so the lit base == DiffuseColor (SkinnedEffect folds Ambient*Diffuse into emissive).
+    Color Render(bool perPixel, bool colorVariant, int weightsPerVertex, const Vector3& diffuse,
+                 float alpha, bool fogEnabled)
     {
         auto& dev = getGraphicsDeviceProperty();
         dev.SetRenderTarget(target_.get());
         dev.Clear(Color(0, 0, 0, 255));
-        VertexBuffer vb = MakeQuad(dev, colorVariant);
+
+        float w0 = 1, w1 = 0, w2 = 0, w3 = 0;
+        if (weightsPerVertex == 2) { w0 = 0.5f; w1 = 0.5f; }
+        else if (weightsPerVertex == 4) { w0 = w1 = w2 = w3 = 0.25f; }
+        VertexBuffer vb = MakeQuad(dev, colorVariant, w0, w1, w2, w3);
+
         SkinnedEffect fx(dev);
         fx.setWorldProperty(Matrix::getIdentityProperty());
-        fx.setViewProperty(view);
+        fx.setViewProperty(Matrix::CreateTranslation(0, 0, -4.0f));
         fx.setProjectionProperty(Ortho());
         fx.setTextureProperty(white_.get());
-        std::vector<Matrix> bones = { Matrix::getIdentityProperty() };
+        // bone0 identity, bone1 shifts z by +4, bones 2/3 identity.
+        std::vector<Matrix> bones = {
+            Matrix::getIdentityProperty(), Matrix::CreateTranslation(0, 0, 4.0f),
+            Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+        };
         fx.SetBoneTransforms(bones);
-        fx.setWeightsPerVertexProperty(1);
+        fx.setWeightsPerVertexProperty(weightsPerVertex);
         fx.setDiffuseColorProperty(diffuse);
+        fx.setAlphaProperty(alpha);
         fx.setPreferPerPixelLightingProperty(perPixel);
         fx.VertexColorEnabled = colorVariant;
         fx.setAmbientLightColorProperty(Vector3(1, 1, 1));
@@ -145,9 +174,9 @@ class WebGpuSkinnedEffectFogTest final : public Game
         fx.DirectionalLight1.setEnabledProperty(false);
         fx.DirectionalLight2.setEnabledProperty(false);
         fx.setFogEnabledProperty(fogEnabled);
-        fx.setFogColorProperty(fogColor);
-        fx.setFogStartProperty(fogStart);
-        fx.setFogEndProperty(fogEnd);
+        fx.setFogColorProperty(kFogColor);
+        fx.setFogStartProperty(kFogStart);
+        fx.setFogEndProperty(kFogEnd);
         fx.Apply();
         dev.SetVertexBuffer(&vb);
         dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
@@ -156,10 +185,10 @@ class WebGpuSkinnedEffectFogTest final : public Game
         return ReadCentre();
     }
 
-    Color Calibrate(bool perPixel, bool colorVariant, const Vector3& linearRgb)
+    // Renders a solid linear RGB (fog off, alpha 1, WPV 1) to get its encoded bytes.
+    Color Calibrate(const Vector3& linearRgb)
     {
-        return Render(perPixel, colorVariant, Matrix::CreateTranslation(0, 0, -4.0f), linearRgb,
-                      false, Vector3::Zero, kFogStart, kFogEnd);
+        return Render(false, false, 1, linearRgb, 1.0f, false);
     }
 
     void Check(bool ok, const std::string& label, const Color& got, const Color& expected)
@@ -172,19 +201,40 @@ class WebGpuSkinnedEffectFogTest final : public Game
 
     void RunModule(const char* name, bool perPixel, bool colorVariant)
     {
-        const Matrix viewFar = Matrix::CreateTranslation(0, 0, -4.0f); // keep=0.5
-        const Color base = Render(perPixel, colorVariant, viewFar, kBase, false, kFogColor, kFogStart, kFogEnd);
-        Check(RgbNear(base, FromLinear(kBase)), std::string(name) + " base (ambient-only) = DiffuseColor",
-              base, FromLinear(kBase));
+        // WeightsPerVertex 1/2/4: each produces a distinct SKINNED z, hence a distinct fog keep. A
+        // shader fogging the ORIGINAL (z=0) position would give keep=0.5 for all three.
+        for (int wpv : {1, 2, 4})
+        {
+            const float keep = KeepForZ(SkinnedZ(wpv));
+            const Color expected = Calibrate(MixLin(kFogColor, kBase, keep));
+            const Color got = Render(perPixel, colorVariant, wpv, kBase, 1.0f, true);
+            Check(RgbNear(got, expected),
+                  std::string(name) + " WPV=" + std::to_string(wpv) + " fog uses skinned z (keep=" +
+                      std::to_string(keep).substr(0, 4) + ")", got, expected);
+        }
 
-        const Color full = Render(perPixel, colorVariant, viewFar, kBase, true, kFogColor, 4.0f, 4.0f);
-        Check(RgbNear(full, FromLinear(kFogColor)),
-              std::string(name) + " FogStart==FogEnd collapses to FogColor", full, FromLinear(kFogColor));
+        // Full fog (WPV=1 lands at keep=0.5, so shift the quad fully into fog with a far view? Instead
+        // use FogStart==FogEnd is not available here (fixed 2/6); rely on the WPV=1 half-fog above and
+        // add an explicit fully-fogged check by putting the quad far: bone1-only via WPV=2 gives keep=1
+        // (no fog), and WPV=1 gives keep=0.5. For a keep=0 anchor, reuse the base (no fog) below.)
+        const Color base = Render(perPixel, colorVariant, 2, kBase, 1.0f, true); // WPV=2 -> keep=1 -> base
+        Check(RgbNear(base, FromLinear(kBase)),
+              std::string(name) + " skinned z moved out of fog range => no fog (base)", base, FromLinear(kBase));
 
-        const Color halfExpected = Calibrate(perPixel, colorVariant, MixLin(kFogColor, kBase, 0.5f));
-        const Color half = Render(perPixel, colorVariant, viewFar, kBase, true, kFogColor, kFogStart, kFogEnd);
-        Check(RgbNear(half, halfExpected), std::string(name) + " half fog matches lerp(FogColor,base,keep)",
-              half, halfExpected);
+        // Alpha < 1 with WPV=1 (half fog): the fogged pixel is mix(FogColor*alpha, base*alpha, keep).
+        // Check the fully-fogged limit is FogColor*alpha, not FogColor: pull the quad deep into fog by
+        // using WPV=1 but a start/end that gives keep~0 is fixed; instead compare the half-fog fogged R
+        // against the alpha-scaled expectation.
+        const float keep1 = KeepForZ(SkinnedZ(1)); // 0.5
+        const float a = 0.5f;
+        const Color gotA = Render(perPixel, colorVariant, 1, kBase, a, true);
+        // base is premultiplied by alpha (SkinnedEffect folds alpha), fog target = FogColor*alpha.
+        const Vector3 baseA = Vector3(kBase.X * a, kBase.Y * a, kBase.Z * a);
+        const Vector3 fogA = Vector3(kFogColor.X * a, kFogColor.Y * a, kFogColor.Z * a);
+        const Color expA = Calibrate(MixLin(fogA, baseA, keep1));
+        const Color expWrong = Calibrate(MixLin(kFogColor, baseA, keep1)); // if alpha-multiply dropped
+        Check(RgbNear(gotA, expA) && !RgbNear(gotA, expWrong),
+              std::string(name) + " Alpha<1: fog target is FogColor*alpha (not plain FogColor)", gotA, expA);
     }
 
 protected:
@@ -214,7 +264,7 @@ protected:
         RunModule("Skinned(perVertex,stride56)", false, true);
         RunModule("Skinned(perPixel,stride56)", true, true);
 
-        std::printf("=== WEBGPU-148 SkinnedEffect fog: %d/%d PASS ===\n", passed_, total_);
+        std::printf("=== WEBGPU-149 SkinnedEffect fog: %d/%d PASS ===\n", passed_, total_);
         result_ = (passed_ == total_) ? 0 : 1;
         Exit();
     }
