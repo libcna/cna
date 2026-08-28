@@ -20,7 +20,9 @@ endif()
 
 # QUIET, and skipped when absent, for the same reason as the ratchet: a machine with no
 # Python 3 must still be able to configure and build CNA.
-find_package(Python3 QUIET COMPONENTS Interpreter)
+if(NOT DEFINED Python3_Interpreter_FOUND)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+endif()
 
 if(NOT Python3_Interpreter_FOUND)
     message(STATUS "CNA: hot-path lint skipped (no Python 3 interpreter found)")
@@ -33,15 +35,18 @@ if(NOT EXISTS "${_hot_path_script}")
     return()
 endif()
 
-execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "${_hot_path_script}" --repo "${CMAKE_CURRENT_SOURCE_DIR}"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    RESULT_VARIABLE _hot_path_result
-    OUTPUT_VARIABLE _hot_path_stdout
-    ERROR_VARIABLE _hot_path_stderr
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_STRIP_TRAILING_WHITESPACE
-)
+include("${CMAKE_CURRENT_LIST_DIR}/ConfigureAuditCache.cmake")
+cna_run_configure_audit(
+    NAME platform-hot-path
+    RESULT _hot_path_result
+    OUTPUT _hot_path_stdout
+    ERROR _hot_path_stderr
+    SHARED_INPUTS
+        "${CMAKE_CURRENT_SOURCE_DIR}/modules"
+    INPUTS
+        "${_hot_path_script}"
+    COMMAND "${Python3_EXECUTABLE}" "${_hot_path_script}"
+            --repo "${CMAKE_CURRENT_SOURCE_DIR}")
 
 if(_hot_path_stdout)
     message(STATUS "CNA: ${_hot_path_stdout}")

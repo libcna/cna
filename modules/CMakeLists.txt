@@ -366,21 +366,14 @@ set(_cna_renderer_modules
     opengl2 opengl4 opengles1 openvg pixijs portablegl sdl-gpu sdl-renderer skia software sokol
     stub svg-dom tinygl vulkan
     webgpu wicked common/d3d common/mojoshader)
+string(JOIN "|" _cna_framework_module_pattern ${_cna_framework_modules})
+string(JOIN "|" _cna_renderer_module_pattern ${_cna_renderer_modules})
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     CONFIGURE_DEPENDS "*.cpp" "*.mm")
 foreach(_cna_tu IN LISTS _cna_all_module_tus)
-    set(_cna_tu_ok FALSE)
-    foreach(_cna_m IN LISTS _cna_framework_modules)
-        if(_cna_tu MATCHES "^${_cna_m}/(src|tests|examples)/")
-            set(_cna_tu_ok TRUE)
-        endif()
-    endforeach()
-    foreach(_cna_m IN LISTS _cna_renderer_modules)
-        if(_cna_tu MATCHES "^renderers/${_cna_m}/(src|tests|examples)/")
-            set(_cna_tu_ok TRUE)
-        endif()
-    endforeach()
-    if(NOT _cna_tu_ok)
+    if(NOT _cna_tu MATCHES "^(${_cna_framework_module_pattern})/(src|tests|examples)/"
+            AND NOT _cna_tu MATCHES
+                "^renderers/(${_cna_renderer_module_pattern})/(src|tests|examples)/")
         message(FATAL_ERROR
             "CNA: translation unit outside every declared physical module src/tests/examples "
             "tree: modules/${_cna_tu} -- add it to a module (modules/<name>/src) or extend "
@@ -388,6 +381,8 @@ foreach(_cna_tu IN LISTS _cna_all_module_tus)
     endif()
 endforeach()
 unset(_cna_all_module_tus)
+unset(_cna_framework_module_pattern)
+unset(_cna_renderer_module_pattern)
 
 # The legacy global trees must not silently come back. Anchored on CNA_SOURCE_DIR (this
 # repository's own root, from project(CNA)) and NOT on CMAKE_SOURCE_DIR: when CNA is consumed

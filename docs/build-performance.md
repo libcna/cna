@@ -81,6 +81,34 @@ Do not use `dev` as merge evidence for a renderer-, C API-, network-, media-, or
 change. Existing renderer/platform/integration presets remain the required evidence for the code
 they include.
 
+## Configure-time audit cache
+
+`CNA_CONFIGURE_AUDIT_CACHE=ON` (the default) caches only successful platform ratchet,
+non-production SDL, and hot-path audit results under the current build directory's `CMakeFiles/`.
+The key is a SHA-256 content fingerprint of every source/header the audits inspect, their scripts
+and budgets, the Python version, and the exact command. File additions, removals, content changes,
+strict-mode changes, or audit implementation changes therefore invalidate the result. Failed
+audits are never cached, and a fresh CI build directory always executes every audit.
+
+All three audits share one fingerprint pass over the module tree. Set
+`-DCNA_CONFIGURE_AUDIT_CACHE=OFF` to force execution during every configure, or run the existing
+`cna_platform_ratchet`, `cna_platform_nonproduction_sdl_audit`, and
+`cna_platform_hot_path_lint` targets for an explicit check.
+
+The 2026-08-28 reference `dev` measurement found 4.42 s of self time in configure-time
+`execute_process()` calls: 1.45 s for the platform ratchet, 1.45 s for the non-production audit,
+and 1.30 s for the hot-path lint. After content-aware caching and replacing the physical-module
+validator's nested module scan with two equivalent combined regular expressions, repeated
+unchanged configure time fell from 4.39–4.72 s to 0.83–0.84 s (about 82% less). A cached `unit`
+configuration took 1.26 s. A changed audit input still runs the complete checks; forcing the cache
+off took 3.99 s on the same machine.
+
+The source glob behavior is unchanged. Adding a temporary module `.cpp` produced Ninja's
+`GLOB mismatch`, regenerated CMake, refreshed the audits, compiled the new object, and removing it
+regenerated again. A temporary forbidden `SDL_CreateWindow` reference invalidated the cache and
+made configuration fail at the strict ratchet gate, proving that caching does not weaken the
+correctness check.
+
 ## Compiler-policy layers
 
 The CMake targets distinguish requirements imposed on a consumer from CNA's private build policy:

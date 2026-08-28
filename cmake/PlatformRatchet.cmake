@@ -26,7 +26,9 @@ endif()
 # QUIET: the ratchet is a development aid, not a build dependency. A machine without a
 # Python 3 interpreter must still be able to configure and build CNA -- skipping the
 # report is the correct degradation, and saying so beats failing or staying silent.
-find_package(Python3 QUIET COMPONENTS Interpreter)
+if(NOT DEFINED Python3_Interpreter_FOUND)
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+endif()
 
 if(NOT Python3_Interpreter_FOUND)
     message(STATUS "CNA: platform ratchet skipped (no Python 3 interpreter found)")
@@ -44,15 +46,19 @@ if(CNA_PLATFORM_RATCHET_STRICT)
     list(APPEND _ratchet_args "--strict")
 endif()
 
-execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "${_ratchet_script}" ${_ratchet_args}
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    RESULT_VARIABLE _ratchet_result
-    OUTPUT_VARIABLE _ratchet_stdout
-    ERROR_VARIABLE _ratchet_stderr
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_STRIP_TRAILING_WHITESPACE
-)
+include("${CMAKE_CURRENT_LIST_DIR}/ConfigureAuditCache.cmake")
+cna_run_configure_audit(
+    NAME platform-ratchet
+    RESULT _ratchet_result
+    OUTPUT _ratchet_stdout
+    ERROR _ratchet_stderr
+    SHARED_INPUTS
+        "${CMAKE_CURRENT_SOURCE_DIR}/modules"
+    INPUTS
+        "${_ratchet_script}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/sdl_inventory.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/sdl_budget.json"
+    COMMAND "${Python3_EXECUTABLE}" "${_ratchet_script}" ${_ratchet_args})
 
 if(_ratchet_stdout)
     message(STATUS "CNA: ${_ratchet_stdout}")
@@ -70,21 +76,25 @@ endif()
 # report is only as fresh as the last configure, which would quietly defeat the purpose.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${_ratchet_script}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/sdl_inventory.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/sdl_budget.json")
 
 set(_nonproduction_audit_script
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/nonproduction_sdl_audit.py")
 if(EXISTS "${_nonproduction_audit_script}")
-    execute_process(
+    cna_run_configure_audit(
+        NAME platform-nonproduction-sdl
+        RESULT _nonproduction_audit_result
+        OUTPUT _nonproduction_audit_stdout
+        ERROR _nonproduction_audit_stderr
+        SHARED_INPUTS
+            "${CMAKE_CURRENT_SOURCE_DIR}/modules"
+        INPUTS
+            "${_nonproduction_audit_script}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/sdl_inventory.py"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/nonproduction_sdl_budget.json"
         COMMAND "${Python3_EXECUTABLE}" "${_nonproduction_audit_script}"
-                --repo "${CMAKE_CURRENT_SOURCE_DIR}" --check
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        RESULT_VARIABLE _nonproduction_audit_result
-        OUTPUT_VARIABLE _nonproduction_audit_stdout
-        ERROR_VARIABLE _nonproduction_audit_stderr
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_STRIP_TRAILING_WHITESPACE
-    )
+                --repo "${CMAKE_CURRENT_SOURCE_DIR}" --check)
     if(_nonproduction_audit_stdout)
         message(STATUS "CNA: ${_nonproduction_audit_stdout}")
     endif()
@@ -94,6 +104,7 @@ if(EXISTS "${_nonproduction_audit_script}")
     endif()
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
         "${_nonproduction_audit_script}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/sdl_inventory.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/platform/nonproduction_sdl_budget.json")
 endif()
 

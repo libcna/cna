@@ -60,7 +60,7 @@ must not be compared with the new post-reset counters.
 | COMP-002 | Split the monolithic unit-test iteration path | COMP-001 | ✅ |
 | COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ⬜ |
 | COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ⬜ |
-| COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ⬜ |
+| COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ✅ |
 | COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ⬜ |
 | COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ⬜ |
 | COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | ⬜ |
@@ -204,6 +204,28 @@ foundation work.
   the remaining time is required correctness work.
 - Adding/removing a source file still causes the correct target to regenerate and build.
 - Existing audit checks remain executable in CI and fail on an intentionally invalid fixture.
+
+### Completion evidence (2026-08-28)
+
+- A Google Trace profile attributed 4.42 s of configure self time to 23 `execute_process()` calls.
+  The platform ratchet, non-production SDL audit, and hot-path lint alone cost 1.45 s, 1.45 s, and
+  1.30 s respectively. The physical module validator also performed about 181,000 nested module
+  comparisons per configuration.
+- Successful audits are now cached per build tree using SHA-256 over all inspected source content,
+  scripts, budgets, Python version, strictness, and command. The three checks share one module-tree
+  fingerprint pass. A failed result is never cached, fresh CI trees always execute the checks, and
+  `CNA_CONFIGURE_AUDIT_CACHE=OFF` provides an explicit forced-audit path.
+- The physical module ownership gate now performs two equivalent combined regex checks per
+  translation unit instead of walking both module lists. Its profile cost fell from about 0.89 s
+  of loop/condition work to about 0.03 s.
+- Repeated unchanged `dev` configuration fell from 4.39–4.72 s to 0.83–0.84 s (about 82% less),
+  exceeding the 30% acceptance threshold. Cached `unit` configuration measured 1.26 s; forcing
+  audits with the cache disabled measured 3.99 s.
+- Adding a temporary harmless module source triggered Ninja's glob mismatch, regenerated CMake,
+  refreshed the audits, and compiled the new object; removal regenerated again. Adding a temporary
+  forbidden `SDL_CreateWindow` reference invalidated the cache and failed the strict ratchet gate.
+- The existing `cna_platform_ratchet`, `cna_platform_nonproduction_sdl_audit`, and
+  `cna_platform_hot_path_lint` targets remain available for explicit execution.
 
 ## 9. COMP-006 — include and translation-unit cost
 
