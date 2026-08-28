@@ -1,0 +1,260 @@
+# CNA compilation-performance plan
+
+> **Status:** ACTIVE — the safe build-policy foundation is complete; measured follow-up work is
+> pending. This plan turns [`misc/cnacomp.md`](misc/cnacomp.md) into an executable task sequence.
+>
+> **Goal:** shorten the edit/build/test loop without weakening XNA/FNA compatibility, diagnostics,
+> platform coverage, installed-package compatibility, or reproducibility.
+>
+> **Status legend:** ✅ complete and verified; 🟨 implemented but not yet accepted; ⬜ pending;
+> ⛔ blocked with the blocking dependency recorded in the task.
+
+## 1. Current verified baseline
+
+Commit `b3db5701b` established the first safe layer:
+
+- focused `dev`, `unit`, `release-modules`, and `release-ipo` Ninja presets;
+- target-scoped build configuration, project policy, instrumentation, Emscripten ABI, and linker
+  policy instead of routine global `CMAKE_*_FLAGS` mutation;
+- stable per-invocation `CCACHE_BASEDIR`, `cna_ccache_stats`, and compilation databases;
+- validated sanitizer, optional linker, and guarded IPO/LTO controls;
+- target-scoped Clang compatibility for vendored Draco.
+
+The local measurements on 2026-08-28 are a starting point, not a portable performance promise:
+
+| Configuration/measurement | Result |
+|---|---:|
+| Legacy `cmake-build-debug` `all` compile commands | 1,929 |
+| `dev` target compile commands | 483 (75.0% fewer; about one quarter of the work) |
+| `unit` / `CnaTests` compile commands | 1,126 (41.6% fewer) |
+| Warm `dev` no-op build | 0.16 s |
+| CMake regeneration observed after build-system edits | about 4.5 s |
+| `cmake-build-debug` disk use | 29 GiB |
+| `cmake-build-dev` disk use | 566 MiB |
+| `cmake-build-unit` disk use | 1.9 GiB |
+
+The developer subsequently increased the shared ccache limit from 20 GiB to 50 GiB and reset its
+statistics. That is local machine state, not repository configuration. The old lifetime hit rate
+must not be compared with the new post-reset counters.
+
+## 2. Rules for every task
+
+1. Run performance comparisons with the same compiler/version, renderer, target, optional
+   dependencies, parallelism, build type, and cache state.
+2. Record configure time, build wall time, peak RSS, executed compile/link edges, build-tree size,
+   and ccache counters before and after the candidate.
+3. Measure at least a clean build, warm no-op build, representative `.cpp` rebuild, public-header
+   rebuild, and final-link-only rebuild when the task can affect them.
+4. Run the affected tests. A faster build that changes behavior or loses tests is a regression.
+5. Keep third-party targets, package consumers, sanitizers, Emscripten, and cross-compiles outside
+   new policy unless the task explicitly verifies them.
+6. Implement one task per commit. Update this plan's status and evidence in that same commit.
+7. Do not make a measured experiment the default until its acceptance criteria are satisfied on
+   at least native GCC and Clang builds.
+
+## 3. Task index and order
+
+| ID | Task | Depends on | Status |
+|---|---|---|---|
+| COMP-001 | Rebuild the benchmark and ccache evidence baseline | foundation commit | ⬜ |
+| COMP-002 | Split the monolithic unit-test iteration path | COMP-001 | ⬜ |
+| COMP-003 | Pilot target-specific precompiled headers | COMP-002 | ⬜ |
+| COMP-004 | Benchmark Mold and LLD final linking | COMP-001 | ⬜ |
+| COMP-005 | Reduce CMake configure/regeneration cost | COMP-001 | ⬜ |
+| COMP-006 | Reduce measured header and translation-unit cost | COMP-001 | ⬜ |
+| COMP-007 | Add an opt-in CI unity-build experiment | COMP-002, COMP-006 | ⬜ |
+| COMP-008 | Publish results and add regression guardrails | COMP-002–COMP-007 | ⬜ |
+
+`COMP-003`, `COMP-004`, `COMP-005`, and `COMP-006` may proceed independently after their stated
+dependencies. `COMP-007` must remain last among compilation-technique experiments because unity
+builds can hide include hygiene and alter which translation units appear expensive.
+
+## 4. COMP-001 — benchmark and ccache evidence baseline
+
+### Work
+
+- Add a repository-owned benchmark driver under `tools/build/` that records commands and results
+  without deleting arbitrary paths. Disposable build directories must have a fixed
+  `cmake-build-benchmark-*` prefix or be created with `mktemp -d`.
+- Measure `dev`, `unit`, and the legacy full integration configuration with GCC and Clang at
+  `--parallel 8`, `12`, and `16`. Stop a setting if it swaps or materially harms interactivity.
+- Capture compiler/linker versions, CMake cache variables that affect the target closure, Ninja
+  compile/link edge counts, wall time, peak RSS, output size, and build-tree size.
+- Record ccache counters before and after three representative edit/build sequences. Keep direct
+  mode enabled. Do not clear the 50 GiB cache and do not change global ccache policy from CMake.
+- Add the concise results and exact reproduction commands to `docs/build-performance.md`.
+
+### Acceptance
+
+- Re-running the driver with the same inputs produces comparable machine-readable results.
+- Fresh post-reset ccache statistics distinguish hits, misses, uncacheable calls, and evictions.
+- The plan records a measured baseline rather than extrapolating elapsed time solely from command
+  counts.
+
+## 5. COMP-002 — split the monolithic unit-test iteration path
+
+`CnaTests` currently requires 1,126 compile commands and a large final link even when one module is
+being edited. The goal is a focused developer target, while retaining a full compatibility path.
+
+### Work
+
+- Inventory every test source by owning module, renderer family, shared fixture, and genuinely
+  cross-module integration suite.
+- Extract shared fixtures and test utilities into narrowly linked support targets.
+- Group module test sources into object libraries so a source is compiled once and can feed both a
+  focused executable and the legacy full-suite executable. Do not use ordinary static libraries
+  where GoogleTest registration objects could be discarded by the linker.
+- Add focused executables for at least core/math, content, graphics, runtime, devices, and renderer
+  contract tests. Give each target only the module dependencies it actually needs.
+- Preserve the `CnaTests` executable and its existing full-suite behavior during the migration.
+  Focused developer executables should not also be registered in default CTest if that would make
+  CI execute every test twice.
+- Document direct focused invocations and add a small number of useful build presets rather than
+  one preset per module.
+
+### Acceptance
+
+- Building a focused module test target does not compile unrelated module or renderer test sources.
+- The full `CnaTests` binary contains the same test inventory as before the split and passes.
+- Test sources are not compiled twice when building `CnaTests`.
+- Record focused `.cpp` rebuild and final-link times. Keep the split only if a representative
+  module loop improves by at least 30% without increasing the full clean build by more than 10%.
+
+## 6. COMP-003 — target-specific PCH pilot
+
+### Work
+
+- Use COMP-001/002 traces to select one stable, high-cost CNA-owned target. Prefer a focused test
+  target whose sources repeatedly parse standard-library and GoogleTest headers.
+- Add `target_precompile_headers(... PRIVATE ...)` behind `CNA_ENABLE_PCH`, defaulting to `OFF`
+  during the experiment.
+- Keep volatile CNA public headers out of the first PCH. Do not expose a build-tree PCH to installed
+  consumers or apply it to vendored dependencies.
+- Verify GCC and Clang; inspect ccache PCH counters. Do not add ccache `sloppiness` settings unless
+  correctness and macro/time behavior are explicitly demonstrated.
+- Measure clean, one-source, public-header, and peak-memory deltas with PCH both enabled and disabled.
+
+### Acceptance
+
+- At least 15% improvement on the selected target's clean compile or a clearly documented larger
+  improvement in its normal edit loop.
+- No material regression in one-source incremental time, no new warnings, and no test difference.
+- Peak memory remains safe at the documented parallelism. Otherwise remove the pilot and record it
+  as rejected evidence.
+
+## 7. COMP-004 — Mold/LLD linker benchmark
+
+The `CNA_LINKER` policy already detects and probes `MOLD` and `LLD`; neither was installed during the
+foundation work.
+
+### Work
+
+- Install Mold and/or LLD only in the benchmark environment, not from project configuration.
+- Build identical `CnaTests` and release content-tool inputs with `DEFAULT`, `LLD`, and `MOLD`.
+- Measure final-link-only wall time, peak RSS, executable size, startup, and test results.
+- Verify that explicit unavailable linkers fail clearly and that unsupported platforms retain their
+  default linker.
+- Keep `AUTO` probe-based. Do not hard-code an ELF linker into Apple, MSVC, Android, Emscripten, or
+  cross builds.
+
+### Acceptance
+
+- Publish the measurement table in `docs/build-performance.md`.
+- A linker may become a recommended local dependency only if it improves the large test link by at
+  least 20% and passes the same tests. The portable default remains valid.
+
+## 8. COMP-005 — configure/regeneration cost
+
+### Work
+
+- Capture a CMake profiling trace for cold configure and regeneration.
+- Attribute time to source globbing, renderer registration, configure-time audit scripts, vendored
+  dependency checks, and other top-level work.
+- Replace `GLOB_RECURSE CONFIGURE_DEPENDS` only where profiling shows a material cost and a generated
+  or explicit source manifest can be maintained reliably.
+- Move expensive diagnostics to explicit/CI targets or add input-aware caching only when doing so
+  preserves the configure-time correctness gate.
+- Do not weaken platform, renderer, descriptor, or API audit failures merely to improve a timer.
+
+### Acceptance
+
+- Reduce unchanged native `dev` regeneration time by at least 30%, or document with profiling why
+  the remaining time is required correctness work.
+- Adding/removing a source file still causes the correct target to regenerate and build.
+- Existing audit checks remain executable in CI and fail on an intentionally invalid fixture.
+
+## 9. COMP-006 — include and translation-unit cost
+
+### Work
+
+- Use `compile_commands.json`, Clang `-ftime-trace`, and `clang-scan-deps` (plus IWYU where useful)
+  to rank expensive translation units and high-fan-out headers.
+- Start with measured hotspots, including the large C API engine layer and large renderer sources;
+  file size alone is not sufficient evidence.
+- Remove unnecessary transitive includes, use forward declarations where ownership permits, and
+  move implementation-only includes and non-template bodies from `.hpp` to `.cpp`.
+- Split a large `.cpp` only at cohesive subsystem boundaries and only when traces show the split
+  improves useful parallelism or incremental rebuilds.
+- Preserve public XNA/FNA declarations, Doxygen coverage, exception behavior, and include spelling.
+
+### Acceptance
+
+- Record before/after parse time and public-header fan-out for each modified hotspot.
+- Each retained change improves the chosen metric by at least 10% or removes a documented large
+  rebuild fan-out, with affected tests passing on GCC and Clang.
+- No new cyclic includes, public API changes, or implementation bodies moved into public headers.
+
+## 10. COMP-007 — opt-in unity build for clean CI builds
+
+### Work
+
+- Add a separate `CNA_ENABLE_UNITY_BUILD` experiment or dedicated CI preset; default `OFF`.
+- Enable CMake `UNITY_BUILD` only on measured, stable CNA-owned leaf targets and set a bounded batch
+  size. Exclude third-party targets, generated sources, platform-sensitive translation units, and
+  files with known anonymous-namespace/include-order collisions.
+- Compare clean build time, incremental `.cpp` and public-header rebuilds, peak RSS, diagnostics,
+  and test behavior.
+- Run at least GCC and Clang configurations. Include one sanitizer configuration to expose hidden
+  ODR and instrumentation interactions.
+
+### Acceptance
+
+- Keep the preset only if clean CI compilation improves by at least 25%, memory stays within the
+  documented worker limit, and the complete selected test suite passes.
+- Unity remains opt-in unless a later project-owner decision accepts its incremental-build and
+  diagnostic tradeoffs.
+
+## 11. COMP-008 — results and regression guardrails
+
+### Work
+
+- Consolidate accepted measurements in `docs/build-performance.md` and mark every experiment here
+  ✅, rejected with evidence, or explicitly deferred.
+- Add a lightweight CI report for configure time, executed compile/link edges, artifact sizes, and
+  ccache summary. Use trend reporting before enforcing hard timing thresholds on shared runners.
+- Add deterministic structural guards where possible: focused presets must keep tests/examples/C
+  API and optional backends at their documented values; raw routine policy must not return to
+  `CMAKE_CXX_FLAGS`, `CMAKE_C_FLAGS`, or global linker flags.
+- Re-run the full integration build and relevant platform/renderer configurations before closing
+  the plan.
+
+### Acceptance
+
+- Every retained optimization has reproducible before/after evidence and a documented disable path.
+- Full integration tests and installed-consumer checks pass.
+- The final report distinguishes clean-build, incremental-build, configure, link, and cache gains;
+  it does not present compile-command reduction as an elapsed-time benchmark.
+
+## 12. Explicit non-goals
+
+- No global `-march=native`, `-Ofast`, or `-ffast-math`; distribution portability and XNA numerical
+  behavior take priority.
+- No project-wide PCH or unity switch without the target-specific pilots above.
+- No default IPO/LTO for installed static archives. The existing guarded release experiment stays
+  opt-in.
+- No generic PGO campaign until CNA has a deterministic workload representative of real client
+  applications.
+- No C++ modules migration as a build-speed shortcut; toolchain, dependency scanning, package
+  consumption, and cross-compile support require a separate design.
+- No global ccache configuration changes from CMake and no misleading hit-rate target independent
+  of the actual workload.
