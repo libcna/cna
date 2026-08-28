@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "CNA/C/render_target.h"
 #include "CnaCApiGraphicsDetail.hpp"
+#include "CnaCApiRenderTargetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
@@ -24,6 +26,8 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
@@ -128,7 +132,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
             ErrorCategoryForResult(result),
             "The owned RenderTargetCube handle could not be created.");
     }
-    AddOwnedGraphicsResource();
+    AddOwnedGraphicsResourceFor(parentGame);
     return CNA_RESULT_SUCCESS;
 }
 
@@ -159,7 +163,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
 
     for (uint64_t index = 0U; index < bindingCount; ++index) {
         const CNA_RenderTargetBinding& binding = bindings[index];
-        if (binding.struct_size != sizeof(CNA_RenderTargetBinding) ||
+        if (binding.struct_size < sizeof(CNA_RenderTargetBinding) ||
             binding.struct_version != StructureVersion) {
             return InvalidArgument("A render-target binding has an invalid structure version.");
         }
@@ -241,6 +245,102 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result GetTrackedRenderTargetBindings(
+    GraphicsDevice* const device,
+    std::vector<CNA_RenderTargetBinding>* const outBindings)
+{
+    if (device == nullptr || outBindings == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The tracked render-target binding request is invalid.");
+    }
+    const auto found = activeBindings.find(device);
+    *outBindings = found == activeBindings.end()
+        ? std::vector<CNA_RenderTargetBinding>{}
+        : found->second;
+    return CNA_RESULT_SUCCESS;
+}
+
+void SetTrackedRenderTargetBindings(
+    GraphicsDevice* const device,
+    std::vector<CNA_RenderTargetBinding> bindings)
+{
+    if (device == nullptr) {
+        return;
+    }
+    if (bindings.empty()) {
+        activeBindings.erase(device);
+    } else {
+        activeBindings[device] = std::move(bindings);
+    }
+}
+
+CNA_Result ResolveRenderTargetScopeReference(
+    const CNA_Handle handle,
+    const CNA_Handle parentGame,
+    std::shared_ptr<void>* const outOwner,
+    uint64_t** const outReferenceCount)
+{
+    if (outOwner == nullptr || outReferenceCount == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The render-target scope reference output is invalid.");
+    }
+    outOwner->reset();
+    *outReferenceCount = nullptr;
+
+    ObjectKind kind = ObjectKind::Unknown;
+    if (const CNA_Result result = GetRuntimeHandles().GetKind(handle, &kind);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "A render-target scope binding handle is invalid.");
+    }
+    if (kind == ObjectKind::RenderTarget2D) {
+        std::shared_ptr<Texture2DResource> target;
+        if (const CNA_Result result = GetRenderTarget2D(handle, &target);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (target->parentGame != parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE,
+                CNA_ERROR_CATEGORY_HANDLE,
+                "A render-target scope binding belongs to a different game.");
+        }
+        *outReferenceCount = &target->activeScopeReferenceCount;
+        *outOwner = std::move(target);
+        return CNA_RESULT_SUCCESS;
+    }
+    if (kind == ObjectKind::RenderTargetCube) {
+        std::shared_ptr<RenderTargetCubeResource> target;
+        if (const CNA_Result result = GetRenderTargetCube(handle, &target);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (target->parentGame != parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE,
+                CNA_ERROR_CATEGORY_HANDLE,
+                "A render-target scope binding belongs to a different game.");
+        }
+        *outReferenceCount = &target->activeScopeReferenceCount;
+        *outOwner = std::move(target);
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        CNA_RESULT_INVALID_HANDLE,
+        CNA_ERROR_CATEGORY_HANDLE,
+        "A render-target scope binding does not refer to a render target.");
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_render_target_usage_preserves_contents(
     const CNA_RenderTargetUsage usage,
@@ -543,6 +643,155 @@ CNA_Result cna_graphics_device_copy_render_targets(
     });
 }
 
+namespace {
+
+/// Keeps one render target's ContentLost subscription, and detaches it exactly once. Weak, so a
+/// registration outliving its target unsubscribes from nothing rather than from freed memory.
+class RenderTargetContentLostRegistration final {
+public:
+    using Token = System::EventHandler<System::EventArgs>::Token;
+
+    RenderTargetContentLostRegistration(
+        std::weak_ptr<CNA::Internal::Graphics::IContentLosable> target,
+        const Token token)
+        : target_(std::move(target)), token_(token)
+    {
+    }
+
+    RenderTargetContentLostRegistration(const RenderTargetContentLostRegistration&) = delete;
+    RenderTargetContentLostRegistration& operator=(
+        const RenderTargetContentLostRegistration&) = delete;
+
+    ~RenderTargetContentLostRegistration() { Unsubscribe(); }
+
+    void Unsubscribe() noexcept
+    {
+        if (detached_) {
+            return;
+        }
+        detached_ = true;
+        if (const auto target = target_.lock()) {
+            if (auto* const target2d = dynamic_cast<RenderTarget2D*>(target.get())) {
+                target2d->ContentLost.Remove(token_);
+            } else if (auto* const cube = dynamic_cast<RenderTargetCube*>(target.get())) {
+                cube->ContentLost.Remove(token_);
+            }
+        }
+    }
+
+private:
+    std::weak_ptr<CNA::Internal::Graphics::IContentLosable> target_;
+    Token token_;
+    bool detached_ = false;
+};
+
+} // namespace
+
+CNA_Result cna_render_target_subscribe_content_lost(
+    const CNA_Handle renderTargetHandle,
+    const CNA_RenderTargetContentLostCallback callback,
+    void* const context,
+    CNA_RenderTargetEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The ContentLost registration output handle is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The ContentLost callback is null.");
+        }
+
+        ObjectKind kind = ObjectKind::Unknown;
+        if (const CNA_Result result = GetRuntimeHandles().GetKind(renderTargetHandle, &kind);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The render-target handle is invalid for this call.");
+        }
+
+        std::shared_ptr<CNA::Internal::Graphics::IContentLosable> losable;
+        RenderTargetContentLostRegistration::Token token{};
+        if (kind == ObjectKind::RenderTarget2D) {
+            std::shared_ptr<Texture2DResource> texture;
+            if (const CNA_Result result = GetOwnedTexture2D(renderTargetHandle, &texture);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            const auto target = std::static_pointer_cast<RenderTarget2D>(texture->value);
+            token = target->ContentLost.Add(
+                [renderTargetHandle, callback, context](System::Object*, const System::EventArgs&) {
+                    callback(renderTargetHandle, context);
+                });
+            losable = std::shared_ptr<CNA::Internal::Graphics::IContentLosable>(
+                target, static_cast<CNA::Internal::Graphics::IContentLosable*>(target.get()));
+        } else if (kind == ObjectKind::RenderTargetCube) {
+            std::shared_ptr<RenderTargetCubeResource> resource;
+            if (const CNA_Result result = GetRenderTargetCube(renderTargetHandle, &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            token = resource->value->ContentLost.Add(
+                [renderTargetHandle, callback, context](System::Object*, const System::EventArgs&) {
+                    callback(renderTargetHandle, context);
+                });
+            losable = std::shared_ptr<CNA::Internal::Graphics::IContentLosable>(
+                resource->value,
+                static_cast<CNA::Internal::Graphics::IContentLosable*>(resource->value.get()));
+        } else {
+            return Fail(
+                CNA_RESULT_INVALID_HANDLE,
+                CNA_ERROR_CATEGORY_HANDLE,
+                "The handle does not refer to a render target.");
+        }
+
+        const auto registration =
+            std::make_shared<RenderTargetContentLostRegistration>(losable, token);
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::RenderTargetEventRegistration, registration, outRegistration);
+        if (result == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        registration->Unsubscribe();
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The ContentLost registration handle could not be created.");
+    });
+}
+
+CNA_Result cna_render_target_unsubscribe_content_lost(
+    const CNA_RenderTargetEventRegistrationHandle registrationHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<RenderTargetContentLostRegistration> registration;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            registrationHandle, ObjectKind::RenderTargetEventRegistration, &registration);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                getResult,
+                ErrorCategoryForResult(getResult),
+                "The ContentLost registration handle is invalid.");
+        }
+        registration->Unsubscribe();
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
+        if (releaseResult == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            releaseResult,
+            ErrorCategoryForResult(releaseResult),
+            "The ContentLost registration handle could not be released.");
+    });
+}
+
 CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
 {
     return CallWithExceptionBarrier([&]() {
@@ -569,11 +818,12 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (resource->activeEffectReferenceCount != 0U) {
+        if (resource->activeEffectReferenceCount != 0U ||
+            resource->activeScopeReferenceCount != 0U) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "The RenderTargetCube is retained by an EffectParameter.");
+                "The RenderTargetCube is retained by an EffectParameter or render-target scope.");
         }
         resource->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(renderTargetHandle);
@@ -583,7 +833,7 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
                 ErrorCategoryForResult(releaseResult),
                 "The owned RenderTargetCube handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(resource->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

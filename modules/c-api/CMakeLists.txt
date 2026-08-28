@@ -10,7 +10,17 @@ function(cna_c_api_enable_strict_warnings target)
     endif()
 endfunction()
 
-add_library(cna_c_api SHARED
+# plans/plan_cabi.md CABI-14: SHARED under Emscripten means a PIC *side module*, which is neither
+# what a wasm consumer wants nor linkable here -- the vendored SDL3 is built non-PIC, so wasm-ld
+# refuses its relocations outright. A wasm consumer wants an ESM factory plus a .wasm, which is a
+# static library linked into a module target (cna_c_api_wasm, below).
+if(EMSCRIPTEN)
+    set(CNA_C_API_LIBRARY_KIND STATIC)
+else()
+    set(CNA_C_API_LIBRARY_KIND SHARED)
+endif()
+
+add_library(cna_c_api ${CNA_C_API_LIBRARY_KIND}
     src/CnaCApi.cpp
     src/CnaCApiAudio.cpp
     src/CnaCApiXact.cpp
@@ -24,6 +34,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiEffects.cpp
     src/CnaCApiGraphics.cpp
     src/CnaCApiGraphicsDevice.cpp
+    src/CnaCApiEngineLayer.cpp
     src/CnaCApiGraphicsExt.cpp
     src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
@@ -84,11 +95,185 @@ set_target_properties(cna_c_api PROPERTIES
     INSTALL_RPATH "$ORIGIN"
 )
 
-if(UNIX AND NOT APPLE)
+# plans/plan_cabi.md CABI-12: Emscripten satisfies UNIX AND NOT APPLE, and then wasm-ld rejects
+# both of these -- they are ELF symbol-visibility mechanisms with no wasm counterpart
+# ("unknown argument: --exclude-libs"). A wasm build controls its surface with
+# -sEXPORTED_FUNCTIONS instead, so the export list is declared there rather than lost.
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     target_link_options(cna_c_api PRIVATE
         "LINKER:--exclude-libs,ALL"
         "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.map"
     )
+endif()
+
+# ---- Wasm module (plans/plan_cabi.md CABI-14) --------------------------------------------
+# The consumable artifact for a browser: an ES module factory plus a .wasm, exporting the same
+# routes the ELF build publishes through its version script. The export list is generated from the
+# headers rather than maintained beside them -- a name missing from -sEXPORTED_FUNCTIONS is simply
+# absent from the module, with no build-time diagnostic, so the list must not be hand-written.
+if(EMSCRIPTEN)
+    set(CNA_C_API_WASM_EXPORTS "${CMAKE_CURRENT_BINARY_DIR}/cna_c_api_wasm_exports.json")
+    # CABI-29: the generator reads the headers, so the headers are inputs. Depending only on the
+    # two scripts made the list stale the moment a route was declared without a script edit: an
+    # incremental build happily relinked against the previous list and the new routes were simply
+    # absent from the module, which is exactly the silent failure the comment above warns about.
+    # CONFIGURE_DEPENDS so a brand-new header is picked up too, not just an edit to an existing one.
+    file(GLOB CNA_C_API_PUBLIC_HEADERS CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/*.h")
+    add_custom_command(
+        OUTPUT "${CNA_C_API_WASM_EXPORTS}"
+        COMMAND ${CMAKE_COMMAND} -E env python3
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_wasm_exports.py"
+                --headers "${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C"
+                --output "${CNA_C_API_WASM_EXPORTS}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_wasm_exports.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/check_declared_exports.py"
+                ${CNA_C_API_PUBLIC_HEADERS}
+        COMMENT "Generating the wasm export list from the public C headers"
+        VERBATIM
+    )
+    add_custom_target(cna_c_api_wasm_exports DEPENDS "${CNA_C_API_WASM_EXPORTS}")
+
+    # --no-entry: this is a library, not a program. MODULARIZE/EXPORT_ES6 give cna-ts a factory it
+    # can import rather than a script that installs a global.
+    add_executable(cna_c_api_wasm wasm/module_entry.c)
+    add_dependencies(cna_c_api_wasm cna_c_api_wasm_exports)
+    target_link_libraries(cna_c_api_wasm PRIVATE cna_c_api)
+    set_target_properties(cna_c_api_wasm PROPERTIES
+        OUTPUT_NAME "cna_c_api"
+        SUFFIX ".mjs"
+    )
+    target_link_options(cna_c_api_wasm PRIVATE
+        "--no-entry"
+        "-sMODULARIZE=1"
+        "-sEXPORT_ES6=1"
+        "-sEXPORT_NAME=createCnaCApi"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sSTACK_SIZE=1048576"
+        "-sFORCE_FILESYSTEM=1"
+        # CABI-41: addFunction/removeFunction and a growable table, without which a JavaScript
+        # consumer cannot make a function pointer at all -- and this ABI is callback-driven
+        # (game callbacks, ContentLost, storage disposing, resource events). The artifact was
+        # exporting 2,872 routes and no way to hand any of them a callback. FS goes with it:
+        # FORCE_FILESYSTEM was already set, but the object was not reachable from JS, so
+        # "filesystem/title content" in the fixcnats.md Phase 7 contract had no implementation
+        # on the consumer's side either.
+        "-sALLOW_TABLE_GROWTH=1"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','lengthBytesUTF8','HEAPU8','HEAP8','HEAP16','HEAPU16','HEAP32','HEAPU32','HEAPF32','HEAPF64','getValue','setValue','addFunction','removeFunction','FS']"
+        "SHELL:-sEXPORTED_FUNCTIONS=@${CNA_C_API_WASM_EXPORTS}"
+    )
+
+    # CABI-37: the browser probe is a hand-written page, not one Emscripten emits, so nothing put
+    # it beside the module it imports. It was being copied by hand, which is exactly the kind of
+    # step that works once and is gone at the next clean build -- external review caught it.
+    #
+    # An OUTPUT rule rather than POST_BUILD, and the difference matters: POST_BUILD only runs when
+    # the target relinks, so editing the page alone left a stale copy staged. This depends on the
+    # page, so the page is what triggers it.
+    # A plain path, not $<TARGET_FILE_DIR:>: a generator expression naming a target is not usable
+    # in a custom command's OUTPUT here. The module lands in this module's own binary directory,
+    # which is the same place -- CMAKE_RUNTIME_OUTPUT_DIRECTORY is set only in examples/
+    # subdirectories and is directory-scoped, so nothing redirects it here. The test below still
+    # passes $<TARGET_FILE_DIR:cna_c_api_wasm> to the runner, so if those two ever diverge the
+    # runner fails with "missing built page" rather than testing nothing.
+    set(CNA_C_API_BROWSER_PROBE "${CMAKE_CURRENT_BINARY_DIR}/browser_probe.html")
+    add_custom_command(
+        OUTPUT "${CNA_C_API_BROWSER_PROBE}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/wasm/browser_probe.html"
+                "${CNA_C_API_BROWSER_PROBE}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/wasm/browser_probe.html"
+        COMMENT "Staging the C ABI browser probe beside the wasm module"
+        VERBATIM)
+    add_custom_target(cna_c_api_browser_probe ALL DEPENDS "${CNA_C_API_BROWSER_PROBE}")
+    add_dependencies(cna_c_api_browser_probe cna_c_api_wasm)
+
+    # CABI-39: NODE_JS_EXECUTABLE was read here and set nowhere, so this guard was always false and
+    # neither wasm test was ever registered -- they were only ever run by hand.
+    #
+    # The cause is worth writing down, because the symptom is misleading. Emscripten.cmake does set
+    # NODE_JS_EXECUTABLE, but only inside `if (NOT DEFINED CMAKE_CROSSCOMPILING_EMULATOR)` -- and
+    # `emcmake` passes CMAKE_CROSSCOMPILING_EMULATOR on the command line, so that branch never runs
+    # and the variable is never defined. The emulator it passes *is* node, which makes it the right
+    # thing to use. It may carry arguments, so take the first element.
+    if(NOT NODE_JS_EXECUTABLE)
+        if(CMAKE_CROSSCOMPILING_EMULATOR)
+            list(GET CMAKE_CROSSCOMPILING_EMULATOR 0 NODE_JS_EXECUTABLE)
+        elseif(DEFINED ENV{EMSDK_NODE})
+            set(NODE_JS_EXECUTABLE "$ENV{EMSDK_NODE}")
+        else()
+            find_program(NODE_JS_EXECUTABLE NAMES node nodejs)
+        endif()
+    endif()
+    if(NOT NODE_JS_EXECUTABLE AND CNA_BUILD_TESTS)
+        message(STATUS "cna_c_api: no node found, so the wasm module and browser tests are skipped")
+    endif()
+
+    # The structural checks -- an ESM factory, one wrapper per generated name -- only prove the
+    # link was configured. This instantiates the module and calls into it, which is the first
+    # thing a consumer actually depends on.
+    if(CNA_BUILD_TESTS AND NODE_JS_EXECUTABLE)
+        add_test(NAME CApi_WasmModuleSmoke
+            COMMAND "${NODE_JS_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/wasm/module_smoke.mjs"
+                    "$<TARGET_FILE_DIR:cna_c_api_wasm>/cna_c_api.mjs"
+                    "${CNA_C_API_WASM_EXPORTS}")
+
+        # And the same artifact in a real browser, which is what fixcnats.md Phase 7 actually asks
+        # for: node compiles the module itself, a browser fetches it over HTTP and runs it through
+        # its own WebAssembly pipeline. Registered only where Playwright resolves, since a browser
+        # is an environment fact rather than a build one -- and reported as a skipped test rather
+        # than silently absent, so a machine that cannot run it says so.
+        # Playwright is usually a global install that a bare `require` will not find, so NODE_PATH
+        # is pointed at the module root belonging to *this* node -- `npm root -g` answers for
+        # whichever npm is on PATH, which need not be the same installation.
+        get_filename_component(_cna_node_bin_dir "${NODE_JS_EXECUTABLE}" DIRECTORY)
+        get_filename_component(_cna_node_prefix "${_cna_node_bin_dir}" DIRECTORY)
+        set(_cna_node_global_modules "${_cna_node_prefix}/lib/node_modules")
+        if(NOT IS_DIRECTORY "${_cna_node_global_modules}")
+            execute_process(
+                COMMAND "${NODE_JS_EXECUTABLE}" -e "console.log(require('node:child_process').execSync('npm root -g').toString().trim())"
+                OUTPUT_VARIABLE _cna_node_global_modules
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET)
+        endif()
+
+        # The gate asks the runner itself, so the two cannot disagree about what is resolvable. A
+        # separate search here was narrower than the runner's own and would report a skip on a
+        # machine where the test would have passed.
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E env "NODE_PATH=${_cna_node_global_modules}"
+                    "${NODE_JS_EXECUTABLE}"
+                    "${PROJECT_SOURCE_DIR}/scripts/run_pixijs_browser_tests.mjs"
+                    --check-playwright
+            RESULT_VARIABLE _cna_playwright_missing
+            OUTPUT_QUIET ERROR_QUIET)
+        find_program(CNA_BROWSER_FOR_WASM_PROBE
+            NAMES google-chrome google-chrome-stable chromium chromium-browser)
+        if(_cna_playwright_missing EQUAL 0)
+            set(_cna_probe_env "NODE_PATH=${_cna_node_global_modules}")
+            if(CNA_BROWSER_FOR_WASM_PROBE)
+                list(APPEND _cna_probe_env "PLAYWRIGHT_CHROMIUM=${CNA_BROWSER_FOR_WASM_PROBE}")
+            endif()
+            add_test(NAME CApi_WasmBrowserProbe
+                COMMAND ${CMAKE_COMMAND} -E env ${_cna_probe_env}
+                        "${NODE_JS_EXECUTABLE}"
+                        "${PROJECT_SOURCE_DIR}/scripts/run_pixijs_browser_tests.mjs"
+                        "$<TARGET_FILE_DIR:cna_c_api_wasm>"
+                        "browser_probe.html")
+            set_tests_properties(CApi_WasmBrowserProbe PROPERTIES TIMEOUT 300)
+        else()
+            # SKIP_REGULAR_EXPRESSION, not PASS_REGULAR_EXPRESSION: the latter reports Passed, which
+            # would fold a test that did nothing into the suite's pass count -- the very thing this
+            # branch exists to avoid. Matches the convention in modules/renderers/webgpu and
+            # modules/renderers/diligent.
+            add_test(NAME CApi_WasmBrowserProbe
+                COMMAND ${CMAKE_COMMAND} -E echo
+                        "[SKIP] Playwright is not resolvable from this node, so the browser probe cannot run here.")
+            set_tests_properties(CApi_WasmBrowserProbe PROPERTIES
+                SKIP_REGULAR_EXPRESSION "\\[SKIP\\]")
+        endif()
+    endif()
 endif()
 
 target_compile_definitions(cna_c_api PRIVATE CNA_C_API_BUILD)
@@ -169,13 +354,15 @@ if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
         COMPONENT CNACApi)
 endif()
 
-install(TARGETS cna_c_api
-    EXPORT CNACTargets
-    COMPONENT CNACApi
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+if(NOT EMSCRIPTEN)
+    install(TARGETS cna_c_api
+        EXPORT CNACTargets
+        COMPONENT CNACApi
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 install(DIRECTORY include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     COMPONENT CNACApi
@@ -217,12 +404,18 @@ if(WIN32 AND NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install
         FILES_MATCHING PATTERN "SDL3*.dll"
     )
 endif()
-install(EXPORT CNACTargets
-    FILE CNACTargets.cmake
-    NAMESPACE CNA::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
-    COMPONENT CNACApi
-)
+# CABI-14: a wasm build ships an ESM factory plus a .wasm, not an installable CMake
+# package, and cna_c_api is STATIC there -- which makes install(EXPORT) demand every
+# link dependency join the export set. Skip the package on that target rather than
+# widening the export set for consumers that will never call find_package.
+if(NOT EMSCRIPTEN)
+    install(EXPORT CNACTargets
+        FILE CNACTargets.cmake
+        NAMESPACE CNA::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
+        COMPONENT CNACApi
+    )
+endif()
 
 # CBIND-041: the targets file alone is not a package. Without a CNAConfig.cmake beside it,
 # find_package(CNA CONFIG) finds nothing and every documented consumption instruction would have
@@ -427,14 +620,15 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_draw3d_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_draw3d_smoke)
     add_test(NAME CApi_Draw3DSmoke COMMAND cna_c_api_draw3d_smoke)
-    # SDL's dummy video driver has no OpenGL, so a GL renderer cannot create a device under it
-    # and the game never starts. Every other graphics smoke here already scopes the override to
-    # the one backend it suits; this one did not, and failed on every GL build.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
-        set_tests_properties(CApi_Draw3DSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        )
-    endif()
+    # This draws and reads pixels back, so it needs a driver that can give it a GL context. Under
+    # the dummy driver -- which has no OpenGL at all -- it had been failing at cna_game_create,
+    # returning 1, "no window": a failure it can never get past on any machine, and one that masks
+    # whatever the draw path actually does. Naming the driver and the display here rather than
+    # inheriting whichever one ctest was started with keeps the run hermetic on a GL build too.
+    # Same convention as CApi_OwnedGraphicsDeviceSmoke below.
+    set_tests_properties(CApi_Draw3DSmoke PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+    )
 
     add_executable(cna_c_api_graphics_ext_smoke
         tests/pure_c/GraphicsExtSmoke.c
@@ -449,6 +643,39 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_GraphicsExtSmoke COMMAND cna_c_api_graphics_ext_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_GraphicsExtSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
+    add_executable(cna_c_api_owned_graphics_device_smoke
+        tests/pure_c/OwnedGraphicsDeviceSmoke.c
+    )
+    set_target_properties(cna_c_api_owned_graphics_device_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_owned_graphics_device_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_owned_graphics_device_smoke)
+    add_test(NAME CApi_OwnedGraphicsDeviceSmoke
+        COMMAND cna_c_api_owned_graphics_device_smoke)
+    set_tests_properties(CApi_OwnedGraphicsDeviceSmoke PROPERTIES
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    add_executable(cna_c_api_render_target_lifetime_smoke
+        tests/pure_c/RenderTargetLifetimeSmoke.c
+    )
+    set_target_properties(cna_c_api_render_target_lifetime_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_render_target_lifetime_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_render_target_lifetime_smoke)
+    add_test(NAME CApi_RenderTargetLifetimeSmoke
+        COMMAND cna_c_api_render_target_lifetime_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_RenderTargetLifetimeSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()
@@ -1070,6 +1297,34 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_engine_layer_smoke
+        tests/pure_c/EngineLayerSmoke.c
+    )
+    set_target_properties(cna_c_api_engine_layer_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_engine_layer_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_engine_layer_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_engine_layer_smoke)
+    add_test(NAME CApi_EngineLayerSmoke COMMAND cna_c_api_engine_layer_smoke)
+    # plans/plan_binding.md CBIND-084A. The suite creates a game, so it takes the same isolated
+    # environment CBIND-094 gave the other game-creating smokes rather than reading the machine.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
+        )
+    elseif(CNA_GRAPHICS_RENDERER MATCHES "^OPEN(GL|GLES)")
+        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
+        )
+    else()
+        set_tests_properties(CApi_EngineLayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/engine-layer-smoke-home"
+        )
+    endif()
+
     add_executable(cna_c_api_media_smoke
         tests/pure_c/MediaSmoke.c
     )
@@ -1082,9 +1337,20 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_media_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_media_smoke)
     add_test(NAME CApi_MediaSmoke COMMAND cna_c_api_media_smoke)
+    # CBIND-094. This test builds its song fixture through a real StorageContainer, so it writes
+    # to the user storage root -- which resolves under $XDG_DATA_HOME, or $HOME when that is
+    # unset. Left to the ambient environment it fails outright wherever $HOME is not writable,
+    # which is a statement about the machine and not about the media routes. Pin the storage root
+    # into the build tree the way CApi_StorageSmoke and CApi_ContentSmoke already do, and take
+    # dummy audio unconditionally: loading a song reaches the audio device, and a test must not
+    # depend on a reachable sound server to report on the media ABI.
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_MediaSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
+        )
+    else()
+        set_tests_properties(CApi_MediaSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/media-smoke-home"
         )
     endif()
 
@@ -1293,6 +1559,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_gamers_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_gamers_smoke)
     add_test(NAME CApi_GamersSmoke COMMAND cna_c_api_gamers_smoke)
+    # CBIND-094. The gamer routes bring SDL up, and a default audio driver blocks where no sound
+    # server answers -- the test hung rather than failing, which is the worse of the two. It had
+    # no ENVIRONMENT at all; every neighbouring registration already takes dummy drivers.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_GamersSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
+        )
+    else()
+        set_tests_properties(CApi_GamersSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+        )
+    endif()
 
     add_executable(cna_c_api_gamer_identities_smoke
         tests/pure_c/GamerIdentitiesSmoke.c
@@ -1441,6 +1719,11 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    # CABI-35: the frame-identity coverage needs a real decodable video, and this is the first C
+    # test to want an asset at all. The source tree's own fixture directory is compiled in rather
+    # than relying on the working directory, which ctest does not guarantee.
+    target_compile_definitions(cna_c_api_video_smoke PRIVATE
+        CNA_C_API_TEST_ASSET_DIR="${PROJECT_SOURCE_DIR}/tests/assets")
     add_test(NAME CApi_VideoSmoke COMMAND cna_c_api_video_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_VideoSmoke PROPERTIES
@@ -1555,6 +1838,13 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
+        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
+        # is what supplies it, and it also keeps this target catching the same exceptions the
+        # library does: a boundary test that saw a narrower firewall than production would be
+        # testing a different boundary.
+        cna_graphics_ext
         cna_platform
         Threads::Threads
         sharp_runtime_core_base
@@ -1586,6 +1876,13 @@ if(CNA_BUILD_TESTS)
     # throws whose constructors are not header-only, so proving their conversion needs those modules on the
     # link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
+        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
+        # is what supplies it, and it also keeps this target catching the same exceptions the
+        # library does: a boundary test that saw a narrower firewall than production would be
+        # testing a different boundary.
+        cna_graphics_ext
         sharp_runtime_core_base
         cna_core
         cna_platform
@@ -1622,6 +1919,13 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_utf8_oracle_test PRIVATE
+        # plans/plan_binding.md CBIND-084A. CNA_CNAEXT reaches this target through
+        # cna_build_flags, so CnaCApiDetail.hpp's EngineException firewall arm is compiled here --
+        # which means the engine layer's include path has to reach it too. Linking cna_graphics_ext
+        # is what supplies it, and it also keeps this target catching the same exceptions the
+        # library does: a boundary test that saw a narrower firewall than production would be
+        # testing a different boundary.
+        cna_graphics_ext
         sharp_runtime_core_base
         cna_core
         cna_platform
@@ -1633,6 +1937,18 @@ if(CNA_BUILD_TESTS)
     cna_link_sharp_runtime(cna_c_api_utf8_oracle_test PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_utf8_oracle_test)
     add_test(NAME CApi_Utf8Oracle COMMAND cna_c_api_utf8_oracle_test)
+
+    # CBIND-090: the .cube parser against an independent oracle. Unlike the UTF-8 oracle this one
+    # goes through the public routes, because the subject is the parser as a caller reaches it --
+    # a few thousand entries rather than eighteen million decisions, so the route costs nothing.
+    add_executable(cna_c_api_cube_lut_oracle_test tests/cpp/CubeLutOracleTest.cpp)
+    target_include_directories(cna_c_api_cube_lut_oracle_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
+    )
+    target_link_libraries(cna_c_api_cube_lut_oracle_test PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cube_lut_oracle_test)
+    add_test(NAME CApi_CubeLutOracle COMMAND cna_c_api_cube_lut_oracle_test)
 
     # CBIND-041: the only test that leaves the source tree. It installs the CNACApi component into a
     # staging prefix, configures modules/c-api/examples/c as a standalone project that knows nothing
@@ -1652,6 +1968,8 @@ if(CNA_BUILD_TESTS)
                 -DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
                 -DCNA_SANITIZE=${CNA_SANITIZE}
                 -DCNA_EXPECT_STATIC=$<BOOL:${CNA_C_API_BUILD_STATIC}>
+                -DCNA_CONSUMER_VIDEODRIVER=x11
+                -DCNA_CONSUMER_DISPLAY=${CNA_TEST_DISPLAY}
                 -DCNA_GRAPHICS_RENDERER=${CNA_GRAPHICS_RENDERER}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
         # It installs, configures, compiles and runs; it is by far the slowest test here, and the
@@ -1665,6 +1983,8 @@ if(CNA_BUILD_TESTS)
     # the Clang command line that turns this source into a running fuzzer.
     add_library(cna_c_api_fuzz_targets OBJECT
         tests/fuzz/StringViewFuzz.cpp
+        # CBIND-090: the engine layer's only byte-facing surface, the .cube LUT parser.
+        tests/fuzz/CubeLutFuzz.cpp
     )
     target_include_directories(cna_c_api_fuzz_targets PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -1686,4 +2006,35 @@ if(CNA_BUILD_TESTS)
     # The exhaustive sweep is the slowest test in the suite by a wide margin, and slower still under
     # a sanitizer; the default 1500 s ctest timeout is generous, but say so rather than rely on it.
     set_tests_properties(CApi_Utf8Oracle PROPERTIES TIMEOUT 900)
+
+    # plans/plan_binding.md CBIND-101. Every registration above that names a video driver at all
+    # names it for a reason, and those are left exactly as they are. What this loop settles is the
+    # rest: a test that names none inherits ctest's own environment, which on a developer machine is
+    # the live desktop session -- a shared, externally mutated resource the suite does not own, and
+    # which another application can resize, focus, lock or blank underneath it. Every registration
+    # that scopes `SDL_VIDEODRIVER=dummy` to `SDL_RENDERER` therefore ran unpinned in every other
+    # renderer's tree, which is all three this campaign uses.
+    #
+    # This is CBIND-094's rule applied to the display: a test whose result depends on the machine it
+    # runs on is not evidence. It is deliberately **not** a claim to have diagnosed CBIND-101 -- that
+    # row closes as not reproducible -- but it does remove the only structural candidate for it, and
+    # it would be worth doing with no such row at all.
+    get_property(_cna_c_api_registered_tests DIRECTORY PROPERTY TESTS)
+    foreach(_cna_c_api_test IN LISTS _cna_c_api_registered_tests)
+        get_test_property(${_cna_c_api_test} ENVIRONMENT _cna_c_api_test_environment)
+        if(NOT _cna_c_api_test_environment)
+            set(_cna_c_api_test_environment "")
+        endif()
+        string(FIND "${_cna_c_api_test_environment}" "SDL_VIDEODRIVER=" _cna_c_api_driver_named)
+        if(_cna_c_api_driver_named EQUAL -1)
+            list(APPEND _cna_c_api_test_environment
+                "SDL_VIDEODRIVER=x11" "DISPLAY=${CNA_TEST_DISPLAY}")
+            set_tests_properties(${_cna_c_api_test} PROPERTIES
+                ENVIRONMENT "${_cna_c_api_test_environment}")
+        endif()
+    endforeach()
+    unset(_cna_c_api_registered_tests)
+    unset(_cna_c_api_test)
+    unset(_cna_c_api_test_environment)
+    unset(_cna_c_api_driver_named)
 endif()

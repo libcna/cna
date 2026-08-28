@@ -20,6 +20,8 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -318,7 +320,7 @@ CNA_Result cna_index_buffer_create(
                 ErrorCategoryForResult(result),
                 "The owned IndexBuffer handle could not be created.");
         }
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -344,7 +346,7 @@ CNA_Result cna_index_buffer_destroy(const CNA_IndexBufferHandle indexBufferHandl
                 ErrorCategoryForResult(result),
                 "The owned IndexBuffer handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(buffer->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

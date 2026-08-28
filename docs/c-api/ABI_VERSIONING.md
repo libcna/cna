@@ -2,11 +2,55 @@
 
 ## ABI identity
 
-The ABI is `0.8.0`. It adds the NanoVG renderer identity and the five engine-layer capability
-identities for float and half-float render targets, half-float texture filtering, compute shaders,
-and indirect drawing. Appending those identities moves the two public `MAXIMUM` sentinels, so this
-is a reviewed incompatible change under the experimental `0.x` policy rather than an additive
-patch to `0.7.0`.
+The ABI is `0.9.0`. It adds the owned-`GraphicsDevice` routes
+(`cna_graphics_device_create`/`_destroy`), the render-target ContentLost subscription
+(`cna_render_target_subscribe_content_lost`/`_unsubscribe_content_lost` and the
+`CNA_RenderTargetEventRegistrationHandle` they hand back), and the frame-identity route
+`cna_video_player_get_frame_ext` with its `CNA_VideoFrameEXT` descriptor and
+`CNA_VIDEO_FRAME_EXT_STRUCT_VERSION`.
+
+Those additions alone would be additive. The minor moves because `0.9.0` also **changes seven
+documented contracts**. A consumer that read the `0.8.0` headers was told something other than what
+now happens in each case, so each is worth reading before adopting this generation:
+
+- **`SoundEffectInstance.Apply3D` refuses on a playing instance that was never positioned.** This
+  is the one most likely to be hit, and the only one that turns a succeeding call into a failing
+  one: it returns `CNA_RESULT_INVALID_STATE`. Starting playback fixes the choice between 3D and
+  pan, which is the reference behaviour -- the packet is submitted on the first play. Position the
+  instance first and then play it, or stop it, position it, and play again.
+- **`SoundEffectInstance.Apply3D` accepts any positive listener count.** It previously refused every
+  count but one. The reference implementation has no count restriction; where several listeners are
+  given, the nearest to the emitter decides the applied attenuation, pan and Doppler, because this
+  runtime's mixer has a single stereo gain pair and no per-listener output matrices.
+- **Non-finite sprite values are accepted.** NaN and the infinities in a position, rotation,
+  origin, scale, layer depth or transform component were refused with
+  `CNA_RESULT_INVALID_ARGUMENT`; they are now carried into the vertex path, which is what the
+  reference implementation does -- it validates none of them. The Int32 destination range check is
+  unchanged and still refuses a finite value too large to be a representable destination.
+  `cna_sprite_batch_draw_mesh_ext` keeps its own finiteness check, having no reference counterpart.
+- **An unnamed `SpriteSortMode` value is accepted.** Values outside the named set previously came
+  back as `CNA_RESULT_INVALID_ARGUMENT`; they now pass through and run as `Deferred`, which is what
+  the reference implementation does.
+- **ContentLost is raised.** Through `0.8.0` the dynamic vertex- and index-buffer headers stated
+  that CNA never raises the event and that registration existed only to preserve the shape of the
+  public contract. It is now raised for real on the renderers whose API can lose a device
+  (DirectX9, Direct2D, Skia). A consumer that registered a callback expecting it to be dead will
+  now see it called.
+- **A render target's ContentLost flag is cleared again.** It was set on a device reset and never
+  cleared, so a target that lost its content reported `IsContentLost` for the rest of its life.
+  Binding it as a render target now clears it; see the note under that route for exactly when.
+- **A video frame generation is never restarted.** The counter is monotonic for the lifetime of the
+  player. `Play` and `Stop` previously reset it, which gave the first frame of every playback the
+  same generation and so defeated the one comparison the value exists to support.
+
+Four of those seven -- the two `Apply3D` changes, the sort mode and the layer-depth half of the
+non-finite change -- landed while the version still read `0.8.0` and so were briefly unversioned. That is the defect this bump repairs: `0.9.0` is the
+first version number a consumer can use to tell any of them apart.
+
+`0.8.0` added the NanoVG renderer identity and the five engine-layer capability identities for
+float and half-float render targets, half-float texture filtering, compute shaders, and indirect
+drawing. Appending those identities moves the two public `MAXIMUM` sentinels, so it too was a
+reviewed incompatible change rather than an additive patch to `0.7.0`.
 
 `0.7.0` added the six PBR and morph-target routes from `CBIND-078`; `0.6.0` standardized empty
 shader-source refusal in `CBIND-075`; `0.5.0` added the portable native-window handle routes from
@@ -162,6 +206,9 @@ Recording the baseline needs the library:
 python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
 ```
 
-All four build configurations export the same 2,867 symbols. That is itself part of the contract:
-the ABI **surface** does not vary with the renderer or with `CNA_DEVICES` — only the answers do. A
-route whose backend is absent exists and refuses, rather than disappearing from the library.
+All four build configurations export the same 3,746 symbols. That is itself part of the contract:
+the ABI **surface** does not vary with the renderer, with `CNA_DEVICES`, or with `CNA_CNAEXT` —
+only the answers do. A route whose backend or layer is absent exists and refuses, rather than
+disappearing from the library. `CNA_CNAEXT` is the newest member of that list and the one with the
+most at stake, because it is `OFF` by default: the engine-layer routes are declared and exported in
+every build and answer `CNA_RESULT_NOT_SUPPORTED` where the layer was compiled out.

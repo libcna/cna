@@ -3,8 +3,15 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    /** @brief Defines sprite sort rendering options for SpriteBatch::Begin. */
-    enum class SpriteSortMode
+    /**
+     * @brief Defines sprite sort rendering options for SpriteBatch::Begin.
+     *
+     * The underlying type is fixed because the XNA enum is int-backed and callers may cast an
+     * arbitrary int into it. XNA stores whatever it is given and only ever compares against the
+     * named members, so an unnamed value sorts like Deferred rather than being rejected; a fixed
+     * underlying type is what makes holding such a value defined behaviour here too.
+     */
+    enum class SpriteSortMode : int
     {
         /** @brief All sprites are drawn when SpriteBatch::End is called, in draw-call order. Depth is ignored. */
         Deferred,

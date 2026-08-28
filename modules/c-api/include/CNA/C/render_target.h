@@ -126,7 +126,11 @@ typedef struct CNA_RenderTargetInfo {
     int32_t multi_sample_count;
     /** @brief Content preservation policy. */
     CNA_RenderTargetUsage usage;
-    /** @brief Always false in current CNA; native ContentLost is never raised. */
+    /** @brief True from the moment a renderer reports a real device reset until this target is
+     * next bound for rendering, which is when the caller takes ownership of its contents again.
+     * Binding is the boundary rather than a later draw: a target bound with the default
+     * `CNA_RENDER_TARGET_USAGE_DISCARD_CONTENTS` has already had its previous contents discarded.
+     * False on the renderer families that cannot lose a device, which is most of them. */
     CNA_Bool is_content_lost;
     /** @brief Whether the active backend created real bindable render-target storage. */
     CNA_Bool renderer_available;
@@ -283,6 +287,54 @@ CNA_C_API CNA_Result cna_graphics_device_copy_render_targets(
  * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` while bound or retained by an active
  * SpriteBatch, or another documented handle/thread/native failure.
  */
+/** @brief Owned handle for one render-target ContentLost subscription. */
+typedef CNA_Handle CNA_RenderTargetEventRegistrationHandle;
+
+/**
+ * @brief Receives a render target's ContentLost notification.
+ *
+ * @param render_target The render target whose contents were lost.
+ * @param context The caller-owned context given at subscription.
+ */
+typedef void (*CNA_RenderTargetContentLostCallback)(
+    CNA_Handle render_target,
+    void* context);
+
+/**
+ * @brief Subscribes to a render target's ContentLost event.
+ *
+ * Raised when a renderer reports that it lost and recreated its device, which destroys the
+ * contents of default-pool resources. **Only three renderer families can report that** --
+ * `DIRECTX9`, `DIRECT2D` and `SKIA`. The rest never lose a device, so they never raise this, and a
+ * subscription on them is valid and simply silent. A caller-initiated
+ * `cna_graphics_device_reset*` does not raise it either: the event means a renderer really lost
+ * content, not that a reset happened.
+ *
+ * The callback and context remain caller-owned until unsubscription or render-target destruction.
+ *
+ * @param render_target Owned 2D or cube render-target handle.
+ * @param callback Non-null callback.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives the owned subscription handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null callback or output, or a
+ *         documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_render_target_subscribe_content_lost(
+    CNA_Handle render_target,
+    CNA_RenderTargetContentLostCallback callback,
+    void* context,
+    CNA_RenderTargetEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Removes and destroys a render-target ContentLost subscription.
+ *
+ * @param registration Owned subscription handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle is not a live
+ *         registration, or a documented thread failure.
+ */
+CNA_C_API CNA_Result cna_render_target_unsubscribe_content_lost(
+    CNA_RenderTargetEventRegistrationHandle registration);
+
 CNA_C_API CNA_Result cna_render_target_destroy(CNA_Handle render_target);
 
 #ifdef __cplusplus

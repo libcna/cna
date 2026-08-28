@@ -551,6 +551,10 @@ TEST_F(SoundEffectInstanceTest, Apply3DSingleListener)
     EXPECT_NO_THROW(inst.Apply3D(listener, emitter));
 }
 
+// CABI-6/CABI-32: XNA places no count restriction on this overload, so a count of two is accepted
+// rather than refused. This test asserted the opposite refusal until CABI-32; it did not fail when
+// the implementation changed under it, because REQUIRE_DEVICE() skips the whole case wherever no
+// audio device exists -- which is every headless run. A skipped test defends nothing.
 TEST_F(SoundEffectInstanceTest, Apply3DArrayOverload)
 {
     REQUIRE_DEVICE();
@@ -558,8 +562,48 @@ TEST_F(SoundEffectInstanceTest, Apply3DArrayOverload)
     AudioListener listeners[2];
     AudioEmitter emitter;
     EXPECT_NO_THROW(inst.Apply3D(listeners, 1, emitter));
-    EXPECT_THROW(inst.Apply3D(listeners, 2, emitter), System::NotSupportedException);
+    EXPECT_NO_THROW(inst.Apply3D(listeners, 2, emitter));
     EXPECT_THROW(inst.Apply3D(nullptr, 1, emitter), System::ArgumentNullException);
+    // Zero is refused explicitly: XNA hands the count to XACT and surfaces whatever it returns,
+    // an outcome not established here, so CNA refuses rather than guessing.
+    EXPECT_THROW(inst.Apply3D(listeners, 0, emitter), System::ArgumentOutOfRangeException);
+    EXPECT_THROW(inst.Apply3D(listeners, -1, emitter), System::ArgumentOutOfRangeException);
+}
+
+// CABI-32: the multi-listener rule is "the nearest listener decides", not "listeners[0] decides".
+// The geometry is chosen so those two rules give opposite answers: the emitter sits hard LEFT of
+// the far listener and hard RIGHT of the near one, so a +1 pan can only come from the near
+// listener. Written this way deliberately -- an assertion that both rules satisfy would pass
+// against a first-element implementation and prove nothing.
+TEST_F(SoundEffectInstanceTest, Apply3DMultiListenerNearestListenerDominates)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+
+    AudioEmitter emitter;
+    emitter.setPositionProperty({0.0f, 0.0f, 0.0f});
+
+    AudioListener far;                                  // emitter is 100 units to its -X: pan -1
+    far.setPositionProperty({100.0f, 0.0f, 0.0f});
+    AudioListener near;                                 // emitter is 10 units to its +X: pan +1
+    near.setPositionProperty({-10.0f, 0.0f, 0.0f});
+
+    const AudioListener farFirst[2]  = {far, near};
+    const AudioListener nearFirst[2] = {near, far};
+
+    inst.Apply3D(farFirst, 2, emitter);
+    inst.Play();
+    const float withFarFirst = SoundEffectInstanceTestAccess::GetPanState(inst);
+    EXPECT_NEAR(withFarFirst, 1.0f, 1e-5f) << "the nearer listener must win regardless of position";
+
+    // Order-independence: the same set in the other order must give the same answer.
+    inst.Apply3D(nearFirst, 2, emitter);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), withFarFirst, 1e-5f);
+
+    // And the discriminator itself: the far listener alone really does give the opposite pan, so
+    // the +1 above could not have come from it.
+    inst.Apply3D(far, emitter);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), -1.0f, 1e-5f);
 }
 
 TEST_F(SoundEffectInstanceTest, Apply3DDoesNotModifyVolumeOrPanProperties)
@@ -586,12 +630,12 @@ TEST_F(SoundEffectInstanceTest, Apply3DWritesComputedPanIntoDspState)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f}); // hard right at the default orientation
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     // Matches CalculatePanIsFullyRightWhenEmitterDirectlyToTheRight's own (10,10)->1.0 result --
     // rightDisplacement and distance are both 10 here (emitter purely along +X).
@@ -609,7 +653,6 @@ TEST_F(SoundEffectInstanceTest, Apply3DWithRotatedListenerAppliesSameDistanceAtt
     SoundEffect::setDistanceScaleProperty(10.0f);
 
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     listener.setForwardProperty(Vector3(1.0f, 0.0f, 0.0f)); // rotated 90 degrees to face +X
@@ -617,6 +660,7 @@ TEST_F(SoundEffectInstanceTest, Apply3DWithRotatedListenerAppliesSameDistanceAtt
     AudioEmitter emitter;
     emitter.setPositionProperty({0.0f, 0.0f, 20.0f}); // beyond DistanceScale
     EXPECT_NO_THROW(inst.Apply3D(listener, emitter));
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -639,12 +683,12 @@ TEST_F(SoundEffectInstanceTest, Apply3DAppliesFullVolumeWithinDistanceScale)
     SoundEffect::setDistanceScaleProperty(10.0f);
 
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener; // default position: origin
     AudioEmitter emitter;
     emitter.setPositionProperty({5.0f, 0.0f, 0.0f}); // half of DistanceScale -- still "close"
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -662,12 +706,12 @@ TEST_F(SoundEffectInstanceTest, Apply3DAppliesFullVolumeExactlyAtDistanceScaleBo
     SoundEffect::setDistanceScaleProperty(10.0f);
 
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f}); // exactly == DistanceScale
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -683,12 +727,12 @@ TEST_F(SoundEffectInstanceTest, Apply3DAppliesInverseDistanceLawBeyondDistanceSc
     SoundEffect::setDistanceScaleProperty(10.0f);
 
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // 2x DistanceScale
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -704,13 +748,13 @@ TEST_F(SoundEffectInstanceTest, Apply3DAppliesDopplerPitchDownWhenEmitterRecedes
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener; // default position origin, default velocity zero
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // moving away from the listener
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -724,13 +768,13 @@ TEST_F(SoundEffectInstanceTest, Apply3DAppliesDopplerPitchUpWhenEmitterApproache
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     emitter.setVelocityProperty({-171.75f, 0.0f, 0.0f}); // moving toward the listener
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -745,13 +789,13 @@ TEST_F(SoundEffectInstanceTest, Apply3DAppliesDopplerPitchUpWhenListenerApproach
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     listener.setVelocityProperty({171.75f, 0.0f, 0.0f}); // moving toward the emitter
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -768,13 +812,13 @@ TEST_F(SoundEffectInstanceTest, Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero
     SoundEffect::setDopplerScaleProperty(0.0f);
 
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // would otherwise pitch down
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -789,12 +833,12 @@ TEST_F(SoundEffectInstanceTest, Apply3DZeroVelocitiesYieldNeutralDopplerRegardle
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener; // velocity defaults to zero
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 5.0f, -3.0f}); // position only, no motion
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -809,7 +853,6 @@ TEST_F(SoundEffectInstanceTest, Apply3DEqualListenerAndEmitterVelocityYieldsNeut
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     listener.setVelocityProperty({50.0f, 0.0f, 0.0f});
@@ -817,6 +860,7 @@ TEST_F(SoundEffectInstanceTest, Apply3DEqualListenerAndEmitterVelocityYieldsNeut
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     emitter.setVelocityProperty({50.0f, 0.0f, 0.0f}); // identical velocity -- moving together
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -831,13 +875,13 @@ TEST_F(SoundEffectInstanceTest, Apply3DTangentialMotionYieldsNeutralDoppler)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     emitter.setVelocityProperty({0.0f, 100.0f, 0.0f}); // purely tangential, no radial component
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -852,7 +896,6 @@ TEST_F(SoundEffectInstanceTest, Apply3DCoincidentPositionsDoesNotProduceNaNOrInf
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     listener.setVelocityProperty({100.0f, 0.0f, 0.0f});
@@ -860,6 +903,7 @@ TEST_F(SoundEffectInstanceTest, Apply3DCoincidentPositionsDoesNotProduceNaNOrInf
     emitter.setPositionProperty({0.0f, 0.0f, 0.0f}); // same position as the listener
     emitter.setVelocityProperty({-100.0f, 0.0f, 0.0f});
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -876,13 +920,13 @@ TEST_F(SoundEffectInstanceTest, Apply3DExtremeVelocityClampsToDocumentedRange)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     emitter.setVelocityProperty({-1.0e9f, 0.0f, 0.0f}); // absurdly fast approach
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -893,12 +937,12 @@ TEST_F(SoundEffectInstanceTest, Apply3DExtremeVelocityClampsToDocumentedRange)
     EXPECT_GE(ratio, 0.5f);
 }
 
-// CP-20: matches FNA's `is3D` latch (SoundEffectInstance.cs) -- once Apply3D has run, it (not
-// setPanProperty) should keep governing the real track output. SDL3_mixer has no stereo-pan
-// getter to directly observe the output matrix (same limitation as CP-3/T-4B's Apply3D
-// coverage), so this verifies the is3D_ state machine that setPanProperty() actually branches
-// on, via SoundEffectInstanceTestAccess.
-TEST_F(SoundEffectInstanceTest, SetPanAfterApply3DDoesNotClearIs3DLatch)
+// CABI-25: the 3D-versus-pan choice is free until playback begins and fixed afterwards, which is
+// XNA's own rule (SoundEffectInstance.cs:130-138 and :376-383, decompiled reference). This
+// replaces CP-20's earlier reading, which followed FNA's `if (is3D) return;` and kept the latch
+// set for the instance's whole life. SDL3_mixer has no stereo-pan getter, so the state machine is
+// observed through SoundEffectInstanceTestAccess rather than the output matrix.
+TEST_F(SoundEffectInstanceTest, SetPanBeforePlaybackTakesTheInstanceOutOf3D)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
@@ -910,12 +954,66 @@ TEST_F(SoundEffectInstanceTest, SetPanAfterApply3DDoesNotClearIs3DLatch)
     inst.Apply3D(listener, emitter);
     EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
 
-    // Setting Pan afterward must still update the property (matches FNA) but must not clear the
-    // latch -- Apply3D's own pan approximation should keep governing the real output until
-    // Apply3D runs again, not this call.
+    // Nothing has played yet, so Pan is free to take the instance back out of 3D -- and does.
     inst.setPanProperty(0.9f);
     EXPECT_FLOAT_EQ(inst.getPanProperty(), 0.9f);
+    EXPECT_FALSE(SoundEffectInstanceTestAccess::Is3D(inst));
+
+    // And back again, still before playback.
+    inst.Apply3D(listener, emitter);
     EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+}
+
+// The other half of the same rule: once playing, the choice is fixed and the other call refuses.
+TEST_F(SoundEffectInstanceTest, PlaybackFixesTheChoiceBetween3DAndPan)
+{
+    REQUIRE_DEVICE();
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+
+    SoundEffectInstance spatial = instance();
+    spatial.Apply3D(listener, emitter);
+    spatial.Play();
+    EXPECT_THROW(spatial.setPanProperty(0.5f), System::InvalidOperationException);
+    // Stopping releases the choice, so the instance can be aimed again.
+    spatial.Stop();
+    EXPECT_NO_THROW(spatial.setPanProperty(0.5f));
+
+    SoundEffectInstance panned = instance();
+    panned.setPanProperty(0.5f);
+    panned.Play();
+    EXPECT_THROW(panned.Apply3D(listener, emitter), System::InvalidOperationException);
+    panned.Stop();
+    EXPECT_NO_THROW(panned.Apply3D(listener, emitter));
+}
+
+// The case the two tests above leave out, and the one that matters most in practice: an instance
+// that was never aimed at all. XNA's Play() submits the packet, so a plain Play() followed by
+// Apply3D() takes the `!isPacketSubmitted` branch as false, never latches `is3d`, and throws
+// (SoundEffectInstance.cs:285-289 and :376-383, decompiled reference).
+//
+// Worth pinning explicitly. Every spatial test in this file used to open with `inst.Play();` and
+// aim afterwards, which XNA does not allow; the gate turned all fifteen of them red at once and no
+// case here described the transition, because both tests above aim the instance before playing it.
+// Aim first, then play.
+TEST_F(SoundEffectInstanceTest, Apply3DOnAnInstanceThatWasPlayedWithoutBeingAimedThrows)
+{
+    REQUIRE_DEVICE();
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+    ASSERT_FALSE(SoundEffectInstanceTestAccess::Is3D(inst));
+    EXPECT_THROW(inst.Apply3D(listener, emitter), System::InvalidOperationException);
+
+    // Stop releases the packet, so the instance can be aimed and then played.
+    inst.Stop();
+    EXPECT_NO_THROW(inst.Apply3D(listener, emitter));
+    EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
+    EXPECT_NO_THROW(inst.Play());
 }
 
 // ===================== AUDIO-001: persistent spatial state =====================
@@ -962,12 +1060,12 @@ TEST_F(SoundEffectInstanceTest, SetVolumeAfterApply3DPreservesDistanceAttenuatio
     SoundEffect::setDistanceScaleProperty(10.0f);
 
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // atten == 0.5
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -984,13 +1082,13 @@ TEST_F(SoundEffectInstanceTest, SetPitchAfterApply3DPreservesDopplerFactor)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
     emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // receding -> doppler == 2/3
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
     ASSERT_NE(track, nullptr);
@@ -1011,12 +1109,12 @@ TEST_F(SoundEffectInstanceTest, StopThenReplayReappliesLastApply3DState)
     SoundEffect::setDistanceScaleProperty(10.0f);
 
     SoundEffectInstance inst = instance();
-    inst.Play();
 
     AudioListener listener;
     AudioEmitter emitter;
     emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // atten == 0.5
     inst.Apply3D(listener, emitter);
+    inst.Play();
 
     inst.Stop();
     inst.Play(); // replay -- no new Apply3D() call

@@ -187,23 +187,32 @@ static CNA_Result validate_states(CNA_Handle graphics_device)
             (effect_begin != CNA_RESULT_SUCCESS && effect_begin != CNA_RESULT_NOT_SUPPORTED)) {
             return CNA_RESULT_INVALID_STATE;
         }
-        /* A non-finite component is refused before anything is begun, so the batch stays usable. */
+        /* CABI-38: a non-finite transform component is accepted and carried into the vertex path,
+           matching XNA, which validates nothing here. This used to require
+           CNA_RESULT_INVALID_ARGUMENT; the batch now begins, so it has to be ended again before
+           the next case -- the same shape as the unnamed sort mode below. */
         transform.m11 = 1.0f / 0.0f;
         if (cna_sprite_batch_begin_with_effect(
                 sprite_batch,
                 CNA_SPRITE_SORT_MODE_DEFERRED,
                 &blend, &sampler, &depth, &rasterizer,
                 CNA_INVALID_HANDLE,
-                &transform) != CNA_RESULT_INVALID_ARGUMENT) {
+                &transform) != CNA_RESULT_SUCCESS ||
+            cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) {
             return CNA_RESULT_INVALID_STATE;
         }
         transform.m11 = 2.0f;
-        /* An undefined sort mode and a handle of the wrong family are refused the same way here as
-           everywhere else. */
+        /* An unnamed sort mode is accepted and runs as Deferred, matching XNA, which stores the
+           enum rather than validating it. This used to require CNA_RESULT_INVALID_ARGUMENT; the
+           batch now begins, so it has to be ended again before the next case. */
         if (cna_sprite_batch_begin_with_effect(
                 sprite_batch, UINT32_MAX, &blend, &sampler, &depth, &rasterizer,
-                CNA_INVALID_HANDLE, &transform) != CNA_RESULT_INVALID_ARGUMENT ||
-            cna_sprite_batch_begin_with_effect(
+                CNA_INVALID_HANDLE, &transform) != CNA_RESULT_SUCCESS ||
+            cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        /* A handle of the wrong family is still refused. */
+        if (cna_sprite_batch_begin_with_effect(
                 sprite_batch, CNA_SPRITE_SORT_MODE_DEFERRED, &blend, &sampler, &depth, &rasterizer,
                 sprite_batch, &transform) != CNA_RESULT_INVALID_HANDLE) {
             return CNA_RESULT_INVALID_STATE;

@@ -224,3 +224,24 @@ the manager's cache — `cna_content_manager_unload` drops it. And only **compil
 reach a registered reader: a loose file or a `.cnj` descriptor is dispatched by requested C++ type
 rather than by reader name, and there is no C++ type here to dispatch on, so such an asset fails
 with `CNA_RESULT_IO` rather than being read by the wrong reader.
+
+## The CNB content format is not reachable from this ABI yet
+
+CNA has a second compiled content format beside `.xnb`: **CNB** (`CNA::Content::Cnb`,
+`plans/plan_cnb.md`), a CNA-native container with its own schemas for textures, sprite fonts,
+sound effects, media, curves, animation clips and models, its own compiler front ends
+(`cna_tool_source_to_cnb`, `cna_tool_cnj_to_cnb`, `cna_tool_gltf_to_cnb`) and its own
+`ContentManager` tier.
+
+**None of it has a C route.** Not the container, not a schema, not the loader registry, and not
+`ContentManager::RegisterCnbLoaderEXT` — the hook a game uses to teach a manager about a `.cnb`
+asset type. A C application can therefore load `.xnb` assets, loose files and `.cnj` descriptors
+through the routes above, and cannot load a `.cnb` asset at all.
+
+This is a **scheduling** decision recorded on 2026-08-28, not a judgement that the format has no C
+form: it is a byte container of plain-old-data structures and free functions, among the more
+straightforwardly bindable things in this repository. The 460 unbound declarations are counted in
+[`COVERAGE.md`](COVERAGE.md) as `planned` — deliberately not as `not-applicable`, which would say
+something false — they are why
+[`RELEASE_GATE.md`](RELEASE_GATE.md) reads *Not ready*, and `plans/plan_binding.md` Phase B10
+(`CBIND-103`–`CBIND-112`) is the sized backlog that binds them.

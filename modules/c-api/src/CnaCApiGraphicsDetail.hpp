@@ -4,12 +4,15 @@
 #define CNA_C_API_GRAPHICS_DETAIL_HPP
 
 #include "CNA/C/abi.h"
+#include "CNA/C/vertex_resources.h"
 
 #include <cstdint>
 #include <memory>
 
 namespace Microsoft::Xna::Framework::Graphics {
+class ModelMeshPart;
 class SkinnedModelEXT;
+class VertexElement;
 class SpriteBatch;
 class Effect;
 class OcclusionQuery;
@@ -30,6 +33,7 @@ struct EffectResource final {
     CNA_Handle parentGame;
     std::shared_ptr<void> adapterState;
     uint64_t activeModelReferenceCount = 0U;
+    bool disposeAllowed = true;
 };
 
 struct OcclusionQueryResource final {
@@ -44,6 +48,10 @@ struct Texture2DResource final {
     uint64_t activeFontReferenceCount;
     uint64_t activeEffectReferenceCount;
     uint64_t activeModelReferenceCount;
+    std::shared_ptr<void> adapterLifetime;
+    uint64_t activeScopeReferenceCount = 0U;
+    bool disposeAllowed = true;
+    bool ownedResource = true;
 };
 
 struct SpriteFontResource final {
@@ -56,6 +64,7 @@ struct RenderTargetCubeResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::RenderTargetCube> value;
     CNA_Handle parentGame;
     uint64_t activeEffectReferenceCount;
+    uint64_t activeScopeReferenceCount = 0U;
 };
 
 struct Texture3DResource final {
@@ -112,6 +121,17 @@ struct TextureCubeResourceView final {
     CNA_Handle parentGame,
     CNA_Handle* outTexture);
 
+[[nodiscard]] CNA_Result CreateBorrowedRenderTarget2D(
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
+    CNA_Handle parentGame,
+    std::shared_ptr<void> adapterLifetime,
+    CNA_Handle* outTexture);
+
+[[nodiscard]] CNA_Result CreateBorrowedEffect(
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> effect,
+    CNA_Handle parentGame,
+    CNA_Handle* outEffect);
+
 [[nodiscard]] CNA_Result CreateOwnedTextureCube(
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> texture,
     CNA_Handle parentGame,
@@ -152,6 +172,21 @@ struct TextureCubeResourceView final {
 [[nodiscard]] CNA_Result GetOwnedTextureCube(
     CNA_Handle handle,
     TextureCubeResourceView* outTexture);
+
+// CBIND-092B. The instanced renderer and the LOD group take a ModelMeshPart the caller already
+// owns. The part resource layout stays private to the models adapter; this hands back only the
+// canonical object, which is all a caller outside that adapter can use -- the same shape
+// GetOwnedSkinnedModelValue and GetOwnedSpriteBatchValue already use for the same reason.
+[[nodiscard]] CNA_Result GetOwnedModelMeshPartValue(
+    CNA_Handle handle,
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart>* outPart);
+
+// CBIND-092B. The instanced renderer publishes two static vertex declarations a caller has to
+// reproduce byte for byte. Sharing the conversion rather than repeating it is the point: two
+// copies of a four-field mapping drift, and the drift would show up as an instance stream that
+// almost works.
+[[nodiscard]] CNA_VertexElement ToCVertexElement(
+    const Microsoft::Xna::Framework::Graphics::VertexElement& value) noexcept;
 
 } // namespace CNA::C::Detail
 

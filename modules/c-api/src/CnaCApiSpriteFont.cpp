@@ -21,6 +21,8 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
@@ -119,7 +121,7 @@ CNA_Result cna_sprite_font_create(
         kerning.reserve(count);
         for (std::size_t index = 0U; index < count; ++index) {
             const CNA_SpriteFontGlyph& glyph = createInfo->glyphs[index];
-            if (glyph.struct_size != sizeof(CNA_SpriteFontGlyph) ||
+            if (glyph.struct_size < sizeof(CNA_SpriteFontGlyph) ||
                 glyph.struct_version != StructureVersion || glyph.reserved != 0U ||
                 !std::isfinite(glyph.kerning.x) || !std::isfinite(glyph.kerning.y) ||
                 !std::isfinite(glyph.kerning.z)) {
@@ -172,7 +174,7 @@ CNA_Result cna_sprite_font_create(
                 "The SpriteFont texture reference count overflowed.");
         }
         ++texture->activeFontReferenceCount;
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(texture->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -399,7 +401,7 @@ CNA_Result cna_sprite_font_destroy(const CNA_Handle spriteFontHandle)
         if (spriteFont->texture->activeFontReferenceCount != 0U) {
             --spriteFont->texture->activeFontReferenceCount;
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(spriteFont->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -3,8 +3,8 @@
 #include <CNA/C/cna.h>
 
 #include <stdio.h>
-#include <stdio.h>
 #include <string.h>
+#include <threads.h>
 
 /*
  * A stage number cannot say which of a dozen claims in one condition broke. VOL names the
@@ -12,7 +12,6 @@
  */
 #define VOL(condition) ((condition) ? 1 : (fprintf(stderr, \
     "TextureVolumeSmoke failure at line %d: %s\n", __LINE__, #condition), 0))
-#include <threads.h>
 
 typedef struct CallbackState {
     CNA_Handle borrowed_device;
@@ -94,47 +93,80 @@ static int use_cube_on_wrong_thread(void* const context)
 }
 
 /*
- * The three claims below the first one are about the format and dimension contract and hold
- * whatever the backend supports; only the first depends on whether volumes exist at all. A
- * backend that has them must create one and hand it back; a backend that does not must refuse.
+ * Argument validation holds whether or not the backend can make a volume texture: a malformed
+ * request is refused before any renderer is consulted.
  */
-static int validate_texture3d_contract(const CNA_Handle device, const CNA_Bool supported)
+static int validate_texture3d_arguments(const CNA_Handle device)
 {
     CNA_Texture3DCreateInfo create_info = {
         sizeof(CNA_Texture3DCreateInfo), UINT32_C(1), 4U, 4U, 4U,
-        CNA_TRUE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
+        CNA_TRUE, {0U, 0U, 0U}, UINT32_MAX, 0U
     };
     CNA_Handle texture = UINT64_MAX;
-    if (supported == CNA_TRUE) {
-        if (cna_texture3d_create(device, &create_info, &texture) != CNA_RESULT_SUCCESS ||
-            texture == CNA_INVALID_HANDLE ||
-            cna_texture3d_destroy(texture) != CNA_RESULT_SUCCESS) {
-            return 0;
-        }
-    } else if (cna_texture3d_create(device, &create_info, &texture) !=
-                   CNA_RESULT_NOT_SUPPORTED || texture != CNA_INVALID_HANDLE) {
-        return 0;
-    }
-    /* A format the native contract does not carry is refused on every backend. */
-    create_info.format = CNA_SURFACE_FORMAT_BGR565;
-    texture = UINT64_MAX;
-    if (cna_texture3d_create(device, &create_info, &texture) !=
-            CNA_RESULT_NOT_SUPPORTED || texture != CNA_INVALID_HANDLE) {
-        return 0;
-    }
-    create_info.format = UINT32_MAX;
-    texture = UINT64_MAX;
     if (cna_texture3d_create(device, &create_info, &texture) !=
             CNA_RESULT_INVALID_ARGUMENT || texture != CNA_INVALID_HANDLE) {
         return 0;
     }
     create_info.format = CNA_SURFACE_FORMAT_COLOR;
     create_info.width = 0U;
+    texture = UINT64_MAX;
+    return cna_texture3d_create(device, &create_info, &texture) ==
+        CNA_RESULT_INVALID_ARGUMENT && texture == CNA_INVALID_HANDLE;
+}
+
+/* A backend that cannot store a volume refuses every well-formed request, whatever the format. */
+static int validate_texture3d_rejection(const CNA_Handle device)
+{
+    CNA_Texture3DCreateInfo create_info = {
+        sizeof(CNA_Texture3DCreateInfo), UINT32_C(1), 4U, 4U, 4U,
+        CNA_TRUE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
+    };
+    CNA_Handle texture = UINT64_MAX;
     if (cna_texture3d_create(device, &create_info, &texture) !=
-            CNA_RESULT_INVALID_ARGUMENT || texture != CNA_INVALID_HANDLE) {
+            CNA_RESULT_NOT_SUPPORTED || texture != CNA_INVALID_HANDLE) {
         return 0;
     }
-    return 1;
+    /* A format the native contract does not carry is refused on every backend. */
+    create_info.format = CNA_SURFACE_FORMAT_BGR565;
+    texture = UINT64_MAX;
+    return cna_texture3d_create(device, &create_info, &texture) ==
+        CNA_RESULT_NOT_SUPPORTED && texture == CNA_INVALID_HANDLE;
+}
+
+/*
+ * A backend that can store a volume makes one, describes it back accurately, and releases it.
+ * CNA_SURFACE_FORMAT_COLOR is the only format the native contract accepts, so a second format is
+ * still refused here -- support for volumes is not support for every format in one.
+ */
+static int validate_texture3d_support(const CNA_Handle device)
+{
+    CNA_Texture3DCreateInfo create_info = {
+        sizeof(CNA_Texture3DCreateInfo), UINT32_C(1), 4U, 4U, 4U,
+        CNA_TRUE, {0U, 0U, 0U}, CNA_SURFACE_FORMAT_COLOR, 0U
+    };
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    if (cna_texture3d_create(device, &create_info, &texture) != CNA_RESULT_SUCCESS ||
+        texture == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    CNA_Texture3DInfo info = {
+        sizeof(CNA_Texture3DInfo), UINT32_C(1), 0U, 0U, 0U, 0U, CNA_SURFACE_FORMAT_COLOR, 0U
+    };
+    if (cna_texture3d_get_info(texture, &info) != CNA_RESULT_SUCCESS ||
+        info.width != 4U || info.height != 4U || info.depth != 4U) {
+        (void)cna_texture3d_destroy(texture);
+        return 0;
+    }
+    CNA_Texture3DCreateInfo unsupported_format = create_info;
+    unsupported_format.format = CNA_SURFACE_FORMAT_BGR565;
+    CNA_Handle refused = UINT64_MAX;
+    if (cna_texture3d_create(device, &unsupported_format, &refused) !=
+            CNA_RESULT_NOT_SUPPORTED || refused != CNA_INVALID_HANDLE) {
+        (void)cna_texture3d_destroy(texture);
+        return 0;
+    }
+    return cna_texture3d_destroy(texture) == CNA_RESULT_SUCCESS &&
+        cna_texture3d_destroy(texture) == CNA_RESULT_INVALID_HANDLE;
 }
 
 /*
@@ -344,6 +376,35 @@ static int validate_cube(const CNA_Handle device)
     return 1;
 }
 
+/*
+ * A render-target cube takes an upload like any other cube where the renderer stores one, and it
+ * keeps it: measured on a live XNA 4.0 build, RenderTargetCube.SetData(face, data) returns
+ * normally and the matching GetData reads back exactly what was written, so wherever the transfer
+ * is accepted the round trip is contract and asserted as such.
+ *
+ * Whether it is accepted at all is renderer storage rather than contract -- HEADLESS refuses it --
+ * and this used to pin one answer or the other, so it went red first when a renderer gained the
+ * transfer and again when one without it ran. Both answers are real evidence; a third is not.
+ */
+static int validate_render_target_cube_transfer(const CNA_Handle target,
+                                                const CNA_TextureCubeTransfer* const transfer,
+                                                const CNA_Color* const colors,
+                                                CNA_Color* const readback)
+{
+    uint64_t required = 0U;
+    const CNA_Result stored = cna_texturecube_set_data(target, transfer, colors, 4U);
+    if (stored == CNA_RESULT_NOT_SUPPORTED) {
+        return VOL(cna_texturecube_get_data(target, transfer, readback, 4U, &required) ==
+                   CNA_RESULT_NOT_SUPPORTED);
+    }
+    return VOL(stored == CNA_RESULT_SUCCESS) &&
+        VOL(cna_texturecube_get_data(target, transfer, readback, 4U, &required) ==
+            CNA_RESULT_SUCCESS) &&
+        VOL(required == 4U) &&
+        VOL(readback[0].r == colors[0].r && readback[0].g == colors[0].g &&
+            readback[0].b == colors[0].b && readback[0].a == colors[0].a);
+}
+
 static int validate_render_target_cube(const CNA_Handle device)
 {
     static const char TypeName[] = CNA_RENDER_TARGET_CUBE_TYPE_NAME;
@@ -364,7 +425,6 @@ static int validate_render_target_cube(const CNA_Handle device)
     CNA_Color colors[4] = {{1U, 2U, 3U, 4U}, {1U, 2U, 3U, 4U}, {1U, 2U, 3U, 4U},
                            {1U, 2U, 3U, 4U}};
     CNA_Color readback[4] = {{0U, 0U, 0U, 0U}};
-    uint64_t required = 0U;
     CNA_TextureCubeTransfer transfer = make_cube_transfer(
         CNA_CUBE_MAP_FACE_NEGATIVE_Z, 0, 0U, 4U);
     return VOL(cna_render_target_cube_create(device, &create_info, &target) ==
@@ -378,18 +438,7 @@ static int validate_render_target_cube(const CNA_Handle device)
             CNA_RESULT_SUCCESS) &&
         VOL(count == sizeof(name)) &&
         VOL(memcmp(name, TypeName, sizeof(name)) == 0) &&
-        /*
-         * A render-target cube takes an upload like any other cube, and keeps it. Measured on a
-         * live XNA 4.0 build: RenderTargetCube.SetData(face, data) returns normally and the
-         * matching GetData reads back exactly what was written. This used to pin NOT_SUPPORTED,
-         * from when the upload was unimplemented.
-         */
-        VOL(cna_texturecube_set_data(target, &transfer, colors, 4U) == CNA_RESULT_SUCCESS) &&
-        VOL(cna_texturecube_get_data(target, &transfer, readback, 4U, &required) ==
-            CNA_RESULT_SUCCESS) &&
-        VOL(required == 4U) &&
-        VOL(readback[0].r == colors[0].r && readback[0].g == colors[0].g &&
-            readback[0].b == colors[0].b && readback[0].a == colors[0].a) &&
+        VOL(validate_render_target_cube_transfer(target, &transfer, colors, readback)) &&
         VOL(cna_texturecube_destroy(target) == CNA_RESULT_INVALID_HANDLE) &&
         VOL(cna_render_target_destroy(target) == CNA_RESULT_SUCCESS);
 }
@@ -415,7 +464,7 @@ static CNA_Result on_load(
      * support claim, so this suite branches on the reported capabilities instead and runs
      * unchanged on any backend.
      */
-    CNA_Bool supports_texture3d = CNA_TRUE;
+    CNA_Bool supports_texture3d = CNA_FALSE;
     if (cna_game_get_graphics_device(game, &device) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_get_renderer_info(device, &renderer) != CNA_RESULT_SUCCESS ||
         renderer.renderer_type == CNA_GRAPHICS_RENDERER_UNKNOWN ||
@@ -426,7 +475,20 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 2;
-    if (!validate_texture3d_contract(device, supports_texture3d)) {
+    /*
+     * This file's own comment above promises it "branches on the reported capabilities and runs
+     * unchanged on any backend". It did not: it required the capability to be ABSENT and then
+     * asserted a blanket rejection, so a renderer growing volume-texture support turned the suite
+     * red instead of routing it to the supported path. Asserting a negative is not branching.
+     */
+    if (!validate_texture3d_arguments(device)) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    if (supports_texture3d == CNA_TRUE) {
+        if (!validate_texture3d_support(device)) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    } else if (!validate_texture3d_rejection(device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 3;

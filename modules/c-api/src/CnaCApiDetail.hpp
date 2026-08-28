@@ -17,6 +17,9 @@
 // out-of-line constructors, so both stay compile-time dependencies and add no link edge to any
 // translation unit that never throws one.
 #include "CNA/CNAException.hpp"
+#ifdef CNA_CNAEXT
+#include "CNA/Graphics/EngineException.hpp"
+#endif
 #include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
@@ -178,6 +181,90 @@ enum class ObjectKind : uint32_t {
     AvatarRenderer = 120,
     ModelAnimationsEXT = 121,
     ContentTypeReaderRegistration = 122,
+    // plans/plan_cabi.md CABI-13. Distinct from GraphicsDevice, which is the game's own
+    // device borrowed for a callback: this one the caller created and must destroy.
+    OwnedGraphicsDevice = 123,
+    /// plans/plan_cabi.md CABI-24: one render-target ContentLost subscription.
+    RenderTargetEventRegistration = 124,
+    // plans/plan_binding.md CBIND-084A: the engine layer's first two owned resources. Both exist
+    // only when CNA_CNAEXT is on; the kinds are declared unconditionally so the registry's kind
+    // space does not shift with a build option.
+    StorageBuffer = 125,
+    ComputeShader = 126,
+    // plans/plan_binding.md CBIND-084B: timer, pool, factory and active scope handles follow
+    // without reusing either resource kind above; every value stays fixed when CNA_CNAEXT is off.
+    GpuTimer = 127,
+    RenderTargetPool = 128,
+    ShaderEffectFactory = 129,
+    ScopedRenderTarget = 130,
+    // plans/plan_binding.md CBIND-084C: the full-screen drawer, and one kind for every concrete
+    // post-process pass. A pass is one kind rather than one per concrete type because what crosses
+    // this ABI is the abstract contract's operations, not the class that implements them.
+    FullscreenPass = 131,
+    PostProcessPass = 132,
+    // plans/plan_binding.md CBIND-085B1: the two 2D shadow maps.
+    ShadowMap = 133,
+    SpotShadowMap = 134,
+    // plans/plan_binding.md CBIND-085B2: the cascaded atlas and the cube.
+    CascadedShadowMap = 135,
+    CubeShadowMap = 136,
+    // plans/plan_binding.md CBIND-085C1: the clustered shadow budget, a pure CPU object.
+    ClusteredShadowPolicy = 137,
+    // plans/plan_binding.md CBIND-085C2. ContactShadowPass needs no kind of its own: it is a
+    // PostProcessPass, so it uses that one.
+    DepthNormalPrepass = 138,
+    // plans/plan_binding.md CBIND-086A: a collection of values, so no borrow count.
+    ClusteredLightSet = 139,
+    // plans/plan_binding.md CBIND-086B. The grid and the assignment are pure CPU objects; the
+    // buffer owns three textures and lends none of them, so none of the three counts a borrow.
+    ClusteredLightGrid = 140,
+    ClusteredLightAssignment = 141,
+    ClusteredLightBuffer = 142,
+    // plans/plan_binding.md CBIND-086C.
+    ClusteredForwardEffect = 143,
+    ClusteredLightCompute = 144,
+    // plans/plan_binding.md CBIND-087A.
+    PbrMaterialExtensions = 145,
+    // plans/plan_binding.md CBIND-087D.
+    TransparentDrawList = 146,
+    WeightedBlendedTransparency = 147,
+    // plans/plan_binding.md CBIND-088B.
+    RenderPipeline = 148,
+    // plans/plan_binding.md CBIND-089A.
+    PostProcessChain = 149,
+    // plans/plan_binding.md CBIND-089D: neither derives from PostProcessPass.
+    DecalPass = 150,
+    SpatialUpscalePass = 151,
+    // plans/plan_binding.md CBIND-090: none of the three derives from PostProcessPass.
+    HdrDisplayOutput = 152,
+    AutoExposure = 153,
+    CubeLut = 154,
+    // plans/plan_binding.md CBIND-091A.
+    LightProbe = 155,
+    LightProbeVolume = 156,
+
+    // CBIND-091B.
+    LightProbeBaker = 157,
+    EnvironmentProcessor = 158,
+    Skybox = 159,
+    AtmosphericSky = 160,
+
+    // CBIND-091C.
+    AreaLightBrdfTable = 161,
+
+    // CBIND-092A.
+    ParticleSystem = 162,
+
+    // CBIND-092B.
+    InstancedRenderer = 163,
+    LodGroup = 164,
+
+    // CBIND-092C.
+    FrustumCuller = 165,
+    GpuInstanceCuller = 166,
+
+    // CBIND-092D.
+    DebugDraw = 167,
     Test = UINT32_MAX
 };
 
@@ -298,6 +385,17 @@ template<typename TCallable>
         //
         // It derives from std::runtime_error, so this arm must precede that one.
         return Fail(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, exception.what());
+#ifdef CNA_CNAEXT
+    } catch (const CNA::Graphics::EngineException& exception) {
+        // plans/plan_binding.md CBIND-084A. The engine layer throws this when a renderer cannot do
+        // what a subsystem asked, and its message already names all three parts -- which subsystem,
+        // what it needed, which renderer refused -- because EngineException::notSupported composes
+        // them. So the three property accessors need no routes of their own: what a C caller can
+        // act on crosses in the message, and the result says the refusal was a capability boundary
+        // rather than a defect. It derives from System::Exception, so this arm must precede the
+        // arms below that catch its bases.
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
+#endif
     } catch (const CNA::CNAException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const System::ArgumentException& exception) {

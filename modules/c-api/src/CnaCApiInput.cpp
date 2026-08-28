@@ -4731,6 +4731,42 @@ CNA_Result cna_touch_panel_get_display_orientation(
     });
 }
 
+CNA_Result cna_touch_panel_get_mouse_touch_emulation_enabled_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outEnabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEnabled == nullptr) {
+            return InvalidInput("The mouse-touch-emulation output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEnabled = TouchPanel::getMouseTouchEmulationEnabledEXT() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_mouse_touch_emulation_enabled_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool enabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result =
+                CNA::C::Detail::ValidateCanonicalBool(enabled, "enabled");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::setMouseTouchEmulationEnabledEXT(enabled == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_touch_panel_set_display_orientation(
     const CNA_Handle gameHandle,
     const CNA_DisplayOrientation orientation)

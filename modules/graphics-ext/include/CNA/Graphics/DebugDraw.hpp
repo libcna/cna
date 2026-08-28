@@ -13,7 +13,7 @@
 
 namespace Microsoft::Xna::Framework {
     struct BoundingBox;
-    struct BoundingFrustum;
+    class BoundingFrustum;
     struct BoundingSphere;
 }
 

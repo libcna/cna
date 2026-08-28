@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -17,7 +18,8 @@ namespace Microsoft::Xna::Framework::Graphics
     class GraphicsDevice;
 
     /** @brief A cube map texture that can be used as a render target. */
-    class RenderTargetCube : public TextureCube, public IRenderTarget
+    class RenderTargetCube : public TextureCube, public IRenderTarget,
+            public CNA::Internal::Graphics::IContentLosable
     {
     public:
         using TextureCube::Dispose;
@@ -65,10 +67,35 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the render target usage mode. */
         [[nodiscard]] RenderTargetUsage getRenderTargetUsageProperty() const override;
 
-        /** @brief Returns false; content is never lost in CNA. */
-        [[nodiscard]] bool getIsContentLostProperty() const { return false; }
+        /**
+         * @brief Whether this render target's contents were lost to a device reset.
+         *
+         * True from the moment a renderer reports a real device reset until this target is next
+         * **bound for rendering**, which is when the caller takes ownership of its contents again.
+         * Binding is the boundary rather than a subsequent draw or `SetData`, deliberately: a bound
+         * target with the default `RenderTargetUsage::DiscardContents` has already had its previous
+         * contents discarded, so there is nothing left to describe as lost, and a renderer-neutral
+         * "a pixel was actually written" signal does not exist below this API. Renderers whose API
+         * cannot lose a device never set it.
+         */
+        [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
 
-        /** @brief Raised when the render target content is lost (never raised in CNA). */
+        /** @brief Marks the content lost and raises ContentLost. */
+        CNAEXT void NotifyContentLostEXT() override
+        {
+            contentLost_ = true;
+            ContentLost.Raise(this, System::EventArgs::Empty);
+        }
+
+        /** @brief Clears the lost flag; called when this target is bound for rendering. */
+        CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
+
+        /**
+         * @brief Raised when this render target's content is lost to a device reset.
+         *
+         * Raised for real on the renderers whose API can lose a device (DirectX9,
+         * Direct2D, Skia). Families that cannot lose one never raise it.
+         */
         System::EventHandler<System::EventArgs> ContentLost;
 
         /** @brief Returns the renderer cube render target handle (CNA extension). */
@@ -81,5 +108,9 @@ namespace Microsoft::Xna::Framework::Graphics
         RenderTargetUsage usage_;
         // Non-owning pointer into TextureCube::renderer_ (which holds unique ownership).
         CNA::Internal::Renderers::IRenderTargetCubeRenderer* rtCubeRenderer_ = nullptr;
+
+    private:
+        /** @brief Set by a real renderer-reported device reset; cleared by the next write. */
+        bool contentLost_ = false;
     };
 }

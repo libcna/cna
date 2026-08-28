@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 2048,
+  "encoded": 2304,
   "major": 0,
-  "minor": 8,
+  "minor": 9,
   "patch": 0,
-  "runtime": 2048
+  "runtime": 2304
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -927,6 +927,18 @@
   "cna_achievement_get_key_size",
   "cna_achievement_get_name_size",
   "cna_achievement_get_picture_size",
+  "cna_aerial_perspective_pass_air_mass_for_distance",
+  "cna_aerial_perspective_pass_copy_fallback_reason",
+  "cna_aerial_perspective_pass_create",
+  "cna_aerial_perspective_pass_get_intensity",
+  "cna_aerial_perspective_pass_get_scale_height",
+  "cna_aerial_perspective_pass_get_sun_direction",
+  "cna_aerial_perspective_pass_get_turbidity",
+  "cna_aerial_perspective_pass_set_intensity",
+  "cna_aerial_perspective_pass_set_scale_height",
+  "cna_aerial_perspective_pass_set_sun_direction",
+  "cna_aerial_perspective_pass_set_turbidity",
+  "cna_aerial_perspective_pass_transmittance",
   "cna_album_collection_copy_type_name",
   "cna_album_collection_destroy",
   "cna_album_collection_dispose",
@@ -976,6 +988,22 @@
   "cna_animation_player_get_current_position",
   "cna_animation_player_start_clip",
   "cna_animation_player_update",
+  "cna_area_light_brdf_table_copy_lookup_glsl",
+  "cna_area_light_brdf_table_create",
+  "cna_area_light_brdf_table_create_with_size",
+  "cna_area_light_brdf_table_destroy",
+  "cna_area_light_brdf_table_evaluate",
+  "cna_area_light_brdf_table_get_generation_milliseconds",
+  "cna_area_light_brdf_table_get_sample_count",
+  "cna_area_light_brdf_table_get_size",
+  "cna_area_light_brdf_table_get_texture",
+  "cna_area_light_ext_init",
+  "cna_area_light_ext_is_valid",
+  "cna_area_light_shading_contribution",
+  "cna_area_light_shading_copy_shading_glsl",
+  "cna_area_light_shading_coverage",
+  "cna_area_light_shading_lobe_scale_for",
+  "cna_area_light_shading_quad_of",
   "cna_artist_collection_copy_type_name",
   "cna_artist_collection_destroy",
   "cna_artist_collection_dispose",
@@ -994,6 +1022,8 @@
   "cna_artist_get_name_size",
   "cna_artist_get_songs",
   "cna_artist_get_type_name_size",
+  "cna_ascii_pass_create",
+  "cna_ascii_pass_get_effect",
   "cna_ascii_post_process_effect_create",
   "cna_ascii_post_process_effect_destroy",
   "cna_ascii_post_process_effect_draw",
@@ -1002,6 +1032,20 @@
   "cna_ascii_post_process_effect_get_quantize_mode",
   "cna_ascii_post_process_effect_set_cell_size",
   "cna_ascii_post_process_effect_set_quantize_mode",
+  "cna_assembly_copy_title_ext",
+  "cna_assembly_set_title_ext",
+  "cna_atmospheric_sky_copy_model_glsl",
+  "cna_atmospheric_sky_create",
+  "cna_atmospheric_sky_destroy",
+  "cna_atmospheric_sky_draw",
+  "cna_atmospheric_sky_get_intensity",
+  "cna_atmospheric_sky_get_sun_direction",
+  "cna_atmospheric_sky_get_turbidity",
+  "cna_atmospheric_sky_is_supported",
+  "cna_atmospheric_sky_radiance",
+  "cna_atmospheric_sky_set_intensity",
+  "cna_atmospheric_sky_set_sun_direction",
+  "cna_atmospheric_sky_set_turbidity",
   "cna_attitude_reading_copy_string",
   "cna_attitude_reading_copy_type_name",
   "cna_attitude_reading_equals",
@@ -1043,6 +1087,19 @@
   "cna_audio_get_capabilities",
   "cna_audio_listener_init",
   "cna_audio_unsubscribe_ext",
+  "cna_auto_exposure_ext_apply_to",
+  "cna_auto_exposure_ext_create",
+  "cna_auto_exposure_ext_destroy",
+  "cna_auto_exposure_ext_get_brightening_speed",
+  "cna_auto_exposure_ext_get_darkening_speed",
+  "cna_auto_exposure_ext_get_exposure",
+  "cna_auto_exposure_ext_get_key_value",
+  "cna_auto_exposure_ext_measure_average_luminance",
+  "cna_auto_exposure_ext_set_adaptation_speeds",
+  "cna_auto_exposure_ext_set_exposure",
+  "cna_auto_exposure_ext_set_exposure_range",
+  "cna_auto_exposure_ext_set_key_value",
+  "cna_auto_exposure_ext_update",
   "cna_available_network_session_collection_copy_session",
   "cna_available_network_session_collection_create_ext",
   "cna_available_network_session_collection_destroy",
@@ -1122,6 +1179,17 @@
   "cna_basic_effect_set_texture_enabled",
   "cna_basic_effect_set_vertex_color_enabled",
   "cna_blend_state_init",
+  "cna_blit_pass_create",
+  "cna_bloom_pass_create",
+  "cna_bloom_pass_extract_channel",
+  "cna_bloom_pass_get_intensity",
+  "cna_bloom_pass_get_iterations",
+  "cna_bloom_pass_get_threshold",
+  "cna_bloom_pass_iterations_for_quality",
+  "cna_bloom_pass_reset_targets",
+  "cna_bloom_pass_set_intensity",
+  "cna_bloom_pass_set_iterations",
+  "cna_bloom_pass_set_threshold",
   "cna_bounding_box_contains_box",
   "cna_bounding_box_contains_frustum",
   "cna_bounding_box_contains_point",
@@ -1202,10 +1270,139 @@
   "cna_camera_set_test_frame_ext",
   "cna_camera_set_test_state_ext",
   "cna_camera_try_acquire_frame_ext",
+  "cna_cascaded_shadow_map_apply_to_receiver",
+  "cna_cascaded_shadow_map_begin",
+  "cna_cascaded_shadow_map_compute_bounding_sphere",
+  "cna_cascaded_shadow_map_compute_frustum_corners",
+  "cna_cascaded_shadow_map_compute_split_distances",
+  "cna_cascaded_shadow_map_create",
+  "cna_cascaded_shadow_map_destroy",
+  "cna_cascaded_shadow_map_end",
+  "cna_cascaded_shadow_map_get_blend_band",
+  "cna_cascaded_shadow_map_get_cascade_count",
+  "cna_cascaded_shadow_map_get_cascade_matrix",
+  "cna_cascaded_shadow_map_get_cascade_size",
+  "cna_cascaded_shadow_map_get_caster_effect",
+  "cna_cascaded_shadow_map_get_shadow_texture",
+  "cna_cascaded_shadow_map_get_split_distance",
+  "cna_cascaded_shadow_map_get_split_lambda",
+  "cna_cascaded_shadow_map_is_debug_tint_enabled",
+  "cna_cascaded_shadow_map_is_supported",
+  "cna_cascaded_shadow_map_select_cascade",
+  "cna_cascaded_shadow_map_set_blend_band",
+  "cna_cascaded_shadow_map_set_debug_tint_enabled",
+  "cna_cascaded_shadow_map_set_split_lambda",
+  "cna_cascaded_shadow_map_snap_to_texel_grid",
+  "cna_cascaded_shadow_map_update",
+  "cna_chromatic_aberration_pass_create",
+  "cna_chromatic_aberration_pass_get_strength",
+  "cna_chromatic_aberration_pass_set_strength",
   "cna_clipboard_copy_text",
   "cna_clipboard_get_has_text",
   "cna_clipboard_get_text_size",
   "cna_clipboard_set_text",
+  "cna_clustered_forward_effect_begin",
+  "cna_clustered_forward_effect_clear_area_light",
+  "cna_clustered_forward_effect_clear_light_probe",
+  "cna_clustered_forward_effect_contribution",
+  "cna_clustered_forward_effect_contribution_with_extensions",
+  "cna_clustered_forward_effect_create",
+  "cna_clustered_forward_effect_destroy",
+  "cna_clustered_forward_effect_get_ambient",
+  "cna_clustered_forward_effect_get_base_color",
+  "cna_clustered_forward_effect_get_effect",
+  "cna_clustered_forward_effect_get_ior",
+  "cna_clustered_forward_effect_get_material_extensions",
+  "cna_clustered_forward_effect_get_metallic",
+  "cna_clustered_forward_effect_get_opaque_frame",
+  "cna_clustered_forward_effect_get_roughness",
+  "cna_clustered_forward_effect_has_area_light",
+  "cna_clustered_forward_effect_has_light_probe",
+  "cna_clustered_forward_effect_is_supported",
+  "cna_clustered_forward_effect_set_ambient",
+  "cna_clustered_forward_effect_set_area_light",
+  "cna_clustered_forward_effect_set_base_color",
+  "cna_clustered_forward_effect_set_ior",
+  "cna_clustered_forward_effect_set_light_probe",
+  "cna_clustered_forward_effect_set_light_probe_volume",
+  "cna_clustered_forward_effect_set_material_extensions",
+  "cna_clustered_forward_effect_set_metallic",
+  "cna_clustered_forward_effect_set_opaque_frame",
+  "cna_clustered_forward_effect_set_roughness",
+  "cna_clustered_forward_effect_volume_attenuation",
+  "cna_clustered_light_assignment_adopt",
+  "cna_clustered_light_assignment_assign",
+  "cna_clustered_light_assignment_clear",
+  "cna_clustered_light_assignment_copy_indices",
+  "cna_clustered_light_assignment_copy_lights_in_cluster",
+  "cna_clustered_light_assignment_copy_offsets",
+  "cna_clustered_light_assignment_create",
+  "cna_clustered_light_assignment_destroy",
+  "cna_clustered_light_assignment_get_cluster_count",
+  "cna_clustered_light_assignment_get_light_count",
+  "cna_clustered_light_assignment_get_max_lights_per_cluster",
+  "cna_clustered_light_assignment_get_total_reference_count",
+  "cna_clustered_light_buffer_bind",
+  "cna_clustered_light_buffer_copy_light_lookup_glsl",
+  "cna_clustered_light_buffer_create",
+  "cna_clustered_light_buffer_destroy",
+  "cna_clustered_light_buffer_get_cluster_count",
+  "cna_clustered_light_buffer_get_light_count",
+  "cna_clustered_light_buffer_get_reference_count",
+  "cna_clustered_light_buffer_is_uploaded",
+  "cna_clustered_light_buffer_upload",
+  "cna_clustered_light_compute_assign",
+  "cna_clustered_light_compute_copy_unsupported_reason",
+  "cna_clustered_light_compute_create",
+  "cna_clustered_light_compute_destroy",
+  "cna_clustered_light_compute_get_stride",
+  "cna_clustered_light_compute_has_overflowed",
+  "cna_clustered_light_compute_is_supported",
+  "cna_clustered_light_compute_used_compute",
+  "cna_clustered_light_ext_init",
+  "cna_clustered_light_grid_cluster_bounds",
+  "cna_clustered_light_grid_cluster_index",
+  "cna_clustered_light_grid_create",
+  "cna_clustered_light_grid_destroy",
+  "cna_clustered_light_grid_get_cluster_count",
+  "cna_clustered_light_grid_get_far_plane",
+  "cna_clustered_light_grid_get_inverse_projection",
+  "cna_clustered_light_grid_get_near_plane",
+  "cna_clustered_light_grid_get_slice_count",
+  "cna_clustered_light_grid_get_tiles_x",
+  "cna_clustered_light_grid_get_tiles_y",
+  "cna_clustered_light_grid_has_projection",
+  "cna_clustered_light_grid_set_projection",
+  "cna_clustered_light_grid_slice_distance",
+  "cna_clustered_light_grid_slice_for_view_distance",
+  "cna_clustered_light_set_add",
+  "cna_clustered_light_set_add_point",
+  "cna_clustered_light_set_add_spot",
+  "cna_clustered_light_set_clear",
+  "cna_clustered_light_set_copy_bounds",
+  "cna_clustered_light_set_copy_lights",
+  "cna_clustered_light_set_create",
+  "cna_clustered_light_set_destroy",
+  "cna_clustered_light_set_get_at",
+  "cna_clustered_light_set_get_bounds_at",
+  "cna_clustered_light_set_get_count",
+  "cna_clustered_light_set_is_empty",
+  "cna_clustered_light_set_is_usable",
+  "cna_clustered_light_set_remove_at",
+  "cna_clustered_light_set_replace_at",
+  "cna_clustered_shadow_policy_copy_selected",
+  "cna_clustered_shadow_policy_create",
+  "cna_clustered_shadow_policy_destroy",
+  "cna_clustered_shadow_policy_get_budget",
+  "cna_clustered_shadow_policy_get_hysteresis",
+  "cna_clustered_shadow_policy_get_refused_count",
+  "cna_clustered_shadow_policy_get_request_count",
+  "cna_clustered_shadow_policy_get_score",
+  "cna_clustered_shadow_policy_is_selected",
+  "cna_clustered_shadow_policy_reset",
+  "cna_clustered_shadow_policy_select",
+  "cna_clustered_shadow_policy_set_budget",
+  "cna_clustered_shadow_policy_set_hysteresis",
   "cna_color_copy_debug_string",
   "cna_color_copy_string",
   "cna_color_equals",
@@ -1215,6 +1412,17 @@
   "cna_color_get_hash_code",
   "cna_color_get_packed_value",
   "cna_color_get_string_byte_count",
+  "cna_color_grade_pass_create",
+  "cna_color_grade_pass_create_identity_lut",
+  "cna_color_grade_pass_get_interpolation",
+  "cna_color_grade_pass_get_lut",
+  "cna_color_grade_pass_get_strength",
+  "cna_color_grade_pass_get_volume_lut",
+  "cna_color_grade_pass_lut_size_for_strip",
+  "cna_color_grade_pass_set_interpolation",
+  "cna_color_grade_pass_set_lut",
+  "cna_color_grade_pass_set_strength",
+  "cna_color_grade_pass_set_volume_lut",
   "cna_color_init_bytes_rgb",
   "cna_color_init_bytes_rgba",
   "cna_color_init_float_rgb",
@@ -1263,6 +1471,35 @@
   "cna_compass_stop",
   "cna_compass_subscribe_calibrate",
   "cna_compass_subscribe_current_value_changed",
+  "cna_compute_shader_barrier",
+  "cna_compute_shader_bind_image",
+  "cna_compute_shader_bind_storage_buffer",
+  "cna_compute_shader_bind_texture",
+  "cna_compute_shader_copy_compile_error",
+  "cna_compute_shader_create",
+  "cna_compute_shader_destroy",
+  "cna_compute_shader_dispatch",
+  "cna_compute_shader_is_image_binding_supported",
+  "cna_compute_shader_is_valid",
+  "cna_compute_shader_set_uniform_float",
+  "cna_compute_shader_set_uniform_int",
+  "cna_contact_shadow_pass_combine_visibility",
+  "cna_contact_shadow_pass_copy_fallback_reason",
+  "cna_contact_shadow_pass_copy_occlusion_test_glsl",
+  "cna_contact_shadow_pass_create",
+  "cna_contact_shadow_pass_get_bias",
+  "cna_contact_shadow_pass_get_intensity",
+  "cna_contact_shadow_pass_get_light_direction",
+  "cna_contact_shadow_pass_get_max_distance",
+  "cna_contact_shadow_pass_get_step_count",
+  "cna_contact_shadow_pass_get_thickness",
+  "cna_contact_shadow_pass_is_occluded",
+  "cna_contact_shadow_pass_set_bias",
+  "cna_contact_shadow_pass_set_intensity",
+  "cna_contact_shadow_pass_set_light_direction",
+  "cna_contact_shadow_pass_set_max_distance",
+  "cna_contact_shadow_pass_set_step_count",
+  "cna_contact_shadow_pass_set_thickness",
   "cna_content_manager_copy_asset_path",
   "cna_content_manager_copy_manifest_native_extension",
   "cna_content_manager_copy_manifest_relative_path",
@@ -1339,6 +1576,34 @@
   "cna_crt_effect_set_mask_type",
   "cna_crt_effect_set_scanline_intensity",
   "cna_crt_effect_set_vignette_intensity",
+  "cna_cube_lut_copy_title",
+  "cna_cube_lut_create_strip_texture",
+  "cna_cube_lut_create_volume_texture",
+  "cna_cube_lut_destroy",
+  "cna_cube_lut_get_domain_max",
+  "cna_cube_lut_get_domain_min",
+  "cna_cube_lut_get_entry",
+  "cna_cube_lut_get_size",
+  "cna_cube_lut_is_unit_domain",
+  "cna_cube_lut_load_from_file",
+  "cna_cube_lut_parse",
+  "cna_cube_shadow_map_begin",
+  "cna_cube_shadow_map_compute_face_projection",
+  "cna_cube_shadow_map_compute_face_view",
+  "cna_cube_shadow_map_create",
+  "cna_cube_shadow_map_destroy",
+  "cna_cube_shadow_map_end",
+  "cna_cube_shadow_map_get_caster_effect",
+  "cna_cube_shadow_map_get_depth_bias",
+  "cna_cube_shadow_map_get_light_position",
+  "cna_cube_shadow_map_get_light_range",
+  "cna_cube_shadow_map_get_quality",
+  "cna_cube_shadow_map_get_shadow_texture",
+  "cna_cube_shadow_map_get_size",
+  "cna_cube_shadow_map_is_supported",
+  "cna_cube_shadow_map_set_depth_bias",
+  "cna_cube_shadow_map_size_for_quality",
+  "cna_cube_shadow_map_update",
   "cna_cue_apply_3d",
   "cna_cue_copy_name",
   "cna_cue_copy_type_name",
@@ -1398,17 +1663,88 @@
   "cna_curve_key_set_value",
   "cna_curve_set_post_loop",
   "cna_curve_set_pre_loop",
+  "cna_debug_draw_add_bounding_sphere",
+  "cna_debug_draw_add_box",
+  "cna_debug_draw_add_cascade_gizmo",
+  "cna_debug_draw_add_cluster_slice_gizmo",
+  "cna_debug_draw_add_cross",
+  "cna_debug_draw_add_directional_light_gizmo",
+  "cna_debug_draw_add_frustum",
+  "cna_debug_draw_add_line",
+  "cna_debug_draw_add_point_light_gizmo",
+  "cna_debug_draw_add_probe_volume_gizmo",
+  "cna_debug_draw_add_sphere",
+  "cna_debug_draw_add_spot_light_gizmo",
+  "cna_debug_draw_begin",
+  "cna_debug_draw_clear",
+  "cna_debug_draw_copy_vertices",
+  "cna_debug_draw_create",
+  "cna_debug_draw_destroy",
+  "cna_debug_draw_end",
+  "cna_debug_draw_get_line_count",
+  "cna_debug_draw_is_depth_tested",
+  "cna_debug_draw_set_depth_tested",
+  "cna_decal_pass_create",
+  "cna_decal_pass_destroy",
+  "cna_decal_pass_draw",
+  "cna_decal_pass_get_max_slope_angle",
+  "cna_decal_pass_get_opacity",
+  "cna_decal_pass_get_tint",
+  "cna_decal_pass_is_inside_decal_box",
+  "cna_decal_pass_set_camera",
+  "cna_decal_pass_set_max_slope_angle",
+  "cna_decal_pass_set_opacity",
+  "cna_decal_pass_set_prepass_inputs",
+  "cna_decal_pass_set_tint",
   "cna_depth_effect_create",
   "cna_depth_effect_get_dither_mode",
   "cna_depth_effect_get_mode",
   "cna_depth_effect_set_dither_mode",
   "cna_depth_effect_set_mode",
+  "cna_depth_normal_prepass_begin",
+  "cna_depth_normal_prepass_copy_depth_decode_glsl",
+  "cna_depth_normal_prepass_copy_velocity_decode_glsl",
+  "cna_depth_normal_prepass_create",
+  "cna_depth_normal_prepass_decode_velocity_ext",
+  "cna_depth_normal_prepass_destroy",
+  "cna_depth_normal_prepass_end",
+  "cna_depth_normal_prepass_get_depth_texture",
+  "cna_depth_normal_prepass_get_normal_texture",
+  "cna_depth_normal_prepass_get_pass_count",
+  "cna_depth_normal_prepass_get_prepass_effect",
+  "cna_depth_normal_prepass_get_roughness",
+  "cna_depth_normal_prepass_get_skinned_prepass_effect",
+  "cna_depth_normal_prepass_get_velocity_texture_ext",
+  "cna_depth_normal_prepass_has_velocity_ext",
+  "cna_depth_normal_prepass_is_depth_packed",
+  "cna_depth_normal_prepass_is_supported",
+  "cna_depth_normal_prepass_is_using_multiple_render_targets",
+  "cna_depth_normal_prepass_is_velocity_enabled_ext",
+  "cna_depth_normal_prepass_pack_depth",
+  "cna_depth_normal_prepass_resize",
+  "cna_depth_normal_prepass_set_previous_camera_ext",
+  "cna_depth_normal_prepass_set_previous_world_ext",
+  "cna_depth_normal_prepass_set_roughness",
+  "cna_depth_normal_prepass_set_velocity_enabled_ext",
+  "cna_depth_normal_prepass_unpack_depth",
+  "cna_depth_normal_prepass_uses_packed_depth_ext",
+  "cna_depth_of_field_pass_circle_of_confusion_millimetres",
+  "cna_depth_of_field_pass_create",
+  "cna_depth_of_field_pass_get_f_number",
+  "cna_depth_of_field_pass_get_focal_length",
+  "cna_depth_of_field_pass_get_focus_distance",
+  "cna_depth_of_field_pass_get_max_radius",
+  "cna_depth_of_field_pass_set_f_number",
+  "cna_depth_of_field_pass_set_focal_length",
+  "cna_depth_of_field_pass_set_focus_distance",
+  "cna_depth_of_field_pass_set_max_radius",
   "cna_depth_stencil_state_init",
   "cna_desktop_os_get_current",
   "cna_devices_clipboard_set_text_ext",
   "cna_devices_ext_is_available",
   "cna_directional_light_create",
   "cna_directional_light_destroy",
+  "cna_directional_light_ext_init",
   "cna_directional_light_get_diffuse_color",
   "cna_directional_light_get_direction",
   "cna_directional_light_get_enabled",
@@ -1491,13 +1827,21 @@
   "cna_effect_get_current_technique",
   "cna_effect_get_fragment_source_byte_count",
   "cna_effect_get_graphics_device",
+  "cna_effect_get_image_based_light_ext",
   "cna_effect_get_is_compiled_ext",
+  "cna_effect_get_light_view_projection_ext",
   "cna_effect_get_parameters",
+  "cna_effect_get_punctual_light_ext",
+  "cna_effect_get_shadow_cascades_ext",
+  "cna_effect_get_shadow_depth_bias_ext",
+  "cna_effect_get_shadow_filter_radius_ext",
+  "cna_effect_get_shadow_map_ext",
   "cna_effect_get_techniques",
   "cna_effect_get_type_name_byte_count",
   "cna_effect_get_vertex_source_byte_count",
   "cna_effect_has_renderer",
   "cna_effect_is_exact_stock_sprite_effect",
+  "cna_effect_is_shadows_enabled_ext",
   "cna_effect_lights_enable_default",
   "cna_effect_lights_get_ambient_color",
   "cna_effect_lights_get_directional_light",
@@ -1552,6 +1896,14 @@
   "cna_effect_pass_get_index_ext",
   "cna_effect_pass_get_name_byte_count",
   "cna_effect_set_current_technique",
+  "cna_effect_set_image_based_light_ext",
+  "cna_effect_set_light_view_projection_ext",
+  "cna_effect_set_punctual_light_ext",
+  "cna_effect_set_shadow_cascades_ext",
+  "cna_effect_set_shadow_depth_bias_ext",
+  "cna_effect_set_shadow_filter_radius_ext",
+  "cna_effect_set_shadow_map_ext",
+  "cna_effect_set_shadows_enabled_ext",
   "cna_effect_technique_collection_add_default",
   "cna_effect_technique_collection_add_named",
   "cna_effect_technique_collection_create",
@@ -1569,6 +1921,8 @@
   "cna_effect_technique_get_index_ext",
   "cna_effect_technique_get_name_byte_count",
   "cna_effect_technique_get_passes",
+  "cna_engine_layer_copy_version_string",
+  "cna_engine_layer_get_version",
   "cna_environment_map_effect_create",
   "cna_environment_map_effect_get_alpha",
   "cna_environment_map_effect_get_amount",
@@ -1586,6 +1940,19 @@
   "cna_environment_map_effect_set_fresnel_factor",
   "cna_environment_map_effect_set_specular",
   "cna_environment_map_effect_set_texture",
+  "cna_environment_processor_convert_equirectangular",
+  "cna_environment_processor_create",
+  "cna_environment_processor_destroy",
+  "cna_environment_processor_direction_to_equirectangular",
+  "cna_environment_processor_face_direction",
+  "cna_environment_processor_generate_brdf_lut",
+  "cna_environment_processor_generate_irradiance",
+  "cna_environment_processor_generate_prefiltered_specular",
+  "cna_environment_processor_generate_probe",
+  "cna_environment_processor_hammersley",
+  "cna_environment_processor_importance_sample_ggx",
+  "cna_environment_processor_mip_for_roughness",
+  "cna_environment_processor_roughness_for_mip",
   "cna_error_copy_last_message",
   "cna_error_get_last_info",
   "cna_error_get_last_message_size",
@@ -1594,6 +1961,9 @@
   "cna_file_dialog_show_open_file_ext",
   "cna_file_dialog_show_open_folder_ext",
   "cna_file_dialog_show_save_file_ext",
+  "cna_film_grain_pass_create",
+  "cna_film_grain_pass_get_intensity",
+  "cna_film_grain_pass_set_intensity",
   "cna_framework_dispatcher_update",
   "cna_friend_collection_create_ext",
   "cna_friend_collection_get_is_disposed",
@@ -1601,6 +1971,25 @@
   "cna_friend_gamer_create_ext",
   "cna_friend_gamer_get_info",
   "cna_friend_gamer_get_presence_size",
+  "cna_frustum_culler_ext_create",
+  "cna_frustum_culler_ext_cull_boxes",
+  "cna_frustum_culler_ext_cull_spheres",
+  "cna_frustum_culler_ext_cull_transforms",
+  "cna_frustum_culler_ext_destroy",
+  "cna_frustum_culler_ext_get_frustum",
+  "cna_frustum_culler_ext_is_box_visible",
+  "cna_frustum_culler_ext_is_sphere_visible",
+  "cna_frustum_culler_ext_set_camera",
+  "cna_frustum_culler_ext_set_view_projection",
+  "cna_fullscreen_pass_create",
+  "cna_fullscreen_pass_destroy",
+  "cna_fullscreen_pass_draw",
+  "cna_fullscreen_pass_draw_over_current_target",
+  "cna_fxaa_pass_copy_fragment_glsl",
+  "cna_fxaa_pass_create",
+  "cna_fxaa_pass_edge_threshold_for_quality",
+  "cna_fxaa_pass_get_edge_threshold",
+  "cna_fxaa_pass_set_edge_threshold",
   "cna_game_clear",
   "cna_game_component_callbacks_init",
   "cna_game_component_compare_to",
@@ -1843,6 +2232,34 @@
   "cna_gesture_sample_init_from_values",
   "cna_gesture_sample_init_from_values_ext",
   "cna_get_abi_version",
+  "cna_gltf_material_bridge_build_extensions",
+  "cna_gltf_material_bridge_build_material",
+  "cna_gltf_material_extension_source_ext_init",
+  "cna_gltf_material_extension_textures_ext_init",
+  "cna_gltf_material_source_ext_init",
+  "cna_gltf_material_textures_ext_init",
+  "cna_gpu_cullable_instance_init",
+  "cna_gpu_instance_culler_copy_instance_lookup_glsl",
+  "cna_gpu_instance_culler_copy_unsupported_reason",
+  "cna_gpu_instance_culler_create",
+  "cna_gpu_instance_culler_cull",
+  "cna_gpu_instance_culler_destroy",
+  "cna_gpu_instance_culler_draw",
+  "cna_gpu_instance_culler_get_instance_count",
+  "cna_gpu_instance_culler_is_supported",
+  "cna_gpu_instance_culler_read_visible_count_ext",
+  "cna_gpu_instance_culler_set_instances",
+  "cna_gpu_timer_begin",
+  "cna_gpu_timer_copy_unsupported_reason",
+  "cna_gpu_timer_create",
+  "cna_gpu_timer_destroy",
+  "cna_gpu_timer_end",
+  "cna_gpu_timer_get_last_milliseconds",
+  "cna_gpu_timer_get_sample_count",
+  "cna_gpu_timer_is_open",
+  "cna_gpu_timer_is_result_available",
+  "cna_gpu_timer_is_supported",
+  "cna_gpu_timer_poll",
   "cna_graphics_adapter_copy_description",
   "cna_graphics_adapter_copy_device_name",
   "cna_graphics_adapter_copy_display_modes",
@@ -1872,12 +2289,17 @@
   "cna_graphics_device_copy_renderer_name",
   "cna_graphics_device_copy_type_name",
   "cna_graphics_device_copy_vertex_buffers",
+  "cna_graphics_device_create",
+  "cna_graphics_device_destroy",
   "cna_graphics_device_dispose",
   "cna_graphics_device_draw_indexed_primitives",
+  "cna_graphics_device_draw_indexed_primitives_indirect_ext",
   "cna_graphics_device_draw_instanced_primitives",
   "cna_graphics_device_draw_primitives",
+  "cna_graphics_device_draw_primitives_indirect_ext",
   "cna_graphics_device_draw_user_indexed_primitives",
   "cna_graphics_device_draw_user_primitives",
+  "cna_graphics_device_executes_shader_effect_source_ext",
   "cna_graphics_device_get_adapter_index",
   "cna_graphics_device_get_backbuffer_data_rgba8",
   "cna_graphics_device_get_backbuffer_data_window",
@@ -1886,10 +2308,14 @@
   "cna_graphics_device_get_blend_state",
   "cna_graphics_device_get_capability_report_size_ext",
   "cna_graphics_device_get_depth_stencil_state",
+  "cna_graphics_device_get_display_color_space_ext",
   "cna_graphics_device_get_display_mode",
   "cna_graphics_device_get_graphics_profile",
   "cna_graphics_device_get_index_buffer",
   "cna_graphics_device_get_is_disposed",
+  "cna_graphics_device_get_max_compute_work_group_count_ext",
+  "cna_graphics_device_get_max_compute_work_group_invocations_ext",
+  "cna_graphics_device_get_max_compute_work_group_size_ext",
   "cna_graphics_device_get_multi_sample_mask",
   "cna_graphics_device_get_native_window_handle",
   "cna_graphics_device_get_presentation_parameters",
@@ -1950,6 +2376,7 @@
   "cna_graphics_device_manager_subscribe_preparing_device_settings",
   "cna_graphics_device_manager_subscribe_preparing_device_settings_ext",
   "cna_graphics_device_manager_toggle_full_screen",
+  "cna_graphics_device_notify_content_lost_resources_ext",
   "cna_graphics_device_present",
   "cna_graphics_device_recreate_renderer_for_multi_sample_count_ext",
   "cna_graphics_device_reset",
@@ -1962,6 +2389,7 @@
   "cna_graphics_device_set_depth_stencil_state",
   "cna_graphics_device_set_depth_test_enabled",
   "cna_graphics_device_set_depth_write_enabled",
+  "cna_graphics_device_set_display_color_space_ext",
   "cna_graphics_device_set_graphics_profile_ext",
   "cna_graphics_device_set_index_buffer",
   "cna_graphics_device_set_multi_sample_mask",
@@ -1984,9 +2412,14 @@
   "cna_graphics_device_subscribe_resource_created",
   "cna_graphics_device_subscribe_resource_destroyed",
   "cna_graphics_device_supports_capability",
+  "cna_graphics_device_supports_display_color_space_ext",
+  "cna_graphics_device_supports_image_based_lighting_ext",
+  "cna_graphics_device_supports_shadow_sampling_ext",
+  "cna_graphics_device_supports_surface_format_as_render_target_ext",
   "cna_graphics_device_unbind_texture",
   "cna_graphics_device_unsubscribe",
   "cna_graphics_ext_is_available",
+  "cna_graphics_memory_barrier_has",
   "cna_graphics_renderer_copy_available_ext",
   "cna_graphics_renderer_copy_current_name",
   "cna_graphics_renderer_fallback_copy_message_ext",
@@ -2141,7 +2574,34 @@
   "cna_haptics_open",
   "cna_haptics_open_from_joystick",
   "cna_haptics_open_from_mouse",
+  "cna_hdr_display_output_create",
+  "cna_hdr_display_output_decode_pq",
+  "cna_hdr_display_output_destroy",
+  "cna_hdr_display_output_draw",
+  "cna_hdr_display_output_encode",
+  "cna_hdr_display_output_encode_pq",
+  "cna_hdr_display_output_get_color_space",
+  "cna_hdr_display_output_get_paper_white_nits",
+  "cna_hdr_display_output_get_peak_nits",
+  "cna_hdr_display_output_is_supported",
+  "cna_hdr_display_output_rec709_to_rec2020",
+  "cna_hdr_display_output_roll_off",
+  "cna_hdr_display_output_set_color_space",
+  "cna_hdr_display_output_set_paper_white_nits",
+  "cna_hdr_display_output_set_peak_nits",
+  "cna_height_fog_pass_create",
+  "cna_height_fog_pass_get_base_height",
+  "cna_height_fog_pass_get_color",
+  "cna_height_fog_pass_get_density",
+  "cna_height_fog_pass_get_falloff",
+  "cna_height_fog_pass_optical_depth",
+  "cna_height_fog_pass_set_base_height",
+  "cna_height_fog_pass_set_color",
+  "cna_height_fog_pass_set_density",
+  "cna_height_fog_pass_set_falloff",
   "cna_host_changed_event_info_init",
+  "cna_image_based_light_ext_init",
+  "cna_image_based_light_ext_is_valid",
   "cna_index_buffer_copy_type_name",
   "cna_index_buffer_create",
   "cna_index_buffer_destroy",
@@ -2152,6 +2612,8 @@
   "cna_index_buffer_set_data_at",
   "cna_index_buffer_subscribe_content_lost",
   "cna_index_buffer_unsubscribe_content_lost",
+  "cna_indirect_draw_arguments_init",
+  "cna_indirect_draw_indexed_arguments_init",
   "cna_input_device_info_equals",
   "cna_input_device_info_init",
   "cna_input_devices_copy_keyboard_name_at",
@@ -2176,6 +2638,24 @@
   "cna_input_devices_subscribe_mouse_connected_ext",
   "cna_input_devices_subscribe_mouse_disconnected_ext",
   "cna_input_devices_unsubscribe_ext",
+  "cna_instanced_renderer_ext_copy_instance_elements",
+  "cna_instanced_renderer_ext_copy_tint_elements",
+  "cna_instanced_renderer_ext_create",
+  "cna_instanced_renderer_ext_destroy",
+  "cna_instanced_renderer_ext_did_last_draw_instance",
+  "cna_instanced_renderer_ext_draw",
+  "cna_instanced_renderer_ext_get_instance_capacity",
+  "cna_instanced_renderer_ext_get_instance_count",
+  "cna_instanced_renderer_ext_get_instance_stride",
+  "cna_instanced_renderer_ext_get_last_draw_call_count",
+  "cna_instanced_renderer_ext_get_tint_stride",
+  "cna_instanced_renderer_ext_is_fallback_enabled",
+  "cna_instanced_renderer_ext_is_instancing_supported",
+  "cna_instanced_renderer_ext_is_tints_enabled",
+  "cna_instanced_renderer_ext_set_fallback_enabled",
+  "cna_instanced_renderer_ext_set_instance_tints",
+  "cna_instanced_renderer_ext_set_instances",
+  "cna_instanced_renderer_ext_set_tints_enabled",
   "cna_invite_accepted_event_info_init",
   "cna_joystick_capabilities_equals",
   "cna_joystick_capabilities_init",
@@ -2253,6 +2733,68 @@
   "cna_leaderboard_reader_read",
   "cna_leaderboard_reader_read_from_gamers",
   "cna_leaderboard_reader_read_from_pivot",
+  "cna_lens_flare_pass_create",
+  "cna_lens_flare_pass_get_dispersal",
+  "cna_lens_flare_pass_get_intensity",
+  "cna_lens_flare_pass_get_threshold",
+  "cna_lens_flare_pass_set_dispersal",
+  "cna_lens_flare_pass_set_intensity",
+  "cna_lens_flare_pass_set_threshold",
+  "cna_light_probe_baker_bake_light",
+  "cna_light_probe_baker_bake_probe",
+  "cna_light_probe_baker_bake_visibility",
+  "cna_light_probe_baker_create",
+  "cna_light_probe_baker_create_with_face_size",
+  "cna_light_probe_baker_destroy",
+  "cna_light_probe_baker_face_count",
+  "cna_light_probe_baker_face_view",
+  "cna_light_probe_baker_get_face_size",
+  "cna_light_probe_baker_get_far_plane",
+  "cna_light_probe_baker_get_near_plane",
+  "cna_light_probe_baker_is_supported",
+  "cna_light_probe_baker_set_planes",
+  "cna_light_probe_ext_copy_coefficients",
+  "cna_light_probe_ext_copy_evaluation_glsl",
+  "cna_light_probe_ext_copy_from",
+  "cna_light_probe_ext_create",
+  "cna_light_probe_ext_create_at",
+  "cna_light_probe_ext_destroy",
+  "cna_light_probe_ext_equals",
+  "cna_light_probe_ext_get_coefficient",
+  "cna_light_probe_ext_get_position",
+  "cna_light_probe_ext_get_visibility_mean",
+  "cna_light_probe_ext_get_visibility_mean_squared",
+  "cna_light_probe_ext_has_visibility",
+  "cna_light_probe_ext_irradiance",
+  "cna_light_probe_ext_is_zero",
+  "cna_light_probe_ext_scale",
+  "cna_light_probe_ext_set_coefficient",
+  "cna_light_probe_ext_set_position",
+  "cna_light_probe_ext_set_visibility",
+  "cna_light_probe_ext_visibility_weight",
+  "cna_light_probe_volume_ext_contains",
+  "cna_light_probe_volume_ext_create",
+  "cna_light_probe_volume_ext_destroy",
+  "cna_light_probe_volume_ext_get_bounds",
+  "cna_light_probe_volume_ext_get_count_x",
+  "cna_light_probe_volume_ext_get_count_y",
+  "cna_light_probe_volume_ext_get_count_z",
+  "cna_light_probe_volume_ext_get_probe",
+  "cna_light_probe_volume_ext_get_probe_count",
+  "cna_light_probe_volume_ext_get_probe_position",
+  "cna_light_probe_volume_ext_irradiance",
+  "cna_light_probe_volume_ext_is_zero",
+  "cna_light_probe_volume_ext_sample_probe",
+  "cna_light_probe_volume_ext_set_probe",
+  "cna_light_shaft_pass_create",
+  "cna_light_shaft_pass_get_decay",
+  "cna_light_shaft_pass_get_intensity",
+  "cna_light_shaft_pass_get_light_screen_position",
+  "cna_light_shaft_pass_get_threshold",
+  "cna_light_shaft_pass_set_decay",
+  "cna_light_shaft_pass_set_intensity",
+  "cna_light_shaft_pass_set_light_screen_position",
+  "cna_light_shaft_pass_set_threshold",
   "cna_local_network_gamer_clear_packet_queue_ext",
   "cna_local_network_gamer_create_ext",
   "cna_local_network_gamer_enable_send_voice",
@@ -2274,6 +2816,20 @@
   "cna_locale_get_country_size_at_ext",
   "cna_locale_get_language_size_at_ext",
   "cna_locale_get_preferred_count_ext",
+  "cna_lod_group_ext_add_level",
+  "cna_lod_group_ext_clear",
+  "cna_lod_group_ext_copy_levels",
+  "cna_lod_group_ext_create",
+  "cna_lod_group_ext_destroy",
+  "cna_lod_group_ext_get_hysteresis",
+  "cna_lod_group_ext_get_selection_mode",
+  "cna_lod_group_ext_projected_radius_pixels",
+  "cna_lod_group_ext_reset_hysteresis",
+  "cna_lod_group_ext_select",
+  "cna_lod_group_ext_select_index",
+  "cna_lod_group_ext_set_hysteresis",
+  "cna_lod_group_ext_set_screen_space_parameters",
+  "cna_lod_group_ext_set_selection_mode",
   "cna_logger_debug",
   "cna_logger_debug_if",
   "cna_logger_error",
@@ -2611,6 +3167,11 @@
   "cna_morph_target_data_ext_set_weight_track",
   "cna_morph_target_data_ext_set_weights",
   "cna_morph_weight_track_ext_evaluate",
+  "cna_motion_blur_pass_create",
+  "cna_motion_blur_pass_get_max_distance",
+  "cna_motion_blur_pass_get_strength",
+  "cna_motion_blur_pass_set_max_distance",
+  "cna_motion_blur_pass_set_strength",
   "cna_motion_copy_type_name",
   "cna_motion_create",
   "cna_motion_destroy",
@@ -2818,7 +3379,33 @@
   "cna_packet_writer_write_vector2",
   "cna_packet_writer_write_vector3",
   "cna_packet_writer_write_vector4",
+  "cna_particle_emitter_settings_init",
+  "cna_particle_init",
+  "cna_particle_system_copy_particle_lookup_glsl",
+  "cna_particle_system_copy_particles_ext",
+  "cna_particle_system_copy_unsupported_reason",
+  "cna_particle_system_create",
+  "cna_particle_system_create_with_capacity",
+  "cna_particle_system_destroy",
+  "cna_particle_system_draw",
+  "cna_particle_system_get_active_count",
+  "cna_particle_system_get_capacity",
+  "cna_particle_system_get_settings",
+  "cna_particle_system_get_softness_ext",
+  "cna_particle_system_is_emission_rate_clamped",
+  "cna_particle_system_is_simulation_on_cpu_ext",
+  "cna_particle_system_random",
+  "cna_particle_system_reset",
+  "cna_particle_system_set_depth_input_ext",
+  "cna_particle_system_set_settings",
+  "cna_particle_system_set_simulation_on_cpu_ext",
+  "cna_particle_system_set_softness_ext",
+  "cna_particle_system_step",
+  "cna_particle_system_update",
+  "cna_particle_system_uses_compute",
+  "cna_pbr_effect_apply_material",
   "cna_pbr_effect_create",
+  "cna_pbr_effect_extract_material",
   "cna_pbr_effect_get_alpha",
   "cna_pbr_effect_get_alpha_cutoff_ext",
   "cna_pbr_effect_get_alpha_mode_ext",
@@ -2857,7 +3444,70 @@
   "cna_pbr_effect_set_texture_is_srgb_ext",
   "cna_pbr_effect_set_texture_transform_ext",
   "cna_pbr_effect_set_vertex_color_enabled_ext",
+  "cna_pbr_material_apply_state",
+  "cna_pbr_material_ext_copy_to_string",
+  "cna_pbr_material_ext_equals",
+  "cna_pbr_material_ext_get_hash_code",
   "cna_pbr_material_ext_init",
+  "cna_pbr_material_extensions_copy_from",
+  "cna_pbr_material_extensions_copy_to_string",
+  "cna_pbr_material_extensions_create",
+  "cna_pbr_material_extensions_destroy",
+  "cna_pbr_material_extensions_equals",
+  "cna_pbr_material_extensions_get_attenuation_color",
+  "cna_pbr_material_extensions_get_attenuation_distance",
+  "cna_pbr_material_extensions_get_clearcoat_factor",
+  "cna_pbr_material_extensions_get_clearcoat_normal_scale",
+  "cna_pbr_material_extensions_get_clearcoat_normal_texture",
+  "cna_pbr_material_extensions_get_clearcoat_roughness",
+  "cna_pbr_material_extensions_get_clearcoat_roughness_texture",
+  "cna_pbr_material_extensions_get_clearcoat_texture",
+  "cna_pbr_material_extensions_get_hash_code",
+  "cna_pbr_material_extensions_get_iridescence_factor",
+  "cna_pbr_material_extensions_get_iridescence_ior",
+  "cna_pbr_material_extensions_get_iridescence_texture",
+  "cna_pbr_material_extensions_get_iridescence_thickness_maximum",
+  "cna_pbr_material_extensions_get_iridescence_thickness_minimum",
+  "cna_pbr_material_extensions_get_iridescence_thickness_texture",
+  "cna_pbr_material_extensions_get_sheen_color_factor",
+  "cna_pbr_material_extensions_get_sheen_color_texture",
+  "cna_pbr_material_extensions_get_sheen_roughness",
+  "cna_pbr_material_extensions_get_sheen_roughness_texture",
+  "cna_pbr_material_extensions_get_subsurface_color",
+  "cna_pbr_material_extensions_get_subsurface_wrap",
+  "cna_pbr_material_extensions_get_thickness_factor",
+  "cna_pbr_material_extensions_get_thickness_texture",
+  "cna_pbr_material_extensions_get_transmission_factor",
+  "cna_pbr_material_extensions_get_transmission_texture",
+  "cna_pbr_material_extensions_is_iridescence_enabled",
+  "cna_pbr_material_extensions_is_neutral",
+  "cna_pbr_material_extensions_is_sheen_enabled",
+  "cna_pbr_material_extensions_is_subsurface_enabled",
+  "cna_pbr_material_extensions_is_transmission_enabled",
+  "cna_pbr_material_extensions_set_attenuation_color",
+  "cna_pbr_material_extensions_set_attenuation_distance",
+  "cna_pbr_material_extensions_set_clearcoat_factor",
+  "cna_pbr_material_extensions_set_clearcoat_normal_scale",
+  "cna_pbr_material_extensions_set_clearcoat_normal_texture",
+  "cna_pbr_material_extensions_set_clearcoat_roughness",
+  "cna_pbr_material_extensions_set_clearcoat_roughness_texture",
+  "cna_pbr_material_extensions_set_clearcoat_texture",
+  "cna_pbr_material_extensions_set_iridescence_factor",
+  "cna_pbr_material_extensions_set_iridescence_ior",
+  "cna_pbr_material_extensions_set_iridescence_texture",
+  "cna_pbr_material_extensions_set_iridescence_thickness_maximum",
+  "cna_pbr_material_extensions_set_iridescence_thickness_minimum",
+  "cna_pbr_material_extensions_set_iridescence_thickness_texture",
+  "cna_pbr_material_extensions_set_sheen_color_factor",
+  "cna_pbr_material_extensions_set_sheen_color_texture",
+  "cna_pbr_material_extensions_set_sheen_roughness",
+  "cna_pbr_material_extensions_set_sheen_roughness_texture",
+  "cna_pbr_material_extensions_set_subsurface_color",
+  "cna_pbr_material_extensions_set_subsurface_wrap",
+  "cna_pbr_material_extensions_set_thickness_factor",
+  "cna_pbr_material_extensions_set_thickness_texture",
+  "cna_pbr_material_extensions_set_transmission_factor",
+  "cna_pbr_material_extensions_set_transmission_texture",
   "cna_pbr_material_init",
   "cna_picture_album_collection_copy_type_name",
   "cna_picture_album_collection_destroy",
@@ -2956,9 +3606,33 @@
   "cna_point_get_zero",
   "cna_point_init",
   "cna_point_init_xy",
+  "cna_point_light_ext_init",
   "cna_point_multiply",
   "cna_point_not_equals",
   "cna_point_subtract",
+  "cna_post_process_chain_add_owned_pass",
+  "cna_post_process_chain_add_pass",
+  "cna_post_process_chain_apply",
+  "cna_post_process_chain_clear",
+  "cna_post_process_chain_copy_pass_timing_name",
+  "cna_post_process_chain_create",
+  "cna_post_process_chain_destroy",
+  "cna_post_process_chain_get_pass_count",
+  "cna_post_process_chain_get_pass_timing",
+  "cna_post_process_chain_get_pass_timing_count",
+  "cna_post_process_chain_get_target_pool",
+  "cna_post_process_chain_is_gpu_timing_enabled",
+  "cna_post_process_chain_reset_targets",
+  "cna_post_process_chain_set_gpu_timing_enabled",
+  "cna_post_process_context_init",
+  "cna_post_process_effect_pass_create",
+  "cna_post_process_effect_pass_create_owning",
+  "cna_post_process_effect_pass_get_effect",
+  "cna_post_process_effect_pass_set_effect",
+  "cna_post_process_pass_apply",
+  "cna_post_process_pass_copy_name",
+  "cna_post_process_pass_destroy",
+  "cna_post_process_pass_is_supported",
   "cna_power_get_battery_percent_ext",
   "cna_power_get_info",
   "cna_power_get_seconds_remaining_ext",
@@ -2995,6 +3669,7 @@
   "cna_property_dictionary_set_string",
   "cna_property_dictionary_set_time_span_ticks",
   "cna_property_dictionary_try_get_value_kind_ext",
+  "cna_punctual_light_ext_init",
   "cna_quality_of_service_init",
   "cna_quality_of_service_init_measured",
   "cna_quaternion_add",
@@ -3062,13 +3737,61 @@
   "cna_rectangle_offset_xy",
   "cna_rectangle_set_location",
   "cna_rectangle_union",
+  "cna_render_pipeline_add_user_pass",
+  "cna_render_pipeline_begin",
+  "cna_render_pipeline_clear_user_passes",
+  "cna_render_pipeline_copy_pass_timing_name_ext",
+  "cna_render_pipeline_copy_transparency_fallback_reason_ext",
+  "cna_render_pipeline_create",
+  "cna_render_pipeline_destroy",
+  "cna_render_pipeline_did_shadow_pass_run",
+  "cna_render_pipeline_did_skybox_draw",
+  "cna_render_pipeline_end",
+  "cna_render_pipeline_get_gpu_memory_estimate_bytes",
+  "cna_render_pipeline_get_last_frame_pass_count",
+  "cna_render_pipeline_get_pass_timing_count_ext",
+  "cna_render_pipeline_get_pass_timing_ext",
+  "cna_render_pipeline_get_scene_target",
+  "cna_render_pipeline_get_scene_target_format",
+  "cna_render_pipeline_get_settings",
+  "cna_render_pipeline_get_shadow_map",
+  "cna_render_pipeline_get_skybox",
+  "cna_render_pipeline_get_statistics",
+  "cna_render_pipeline_is_gpu_timing_enabled_ext",
+  "cna_render_pipeline_is_using_scene_target",
+  "cna_render_pipeline_release_device_resources_ext",
+  "cna_render_pipeline_resize",
+  "cna_render_pipeline_set_camera",
+  "cna_render_pipeline_set_depth_normal_inputs",
+  "cna_render_pipeline_set_gpu_timing_enabled_ext",
+  "cna_render_pipeline_set_settings",
+  "cna_render_pipeline_set_shadow_scene",
+  "cna_render_pipeline_set_skybox",
+  "cna_render_pipeline_set_skybox_camera",
+  "cna_render_pipeline_set_transparent_scene",
+  "cna_render_pipeline_set_velocity_input_ext",
+  "cna_render_pipeline_settings_ext_apply_from_string",
+  "cna_render_pipeline_settings_ext_apply_render_quality_preset",
+  "cna_render_pipeline_settings_ext_init",
+  "cna_render_pipeline_settings_ext_normalize",
   "cna_render_pipeline_settings_init",
   "cna_render_target2d_create",
   "cna_render_target_cube_create",
   "cna_render_target_destroy",
   "cna_render_target_get_info",
+  "cna_render_target_pool_acquire",
+  "cna_render_target_pool_create",
+  "cna_render_target_pool_destroy",
+  "cna_render_target_pool_get_estimated_bytes",
+  "cna_render_target_pool_get_target_count",
+  "cna_render_target_pool_reset",
+  "cna_render_target_subscribe_content_lost",
+  "cna_render_target_unsubscribe_content_lost",
   "cna_render_target_usage_preserves_contents",
   "cna_sampler_state_init",
+  "cna_scoped_render_target_begin",
+  "cna_scoped_render_target_end",
+  "cna_scoped_render_target_get_has_recorded_previous",
   "cna_sensor_info_equals",
   "cna_sensor_info_init",
   "cna_sensor_unsubscribe_ext",
@@ -3079,8 +3802,15 @@
   "cna_sensors_get_info_at",
   "cna_sensors_get_last_error_id_ext",
   "cna_sensors_get_name_size_at",
+  "cna_shader_effect_copy_compile_error_ext",
   "cna_shader_effect_create",
   "cna_shader_effect_declare_uniform_block_ext",
+  "cna_shader_effect_factory_acquire",
+  "cna_shader_effect_factory_clear",
+  "cna_shader_effect_factory_contains",
+  "cna_shader_effect_factory_create",
+  "cna_shader_effect_factory_destroy",
+  "cna_shader_effect_factory_get_compile_count",
   "cna_shader_effect_get_projection",
   "cna_shader_effect_get_view",
   "cna_shader_effect_get_world",
@@ -3093,13 +3823,36 @@
   "cna_shader_effect_set_uniform_float",
   "cna_shader_effect_set_uniform_float_array",
   "cna_shader_effect_set_uniform_int32",
+  "cna_shader_effect_set_uniform_mat4_array",
   "cna_shader_effect_set_uniform_matrix",
+  "cna_shader_effect_set_uniform_vec3_array",
   "cna_shader_effect_set_uniform_vector2",
   "cna_shader_effect_set_uniform_vector2_array",
   "cna_shader_effect_set_uniform_vector3",
   "cna_shader_effect_set_uniform_vector4",
   "cna_shader_effect_set_view",
   "cna_shader_effect_set_world",
+  "cna_shadow_cascade_state_ext_init",
+  "cna_shadow_map_apply_caster",
+  "cna_shadow_map_apply_skinned_caster",
+  "cna_shadow_map_begin",
+  "cna_shadow_map_compute_light_projection",
+  "cna_shadow_map_compute_light_view",
+  "cna_shadow_map_create",
+  "cna_shadow_map_destroy",
+  "cna_shadow_map_end",
+  "cna_shadow_map_filter_radius_for_quality",
+  "cna_shadow_map_get_caster_effect",
+  "cna_shadow_map_get_depth_bias",
+  "cna_shadow_map_get_filter_radius",
+  "cna_shadow_map_get_light_view_projection",
+  "cna_shadow_map_get_quality",
+  "cna_shadow_map_get_shadow_texture",
+  "cna_shadow_map_get_size",
+  "cna_shadow_map_get_skinned_caster_effect",
+  "cna_shadow_map_is_supported",
+  "cna_shadow_map_set_depth_bias",
+  "cna_shadow_map_size_for_quality",
   "cna_signed_in_gamer_award_achievement",
   "cna_signed_in_gamer_begin_award_achievement",
   "cna_signed_in_gamer_begin_get_achievements",
@@ -3170,8 +3923,10 @@
   "cna_skinned_model_ext_remove_part",
   "cna_skinned_model_ext_set_clip",
   "cna_skinned_model_ext_set_skeleton",
+  "cna_skinned_pbr_effect_apply_material",
   "cna_skinned_pbr_effect_copy_bone_transforms",
   "cna_skinned_pbr_effect_create",
+  "cna_skinned_pbr_effect_extract_material",
   "cna_skinned_pbr_effect_get_weights_per_vertex",
   "cna_skinned_pbr_effect_set_bone_transforms",
   "cna_skinned_pbr_effect_set_weights_per_vertex",
@@ -3196,6 +3951,20 @@
   "cna_skinning_data_set_clip_target_space_ext",
   "cna_skinning_data_set_skeleton_root_name_ext",
   "cna_skinning_data_set_skeleton_root_node_index_ext",
+  "cna_skybox_compute_view_ray",
+  "cna_skybox_create",
+  "cna_skybox_destroy",
+  "cna_skybox_draw",
+  "cna_skybox_get_environment",
+  "cna_skybox_get_intensity",
+  "cna_skybox_get_tint",
+  "cna_skybox_get_yaw",
+  "cna_skybox_is_supported",
+  "cna_skybox_set_environment",
+  "cna_skybox_set_intensity",
+  "cna_skybox_set_owned_environment",
+  "cna_skybox_set_tint",
+  "cna_skybox_set_yaw",
   "cna_song_collection_copy_type_name",
   "cna_song_collection_create",
   "cna_song_collection_destroy",
@@ -3279,6 +4048,31 @@
   "cna_sound_effect_set_master_volume",
   "cna_sound_effect_set_name",
   "cna_sound_effect_set_speed_of_sound",
+  "cna_spatial_upscale_pass_create",
+  "cna_spatial_upscale_pass_destroy",
+  "cna_spatial_upscale_pass_draw",
+  "cna_spatial_upscale_pass_get_edge_adaptive",
+  "cna_spatial_upscale_pass_get_sharpness",
+  "cna_spatial_upscale_pass_is_identity_scale",
+  "cna_spatial_upscale_pass_set_edge_adaptive",
+  "cna_spatial_upscale_pass_set_sharpness",
+  "cna_spot_light_ext_init",
+  "cna_spot_shadow_map_begin",
+  "cna_spot_shadow_map_compute_light_projection",
+  "cna_spot_shadow_map_compute_light_view",
+  "cna_spot_shadow_map_create",
+  "cna_spot_shadow_map_destroy",
+  "cna_spot_shadow_map_end",
+  "cna_spot_shadow_map_get_caster_effect",
+  "cna_spot_shadow_map_get_depth_bias",
+  "cna_spot_shadow_map_get_light_position",
+  "cna_spot_shadow_map_get_light_range",
+  "cna_spot_shadow_map_get_light_view_projection",
+  "cna_spot_shadow_map_get_quality",
+  "cna_spot_shadow_map_get_shadow_texture",
+  "cna_spot_shadow_map_get_size",
+  "cna_spot_shadow_map_is_supported",
+  "cna_spot_shadow_map_set_depth_bias",
   "cna_sprite_batch_begin",
   "cna_sprite_batch_begin_with_effect",
   "cna_sprite_batch_begin_with_states",
@@ -3301,6 +4095,44 @@
   "cna_sprite_font_set_default_character",
   "cna_sprite_font_set_line_spacing",
   "cna_sprite_font_set_spacing",
+  "cna_ssao_pass_copy_kernel",
+  "cna_ssao_pass_copy_occlusion_glsl",
+  "cna_ssao_pass_create",
+  "cna_ssao_pass_get_half_resolution",
+  "cna_ssao_pass_get_intensity",
+  "cna_ssao_pass_get_radius",
+  "cna_ssao_pass_get_sample_count",
+  "cna_ssao_pass_reset_targets",
+  "cna_ssao_pass_sample_count_for_quality",
+  "cna_ssao_pass_set_half_resolution",
+  "cna_ssao_pass_set_intensity",
+  "cna_ssao_pass_set_radius",
+  "cna_ssao_pass_set_sample_count",
+  "cna_ssr_pass_create",
+  "cna_ssr_pass_get_depth_bias",
+  "cna_ssr_pass_get_edge_fade",
+  "cna_ssr_pass_get_intensity",
+  "cna_ssr_pass_get_max_distance",
+  "cna_ssr_pass_get_roughness_blur",
+  "cna_ssr_pass_get_step_count",
+  "cna_ssr_pass_get_thickness",
+  "cna_ssr_pass_set_depth_bias",
+  "cna_ssr_pass_set_edge_fade",
+  "cna_ssr_pass_set_intensity",
+  "cna_ssr_pass_set_max_distance",
+  "cna_ssr_pass_set_roughness_blur",
+  "cna_ssr_pass_set_step_count",
+  "cna_ssr_pass_set_thickness",
+  "cna_storage_buffer_create",
+  "cna_storage_buffer_create_typed",
+  "cna_storage_buffer_destroy",
+  "cna_storage_buffer_get_byte_size",
+  "cna_storage_buffer_get_bytes",
+  "cna_storage_buffer_get_element_byte_size",
+  "cna_storage_buffer_get_element_count",
+  "cna_storage_buffer_get_elements",
+  "cna_storage_buffer_set_bytes",
+  "cna_storage_buffer_set_elements",
   "cna_storage_container_copy_directory_name",
   "cna_storage_container_copy_display_name",
   "cna_storage_container_copy_file_name",
@@ -3425,10 +4257,24 @@
   "cna_texturecube_get_info",
   "cna_texturecube_get_type_name_byte_count",
   "cna_texturecube_set_data",
+  "cna_thin_film_iridescence_copy_glsl",
+  "cna_thin_film_iridescence_evaluate",
   "cna_title_container_read_ext",
   "cna_title_location_copy_path",
   "cna_title_location_get_path_size",
   "cna_title_location_set_path_ext",
+  "cna_tonemap_pass_create",
+  "cna_tonemap_pass_get_deband_strength",
+  "cna_tonemap_pass_get_exposure",
+  "cna_tonemap_pass_get_gamma",
+  "cna_tonemap_pass_get_mode",
+  "cna_tonemap_pass_is_deband_enabled",
+  "cna_tonemap_pass_set_deband_enabled",
+  "cna_tonemap_pass_set_deband_strength",
+  "cna_tonemap_pass_set_exposure",
+  "cna_tonemap_pass_set_gamma",
+  "cna_tonemap_pass_set_mode",
+  "cna_tonemap_pass_tonemap_channel",
   "cna_touch_capabilities_init",
   "cna_touch_capabilities_init_from_values_ext",
   "cna_touch_get_capabilities",
@@ -3449,6 +4295,7 @@
   "cna_touch_panel_get_display_width",
   "cna_touch_panel_get_enabled_gestures",
   "cna_touch_panel_get_is_gesture_available",
+  "cna_touch_panel_get_mouse_touch_emulation_enabled_ext",
   "cna_touch_panel_get_touch_device_exists_ext",
   "cna_touch_panel_get_window_handle",
   "cna_touch_panel_raise_touch_event_ext",
@@ -3459,6 +4306,7 @@
   "cna_touch_panel_set_display_width",
   "cna_touch_panel_set_enabled_gestures",
   "cna_touch_panel_set_finger_ext",
+  "cna_touch_panel_set_mouse_touch_emulation_enabled_ext",
   "cna_touch_panel_set_touch_device_exists_ext",
   "cna_touch_panel_set_window_handle",
   "cna_touch_panel_update_ext",
@@ -3475,6 +4323,15 @@
   "cna_touch_state_insert",
   "cna_touch_state_remove",
   "cna_touch_state_remove_at",
+  "cna_transparent_draw_list_camera_position_of",
+  "cna_transparent_draw_list_clear",
+  "cna_transparent_draw_list_copy_sorted_order_ext",
+  "cna_transparent_draw_list_create",
+  "cna_transparent_draw_list_destroy",
+  "cna_transparent_draw_list_draw_sorted",
+  "cna_transparent_draw_list_get_count",
+  "cna_transparent_draw_list_sort_key",
+  "cna_transparent_draw_list_submit",
   "cna_url_launcher_open_ext",
   "cna_vector2_add",
   "cna_vector2_barycentric",
@@ -3677,6 +4534,7 @@
   "cna_video_player_create",
   "cna_video_player_destroy",
   "cna_video_player_dispose",
+  "cna_video_player_get_frame_ext",
   "cna_video_player_get_is_disposed",
   "cna_video_player_get_is_looped",
   "cna_video_player_get_is_muted",
@@ -3712,6 +4570,14 @@
   "cna_visualization_data_copy_type_name",
   "cna_visualization_data_get_type_name_size",
   "cna_visualization_data_init",
+  "cna_volumetric_fog_pass_create",
+  "cna_volumetric_fog_pass_get_anisotropy",
+  "cna_volumetric_fog_pass_get_density",
+  "cna_volumetric_fog_pass_get_range",
+  "cna_volumetric_fog_pass_set_anisotropy",
+  "cna_volumetric_fog_pass_set_density",
+  "cna_volumetric_fog_pass_set_light",
+  "cna_volumetric_fog_pass_set_range",
   "cna_wave_bank_copy_type_name",
   "cna_wave_bank_create",
   "cna_wave_bank_create_streaming",
@@ -3721,17 +4587,36 @@
   "cna_wave_bank_get_is_prepared",
   "cna_wave_bank_get_type_name_size",
   "cna_wave_bank_subscribe_disposing_ext",
+  "cna_weighted_blended_transparency_begin",
+  "cna_weighted_blended_transparency_copy_accumulation_glsl",
+  "cna_weighted_blended_transparency_copy_unsupported_reason",
+  "cna_weighted_blended_transparency_create",
+  "cna_weighted_blended_transparency_destroy",
+  "cna_weighted_blended_transparency_end",
+  "cna_weighted_blended_transparency_get_accumulation_texture_ext",
+  "cna_weighted_blended_transparency_get_revealage_texture_ext",
+  "cna_weighted_blended_transparency_is_accumulating",
+  "cna_weighted_blended_transparency_is_supported",
+  "cna_weighted_blended_transparency_resize",
+  "cna_weighted_blended_transparency_resolve",
+  "cna_weighted_blended_transparency_weight",
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 2048,
+  "CNA_ABI_VERSION": 2304,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 8,
+  "CNA_ABI_VERSION_MINOR": 9,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
   "CNA_ALPHA_MODE_MAXIMUM_EXT": 2,
   "CNA_ALPHA_MODE_OPAQUE_EXT": 0,
+  "CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SAMPLE_COUNT": 64,
+  "CNA_AREA_LIGHT_BRDF_TABLE_DEFAULT_SIZE": 32,
+  "CNA_AREA_LIGHT_QUAD_CORNER_COUNT": 4,
+  "CNA_AREA_LIGHT_SHAPE_DISC_EXT": 1,
+  "CNA_AREA_LIGHT_SHAPE_RECTANGLE_EXT": 0,
+  "CNA_AREA_LIGHT_SHAPE_TUBE_EXT": 2,
   "CNA_ASCII_QUANTIZE_MODE_BLACK_WHITE": 0,
   "CNA_ASCII_QUANTIZE_MODE_COLOR": 1,
   "CNA_AUDIO_CHANNELS_MONO": 1,
@@ -3917,6 +4802,20 @@
   "CNA_CLIP_TARGET_SPACE_JOINT_PALETTE_EXT": 0,
   "CNA_CLIP_TARGET_SPACE_MAXIMUM_EXT": 1,
   "CNA_CLIP_TARGET_SPACE_SCENE_NODE_EXT": 1,
+  "CNA_CLUSTERED_ASSIGNMENT_MAX_LIGHTS_EXT": 1024,
+  "CNA_CLUSTERED_COMPUTE_DEFAULT_STRIDE_EXT": 64,
+  "CNA_CLUSTERED_FORWARD_MAX_LIGHTS_PER_FRAGMENT_EXT": 128,
+  "CNA_CLUSTERED_LIGHT_SET_MAX_EXT": 256,
+  "CNA_CLUSTERED_LIGHT_TYPE_POINT": 0,
+  "CNA_CLUSTERED_LIGHT_TYPE_SPOT": 1,
+  "CNA_CLUSTERED_SHADOW_DEFAULT_BUDGET_EXT": 4,
+  "CNA_CLUSTERED_SHADOW_DEFAULT_HYSTERESIS_EXT": 1,
+  "CNA_CLUSTER_GRID_DEFAULT_SLICE_COUNT_EXT": 24,
+  "CNA_CLUSTER_GRID_DEFAULT_TILES_X_EXT": 16,
+  "CNA_CLUSTER_GRID_DEFAULT_TILES_Y_EXT": 8,
+  "CNA_CLUSTER_GRID_MAX_SLICE_COUNT_EXT": 256,
+  "CNA_CLUSTER_GRID_MAX_TILES_PER_AXIS_EXT": 128,
+  "CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT": 64,
   "CNA_COLOR_WRITE_ALL": 15,
   "CNA_COLOR_WRITE_ALPHA": 8,
   "CNA_COLOR_WRITE_BLUE": 4,
@@ -3941,12 +4840,15 @@
   "CNA_CRT_MASK_TYPE_APERTURE_GRILLE": 1,
   "CNA_CRT_MASK_TYPE_NONE": 0,
   "CNA_CRT_MASK_TYPE_SHADOW_MASK": 2,
+  "CNA_CUBE_LUT_MAX_SIZE_EXT": 64,
+  "CNA_CUBE_LUT_MIN_SIZE_EXT": 2,
   "CNA_CUBE_MAP_FACE_NEGATIVE_X": 1,
   "CNA_CUBE_MAP_FACE_NEGATIVE_Y": 3,
   "CNA_CUBE_MAP_FACE_NEGATIVE_Z": 5,
   "CNA_CUBE_MAP_FACE_POSITIVE_X": 0,
   "CNA_CUBE_MAP_FACE_POSITIVE_Y": 2,
   "CNA_CUBE_MAP_FACE_POSITIVE_Z": 4,
+  "CNA_CUBE_SHADOW_FACE_COUNT_EXT": 6,
   "CNA_CULL_CLOCKWISE_FACE": 1,
   "CNA_CULL_COUNTER_CLOCKWISE_FACE": 2,
   "CNA_CULL_NONE": 0,
@@ -3960,6 +4862,8 @@
   "CNA_CURVE_TANGENT_FLAT": 0,
   "CNA_CURVE_TANGENT_LINEAR": 1,
   "CNA_CURVE_TANGENT_SMOOTH": 2,
+  "CNA_DEBUG_DRAW_MAX_SEGMENTS": 128,
+  "CNA_DEBUG_DRAW_MIN_SEGMENTS": 4,
   "CNA_DEPTH_EFFECT_MODE_COLOR_16_BIT": 0,
   "CNA_DEPTH_EFFECT_MODE_COLOR_8_BIT": 1,
   "CNA_DEPTH_EFFECT_MODE_GRAYSCALE_1_BIT": 4,
@@ -3967,10 +4871,14 @@
   "CNA_DEPTH_EFFECT_MODE_GRAYSCALE_4_BIT": 2,
   "CNA_DEPTH_EFFECT_MODE_PALETTE_16": 6,
   "CNA_DEPTH_EFFECT_MODE_PALETTE_256": 5,
+  "CNA_DEPTH_ENCODING_AUTOMATIC": 0,
+  "CNA_DEPTH_ENCODING_HALF_FLOAT": 2,
+  "CNA_DEPTH_ENCODING_PACKED": 1,
   "CNA_DEPTH_FORMAT_DEPTH16": 1,
   "CNA_DEPTH_FORMAT_DEPTH24": 2,
   "CNA_DEPTH_FORMAT_DEPTH24_STENCIL8": 3,
   "CNA_DEPTH_FORMAT_NONE": 0,
+  "CNA_DEPTH_OF_FIELD_SENSOR_HEIGHT_MILLIMETRES_EXT": 24,
   "CNA_DEPTH_STENCIL_STATE_PRESET_DEFAULT": 0,
   "CNA_DEPTH_STENCIL_STATE_PRESET_DEPTH_READ": 1,
   "CNA_DEPTH_STENCIL_STATE_PRESET_NONE": 2,
@@ -3978,6 +4886,9 @@
   "CNA_DESKTOP_OS_MACOSX": 2,
   "CNA_DESKTOP_OS_OTHER": 3,
   "CNA_DESKTOP_OS_WINDOWS": 0,
+  "CNA_DISPLAY_COLOR_SPACE_HDR10": 2,
+  "CNA_DISPLAY_COLOR_SPACE_SCRGB": 1,
+  "CNA_DISPLAY_COLOR_SPACE_SRGB": 0,
   "CNA_DISPLAY_ORIENTATION_DEFAULT": 0,
   "CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT": 1,
   "CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT": 2,
@@ -4013,6 +4924,7 @@
   "CNA_EFFECT_VALUE_VECTOR2": 6,
   "CNA_EFFECT_VALUE_VECTOR3": 7,
   "CNA_EFFECT_VALUE_VECTOR4": 8,
+  "CNA_ENGINE_LAYER_VERSION": 2,
   "CNA_ERROR_CATEGORY_ARGUMENT": 1,
   "CNA_ERROR_CATEGORY_CALLBACK": 9,
   "CNA_ERROR_CATEGORY_ENCODING": 11,
@@ -4044,6 +4956,7 @@
   "CNA_FILE_SHARE_WRITE": 2,
   "CNA_FILL_SOLID": 0,
   "CNA_FILL_WIREFRAME": 1,
+  "CNA_FRUSTUM_CORNER_COUNT_EXT": 8,
   "CNA_GAMEPAD_BUTTON_A": 4096,
   "CNA_GAMEPAD_BUTTON_ALL": 2147483647,
   "CNA_GAMEPAD_BUTTON_B": 8192,
@@ -4217,6 +5130,7 @@
   "CNA_GLTF_IMPORT_SEVERITY_INFORMATION_EXT": 0,
   "CNA_GLTF_IMPORT_SEVERITY_MAXIMUM_EXT": 1,
   "CNA_GLTF_IMPORT_SEVERITY_WARNING_EXT": 1,
+  "CNA_GPU_INSTANCE_BINDING": 6,
   "CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC": 4,
   "CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE": 0,
   "CNA_GRAPHICS_BACKEND_CATEGORY_SOFTWARE": 2,
@@ -4262,6 +5176,11 @@
   "CNA_GRAPHICS_DEVICE_STATUS_LOST": 1,
   "CNA_GRAPHICS_DEVICE_STATUS_NORMAL": 0,
   "CNA_GRAPHICS_DEVICE_STATUS_NOT_RESET": 2,
+  "CNA_GRAPHICS_IMAGE_ACCESS_READ_ONLY": 0,
+  "CNA_GRAPHICS_IMAGE_ACCESS_READ_WRITE": 2,
+  "CNA_GRAPHICS_IMAGE_ACCESS_WRITE_ONLY": 1,
+  "CNA_GRAPHICS_MEMORY_BARRIER_ALL": 511,
+  "CNA_GRAPHICS_MEMORY_BARRIER_NONE": 0,
   "CNA_GRAPHICS_PROFILE_HI_DEF": 1,
   "CNA_GRAPHICS_PROFILE_REACH": 0,
   "CNA_GRAPHICS_RENDERER_BGFX": 7,
@@ -4360,6 +5279,8 @@
   "CNA_HAPTIC_FEATURE_SQUARE": 4,
   "CNA_HAPTIC_FEATURE_STATUS": 262144,
   "CNA_HAPTIC_FEATURE_TRIANGLE": 8,
+  "CNA_HDR_DISPLAY_DEFAULT_PAPER_WHITE_NITS_EXT": 200,
+  "CNA_HDR_DISPLAY_DEFAULT_PEAK_NITS_EXT": 1000,
   "CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS": 0,
   "CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS": 1,
   "CNA_INVALID_HANDLE": 0,
@@ -4567,6 +5488,15 @@
   "CNA_LEADERBOARD_OUTCOME_NONE": 0,
   "CNA_LEADERBOARD_OUTCOME_TIE": 3,
   "CNA_LEADERBOARD_OUTCOME_WIN": 1,
+  "CNA_LENS_FLARE_GHOST_COUNT_EXT": 4,
+  "CNA_LIGHT_PROBE_BAKER_DEFAULT_FACE_SIZE": 32,
+  "CNA_LIGHT_PROBE_BAKER_FACE_COUNT": 6,
+  "CNA_LIGHT_PROBE_COEFFICIENT_COUNT_EXT": 9,
+  "CNA_LIGHT_PROBE_VISIBILITY_DIRECTIONS_EXT": 6,
+  "CNA_LIGHT_PROBE_VOLUME_MAX_PROBES_EXT": 32768,
+  "CNA_LIGHT_SHAFT_STEP_COUNT_EXT": 24,
+  "CNA_LOD_SELECTION_MODE_DISTANCE": 0,
+  "CNA_LOD_SELECTION_MODE_SCREEN_SPACE_ERROR": 1,
   "CNA_LOG_CATEGORY_APPLICATION": 0,
   "CNA_LOG_CATEGORY_AUDIO": 3,
   "CNA_LOG_CATEGORY_ERROR": 1,
@@ -4583,6 +5513,8 @@
   "CNA_LOG_LEVEL_INFO": 3,
   "CNA_LOG_LEVEL_TRACE": 5,
   "CNA_LOG_LEVEL_WARN": 2,
+  "CNA_LUT_INTERPOLATION_TETRAHEDRAL": 1,
+  "CNA_LUT_INTERPOLATION_TRILINEAR": 0,
   "CNA_MATH_E": 2,
   "CNA_MATH_LOG10_E": 0,
   "CNA_MATH_LOG2_E": 1,
@@ -4610,6 +5542,7 @@
   "CNA_MICROPHONE_STATE_MAXIMUM": 1,
   "CNA_MICROPHONE_STATE_STARTED": 0,
   "CNA_MICROPHONE_STATE_STOPPED": 1,
+  "CNA_MOTION_BLUR_SAMPLE_COUNT_EXT": 8,
   "CNA_MOUSE_BUTTON_NONE": 0,
   "CNA_MOUSE_CURSOR_STOCK_ARROW": 0,
   "CNA_MOUSE_CURSOR_STOCK_CROSSHAIR": 1,
@@ -4686,6 +5619,8 @@
   "CNA_PACKED_VECTOR_FORMAT_RGBA64": 14,
   "CNA_PACKED_VECTOR_FORMAT_SHORT2": 15,
   "CNA_PACKED_VECTOR_FORMAT_SHORT4": 16,
+  "CNA_PARTICLE_BINDING": 7,
+  "CNA_PARTICLE_SYSTEM_DEFAULT_CAPACITY": 1024,
   "CNA_PBR_MATERIAL_EXT_VERSION": 1,
   "CNA_PBR_TEXTURE_BASE_COLOR": 0,
   "CNA_PBR_TEXTURE_EMISSIVE": 3,
@@ -4693,6 +5628,7 @@
   "CNA_PBR_TEXTURE_METALLIC_ROUGHNESS": 2,
   "CNA_PBR_TEXTURE_NORMAL": 1,
   "CNA_PBR_TEXTURE_OCCLUSION": 4,
+  "CNA_PBR_TEXTURE_SLOT_COUNT": 7,
   "CNA_PBR_TEXTURE_SPECULAR_COLOR_EXT": 6,
   "CNA_PBR_TEXTURE_SPECULAR_EXT": 5,
   "CNA_PLANE_INTERSECTION_BACK": 1,
@@ -4706,6 +5642,8 @@
   "CNA_PLAYER_INDEX_ONE": 0,
   "CNA_PLAYER_INDEX_THREE": 2,
   "CNA_PLAYER_INDEX_TWO": 1,
+  "CNA_POST_PROCESS_CONTEXT_SIZE_V1": 328,
+  "CNA_POST_PROCESS_CONTEXT_VERSION_2": 2,
   "CNA_POWER_STATE_CHARGED": 5,
   "CNA_POWER_STATE_CHARGING": 4,
   "CNA_POWER_STATE_ERROR": 0,
@@ -4739,6 +5677,9 @@
   "CNA_PROPERTY_VALUE_KIND_STRING": 8,
   "CNA_PROPERTY_VALUE_KIND_TIME_SPAN": 9,
   "CNA_PROPERTY_VALUE_KIND_UNKNOWN": 0,
+  "CNA_PUNCTUAL_LIGHT_KIND_EXT_NONE": 0,
+  "CNA_PUNCTUAL_LIGHT_KIND_EXT_POINT": 1,
+  "CNA_PUNCTUAL_LIGHT_KIND_EXT_SPOT": 2,
   "CNA_RACING_CAMERA_ANGLE_BACK": 0,
   "CNA_RACING_CAMERA_ANGLE_FRONT": 1,
   "CNA_RACING_CAMERA_ANGLE_INSIDE": 2,
@@ -4794,6 +5735,8 @@
   "CNA_RENDERER_LIMIT_MAX_TEXTURE_DIMENSION": 0,
   "CNA_RENDERER_LIMIT_MAX_VERTEX_SHADER_STORAGE_BLOCKS": 9,
   "CNA_RENDERER_LIMIT_MAX_VERTEX_STREAMS": 1,
+  "CNA_RENDER_PIPELINE_MINIMUM_FXAA_EDGE_THRESHOLD_EXT": 0,
+  "CNA_RENDER_PIPELINE_MINIMUM_GAMMA_EXT": 0,
   "CNA_RENDER_QUALITY_HIGH": 2,
   "CNA_RENDER_QUALITY_LOW": 0,
   "CNA_RENDER_QUALITY_MEDIUM": 1,
@@ -4861,6 +5804,7 @@
   "CNA_SHADER_DIALECT_WGSL": 6,
   "CNA_SHADER_STAGE_PIXEL": 0,
   "CNA_SHADER_STAGE_VERTEX": 1,
+  "CNA_SHADOW_CASCADE_MAX_EXT": 4,
   "CNA_SHADOW_QUALITY_DISABLED": 0,
   "CNA_SHADOW_QUALITY_HIGH": 3,
   "CNA_SHADOW_QUALITY_LOW": 1,
@@ -4877,6 +5821,8 @@
   "CNA_SPRITE_SORT_MODE_FRONT_TO_BACK": 4,
   "CNA_SPRITE_SORT_MODE_IMMEDIATE": 1,
   "CNA_SPRITE_SORT_MODE_TEXTURE": 2,
+  "CNA_SSR_PASS_MAX_STEP_COUNT_EXT": 64,
+  "CNA_SSR_PASS_MIN_STEP_COUNT_EXT": 4,
   "CNA_STENCIL_DECREMENT": 4,
   "CNA_STENCIL_DECREMENT_SATURATION": 6,
   "CNA_STENCIL_INCREMENT": 3,
@@ -4959,12 +5905,16 @@
   "CNA_TONEMAPPING_MODE_FILMIC": 2,
   "CNA_TONEMAPPING_MODE_NONE": 0,
   "CNA_TONEMAPPING_MODE_REINHARD": 1,
+  "CNA_TONEMAPPING_MODE_UNCHARTED2": 4,
   "CNA_TOUCH_LOCATION_INVALID": 0,
   "CNA_TOUCH_LOCATION_MOVED": 3,
   "CNA_TOUCH_LOCATION_PRESSED": 2,
   "CNA_TOUCH_LOCATION_RELEASED": 1,
   "CNA_TOUCH_MAX_TOUCHES": 8,
   "CNA_TOUCH_NO_FINGER": -1,
+  "CNA_TRANSPARENCY_MODE_NONE": 0,
+  "CNA_TRANSPARENCY_MODE_ORDER_INDEPENDENT": 2,
+  "CNA_TRANSPARENCY_MODE_SORTED": 1,
   "CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW": 0,
   "CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB": 1,
   "CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE": 0,
@@ -5005,11 +5955,14 @@
   "CNA_VERTEX_TYPE_POSITION_NORMAL_TEXTURE": 4,
   "CNA_VERTEX_TYPE_POSITION_NORMAL_TEXTURE_SKINNED": 5,
   "CNA_VERTEX_TYPE_POSITION_TEXTURE": 6,
+  "CNA_VIDEO_FRAME_EXT_STRUCT_VERSION": 1,
   "CNA_VIDEO_SOUNDTRACK_TYPE_DIALOG": 1,
   "CNA_VIDEO_SOUNDTRACK_TYPE_MAXIMUM": 2,
   "CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC": 0,
   "CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC_AND_DIALOG": 2,
-  "CNA_VISUALIZATION_DATA_SIZE": 256
+  "CNA_VISUALIZATION_DATA_SIZE": 256,
+  "CNA_VOLUMETRIC_FOG_SLICE_COUNT_EXT": 32,
+  "CNA_VOLUMETRIC_FOG_SLICE_RESOLUTION_EXT": 96
  },
  "scalars": {
   "CNA_AccelerometerHandle": [
@@ -5040,6 +5993,14 @@
    8,
    8
   ],
+  "CNA_AreaLightBrdfTableHandle": [
+   8,
+   8
+  ],
+  "CNA_AreaLightShapeEXT": [
+   4,
+   4
+  ],
   "CNA_ArtistCollectionHandle": [
    8,
    8
@@ -5056,6 +6017,10 @@
    4,
    4
   ],
+  "CNA_AtmosphericSkyHandle": [
+   8,
+   8
+  ],
   "CNA_AudioChannels": [
    4,
    4
@@ -5067,6 +6032,10 @@
   "CNA_AudioStopOptions": [
    4,
    4
+  ],
+  "CNA_AutoExposureHandle": [
+   8,
+   8
   ],
   "CNA_AvailableNetworkSessionCollectionHandle": [
    8,
@@ -5152,6 +6121,10 @@
    4,
    4
   ],
+  "CNA_CascadedShadowMapHandle": [
+   8,
+   8
+  ],
   "CNA_Char16": [
    2,
    2
@@ -5164,6 +6137,38 @@
    4,
    4
   ],
+  "CNA_ClusteredForwardEffectHandle": [
+   8,
+   8
+  ],
+  "CNA_ClusteredLightAssignmentHandle": [
+   8,
+   8
+  ],
+  "CNA_ClusteredLightBufferHandle": [
+   8,
+   8
+  ],
+  "CNA_ClusteredLightComputeHandle": [
+   8,
+   8
+  ],
+  "CNA_ClusteredLightGridHandle": [
+   8,
+   8
+  ],
+  "CNA_ClusteredLightSetHandle": [
+   8,
+   8
+  ],
+  "CNA_ClusteredLightType": [
+   4,
+   4
+  ],
+  "CNA_ClusteredShadowPolicyHandle": [
+   8,
+   8
+  ],
   "CNA_ColorWriteChannels": [
    4,
    4
@@ -5173,6 +6178,10 @@
    4
   ],
   "CNA_CompassHandle": [
+   8,
+   8
+  ],
+  "CNA_ComputeShaderHandle": [
    8,
    8
   ],
@@ -5192,9 +6201,17 @@
    4,
    4
   ],
+  "CNA_CubeLutHandle": [
+   8,
+   8
+  ],
   "CNA_CubeMapFace": [
    4,
    4
+  ],
+  "CNA_CubeShadowMapHandle": [
+   8,
+   8
   ],
   "CNA_CullMode": [
    4,
@@ -5220,13 +6237,29 @@
    4,
    4
   ],
+  "CNA_DebugDrawHandle": [
+   8,
+   8
+  ],
+  "CNA_DecalPassHandle": [
+   8,
+   8
+  ],
   "CNA_DepthEffectMode": [
+   4,
+   4
+  ],
+  "CNA_DepthEncoding": [
    4,
    4
   ],
   "CNA_DepthFormat": [
    4,
    4
+  ],
+  "CNA_DepthNormalPrepassHandle": [
+   8,
+   8
   ],
   "CNA_DepthStencilStatePreset": [
    4,
@@ -5239,6 +6272,10 @@
   "CNA_DirectionalLightHandle": [
    8,
    8
+  ],
+  "CNA_DisplayColorSpace": [
+   4,
+   4
   ],
   "CNA_DisplayOrientation": [
    4,
@@ -5300,6 +6337,10 @@
    4,
    4
   ],
+  "CNA_EnvironmentProcessorHandle": [
+   8,
+   8
+  ],
   "CNA_ErrorCategory": [
    4,
    4
@@ -5319,6 +6360,14 @@
   "CNA_FillMode": [
    4,
    4
+  ],
+  "CNA_FrustumCullerEXTHandle": [
+   8,
+   8
+  ],
+  "CNA_FullscreenPassHandle": [
+   8,
+   8
   ],
   "CNA_GameComponentEvent": [
    4,
@@ -5420,6 +6469,14 @@
    4,
    4
   ],
+  "CNA_GpuInstanceCullerHandle": [
+   8,
+   8
+  ],
+  "CNA_GpuTimerHandle": [
+   8,
+   8
+  ],
   "CNA_GraphicsBackendCategory": [
    4,
    4
@@ -5453,6 +6510,14 @@
    8
   ],
   "CNA_GraphicsDeviceStatus": [
+   4,
+   4
+  ],
+  "CNA_GraphicsImageAccess": [
+   4,
+   4
+  ],
+  "CNA_GraphicsMemoryBarrier": [
    4,
    4
   ],
@@ -5500,6 +6565,10 @@
    4,
    4
   ],
+  "CNA_HdrDisplayOutputHandle": [
+   8,
+   8
+  ],
   "CNA_IndexBufferEventRegistrationHandle": [
    8,
    8
@@ -5513,6 +6582,10 @@
    4
   ],
   "CNA_InputDeviceEventRegistrationHandle": [
+   8,
+   8
+  ],
+  "CNA_InstancedRendererEXTHandle": [
    8,
    8
   ],
@@ -5560,11 +6633,35 @@
    8,
    8
   ],
+  "CNA_LightProbeBakerHandle": [
+   8,
+   8
+  ],
+  "CNA_LightProbeHandle": [
+   8,
+   8
+  ],
+  "CNA_LightProbeVolumeHandle": [
+   8,
+   8
+  ],
+  "CNA_LodGroupEXTHandle": [
+   8,
+   8
+  ],
+  "CNA_LodSelectionMode": [
+   4,
+   4
+  ],
   "CNA_LogCategory": [
    4,
    4
   ],
   "CNA_LogLevel": [
+   4,
+   4
+  ],
+  "CNA_LutInterpolation": [
    4,
    4
   ],
@@ -5812,6 +6909,14 @@
    8,
    8
   ],
+  "CNA_ParticleSystemHandle": [
+   8,
+   8
+  ],
+  "CNA_PbrMaterialExtensionsHandle": [
+   8,
+   8
+  ],
   "CNA_PbrTextureSlot": [
    4,
    4
@@ -5852,6 +6957,14 @@
    8,
    8
   ],
+  "CNA_PostProcessChainHandle": [
+   8,
+   8
+  ],
+  "CNA_PostProcessPassHandle": [
+   8,
+   8
+  ],
   "CNA_PowerState": [
    4,
    4
@@ -5876,6 +6989,10 @@
    4,
    4
   ],
+  "CNA_PunctualLightKindEXT": [
+   4,
+   4
+  ],
   "CNA_RacingCameraAngle": [
    4,
    4
@@ -5884,13 +7001,25 @@
    4,
    4
   ],
+  "CNA_RenderPipelineHandle": [
+   8,
+   8
+  ],
   "CNA_RenderQuality": [
    4,
    4
   ],
+  "CNA_RenderTargetEventRegistrationHandle": [
+   8,
+   8
+  ],
   "CNA_RenderTargetKind": [
    4,
    4
+  ],
+  "CNA_RenderTargetPoolHandle": [
+   8,
+   8
   ],
   "CNA_RenderTargetUsage": [
    4,
@@ -5920,6 +7049,10 @@
    4,
    4
   ],
+  "CNA_ScopedRenderTargetHandle": [
+   8,
+   8
+  ],
   "CNA_SeekOrigin": [
    4,
    4
@@ -5948,9 +7081,17 @@
    4,
    4
   ],
+  "CNA_ShaderEffectFactoryHandle": [
+   8,
+   8
+  ],
   "CNA_ShaderStage": [
    4,
    4
+  ],
+  "CNA_ShadowMapHandle": [
+   8,
+   8
   ],
   "CNA_ShadowQuality": [
    4,
@@ -5968,6 +7109,10 @@
    8,
    8
   ],
+  "CNA_SkyboxHandle": [
+   8,
+   8
+  ],
   "CNA_SongCollectionHandle": [
    8,
    8
@@ -5980,6 +7125,14 @@
    4,
    4
   ],
+  "CNA_SpatialUpscalePassHandle": [
+   8,
+   8
+  ],
+  "CNA_SpotShadowMapHandle": [
+   8,
+   8
+  ],
   "CNA_SpriteEffects": [
    4,
    4
@@ -5991,6 +7144,10 @@
   "CNA_StencilOperation": [
    4,
    4
+  ],
+  "CNA_StorageBufferHandle": [
+   8,
+   8
   ],
   "CNA_StorageContainerHandle": [
    8,
@@ -6044,6 +7201,14 @@
    4,
    4
   ],
+  "CNA_TransparencyMode": [
+   4,
+   4
+  ],
+  "CNA_TransparentDrawListHandle": [
+   8,
+   8
+  ],
   "CNA_Unsupported3DGraphicsCallBehavior": [
    4,
    4
@@ -6091,6 +7256,10 @@
   "CNA_VideoSoundtrackType": [
    4,
    4
+  ],
+  "CNA_WeightedBlendedTransparencyHandle": [
+   8,
+   8
   ]
  },
  "schema_version": 1,
@@ -6218,6 +7387,86 @@
     ]
    },
    "size": 24
+  },
+  "CNA_AreaLightBrdfTerms": {
+   "align": 4,
+   "fields": {
+    "average_normal": [
+     20,
+     4
+    ],
+    "average_tangent": [
+     16,
+     4
+    ],
+    "fresnel": [
+     12,
+     4
+    ],
+    "magnitude": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 24
+  },
+  "CNA_AreaLightEXT": {
+   "align": 4,
+   "fields": {
+    "color": [
+     52,
+     12
+    ],
+    "intensity": [
+     64,
+     4
+    ],
+    "position": [
+     16,
+     12
+    ],
+    "range": [
+     68,
+     4
+    ],
+    "reserved0": [
+     13,
+     3
+    ],
+    "right_axis": [
+     28,
+     12
+    ],
+    "shape": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "two_sided": [
+     12,
+     1
+    ],
+    "up_axis": [
+     40,
+     12
+    ]
+   },
+   "size": 72
   },
   "CNA_AttitudeReading": {
    "align": 8,
@@ -6785,6 +8034,60 @@
    },
    "size": 12
   },
+  "CNA_ClusteredLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     12,
+     1
+    ],
+    "color": [
+     40,
+     12
+    ],
+    "direction": [
+     28,
+     12
+    ],
+    "inner_angle": [
+     60,
+     4
+    ],
+    "intensity": [
+     52,
+     4
+    ],
+    "outer_angle": [
+     64,
+     4
+    ],
+    "position": [
+     16,
+     12
+    ],
+    "range": [
+     56,
+     4
+    ],
+    "reserved": [
+     13,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "type": [
+     8,
+     4
+    ]
+   },
+   "size": 68
+  },
   "CNA_Color": {
    "align": 1,
    "fields": {
@@ -7184,6 +8487,40 @@
     ]
    },
    "size": 64
+  },
+  "CNA_DirectionalLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     36,
+     1
+    ],
+    "color": [
+     20,
+     12
+    ],
+    "direction": [
+     8,
+     12
+    ],
+    "intensity": [
+     32,
+     4
+    ],
+    "reserved": [
+     37,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
   },
   "CNA_DisplayMode": {
    "align": 4,
@@ -8359,6 +9696,220 @@
    },
    "size": 144
   },
+  "CNA_GltfMaterialExtensionSourceEXT": {
+   "align": 4,
+   "fields": {
+    "attenuation_color_ext": [
+     44,
+     12
+    ],
+    "attenuation_distance_ext": [
+     40,
+     4
+    ],
+    "clearcoat_factor_ext": [
+     8,
+     4
+    ],
+    "clearcoat_roughness_factor_ext": [
+     12,
+     4
+    ],
+    "iridescence_factor_ext": [
+     56,
+     4
+    ],
+    "iridescence_ior_ext": [
+     60,
+     4
+    ],
+    "iridescence_thickness_maximum_ext": [
+     68,
+     4
+    ],
+    "iridescence_thickness_minimum_ext": [
+     64,
+     4
+    ],
+    "sheen_color_factor_ext": [
+     16,
+     12
+    ],
+    "sheen_roughness_factor_ext": [
+     28,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "thickness_factor_ext": [
+     36,
+     4
+    ],
+    "transmission_factor_ext": [
+     32,
+     4
+    ]
+   },
+   "size": 72
+  },
+  "CNA_GltfMaterialExtensionTexturesEXT": {
+   "align": 8,
+   "fields": {
+    "clearcoat": [
+     8,
+     8
+    ],
+    "clearcoat_normal": [
+     24,
+     8
+    ],
+    "clearcoat_roughness": [
+     16,
+     8
+    ],
+    "iridescence": [
+     64,
+     8
+    ],
+    "iridescence_thickness": [
+     72,
+     8
+    ],
+    "sheen_color": [
+     32,
+     8
+    ],
+    "sheen_roughness": [
+     40,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "thickness": [
+     56,
+     8
+    ],
+    "transmission": [
+     48,
+     8
+    ]
+   },
+   "size": 80
+  },
+  "CNA_GltfMaterialSourceEXT": {
+   "align": 4,
+   "fields": {
+    "alpha_cutoff": [
+     76,
+     4
+    ],
+    "alpha_mode": [
+     72,
+     4
+    ],
+    "base_color_factor": [
+     8,
+     16
+    ],
+    "double_sided": [
+     80,
+     1
+    ],
+    "emissive_factor": [
+     32,
+     12
+    ],
+    "ior_ext": [
+     52,
+     4
+    ],
+    "metallic_factor": [
+     24,
+     4
+    ],
+    "normal_scale": [
+     44,
+     4
+    ],
+    "occlusion_strength": [
+     48,
+     4
+    ],
+    "reserved": [
+     81,
+     3
+    ],
+    "roughness_factor": [
+     28,
+     4
+    ],
+    "specular_color_factor_ext": [
+     60,
+     12
+    ],
+    "specular_factor_ext": [
+     56,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 308
+  },
+  "CNA_GltfMaterialTexturesEXT": {
+   "align": 8,
+   "fields": {
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 64
+  },
+  "CNA_GpuCullableInstance": {
+   "align": 4,
+   "fields": {
+    "bounds": [
+     72,
+     24
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "world": [
+     8,
+     64
+    ]
+   },
+   "size": 96
+  },
   "CNA_GraphicsAdapterInfo": {
    "align": 8,
    "fields": {
@@ -8729,6 +10280,40 @@
    },
    "size": 24
   },
+  "CNA_ImageBasedLightEXT": {
+   "align": 8,
+   "fields": {
+    "brdf_lut": [
+     24,
+     8
+    ],
+    "intensity": [
+     36,
+     4
+    ],
+    "irradiance": [
+     8,
+     8
+    ],
+    "prefiltered_mip_count": [
+     32,
+     4
+    ],
+    "prefiltered_specular": [
+     16,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 40
+  },
   "CNA_IndexBufferCreateInfo": {
    "align": 4,
    "fields": {
@@ -8834,6 +10419,54 @@
     ]
    },
    "size": 32
+  },
+  "CNA_IndirectDrawArguments": {
+   "align": 4,
+   "fields": {
+    "base_instance": [
+     12,
+     4
+    ],
+    "first_vertex": [
+     8,
+     4
+    ],
+    "instance_count": [
+     4,
+     4
+    ],
+    "vertex_count": [
+     0,
+     4
+    ]
+   },
+   "size": 16
+  },
+  "CNA_IndirectDrawIndexedArguments": {
+   "align": 4,
+   "fields": {
+    "base_instance": [
+     16,
+     4
+    ],
+    "base_vertex": [
+     12,
+     4
+    ],
+    "first_index": [
+     8,
+     4
+    ],
+    "index_count": [
+     0,
+     4
+    ],
+    "instance_count": [
+     4,
+     4
+    ]
+   },
+   "size": 20
   },
   "CNA_InputDeviceInfo": {
    "align": 8,
@@ -9084,6 +10717,24 @@
     ]
    },
    "size": 24
+  },
+  "CNA_LodLevelEXT": {
+   "align": 8,
+   "fields": {
+    "max_distance": [
+     8,
+     4
+    ],
+    "part": [
+     0,
+     8
+    ],
+    "reserved0": [
+     12,
+     4
+    ]
+   },
+   "size": 16
   },
   "CNA_Matrix": {
    "align": 4,
@@ -9575,6 +11226,120 @@
    },
    "size": 8
   },
+  "CNA_Particle": {
+   "align": 4,
+   "fields": {
+    "position": [
+     0,
+     16
+    ],
+    "state": [
+     32,
+     16
+    ],
+    "velocity": [
+     16,
+     16
+    ]
+   },
+   "size": 48
+  },
+  "CNA_ParticleEmitterSettings": {
+   "align": 4,
+   "fields": {
+    "cone_angle": [
+     76,
+     4
+    ],
+    "direction": [
+     20,
+     12
+    ],
+    "drag": [
+     96,
+     4
+    ],
+    "emission_rate": [
+     100,
+     4
+    ],
+    "end_color": [
+     60,
+     16
+    ],
+    "end_size": [
+     108,
+     4
+    ],
+    "gravity": [
+     32,
+     12
+    ],
+    "lifetime": [
+     88,
+     4
+    ],
+    "lifetime_variance": [
+     92,
+     4
+    ],
+    "position": [
+     8,
+     12
+    ],
+    "speed": [
+     80,
+     4
+    ],
+    "speed_variance": [
+     84,
+     4
+    ],
+    "start_color": [
+     44,
+     16
+    ],
+    "start_size": [
+     104,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 112
+  },
+  "CNA_PassTimingEXT": {
+   "align": 8,
+   "fields": {
+    "milliseconds": [
+     16,
+     8
+    ],
+    "reserved": [
+     12,
+     4
+    ],
+    "sample_count": [
+     8,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 24
+  },
   "CNA_PbrMaterial": {
    "align": 8,
    "fields": {
@@ -9783,6 +11548,122 @@
    },
    "size": 8
   },
+  "CNA_PointLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     40,
+     1
+    ],
+    "color": [
+     20,
+     12
+    ],
+    "intensity": [
+     32,
+     4
+    ],
+    "position": [
+     8,
+     12
+    ],
+    "range": [
+     36,
+     4
+    ],
+    "reserved": [
+     41,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 44
+  },
+  "CNA_PostProcessContext": {
+   "align": 8,
+   "fields": {
+    "destination": [
+     40,
+     8
+    ],
+    "elapsed_seconds": [
+     56,
+     4
+    ],
+    "far_plane": [
+     64,
+     4
+    ],
+    "has_previous_frame": [
+     68,
+     1
+    ],
+    "height": [
+     52,
+     4
+    ],
+    "inverse_projection": [
+     136,
+     64
+    ],
+    "inverse_view": [
+     200,
+     64
+    ],
+    "near_plane": [
+     60,
+     4
+    ],
+    "previous_view_projection": [
+     264,
+     64
+    ],
+    "projection": [
+     72,
+     64
+    ],
+    "reserved": [
+     69,
+     3
+    ],
+    "source": [
+     8,
+     8
+    ],
+    "source_depth": [
+     16,
+     8
+    ],
+    "source_normals": [
+     24,
+     8
+    ],
+    "source_velocity": [
+     32,
+     8
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "width": [
+     48,
+     4
+    ]
+   },
+   "size": 336
+  },
   "CNA_PresentationParameters": {
    "align": 4,
    "fields": {
@@ -9840,6 +11721,68 @@
     ]
    },
    "size": 44
+  },
+  "CNA_PunctualLightEXT": {
+   "align": 8,
+   "fields": {
+    "diffuse_color": [
+     40,
+     12
+    ],
+    "direction": [
+     28,
+     12
+    ],
+    "inner_angle": [
+     56,
+     4
+    ],
+    "kind": [
+     8,
+     4
+    ],
+    "outer_angle": [
+     60,
+     4
+    ],
+    "position": [
+     16,
+     12
+    ],
+    "range": [
+     52,
+     4
+    ],
+    "reserved": [
+     12,
+     4
+    ],
+    "shadow_cube": [
+     72,
+     8
+    ],
+    "shadow_depth_bias": [
+     64,
+     4
+    ],
+    "shadow_map": [
+     80,
+     8
+    ],
+    "shadow_view_projection": [
+     88,
+     64
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 152
   },
   "CNA_QualityOfService": {
    "align": 8,
@@ -9979,6 +11922,44 @@
    },
    "size": 16
   },
+  "CNA_RenderPipelineFrameStatisticsEXT": {
+   "align": 8,
+   "fields": {
+    "drew_skybox": [
+     17,
+     1
+    ],
+    "gpu_memory_estimate_bytes": [
+     24,
+     8
+    ],
+    "passes_run": [
+     8,
+     4
+    ],
+    "reserved": [
+     18,
+     2
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "target_switches": [
+     12,
+     4
+    ],
+    "used_scene_target": [
+     16,
+     1
+    ]
+   },
+   "size": 32
+  },
   "CNA_RenderPipelineSettings": {
    "align": 4,
    "fields": {
@@ -10024,6 +12005,212 @@
     ]
    },
    "size": 28
+  },
+  "CNA_RenderPipelineSettingsEXT": {
+   "align": 4,
+   "fields": {
+    "bloom_enabled": [
+     24,
+     1
+    ],
+    "bloom_intensity": [
+     28,
+     4
+    ],
+    "bloom_iterations": [
+     36,
+     4
+    ],
+    "bloom_threshold": [
+     32,
+     4
+    ],
+    "chromatic_aberration_strength": [
+     120,
+     4
+    ],
+    "color_grade_enabled": [
+     140,
+     1
+    ],
+    "color_grade_strength": [
+     144,
+     4
+    ],
+    "dof_enabled": [
+     148,
+     1
+    ],
+    "dof_focal_length": [
+     156,
+     4
+    ],
+    "dof_focus_distance": [
+     152,
+     4
+    ],
+    "dof_max_radius": [
+     164,
+     4
+    ],
+    "doff_number": [
+     160,
+     4
+    ],
+    "exposure": [
+     12,
+     4
+    ],
+    "film_grain_intensity": [
+     124,
+     4
+    ],
+    "fxaa_edge_threshold_ext": [
+     180,
+     4
+    ],
+    "fxaa_enabled": [
+     176,
+     1
+    ],
+    "gamma": [
+     16,
+     4
+    ],
+    "hdr_enabled": [
+     8,
+     1
+    ],
+    "height_fog_base_height": [
+     108,
+     4
+    ],
+    "height_fog_density": [
+     100,
+     4
+    ],
+    "height_fog_falloff": [
+     104,
+     4
+    ],
+    "lens_flare_dispersal": [
+     136,
+     4
+    ],
+    "lens_flare_intensity": [
+     132,
+     4
+    ],
+    "lens_flare_threshold": [
+     128,
+     4
+    ],
+    "light_shaft_decay": [
+     96,
+     4
+    ],
+    "light_shaft_intensity": [
+     92,
+     4
+    ],
+    "light_shaft_threshold": [
+     88,
+     4
+    ],
+    "motion_blur_max_distance": [
+     116,
+     4
+    ],
+    "motion_blur_strength": [
+     112,
+     4
+    ],
+    "render_quality": [
+     184,
+     4
+    ],
+    "reserved": [
+     193,
+     4
+    ],
+    "shadow_quality": [
+     188,
+     4
+    ],
+    "shadows_enabled": [
+     192,
+     1
+    ],
+    "ssao_enabled": [
+     40,
+     1
+    ],
+    "ssao_intensity": [
+     52,
+     4
+    ],
+    "ssao_radius": [
+     48,
+     4
+    ],
+    "ssao_sample_count": [
+     56,
+     4
+    ],
+    "ssr_depth_bias": [
+     76,
+     4
+    ],
+    "ssr_edge_fade": [
+     80,
+     4
+    ],
+    "ssr_enabled": [
+     60,
+     1
+    ],
+    "ssr_intensity": [
+     172,
+     4
+    ],
+    "ssr_max_distance": [
+     64,
+     4
+    ],
+    "ssr_roughness_blur": [
+     168,
+     4
+    ],
+    "ssr_step_count": [
+     68,
+     4
+    ],
+    "ssr_thickness": [
+     72,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "tonemapping_mode": [
+     20,
+     4
+    ],
+    "transparency_mode": [
+     44,
+     4
+    ],
+    "volumetric_fog_density": [
+     84,
+     4
+    ]
+   },
+   "size": 200
   },
   "CNA_RenderTarget2DCreateInfo": {
    "align": 4,
@@ -10347,6 +12534,40 @@
    },
    "size": 16
   },
+  "CNA_ShadowCascadeStateEXT": {
+   "align": 4,
+   "fields": {
+    "blend_band": [
+     12,
+     4
+    ],
+    "camera_view": [
+     288,
+     64
+    ],
+    "count": [
+     8,
+     4
+    ],
+    "debug_tint": [
+     352,
+     1
+    ],
+    "reserved": [
+     353,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 356
+  },
   "CNA_SignedInGamerEventInfo": {
    "align": 8,
    "fields": {
@@ -10512,6 +12733,56 @@
     ]
    },
    "size": 32
+  },
+  "CNA_SpotLightEXT": {
+   "align": 4,
+   "fields": {
+    "casts_shadows": [
+     60,
+     1
+    ],
+    "color": [
+     32,
+     12
+    ],
+    "direction": [
+     20,
+     12
+    ],
+    "inner_angle": [
+     52,
+     4
+    ],
+    "intensity": [
+     44,
+     4
+    ],
+    "outer_angle": [
+     56,
+     4
+    ],
+    "position": [
+     8,
+     12
+    ],
+    "range": [
+     48,
+     4
+    ],
+    "reserved": [
+     61,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ]
+   },
+   "size": 64
   },
   "CNA_SpriteBatchBeginInfo": {
    "align": 4,
@@ -11940,6 +14211,40 @@
     ]
    },
    "size": 48
+  },
+  "CNA_VideoFrameEXT": {
+   "align": 8,
+   "fields": {
+    "available": [
+     32,
+     1
+    ],
+    "generation": [
+     16,
+     8
+    ],
+    "presentation_time": [
+     24,
+     8
+    ],
+    "reserved": [
+     33,
+     3
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "texture": [
+     8,
+     8
+    ]
+   },
+   "size": 40
   },
   "CNA_VideoInfo": {
    "align": 8,

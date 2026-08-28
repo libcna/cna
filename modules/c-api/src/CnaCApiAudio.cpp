@@ -2000,8 +2000,9 @@ CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
                 "The AudioListener count is too large.");
         }
         // At least one element, so the pointer handed to the canonical overload is never null even
-        // for an empty array: a count of zero has to reach the canonical count check and be refused
-        // as unsupported, not be mistaken for a null array.
+        // for an empty array: a count of zero reaches the canonical count check and is refused
+        // there, not mistaken for a null array. CABI-6: the canonical overload now accepts any
+        // count of one or more, matching XNA, which hands its whole listener array to XACT.
         std::vector<Microsoft::Xna::Framework::Audio::AudioListener> nativeListeners(
             static_cast<std::size_t>(listenerCount == 0U ? 1U : listenerCount));
         for (uint64_t index = 0U; index < listenerCount; ++index) {
@@ -2021,9 +2022,9 @@ CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        // The canonical overload accepts any count and then refuses everything but one; the empty
-        // array reaches it as well, so the refusal is the canonical one rather than an early return
-        // invented here.
+        // The canonical overload evaluates every listener and applies the dominant one, and the
+        // empty array reaches it too, so a count of zero is refused by the canonical rule rather
+        // than by an early return invented here.
         instance->value->Apply3D(
             nativeListeners.data(),
             static_cast<int>(listenerCount),

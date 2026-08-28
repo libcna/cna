@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework
          * @brief Gets the drawing order value used to sort drawable components.
          * @return The draw order; lower values are drawn first.
          */
-        [[nodiscard]] SharpRuntime::Int32 getDrawOrderProperty() const;
+        [[nodiscard]] SharpRuntime::Int32 getDrawOrderProperty() const override;
 
         /**
          * @brief Sets the drawing order and raises the draw-order change event when the value changes.
@@ -47,7 +47,7 @@ namespace Microsoft::Xna::Framework
          * @brief Gets whether this component should be drawn.
          * @return true if the component is visible and should be drawn.
          */
-        [[nodiscard]] bool getVisibleProperty() const;
+        [[nodiscard]] bool getVisibleProperty() const override;
 
         /**
          * @brief Sets visibility and raises the visibility change event when the value changes.

@@ -1173,8 +1173,15 @@ CNA_C_API CNA_Result cna_audio_listener_init(CNA_AudioListener* out_listener);
  * @param instance Owned instance handle.
  * @param listener Where the ears are.
  * @param emitter Where the sound is.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed instance or for one that
+ *         is playing without having been positioned first (see below), or a documented
  *         argument/handle/thread/native failure.
+ *
+ * **Aim before you play.** Starting playback fixes the choice between 3D and pan for the rest of
+ * that playback: the reference implementation submits its audio packet on the first `..._play`, and
+ * this route refuses with `CNA_RESULT_INVALID_STATE` on an instance that is playing and was never
+ * positioned. Position it first and then play, or stop it, position it, and play again. An instance
+ * already positioned before playback keeps accepting this route while it plays.
  *
  * The distance attenuation this applies is a **computed inverse law beyond the process-wide distance
  * scale and full volume within it**, not a falloff that starts at zero distance — the canonical
@@ -1198,13 +1205,28 @@ CNA_C_API CNA_Result cna_sound_effect_instance_apply_3d(
  * @param listeners Array of @p listener_count listeners, borrowed for the duration of the call.
  * @param listener_count Number of listeners.
  * @param emitter Where the sound is.
- * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` for any count other than one,
- *         `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null array or a count of
+ *         zero, `CNA_RESULT_INVALID_STATE` for a disposed instance or for one that is playing
+ *         without having been positioned first (see below), or a documented
  *         argument/handle/thread/native failure.
  *
- * **This runtime supports exactly one listener.** The canonical overload accepts the array XNA's
- * split-screen API needs and then refuses every count but one, which is reported here as it is
- * rather than smoothed into a silent single-listener fallback.
+ * **Aim before you play.** Starting playback fixes the choice between 3D and pan for the rest of
+ * that playback: the reference implementation submits its audio packet on the first `..._play`, and
+ * this route refuses with `CNA_RESULT_INVALID_STATE` on an instance that is playing and was never
+ * positioned. Position it first and then play, or stop it, position it, and play again. An instance
+ * already positioned before playback keeps accepting this route while it plays.
+ *
+ * Any count of one or more is accepted, as in XNA, which copies the whole listener array to XACT
+ * with no count restriction.
+ *
+ * **How several listeners combine is an approximation, and worth knowing before relying on it.**
+ * XACT computes per-listener output matrices; this runtime's mixer has a single stereo gain pair
+ * and no equivalent. So every listener is evaluated and the **nearest** one -- the listener that
+ * hears the emitter loudest -- decides the applied attenuation, pan and Doppler. Moving a second,
+ * closer listener does change the result; this is not a silent fallback to `listeners[0]`.
+ *
+ * A count of zero is refused rather than guessed at: XNA reaches its native call with zero and
+ * surfaces whatever XACT returns, an outcome not established here.
  */
 CNA_C_API CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
     CNA_Handle instance,

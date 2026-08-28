@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "CNA/Internal/DefaultWindowTitle.hpp"
@@ -675,6 +676,21 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (!ResourceDestroyed.Empty())
             ResourceDestroyed.Raise(this, ResourceDestroyedEventArgs(name, tag));
+    }
+
+    void GraphicsDevice::NotifyContentLostResourcesEXT()
+    {
+        // A copy, because a subscriber is free to dispose the resource it is told about and that
+        // would rewrite resources_ underneath this loop.
+        const std::vector<GraphicsResource*> snapshot = resources_;
+        for (GraphicsResource* const resource : snapshot)
+        {
+            if (auto* const losable =
+                    dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(resource))
+            {
+                losable->NotifyContentLostEXT();
+            }
+        }
     }
 
     void GraphicsDevice::AddResourceReference(GraphicsResource* resource)
@@ -3216,6 +3232,11 @@ namespace Microsoft::Xna::Framework::Graphics
                     break;
                 case CNA::Internal::Renderers::RendererDeviceEvent::Reset:
                     deviceStatus_ = GraphicsDeviceStatus::Normal;
+                    // CABI-15: a renderer really did lose and recreate its resources, so the
+                    // default-pool ones lost their contents. This is the only place ContentLost is
+                    // raised: a caller-initiated Reset on a renderer that never loses anything must
+                    // not fire it, or the event becomes noise on 44 of the 47 families.
+                    NotifyContentLostResourcesEXT();
                     DeviceReset.Raise(this, System::EventArgs::Empty);
                     break;
             }
@@ -3929,6 +3950,19 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderer_)
             renderer_->SetRenderTargets(
                 descriptors.data(), static_cast<int>(descriptors.size()));
+
+        // CABI-28: bound for writing, so the content is no longer lost. Deliberately after the
+        // renderer call above rather than beside the per-binding validation: a binding that throws
+        // (unsupported target, mismatched dimensions, duplicate subresource) must leave the flag
+        // exactly as it found it, and every path -- 2D, cube face, MRT -- funnels through here.
+        for (IRenderTarget* const target : publicTargets)
+        {
+            if (auto* const losable =
+                    dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(target))
+            {
+                losable->ClearContentLostEXT();
+            }
+        }
 
         currentRenderTargets_ = renderTargets;
         renderTargetBound_ = true;

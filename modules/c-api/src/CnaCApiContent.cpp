@@ -31,6 +31,7 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedContentManager;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
 using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
@@ -706,7 +707,7 @@ CNA_Result cna_content_manager_load_sprite_font(
                 "The loaded SpriteFont handle could not be created.");
         }
         ++texture->activeFontReferenceCount;
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(contentManager->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

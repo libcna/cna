@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "Microsoft/Xna/Framework/Graphics/DynamicVertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
@@ -214,6 +215,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // GFX-043: propagate this buffer's complete declaration before every real upload. The
         // shared empty branch returns before this method, so even declaration propagation is not
         // a renderer call for an empty operation.
+        // CABI-15: content written again, so it is no longer lost. Doing it on this single
+        // upload path rather than in the 13 SetData overloads is what keeps the two in step.
+        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this)) {
+            losable->ClearContentLostEXT();
+        }
         renderer_->SetVertexDeclaration(vertexDeclaration_);
         if (useOptions)
             renderer_->SetDataWithOptions(data, elementCount, uploadStride, options);

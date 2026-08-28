@@ -18,9 +18,21 @@ class GraphicsDevice;
 
 namespace CNA::C::Detail {
 
+/// A device a call may use. `parentGame` is the **owner token**, not necessarily a game: it is
+/// the game handle for the game's own device, and the owned-device handle for a caller-created
+/// one. Resources copy it and compare it to reject cross-device use, so two standalone devices
+/// are as distinguishable as two games are.
 struct BorrowedGraphicsDevice final {
     Microsoft::Xna::Framework::Graphics::GraphicsDevice* value;
     CNA_Handle parentGame;
+};
+
+/// A GraphicsDevice the caller created outside any Game and must destroy itself (CABI-13).
+/// `view` is what every resource route resolves to, so an owned device reaches them by exactly
+/// the same path the game's own device does.
+struct OwnedGraphicsDevice final {
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::GraphicsDevice> value;
+    std::shared_ptr<BorrowedGraphicsDevice> view;
 };
 
 [[nodiscard]] HandleRegistry& GetRuntimeHandles() noexcept;
@@ -75,6 +87,17 @@ void ResetGameEventRegistrationState() noexcept;
 // Releases the single borrowed handle to the game's own content manager. The manager is a value
 // member of the game, so the handle is invalidated with the game rather than destroyed by a caller.
 void ResetGameContentManagerState() noexcept;
+
+/// True when `owner` names a live Game handle. The owner token on a resource is a game handle
+/// or an owned-device handle (see BorrowedGraphicsDevice), and only the former gates game
+/// destruction.
+[[nodiscard]] bool IsGameOwnedResource(CNA_Handle owner) noexcept;
+
+/// Counts a graphics resource against cna_game_destroy's gate, but only when its owner is a game.
+void AddOwnedGraphicsResourceFor(CNA_Handle owner) noexcept;
+
+/// Undoes AddOwnedGraphicsResourceFor for the same owner.
+void RemoveOwnedGraphicsResourceFor(CNA_Handle owner) noexcept;
 
 void AddOwnedGraphicsResource() noexcept;
 

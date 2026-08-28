@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 
+#include <cmath>
 #include <vector>
 
 namespace CNA::Internal::Renderers
@@ -42,6 +43,19 @@ namespace CNA::Internal::Renderers
     class RecordingSpriteBatchRenderer : public ISpriteBatchRenderer
     {
     public:
+        /// Casting a non-finite float to int is undefined behaviour, and since CABI-38 sprite
+        /// destinations can be non-finite: they are XNA-valid and travel into the vertex path.
+        /// UBSan reported four such casts here, but only once the build enabled
+        /// `float-cast-overflow`, which plain `-fsanitize=undefined` leaves off on this GCC.
+        ///
+        /// The float fields above are the record that matters and keep the value exactly; this is
+        /// the quantised convenience copy, so a non-finite component becomes 0 rather than
+        /// whatever the cast happened to produce.
+        [[nodiscard]] static int Quantise(float value) noexcept
+        {
+            return std::isfinite(value) ? static_cast<int>(value) : 0;
+        }
+
         struct DrawCall
         {
             const ITextureRenderer* texture = nullptr;
@@ -73,7 +87,7 @@ namespace CNA::Internal::Renderers
         {
             DrawCall call;
             call.texture = &texture;
-            call.destinationRectangle = Rectangle(static_cast<int>(x), static_cast<int>(y), 0, 0);
+            call.destinationRectangle = Rectangle(Quantise(x), Quantise(y), 0, 0);
             drawCalls.push_back(call);
         }
 
@@ -126,8 +140,8 @@ namespace CNA::Internal::Renderers
             call.destinationWidth = destinationWidth;
             call.destinationHeight = destinationHeight;
             call.destinationRectangle = Rectangle(
-                static_cast<int>(destinationX), static_cast<int>(destinationY),
-                static_cast<int>(destinationWidth), static_cast<int>(destinationHeight));
+                Quantise(destinationX), Quantise(destinationY),
+                Quantise(destinationWidth), Quantise(destinationHeight));
             call.sourceRectangle = sourceRectangle;
             call.color = color;
             call.rotation = rotation;

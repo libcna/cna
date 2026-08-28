@@ -93,7 +93,8 @@ static int validate_structure_refusals(const CNA_Handle instance)
 }
 
 /* The process-wide 3D settings are what Apply3D reads, so they are moved before positioning. */
-static int validate_positioning(const CNA_Handle game, const CNA_Handle instance)
+static int validate_positioning(const CNA_Handle game, const CNA_Handle sound_effect,
+                                const CNA_Handle instance)
 {
     CNA_AudioEmitter emitter;
     CNA_AudioListener listener;
@@ -116,9 +117,53 @@ static int validate_positioning(const CNA_Handle game, const CNA_Handle instance
     emitter.velocity.x = -60.0F;
     listener.forward.z = -1.0F;
     listener.up.y = 1.0F;
-    if (cna_sound_effect_instance_play(instance) != CNA_RESULT_SUCCESS ||
+    /*
+     * CABI-25: Apply3D before Play, which is the order XNA requires. Its UnsafeApply3D only sets
+     * the instance's 3D flag while no packet has been submitted, and refuses outright once one
+     * has -- so an instance aimed after it starts playing throws InvalidApply3DCall. Aiming first
+     * and updating during playback (below) is the sequence that works.
+     */
+    if (cna_sound_effect_instance_apply_3d(instance, &listener, &emitter) != CNA_RESULT_SUCCESS ||
+        cna_sound_effect_instance_play(instance) != CNA_RESULT_SUCCESS ||
         cna_sound_effect_instance_apply_3d(instance, &listener, &emitter) != CNA_RESULT_SUCCESS) {
         return 0;
+    }
+    /* Pan is refused while this instance is playing in 3D; the property is unchanged by that. */
+    if (cna_sound_effect_instance_set_pan(instance, 0.5F) == CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_sound_effect_instance_stop(instance, CNA_TRUE) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /*
+     * CABI-32: the refusal itself, at the C boundary. The comment above describes the order XNA
+     * requires; this asserts what happens when a caller gets it wrong, which is the half a
+     * consumer actually has to handle. A never-positioned instance that is already playing refuses
+     * with CNA_RESULT_INVALID_STATE, and stopping it releases the choice again.
+     */
+    {
+        CNA_Handle unaimed = CNA_INVALID_HANDLE;
+        if (cna_sound_effect_create_instance(sound_effect, &unaimed) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_sound_effect_instance_play(unaimed) != CNA_RESULT_SUCCESS ||
+            cna_sound_effect_instance_apply_3d(unaimed, &listener, &emitter) !=
+                CNA_RESULT_INVALID_STATE ||
+            cna_sound_effect_instance_apply_3d_multi_ext(unaimed, &listener, 1U, &emitter) !=
+                CNA_RESULT_INVALID_STATE) {
+            (void)cna_sound_effect_instance_destroy(unaimed);
+            return 0;
+        }
+        if (cna_sound_effect_instance_stop(unaimed, CNA_TRUE) != CNA_RESULT_SUCCESS ||
+            cna_sound_effect_instance_apply_3d(unaimed, &listener, &emitter) !=
+                CNA_RESULT_SUCCESS) {
+            (void)cna_sound_effect_instance_destroy(unaimed);
+            return 0;
+        }
+        if (cna_sound_effect_instance_destroy(unaimed) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
     }
 
     /* Positioning latches spatial gain, pan and pitch inside the instance; the instance's own
@@ -162,13 +207,40 @@ static int validate_multi_listener(const CNA_Handle instance)
         CNA_RESULT_SUCCESS) {
         return 0;
     }
+    /*
+     * CABI-6: two listeners are accepted, as in XNA, whose UnsafeApply3D copies the whole array to
+     * XACT with no count restriction. This used to require CNA_RESULT_NOT_SUPPORTED.
+     */
     if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(2), &emitter) !=
-        CNA_RESULT_NOT_SUPPORTED) {
+        CNA_RESULT_SUCCESS) {
         return 0;
     }
-    /* An empty array is a count the canonical overload refuses, not a null array. */
+    /*
+     * An arrangement where the *second* listener is the dominant one: the first is far away, the
+     * second sits on the emitter. This exercises the path that picks a listener other than
+     * listeners[0].
+     *
+     * It cannot assert *which* listener won: this ABI exposes no spatial readback -- no pan,
+     * attenuation or Doppler getter -- so the choice is not observable from C. That is stated
+     * rather than dressed up, and it is why the dominant-listener rule is documented on
+     * cna_sound_effect_instance_apply_3d_multi_ext itself.
+     */
+    {
+        CNA_AudioListener nearest[2];
+        if (cna_audio_listener_init(&nearest[0]) != CNA_RESULT_SUCCESS ||
+            cna_audio_listener_init(&nearest[1]) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        nearest[0].position.x = 1000.0F;   /* far away */
+        nearest[1].position.z = 5.0F;      /* on top of the emitter */
+        if (cna_sound_effect_instance_apply_3d_multi_ext(
+                instance, nearest, UINT64_C(2), &emitter) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    /* A count of zero is refused: XNA's own outcome there is not established. */
     if (cna_sound_effect_instance_apply_3d_multi_ext(instance, listeners, UINT64_C(0), &emitter) !=
-        CNA_RESULT_NOT_SUPPORTED) {
+        CNA_RESULT_INVALID_ARGUMENT) {
         return 0;
     }
     if (cna_sound_effect_instance_apply_3d_multi_ext(instance, 0, UINT64_C(1), &emitter) !=
@@ -224,7 +296,7 @@ int main(void)
     if (!validate_structure_refusals(instance)) {
         return 5;
     }
-    if (!validate_positioning(game, instance)) {
+    if (!validate_positioning(game, sound_effect, instance)) {
         return 6;
     }
     if (!validate_multi_listener(instance)) {

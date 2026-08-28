@@ -599,6 +599,188 @@ static int validate_disposal(const CNA_StorageContainerHandle container)
     return cna_storage_container_unsubscribe_disposing(registration) == CNA_RESULT_INVALID_HANDLE;
 }
 
+/* Records a disposal and asks the container about itself from inside the callback, which is how
+   the ordering half of the contract is observable at all: the event has to arrive while the
+   handle is still answerable, not after it has been invalidated. */
+typedef struct DisposingObserver {
+    CNA_StorageContainerHandle container;
+    int calls;
+    CNA_Result query_result;
+    CNA_Bool seen_disposed;
+} DisposingObserver;
+
+static void on_disposing_observed(void* const context)
+{
+    DisposingObserver* const observer = (DisposingObserver*)context;
+    observer->calls += 1;
+    observer->query_result = cna_storage_container_get_is_disposed(
+        observer->container, &observer->seen_disposed);
+}
+
+/* CABI-34: the other ordering half the work order asks for -- Disposing relative to the container's
+   own file cleanup. Asked from inside the callback, because that is the only moment at which the
+   answer distinguishes "the event arrives before the container tears its contents down" from
+   "after". */
+typedef struct FileVisibilityObserver {
+    CNA_StorageContainerHandle container;
+    int calls;
+    CNA_Result query_result;
+    CNA_Bool seen_file;
+} FileVisibilityObserver;
+
+static void on_disposing_checks_files(void* const context)
+{
+    FileVisibilityObserver* const observer = (FileVisibilityObserver*)context;
+    observer->calls += 1;
+    observer->query_result = cna_storage_container_file_exists(
+        observer->container, view("cabi-ordering.bin"), &observer->seen_file);
+}
+
+static int validate_disposal_edges(const CNA_StorageDeviceHandle device)
+{
+    CNA_StorageContainerHandle container = CNA_INVALID_HANDLE;
+    CNA_Handle first = CNA_INVALID_HANDLE;
+    CNA_Handle second = CNA_INVALID_HANDLE;
+    int a = 0;
+    int b = 0;
+
+    /* Two subscribers on one container: both run, each exactly once. */
+    if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_storage_container_subscribe_disposing(container, on_completed, &a, &first) !=
+            CNA_RESULT_SUCCESS ||
+        cna_storage_container_subscribe_disposing(container, on_completed, &b, &second) !=
+            CNA_RESULT_SUCCESS ||
+        first == second) {
+        return 0;
+    }
+    if (cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS || a != 1 || b != 1) {
+        return 0;
+    }
+    if (cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS ||
+        cna_storage_container_unsubscribe_disposing(second) != CNA_RESULT_SUCCESS ||
+        cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* A subscriber removed before disposal does not run. Without this, an implementation that
+       ignored unsubscribe entirely would still pass every count-based assertion above. */
+    a = 0;
+    if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+            CNA_RESULT_SUCCESS ||
+        cna_storage_container_subscribe_disposing(container, on_completed, &a, &first) !=
+            CNA_RESULT_SUCCESS ||
+        cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS ||
+        cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS ||
+        a != 0 ||
+        cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* Destroying a container that was never disposed still raises Disposing exactly once -- the
+       destroy-if-needed path, which the explicit-dispose cases never reach. */
+    {
+        DisposingObserver observer = {CNA_INVALID_HANDLE, 0, CNA_RESULT_SUCCESS, CNA_FALSE};
+        if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        observer.container = container;
+        if (cna_storage_container_subscribe_disposing(
+                container, on_disposing_observed, &observer, &first) != CNA_RESULT_SUCCESS ||
+            cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS ||
+            observer.calls != 1) {
+            return 0;
+        }
+        /* Ordering: the callback ran while the container was still addressable, and reported
+           itself already disposed -- the event follows the state change, not the handle's
+           release. */
+        if (observer.query_result != CNA_RESULT_SUCCESS || observer.seen_disposed != CNA_TRUE) {
+            return 0;
+        }
+        /* The registration is a separately owned handle, as its header says, so destroying the
+           container does not release it -- the caller still has to, and only once. Pinning this
+           keeps the ownership rule from drifting into an implicit free. */
+        if (cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS ||
+            cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_INVALID_HANDLE) {
+            return 0;
+        }
+    }
+
+    /* Repeated create/destroy leaves nothing behind that changes the next cycle's answer. */
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        int calls = 0;
+        if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_container_subscribe_disposing(container, on_completed, &calls, &first) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS ||
+            calls != 1) {
+            return 0;
+        }
+    }
+
+    /* CABI-34: double dispose. The second call must be accepted and must not raise again --
+       "exactly once" has to survive a caller that disposes defensively. */
+    {
+        int calls = 0;
+        if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_container_subscribe_disposing(container, on_completed, &calls, &first) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS ||
+            calls != 1) {
+            return 0;
+        }
+        if (cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS || calls != 1) {
+            return 0;
+        }
+        /* And destroying an already-disposed container does not raise a third time either. */
+        if (cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS || calls != 1) {
+            return 0;
+        }
+        if (cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    /* CABI-34: ordering against the container's own file cleanup. The event must arrive while the
+       container's contents are still there, for the same reason it must arrive while the handle is
+       still answerable: a subscriber whose whole purpose is to flush or inspect state cannot do it
+       after the state is gone. */
+    {
+        FileVisibilityObserver observer = {CNA_INVALID_HANDLE, 0, CNA_RESULT_SUCCESS, CNA_FALSE};
+        CNA_StorageStreamHandle file = CNA_INVALID_HANDLE;
+        if (cna_storage_container_open(device, view("cabi-edges"), 0, 0, &container) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        observer.container = container;
+        if (cna_storage_container_create_file(container, view("cabi-ordering.bin"), &file) !=
+                CNA_RESULT_SUCCESS ||
+            cna_storage_stream_close(file) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (cna_storage_container_subscribe_disposing(
+                container, on_disposing_checks_files, &observer, &first) != CNA_RESULT_SUCCESS ||
+            cna_storage_container_dispose(container) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        if (observer.calls != 1 || observer.query_result != CNA_RESULT_SUCCESS ||
+            observer.seen_file != CNA_TRUE) {
+            return 0;
+        }
+        if (cna_storage_container_unsubscribe_disposing(first) != CNA_RESULT_SUCCESS ||
+            cna_storage_container_destroy(container) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    return cna_storage_device_delete_container(device, view("cabi-edges")) == CNA_RESULT_SUCCESS;
+}
+
 static int validate_storage(void)
 {
     CNA_StorageDeviceHandle device = CNA_INVALID_HANDLE;
@@ -625,7 +807,8 @@ static int validate_storage(void)
         return 0;
     }
     if (!validate_container_identity(device, container) || !validate_directories(container) ||
-        !validate_files(container) || !validate_disposal(container)) {
+        !validate_files(container) || !validate_disposal(container) ||
+        !validate_disposal_edges(device)) {
         return 0;
     }
     // A device cannot be released while it still owns a live container.

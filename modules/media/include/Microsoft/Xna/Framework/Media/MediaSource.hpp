@@ -42,7 +42,7 @@ namespace Microsoft::Xna::Framework::Media
          *
          * @return Source name string.
          */
-        [[nodiscard]] std::string ToString() const;
+        [[nodiscard]] std::string ToString() const override;
 
         /** @brief Returns the fully-qualified .NET type name. */
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;

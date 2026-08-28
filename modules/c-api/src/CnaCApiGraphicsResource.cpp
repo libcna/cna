@@ -56,6 +56,8 @@ struct GraphicsResourceView final {
     std::shared_ptr<Texture2DResource> texture;
     uint64_t* activeEffectReferenceCount = nullptr;
     uint64_t* activeModelReferenceCount = nullptr;
+    uint64_t* activeScopeReferenceCount = nullptr;
+    bool disposeAllowed = true;
 };
 
 class DisposingRegistration final {
@@ -124,6 +126,8 @@ private:
         result.parentGame = texture->parentGame;
         result.activeEffectReferenceCount = &texture->activeEffectReferenceCount;
         result.activeModelReferenceCount = &texture->activeModelReferenceCount;
+        result.activeScopeReferenceCount = &texture->activeScopeReferenceCount;
+        result.disposeAllowed = texture->disposeAllowed;
         result.texture = std::move(texture);
     } else if (kind == ObjectKind::Texture3D) {
         std::shared_ptr<Texture3DResource> texture;
@@ -155,6 +159,7 @@ private:
         result.value = std::static_pointer_cast<GraphicsResource>(target->value);
         result.parentGame = target->parentGame;
         result.activeEffectReferenceCount = &target->activeEffectReferenceCount;
+        result.activeScopeReferenceCount = &target->activeScopeReferenceCount;
     } else if (kind == ObjectKind::OcclusionQuery) {
         std::shared_ptr<OcclusionQueryResource> query;
         const CNA_Result getResult = GetRuntimeHandles().Get(
@@ -202,6 +207,7 @@ private:
         result.value = std::static_pointer_cast<GraphicsResource>(effect->value);
         result.parentGame = effect->parentGame;
         result.activeModelReferenceCount = &effect->activeModelReferenceCount;
+        result.disposeAllowed = effect->disposeAllowed;
     } else {
         return InvalidResource(CNA_RESULT_INVALID_HANDLE);
     }
@@ -211,13 +217,21 @@ private:
 
 [[nodiscard]] CNA_Result EnsureDisposable(const GraphicsResourceView& resource)
 {
+    if (!resource.disposeAllowed) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "The graphics resource is a borrowed view and cannot be disposed by the caller.");
+    }
     if ((resource.texture != nullptr &&
          (resource.texture->activeBatchReferenceCount != 0U ||
           resource.texture->activeFontReferenceCount != 0U)) ||
         (resource.activeEffectReferenceCount != nullptr &&
          *resource.activeEffectReferenceCount != 0U) ||
         (resource.activeModelReferenceCount != nullptr &&
-         *resource.activeModelReferenceCount != 0U)) {
+         *resource.activeModelReferenceCount != 0U) ||
+        (resource.activeScopeReferenceCount != nullptr &&
+         *resource.activeScopeReferenceCount != 0U)) {
         return Fail(
             CNA_RESULT_INVALID_STATE,
             CNA_ERROR_CATEGORY_STATE,

@@ -21,7 +21,8 @@ typedef CNA_Handle CNA_IndexBufferEventRegistrationHandle;
 /**
  * @brief Receives a dynamic index-buffer ContentLost notification.
  *
- * CNA currently never raises this event, but registration preserves the public event contract.
+ * CNA raises this on the renderers whose API can actually lose a device (DirectX9,
+ * Direct2D, Skia); families that cannot lose one never raise it.
  *
  * @param index_buffer Dynamic index-buffer handle supplied at registration.
  * @param context Caller-owned context supplied at registration.
@@ -212,8 +213,9 @@ CNA_C_API CNA_Result cna_index_buffer_get_data(
 /**
  * @brief Subscribes to a dynamic index buffer's ContentLost event.
  *
- * CNA currently never raises ContentLost. The callback and context remain caller-owned until
- * unregistration or buffer destruction.
+ * CNA raises this on the renderers whose API can actually lose a device (DirectX9,
+ * Direct2D, Skia); families that cannot lose one never raise it. The callback and context remain caller-owned
+ * until unregistration or buffer destruction.
  *
  * @param index_buffer Dynamic index-buffer handle.
  * @param callback Non-null callback.

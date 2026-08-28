@@ -2110,6 +2110,41 @@ static int validate_touch_panel_family(const CNA_Handle game)
         return 0;
     }
 
+    /* CBIND-083. Mouse-touch emulation is off by default, because that keeps the default
+       behaviour XNA's and FNA's: both feed the panel from real finger events only. The default is
+       asserted before anything toggles it, so a build that quietly flipped it would fail here. */
+    {
+        CNA_Bool emulation = UINT8_C(9);
+        if (cna_touch_panel_get_mouse_touch_emulation_enabled_ext(game, &emulation) !=
+                CNA_RESULT_SUCCESS ||
+            emulation != CNA_FALSE) {
+            return 0;
+        }
+        if (cna_touch_panel_set_mouse_touch_emulation_enabled_ext(game, CNA_TRUE) !=
+                CNA_RESULT_SUCCESS ||
+            cna_touch_panel_get_mouse_touch_emulation_enabled_ext(game, &emulation) !=
+                CNA_RESULT_SUCCESS ||
+            emulation != CNA_TRUE) {
+            return 0;
+        }
+        /* A non-canonical boolean is refused rather than treated as true, and the null output is
+           an argument error. */
+        if (cna_touch_panel_set_mouse_touch_emulation_enabled_ext(game, UINT8_C(2)) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_touch_panel_get_mouse_touch_emulation_enabled_ext(game, 0) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+        /* Restore the default so later assertions in this suite see the panel they expect. */
+        if (cna_touch_panel_set_mouse_touch_emulation_enabled_ext(game, CNA_FALSE) !=
+                CNA_RESULT_SUCCESS ||
+            cna_touch_panel_get_mouse_touch_emulation_enabled_ext(game, &emulation) !=
+                CNA_RESULT_SUCCESS ||
+            emulation != CNA_FALSE) {
+            return 0;
+        }
+    }
+
     /* Enabled gestures are a real bit set, so C combines them with its own operators; only the
        undefined bit is refused. */
     if (cna_touch_panel_set_enabled_gestures(

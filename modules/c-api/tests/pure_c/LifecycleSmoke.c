@@ -210,7 +210,21 @@ static CNA_Result on_load(
     CNA_SpriteBatchBeginInfo sort_probe = {
         sizeof(CNA_SpriteBatchBeginInfo), UINT32_C(1), UINT32_MAX, 0U
     };
-    if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_INVALID_ARGUMENT) {
+    /*
+     * An unnamed sort enum is accepted, not refused. XNA's Begin stores whatever it is handed and
+     * its flush path only ever compares for equality against the named members, so the batch runs
+     * as Deferred with no sort applied. This assertion used to require CNA_RESULT_INVALID_ARGUMENT,
+     * which encoded a C-boundary check CNA had and XNA does not -- the batch has to begin and end
+     * normally, or a caller cannot reproduce XNA's behaviour through this ABI at all.
+     */
+    if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    /* A second unnamed value, to keep this from passing on one accidentally-handled constant. */
+    sort_probe.sort_mode = UINT32_C(99);
+    if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;
     }
     for (size_t index = 0U; index < sizeof(sort_modes) / sizeof(sort_modes[0]); ++index) {
@@ -249,12 +263,22 @@ static CNA_Result on_update(
 {
     LifecycleState* const state = (LifecycleState*)context;
     (void)out_error;
-    if (game_time == 0 || game_time->elapsed_game_time_ticks <= 0) {
+    /*
+     * The FIRST update runs with ElapsedGameTime of exactly zero, and every later one carries a
+     * real step. That is XNA 4.0's own clock, measured on the real runtime and adopted by CNA on
+     * the owner's ruling that XNA is authoritative over FNA (SAMPLE-044). This used to require a
+     * positive step on every update, which is FNA's behaviour and what CNA had before that
+     * ruling -- so the assertion pinned the wrong runtime and a correct framework fix failed it.
+     */
+    if (game_time == 0) {
         return CNA_RESULT_INVALID_STATE;
     }
     if (state->lifecycle_stage == 1) {
+        if (game_time->elapsed_game_time_ticks != 0) {
+            return CNA_RESULT_INVALID_STATE;
+        }
         ++state->lifecycle_stage;
-    } else if (state->lifecycle_stage != 2) {
+    } else if (state->lifecycle_stage != 2 || game_time->elapsed_game_time_ticks <= 0) {
         return CNA_RESULT_INVALID_STATE;
     }
     CNA_KeyboardState keyboard_state = {
@@ -378,8 +402,10 @@ static CNA_Result on_draw(
                 CNA_RESULT_SUCCESS) {
             return CNA_RESULT_INVALID_STATE;
         }
-        /* Every field is validated before anything is submitted: an undefined effect bit, a
-           non-finite scale and a handle of the wrong family are all refused. */
+        /* The structure's own shape is validated before anything is submitted: an undefined effect
+           bit, an unknown struct version and a handle of the wrong family are all refused.
+           CABI-38: a non-finite scale is not among them any more -- it is XNA-valid and travels
+           into the vertex path -- so the case below submits successfully. */
         scaled[0].effects = UINT32_C(4);
         if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
             CNA_RESULT_INVALID_ARGUMENT) {
@@ -388,7 +414,7 @@ static CNA_Result on_draw(
         scaled[0].effects = CNA_SPRITE_EFFECT_NONE;
         scaled[0].scale.x = 1.0f / 0.0f;
         if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
-            CNA_RESULT_INVALID_ARGUMENT) {
+            CNA_RESULT_SUCCESS) {
             return CNA_RESULT_INVALID_STATE;
         }
         scaled[0].scale.x = 3.0f;

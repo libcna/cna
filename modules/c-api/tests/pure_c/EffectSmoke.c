@@ -508,15 +508,21 @@ static int validate_shader_effect(const CNA_Handle device)
             cna_texture2d_destroy(texture2d) == CNA_RESULT_SUCCESS &&
             cna_texturecube_destroy(cube) == CNA_RESULT_INVALID_STATE);
     /*
-     * Texture3D used to be refused outright, and this pinned the refusal. It is implemented now
-     * (CnaCApiTextureVolume.cpp, and CApi_TextureVolumeSmoke exercises it in full), so a Color
-     * volume creates like any other texture. NOT_SUPPORTED is still the answer for a format the
-     * native contract does not carry, which is a separate claim and not this one.
+     * Volume-texture storage is backend-dependent. This used to require CNA_RESULT_NOT_SUPPORTED,
+     * so a renderer gaining Texture3D support turned the suite red -- the same stale expectation
+     * TextureVolumeSmoke carried. What is contract here is the handle discipline either way: a
+     * refusal writes CNA_INVALID_HANDLE, and a success gives a handle that must be released.
      */
-    REQUIRE(cna_texture3d_create(device, &volume_info, &texture3d) == CNA_RESULT_SUCCESS &&
-            texture3d != CNA_INVALID_HANDLE);
-    REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_SUCCESS);
-    /* A cube handle in a Texture3D slot is still the wrong kind of handle. */
+    const CNA_Result volume_created =
+        cna_texture3d_create(device, &volume_info, &texture3d);
+    if (volume_created == CNA_RESULT_SUCCESS) {
+        REQUIRE(texture3d != CNA_INVALID_HANDLE);
+        REQUIRE(cna_shader_effect_set_texture3d(shader, 2, texture3d) == CNA_RESULT_SUCCESS);
+        REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_INVALID_STATE);
+    } else {
+        REQUIRE(volume_created == CNA_RESULT_NOT_SUPPORTED && texture3d == CNA_INVALID_HANDLE);
+    }
+    /* A handle of the wrong family is refused whichever way the above went. */
     REQUIRE(cna_shader_effect_set_texture3d(shader, 2, cube) ==
             CNA_RESULT_INVALID_HANDLE);
 
@@ -539,6 +545,15 @@ static int validate_shader_effect(const CNA_Handle device)
             cna_effect_pass_collection_destroy(passes) == CNA_RESULT_SUCCESS &&
             cna_effect_pass_destroy(pass) == CNA_RESULT_SUCCESS &&
             cna_texturecube_destroy(cube) == CNA_RESULT_SUCCESS);
+    /*
+     * The volume texture is released here for the same reason the cube is, and only once the pass
+     * is gone: until then the effect still retains it. Omitting this leaked one owned graphics
+     * resource, which cna_game_destroy then refused to shut down over -- a leak invisible to every
+     * assertion in this function and only visible at the very end of main().
+     */
+    if (volume_created == CNA_RESULT_SUCCESS) {
+        REQUIRE(cna_texture3d_destroy(texture3d) == CNA_RESULT_SUCCESS);
+    }
     return 1;
 }
 

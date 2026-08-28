@@ -19,7 +19,7 @@ namespace CNA::Internal::Audio { struct XgsRpc; struct XgsVariable; }
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    class AudioCategory;
+    struct AudioCategory;
     class WaveBank;
     class SoundBank;
     class Cue;
@@ -128,7 +128,7 @@ namespace Microsoft::Xna::Framework::Audio
         };
 
     private:
-        friend class AudioCategory;
+        friend struct AudioCategory;
         friend class WaveBank;
         friend class SoundBank;
         friend class Cue;

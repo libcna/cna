@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 
+#include "CNA/C/engine_layer.h"
 #include "CNA/C/graphics_ext.h"
+#include "CNA/IndirectDrawArguments.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AreaLightEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ImageBasedLightEXT.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
+#include "CnaCApiGraphicsExtDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include <memory>
@@ -23,12 +28,15 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/IDisposable.hpp"
 
+using CNA::C::Detail::AsciiEffectResource;
 #include <type_traits>
 #endif
 
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::Fail;
 
 // Every caller is in the #ifndef CNA_CNAEXT half below, so a build that has the extension layer
@@ -117,11 +125,6 @@ static_assert(
     NativeOrdinal(Ext::DepthEffectMode::Palette256) == CNA_DEPTH_EFFECT_MODE_PALETTE_256 &&
     NativeOrdinal(Ext::DepthEffectMode::Palette16) == CNA_DEPTH_EFFECT_MODE_PALETTE_16);
 
-struct AsciiEffectResource final {
-    std::shared_ptr<Ext::AsciiPostProcessEffect> value;
-    CNA_Handle parentGame;
-};
-
 [[nodiscard]] CNA_Result GetAsciiEffect(
     const CNA_Handle handle,
     std::shared_ptr<AsciiEffectResource>* const outEffect)
@@ -209,6 +212,194 @@ CNA_Result cna_pbr_material_ext_init(CNA_PbrMaterialEXT* const outMaterial)
         }
     }
     return StoreValue(outMaterial, defaults);
+}
+
+/* CBIND-092C. The two indirect-draw argument structs are the GPU's own command format, not part of
+ * the engine layer -- they live in the always-compiled graphics module -- so these initializers
+ * work in every build. Their SIZE is the contract, since the GPU reads them verbatim, and the
+ * assertions below pin it on both sides of the boundary. */
+static_assert(
+    sizeof(CNA_IndirectDrawArguments) == sizeof(CNA::IndirectDrawArguments) &&
+    sizeof(CNA_IndirectDrawArguments) == 16,
+    "the GPU reads this struct verbatim; it must be exactly four 32-bit words on both sides");
+static_assert(
+    sizeof(CNA_IndirectDrawIndexedArguments) == sizeof(CNA::IndirectDrawIndexedArguments) &&
+    sizeof(CNA_IndirectDrawIndexedArguments) == 20,
+    "the GPU reads this struct verbatim; it must be exactly five 32-bit words on both sides");
+
+CNA_Result cna_indirect_draw_arguments_init(CNA_IndirectDrawArguments* const outArguments)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outArguments == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The arguments are null.");
+        }
+        const CNA::IndirectDrawArguments defaults;
+        outArguments->vertex_count = defaults.VertexCount;
+        outArguments->instance_count = defaults.InstanceCount;
+        outArguments->first_vertex = defaults.FirstVertex;
+        outArguments->base_instance = defaults.BaseInstance;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_indirect_draw_indexed_arguments_init(
+    CNA_IndirectDrawIndexedArguments* const outArguments)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outArguments == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The arguments are null.");
+        }
+        const CNA::IndirectDrawIndexedArguments defaults;
+        outArguments->index_count = defaults.IndexCount;
+        outArguments->instance_count = defaults.InstanceCount;
+        outArguments->first_index = defaults.FirstIndex;
+        outArguments->base_vertex = defaults.BaseVertex;
+        outArguments->base_instance = defaults.BaseInstance;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+/* CBIND-091C. The area light is the second value in this slice whose canonical type lives in the
+ * always-compiled XNA header rather than under CNA_CNAEXT, so these two routes work in every build
+ * for the same reason the image-based-light pair below does. */
+CNA_Result cna_area_light_ext_init(CNA_AreaLightEXT* const outLight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLight == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+        }
+        const Microsoft::Xna::Framework::Graphics::AreaLightEXT defaults;
+        *outLight = CNA_AreaLightEXT{};
+        outLight->struct_size = static_cast<uint32_t>(sizeof(CNA_AreaLightEXT));
+        outLight->struct_version = UINT32_C(1);
+        outLight->shape = static_cast<CNA_AreaLightShapeEXT>(defaults.Shape);
+        outLight->two_sided = static_cast<CNA_Bool>(defaults.TwoSided ? CNA_TRUE : CNA_FALSE);
+        outLight->position = CNA_Vector3{defaults.Position.X, defaults.Position.Y,
+                                         defaults.Position.Z};
+        outLight->right_axis = CNA_Vector3{defaults.RightAxis.X, defaults.RightAxis.Y,
+                                           defaults.RightAxis.Z};
+        outLight->up_axis = CNA_Vector3{defaults.UpAxis.X, defaults.UpAxis.Y, defaults.UpAxis.Z};
+        outLight->color = CNA_Vector3{defaults.Color.X, defaults.Color.Y, defaults.Color.Z};
+        outLight->intensity = defaults.Intensity;
+        outLight->range = defaults.Range;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+/* Rebuilding the canonical value and asking it, rather than restating its seven arms here. The
+ * shape-dependent arm -- a tube skips the parallel-axis test -- is exactly the one a reimplementation
+ * gets wrong, and this cannot get it wrong. */
+[[nodiscard]] CNA_Result ToNativeAreaLight(
+    const CNA_AreaLightEXT* const light,
+    Microsoft::Xna::Framework::Graphics::AreaLightEXT* const out)
+{
+    if (light == nullptr) {
+        return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+    }
+    if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_AreaLightEXT)) ||
+        light->struct_version == UINT32_C(0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The area-light structure is malformed.");
+    }
+    if (light->shape > CNA_AREA_LIGHT_SHAPE_TUBE_EXT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The area-light shape is not a defined identity.");
+    }
+    out->Shape =
+        static_cast<Microsoft::Xna::Framework::Graphics::AreaLightShapeEXT>(light->shape);
+    out->Position = {light->position.x, light->position.y, light->position.z};
+    out->RightAxis = {light->right_axis.x, light->right_axis.y, light->right_axis.z};
+    out->UpAxis = {light->up_axis.x, light->up_axis.y, light->up_axis.z};
+    out->Color = {light->color.x, light->color.y, light->color.z};
+    out->Intensity = light->intensity;
+    out->Range = light->range;
+    out->TwoSided = light->two_sided != CNA_FALSE;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_area_light_ext_is_valid(
+    const CNA_AreaLightEXT* const light, CNA_Bool* const outValid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::Graphics::AreaLightEXT native;
+        if (const CNA_Result result = ToNativeAreaLight(light, &native);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return StoreValue(
+            outValid, static_cast<CNA_Bool>(native.IsValidEXT() ? CNA_TRUE : CNA_FALSE));
+    });
+}
+
+/* CBIND-091A. The image-based light is a value, and its canonical type lives in the
+ * always-compiled XNA header rather than under CNA_CNAEXT (plans/plan_modern.md MOD-1222),
+ * so these two routes work in every build and read their defaults from the canonical type
+ * instead of repeating them as literals. */
+CNA_Result cna_image_based_light_ext_init(CNA_ImageBasedLightEXT* const outLight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLight == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+        }
+        const Microsoft::Xna::Framework::Graphics::ImageBasedLightEXT defaults;
+        *outLight = CNA_ImageBasedLightEXT{};
+        outLight->struct_size = static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT));
+        outLight->struct_version = UINT32_C(1);
+        outLight->irradiance = CNA_INVALID_HANDLE;
+        outLight->prefiltered_specular = CNA_INVALID_HANDLE;
+        outLight->brdf_lut = CNA_INVALID_HANDLE;
+        outLight->prefiltered_mip_count = static_cast<int32_t>(defaults.PrefilteredMipCount);
+        outLight->intensity = defaults.Intensity;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_image_based_light_ext_is_valid(
+    const CNA_ImageBasedLightEXT* const light, CNA_Bool* const outValid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (light == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, "The light is null.");
+        }
+        if (light->struct_size < static_cast<uint32_t>(sizeof(CNA_ImageBasedLightEXT)) ||
+            light->struct_version == UINT32_C(0)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The image-based-light structure is malformed.");
+        }
+        // The canonical predicate asks whether all three textures are present and the mip count is
+        // at least one. Here the textures are handles, so "present" is "a live texture handle" --
+        // a stale one is not a texture and must not read as a complete light.
+        const CNA_Handle handles[] = {
+            light->irradiance, light->prefiltered_specular, light->brdf_lut};
+        // IsValidEXT() also refuses a negative intensity: a bundle that would subtract light
+        // is not two thirds of an answer either.
+        bool complete = light->prefiltered_mip_count >= INT32_C(1) && light->intensity >= 0.0F;
+        for (const CNA_Handle handle : handles) {
+            if (!complete) {
+                break;
+            }
+            CNA::C::Detail::ObjectKind kind = CNA::C::Detail::ObjectKind::Unknown;
+            complete = handle != CNA_INVALID_HANDLE &&
+                CNA::C::Detail::GetRuntimeHandles().GetKind(handle, &kind) ==
+                    CNA_RESULT_SUCCESS;
+        }
+        return StoreValue(outValid, static_cast<CNA_Bool>(complete ? CNA_TRUE : CNA_FALSE));
+    });
 }
 
 CNA_Result cna_render_pipeline_settings_init(CNA_RenderPipelineSettings* const outSettings)
@@ -342,7 +533,7 @@ CNA_Result cna_ascii_post_process_effect_create(
                 ErrorCategoryForResult(result),
                 "The owned ASCII post-process effect handle could not be created.");
         }
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -512,7 +703,7 @@ CNA_Result cna_ascii_post_process_effect_destroy(
                 ErrorCategoryForResult(releaseResult),
                 "The owned ASCII post-process effect handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(effect->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

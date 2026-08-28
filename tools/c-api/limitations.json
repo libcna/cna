@@ -134,7 +134,8 @@
         "cross-module signalling",
         "no second name to move from",
         "`std::function` alias",
-        "an alias naming the platform's"
+        "an alias naming the platform's",
+        "a second name for the same resource"
       ],
       "note": "Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface."
     },
@@ -159,11 +160,28 @@
     },
     {
       "id": "internal-entry-points-in-public-headers",
-      "title": "`CNA::Internal` entry points declared in a public header",
+      "title": "`CNA::Internal` and `CNA::Graphics::detail` entry points declared in a public header",
       "match": [
-        "a `CNA::Internal` entry point"
+        "a `CNA::Internal` entry point",
+        "a `CNA::Graphics::detail` entry point"
       ],
-      "note": "The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D)."
+      "note": "The inventory excludes `CNA::Internal` and `Detail` by path, because those namespaces are how CNA's own modules talk to each other rather than surface an application uses. A few such entry points are declared in a public header for the compiler's convenience and reach the inventory that way. `ConfigureModelMaterialVariantsEXT` is the example: it is how the glTF importer installs a model's variant bindings, not an operation an application performs. What an application does with variants -- read the declared names, select one -- is bound on `CNA_ModelHandle` (CBIND-051D). The engine layer adds the same shape under its own `detail` namespace: `requireCapability`, `nameOfCapability` and `reportShaderCompileFailure` are the choke points its subsystems call, and a C caller sees their effect as a refusal or a log line rather than calling them. The questions they answer are already reachable -- `cna_graphics_device_supports_capability` for the capability, and each shader route's own validity reporting for the compile."
+    },
+    {
+      "id": "renderer-private-interfaces",
+      "title": "Renderer-private C++ interfaces returned by a public accessor",
+      "match": [
+        "a renderer-private C++ interface"
+      ],
+      "note": "A few engine-layer resources expose the renderer object behind them through an `*EXT` accessor -- `StorageBuffer::getRendererEXT` is the example, returning `CNA::Internal::Renderers::IStorageBufferRenderer*`. That type is an abstract C++ interface with virtual dispatch whose shape is a contract between CNA and its renderers, not between CNA and an application. Handing a C caller that pointer would put a renderer-private vtable into the ABI, and every operation reachable through it is already reachable through the resource's own routes. This is the same argument the inventory's `Internal`/`Detail` path exclusion makes, applied to a return type rather than a declaration site."
+    },
+    {
+      "id": "private-helpers-reported-public",
+      "title": "Private implementation helpers the inventory reports as public",
+      "match": [
+        "a private implementation helper"
+      ],
+      "note": "`ContentManager` declares `private:` and then uses a `DEF_PROP` property macro, after which Doxygen reports the following members as public. `ResolveExistingAssetPath` is one: it is a private helper the loader calls to find which extension of an asset actually exists on disk, and CNA's visibility rules say a private member is not C API surface. Its neighbour `BuildAssetPath` is in the same private block and is currently recorded as implemented against `cna_content_manager_copy_asset_path`; that route really does call `BuildAssetPath`, so the mapping is not false, but the two rows disagree about whether a private member is bindable. Whoever revisits that row should settle it for both."
     }
   ],
   "environment": [
@@ -174,8 +192,8 @@
       "owner": "CONSUMING.md"
     },
     {
-      "subject": "The static archive keeps 130 C++ statics visible",
-      "impact": "A static CNA exists and exports exactly the same 2,867 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
+      "subject": "The static archive keeps a few dozen C++ statics visible",
+      "impact": "A static CNA exists and exports exactly the same 3,746 `cna_*` names the shared library does: the whole closure is partially linked into one object and every other global symbol is localized. What cannot be localized is the handful GCC emits as `STB_GNU_UNIQUE` -- function-local statics in inline and template code, whose uniqueness is what makes them correct. They are mangled C++ names, no C program can collide with them, and none is callable API. How many there are depends on what the configuration links -- 154 with the engine layer off, 164 and 165 with it on, measured on 2026-08-28 -- which is why no single number is written here. The build **fails** if a symbol of any other binding survives, so the exception cannot widen quietly.",
       "status": "by design",
       "owner": "CONSUMING.md"
     },

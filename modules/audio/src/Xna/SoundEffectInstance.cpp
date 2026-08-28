@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <exception>
 #include <numbers>
 #include <utility>
@@ -495,6 +496,11 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
 
+        // CABI-25: XNA submits the packet on the first Play and never again until Stop; from
+        // that moment the 3D-versus-pan choice is fixed. Set before the early returns below, so a
+        // Play on an already-playing or paused instance still counts as submitted.
+        packetSubmitted_ = true;
+
         // Already playing: no-op, matching FNA exactly (a naive re-Play would otherwise restart
         // the track from the beginning instead of leaving ongoing playback untouched).
         if (getStateProperty() == SoundState::Playing)
@@ -611,6 +617,9 @@ namespace Microsoft::Xna::Framework::Audio
 
     void SoundEffectInstance::Stop(bool immediate)
     {
+        // CABI-25: XNA clears isPacketSubmitted on Stop, which is what lets a stopped instance be
+        // aimed again -- in 3D or in pan -- before it next plays.
+        packetSubmitted_ = false;
 #ifdef SOUND_ENABLED
         auto* track = AsTrack(GetLiveTrackHandle());
         if (track)
@@ -1002,7 +1011,18 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ObjectDisposedException("SoundEffectInstance");
         }
 
-        is3D_ = true; // CP-20: latches setPanProperty() out of writing the real track output
+        // CABI-25: XNA's own gate (SoundEffectInstance.cs:376-383). Before the packet is
+        // submitted the instance may still be aimed in 3D; once it is playing, an instance that
+        // was put in pan mode refuses Apply3D rather than silently switching.
+        if (!packetSubmitted_)
+        {
+            is3D_ = true; // CP-20: latches setPanProperty() out of writing the real track output
+        }
+        if (!is3D_)
+        {
+            throw System::InvalidOperationException(
+                "Apply3D cannot be called on a playing instance that is not using 3D audio.");
+        }
 
         // The mixer does not support full 3D spatial audio (HRTF, orientation/cone). Pan and
         // distance attenuation are simplified linear approximations; Doppler pitch shift
@@ -1082,16 +1102,61 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::Apply3D(const AudioListener* listeners, int listenerCount,
                                       const AudioEmitter& emitter)
     {
+        if (isDisposed_)
+        {
+            throw System::ObjectDisposedException("SoundEffectInstance");
+        }
+        // XNA copies every listener into a native array and hands XACT the whole thing with
+        // listeners.Length -- there is no count restriction anywhere in
+        // Microsoft.Xna.Framework.Audio.SoundEffectInstance.UnsafeApply3D. FNA refuses any count
+        // but one; CNA followed FNA here until the XNA reference settled it.
+        //
+        // What CNA cannot reproduce is XACT's own multi-listener DSP: the mixer has a single
+        // stereo gain pair, not per-listener output matrices (CHECKLIST.md CP-19). So every
+        // listener is evaluated and the **dominant** one -- the one that hears the emitter
+        // loudest, i.e. the nearest -- decides the applied attenuation, pan and Doppler. That is
+        // an approximation of XACT's calculation, and it is deliberately not "use listeners[0]":
+        // moving a second, closer listener changes the result.
+        if (listenerCount < 0)
+        {
+            throw System::ArgumentOutOfRangeException(
+                "listenerCount", "The listener count cannot be negative.");
+        }
         if (listeners == nullptr)
         {
+            // XNA dereferences the array to read Length, so a null array faults there. A C++
+            // reference cannot be null, but this overload takes a pointer.
             throw System::ArgumentNullException("listeners");
         }
-        if (listenerCount == 1)
+        if (listenerCount == 0)
         {
-            Apply3D(listeners[0], emitter);
-            return;
+            // XNA reaches its native Apply3D with a count of zero and surfaces whatever XACT
+            // returns; that outcome is not established here, so the refusal is explicit rather
+            // than guessed at. See plans/plan_cabi.md CABI-6.
+            throw System::ArgumentOutOfRangeException(
+                "listenerCount", "At least one AudioListener is required.");
         }
-        throw System::NotSupportedException("Only one listener is supported.");
+
+        int dominant = 0;
+        if (listenerCount > 1)
+        {
+            const auto& ep = emitter.getPositionProperty();
+            float nearest = std::numeric_limits<float>::max();
+            for (int index = 0; index < listenerCount; ++index)
+            {
+                const auto& lp = listeners[index].getPositionProperty();
+                const float dx = ep.X - lp.X;
+                const float dy = ep.Y - lp.Y;
+                const float dz = ep.Z - lp.Z;
+                const float distanceSquared = dx * dx + dy * dy + dz * dz;
+                if (distanceSquared < nearest)
+                {
+                    nearest = distanceSquared;
+                    dominant = index;
+                }
+            }
+        }
+        Apply3D(listeners[dominant], emitter);
     }
 
     bool SoundEffectInstance::getIsDisposedProperty() const
@@ -1137,13 +1202,18 @@ namespace Microsoft::Xna::Framework::Audio
         }
         Pan_ = pan;
 
-        // CP-20: once Apply3D has run at least once, its own pan approximation is what should
-        // keep governing the real track output -- matches FNA's `if (is3D) return;` in Pan's
-        // setter (SoundEffectInstance.cs). The property itself still always reports what was
-        // last set, above.
+        // CABI-25: XNA's mirror of the Apply3D gate (SoundEffectInstance.cs:130-138). Before the
+        // packet is submitted, setting Pan takes the instance back out of 3D; once it is playing,
+        // a 3D instance refuses Pan rather than silently ignoring it, which is what FNA -- and CNA
+        // until now -- did.
+        if (!packetSubmitted_)
+        {
+            is3D_ = false;
+        }
         if (is3D_)
         {
-            return;
+            throw System::InvalidOperationException(
+                "Pan cannot be set on a playing instance that is using 3D audio.");
         }
 
         // AUDIO-001: routed through the same shared composition routine Play()/Apply3D()/the

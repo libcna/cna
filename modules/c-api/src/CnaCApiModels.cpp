@@ -36,6 +36,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -304,7 +306,7 @@ MeshResource::~MeshResource()
         part->value = std::move(part->detachedValue);
     }
     if (countedAsGraphicsResource) {
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(parentGame);
     }
 }
 
@@ -1575,7 +1577,7 @@ void AddMeshEffect(
     mesh->value = named
         ? std::make_shared<ModelMesh>(device->value, name, std::move(nativeParts))
         : std::make_shared<ModelMesh>(device->value, std::move(nativeParts));
-    AddOwnedGraphicsResource();
+    AddOwnedGraphicsResourceFor(mesh->parentGame);
     mesh->countedAsGraphicsResource = true;
     return CreateMeshHandle(std::move(mesh), outMesh);
 }
@@ -2233,6 +2235,24 @@ CNA_Result cna_model_mesh_part_create(
         return CreatePartHandle(part, outPart);
     });
 }
+
+namespace CNA::C::Detail {
+
+// CBIND-092B. Declared in CnaCApiGraphicsDetail.hpp; defined here because PartResource is private
+// to this adapter.
+CNA_Result GetOwnedModelMeshPartValue(
+    const CNA_Handle handle,
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::ModelMeshPart>* const outPart)
+{
+    std::shared_ptr<PartResource> resource;
+    if (const CNA_Result result = GetPart(handle, &resource); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outPart = resource->value;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_model_mesh_part_destroy(const CNA_ModelMeshPartHandle partHandle)
 {

@@ -520,8 +520,245 @@ def approve_rule_symbols(
     return 0
 
 
+# CBIND-079, 2026-08-26: the CNAEXT engine layer and a post-merge tail of ordinary XNA symbols
+# reopened the coverage matrix, and every row they left behind still named `CBIND-035` -- a task
+# plans/plan_binding.md records as complete. A finished task cannot own unfinished work: a matrix
+# that says so is how 1,414 unmapped symbols hid behind a green tick for a week. The reopened rows
+# are partitioned here onto the Phase B9 slices that actually own them, keyed by module and header
+# stem so the assignment is greppable from either direction. `validate_planned_row_owners` below
+# turns the invariant this restores -- no completed task owns a planned row -- into a gate that
+# fails rather than a convention that erodes.
+CNAEXT_SLICE_OWNERS: dict[str, str] = {
+    # CBIND-080 -- 15 rows
+    "graphics/DynamicIndexBuffer": "CBIND-080",
+    "graphics/DynamicVertexBuffer": "CBIND-080",
+    "graphics/Effect": "CBIND-080",
+    "graphics/RenderTarget2D": "CBIND-080",
+    "graphics/RenderTargetCube": "CBIND-080",
+    "graphics/SpriteBatch": "CBIND-080",
+    "graphics/TextureCube": "CBIND-080",
+    "graphics/VertexBuffer": "CBIND-080",
+    # CBIND-081 -- 7 rows
+    "math/Color": "CBIND-081",
+    "math/Vector2": "CBIND-081",
+    # CBIND-082 -- 23 rows
+    "media/Album": "CBIND-082",
+    "media/Artist": "CBIND-082",
+    "media/Genre": "CBIND-082",
+    "media/MediaSource": "CBIND-082",
+    "media/Picture": "CBIND-082",
+    "media/PictureAlbum": "CBIND-082",
+    "media/Playlist": "CBIND-082",
+    "media/Song": "CBIND-082",
+    "media/VideoPlayer": "CBIND-082",
+    # CBIND-083 -- 5 rows
+    "content/ContentManager": "CBIND-083",
+    "input/TouchPanel": "CBIND-083",
+    "runtime/DrawableGameComponent": "CBIND-083",
+    # CBIND-084 -- 121 rows
+    "graphics-ext/BlitPass": "CBIND-084",
+    "graphics-ext/ComputeShader": "CBIND-084",
+    "graphics-ext/DepthEncoding": "CBIND-084",
+    "graphics-ext/EffectPass": "CBIND-084",
+    "graphics-ext/EngineException": "CBIND-084",
+    "graphics-ext/EngineLayerVersion": "CBIND-084",
+    "graphics-ext/FullscreenPass": "CBIND-084",
+    "graphics-ext/GpuTimer": "CBIND-084",
+    "graphics-ext/MaterialBinding": "CBIND-084",
+    "graphics-ext/PostProcessContext": "CBIND-084",
+    "graphics-ext/PostProcessPass": "CBIND-084",
+    "graphics-ext/RenderTargetPool": "CBIND-084",
+    "graphics-ext/RequireCapability": "CBIND-084",
+    "graphics-ext/ScopedRenderTarget": "CBIND-084",
+    "graphics-ext/ShaderDiagnostics": "CBIND-084",
+    "graphics-ext/ShaderEffectFactory": "CBIND-084",
+    "graphics-ext/StorageBuffer": "CBIND-084",
+    # CBIND-085 -- 209 rows
+    "graphics-ext/CascadedShadowMap": "CBIND-085",
+    "graphics-ext/ClusteredShadowPolicyEXT": "CBIND-085",
+    "graphics-ext/ContactShadowPass": "CBIND-085",
+    "graphics-ext/CubeShadowMap": "CBIND-085",
+    "graphics-ext/DepthNormalPrepass": "CBIND-085",
+    "graphics-ext/DirectionalLightEXT": "CBIND-085",
+    "graphics-ext/PointLightEXT": "CBIND-085",
+    "graphics-ext/ShadowMap": "CBIND-085",
+    "graphics-ext/SpotLightEXT": "CBIND-085",
+    "graphics-ext/SpotShadowMap": "CBIND-085",
+    "graphics/IShadowReceiverEXT": "CBIND-085",
+    "graphics/PunctualLightEXT": "CBIND-085",
+    "graphics/ShadowCascadeStateEXT": "CBIND-085",
+    # CBIND-086 -- 116 rows
+    "graphics-ext/ClusteredForwardEffect": "CBIND-086",
+    "graphics-ext/ClusteredLightAssignment": "CBIND-086",
+    "graphics-ext/ClusteredLightBuffer": "CBIND-086",
+    "graphics-ext/ClusteredLightCompute": "CBIND-086",
+    "graphics-ext/ClusteredLightEXT": "CBIND-086",
+    "graphics-ext/ClusteredLightGrid": "CBIND-086",
+    "graphics-ext/ClusteredLightSetEXT": "CBIND-086",
+    "graphics-ext/ClusteredLightType": "CBIND-086",
+    # CBIND-087 -- 177 rows
+    "graphics-ext/GltfMaterialBridge": "CBIND-087",
+    "graphics-ext/PbrMaterial": "CBIND-087",
+    "graphics-ext/PbrMaterialExtensions": "CBIND-087",
+    "graphics-ext/ThinFilmIridescence": "CBIND-087",
+    "graphics-ext/TransparencyMode": "CBIND-087",
+    "graphics-ext/TransparentDrawList": "CBIND-087",
+    "graphics-ext/WeightedBlendedTransparency": "CBIND-087",
+    "graphics/PbrEffect": "CBIND-087",
+    "graphics/SkinnedPbrEffect": "CBIND-087",
+    # CBIND-088 -- 117 rows
+    "graphics-ext/RenderPipeline": "CBIND-088",
+    "graphics-ext/RenderPipelineSettings": "CBIND-088",
+    # CBIND-089 -- 232 rows
+    "graphics-ext/AerialPerspectivePass": "CBIND-089",
+    "graphics-ext/AsciiPass": "CBIND-089",
+    "graphics-ext/BloomPass": "CBIND-089",
+    "graphics-ext/ChromaticAberrationPass": "CBIND-089",
+    "graphics-ext/DecalPass": "CBIND-089",
+    "graphics-ext/DepthOfFieldPass": "CBIND-089",
+    "graphics-ext/FilmGrainPass": "CBIND-089",
+    "graphics-ext/FxaaPass": "CBIND-089",
+    "graphics-ext/HeightFogPass": "CBIND-089",
+    "graphics-ext/LensFlarePass": "CBIND-089",
+    "graphics-ext/LightShaftPass": "CBIND-089",
+    "graphics-ext/MotionBlurPass": "CBIND-089",
+    "graphics-ext/PostProcessChain": "CBIND-089",
+    "graphics-ext/SpatialUpscalePass": "CBIND-089",
+    "graphics-ext/SsaoPass": "CBIND-089",
+    "graphics-ext/SsrPass": "CBIND-089",
+    "graphics-ext/VolumetricFogPass": "CBIND-089",
+    # CBIND-090 -- 87 rows
+    "graphics-ext/AutoExposureEXT": "CBIND-090",
+    "graphics-ext/ColorGradePass": "CBIND-090",
+    "graphics-ext/CubeLut": "CBIND-090",
+    "graphics-ext/HdrDisplayOutput": "CBIND-090",
+    "graphics-ext/LutInterpolation": "CBIND-090",
+    "graphics-ext/TonemapPass": "CBIND-090",
+    "graphics-ext/TonemappingMode": "CBIND-090",
+    "graphics/DisplayColorSpace": "CBIND-090",
+    # CBIND-091 -- 137 rows
+    "graphics-ext/AreaLightBrdfTable": "CBIND-091",
+    "graphics-ext/AreaLightShading": "CBIND-091",
+    "graphics-ext/AtmosphericSky": "CBIND-091",
+    "graphics-ext/EnvironmentProcessor": "CBIND-091",
+    "graphics-ext/LightProbeBaker": "CBIND-091",
+    "graphics-ext/LightProbeEXT": "CBIND-091",
+    "graphics-ext/LightProbeVolumeEXT": "CBIND-091",
+    "graphics-ext/Skybox": "CBIND-091",
+    "graphics/AreaLightEXT": "CBIND-091",
+    "graphics/ImageBasedLightEXT": "CBIND-091",
+    # CBIND-092 -- 157 rows
+    "graphics-ext/DebugDraw": "CBIND-092",
+    "graphics-ext/DebugGizmos": "CBIND-092",
+    "graphics-ext/FrustumCullerEXT": "CBIND-092",
+    "graphics-ext/GpuInstanceCuller": "CBIND-092",
+    "graphics-ext/InstancedRendererEXT": "CBIND-092",
+    "graphics-ext/LodGroupEXT": "CBIND-092",
+    "graphics-ext/ParticleSystem": "CBIND-092",
+    "graphics/GraphicsImageAccess": "CBIND-092",
+    "graphics/GraphicsMemoryBarrier": "CBIND-092",
+    "graphics/IndirectDrawArguments": "CBIND-092",
+    # CBIND-093 -- 48 rows
+    "core/AssemblyInfo": "CBIND-093",
+    "graphics/BasicEffect": "CBIND-093",
+    "graphics/GraphicsDevice": "CBIND-093",
+    "graphics/ShaderEffect": "CBIND-093",
+    "graphics/SkinnedEffect": "CBIND-093",
+}
+
+
+# CBIND-084C, 2026-08-26. One symbol whose owner is not its header's slice. PostProcessContext's
+# `settings` field points at a RenderPipelineSettings, and the C form of that type is still a
+# subset of the canonical one; binding the field now would silently apply engine defaults for
+# every field the subset omits. The field therefore waits for CBIND-088, which owns the settings
+# type, while the rest of the struct is bound by CBIND-084C.
+SYMBOL_OWNER_OVERRIDES: dict[str, str] = {
+    # Every entry that stood here has expired. The two material-extension ones went when CBIND-087A
+    # bound PbrMaterialExtensions, the four image-based-light ones and the two light-probe ones when
+    # CBIND-091A bound the types that carry them, the two skybox ones when CBIND-091B bound Skybox,
+    # and setAreaLight when CBIND-091C bound AreaLightEXT and the BRDF table. The table is kept
+    # rather than deleted because the discipline it enforces -- a deferral names its owner and is
+    # removed in the commit that binds it -- outlives the entries.
+    # The two CBIND-088B skybox entries that stood here expired when CBIND-091B bound Skybox and
+    # the pipeline pair that carries it, and the four CBIND-087C image-based-light entries expired
+    # when CBIND-091A bound ImageBasedLightEXT.
+}
+
+
+# CBIND-102, 2026-08-28: the sixth merge of `next` reopened the matrix by 506 rows, and 460 of them
+# are one thing -- the `CNA::Content::Cnb` content format, 23 public headers that did not exist
+# here before. The owner ruled on 2026-08-28 that binding it is **not** this session's work: the
+# format is recorded as not yet reachable from the C ABI and the backlog below is what will make it
+# so. The remaining 46 are ordinary XNA symbols the merge added beside it.
+#
+# These keys are consulted before CNAEXT_SLICE_OWNERS on purpose. Three of them --
+# `graphics/DynamicVertexBuffer`, `graphics/VertexBuffer` and `content/ContentManager` -- already
+# name a Phase B9 slice that is ✅, and the rows they gained are new work rather than work that
+# slice left behind. Pointing them at the finished slice is precisely the defect `CBIND-079` gated
+# against, so the newer partition wins and the older keys keep answering for anything else.
+B10_SLICE_OWNERS: dict[str, str] = {
+    # CBIND-103 -- 7 rows: the compound-assignment operators and the default constructor the
+    # SAMPLE-043 work added to the math types.
+    "math/Vector3": "CBIND-103",
+    "math/Matrix": "CBIND-103",
+    "math/Quaternion": "CBIND-103",
+    # CBIND-104 -- 22 rows: DynamicVertexBuffer's `using VertexBuffer::SetData` (which makes every
+    # inherited overload a declaration of this type too) and its two templates, the raw windowed
+    # upload pair beneath them, EffectMaterial's retained parameter textures and OcclusionQuery's
+    # precision query.
+    "graphics/DynamicVertexBuffer": "CBIND-104",
+    "graphics/VertexBuffer": "CBIND-104",
+    "graphics/EffectMaterial": "CBIND-104",
+    "graphics/OcclusionQuery": "CBIND-104",
+    # CBIND-105 -- 17 rows: the reflectively serialized XNB reader and the .cnb loader hook that
+    # registers beside it.
+    "content/ReflectiveTypeReader": "CBIND-105",
+    "content/ContentManager": "CBIND-105",
+    # CBIND-106 -- 66 rows: the CNB container's identities and its whole-file arithmetic.
+    "content/CnbFormat": "CBIND-106",
+    "content/CnbArithmetic": "CBIND-106",
+    "content/CnbCrc32c": "CBIND-106",
+    "content/CnbReadLimits": "CBIND-106",
+    "content/CnbChunkCompression": "CBIND-106",
+    # CBIND-107 -- 88 rows: the document and the byte cursors every schema reads and writes with.
+    "content/CnbDocument": "CBIND-107",
+    "content/CnbByteReader": "CBIND-107",
+    "content/CnbByteWriter": "CBIND-107",
+    "content/CnbWriter": "CBIND-107",
+    # CBIND-108 -- 67 rows: the texture schemas.
+    "content/CnbTextureFormat": "CBIND-108",
+    "content/CnbTextureCodec": "CBIND-108",
+    # CBIND-109 -- 129 rows: the model schema, the largest single type in the format.
+    "content/CnbModelData": "CBIND-109",
+    "content/CnbModelCodec": "CBIND-109",
+    "content/CnbModelFromCnj": "CBIND-109",
+    # CBIND-110 -- 85 rows: the remaining asset schemas.
+    "content/CnbSpriteFontCodec": "CBIND-110",
+    "content/CnbSoundEffectCodec": "CBIND-110",
+    "content/CnbMediaCodec": "CBIND-110",
+    "content/CnbCurveCodec": "CBIND-110",
+    "content/CnbAnimationClipCodec": "CBIND-110",
+    # CBIND-111 -- 25 rows: the registry a ContentManager loads through, and the two front ends
+    # that produce a .cnb from something else.
+    "content/CnbLoaderRegistry": "CBIND-111",
+    "content/CnbSourceImport": "CBIND-111",
+    "content/CnjToCnb": "CBIND-111",
+}
+
+
 def owner_task(symbol: Symbol) -> str:
-    module = Path(symbol.header).parts[1]
+    override = SYMBOL_OWNER_OVERRIDES.get(symbol.qualified_name)
+    if override is not None:
+        return override
+    header = Path(symbol.header)
+    key = f"{header.parts[1]}/{header.stem}"
+    b10_owner = B10_SLICE_OWNERS.get(key)
+    if b10_owner is not None:
+        return b10_owner
+    slice_owner = CNAEXT_SLICE_OWNERS.get(key)
+    if slice_owner is not None:
+        return slice_owner
+    module = header.parts[1]
     if module == "graphics":
         if re.search(
             r"(RenderTarget|SpriteFont|BlendState|SamplerState|DepthStencilState|RasterizerState|"
@@ -770,6 +1007,72 @@ def render_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
+PLAN_PATH = Path("plans/plan_binding.md")
+PLAN_STATUS_MARKS = {"\u2705": "complete", "\U0001f7e8": "in progress", "\u2b1c": "not started"}
+
+
+def parse_plan_task_status(root: Path) -> dict[str, str]:
+    """Read every `| CBIND-… | … | <mark> | … |` row in the plan and return id -> status.
+
+    The plan's task tables do not all carry the same columns -- some phases add a row-count
+    column between the subject and the status -- so the status is found by looking for the one
+    cell that is exactly a status mark rather than by counting columns.
+    """
+    statuses: dict[str, str] = {}
+    plan = root / PLAN_PATH
+    if not plan.is_file():
+        return statuses
+    for line in plan.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("| CBIND-"):
+            continue
+        cells = [cell.strip() for cell in line.split("|")]
+        task = cells[1]
+        marks = [cell for cell in cells[2:] if cell in PLAN_STATUS_MARKS]
+        if len(marks) != 1:
+            continue
+        statuses[task] = PLAN_STATUS_MARKS[marks[0]]
+    return statuses
+
+
+# CBIND-079, 2026-08-26. The invariant this enforces is narrow and specific: a task the plan
+# records as complete may not own a `planned` row. It is not "no planned row may exist" -- Phase
+# B9 opens 1,451 of them on purpose, and a gate that forbade them would simply be switched off.
+#
+# The state it forbids is the one that actually happened. `CBIND-035` closed, four merges grew the
+# tracked surface, `owner_task()` kept attributing the new unmapped symbols to it by module, and
+# for a week COVERAGE.md asserted that a finished task owned 1,414 unfinished symbols while
+# `## Current status` read "0 planned" and RELEASE_GATE.md read "Not ready". Nothing was lying;
+# three documents were each locally consistent and nobody re-read them together. This makes the
+# combination fail instead.
+def validate_planned_row_owners(root: Path, mappings: dict[str, Mapping]) -> None:
+    statuses = parse_plan_task_status(root)
+    if not statuses:
+        return
+    finished: Counter[str] = Counter()
+    unknown: Counter[str] = Counter()
+    for mapping in mappings.values():
+        if mapping.status != "planned":
+            continue
+        status = statuses.get(mapping.task)
+        if status is None:
+            unknown[mapping.task] += 1
+        elif status == "complete":
+            finished[mapping.task] += 1
+    problems: list[str] = []
+    for task, count in sorted(finished.items()):
+        problems.append(
+            f"  {task} is recorded complete in {PLAN_PATH} but owns {count} planned row(s)"
+        )
+    for task, count in sorted(unknown.items()):
+        problems.append(f"  {task} owns {count} planned row(s) but has no row in {PLAN_PATH}")
+    if problems:
+        raise RuntimeError(
+            "A planned row names a task that cannot own it. Unfinished work must name an "
+            "unfinished task: either open a task for these symbols and point owner_task() at "
+            "it, or map them.\n" + "\n".join(problems)
+        )
+
+
 def validate_inventory(
     headers: list[Path],
     excluded: list[Path],
@@ -847,6 +1150,7 @@ def main() -> int:
     if arguments.approve_rule_symbols:
         return approve_rule_symbols(rules_path, usage, arguments.rule)
     validate_inventory(headers, excluded, symbols, mappings)
+    validate_planned_row_owners(root, mappings)
     rendered = render_markdown(headers, excluded, symbols, mappings)
 
     summary = Counter(mapping.status for mapping in mappings.values())

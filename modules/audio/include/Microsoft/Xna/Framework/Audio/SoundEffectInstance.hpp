@@ -106,6 +106,15 @@ namespace Microsoft::Xna::Framework::Audio
         // approximation is what should keep governing the actual output until Apply3D runs
         // again. Never reset back to false once set (matches FNA: is3D is only ever set to true).
         bool  is3D_         = false;
+        /**
+         * @brief Whether playback has begun, which is what locks the 3D-versus-pan choice.
+         *
+         * plans/plan_cabi.md CABI-25. XNA calls this `isPacketSubmitted`: before the packet is
+         * submitted (before the first Play) the instance switches freely between Apply3D and Pan,
+         * and afterwards whichever was chosen is fixed -- the other one throws
+         * InvalidOperationException. Stop clears it, so a stopped instance can be re-aimed.
+         */
+        bool  packetSubmitted_ = false;
 
         // AUDIO-001: Apply3D's derived attenuation/pan/Doppler must survive later Play()/Volume/
         // Pitch calls, and a call made before this instance has ever had a track (no track yet to
@@ -353,13 +362,23 @@ namespace Microsoft::Xna::Framework::Audio
         void Apply3D(const AudioListener& listener, const AudioEmitter& emitter);
 
         /**
-         * @brief Multi-listener overload; only a single listener is supported.
+         * @brief Multi-listener overload; any positive listener count is accepted.
+         *
+         * XNA places no count restriction on this overload, so neither does CNA. What CNA cannot
+         * reproduce is XACT's per-listener output matrices: the mixer has a single stereo gain
+         * pair. Every listener is therefore evaluated and the **dominant** one -- the nearest to
+         * the emitter, i.e. the one that hears it loudest -- decides the applied attenuation, pan
+         * and Doppler. This is an approximation of XACT's own calculation, and deliberately not
+         * "use listeners[0]": moving a second, closer listener changes the result.
          *
          * @param listeners     Array of listener descriptions.
-         * @param listenerCount Number of listeners (must be 1).
+         * @param listenerCount Number of listeners; must be at least 1.
          * @param emitter       Position and orientation of the sound emitter.
          * @throws System::ArgumentNullException if @p listeners is null.
-         * @throws System::NotSupportedException if @p listenerCount is not 1.
+         * @throws System::ArgumentOutOfRangeException if @p listenerCount is negative, or zero --
+         *         XNA hands a zero count to XACT and surfaces whatever it returns, an outcome not
+         *         established here, so the refusal is explicit rather than guessed at.
+         * @throws System::ObjectDisposedException if the instance has been disposed.
          */
         void Apply3D(const AudioListener* listeners, int listenerCount, const AudioEmitter& emitter);
 

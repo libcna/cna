@@ -52,45 +52,41 @@ def run(command: list[str], description: str) -> str:
     return completed.stdout
 
 
-def ninja_link_line(build_dir: Path, module_dir: Path) -> str | None:
-    """The same link line, asked of Ninja, which writes no link.txt.
+def link_line_tokens(module_dir: Path, build_dir: Path) -> tuple[list[str], Path]:
+    """The link command for cna_c_api, plus the directory its relative paths are based on.
 
-    `link.txt` is a Makefile-generator artifact. Under Ninja the link command lives in
-    build.ninja, and `ninja -t commands` prints it; the last command needed to produce the
-    library is the link itself. Its paths are relative to the build root rather than to the
-    module directory, which is why the caller is told which root to resolve against.
+    Only the Makefile generator writes `link.txt`. Under Ninja the link command lives in
+    `build.ninja`, and reading it needs `ninja -t commands` -- which is why this used to fail the
+    whole build with "link.txt does not exist; build the cna_c_api target before the static
+    archive" on a Ninja tree where cna_c_api had in fact just been built. The two generators also
+    differ in what their relative paths are relative to: link.txt's are relative to the module's
+    binary directory, build.ninja's to the build root, so the base is returned alongside.
     """
-    ninja = shutil.which("ninja")
-    if ninja is None or not (build_dir / "build.ninja").exists():
-        return None
-    try:
-        relative = (module_dir / "libcna_c_api.so").resolve().relative_to(build_dir)
-    except ValueError:
-        return None
-    completed = subprocess.run(
-        [ninja, "-C", str(build_dir), "-t", "commands", str(relative)],
-        capture_output=True, text=True)
-    if completed.returncode != 0 or not completed.stdout.strip():
-        return None
-    return completed.stdout.strip().splitlines()[-1]
-
-
-def read_link_line(
-    module_dir: Path, build_dir: Path) -> tuple[list[str], list[str], list[str]]:
-    """Split CMake's own link line into objects, archives and external libraries."""
     path = module_dir / LINK_LINE
     if path.exists():
-        working = module_dir.resolve()
-        tokens = path.read_text(encoding="utf-8").split()
-    else:
-        command = ninja_link_line(build_dir, module_dir)
-        if command is None:
-            raise SystemExit(
-                f"{path} does not exist and no Ninja link line could be read; build the "
-                "cna_c_api target before the static archive.")
-        # Ninja wraps the link in a shell command; its paths are build-root relative.
-        working = build_dir.resolve()
-        tokens = command.split()
+        return path.read_text(encoding="utf-8").split(), module_dir.resolve()
+
+    if not (build_dir / "build.ninja").exists():
+        raise SystemExit(
+            f"{path} does not exist and {build_dir / 'build.ninja'} does not either; "
+            "build the cna_c_api target before the static archive.")
+    ninja = shutil.which("ninja") or shutil.which("ninja-build")
+    if ninja is None:
+        raise SystemExit(
+            "this is a Ninja build tree, so the link line comes from build.ninja, but no ninja "
+            "executable was found to read it.")
+    # The link is the last command Ninja reports for the target; CMake wraps it as ": && <cmd> && :".
+    output = run([ninja, "-C", str(build_dir), "-t", "commands", "cna_c_api"],
+                 "reading the cna_c_api link command from build.ninja")
+    lines = [line for line in output.splitlines() if line.strip()]
+    if not lines:
+        raise SystemExit("ninja reported no commands for cna_c_api; build it first.")
+    return lines[-1].split(), build_dir.resolve()
+
+
+def read_link_line(module_dir: Path, build_dir: Path) -> tuple[list[str], list[str], list[str]]:
+    """Split CMake's own link line into objects, archives and external libraries."""
+    tokens, working = link_line_tokens(module_dir, build_dir)
     objects: list[str] = []
     archives: list[str] = []
     external: list[str] = []

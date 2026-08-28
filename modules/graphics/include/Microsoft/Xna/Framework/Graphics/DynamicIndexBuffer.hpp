@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include "CNA/Internal/Graphics/IContentLosable.hpp"
 #include <cstdint>
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -10,7 +11,8 @@
 namespace Microsoft::Xna::Framework::Graphics
 {
     /** @brief An index buffer whose content is expected to change frequently. */
-    class DynamicIndexBuffer : public IndexBuffer
+    class DynamicIndexBuffer : public IndexBuffer,
+            public CNA::Internal::Graphics::IContentLosable
     {
     public:
         /**
@@ -28,10 +30,30 @@ namespace Microsoft::Xna::Framework::Graphics
         {
         }
 
-        /** @brief Returns false; content is never lost in CNA. */
-        [[nodiscard]] bool getIsContentLostProperty() const { return false; }
+        /**
+         * @brief Whether this buffer's contents were lost to a device reset.
+         *
+         * True from the moment a renderer reports a real device reset until the buffer is written
+         * again with `SetData`. Renderers whose API cannot lose a device never set it.
+         */
+        [[nodiscard]] bool getIsContentLostProperty() const { return contentLost_; }
 
-        /** @brief Raised when the index buffer content is lost (never raised in CNA). */
+        /** @brief Marks the content lost and raises ContentLost. */
+        CNAEXT void NotifyContentLostEXT() override
+        {
+            contentLost_ = true;
+            ContentLost.Raise(this, System::EventArgs::Empty);
+        }
+
+        /** @brief Clears the lost flag; called when the buffer is written with SetData. */
+        CNAEXT void ClearContentLostEXT() noexcept override { contentLost_ = false; }
+
+        /**
+         * @brief Raised when this index buffer's content is lost to a device reset.
+         *
+         * Raised for real on the renderers whose API can lose a device (DirectX9,
+         * Direct2D, Skia). Families that cannot lose one never raise it.
+         */
         System::EventHandler<System::EventArgs> ContentLost;
 
         /**
@@ -75,5 +97,9 @@ namespace Microsoft::Xna::Framework::Graphics
         {
             IndexBuffer::SetDataWithOptions(data, startIndex, elementCount, options);
         }
+
+    private:
+        /** @brief Set by a real renderer-reported device reset; cleared by the next write. */
+        bool contentLost_ = false;
     };
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <stdio.h>
 #include <CNA/C/cna.h>
 
 #include <stdint.h>
@@ -138,12 +139,13 @@ static int clear_and_confirm(
 {
     CNA_Color pixel = {0U, 0U, 0U, 0U};
     /*
-     * The depth buffer is cleared with the target, which is what XNA's own Clear(Color) does
-     * and what every draw below depends on: DepthStencilState.Default keeps depth testing on,
-     * and a backbuffer's depth contents before the first clear are undefined in both D3D and
-     * GL. Clearing only the target left every triangle to be tested against whatever the
-     * driver happened to leave there, so the draws returned success and changed nothing on a
-     * driver that starts it at 0.
+     * Depth as well as colour, and that is the whole of what was wrong with this test. It used to
+     * clear CNA_CLEAR_OPTION_TARGET alone, which leaves the depth buffer holding whatever the
+     * window system handed over -- undefined before the first clear in both D3D and GL.
+     * DepthStencilState.Default keeps depth testing on and the triangle sits at z = 0, so against
+     * undefined depth the LessEqual test could discard every fragment: the draw then reported
+     * success while changing no pixel, which reads exactly like a broken draw path and is not one.
+     * Clearing target, depth and stencil together is what XNA's own Clear(Color) does.
      */
     if (cna_graphics_device_clear_options(
             graphics_device,
@@ -154,8 +156,18 @@ static int clear_and_confirm(
     if (!state->has_readback) {
         return 1;
     }
-    return read_center_pixel(graphics_device, &pixel) == CNA_RESULT_SUCCESS &&
-        colors_equal(pixel, clear_color);
+    if (read_center_pixel(graphics_device, &pixel) != CNA_RESULT_SUCCESS) {
+        printf("clear_and_confirm: the centre pixel could not be read back\n");
+        return 0;
+    }
+    if (!colors_equal(pixel, clear_color)) {
+        printf("clear_and_confirm: centre pixel is (%u,%u,%u,%u), expected the clear colour "
+               "(%u,%u,%u,%u)\n",
+               pixel.r, pixel.g, pixel.b, pixel.a,
+               clear_color.r, clear_color.g, clear_color.b, clear_color.a);
+        return 0;
+    }
+    return 1;
 }
 
 /* Confirms the center pixel no longer holds the clear color, where readback exists. */
@@ -168,8 +180,17 @@ static int confirm_drawn(
     if (!state->has_readback) {
         return 1;
     }
-    return read_center_pixel(graphics_device, &pixel) == CNA_RESULT_SUCCESS &&
-        !colors_equal(pixel, clear_color);
+    if (read_center_pixel(graphics_device, &pixel) != CNA_RESULT_SUCCESS) {
+        printf("confirm_drawn: the centre pixel could not be read back\n");
+        return 0;
+    }
+    if (colors_equal(pixel, clear_color)) {
+        printf("confirm_drawn: centre pixel is still the clear colour (%u,%u,%u,%u) -- the draw "
+               "reported success and changed nothing\n",
+               pixel.r, pixel.g, pixel.b, pixel.a);
+        return 0;
+    }
+    return 1;
 }
 
 /* Draws real geometry and proves the backbuffer changed where the triangle covers it. */

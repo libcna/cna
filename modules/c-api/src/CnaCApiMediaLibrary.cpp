@@ -121,7 +121,7 @@ struct MediaTraits;
     template<>                                                                                   \
     struct MediaTraits<TYPE> {                                                                   \
         static constexpr ObjectKind Kind = ObjectKind::KIND;                                     \
-        static constexpr const char* InvalidHandleMessage = MESSAGE;                             \
+        [[maybe_unused]] static constexpr const char* InvalidHandleMessage = MESSAGE;            \
     }
 
 CNA_C_API_MEDIA_TRAITS(Album, Album, "The album handle is invalid for this call.");

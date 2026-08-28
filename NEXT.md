@@ -1,5 +1,79 @@
 # NEXT.md
 
+## C ABI — the sixth merge reopened the matrix by 506 rows, and Phase B10 owns them (`CBIND-102`, 2026-08-28)
+
+`origin/next` merged into `feature/bindings` on 2026-08-28: 150 commits carrying the CNB content
+format, the WebGPU renderer's fog/MRT/stencil work, the official-XNA sample fidelity fixes and a
+corrected game clock. The coverage matrix reopened at **506 rows**, and this time the reopening is
+**recorded rather than worked off**.
+
+**What is unmapped: 506 public symbols, and 460 of them are one thing.** The CNB content format —
+`CNA::Content::Cnb`, 23 public headers under `modules/content/include/CNA/Content/Cnb/`, the whole
+`plans/plan_cnb.md` `CNBF-002`–`CNBF-123` campaign. The other 46 are ordinary XNA symbols the same
+merge added: `Vector3`/`Matrix` compound-assignment operators and `Quaternion`'s default
+constructor, `DynamicVertexBuffer`'s `using VertexBuffer::SetData` and its two `SetData<TVertex>`
+templates with the raw windowed upload pair beneath them, `EffectMaterial`'s retained parameter
+textures, `OcclusionQuery::isPixelCountPreciseEXT`, and the reflective XNB reader
+(`ReflectiveTypeReader`, `EnumTypeReader`, `ReflectiveTypeReaderBuilder`) with
+`ContentManager::RegisterCnbLoaderEXT` beside it.
+
+**The owner ruled on 2026-08-28 that binding it is a later pass.** So `CNA::Content::Cnb` is
+currently **not reachable from the C API at all**, that is published rather than implied, and
+`plans/plan_binding.md` Phase B10 is the sized backlog: `CBIND-103`–`CBIND-111` by subsystem, and
+`CBIND-112` to close the matrix the way `CBIND-095` closed the last one.
+
+**`docs/c-api/RELEASE_GATE.md` therefore reads `Not ready`** — on exactly one criterion, *No public
+C++ symbol is unaccounted for*, and on no other of the ten. That is the gate working rather than a
+document going stale: `CBIND-042B` built it to fail in both directions precisely so a deferral
+appears in the published verdict instead of living in whoever deferred it. Do not "fix" the verdict
+by reclassifying rows — and in particular **not one of the 506 is recorded `not-applicable`**.
+`CBIND-047` excluded `modules/platform` as a substrate and that was a *scope* decision; this is a
+*scheduling* decision. Saying a byte format of PODs and free functions has no C form would be a
+false statement about C.
+
+**Three test defects the merge exposed, all fixed in the merge commit**, none of them a conflict
+git could see:
+
+- `LifecycleSmoke.c` required a positive `ElapsedGameTime` on every update. XNA's own clock gives
+  the **first** update exactly zero, which CNA now follows (`SAMPLE-044`, on the owner's ruling that
+  XNA is authoritative over FNA); the assertion pinned FNA's behaviour and so failed a correct fix.
+- `ContentSmoke.c`'s `.cnj` font descriptor listed `'A'` before `'?'`. The reader now refuses an
+  unsorted character map because `SpriteFont` binary-searches it, so the fixture is sorted and the
+  glyph assertions follow it.
+- `TextureVolumeSmoke.c` required a render-target cube to accept an upload. HEADLESS refuses it, so
+  acceptance is renderer storage rather than contract: the round trip is asserted in full where the
+  transfer is accepted and a matching refusal where it is not, and no third answer is allowed.
+
+**Two long-standing defect rows are closed.** `CBIND-098` — `WeightedBlendedTransparency::begin`
+opening its bracket only where the effect is supported — is **fixed in the canonical engine layer**
+under an explicit owner exception to the audit-only rule, mutation-checked in both directions; the
+canonical suite turned out to have been failing on that renderer the whole time, unnoticed because
+this campaign ran only the `CApi` suite. `CBIND-101` — unrelated `CApi_*` suites failing together in
+a full run and passing on rerun — is **closed as not reproducible**, not as fixed: fifteen serial
+full runs, five of them immediately after a whole-configuration build of all three trees, produced
+one occurrence.
+
+**That one occurrence did surface a structural candidate, recorded as a candidate.** All six suites
+in all five occurrences scope their `SDL_VIDEODRIVER=dummy` to `SDL_RENDERER`, so in every arm this
+phase uses they named no video driver and inherited ctest's own environment — a live desktop
+session. Every C API test that names no driver now gets `SDL_VIDEODRIVER=x11` and the configured
+`CNA_TEST_DISPLAY`, which is `CBIND-094`'s rule applied to the display rather than to `$HOME` and is
+worth doing whether or not it was the cause. `CBIND-113` is opened for what the capture could not
+say: several suites report only through exit codes and print nothing at all on failure.
+
+**The test display was `:0` in all three build trees and is not any more.** `CNA_TEST_DISPLAY` is a
+cache variable, so it survived every reconfigure that did not name it, and `:0` is the owner's real
+desktop. All three trees now name a private `Xvfb :143`, and the suite is run with
+`env -u WAYLAND_DISPLAY DISPLAY=:143 SDL_VIDEODRIVER=x11` because this is a Wayland session: a test
+that names neither a driver nor a display reaches the host compositor rather than any X server you
+started.
+
+**Where it stands:** 536 headers / 8,812 symbols — 7,832 implemented, 15 approved partial, 506
+planned, 459 not applicable. ABI `0.9.0`, 3,746 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 97/97 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+`cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
+`CNA_CNAEXT=ON`).
+
 ## `SAMPLE-005` official XNA content fidelity (`ReachGraphicsDemo_4_0`, 2026-08-23)
 
 The sample audit removed the sample-side model, cubemap, font and background workarounds and fed
@@ -2016,7 +2090,9 @@ task.
 > **State at this handoff.** Forty-six slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **[SUPERSEDED 2026-08-26 — see the
+> top of this file. The sentence that follows was true on 2026-08-19 and is false now: the matrix
+> reopened by 1,451 rows and `graphics-ext` is the bulk of them.]** **Nothing remains in the campaign at all**: every
 > module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-042` are done,
 > as are `CBIND-045` and `CBIND-046` from the owner's two decisions and `CBIND-044A`–`D`. With the
 > owner's approval of the twelve remaining limitations on 2026-08-16, **every task in the plan is

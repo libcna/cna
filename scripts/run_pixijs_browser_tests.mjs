@@ -1,18 +1,33 @@
 #!/usr/bin/env node
-// Runs a built Emscripten PIXIJS test page in a real headless browser and reports its result.
+// Runs a built Emscripten test page in a real headless browser and reports its result.
 //
-// plans/plan_pixijs.md PIXIJS-85: the PixiJS renderer is Emscripten-only and its draw path is EM_JS, so
-// its pixel behaviour can only be verified in a browser with a real WebGL context -- `node` alone
-// has no DOM, and SDL_Init(SDL_INIT_VIDEO) fails there before any renderer code runs (the same
-// boundary docs/canvas-backend.md records for CANVAS). Every browser result quoted in
-// plans/plan_pixijs.md comes from this script, so the run is reproducible rather than a one-off
-// hand-driven session.
+// Two subsystems use this, and the name is historical rather than a scope:
+//
+//   * plans/plan_pixijs.md PIXIJS-85 -- the PixiJS renderer is Emscripten-only and its draw path is
+//     EM_JS, so its pixel behaviour can only be verified in a browser with a real WebGL context.
+//     `node` alone has no DOM, and SDL_Init(SDL_INIT_VIDEO) fails there before any renderer code
+//     runs (the same boundary docs/canvas-backend.md records for CANVAS). Every browser result
+//     quoted in plans/plan_pixijs.md comes from this script.
+//   * plans/plan_cabi.md CABI-37/CABI-39 -- the C ABI's own browser probe
+//     (modules/c-api/wasm/browser_probe.html), registered as the ctest CApi_WasmBrowserProbe. It
+//     reuses this runner rather than adding a second one, so both subsystems agree on how a page
+//     is served, what counts as a pass, and what "Playwright is available" means.
+//
+// Either way the run is reproducible rather than a one-off hand-driven session. A page reports by
+// printing `[FAIL] ...` lines and a final `=== <passed>/<expected> PASS ===`; a run that dies early
+// never prints the summary at all, which is what makes its absence a failure.
 //
 // Usage:
 //   node scripts/run_pixijs_browser_tests.mjs <build-dir> [page.html ...]
+//   node scripts/run_pixijs_browser_tests.mjs --check-playwright
+//
+// `--check-playwright` runs no page: it exits 0 when Playwright resolves here and 1 when it does
+// not, so a build system can gate a browser test on the same resolution the run itself uses
+// instead of on a search of its own that may be narrower.
 //
 // Requires the `playwright` npm package and a Chromium build; point PLAYWRIGHT_CHROMIUM at an
-// executable to override Playwright's own bundled one. Exit code 0 = every page passed.
+// executable to override Playwright's own bundled one, and NODE_PATH at the module root holding
+// Playwright when it is a global install. Exit code 0 = every page passed.
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -96,8 +111,23 @@ async function runPage(browser, origin, page_name, timeoutMs) {
 
 async function main() {
     const [buildDir, ...requested] = process.argv.slice(2);
+
+    // Lets a build system ask "can this machine run these pages?" using the *same* resolution the
+    // run itself uses. A gate with its own separate search can be narrower than the runner and
+    // report a skip where the test would have passed, which is exactly what happened to
+    // CApi_WasmBrowserProbe (plans/plan_cabi.md CABI-39).
+    if (buildDir === '--check-playwright') {
+        try {
+            loadPlaywright();
+            return 0;
+        } catch {
+            return 1;
+        }
+    }
+
     if (!buildDir) {
         console.error('usage: run_pixijs_browser_tests.mjs <build-dir> [page.html ...]');
+        console.error('       run_pixijs_browser_tests.mjs --check-playwright');
         return 2;
     }
     const root = resolve(buildDir);

@@ -218,22 +218,44 @@ void cnaOitEmit(vec3 colour, float alpha, float viewDepth) {
         if (accumulating_)
             throw std::logic_error(
                 "CNA::Graphics::WeightedBlendedTransparency::begin: accumulation is already open");
-        if (!isSupported()) return;
 
-        const std::vector<RenderTargetBinding> bindings = {
-            RenderTargetBinding(accumulation_.get()),
-            RenderTargetBinding(revealage_.get()),
-        };
-        device_.SetRenderTargets(bindings);
-        // Both targets clear to zero: an empty accumulation is a zero sum, and a zero sum of logs
-        // exponentiates to a revealage of 1 -- "nothing covered this pixel", which is what the
-        // resolve early-outs on.
-        device_.Clear(Color(0, 0, 0, 0));
+        // The bracket opens whether or not the resolve can run -- the same correction ShadowMap
+        // needed (plans/plan_modern.md MOD-1697) and for the same reason. Returning here before
+        // accumulating_ was set left a renderer that cannot resolve with a begin() that reported
+        // success and an end() that threw "accumulation is not open", so the second half of a
+        // correctly paired call failed, on exactly the renderers least able to explain why. What
+        // the unsupported path skips is the device work, not the bracket.
+        if (isSupported())
+        {
+            try
+            {
+                const std::vector<RenderTargetBinding> bindings = {
+                    RenderTargetBinding(accumulation_.get()),
+                    RenderTargetBinding(revealage_.get()),
+                };
+                device_.SetRenderTargets(bindings);
+                // Both targets clear to zero: an empty accumulation is a zero sum, and a zero sum
+                // of logs exponentiates to a revealage of 1 -- "nothing covered this pixel", which
+                // is what the resolve early-outs on.
+                device_.Clear(Color(0, 0, 0, 0));
 
-        device_.setBlendStateProperty(*accumulateBlend_);
-        // Depth testing on, depth writing off: a transparent surface must be hidden by the opaque
-        // geometry in front of it and must not hide the transparent ones behind it.
-        device_.setDepthStencilStateProperty(DepthStencilState::DepthRead);
+                device_.setBlendStateProperty(*accumulateBlend_);
+                // Depth testing on, depth writing off: a transparent surface must be hidden by the
+                // opaque geometry in front of it and must not hide the transparent ones behind it.
+                device_.setDepthStencilStateProperty(DepthStencilState::DepthRead);
+            }
+            catch (...)
+            {
+                // A renderer that refuses the two-target bind leaves the object usable rather than
+                // permanently half-open: nothing is recorded as bound, the bracket stays closed,
+                // and a later begin() starts from the beginning instead of reporting "already
+                // open".
+                boundTargets_ = false;
+                try { device_.SetRenderTarget(nullptr); } catch (...) { /* best-effort cleanup */ }
+                throw;
+            }
+            boundTargets_ = true;
+        }
         accumulating_ = true;
     }
 
@@ -243,6 +265,12 @@ void cnaOitEmit(vec3 colour, float alpha, float viewDepth) {
             throw std::logic_error(
                 "CNA::Graphics::WeightedBlendedTransparency::end: accumulation is not open");
         accumulating_ = false;
+        // Restore exactly what the matching begin() changed. Where it bound nothing there is
+        // nothing to unbind, and resetting the blend and depth states here would clobber whatever
+        // the caller had set -- a side effect the supported path does not have, since there it is
+        // undoing its own.
+        if (!boundTargets_) return;
+        boundTargets_ = false;
         device_.SetRenderTarget(nullptr);
         device_.setBlendStateProperty(BlendState::Opaque);
         device_.setDepthStencilStateProperty(DepthStencilState::Default);

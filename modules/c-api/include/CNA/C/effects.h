@@ -2655,6 +2655,57 @@ CNA_C_API CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
     uint64_t capacity,
     uint64_t* out_count);
 
+/**
+ * @brief Copies a shader effect's compile error, if it has one.
+ *
+ * Empty when the effect compiled, and empty on a renderer that never compiled the source at all --
+ * so an empty error is not evidence the shader ran. Ask @ref cna_shader_effect_is_valid for that.
+ *
+ * @param effect The shader effect.
+ * @param destination The buffer, or null to ask for the size.
+ * @param capacity The buffer size in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with the needed size in `out_bytes`,
+ * `CNA_RESULT_INVALID_HANDLE` for an effect that is not a shader effect,
+ * `CNA_RESULT_INVALID_ARGUMENT` for a null count, or an error.
+ */
+CNA_C_API CNA_Result cna_shader_effect_copy_compile_error_ext(
+    CNA_EffectHandle effect, char* destination, uint64_t capacity, uint64_t* out_bytes);
+
+/**
+ * @brief Sets an array of `vec3` uniforms.
+ *
+ * The array is **three floats per element, tightly packed** -- not four, and not padded to a
+ * `vec4`. A caller that pads is describing a different array than the shader declares, which is
+ * the mistake this note exists to prevent.
+ *
+ * @param effect The shader effect.
+ * @param name The uniform name.
+ * @param values `3 * count` floats.
+ * @param count How many vectors.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an effect that is not a shader
+ * effect, `CNA_RESULT_INVALID_ARGUMENT` for a malformed name, a null array with a non-zero count
+ * or a negative count, or an error.
+ */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_vec3_array(
+    CNA_EffectHandle effect, CNA_StringView name, const float* values, int32_t count);
+
+/**
+ * @brief Sets an array of `mat4` uniforms.
+ *
+ * **Sixteen floats per matrix, in the same order @ref CNA_Matrix stores them.**
+ *
+ * @param effect The shader effect.
+ * @param name The uniform name.
+ * @param matrices `16 * count` floats.
+ * @param count How many matrices.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for an effect that is not a shader
+ * effect, `CNA_RESULT_INVALID_ARGUMENT` for a malformed name, a null array with a non-zero count
+ * or a negative count, or an error.
+ */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_mat4_array(
+    CNA_EffectHandle effect, CNA_StringView name, const float* matrices, int32_t count);
+
 #ifdef __cplusplus
 }
 #endif

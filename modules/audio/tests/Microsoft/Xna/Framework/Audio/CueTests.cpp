@@ -2565,10 +2565,13 @@ TEST(CueTest, PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes)
         EXPECT_FALSE(cue->getIsPlayingProperty());
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -2596,10 +2599,13 @@ TEST(CueTest, PauseAfterNaturalCompletionIsANoOp)
         EXPECT_TRUE(cue->getIsStoppedProperty());
         EXPECT_FALSE(cue->getIsPausedProperty());
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -2628,10 +2634,13 @@ TEST(CueTest, PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstan
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), first);
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 1), nullptr);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -2689,41 +2698,55 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
+    // CABI-32: only the fixture acquisition may skip. This whole test used to sit inside one
+    // try/catch that turned *any* exception into "no audio device (dummy driver unavailable)",
+    // which is how CABI-25 hid here: the is3D gate made Apply3D throw, the catch-all swallowed it,
+    // and the test reported a missing device on a machine that has one. Narrowing the guard to the
+    // part that genuinely depends on the environment is what makes a contract exception below fail
+    // the test instead of quietly excusing it.
+    std::unique_ptr<Cue> cue;
     try
     {
-        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
-        cue->Play();
-
-        SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
-        if (!inst)
-        {
-            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                            "could not create a real SoundEffectInstance";
-        }
-
-        MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
-        ASSERT_NE(track, nullptr);
-
-        AudioListener listener; // default position: origin
-        AudioEmitter nearEmitter;
-        nearEmitter.setPositionProperty({1.0f, 0.0f, 0.0f});
-        cue->Apply3D(listener, nearEmitter);
-        const float nearGain = MIX_GetTrackGain(track);
-
-        AudioEmitter farEmitter;
-        farEmitter.setPositionProperty({10000.0f, 0.0f, 0.0f});
-        cue->Apply3D(listener, farEmitter);
-        const float farGain = MIX_GetTrackGain(track);
-
-        EXPECT_LT(farGain, nearGain);
-
-        cue->Stop(AudioStopOptions::Immediate);
+        cue.reset(SharedApply3DBank().GetCue("Apply3DCue"));
     }
-    catch (...)
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "no usable sound bank in this environment: " << error.what();
+    }
+
+    // Everything from here down is contract. An exception is a failure, not a skip.
+    //
+    // Aim before playing: starting playback fixes the choice between 3D and pan, so an instance
+    // played first and aimed afterwards refuses -- XNA's own rule. Cue's pending-3D cache exists
+    // precisely so this order works before there is an active instance to forward to (see the test
+    // below it).
+    AudioListener listener; // default position: origin
+    AudioEmitter nearEmitter;
+    nearEmitter.setPositionProperty({1.0f, 0.0f, 0.0f});
+    cue->Apply3D(listener, nearEmitter);
+
+    cue->Play();
+
+    SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    if (!inst)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+                        "could not create a real SoundEffectInstance";
     }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
+    ASSERT_NE(track, nullptr);
+
+    const float nearGain = MIX_GetTrackGain(track);
+
+    AudioEmitter farEmitter;
+    farEmitter.setPositionProperty({10000.0f, 0.0f, 0.0f});
+    cue->Apply3D(listener, farEmitter);
+    const float farGain = MIX_GetTrackGain(track);
+
+    EXPECT_LT(farGain, nearGain);
+
+    cue->Stop(AudioStopOptions::Immediate);
 }
 
 // AUDIO-001 finding 4: Cue::Apply3D() called BEFORE the cue's first Play() has nothing in
@@ -2762,10 +2785,13 @@ TEST(CueTest, Apply3DBeforePlaySeedsSpatialStateOntoNewlyCreatedInstance)
 
         cue->Stop(AudioStopOptions::Immediate);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -2824,10 +2850,13 @@ TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway
         EXPECT_TRUE(immediateCue->getIsStoppedProperty());
         EXPECT_FALSE(immediateCue->getIsStoppingProperty());
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -2866,10 +2895,13 @@ TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceFadeTimerElapses
         EXPECT_FALSE(cue->getIsStoppingProperty());
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -2898,10 +2930,13 @@ TEST(CueTest, StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate)
         EXPECT_FALSE(cue->getIsStoppingProperty());
         EXPECT_EQ(CueTestAccess::ActiveInstance(*cue, 0), nullptr);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -2947,10 +2982,13 @@ TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
 
         cue->Stop(AudioStopOptions::Immediate); // clean up rather than leaking a Stopping cue
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -4513,10 +4551,13 @@ TEST(CueTest, CueInstanceLimitFailRejectsSecondInstanceOfSameCueDefinition)
 
         cueA->Stop(AudioStopOptions::Immediate);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 
@@ -4593,10 +4634,13 @@ TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinit
         triggerA->Stop(AudioStopOptions::Immediate);
         triggerB->Stop(AudioStopOptions::Immediate);
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
-                        "could not exercise real playback";
+        // CABI-32: names what it caught. A bare catch(...) reporting "no audio device" is how a
+        // contract exception hides as an environment skip -- it happened in this file, to the
+        // Apply3D attenuation case below, and cost a real regression its visibility.
+        GTEST_SKIP() << "could not exercise real playback (expected: no audio device): "
+                     << error.what();
     }
 }
 

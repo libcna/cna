@@ -278,7 +278,7 @@ TEST(GltfLimitationsDoc, CnaextSection32DoesNotClaimMoreThanTheRegistry)
     std::string error;
     const std::vector<std::vector<std::string>> rows =
         [&error]() -> std::vector<std::vector<std::string>> {
-            std::ifstream file(RepositoryRoot() / "CNAEXT.md");
+            std::ifstream file(RepositoryRoot() / "misc" / "CNAEXT.md");
             if (!file) { error = "cannot open CNAEXT.md"; return {}; }
             std::vector<std::vector<std::string>> out;
             std::string line;

@@ -31,6 +31,8 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResourceFor;
+using CNA::C::Detail::RemoveOwnedGraphicsResourceFor;
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -601,7 +603,7 @@ CNA_Result cna_vertex_buffer_create(
                 ErrorCategoryForResult(result),
                 "The owned VertexBuffer handle could not be created.");
         }
-        AddOwnedGraphicsResource();
+        AddOwnedGraphicsResourceFor(graphicsDevice->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -627,7 +629,7 @@ CNA_Result cna_vertex_buffer_destroy(const CNA_VertexBufferHandle vertexBufferHa
                 ErrorCategoryForResult(result),
                 "The owned VertexBuffer handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        RemoveOwnedGraphicsResourceFor(buffer->parentGame);
         return CNA_RESULT_SUCCESS;
     });
 }

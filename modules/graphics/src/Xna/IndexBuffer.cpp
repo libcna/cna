@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MS-PL
+#include "Microsoft/Xna/Framework/Graphics/DynamicIndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -228,6 +229,10 @@ namespace Microsoft::Xna::Framework::Graphics
                                       SetDataOptions options,
                                       bool useOptions)
     {
+        // CABI-15: see VertexBuffer::UploadValidatedData -- one clear on the write path.
+        if (auto* const losable = dynamic_cast<CNA::Internal::Graphics::IContentLosable*>(this)) {
+            losable->ClearContentLostEXT();
+        }
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("IndexBuffer");
 
