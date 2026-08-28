@@ -11,16 +11,17 @@ Everything here is declared in `CNA/C/cnb.h` and reachable through the umbrella 
 
 **Bound.** The container's identities and byte-level constants, chunk identifiers, asset type
 identifiers, external-reference name validation, the whole-file arithmetic a reader does on
-file-declared numbers, CRC-32C, the read limits, and chunk compression (`CBIND-106`); and the parsed
-document, its bounded cursor, the primitive writer and the container writer (`CBIND-107`).
+file-declared numbers, CRC-32C, the read limits, and chunk compression (`CBIND-106`); the parsed
+document, its bounded cursor, the primitive writer and the container writer (`CBIND-107`); and the
+texture pixel formats with the `Texture2D`, `TextureCube` and `Texture3D` schemas (`CBIND-108`).
 
-**Not bound.** The loader registry, and every asset schema — textures, sprite fonts, models, sound
+**Not bound.** The loader registry, and the remaining asset schemas — sprite fonts, models, sound
 effects, media, curves and animation clips.
 
 So a C application can **build a `.cnb` file and parse one back**, walk its table of contents, read
-any chunk's bytes, and check its metadata and external references. It still **cannot load a `.cnb`
-asset**: nothing turns a chunk's bytes into a `Texture2D` or a `Model`. `plans/plan_binding.md`
-Phase B10 is the backlog for the rest, and `docs/c-api/CONTENT.md` records the consequence from the
+any chunk's bytes, check its metadata and external references, and encode or decode a texture. It
+still cannot load a `.cnb` asset through a `ContentManager`. `plans/plan_binding.md` Phase B10 is
+the backlog for the rest, and `docs/c-api/CONTENT.md` records the consequence from the
 `ContentManager` side.
 
 ## Handles, and the parts that have none
@@ -150,6 +151,57 @@ build time. The producer is the right place to find that out.
 **The container-level chunks are always emitted first**, ahead of the schema's own, regardless of
 when they were set. A schema must therefore address chunks by type — `cna_cnb_document_find_all`,
 `_find_single`, `_require_single` — and never by table-of-contents index.
+
+
+## Textures
+
+Three asset types share one chunk layout — `TEXH` for the shape, `TEXR` for the representation
+table, one `TEXD` per level — and differ only in how the header's face count and depth are
+constrained. The container header's asset type is what tells them apart, which is what it is for.
+
+**Pixel formats are a separate, frozen numbering, and the reason matters.** `CNA_CnbTextureFormat`
+exists instead of serializing `CNA_SurfaceFormat` because the canonical `SurfaceFormat` enumerators
+carry no explicit values: inserting one would renumber everything after it and silently change the
+meaning of every `.cnb` already written. So these 27 values never move, and
+`cna_cnb_texture_format_to_surface_format` / `_from_surface_format` are the deliberate bridge
+between them.
+
+```c
+CNA_CnbTextureDataHandle texture;
+cna_cnb_texture_data_create_rgba8(width, height, rgba, width * height * 4, &texture);
+
+uint64_t needed = 0;
+cna_cnb_encode_texture2d(texture, name, NULL, 0, &needed);
+/* allocate `needed`, then call again */
+```
+
+A texture may carry the same image several times over — once as `RGBA8`, once as `BC7` — so a
+runtime can pick whichever its GPU supports without a second asset. Each is a **representation**,
+and its levels are ordered face-major then mip: index `face * mip_count + mip`.
+
+```c
+uint64_t index = 0;
+CNA_Bool found = CNA_FALSE;
+cna_cnb_texture_data_select_representation(texture, my_gpu_supports, &state, &found, &index);
+```
+
+The predicate is called synchronously, once per representation, in the order the writer recorded
+them — which is preference order, so the first accepted one is the author's intended choice. No
+supported format is an ordinary answer (`found` false), not a refusal.
+
+Two rules worth knowing before you compute a buffer size yourself:
+
+- **A block-compressed level rounds each dimension up to a whole 4-texel block.** A 1×1 BC7 level is
+  a full 16-byte block, not a fraction of one. `cna_cnb_get_texture_level_byte_size` applies that
+  rule; open-coding `width * height * unit` does not.
+- **Every identifier can be decoded; schema 1 only ever encodes `RGBA8`.** Encoding any other format
+  is refused, which is better than writing a file no reader of this schema would accept.
+
+`cna_cnb_writer_append_embedded_texture2d` puts a texture's chunks into a document being written for
+a *different* asset type — that is how a sprite font carries its glyph atlas, with exactly the
+chunks, strides, alignment and validation a standalone texture would use. An atlas normally belongs
+to one font, so embedding is right there; a model's textures are shared and are referenced through
+`XREF` instead.
 
 ## Which failure means what
 

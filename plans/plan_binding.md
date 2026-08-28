@@ -1253,7 +1253,23 @@ applies unchanged. Three things are specific to this phase:
 **ABI `0.10.0` → `0.11.0`, exports 3,770 → 3,850**, purely additive. `AbiHeaderC.c`/`AbiHeaderCpp.cpp` freeze all three new structures' sizes, alignments and every offset; each places its 64-bit members ahead of its 32-bit ones so the layouts carry no padding. `--approve-rule-symbols` was again unusable for the reason `CBIND-106` recorded, so the fourteen new rules' approvals were derived with the tool's own matcher over those fourteen patterns only, with the same two assertions in the deriving script.
 
 **Verified in all three arms**, each built whole and then run serially: 99/99 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 3,850 in each tree; and the same 3,850 names exported with the engine layer on and off, compared symbol by symbol. `docs/c-api/CNB.md` gains the document, cursor and writer contract and the table of which result code means whose mistake. |
-| CBIND-108 | Bind the CNB texture schemas | 67 | ⬜ | `CnbTextureFormat` (37) and `CnbTextureCodec` (30): `Texture2D`, `TextureCube` and `Texture3D` schema 1, including the block-compressed payloads WebGPU consumes natively. The surface-format identity already exists in the ABI (`CNA_SurfaceFormat`); do not mint a second one for the same concept — map the format's own tag onto it and record the mapping, or say why the two genuinely differ. |
+| CBIND-108 | Bind the CNB texture schemas | 67 | ✅ | **Done 2026-08-28.** 28 routes, one identity with 27 frozen wire values, one new handle kind (`CnbTextureData` = 172) and one versioned structure close all 67 rows: implemented 7,986 → 8,053 and planned 352 → 285.
+
+**The format numbering is the whole point of the first header, and the C side had to not undo it.** `CnbTextureFormat` exists *instead of* serializing `SurfaceFormat`, because `SurfaceFormat`'s enumerators carry no explicit values and are numbered by position: inserting one — an ordinary thing to do to an XNA-shaped enum — would renumber everything after it and silently change the meaning of every `.cnb` already written. Publishing the C constants at anything but the canonical values would reintroduce exactly that hazard one layer out, so `AbiHeaderC.c` freezes **each of the 27 individually** rather than only the first and the last: a renumbering that shifted the middle would pass a maximum check.
+
+**The mapping is round-tripped over all 27, and that is the check that would find drift.** `to_surface_format` then `from_surface_format` must return the identifier it started from, for every one. Mutation-checked by asserting the wrong identifier comes back, which fails.
+
+**Two things a round trip cannot see, so they are asserted directly.** A block-compressed level rounds each dimension up to a whole 4-texel block, so a 1x1 BC7 level is a full block and a 5x4 BC1 level is two — asserted against each format's own reported unit size rather than a transcribed constant, and mutation-checked by asserting a quarter block. And **every identifier decodes while schema 1 encodes `Rgba8` only**: that asymmetry is canonical and is pinned, because the alternative is writing a file no reader of this schema would accept.
+
+**`CnbTextureData` is a handle because it is nested vectors, and the shape of the C form follows from that.** `CnbTextureRepresentation`'s `format` and `levels` have no POD form, so they become `_get_representation_format`, `_get_level_count`, `_set_level` and `_copy_level`; `add_representation` sizes the new representation for the `faceCount * mipCount` the description already declares, so a caller fills levels **by index** rather than pushing them in an order the format would then have to trust.
+
+**`SelectCnbTextureRepresentation` takes a predicate, so it becomes a callback** — a function pointer plus an opaque context, called synchronously, once per representation in order, never retained. The canonical function reports "none supported" by returning the list size; in C that is a sentinel a caller has to know to compare against, so it becomes the availability pair every optional query here uses, with the index left untouched when nothing matched.
+
+**The embedded-atlas pair is named after the objects a C caller already holds** — `cna_cnb_writer_append_embedded_texture2d` and `cna_cnb_document_read_embedded_texture2d` — rather than after the free functions, and its test round-trips an atlas through a **sprite-font** document, so the path is proved against a file the texture decoders themselves refuse. That is the point of embedding: an atlas belongs to one font, unlike a model's textures, which are shared and go through `XREF`.
+
+**Every throw is a contract again; the grep found no clamps at all** across both sources — 34 refusal sites, zero `clamp`/`min`/`max`. The one place a C caller could have been given a softer answer is an out-of-range representation or level index, and that follows `CBIND-107`'s rule: an index is an argument (`CNA_RESULT_INVALID_ARGUMENT`), a malformed file is content (`CNA_RESULT_IO`), checked at both levels of nesting.
+
+**ABI `0.11.0` → `0.12.0`, exports 3,850 → 3,878**, purely additive. Verified in all three arms, each built whole and then run serially: 100/100 `CApi` tests in `cmake-build-debug`, `cmake-build-cnaext` and `build-probe`; all eight build-free gates green; declared and exported routes agreeing exactly at 3,878 in each tree; and the same 3,878 names with the engine layer on and off, compared symbol by symbol. |
 | CBIND-109 | Bind the CNB model schema | 129 | ⬜ | `CnbModelData` (105) is the biggest single type in the phase: bones, meshes, mesh parts, materials, morph targets and the animation payload. It is a POD graph, so the shape question is whether a caller walks it through borrowed handles per node or reads a flattened descriptor per level; answer it once, at the start, because 105 rows will follow whichever is chosen. `CnbModelCodec` (19) encodes and decodes it and `CnbModelFromCnj` (5) builds one from a `.cnj`. |
 | CBIND-110 | Bind the CNB font, audio, media, curve and animation schemas | 85 | ⬜ | `CnbSpriteFontCodec` (22), `CnbSoundEffectCodec` (25), `CnbMediaCodec` (21), `CnbCurveCodec` (6) and `CnbAnimationClipCodec` (11). Each has a runtime counterpart already bound — `cna_sprite_font_*`, `cna_sound_effect_*`, `cna_song_*`/`cna_video_*`, `cna_curve_*` — so the codec routes produce and consume the *same* C values those families already publish rather than parallel ones. The sprite-font schema carries the strictly-ascending character-map rule the `.cnj` reader enforces; a C route that writes one must refuse an unsorted map for the same reason. |
 | CBIND-111 | Bind the CNB loader registry and the two compilation front ends | 25 | ⬜ | `CnbLoaderRegistry` (11) is what a `ContentManager` resolves an asset through, so it lands after `CBIND-105`'s hook rather than before it. `CnbSourceImport` (7) and `CnjToCnb` (7) are the headless import paths — image, WAV, glTF and `.cnj` in, `.cnb` out — which makes them the one part of this phase a C application would use as a *tool* rather than as a runtime, and their error reporting deserves the same care the runtime routes get. |
@@ -1320,8 +1336,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-28, after `CBIND-107`):** 536 headers / 8,812 symbols —
-**7,986 implemented, 15 approved partial, 352 planned, 459 not applicable.** ABI `0.11.0`, 3,850
+**Snapshot (2026-08-28, after `CBIND-108`):** 536 headers / 8,812 symbols —
+**8,053 implemented, 15 approved partial, 285 planned, 459 not applicable.** ABI `0.12.0`, 3,878
 exported symbols — the same 3,746 with `CNA_CNAEXT` on and off (measured symbol by symbol: zero
 differ), which is the engine layer's ABI promise measured rather than asserted.
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
@@ -1330,8 +1346,9 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 reads **Not ready**, on exactly one criterion — *No public C++ symbol is unaccounted for* — and on
 no other. That is not a regression and not a document going stale: the sixth merge of `next`
 brought in 506 public symbols, 460 of them the `CNA::Content::Cnb` content format, and the owner
-ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106` and
-`CBIND-107`, the container and the document, which closed 154 of them and left 352. The gate says so out loud because
+ruled on 2026-08-28 that binding them belongs to a later pass — then asked for `CBIND-106`,
+`CBIND-107` and `CBIND-108`, the container, the document and the texture schemas, which closed 221
+of them and left 285. The gate says so out loud because
 `CBIND-042B` built it to fail in both directions, and a deferral that only lives in somebody's
 memory is the thing it exists to prevent.
 
@@ -1361,7 +1378,7 @@ CNAEXT engine layer and the fifth merge's tail opened, and `CBIND-095` verified 
 
 ### What remains
 
-**Phase B10 — 352 rows left of 506, in seven slices. `CBIND-106` and `CBIND-107` are closed; `CBIND-103`–`CBIND-105` and `CBIND-108`–`CBIND-111` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
+**Phase B10 — 285 rows left of 506, in six slices. `CBIND-106`–`CBIND-108` are closed; `CBIND-103`–`CBIND-105` and `CBIND-109`–`CBIND-111` remain, with `CBIND-113` beside them and `CBIND-112` to close it.** The
 sixth reopening. `origin/next` merged on 2026-08-28 and brought in the **CNB content format**
 (`CNA::Content::Cnb`, 23 public headers, `plans/plan_cnb.md`'s `CNBF-002`–`CNBF-123`) — 460 of the
 506 rows — plus 46 ordinary XNA symbols: the math types' compound-assignment operators,
@@ -1371,9 +1388,9 @@ parameter textures, `OcclusionQuery`'s precision query, and the reflective XNB r
 
 **One slice of it is done and the rest is a recorded owner decision rather than a gap.** On
 2026-08-28 the ruling was that this pass integrates the merge and writes the backlog; binding the
-format itself is a later pass. `CBIND-106` and `CBIND-107` — the container and the document —
-were then asked for separately and are closed, which is why the count below reads 352 rather than
-506. So `docs/c-api/RELEASE_GATE.md` reads **Not ready** and this plan says why,
+format itself is a later pass. `CBIND-106`, `CBIND-107` and `CBIND-108` — the container, the
+document and the texture schemas — were then asked for separately and are closed, which is why the
+count below reads 285 rather than 506. So `docs/c-api/RELEASE_GATE.md` reads **Not ready** and this plan says why,
 which is the arrangement `CBIND-079` exists to keep honest: three documents agreeing on one
 measurable fact, rather than each being locally consistent.
 

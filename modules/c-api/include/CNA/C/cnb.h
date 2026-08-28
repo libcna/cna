@@ -4,6 +4,7 @@
 #define CNA_C_CNB_H
 
 #include "CNA/C/core.h"
+#include "CNA/C/graphics.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -1838,6 +1839,587 @@ CNA_C_API CNA_Result cna_cnb_writer_build(
 CNA_C_API CNA_Result cna_cnb_writer_write_to_file(
     CNA_CnbWriterHandle writer,
     CNA_StringView path);
+
+/* --- CBIND-108: texture pixel formats ---------------------------------------------------------- */
+
+/**
+ * @brief The pixel format identifiers a `.cnb` texture stores.
+ *
+ * **These exist instead of serializing `CNA_SurfaceFormat`, and the reason is worth knowing.** The
+ * canonical `SurfaceFormat` enumerators carry no explicit values, so they are numbered by position:
+ * inserting one -- a perfectly ordinary thing to do to an XNA-shaped enum -- would renumber every
+ * enumerator after it and silently change the meaning of every `.cnb` already written. A file format
+ * cannot be hostage to the declaration order of a runtime enum, so these values are frozen the way
+ * the container's own constants are, and the mapping between the two is a function that has to be
+ * edited deliberately rather than a cast that follows along quietly.
+ *
+ * Every `SurfaceFormat` CNA defines has an identifier here. That is separate from what CNB schema 1
+ * will actually *encode*, which is `CNA_CNB_TEXTURE_FORMAT_RGBA8` alone -- decoding accepts any of
+ * them.
+ */
+typedef uint32_t CNA_CnbTextureFormat;
+
+/** @brief Not a valid format; a file declaring it is rejected. */
+#define CNA_CNB_TEXTURE_FORMAT_UNKNOWN UINT32_C(0)
+/** @brief 8 bits per channel RGBA, the portable baseline. `SurfaceFormat::Color`. */
+#define CNA_CNB_TEXTURE_FORMAT_RGBA8 UINT32_C(1)
+/** @brief 8 bits per channel with BGRA transfer order. `SurfaceFormat::ColorBgraEXT`. */
+#define CNA_CNB_TEXTURE_FORMAT_BGRA8 UINT32_C(2)
+/** @brief 8 bits per channel RGBA, sRGB-encoded. `SurfaceFormat::ColorSrgbEXT`. */
+#define CNA_CNB_TEXTURE_FORMAT_RGBA8_SRGB UINT32_C(3)
+/** @brief 16-bit 5:6:5 BGR. `SurfaceFormat::Bgr565`. */
+#define CNA_CNB_TEXTURE_FORMAT_BGR565 UINT32_C(4)
+/** @brief 16-bit 5:5:5:1 BGRA. `SurfaceFormat::Bgra5551`. */
+#define CNA_CNB_TEXTURE_FORMAT_BGRA5551 UINT32_C(5)
+/** @brief 16-bit 4:4:4:4 BGRA. `SurfaceFormat::Bgra4444`. */
+#define CNA_CNB_TEXTURE_FORMAT_BGRA4444 UINT32_C(6)
+/** @brief 8-bit alpha only. `SurfaceFormat::Alpha8`. */
+#define CNA_CNB_TEXTURE_FORMAT_ALPHA8 UINT32_C(7)
+/** @brief 8-bit single channel. `SurfaceFormat::ByteEXT`. */
+#define CNA_CNB_TEXTURE_FORMAT_R8 UINT32_C(8)
+/** @brief 16-bit unsigned single channel. `SurfaceFormat::UShortEXT`. */
+#define CNA_CNB_TEXTURE_FORMAT_R16 UINT32_C(9)
+/** @brief 16 bits per channel RG. `SurfaceFormat::Rg32`. */
+#define CNA_CNB_TEXTURE_FORMAT_RG16 UINT32_C(10)
+/** @brief 16 bits per channel RGBA. `SurfaceFormat::Rgba64`. */
+#define CNA_CNB_TEXTURE_FORMAT_RGBA16 UINT32_C(11)
+/** @brief Signed 8 bits per channel RG. `SurfaceFormat::NormalizedByte2`. */
+#define CNA_CNB_TEXTURE_FORMAT_RG8_SNORM UINT32_C(12)
+/** @brief Signed 8 bits per channel RGBA. `SurfaceFormat::NormalizedByte4`. */
+#define CNA_CNB_TEXTURE_FORMAT_RGBA8_SNORM UINT32_C(13)
+/** @brief 10:10:10:2 RGBA. `SurfaceFormat::Rgba1010102`. */
+#define CNA_CNB_TEXTURE_FORMAT_RGB10_A2 UINT32_C(14)
+/** @brief 32-bit float, one channel. `SurfaceFormat::Single`. */
+#define CNA_CNB_TEXTURE_FORMAT_R32_FLOAT UINT32_C(15)
+/** @brief 32-bit float per channel, RG. `SurfaceFormat::Vector2`. */
+#define CNA_CNB_TEXTURE_FORMAT_RG32_FLOAT UINT32_C(16)
+/** @brief 32-bit float per channel, RGBA. `SurfaceFormat::Vector4`. */
+#define CNA_CNB_TEXTURE_FORMAT_RGBA32_FLOAT UINT32_C(17)
+/** @brief 16-bit float, one channel. `SurfaceFormat::HalfSingle`. */
+#define CNA_CNB_TEXTURE_FORMAT_R16_FLOAT UINT32_C(18)
+/** @brief 16-bit float per channel, RG. `SurfaceFormat::HalfVector2`. */
+#define CNA_CNB_TEXTURE_FORMAT_RG16_FLOAT UINT32_C(19)
+/** @brief 16-bit float per channel, RGBA. `SurfaceFormat::HalfVector4`. */
+#define CNA_CNB_TEXTURE_FORMAT_RGBA16_FLOAT UINT32_C(20)
+/** @brief The renderer's preferred HDR-blendable format. `SurfaceFormat::HdrBlendable`. */
+#define CNA_CNB_TEXTURE_FORMAT_HDR_BLENDABLE UINT32_C(21)
+/** @brief BC1 / DXT1 block compression. `SurfaceFormat::Dxt1`. */
+#define CNA_CNB_TEXTURE_FORMAT_BC1 UINT32_C(22)
+/** @brief BC2 / DXT3 block compression. `SurfaceFormat::Dxt3`. */
+#define CNA_CNB_TEXTURE_FORMAT_BC2 UINT32_C(23)
+/** @brief BC3 / DXT5 block compression. `SurfaceFormat::Dxt5`. */
+#define CNA_CNB_TEXTURE_FORMAT_BC3 UINT32_C(24)
+/** @brief BC3 / DXT5 block compression, sRGB. `SurfaceFormat::Dxt5SrgbEXT`. */
+#define CNA_CNB_TEXTURE_FORMAT_BC3_SRGB UINT32_C(25)
+/** @brief BC7 block compression. `SurfaceFormat::Bc7EXT`. */
+#define CNA_CNB_TEXTURE_FORMAT_BC7 UINT32_C(26)
+/** @brief BC7 block compression, sRGB. `SurfaceFormat::Bc7SrgbEXT`. */
+#define CNA_CNB_TEXTURE_FORMAT_BC7_SRGB UINT32_C(27)
+/** @brief Highest identifier this build assigns; a larger value in a file is rejected. */
+#define CNA_CNB_TEXTURE_FORMAT_MAXIMUM CNA_CNB_TEXTURE_FORMAT_BC7_SRGB
+
+/**
+ * @brief Whether @p value names a format identifier this build knows.
+ *
+ * @param value The raw identifier read from a file.
+ * @param out_known Receives `CNA_TRUE` when the value is in 1..`CNA_CNB_TEXTURE_FORMAT_MAXIMUM`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_is_known_texture_format(uint32_t value, CNA_Bool* out_known);
+
+/**
+ * @brief Gets the byte count of a format identifier's diagnostic name.
+ *
+ * @param format The format to render.
+ * @param out_byte_count Receives the byte count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_get_texture_format_name_size(
+    CNA_CnbTextureFormat format,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Renders a format identifier for diagnostics.
+ *
+ * A known format gives its name; any other value gives a hexadecimal rendering, so a corrupt file's
+ * format field still produces a readable line. The text is UTF-8 and carries no terminator.
+ *
+ * @param format The format to render.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_copy_texture_format_name(
+    CNA_CnbTextureFormat format,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Whether @p format stores 4x4 texel blocks rather than individual texels.
+ *
+ * @param format The format to classify.
+ * @param out_block_compressed Receives `CNA_TRUE` for the BC formats.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_is_block_compressed_texture_format(
+    CNA_CnbTextureFormat format,
+    CNA_Bool* out_block_compressed);
+
+/**
+ * @brief Bytes one texel occupies, for an uncompressed format, or one 4x4 block, for a
+ *        block-compressed one.
+ *
+ * @param format The format to measure.
+ * @param out_unit_bytes Receives the unit size in bytes; zero when @p format is not known.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_get_texture_format_unit_bytes(
+    CNA_CnbTextureFormat format,
+    uint32_t* out_unit_bytes);
+
+/**
+ * @brief Bytes one mip level of the given dimensions occupies in @p format.
+ *
+ * A block-compressed level rounds each dimension up to a whole 4-texel block, which is what makes a
+ * 1x1 BC7 level 16 bytes rather than a fraction of one.
+ *
+ * @param format The storage format.
+ * @param width Level width in texels; must be at least 1.
+ * @param height Level height in texels; must be at least 1.
+ * @param depth Level depth in texels; 1 for a 2D or cube texture.
+ * @param out_byte_size Receives the level's exact byte size.
+ * @return A CNA result code; an unknown format, a zero dimension or a product that overflows
+ *         64 bits is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_get_texture_level_byte_size(
+    CNA_CnbTextureFormat format,
+    uint32_t width,
+    uint32_t height,
+    uint32_t depth,
+    uint64_t* out_byte_size);
+
+/**
+ * @brief Maps a CNB format identifier onto the runtime surface format.
+ *
+ * @param format The identifier read from a file.
+ * @param out_surface_format Receives the equivalent `CNA_SurfaceFormat`.
+ * @return A CNA result code; an unknown identifier is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_format_to_surface_format(
+    CNA_CnbTextureFormat format,
+    CNA_SurfaceFormat* out_surface_format);
+
+/**
+ * @brief Maps a runtime surface format onto its CNB format identifier.
+ *
+ * @param surface_format The runtime format.
+ * @param out_format Receives the equivalent identifier.
+ * @return A CNA result code; a surface format with no CNB identifier is `CNA_RESULT_IO`, which can
+ *         only happen if a `SurfaceFormat` is added without extending the mapping.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_format_from_surface_format(
+    CNA_SurfaceFormat surface_format,
+    CNA_CnbTextureFormat* out_format);
+
+/* --- CBIND-108: the texture schemas ------------------------------------------------------------ */
+
+/** @brief `TEXH` -- dimensions, face and mip counts, representation count. Mandatory, exactly one. */
+#define CNA_CNB_TEXTURE_CHUNK_HEADER UINT32_C(0x48584554)
+/** @brief `TEXR` -- the representation descriptor table. Mandatory, exactly one. */
+#define CNA_CNB_TEXTURE_CHUNK_REPRESENTATIONS UINT32_C(0x52584554)
+/** @brief `TEXD` -- one mip level's payload bytes. Mandatory, one per level per representation. */
+#define CNA_CNB_TEXTURE_CHUNK_PAYLOAD UINT32_C(0x44584554)
+
+/** @brief Highest texture schema version this build understands, for all three asset types. */
+#define CNA_CNB_TEXTURE_SCHEMA_VERSION UINT32_C(1)
+/** @brief Bytes the `TEXH` chunk occupies. */
+#define CNA_CNB_TEXTURE_HEADER_STRIDE UINT32_C(24)
+/** @brief Bytes one `TEXR` descriptor occupies. */
+#define CNA_CNB_TEXTURE_REPRESENTATION_STRIDE UINT32_C(24)
+/** @brief Number of faces a cube texture has, in the fixed order +X, -X, +Y, -Y, +Z, -Z. */
+#define CNA_CNB_TEXTURE_CUBE_FACE_COUNT UINT32_C(6)
+/**
+ * @brief Ceiling on the number of mip levels a file may declare.
+ *
+ * A mip chain halves each dimension, so 16 levels already describes a 65536-texel texture. The
+ * ceiling exists so a hostile count is refused on sight rather than after the reader has tried to
+ * account for four billion levels.
+ */
+#define CNA_CNB_MAX_TEXTURE_MIP_LEVELS UINT32_C(16)
+/** @brief Ceiling on the number of representations a file may declare. */
+#define CNA_CNB_MAX_TEXTURE_REPRESENTATIONS UINT32_C(8)
+
+/**
+ * @brief The decoded contents of a texture `.cnb`, independent of any GPU object.
+ *
+ * A texture may carry the same image several times over -- once as `RGBA8`, once as `BC7`, once as
+ * something else -- so a runtime can pick whichever its GPU actually supports without a second
+ * asset. Each of those is a **representation**, and its levels are ordered **face-major, then
+ * mip**: for a cube map that is `+X` mip 0, `+X` mip 1, ..., then `-X` mip 0, and so on.
+ *
+ * The canonical type is a value made of nested vectors, which C cannot hold, so it is a handle:
+ * the shape is read through @ref cna_cnb_texture_data_get_info and each level's bytes are copied
+ * out one at a time. Turning one into a real `Texture2D` needs a `GraphicsDevice` and is not part
+ * of this family.
+ */
+typedef CNA_Handle CNA_CnbTextureDataHandle;
+
+/** @brief Version of @ref CNA_CnbTextureInfo this header declares. */
+#define CNA_CNB_TEXTURE_INFO_STRUCT_VERSION UINT32_C(1)
+
+/** @brief A texture's shape: its level-0 dimensions and its face, mip and representation counts. */
+typedef struct CNA_CnbTextureInfo {
+    /** @brief Size of this structure, in bytes. */
+    uint32_t struct_size;
+    /** @brief Structure version; `CNA_CNB_TEXTURE_INFO_STRUCT_VERSION`. */
+    uint32_t struct_version;
+    /** @brief Width of mip level 0, in texels. */
+    uint32_t width;
+    /** @brief Height of mip level 0, in texels. */
+    uint32_t height;
+    /** @brief Depth of mip level 0, in texels. 1 for a 2D or cube texture. */
+    uint32_t depth;
+    /** @brief Number of faces. 1 for a 2D or 3D texture, 6 for a cube. */
+    uint32_t face_count;
+    /** @brief Number of mip levels, at least 1. */
+    uint32_t mip_count;
+    /** @brief Number of representations the texture carries. */
+    uint32_t representation_count;
+} CNA_CnbTextureInfo;
+
+/**
+ * @brief Creates an empty texture description with the given shape.
+ *
+ * Add at least one representation with @ref cna_cnb_texture_data_add_representation before
+ * encoding, and fill every one of its `face_count * mip_count` levels.
+ *
+ * @param width Width of mip level 0, in texels; must be at least 1.
+ * @param height Height of mip level 0, in texels; must be at least 1.
+ * @param depth Depth of mip level 0, in texels; 1 for a 2D or cube texture.
+ * @param face_count 1 for a 2D or 3D texture, 6 for a cube.
+ * @param mip_count Number of mip levels, at least 1.
+ * @param out_texture Receives the description.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_create(
+    uint32_t width,
+    uint32_t height,
+    uint32_t depth,
+    uint32_t face_count,
+    uint32_t mip_count,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Builds a single-representation, single-mip `RGBA8` 2D texture description.
+ *
+ * The common case of a decoded PNG, which is what CNB schema 1 encodes.
+ *
+ * @param width Texture width in texels; must be at least 1.
+ * @param height Texture height in texels; must be at least 1.
+ * @param rgba Exactly `width * height * 4` bytes, in R, G, B, A order.
+ * @param byte_count Number of bytes in @p rgba.
+ * @param out_texture Receives the description.
+ * @return A CNA result code; a zero dimension or a length that is not exactly right is
+ *         `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_create_rgba8(
+    uint32_t width,
+    uint32_t height,
+    const uint8_t* rgba,
+    uint64_t byte_count,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Releases a texture description.
+ * @param texture The description to release.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_destroy(CNA_CnbTextureDataHandle texture);
+
+/**
+ * @brief Reads a texture's shape.
+ *
+ * @param texture The description.
+ * @param out_info Structure whose `struct_size` and `struct_version` the caller has already set.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_get_info(
+    CNA_CnbTextureDataHandle texture,
+    CNA_CnbTextureInfo* out_info);
+
+/**
+ * @brief The dimensions of one mip level.
+ *
+ * Each dimension halves per level and never falls below 1, which is the standard mip rule and the
+ * one every level byte size is computed against.
+ *
+ * @param texture The description.
+ * @param level The mip level to measure, `0` being the full size.
+ * @param out_width Receives the level's width.
+ * @param out_height Receives the level's height.
+ * @param out_depth Receives the level's depth.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_get_level_dimensions(
+    CNA_CnbTextureDataHandle texture,
+    uint32_t level,
+    uint32_t* out_width,
+    uint32_t* out_height,
+    uint32_t* out_depth);
+
+/**
+ * @brief Appends a representation, sized for `face_count * mip_count` empty levels.
+ *
+ * Representations are recorded in preference order, which is what
+ * @ref cna_cnb_texture_data_select_representation walks.
+ *
+ * @param texture The description.
+ * @param format The storage format of every level in this representation.
+ * @param out_index Receives the new representation's index.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_add_representation(
+    CNA_CnbTextureDataHandle texture,
+    CNA_CnbTextureFormat format,
+    uint64_t* out_index);
+
+/**
+ * @brief Number of representations the texture carries.
+ *
+ * @param texture The description.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_get_representation_count(
+    CNA_CnbTextureDataHandle texture,
+    uint64_t* out_count);
+
+/**
+ * @brief The storage format of one representation.
+ *
+ * @param texture The description.
+ * @param representation Index into the representation list.
+ * @param out_format Receives the format.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_get_representation_format(
+    CNA_CnbTextureDataHandle texture,
+    uint64_t representation,
+    CNA_CnbTextureFormat* out_format);
+
+/**
+ * @brief Number of level payloads one representation holds, `face_count * mip_count`.
+ *
+ * @param texture The description.
+ * @param representation Index into the representation list.
+ * @param out_count Receives the level count.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_get_level_count(
+    CNA_CnbTextureDataHandle texture,
+    uint64_t representation,
+    uint64_t* out_count);
+
+/**
+ * @brief Sets one level's payload bytes.
+ *
+ * Levels are ordered face-major then mip: index `face * mip_count + mip`.
+ *
+ * @param texture The description.
+ * @param representation Index into the representation list.
+ * @param level Index into that representation's levels.
+ * @param bytes The payload, or null only for a zero count. Copied.
+ * @param byte_count Number of bytes.
+ * @return A CNA result code; an out-of-range index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_set_level(
+    CNA_CnbTextureDataHandle texture,
+    uint64_t representation,
+    uint64_t level,
+    const uint8_t* bytes,
+    uint64_t byte_count);
+
+/**
+ * @brief Copies one level's payload bytes.
+ *
+ * @param texture The description.
+ * @param representation Index into the representation list.
+ * @param level Index into that representation's levels.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write, and an out-of-range
+ *         index is `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_copy_level(
+    CNA_CnbTextureDataHandle texture,
+    uint64_t representation,
+    uint64_t level,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Predicate a caller supplies to say which formats it can upload.
+ *
+ * Called synchronously, on the calling thread, once per representation in order, and never
+ * retained past the call it was passed to. It must not call back into this ABI.
+ *
+ * @param format The representation's storage format.
+ * @param context The opaque pointer passed alongside this function.
+ * @return `CNA_TRUE` when the caller can upload @p format.
+ */
+typedef CNA_Bool (*CNA_CnbTextureFormatSupportedFn)(CNA_CnbTextureFormat format, void* context);
+
+/**
+ * @brief Picks the representation a caller should upload, preferring the earliest supported one.
+ *
+ * The writer records representations in preference order, so a runtime that takes the first format
+ * it can upload gets the author's intended choice. CNB schema 1 writes exactly one representation,
+ * but the selection exists from the start so a file with several is not a future format change.
+ *
+ * Absence is an ordinary answer, not a failure: a texture whose formats this caller cannot upload
+ * reports `out_found` false rather than refusing.
+ *
+ * @param texture The description.
+ * @param supported Predicate returning true for a format the caller can upload.
+ * @param context Opaque pointer passed to @p supported.
+ * @param out_found Receives `CNA_TRUE` when a supported representation was found.
+ * @param out_index Receives its index when @p out_found is `CNA_TRUE`; untouched otherwise.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_cnb_texture_data_select_representation(
+    CNA_CnbTextureDataHandle texture,
+    CNA_CnbTextureFormatSupportedFn supported,
+    void* context,
+    CNA_Bool* out_found,
+    uint64_t* out_index);
+
+/**
+ * @brief Encodes a 2D texture as a complete `.cnb` byte image.
+ *
+ * @param texture The texture to encode. Its face count and depth must both be 1.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write, and an inconsistent
+ *         description or a format CNB schema 1 does not encode is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_texture2d(
+    CNA_CnbTextureDataHandle texture,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Encodes a cube texture as a complete `.cnb` byte image.
+ *
+ * @param texture The texture to encode. Its face count must be 6, its depth 1, and its width must
+ *                equal its height, because a cube face is square.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_texture_cube(
+    CNA_CnbTextureDataHandle texture,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Encodes a 3D texture as a complete `.cnb` byte image.
+ *
+ * @param texture The texture to encode. Its face count must be 1; its depth may be any positive
+ *                value and halves per mip level like the other two dimensions.
+ * @param content_name Logical content name recorded in the `CMET` chunk; may be empty.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count; always written on a valid output.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_cnb_encode_texture3d(
+    CNA_CnbTextureDataHandle texture,
+    CNA_StringView content_name,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Decodes a 2D texture from a parsed `.cnb` container.
+ *
+ * @param document A container already validated by @ref cna_cnb_document_parse.
+ * @param out_texture Receives the decoded description.
+ * @return A CNA result code; a document that is not a 2D texture, uses an unsupported schema
+ *         version, is missing a mandatory chunk, or declares counts, dimensions or payload lengths
+ *         that disagree is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_texture2d(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Decodes a cube texture from a parsed `.cnb` container.
+ *
+ * @param document A container already validated by @ref cna_cnb_document_parse.
+ * @param out_texture Receives the decoded description, with a face count of 6.
+ * @return A CNA result code; the same refusals as @ref cna_cnb_decode_texture2d.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_texture_cube(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Decodes a 3D texture from a parsed `.cnb` container.
+ *
+ * @param document A container already validated by @ref cna_cnb_document_parse.
+ * @param out_texture Receives the decoded description.
+ * @return A CNA result code; the same refusals as @ref cna_cnb_decode_texture2d.
+ */
+CNA_C_API CNA_Result cna_cnb_decode_texture3d(
+    CNA_CnbDocumentHandle document,
+    CNA_CnbTextureDataHandle* out_texture);
+
+/**
+ * @brief Appends a 2D texture's `TEXH`/`TEXR`/`TEXD` chunks to a document being written for a
+ *        *different* asset type.
+ *
+ * This is what lets a sprite font embed its glyph atlas without a second copy of the texture
+ * layout: the atlas is stored with exactly the chunks, strides, alignment and validation a
+ * standalone 2D texture would use, in the font's own file. An atlas normally belongs to exactly one
+ * font, so embedding is the right default -- unlike a model's textures, which are shared and
+ * therefore referenced through `XREF`.
+ *
+ * @param writer The document under construction.
+ * @param texture The atlas. Its face count and depth must both be 1.
+ * @param label Owner name used in diagnostics, e.g. `"SpriteFont"`.
+ * @return A CNA result code; an inconsistent description or a format CNB schema 1 does not encode
+ *         is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_writer_append_embedded_texture2d(
+    CNA_CnbWriterHandle writer,
+    CNA_CnbTextureDataHandle texture,
+    CNA_StringView label);
+
+/**
+ * @brief Reads back the chunks @ref cna_cnb_writer_append_embedded_texture2d wrote.
+ *
+ * @param document The container to read from.
+ * @param label Owner name used in diagnostics, e.g. `"SpriteFont"`.
+ * @param out_texture Receives the embedded atlas.
+ * @return A CNA result code; a missing mandatory chunk, or counts, dimensions and payload lengths
+ *         that disagree, is `CNA_RESULT_IO`.
+ */
+CNA_C_API CNA_Result cna_cnb_document_read_embedded_texture2d(
+    CNA_CnbDocumentHandle document,
+    CNA_StringView label,
+    CNA_CnbTextureDataHandle* out_texture);
 
 #ifdef __cplusplus
 }

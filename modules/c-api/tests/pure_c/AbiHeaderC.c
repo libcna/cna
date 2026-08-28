@@ -8,7 +8,7 @@
 
 #include <stddef.h>
 
-_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 11, 0),
+_Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 12, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
@@ -1700,3 +1700,58 @@ _Static_assert(CNA_CNB_CHUNK_ENTRY_STRUCT_VERSION == UINT32_C(1) &&
                    CNA_CNB_EXTERNAL_REFERENCE_STRUCT_VERSION == UINT32_C(1) &&
                    CNA_CNB_METADATA_STRUCT_VERSION == UINT32_C(1),
                "The CNB document's published structures are all at version 1");
+
+/* CBIND-108: the texture format identifiers are wire format -- a `.cnb` written by any build must
+   mean the same thing to every other -- so the whole numbering is frozen here rather than only its
+   ends. The three chunk identifiers are frozen with it. */
+_Static_assert(sizeof(CNA_CnbTextureFormat) == sizeof(uint32_t) &&
+                   CNA_CNB_TEXTURE_FORMAT_UNKNOWN == UINT32_C(0) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA8 == UINT32_C(1) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGRA8 == UINT32_C(2) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA8_SRGB == UINT32_C(3) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGR565 == UINT32_C(4) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGRA5551 == UINT32_C(5) &&
+                   CNA_CNB_TEXTURE_FORMAT_BGRA4444 == UINT32_C(6) &&
+                   CNA_CNB_TEXTURE_FORMAT_ALPHA8 == UINT32_C(7) &&
+                   CNA_CNB_TEXTURE_FORMAT_R8 == UINT32_C(8) &&
+                   CNA_CNB_TEXTURE_FORMAT_R16 == UINT32_C(9) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG16 == UINT32_C(10) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA16 == UINT32_C(11) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG8_SNORM == UINT32_C(12) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA8_SNORM == UINT32_C(13) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGB10_A2 == UINT32_C(14) &&
+                   CNA_CNB_TEXTURE_FORMAT_R32_FLOAT == UINT32_C(15) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG32_FLOAT == UINT32_C(16) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA32_FLOAT == UINT32_C(17) &&
+                   CNA_CNB_TEXTURE_FORMAT_R16_FLOAT == UINT32_C(18) &&
+                   CNA_CNB_TEXTURE_FORMAT_RG16_FLOAT == UINT32_C(19) &&
+                   CNA_CNB_TEXTURE_FORMAT_RGBA16_FLOAT == UINT32_C(20) &&
+                   CNA_CNB_TEXTURE_FORMAT_HDR_BLENDABLE == UINT32_C(21) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC1 == UINT32_C(22) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC2 == UINT32_C(23) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC3 == UINT32_C(24) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC3_SRGB == UINT32_C(25) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC7 == UINT32_C(26) &&
+                   CNA_CNB_TEXTURE_FORMAT_BC7_SRGB == UINT32_C(27) &&
+                   CNA_CNB_TEXTURE_FORMAT_MAXIMUM == UINT32_C(27),
+               "CNB texture format identifiers are wire format and must remain stable");
+_Static_assert(CNA_CNB_TEXTURE_CHUNK_HEADER == UINT32_C(0x48584554) &&
+                   CNA_CNB_TEXTURE_CHUNK_REPRESENTATIONS == UINT32_C(0x52584554) &&
+                   CNA_CNB_TEXTURE_CHUNK_PAYLOAD == UINT32_C(0x44584554) &&
+                   CNA_CNB_TEXTURE_SCHEMA_VERSION == UINT32_C(1) &&
+                   CNA_CNB_TEXTURE_HEADER_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_TEXTURE_REPRESENTATION_STRIDE == UINT32_C(24) &&
+                   CNA_CNB_TEXTURE_CUBE_FACE_COUNT == UINT32_C(6) &&
+                   CNA_CNB_MAX_TEXTURE_MIP_LEVELS == UINT32_C(16) &&
+                   CNA_CNB_MAX_TEXTURE_REPRESENTATIONS == UINT32_C(8),
+               "CNB texture schema constants are wire format and must remain stable");
+_Static_assert(sizeof(CNA_CnbTextureInfo) == 32U &&
+                   _Alignof(CNA_CnbTextureInfo) == 4U &&
+                   offsetof(CNA_CnbTextureInfo, width) == 8U &&
+                   offsetof(CNA_CnbTextureInfo, height) == 12U &&
+                   offsetof(CNA_CnbTextureInfo, depth) == 16U &&
+                   offsetof(CNA_CnbTextureInfo, face_count) == 20U &&
+                   offsetof(CNA_CnbTextureInfo, mip_count) == 24U &&
+                   offsetof(CNA_CnbTextureInfo, representation_count) == 28U &&
+                   CNA_CNB_TEXTURE_INFO_STRUCT_VERSION == UINT32_C(1),
+               "CNA_CnbTextureInfo layout must remain stable");

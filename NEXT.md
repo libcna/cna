@@ -101,9 +101,17 @@ one route taking a destination could not report a short capacity without either 
 consuming it twice. `ReadBytes` deliberately does not get the same treatment, because its size is
 the caller's own argument rather than something the file declares.
 
-**Where it stands:** 536 headers / 8,812 symbols — 7,986 implemented, 15 approved partial, 352
-planned, 459 not applicable. ABI `0.11.0`, 3,850 exported symbols, the same set with `CNA_CNAEXT` on
-and off. 99/99 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
+**`CBIND-108` then bound the texture pixel formats and the three texture schemas** — 28 routes, 67
+rows, and a C application can now encode and decode a `.cnb` texture. Its one lasting decision is
+that the 27-value format numbering is frozen **individually** in the ABI wall rather than only at its
+ends: the enumeration exists precisely because `SurfaceFormat`'s positional numbering cannot be
+serialized safely, and publishing the C constants at anything but the canonical values would
+reintroduce that hazard one layer out. The mapping between the two is round-tripped over all 27,
+which is the check that finds drift.
+
+**Where it stands:** 536 headers / 8,812 symbols — 8,053 implemented, 15 approved partial, 285
+planned, 459 not applicable. ABI `0.12.0`, 3,878 exported symbols, the same set with `CNA_CNAEXT` on
+and off. 100/100 `CApi` tests in all three arms: `cmake-build-debug` (HEADLESS, `CNA_CNAEXT=OFF`),
 `cmake-build-cnaext` (OPENGLES3/EasyGL, `CNA_CNAEXT=ON`) and `build-probe` (HEADLESS,
 `CNA_CNAEXT=ON`).
 

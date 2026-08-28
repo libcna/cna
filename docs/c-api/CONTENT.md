@@ -235,17 +235,18 @@ sound effects, media, curves, animation clips and models, its own compiler front
 
 **The container is bound; nothing that turns a chunk into an asset is.** `CBIND-106` published the
 format's identities, byte-level constants, checksums, whole-file arithmetic, read limits and chunk
-compression, and `CBIND-107` published the parsed document, its bounded cursor and both writers —
-see [`CNB.md`](CNB.md). What still has no C route is the loader registry, every asset schema, and
-`ContentManager::RegisterCnbLoaderEXT` — the hook a game uses to teach a manager about a `.cnb`
+compression, `CBIND-107` published the parsed document, its bounded cursor and both writers, and
+`CBIND-108` published the texture pixel formats and the three texture schemas — see
+[`CNB.md`](CNB.md). What still has no C route is the loader registry, the remaining asset schemas,
+and `ContentManager::RegisterCnbLoaderEXT` — the hook a game uses to teach a manager about a `.cnb`
 asset type.
 
 So a C application can load `.xnb` assets, loose files and `.cnj` descriptors through the routes
-above, can build and parse a `.cnb` container and read any chunk's bytes out of it, and **cannot
-load a `.cnb` asset**: nothing turns those bytes into a `Texture2D` or a `Model`.
+above, can build and parse a `.cnb` container, read any chunk's bytes out of it and encode or decode
+a texture, and **cannot load a `.cnb` asset through a `ContentManager`**.
 
 That the rest is unbound is a **scheduling** decision recorded on 2026-08-28, not a judgement that
 the format has no C form. The remaining declarations are counted in [`COVERAGE.md`](COVERAGE.md) as
 `planned` — deliberately not as `not-applicable`, which would say something false — they are why
 [`RELEASE_GATE.md`](RELEASE_GATE.md) reads *Not ready*, and
-`plans/plan_binding.md` Phase B10 (`CBIND-108`–`CBIND-112`) is the sized backlog that binds them.
+`plans/plan_binding.md` Phase B10 (`CBIND-109`–`CBIND-112`) is the sized backlog that binds them.

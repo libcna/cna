@@ -17908,6 +17908,142 @@
         "CPP-B8693D7DA5EB",
         "CPP-EBE51C53F1E0"
       ]
+    },
+    {
+      "id": "cnb-texture-format-identity",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbTextureFormat(::[A-Za-z0-9_]+)?|CnbTextureFormatMax)$",
+      "kinds": [
+        "enum",
+        "enum-value",
+        "field"
+      ],
+      "mapping": "`CNA_CnbTextureFormat` and `CNA_CNB_TEXTURE_FORMAT_*` at the canonical ordinals, with `CnbTextureFormatMax` as `CNA_CNB_TEXTURE_FORMAT_MAXIMUM`.\n\n**These are wire format and the whole numbering is frozen, not just its ends.** The enumeration exists precisely because serializing `SurfaceFormat` would not be safe: its enumerators carry no explicit values, so inserting one -- an ordinary thing to do to an XNA-shaped enum -- would renumber everything after it and silently change the meaning of every `.cnb` already written. Publishing the C constants at anything but the canonical values would reintroduce exactly that hazard one layer out.",
+      "tests": "`CnbTextureSmoke.c` `validate_format_identities` walks all 27 identifiers, and `AbiHeaderC.c` freezes **each** value individually rather than only the first and the last -- a renumbering that shifted the middle would otherwise pass a maximum check.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-012AF705F8AF",
+        "CPP-081DB8688C68",
+        "CPP-0B0E67F912DF",
+        "CPP-0B87C872D8B1",
+        "CPP-1176215A6D1D",
+        "CPP-180E11CEC69F",
+        "CPP-18AB245EDB5A",
+        "CPP-1CE19B8A5C1D",
+        "CPP-1FFC857449EB",
+        "CPP-30A43B65CB56",
+        "CPP-3B173D7268B4",
+        "CPP-41DF38DCC5CB",
+        "CPP-4C35C9962484",
+        "CPP-52CE2C43F378",
+        "CPP-6A57BE3722E6",
+        "CPP-6BAA3898DB44",
+        "CPP-80B28856BCF6",
+        "CPP-B92F6D9C1E7B",
+        "CPP-B96E7FA91CE8",
+        "CPP-B978BB114FE0",
+        "CPP-BAC1C7A9616E",
+        "CPP-C0F336F2B3FE",
+        "CPP-D557120B09A8",
+        "CPP-D80D8EDA68B3",
+        "CPP-D89AFECEB62C",
+        "CPP-DB9EAEC162E6",
+        "CPP-E0D0F1AC005F",
+        "CPP-E8BD3DF0D8C2",
+        "CPP-F0C663ECE2FE",
+        "CPP-F35AC4EF55FC"
+      ]
+    },
+    {
+      "id": "cnb-texture-format-queries",
+      "qualified_name_regex": "^CNA::Content::Cnb::(IsKnownCnbTextureFormat|CnbTextureFormatToString|IsBlockCompressedCnbTextureFormat|CnbTextureFormatUnitBytes|CnbTextureLevelByteSize|CnbTextureFormatToSurfaceFormat|SurfaceFormatToCnbTextureFormat)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_is_known_texture_format`, the `cna_cnb_get_texture_format_name_size`/`_copy_texture_format_name` pair, `cna_cnb_is_block_compressed_texture_format`, `cna_cnb_get_texture_format_unit_bytes`, `cna_cnb_get_texture_level_byte_size`, and the two mapping routes `cna_cnb_texture_format_to_surface_format`/`_from_surface_format`.\n\nThe two mapping routes deliberately stay routes rather than becoming a published table: the whole point of the canonical design is that the correspondence is a function somebody edits, not a cast that follows a runtime enumeration's declaration order.\n\nThe classification and rendering routes accept **any** 32-bit value, because a corrupt file can name one and a route that refused the values a corrupt file contains would be useless for diagnosing one. `CnbTextureLevelByteSize` is the one that refuses, because there its answer would be a number rather than a description.",
+      "tests": "`CnbTextureSmoke.c` `validate_format_identities` and `validate_surface_format_mapping`. The block-compressed size rule gets its own attention because a round trip cannot see it: a 1x1 BC7 level is a whole block and 5x4 BC1 is two blocks, asserted against each format's own reported unit size rather than a transcribed constant, and mutation-checked by asserting a quarter block instead. The surface-format mapping is round-tripped over **all 27** identifiers -- the check that would catch a correspondence that had drifted -- and mutation-checked by asserting the wrong identifier comes back.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-02502C5844D9",
+        "CPP-120606527CD7",
+        "CPP-316B3E8695DA",
+        "CPP-5ED9F2E1CEE5",
+        "CPP-66761DC5EAF0",
+        "CPP-B5BBAEFE10A1",
+        "CPP-D20E8992E20F"
+      ]
+    },
+    {
+      "id": "cnb-texture-schema-constants",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbTextureChunk::[A-Za-z0-9_]+|CnbTextureSchemaVersion|CnbTextureHeaderStride|CnbTextureRepresentationStride|CnbTextureCubeFaceCount|CnbMaxTextureMipLevels|CnbMaxTextureRepresentations)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`CNA_CNB_TEXTURE_CHUNK_HEADER`, `_REPRESENTATIONS` and `_PAYLOAD` as packed identifiers, plus `CNA_CNB_TEXTURE_SCHEMA_VERSION`, `_HEADER_STRIDE`, `_REPRESENTATION_STRIDE`, `_CUBE_FACE_COUNT`, `CNA_CNB_MAX_TEXTURE_MIP_LEVELS` and `_MAX_TEXTURE_REPRESENTATIONS`.\n\nThe two ceilings are published rather than kept private because they are the reason a hostile count is refused on sight rather than after the reader has tried to account for four billion mip levels; a caller sizing its own buffers wants the same numbers.",
+      "tests": "`CnbTextureSmoke.c` `validate_schemas` asserts each chunk identifier equals what packing its four letters gives, so the constants cannot drift from the packing rule, and reads a real header chunk's size back out of a built file to check it against the published stride -- a number a schema change would otherwise move silently. `AbiHeaderC.c` freezes all nine.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-1246EC0AFA2A",
+        "CPP-59BD3B8A215B",
+        "CPP-658DD39509D2",
+        "CPP-707EDBF31A24",
+        "CPP-73F48E44E921",
+        "CPP-91D0FF19CAA6",
+        "CPP-A55033526EF1",
+        "CPP-C0F92CDAEE91",
+        "CPP-D59AB9B62199"
+      ]
+    },
+    {
+      "id": "cnb-texture-data",
+      "qualified_name_regex": "^CNA::Content::Cnb::(CnbTextureData(::[A-Za-z0-9_]+)?|CnbTextureRepresentation(::[A-Za-z0-9_]+)?|CnbTextureLevelDimensions|MakeRgba8Texture2DData|SelectCnbTextureRepresentation)$",
+      "kinds": [
+        "struct",
+        "field",
+        "function"
+      ],
+      "mapping": "`CNA_CnbTextureDataHandle`, because the canonical value is nested vectors and C cannot hold one. Its shape is read through `CNA_CnbTextureInfo`, and its representations and levels through `cna_cnb_texture_data_get_representation_count`, `_get_representation_format`, `_get_level_count`, `_set_level` and `_copy_level` -- which is what `CnbTextureRepresentation`'s `format` and `levels` become, since a structure holding a vector of vectors has no C form.\n\n`add_representation` sizes the new representation for the `face_count * mip_count` the description already declares, so a caller fills levels **by index** rather than pushing them in an order the format would then have to trust.\n\n`SelectCnbTextureRepresentation` takes a predicate, so the C form is a function pointer plus an opaque context, called synchronously and never retained. The canonical function reports \"none supported\" by returning the list size; in C that would be a sentinel a caller has to know to compare against, so it becomes the availability pair every optional query in this ABI uses -- absence is an ordinary answer with the index left untouched.",
+      "tests": "`CnbTextureSmoke.c` `validate_texture_data`: the shape and every level round-trip, out-of-range indices at both levels of nesting answering `CNA_RESULT_INVALID_ARGUMENT`, the mip rule halving and never falling below 1, the predicate called exactly once per representation in order, and the no-supported-format case reported as an answer with the index left at its previous value.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-0ABB84B038E8",
+        "CPP-2A77B40DC750",
+        "CPP-313EBB2C388E",
+        "CPP-5ABBDD956A36",
+        "CPP-867D94F3C765",
+        "CPP-94490E48DD77",
+        "CPP-9880313E0C42",
+        "CPP-D1AC4D17ABC6",
+        "CPP-D8EE068F1952",
+        "CPP-DF96C055FFA7",
+        "CPP-EF908D9BEB2D",
+        "CPP-F153D1D5EEE0",
+        "CPP-F798EFB44D8C"
+      ]
+    },
+    {
+      "id": "cnb-texture-schemas",
+      "qualified_name_regex": "^CNA::Content::Cnb::(EncodeTexture2DToCnb|EncodeTextureCubeToCnb|EncodeTexture3DToCnb|DecodeTexture2DFromCnb|DecodeTextureCubeFromCnb|DecodeTexture3DFromCnb|AppendEmbeddedTexture2DChunks|ReadEmbeddedTexture2DChunks)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_cnb_encode_texture2d`, `_cube` and `_3d` follow the count/copy shape for bytes whose size is only known by producing them; `cna_cnb_decode_texture2d`, `_cube` and `_3d` each hand back a new texture handle. The embedded pair becomes `cna_cnb_writer_append_embedded_texture2d` and `cna_cnb_document_read_embedded_texture2d`, named after the object each acts on rather than after the free function, because in C the writer and the document are the handles a caller already holds.\n\n**Every identifier can be decoded; schema 1 only ever encodes `RGBA8`.** That asymmetry is canonical and preserved rather than smoothed: encoding any other format is refused, which is better than writing a file no reader of this schema would accept.",
+      "tests": "`CnbTextureSmoke.c` `validate_schemas` builds and re-reads all three asset types -- a 2D texture with a real three-level mip chain, a six-faced cube, and a 3D texture whose depth halves per level -- comparing every level byte for byte, and checks each file's declared asset type and schema version and that it carries one header, one representation table and one payload per level. Asking the wrong schema of a right file is a content refusal that leaves the output handle invalid, and encoding a one-faced texture as a cube is refused for its shape. `validate_schema1_format_restriction` pins the encode-only-Rgba8 rule, and `validate_embedded_atlas` round-trips an atlas through a **sprite-font** document -- so the embedded path is proved against a file the texture decoders themselves refuse, which is the whole point of it.",
+      "status": "implemented",
+      "task": "CBIND-108",
+      "approved_symbols": [
+        "CPP-0BA2A5927A10",
+        "CPP-1E8600E4BB8B",
+        "CPP-304F8DC3362D",
+        "CPP-4FFF10D9B348",
+        "CPP-6B7A35253DD2",
+        "CPP-A0AA6C74AD30",
+        "CPP-D5BDAAAE1C5C",
+        "CPP-DD4F7E4F97DC"
+      ]
     }
   ]
 }

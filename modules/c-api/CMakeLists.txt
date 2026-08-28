@@ -830,6 +830,21 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_cnb_document_smoke)
     add_test(NAME CApi_CnbDocumentSmoke COMMAND cna_c_api_cnb_document_smoke)
 
+    # CBIND-108: the texture pixel formats and the three texture schemas. Separate again from the
+    # container and document suites, because what it proves is different: a wire-format numbering
+    # that would survive being wrong in both directions, and a block-size rule no round trip sees.
+    add_executable(cna_c_api_cnb_texture_smoke
+        tests/pure_c/CnbTextureSmoke.c
+    )
+    set_target_properties(cna_c_api_cnb_texture_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_cnb_texture_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_cnb_texture_smoke)
+    add_test(NAME CApi_CnbTextureSmoke COMMAND cna_c_api_cnb_texture_smoke)
+
     add_executable(cna_c_api_packed_vector_smoke
         tests/pure_c/PackedVectorSmoke.c
     )

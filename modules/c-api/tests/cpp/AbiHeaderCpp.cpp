@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 11, 0));
+static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 12, 0));
 static_assert(sizeof(CNA_Result) == sizeof(uint32_t));
 static_assert(sizeof(CNA_Handle) == sizeof(uint64_t));
 static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t));
@@ -1110,3 +1110,11 @@ static_assert(sizeof(CNA_CnbExternalReference) == 16U);
 static_assert(offsetof(CNA_CnbExternalReference, expected_asset_type_id) == 12U);
 static_assert(sizeof(CNA_CnbMetadata) == 16U);
 static_assert(offsetof(CNA_CnbMetadata, flags) == 12U);
+static_assert(sizeof(CNA_CnbTextureFormat) == sizeof(uint32_t));
+static_assert(CNA_CNB_TEXTURE_FORMAT_MAXIMUM == UINT32_C(27));
+static_assert(CNA_CNB_TEXTURE_CHUNK_HEADER == UINT32_C(0x48584554));
+static_assert(CNA_CNB_TEXTURE_HEADER_STRIDE == UINT32_C(24));
+static_assert(CNA_CNB_TEXTURE_CUBE_FACE_COUNT == UINT32_C(6));
+static_assert(sizeof(CNA_CnbTextureInfo) == 32U);
+static_assert(alignof(CNA_CnbTextureInfo) == 4U);
+static_assert(offsetof(CNA_CnbTextureInfo, representation_count) == 28U);

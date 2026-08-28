@@ -12,6 +12,8 @@
 #include "CNA/Content/Cnb/CnbDocument.hpp"
 #include "CNA/Content/Cnb/CnbFormat.hpp"
 #include "CNA/Content/Cnb/CnbReadLimits.hpp"
+#include "CNA/Content/Cnb/CnbTextureCodec.hpp"
+#include "CNA/Content/Cnb/CnbTextureFormat.hpp"
 #include "CNA/Content/Cnb/CnbWriter.hpp"
 
 #include <cstring>
@@ -331,6 +333,45 @@ void WriteLimits(const Cnb::CnbReadLimits& limits, CNA_CnbReadLimits* const out)
 [[nodiscard]] CNA_Result BorrowText(const CNA_StringView value, std::string* const out)
 {
     return CopyStringView(value, false, out);
+}
+
+/// CBIND-108: the decoded texture description. Nested vectors, so a handle rather than a POD.
+struct CnbTextureDataResource final {
+    std::shared_ptr<Cnb::CnbTextureData> value;
+};
+
+[[nodiscard]] CNA_Result GetTextureData(
+    const CNA_CnbTextureDataHandle handle,
+    std::shared_ptr<CnbTextureDataResource>* const outTexture)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::CnbTextureData, outTexture);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result), "The CNB texture handle is invalid.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] Cnb::CnbTextureFormat ToTextureFormat(const CNA_CnbTextureFormat format) noexcept
+{
+    return static_cast<Cnb::CnbTextureFormat>(format);
+}
+
+[[nodiscard]] CNA_Result CreateTextureData(
+    Cnb::CnbTextureData data,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    const auto resource = std::make_shared<CnbTextureDataResource>();
+    resource->value = std::make_shared<Cnb::CnbTextureData>(std::move(data));
+    const CNA_Result result =
+        GetRuntimeHandles().Create(ObjectKind::CnbTextureData, resource, outTexture);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The CNB texture handle could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -2343,5 +2384,606 @@ CNA_Result cna_cnb_writer_write_to_file(
         }
         writer->value->WriteToFile(pathText);
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+/* --- CBIND-108: texture pixel formats ---------------------------------------------------------- */
+
+CNA_Result cna_cnb_is_known_texture_format(const uint32_t value, CNA_Bool* const outKnown)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outKnown == nullptr) {
+            return InvalidArgument("The format-known output is null.");
+        }
+        *outKnown = Cnb::IsKnownCnbTextureFormat(value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_get_texture_format_name_size(
+    const CNA_CnbTextureFormat format,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReportSize(Cnb::CnbTextureFormatToString(ToTextureFormat(format)), outByteCount);
+    });
+}
+
+CNA_Result cna_cnb_copy_texture_format_name(
+    const CNA_CnbTextureFormat format,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyText(
+            Cnb::CnbTextureFormatToString(ToTextureFormat(format)),
+            destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_cnb_is_block_compressed_texture_format(
+    const CNA_CnbTextureFormat format,
+    CNA_Bool* const outBlockCompressed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBlockCompressed == nullptr) {
+            return InvalidArgument("The block-compression output is null.");
+        }
+        *outBlockCompressed =
+            Cnb::IsBlockCompressedCnbTextureFormat(ToTextureFormat(format)) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_get_texture_format_unit_bytes(
+    const CNA_CnbTextureFormat format,
+    uint32_t* const outUnitBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outUnitBytes == nullptr) {
+            return InvalidArgument("The unit-size output is null.");
+        }
+        *outUnitBytes = Cnb::CnbTextureFormatUnitBytes(ToTextureFormat(format));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_get_texture_level_byte_size(
+    const CNA_CnbTextureFormat format,
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth,
+    uint64_t* const outByteSize)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteSize == nullptr) {
+            return InvalidArgument("The level byte-size output is null.");
+        }
+        *outByteSize = Cnb::CnbTextureLevelByteSize(ToTextureFormat(format), width, height, depth);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_format_to_surface_format(
+    const CNA_CnbTextureFormat format,
+    CNA_SurfaceFormat* const outSurfaceFormat)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSurfaceFormat == nullptr) {
+            return InvalidArgument("The surface-format output is null.");
+        }
+        *outSurfaceFormat = static_cast<CNA_SurfaceFormat>(
+            Cnb::CnbTextureFormatToSurfaceFormat(ToTextureFormat(format)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_format_from_surface_format(
+    const CNA_SurfaceFormat surfaceFormat,
+    CNA_CnbTextureFormat* const outFormat)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFormat == nullptr) {
+            return InvalidArgument("The CNB texture-format output is null.");
+        }
+        *outFormat = static_cast<CNA_CnbTextureFormat>(
+            Cnb::SurfaceFormatToCnbTextureFormat(
+                static_cast<Microsoft::Xna::Framework::Graphics::SurfaceFormat>(surfaceFormat)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+/* --- CBIND-108: the texture schemas ------------------------------------------------------------ */
+
+CNA_Result cna_cnb_texture_data_create(
+    const uint32_t width,
+    const uint32_t height,
+    const uint32_t depth,
+    const uint32_t faceCount,
+    const uint32_t mipCount,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTexture == nullptr) {
+            return InvalidArgument("The CNB texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        // The shape is checked by the encoder, which owns the rule and states it once. What is
+        // refused here is only what would make the description unusable before it ever gets there:
+        // a zero count leaves a representation with no levels to fill.
+        if (faceCount == 0U || mipCount == 0U) {
+            return InvalidArgument("A CNB texture needs at least one face and one mip level.");
+        }
+        Cnb::CnbTextureData data;
+        data.width = width;
+        data.height = height;
+        data.depth = depth;
+        data.faceCount = faceCount;
+        data.mipCount = mipCount;
+        return CreateTextureData(std::move(data), outTexture);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_create_rgba8(
+    const uint32_t width,
+    const uint32_t height,
+    const uint8_t* const rgba,
+    const uint64_t byteCount,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTexture == nullptr) {
+            return InvalidArgument("The CNB texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        std::span<const uint8_t> span;
+        if (const CNA_Result result = BorrowBytes(rgba, byteCount, &span);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateTextureData(
+            Cnb::MakeRgba8Texture2DData(
+                width, height, std::vector<uint8_t>(span.begin(), span.end())),
+            outTexture);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_destroy(const CNA_CnbTextureDataHandle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(textureHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The CNB texture handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_get_info(
+    const CNA_CnbTextureDataHandle textureHandle,
+    CNA_CnbTextureInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outInfo == nullptr) {
+            return InvalidArgument("The texture-info output is null.");
+        }
+        if (outInfo->struct_size < static_cast<uint32_t>(sizeof(CNA_CnbTextureInfo)) ||
+            outInfo->struct_version != CNA_CNB_TEXTURE_INFO_STRUCT_VERSION) {
+            return InvalidArgument("The texture-info structure is not a known size and version.");
+        }
+        const Cnb::CnbTextureData& data = *texture->value;
+        outInfo->width = data.width;
+        outInfo->height = data.height;
+        outInfo->depth = data.depth;
+        outInfo->face_count = data.faceCount;
+        outInfo->mip_count = data.mipCount;
+        outInfo->representation_count = static_cast<uint32_t>(data.representations.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_get_level_dimensions(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const uint32_t level,
+    uint32_t* const outWidth,
+    uint32_t* const outHeight,
+    uint32_t* const outDepth)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outWidth == nullptr || outHeight == nullptr || outDepth == nullptr) {
+            return InvalidArgument("A level-dimension output is null.");
+        }
+        Cnb::CnbTextureLevelDimensions(*texture->value, level, *outWidth, *outHeight, *outDepth);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_add_representation(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const CNA_CnbTextureFormat format,
+    uint64_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outIndex == nullptr) {
+            return InvalidArgument("The representation-index output is null.");
+        }
+        Cnb::CnbTextureData& data = *texture->value;
+        Cnb::CnbTextureRepresentation representation;
+        representation.format = ToTextureFormat(format);
+        // Sized for the shape the description already declares, so a caller fills levels by index
+        // rather than pushing them in an order the format would then have to trust.
+        representation.levels.resize(
+            static_cast<std::size_t>(data.faceCount) * static_cast<std::size_t>(data.mipCount));
+        data.representations.push_back(std::move(representation));
+        *outIndex = static_cast<uint64_t>(data.representations.size() - 1U);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_get_representation_count(
+    const CNA_CnbTextureDataHandle textureHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outCount == nullptr) {
+            return InvalidArgument("The representation-count output is null.");
+        }
+        *outCount = static_cast<uint64_t>(texture->value->representations.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_get_representation_format(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const uint64_t representation,
+    CNA_CnbTextureFormat* const outFormat)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outFormat == nullptr) {
+            return InvalidArgument("The representation-format output is null.");
+        }
+        if (const CNA_Result result = RequireIndex(
+                representation, texture->value->representations.size(),
+                "The representation index is outside this texture's list.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outFormat = static_cast<CNA_CnbTextureFormat>(
+            texture->value->representations[static_cast<std::size_t>(representation)].format);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_get_level_count(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const uint64_t representation,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outCount == nullptr) {
+            return InvalidArgument("The level-count output is null.");
+        }
+        if (const CNA_Result result = RequireIndex(
+                representation, texture->value->representations.size(),
+                "The representation index is outside this texture's list.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(
+            texture->value->representations[static_cast<std::size_t>(representation)].levels.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_set_level(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const uint64_t representation,
+    const uint64_t level,
+    const uint8_t* const bytes,
+    const uint64_t byteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::span<const uint8_t> span;
+        if (const CNA_Result result = BorrowBytes(bytes, byteCount, &span);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = RequireIndex(
+                representation, texture->value->representations.size(),
+                "The representation index is outside this texture's list.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto& levels =
+            texture->value->representations[static_cast<std::size_t>(representation)].levels;
+        if (const CNA_Result result = RequireIndex(
+                level, levels.size(),
+                "The level index is outside this representation's levels.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        levels[static_cast<std::size_t>(level)].assign(span.begin(), span.end());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_texture_data_copy_level(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const uint64_t representation,
+    const uint64_t level,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The level output buffer is invalid.");
+        }
+        if (const CNA_Result result = RequireIndex(
+                representation, texture->value->representations.size(),
+                "The representation index is outside this texture's list.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto& levels =
+            texture->value->representations[static_cast<std::size_t>(representation)].levels;
+        if (const CNA_Result result = RequireIndex(
+                level, levels.size(),
+                "The level index is outside this representation's levels.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyBytes(
+            levels[static_cast<std::size_t>(level)], destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_cnb_texture_data_select_representation(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const CNA_CnbTextureFormatSupportedFn supported,
+    void* const context,
+    CNA_Bool* const outFound,
+    uint64_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (supported == nullptr || outFound == nullptr || outIndex == nullptr) {
+            return InvalidArgument("The representation-selection callback or output is null.");
+        }
+        const Cnb::CnbTextureData& data = *texture->value;
+        const std::size_t chosen = Cnb::SelectCnbTextureRepresentation(
+            data,
+            [&](const Cnb::CnbTextureFormat format) {
+                return supported(static_cast<CNA_CnbTextureFormat>(format), context) == CNA_TRUE;
+            });
+        // The canonical function reports "none" by returning the list size. In C that would be a
+        // sentinel a caller has to know to compare against, so it becomes the availability pair
+        // every optional query in this ABI uses.
+        *outFound = chosen < data.representations.size() ? CNA_TRUE : CNA_FALSE;
+        if (*outFound == CNA_TRUE) {
+            *outIndex = static_cast<uint64_t>(chosen);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using TextureEncoder =
+    std::vector<uint8_t> (*)(const Cnb::CnbTextureData&, const std::string&);
+
+[[nodiscard]] CNA_Result EncodeTexture(
+    const CNA_CnbTextureDataHandle textureHandle,
+    const CNA_StringView contentName,
+    const TextureEncoder encoder,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    std::shared_ptr<CnbTextureDataResource> texture;
+    if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The encoded-texture output buffer is invalid.");
+    }
+    std::string name;
+    if (const CNA_Result result = BorrowText(contentName, &name);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<uint8_t> image = encoder(*texture->value, name);
+    return CopyBytes(image, destination, capacity, outByteCount);
+}
+
+using TextureDecoder = Cnb::CnbTextureData (*)(const Cnb::CnbDocument&);
+
+[[nodiscard]] CNA_Result DecodeTexture(
+    const CNA_CnbDocumentHandle documentHandle,
+    const TextureDecoder decoder,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    if (outTexture == nullptr) {
+        return InvalidArgument("The CNB texture output handle is null.");
+    }
+    *outTexture = CNA_INVALID_HANDLE;
+    std::shared_ptr<CnbDocumentResource> document;
+    if (const CNA_Result result = GetDocument(documentHandle, &document);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CreateTextureData(decoder(*document->value), outTexture);
+}
+
+} // namespace
+
+CNA_Result cna_cnb_encode_texture2d(
+    const CNA_CnbTextureDataHandle texture,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EncodeTexture(
+            texture, contentName, &Cnb::EncodeTexture2DToCnb, destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_cnb_encode_texture_cube(
+    const CNA_CnbTextureDataHandle texture,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EncodeTexture(
+            texture, contentName, &Cnb::EncodeTextureCubeToCnb, destination, capacity,
+            outByteCount);
+    });
+}
+
+CNA_Result cna_cnb_encode_texture3d(
+    const CNA_CnbTextureDataHandle texture,
+    const CNA_StringView contentName,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return EncodeTexture(
+            texture, contentName, &Cnb::EncodeTexture3DToCnb, destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_cnb_decode_texture2d(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DecodeTexture(document, &Cnb::DecodeTexture2DFromCnb, outTexture);
+    });
+}
+
+CNA_Result cna_cnb_decode_texture_cube(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DecodeTexture(document, &Cnb::DecodeTextureCubeFromCnb, outTexture);
+    });
+}
+
+CNA_Result cna_cnb_decode_texture3d(
+    const CNA_CnbDocumentHandle document,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return DecodeTexture(document, &Cnb::DecodeTexture3DFromCnb, outTexture);
+    });
+}
+
+CNA_Result cna_cnb_writer_append_embedded_texture2d(
+    const CNA_CnbWriterHandle writerHandle,
+    const CNA_CnbTextureDataHandle textureHandle,
+    const CNA_StringView label)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CnbWriterResource> writer;
+        if (const CNA_Result result = GetWriter(writerHandle, &writer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CnbTextureDataResource> texture;
+        if (const CNA_Result result = GetTextureData(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string labelText;
+        if (const CNA_Result result = BorrowText(label, &labelText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Cnb::AppendEmbeddedTexture2DChunks(*writer->value, *texture->value, labelText.c_str());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_cnb_document_read_embedded_texture2d(
+    const CNA_CnbDocumentHandle documentHandle,
+    const CNA_StringView label,
+    CNA_CnbTextureDataHandle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTexture == nullptr) {
+            return InvalidArgument("The CNB texture output handle is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        std::shared_ptr<CnbDocumentResource> document;
+        if (const CNA_Result result = GetDocument(documentHandle, &document);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string labelText;
+        if (const CNA_Result result = BorrowText(label, &labelText);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateTextureData(
+            Cnb::ReadEmbeddedTexture2DChunks(*document->value, labelText.c_str()), outTexture);
     });
 }

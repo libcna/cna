@@ -1,10 +1,10 @@
 {
  "abi_version": {
-  "encoded": 2816,
+  "encoded": 3072,
   "major": 0,
-  "minor": 11,
+  "minor": 12,
   "patch": 0,
-  "runtime": 2816
+  "runtime": 3072
  },
  "colors": {
   "CNA_COLOR_ALICE_BLUE": [
@@ -1430,10 +1430,14 @@
   "cna_cnb_copy_decompressed",
   "cna_cnb_copy_format_magic",
   "cna_cnb_copy_logical_name_problem",
+  "cna_cnb_copy_texture_format_name",
   "cna_cnb_crc32c",
   "cna_cnb_crc32c_continue",
   "cna_cnb_crc32c_portable",
   "cna_cnb_crc32c_uses_hardware",
+  "cna_cnb_decode_texture2d",
+  "cna_cnb_decode_texture3d",
+  "cna_cnb_decode_texture_cube",
   "cna_cnb_document_copy_chunk_data",
   "cna_cnb_document_copy_external_reference_name",
   "cna_cnb_document_copy_metadata_asset_type_name",
@@ -1459,17 +1463,26 @@
   "cna_cnb_document_open_chunk",
   "cna_cnb_document_parse",
   "cna_cnb_document_parse_file",
+  "cna_cnb_document_read_embedded_texture2d",
   "cna_cnb_document_require_asset",
   "cna_cnb_document_require_mandatory_chunks_understood",
   "cna_cnb_document_require_single",
+  "cna_cnb_encode_texture2d",
+  "cna_cnb_encode_texture3d",
+  "cna_cnb_encode_texture_cube",
   "cna_cnb_get_asset_type_name_size",
   "cna_cnb_get_chunk_id_string_size",
   "cna_cnb_get_compressed_byte_count",
   "cna_cnb_get_compression_name_size",
   "cna_cnb_get_logical_name_problem_size",
+  "cna_cnb_get_texture_format_name_size",
+  "cna_cnb_get_texture_format_unit_bytes",
+  "cna_cnb_get_texture_level_byte_size",
   "cna_cnb_has_magic",
+  "cna_cnb_is_block_compressed_texture_format",
   "cna_cnb_is_compression_supported",
   "cna_cnb_is_custom_asset_type_id",
+  "cna_cnb_is_known_texture_format",
   "cna_cnb_is_well_formed_chunk_id",
   "cna_cnb_is_well_formed_utf8",
   "cna_cnb_make_chunk_id",
@@ -1495,8 +1508,23 @@
   "cna_cnb_reader_read_u8",
   "cna_cnb_reader_require_exhausted",
   "cna_cnb_reader_skip",
+  "cna_cnb_texture_data_add_representation",
+  "cna_cnb_texture_data_copy_level",
+  "cna_cnb_texture_data_create",
+  "cna_cnb_texture_data_create_rgba8",
+  "cna_cnb_texture_data_destroy",
+  "cna_cnb_texture_data_get_info",
+  "cna_cnb_texture_data_get_level_count",
+  "cna_cnb_texture_data_get_level_dimensions",
+  "cna_cnb_texture_data_get_representation_count",
+  "cna_cnb_texture_data_get_representation_format",
+  "cna_cnb_texture_data_select_representation",
+  "cna_cnb_texture_data_set_level",
+  "cna_cnb_texture_format_from_surface_format",
+  "cna_cnb_texture_format_to_surface_format",
   "cna_cnb_writer_add_chunk",
   "cna_cnb_writer_add_external_reference",
+  "cna_cnb_writer_append_embedded_texture2d",
   "cna_cnb_writer_build",
   "cna_cnb_writer_clear_external_references",
   "cna_cnb_writer_create",
@@ -4707,9 +4735,9 @@
   "cna_write_leaderboards_event_info_init"
  ],
  "integers": {
-  "CNA_ABI_VERSION": 2816,
+  "CNA_ABI_VERSION": 3072,
   "CNA_ABI_VERSION_MAJOR": 0,
-  "CNA_ABI_VERSION_MINOR": 11,
+  "CNA_ABI_VERSION_MINOR": 12,
   "CNA_ABI_VERSION_PATCH": 0,
   "CNA_ALPHA_MODE_BLEND_EXT": 2,
   "CNA_ALPHA_MODE_MASK_EXT": 1,
@@ -4955,8 +4983,47 @@
   "CNA_CNB_FORMAT_HEADER_SIZE": 64,
   "CNA_CNB_FORMAT_MAGIC_SIZE": 4,
   "CNA_CNB_FORMAT_TOC_ENTRY_SIZE": 48,
+  "CNA_CNB_MAX_TEXTURE_MIP_LEVELS": 16,
+  "CNA_CNB_MAX_TEXTURE_REPRESENTATIONS": 8,
   "CNA_CNB_METADATA_STRUCT_VERSION": 1,
   "CNA_CNB_READ_LIMITS_STRUCT_VERSION": 1,
+  "CNA_CNB_TEXTURE_CHUNK_HEADER": 1213744468,
+  "CNA_CNB_TEXTURE_CHUNK_PAYLOAD": 1146635604,
+  "CNA_CNB_TEXTURE_CHUNK_REPRESENTATIONS": 1381516628,
+  "CNA_CNB_TEXTURE_CUBE_FACE_COUNT": 6,
+  "CNA_CNB_TEXTURE_FORMAT_ALPHA8": 7,
+  "CNA_CNB_TEXTURE_FORMAT_BC1": 22,
+  "CNA_CNB_TEXTURE_FORMAT_BC2": 23,
+  "CNA_CNB_TEXTURE_FORMAT_BC3": 24,
+  "CNA_CNB_TEXTURE_FORMAT_BC3_SRGB": 25,
+  "CNA_CNB_TEXTURE_FORMAT_BC7": 26,
+  "CNA_CNB_TEXTURE_FORMAT_BC7_SRGB": 27,
+  "CNA_CNB_TEXTURE_FORMAT_BGR565": 4,
+  "CNA_CNB_TEXTURE_FORMAT_BGRA4444": 6,
+  "CNA_CNB_TEXTURE_FORMAT_BGRA5551": 5,
+  "CNA_CNB_TEXTURE_FORMAT_BGRA8": 2,
+  "CNA_CNB_TEXTURE_FORMAT_HDR_BLENDABLE": 21,
+  "CNA_CNB_TEXTURE_FORMAT_MAXIMUM": 27,
+  "CNA_CNB_TEXTURE_FORMAT_R16": 9,
+  "CNA_CNB_TEXTURE_FORMAT_R16_FLOAT": 18,
+  "CNA_CNB_TEXTURE_FORMAT_R32_FLOAT": 15,
+  "CNA_CNB_TEXTURE_FORMAT_R8": 8,
+  "CNA_CNB_TEXTURE_FORMAT_RG16": 10,
+  "CNA_CNB_TEXTURE_FORMAT_RG16_FLOAT": 19,
+  "CNA_CNB_TEXTURE_FORMAT_RG32_FLOAT": 16,
+  "CNA_CNB_TEXTURE_FORMAT_RG8_SNORM": 12,
+  "CNA_CNB_TEXTURE_FORMAT_RGB10_A2": 14,
+  "CNA_CNB_TEXTURE_FORMAT_RGBA16": 11,
+  "CNA_CNB_TEXTURE_FORMAT_RGBA16_FLOAT": 20,
+  "CNA_CNB_TEXTURE_FORMAT_RGBA32_FLOAT": 17,
+  "CNA_CNB_TEXTURE_FORMAT_RGBA8": 1,
+  "CNA_CNB_TEXTURE_FORMAT_RGBA8_SNORM": 13,
+  "CNA_CNB_TEXTURE_FORMAT_RGBA8_SRGB": 3,
+  "CNA_CNB_TEXTURE_FORMAT_UNKNOWN": 0,
+  "CNA_CNB_TEXTURE_HEADER_STRIDE": 24,
+  "CNA_CNB_TEXTURE_INFO_STRUCT_VERSION": 1,
+  "CNA_CNB_TEXTURE_REPRESENTATION_STRIDE": 24,
+  "CNA_CNB_TEXTURE_SCHEMA_VERSION": 1,
   "CNA_COLOR_GRADE_MAX_LUT_SIZE_EXT": 64,
   "CNA_COLOR_WRITE_ALL": 15,
   "CNA_COLOR_WRITE_ALPHA": 8,
@@ -6330,6 +6397,14 @@
   "CNA_CnbReaderHandle": [
    8,
    8
+  ],
+  "CNA_CnbTextureDataHandle": [
+   8,
+   8
+  ],
+  "CNA_CnbTextureFormat": [
+   4,
+   4
   ],
   "CNA_CnbWriterHandle": [
    8,
@@ -8393,6 +8468,44 @@
     ]
    },
    "size": 48
+  },
+  "CNA_CnbTextureInfo": {
+   "align": 4,
+   "fields": {
+    "depth": [
+     16,
+     4
+    ],
+    "face_count": [
+     20,
+     4
+    ],
+    "height": [
+     12,
+     4
+    ],
+    "mip_count": [
+     24,
+     4
+    ],
+    "representation_count": [
+     28,
+     4
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "width": [
+     8,
+     4
+    ]
+   },
+   "size": 32
   },
   "CNA_Color": {
    "align": 1,

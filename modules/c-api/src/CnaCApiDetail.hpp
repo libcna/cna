@@ -273,6 +273,10 @@ enum class ObjectKind : uint32_t {
     CnbReader = 169,
     CnbByteWriter = 170,
     CnbWriter = 171,
+
+    // CBIND-108: the decoded texture description, which the canonical layer expresses as nested
+    // vectors and C therefore reaches through a handle rather than a POD.
+    CnbTextureData = 172,
     Test = UINT32_MAX
 };
 
