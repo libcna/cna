@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/MathContentTypeReaders.hpp"
 
+#include "CNA/Internal/Xnb/CollectionContentTypeReaders.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 
 namespace CNA::Internal::Xnb
@@ -37,5 +38,20 @@ namespace CNA::Internal::Xnb
             [] { return std::make_unique<BoundingFrustumReader>(); });
         ContentTypeReaderManager::AddTypeCreator(
             "Microsoft.Xna.Framework.Content.RayReader", [] { return std::make_unique<RayReader>(); });
+
+        // A `Vector3[]` in an .xnb, which the stock pipeline writes whenever a processor tags a
+        // model with one. `ArrayReader<T>` already existed as a template but no instantiation of
+        // it was registered for any type, so the reader table of such a file could not resolve --
+        // and an .xnb's table must resolve IN FULL before a single object is read, so the whole
+        // asset failed rather than just the array. Found by cna-samples SAMPLE-048
+        // (TrianglePickingSample), whose own ContentProcessor attaches every world-space triangle
+        // vertex to `Model.Tag` as exactly this type.
+        ContentTypeReaderManager::AddTypeCreator(
+            "Microsoft.Xna.Framework.Content.ArrayReader`1[[Microsoft.Xna.Framework.Vector3]]",
+            [] {
+                return std::make_unique<ArrayReader<Vector3>>(
+                    "Microsoft.Xna.Framework.Vector3[]",
+                    "Microsoft.Xna.Framework.Content.Vector3Reader");
+            });
     }
 }
